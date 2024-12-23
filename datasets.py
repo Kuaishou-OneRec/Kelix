@@ -202,7 +202,7 @@ class LLaVA_CC3M_Dataset(Dataset):
                 [inputs["input_ids"], response_inputs], dim=-1)
             inputs["loss_mask"] = loss_mask
 
-            # Truncate
+            # TODO: improve truncate
             for key in ["input_ids", "attention_mask", "loss_mask"]:
                 inputs[key] = inputs[key][:,:self.max_length]
             _type = {
