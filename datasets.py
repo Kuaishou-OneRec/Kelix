@@ -144,11 +144,21 @@ class LLaVA_CC3M_Dataset(Dataset):
                 if prompt.endswith("<image>"):
                     content = [
                         {"type": "text", "text": re.sub(r"\n<image>", "", prompt)},
-                        {"type": "image", "image": img}
+                        {
+                            "type": "image",
+                            "image": img,
+                            "resized_height": 224,
+                            "resized_width": 224,
+                        }
                     ]
                 else:
                     content = [
-                        {"type": "image", "image": img},
+                        {
+                            "type": "image",
+                            "image": img,
+                            "resized_height": 224,
+                            "resized_width": 224,
+                        },
                         {"type": "text", "text": re.sub(r"<image>\n", "", prompt)}
                     ]
                 prompt_messages.append([{
