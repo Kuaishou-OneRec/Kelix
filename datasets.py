@@ -133,7 +133,7 @@ class LLaVA_CC3M_Dataset(Dataset):
         prompt = session["conversations"][0]["value"]
         if prompt.endswith("<image>"):
             content = [
-                {"type": "text", "text": re.sub(r"\n<image>", "", prompt)}
+                {"type": "text", "text": re.sub(r"\n<image>", "", prompt)},
                 {"type": "image", "image": img}
             ]
         else:

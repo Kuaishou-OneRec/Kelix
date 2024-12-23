@@ -160,7 +160,11 @@ def train():
 
     load_zero3_state_dict(model, args.model_dir)
     model.train()
-    model.gradient_checkpointing_enable()
+    #model.gradient_checkpointing_enable()
+    for name, param in model.named_parameters():
+        if not name.startswith("visual"):
+            print(name)
+            param.requires_grad = False
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     model_engine, _, _, _ = deepspeed.initialize(args=args,
                                                  model=model,
