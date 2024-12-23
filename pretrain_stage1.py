@@ -71,6 +71,17 @@ def get_argument_parser():
 
     return parser
 
+def print_rank_n(*msg, rank=0):
+    if dist.get_rank() == rank:
+        print(*msg)
+
+def print_rank_0(*msg):
+    print_rank_n(*msg, rank=0)
+
+def move_to_cuda(batch):
+    for key in list(batch.keys()):
+        batch[key] = batch[key].cuda(dist.get_rank())
+
 def load_safetensors(path):
     tensors = {}
     with safe_open(path, framework="pt", device="cpu") as f:
@@ -108,7 +119,7 @@ def load_zero3_state_dict(model, model_dir):
         with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
             if dist.get_rank() == 0:
                 local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-                print(f"Load: {prefix}")
+                print_rank_0(f"Load: {prefix}")
                 module._load_from_state_dict(
                     state_dict, prefix, local_metadata, True,
                     missing_keys, unexpected_keys, error_msgs
@@ -126,17 +137,6 @@ def load_zero3_state_dict(model, model_dir):
                 load(child, child_state_dict, child_prefix)
 
     load(model, state_dict, prefix="")
-
-def print_rank_n(*msg, rank=0):
-    if dist.get_rank() == rank:
-        print(*msg)
-
-def print_rank_0(*msg):
-    print_rank_n(*msg, rank=0)
-
-def move_to_cuda(batch):
-    for key in list(batch.keys()):
-        batch[key] = batch[key].cuda(dist.get_rank())
 
 def train():
     arg_parser = get_argument_parser()
@@ -178,7 +178,8 @@ def train():
     for epoch in range(args.num_epochs):
         for batch in torch.utils.data.DataLoader(dataset,
                                                  batch_size=args.batch_size,
-                                                 sampler=sampler):
+                                                 sampler=sampler,
+                                                 collate_fn=dataset.build_collate_fn()):
             move_to_cuda(batch)
             input_ids = batch["input_ids"]
             loss_mask = batch["loss_mask"]
@@ -187,14 +188,10 @@ def train():
             pixel_values_videos = batch.get("pixel_values_videos", None)
             image_grid_thw = batch.get("image_grid_thw", None)
             video_grid_thw = batch.get("video_grid_thw", None)
-            
-            print_rank_0("image_grid_thw", image_grid_thw)
-            print_rank_0("video_grid_thw", video_grid_thw)
 
             input_ids = input_ids * (input_ids > 0).to(torch.int64)
             labels = input_ids * loss_mask + -100 * (1 - loss_mask)
 
-            print_rank_0("input_ids", input_ids, labels)
             loss = model_engine(
                 input_ids, labels=labels, attention_mask=attention_mask,
                 pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
@@ -227,9 +224,10 @@ def train():
                     "sec_per_step": sec_per_step
                 }
                 for name, data in log_dict.items():
-                    writer.log(name, data, iteration)
+                    if data is not None:
+                        writer.add_scalar(name, data, global_step=iteration, new_style=True)
 
-                print(
+                print_rank_0(
                     f"Step: {iteration}, Loss: {avg_loss}, Learning Rate: {learning_rate}, "
                     f"Grad Norm: {model_engine.get_global_grad_norm()}, Sec per Step: {sec_per_step}"
                 )

@@ -167,11 +167,9 @@ class LLaVA_CC3M_Dataset(Dataset):
         self.source = source
         with open(os.path.join(self.source, "chat.json"), encoding="utf-8") as f:
             self.sessions = json.loads(f.read())
-        # FastTokenizer padding_side不生效，使用普通版，SB huggingface!
         self.processor = AutoProcessor.from_pretrained(processor_path)
         self.tokenizer =  AutoTokenizer.from_pretrained(processor_path, use_fast=False)
-        self.processor.tokenizer = self.tokenizer
-        print(self.tokenizer)
+        self.tokenizer.padding_side = "right"
         self.max_length = max_length
         if not self.max_length:
             self.max_length = self.tokenizer.model_max_length
@@ -229,8 +227,6 @@ class LLaVA_CC3M_Dataset(Dataset):
             )
             response_mask = (
                 response_inputs != self.tokenizer.pad_token_id).type(torch.int64)
-            print("inputs", inputs["input_ids"].shape)
-            print("response_mask", response_mask.shape)
             loss_mask = torch.cat(
                 [torch.zeros_like(inputs["input_ids"]), response_mask], dim=-1
             )
