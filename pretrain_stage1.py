@@ -135,8 +135,8 @@ def print_rank_0(*msg):
     print_rank_n(*msg, rank=0)
 
 def move_to_cuda(batch):
-    for t in batch.values():
-        t.cuda(dist.get_rank())
+    for key in list(batch.keys()):
+        batch[key] = batch[key].cuda(dist.get_rank())
 
 def train():
     arg_parser = get_argument_parser()
@@ -163,12 +163,11 @@ def train():
     #model.gradient_checkpointing_enable()
     for name, param in model.named_parameters():
         if not name.startswith("visual"):
-            print(name)
+            print_rank_0(f"Disable grad: {name}")
             param.requires_grad = False
-    model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+    #model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     model_engine, _, _, _ = deepspeed.initialize(args=args,
-                                                 model=model,
-                                                 model_parameters=model_parameters)
+                                                 model=model)
 
     dataset = LLaVA_CC3M_Dataset(
         source=args.dataset,
@@ -188,6 +187,9 @@ def train():
             pixel_values_videos = batch.get("pixel_values_videos", None)
             image_grid_thw = batch.get("image_grid_thw", None)
             video_grid_thw = batch.get("video_grid_thw", None)
+            
+            print_rank_0("image_grid_thw", image_grid_thw)
+            print_rank_0("video_grid_thw", video_grid_thw)
 
             input_ids = input_ids * (input_ids > 0).to(torch.int64)
             labels = input_ids * loss_mask + -100 * (1 - loss_mask)

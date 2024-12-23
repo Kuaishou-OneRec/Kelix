@@ -7,10 +7,12 @@ import pandas as pd
 import tarfile
 import torch.distributed as dist
 
-from torch.utils.data import IterableDataset, Dataset
+from torch.utils.data import IterableDataset, Dataset, DataLoader
+
 
 import random
 from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor
+# from processing_qwen2_vl import Qwen2VLProcessor
 from qwen_vl_utils import process_vision_info
 import glob
 
@@ -115,6 +117,49 @@ class MscocoDataset(IterableDataset):
             iter_end = min(iter_start + per_worker, self.end)
         return self.build_iter(self.file_list[iter_start:iter_end])
 
+messages = [
+    [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+                },
+                {"type": "text", "text": "Describe"},
+            ],
+        }
+    ],
+    [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": "/llm_reco_ssd/luoxinchen/dataset/LLaVA-CC3M-Pretrain-595K/GCC_train_001885390.jpg",
+                },
+                {
+                    "type": "image",
+                    "image": "/llm_reco_ssd/luoxinchen/dataset/LLaVA-CC3M-Pretrain-595K/GCC_train_001970366.jpg",
+                },
+                {"type": "text", "text": "Describe this image."},
+            ],
+        }
+    ]
+]
+
+response_messages = [
+    [
+        {
+            "content": "你好大傻逼，hello"
+        }
+    ],
+    [
+        {
+            "content": "hello"
+        }
+    ]
+]
 
 class LLaVA_CC3M_Dataset(Dataset):
     def __init__(self, source, processor_path, max_length=None):
@@ -122,72 +167,91 @@ class LLaVA_CC3M_Dataset(Dataset):
         self.source = source
         with open(os.path.join(self.source, "chat.json"), encoding="utf-8") as f:
             self.sessions = json.loads(f.read())
+        # FastTokenizer padding_side不生效，使用普通版，SB huggingface!
         self.processor = AutoProcessor.from_pretrained(processor_path)
+        self.tokenizer =  AutoTokenizer.from_pretrained(processor_path, use_fast=False)
+        self.processor.tokenizer = self.tokenizer
+        print(self.tokenizer)
         self.max_length = max_length
         if not self.max_length:
-            self.max_length = self.processor.tokenizer.model_max_length
+            self.max_length = self.tokenizer.model_max_length
 
     def __getitem__(self, index):
         session = self.sessions[index]
-        img = os.path.join(self.source, session["image"])
-        prompt = session["conversations"][0]["value"]
-        if prompt.endswith("<image>"):
-            content = [
-                {"type": "text", "text": re.sub(r"\n<image>", "", prompt)},
-                {"type": "image", "image": img}
-            ]
-        else:
-            content = [
-                {"type": "image", "image": img},
-                {"type": "text", "text": re.sub(r"<image>\n", "", prompt)}
-            ]
-        prompt_messages = [
-            {
-                "role": "user",
-                "content": content,
+        return session
+
+    def build_collate_fn(self):
+        # TODO: SUPPORT TRUNCATE
+        def collate_fn(sessions):
+            prompt_messages = []
+            for session in sessions:
+                prompt = session["conversations"][0]["value"]
+                img = os.path.join(self.source, session["image"])
+                if prompt.endswith("<image>"):
+                    content = [
+                        {"type": "text", "text": re.sub(r"\n<image>", "", prompt)},
+                        {"type": "image", "image": img}
+                    ]
+                else:
+                    content = [
+                        {"type": "image", "image": img},
+                        {"type": "text", "text": re.sub(r"<image>\n", "", prompt)}
+                    ]
+                prompt_messages.append([{
+                    "role": "user",
+                    "content": content,
+                }])
+            text = self.processor.apply_chat_template(
+                prompt_messages, tokenize=False, add_generation_prompt=True
+            )
+            image_inputs, video_inputs = process_vision_info(prompt_messages)
+            inputs = self.processor(
+                text=text,
+                images=image_inputs,
+                videos=video_inputs,
+                padding=True,
+                padding_side="left",
+                return_tensors="pt",
+            )
+
+            response_messages = []
+            for session in sessions:
+                response = session["conversations"][1]["value"]
+                response_messages.append([{"content": response}])
+            # right pad response to concat with prompt
+            response_inputs = self.tokenizer.apply_chat_template(
+                response_messages,
+                chat_template=RESPONSE_TEMPLATE,
+                padding=True,
+                padding_side="right",
+                add_generation_prompt=False,
+                return_tensors="pt",
+            )
+            response_mask = (
+                response_inputs != self.tokenizer.pad_token_id).type(torch.int64)
+            print("inputs", inputs["input_ids"].shape)
+            print("response_mask", response_mask.shape)
+            loss_mask = torch.cat(
+                [torch.zeros_like(inputs["input_ids"]), response_mask], dim=-1
+            )
+            inputs["attention_mask"] = torch.cat(
+                [inputs["attention_mask"], response_mask], dim=-1)
+            inputs["input_ids"]  = torch.cat(
+                [inputs["input_ids"], response_inputs], dim=-1)
+            inputs["loss_mask"] = loss_mask
+            _type = {
+                "input_ids": torch.int64,
+                "attention_mask": torch.int64,
+                "pixel_values": torch.float32,
+                "image_grid_thw": torch.int64,
+                "video_grid_thw": torch.int64,
+                "loss_mask": torch.int64
             }
-        ]
-        text = self.processor.apply_chat_template(
-            prompt_messages, tokenize=False, add_generation_prompt=True
-        )
-        image_inputs, video_inputs = process_vision_info(prompt_messages)
-        inputs = self.processor(
-            text=[text],
-            images=image_inputs,
-            videos=video_inputs,
-            padding=False,
-            # return_tensors="pt",
-        )
+            assert inputs["input_ids"].shape == inputs["loss_mask"].shape
+            assert inputs["input_ids"].shape == inputs["attention_mask"].shape
+            return inputs
 
-        response = session["conversations"][1]["value"]
-        response_messages = [{"content": response}]
-        response_inputs = self.processor.tokenizer.apply_chat_template(
-            response_messages,
-            chat_template=RESPONSE_TEMPLATE,
-            padding=False,
-            add_generation_prompt=False
-        )
-        label_mask = [[0] * len(inputs["input_ids"][0]) + \
-            [1] * len(response_inputs)]
-        inputs["attention_mask"][0] += [1] * len(response_inputs)
-        inputs["input_ids"][0] += response_inputs
-        inputs["label_mask"] = label_mask
-        _type = {
-            "input_ids": torch.int64,
-            "attention_mask": torch.int64,
-            "pixel_values": torch.float32,
-            "image_grid_thw": torch.int64,
-            "video_grid_thw": torch.int64,
-            "label_mask": torch.int64
-        }
-        inputs = {key: torch.tensor(value, dtype=_type[key]) \
-            for key, value in inputs.items()}
-        assert inputs["input_ids"].shape == inputs["label_mask"].shape
-        assert inputs["input_ids"].shape == inputs["attention_mask"].shape
-        # PADDING & TRUNCATE
-
-        return inputs
-
+        return collate_fn
     def __len__(self):
         return len(self.sessions)
 
@@ -196,8 +260,13 @@ if __name__ == "__main__":
         source="/llm_reco_ssd/luoxinchen/dataset/LLaVA-CC3M-Pretrain-595K/",
         processor_path="/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14"
     )
-    for idx, batch in enumerate(dataset):
+    for idx, batch in enumerate(DataLoader(dataset, batch_size=3, collate_fn=dataset.build_collate_fn())):
         print(idx, batch)
-        print(dataset.processor.tokenizer.decode(batch["input_ids"][0]))
-        if idx > 10:
+        #print(dataset.processor.tokenizer.decode(batch["input_ids"]))
+        if idx >= 1:
             break
+    for key, tensor in batch.items():
+        print(key, tensor.shape)
+    for input_ids in batch["input_ids"]:
+        print("=" * 10)
+        print(dataset.processor.tokenizer.decode(input_ids))
