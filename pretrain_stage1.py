@@ -80,7 +80,7 @@ def print_rank_0(*msg):
 
 def move_to_cuda(batch):
     for key in list(batch.keys()):
-        batch[key] = batch[key].cuda(dist.get_rank())
+        batch[key] = batch[key].cuda()
 
 def load_safetensors(path):
     tensors = {}
@@ -172,6 +172,7 @@ def train():
     dataset = LLaVA_CC3M_Dataset(
         source=args.dataset,
         processor_path=args.model_dir,
+        max_length=args.max_length
     )
     sampler = DistributedSampler(dataset)
     start_time = time.time()

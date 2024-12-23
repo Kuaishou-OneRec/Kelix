@@ -117,50 +117,6 @@ class MscocoDataset(IterableDataset):
             iter_end = min(iter_start + per_worker, self.end)
         return self.build_iter(self.file_list[iter_start:iter_end])
 
-messages = [
-    [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
-                },
-                {"type": "text", "text": "Describe"},
-            ],
-        }
-    ],
-    [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "image": "/llm_reco_ssd/luoxinchen/dataset/LLaVA-CC3M-Pretrain-595K/GCC_train_001885390.jpg",
-                },
-                {
-                    "type": "image",
-                    "image": "/llm_reco_ssd/luoxinchen/dataset/LLaVA-CC3M-Pretrain-595K/GCC_train_001970366.jpg",
-                },
-                {"type": "text", "text": "Describe this image."},
-            ],
-        }
-    ]
-]
-
-response_messages = [
-    [
-        {
-            "content": "你好大傻逼，hello"
-        }
-    ],
-    [
-        {
-            "content": "hello"
-        }
-    ]
-]
-
 class LLaVA_CC3M_Dataset(Dataset):
     def __init__(self, source, processor_path, max_length=None):
         super(LLaVA_CC3M_Dataset).__init__()
@@ -235,6 +191,10 @@ class LLaVA_CC3M_Dataset(Dataset):
             inputs["input_ids"]  = torch.cat(
                 [inputs["input_ids"], response_inputs], dim=-1)
             inputs["loss_mask"] = loss_mask
+
+            # Truncate
+            for key in ["input_ids", "attention_mask", "loss_mask"]:
+                inputs[key] = inputs[key][:,:self.max_length]
             _type = {
                 "input_ids": torch.int64,
                 "attention_mask": torch.int64,
