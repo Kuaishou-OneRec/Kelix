@@ -4,7 +4,7 @@
 PYTHON := python3
 PIP := pip3
 LINT := pylint
-TEST := pytest
+TEST := pytest -vv
 
 # Directories
 SRC_DIR := llmx
@@ -31,6 +31,6 @@ install:
 	$(PIP) install -r requirements.txt
 
 format:
-	autopep8 --indent-size=2 --in-place --aggressive --aggressive src/**/*.py
+	autopep8 --indent-size=2 --in-place --aggressive --aggressive ./**/*.py
 
 # Add more targets as needed
