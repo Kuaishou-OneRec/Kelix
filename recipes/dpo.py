@@ -60,9 +60,6 @@ def get_argument_parser():
   parser.add_argument("--save_checkpoint_per_step", type=int, default=None,
                       help="The number of steps to save a checkpoint")
 
-  parser.add_argument("--use_flash_attention_2", action="store_true",
-                      help="Whether to use flash attention 2")
-
   parser.add_argument("--save_checkpoint_every_epoch", action="store_true",
                       help="Save checkpoint at the end of every epoch")
 
@@ -164,6 +161,113 @@ def load_zero3_state_dict(model, model_dir):
   load(model, state_dict, prefix="")
 
 
+def get_batch_logps(
+        logits: torch.FloatTensor,
+        labels: torch.LongTensor,
+        attention_mask,
+        prompt_id_lens,
+        average_log_prob: bool = False) -> torch.FloatTensor:
+  """Compute the log probabilities of the given labels under the given logits.
+
+  Args:
+      logits: Logits of the model (unnormalized). Shape: (batch_size, sequence_length, vocab_size)
+      labels: Labels for which to compute the log probabilities. Label tokens with a value of -100 are ignored. Shape: (batch_size, sequence_length)
+      average_log_prob: If True, return the average log probability per (non-masked) token. Otherwise, return the sum of the log probabilities of the (non-masked) tokens.
+
+  Returns:
+      A tensor of shape (batch_size,) containing the average/sum log probabilities of the given labels under the given logits.
+  """
+  assert average_log_prob == False
+  assert logits.shape[:-1] == labels.shape
+
+  labels = labels[:, 1:].clone()
+  logits = logits[:, :-1, :]
+
+  loss_masks = attention_mask.clone().bool()
+  # mask prompts
+  for mask, source_len in zip(loss_masks, prompt_id_lens):
+    mask[:source_len] = False
+  loss_masks = loss_masks[:, 1:]
+
+  # dummy token; we'll ignore the losses on these tokens later
+  labels[loss_masks == False] = 0
+  per_token_logps = torch.gather(
+      logits.log_softmax(-1), dim=2, index=labels.unsqueeze(2)).squeeze(2)
+
+  logprobs_sums = (per_token_logps * loss_masks).sum(-1)
+  logprobs_means = (per_token_logps * loss_masks).sum(-1) / loss_masks.sum(-1)
+  return logprobs_sums, logprobs_means
+
+
+def concatenated_inputs(chosen_input_ids: torch.Tensor,
+                        chosen_attention_mask: torch.Tensor,
+                        rejected_input_ids: torch.Tensor,
+                        rejected_attention_mask: torch.Tensor,
+                        pad_token_id: int = 0):
+  """Concatenate the chosen and rejected inputs into a single tensor.
+
+  Args:
+      batch: A batch of data. Must contain the keys 'chosen_input_ids' and 'rejected_input_ids',
+        which are tensors of shape (batch_size, sequence_length).
+
+  Returns:
+      A dictionary containing the concatenated inputs under the key 'concatenated_input_ids'.
+  """
+
+  def pad_to_length(tensor, length, pad_value, dim=-1):
+    if tensor.size(dim) >= length:
+      return tensor
+    else:
+      pad_size = list(tensor.shape)
+      pad_size[dim] = length - tensor.size(dim)
+      return torch.cat(
+          [tensor, pad_value * torch.ones(
+              *pad_size, dtype=tensor.dtype, device=tensor.device)],
+          dim=dim
+      )
+
+  max_length = max(chosen_input_ids.shape[1], rejected_input_ids.shape[1])
+  inputs_ids = torch.cat(
+      (
+          pad_to_length(chosen_input_ids, max_length, pad_token_id),
+          pad_to_length(rejected_input_ids, max_length, pad_token_id),
+      ),
+      dim=0,
+  )
+  max_length = max(
+      chosen_attention_mask.shape[1],
+      rejected_attention_mask.shape[1])
+  attention_masks = torch.cat(
+      (pad_to_length(chosen_attention_mask, max_length, 0),
+       pad_to_length(rejected_attention_mask, max_length, 0)), dim=0)
+  return inputs_ids, attention_masks
+
+
+def concatenated_forward(model,
+                         chosen_input_ids: torch.Tensor,
+                         chosen_attention_mask: torch.Tensor,
+                         rejected_input_ids: torch.Tensor,
+                         rejected_attention_mask: torch.Tensor):
+  """Run the given model on the given batch of inputs, concatenating the chosen and rejected inputs together.
+
+  We do this to avoid doing two forward passes, because it's faster for FSDP.
+  """
+  input_ids, attention_masks = concatenated_inputs(
+      chosen_input_ids, chosen_attention_mask,
+      rejected_input_ids, rejected_attention_mask,
+  )
+  output = model(input_ids, attention_mask=attention_masks, return_output=True)
+  all_logits = output["logits"]
+  all_logps_sum, all_logps_mean = get_batch_logps(
+      all_logits, input_ids, attention_masks, average_log_prob=False
+  )
+  chosen_logps = all_logps_sum[:chosen_input_ids.shape[0]]
+  rejected_logps = all_logps_sum[chosen_input_ids.shape[0]:]
+  aux_loss = output.aux_loss if "aux_loss" in output else []
+  return chosen_logps, rejected_logps, aux_loss, \
+      -all_logps_mean[: chosen_input_ids.shape[0]].mean()
+
+
 def train():
   arg_parser = get_argument_parser()
   arg_parser = deepspeed.add_config_arguments(arg_parser)
@@ -184,8 +288,6 @@ def train():
     # TODO: add support for other models
     model_config = Qwen2ForCausalLM.config_class.from_pretrained(
         args.model_dir)
-    model_config.attn_implementation = \
-      "flash_attention_2" if args.use_flash_attention_2 else "eager"
     model = Qwen2ForCausalLM(model_config)
 
   load_zero3_state_dict(model, args.model_dir)
@@ -193,10 +295,23 @@ def train():
   if args.enable_gradient_checkpointing:
     model.gradient_checkpointing_enable()
 
+  with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config):
+    # TODO: add support for other models
+    ref_model = Qwen2ForCausalLM(model_config)
+
+  load_zero3_state_dict(ref_model, args.model_dir)
+  ref_model.eval()
+
+  for p in ref_model.parameters():
+    p.requires_grad = False
+
   model_engine, _, _, _ = deepspeed.initialize(args=args,
                                                model=model)
 
-  dataset = ChatCompletionDataset(
+  ref_model_engine, _, _, _ = deepspeed.initialize(args=args,
+                                                   model=ref_model)
+
+  dataset = PreferenceDataset(
       source=args.dataset,
       tokenizer=args.model_dir,
       input_key=args.input_key,
@@ -213,9 +328,13 @@ def train():
             sampler=sampler,
             collate_fn=dataset.collate_fn):
       move_to_cuda(batch)
-      input_ids = batch["input_ids"]
-      loss_mask = batch["loss_mask"]
-      attention_mask = batch.get("attention_mask", None)
+      input_ids = batch["chosen_input_ids"]
+      loss_mask = batch["chosen_loss_mask"]
+      attention_mask = batch.get("chosen_attention_mask", None)
+
+      input_ids = batch["rejected_input_ids"]
+      loss_mask = batch["rejected_loss_mask"]
+      attention_mask = batch.get("rejected_attention_mask", None)
 
       input_ids = input_ids * (input_ids > 0).to(torch.int64)
       labels = input_ids * loss_mask + -100 * (1 - loss_mask)

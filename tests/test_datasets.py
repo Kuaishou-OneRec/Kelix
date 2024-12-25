@@ -41,7 +41,9 @@ def test_chat_completion():
       source=records,
       tokenizer=TOKENIZER,
       input_key="conversations",
-      system_prompt="You are RecoVLM"
+      system_prompt="You are RecoVLM",
+      chat_template="chat_template_with_generation_tag",
+      max_length=128
   )
 
   ans = {

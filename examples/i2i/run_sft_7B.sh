@@ -7,11 +7,15 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 echo "Output: $OUTPUT_DIR"
 
+export PYTHONPATH=/llm_reco_ssd/zhouyang12/code/RecoVLM:$PYTHONPATH
+
 deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
-	finetune.py --model_dir $MODEL_DIR \
+	recipes/finetune.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
     --dataset /llm_reco_ssd/zhouyang12/data/NegativeFeedback/i2i/pairwise/eval/chat_hop2_20k_mm_tmp_train_openrlhf.jsonl \
-    --batch_size 8 \
+    --chat_template chat_template_with_generation_tag \
+    --input_key conversations \
+    --system_prompt /llm_reco_ssd/zhouyang12/code/RecoVLM/examples/i2i/prompts/pairwise.txt \
     --max_length 2048 \
     --save_checkpoint_every_epoch \
     --num_epochs 1 \
@@ -19,4 +23,4 @@ deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --merge_checkpoint \
     --merge_checkpoint_dtype bf16 \
     --merge_checkpoint_output_file pytorch_model.bin \
-	--deepspeed --deepspeed_config configs/ds_config.json
+	--deepspeed --deepspeed_config examples/i2i/configs/ds_z3_config_7B.json

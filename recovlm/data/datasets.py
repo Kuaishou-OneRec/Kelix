@@ -1,11 +1,10 @@
-from typing import Union, Iterable
+from typing import Union, Iterable, Optional
 
 import os
 import re
 import json
 import math
 import torch
-import pandas as pd
 import tarfile
 import torch.distributed as dist
 
@@ -21,116 +20,12 @@ from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoPro
 from qwen_vl_utils import process_vision_info
 import glob
 
+from .templates import get_template
+from .prompts import PromptLoader
+
 # from utils import get_world_size, is_rank_0
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
-
-
-def extract_tar_file(tar_file_path, destination_path):
-  if not os.path.exists(destination_path):
-    os.makedirs(destination_path)
-
-  with tarfile.open(tar_file_path, 'r') as tar:
-    tar.extractall(path=destination_path)
-    print(f"Files extracted to {destination_path}")
-
-
-def shard(data_dir, rank=0, world_size=1, shuffle=True, reshard=False):
-  shard_dir = os.path.join(data_dir, f"sharded_{world_size}")
-  if is_rank_0():
-    if reshard or (not os.path.exists(shard_dir)):
-      files = glob.glob(os.path.join(data_dir, "*.parquet"))
-      num_files = len(files)
-      num_files_per_rank = num_files // world_size
-      print(f"Shard {num_files} files to {world_size} parts.")
-      random.shuffle(files)
-      os.makedirs(shard_dir)
-      for rank in range(world_size):
-        start = rank * num_files_per_rank
-        end = (rank + 1) * \
-            num_files_per_rank if rank < (world_size - 1) else num_files
-        with open(os.path.join(shard_dir, f"rank_{rank}.txt"), "w", encoding="utf-8") as f:
-          for file in files[start:end]:
-            f.write(file + "\n")
-  else:
-    dist.barrier()
-  return os.path.join(shard_dir, f"rank_{rank}")
-
-
-class MscocoDataset(IterableDataset):
-  def __init__(self, source, world_size, rank):
-    super(MscocoDataset).__init__()
-    self.meta = shard(source, world_size=world_size, rank=rank)
-    self.file_list = []
-    with open(self.meta) as f:
-      for line in f:
-        self.file_list.append(line.strip())
-
-  def tokenize(self, text, img):
-    prompt_messages = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "image": img,
-                },
-                {"type": "text", "text": "Describe this image."},
-            ],
-        }
-    ]
-    response_messages = {"role": "assistant", "content": text}
-    text = processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
-    image_inputs, video_inputs = process_vision_info(messages)
-    inputs = processor(
-        text=[text],
-        images=image_inputs,
-        videos=video_inputs,
-        padding=True,
-        return_tensors="pt",
-    )
-    response = processor.tokenizer.apply_chat_template(
-        response_messages, chat_template="", add_generation_prompt=False)
-    label_mask = len(inputs["input_ids"]) * 0 + len(response) * 1
-    inputs["label_mask"] = label_mask
-    return inputs
-
-  def build_iter(self, files):
-    def iterable():
-      for file in files:
-        tar_file = re.sub(r".parquet$", ".tar", file)
-        img_dir = re.sub(r".parquet$", "", file)
-        extract_tar_file(tar_file, img_dir)
-        df = pd.read_parquet(file)
-        for text, img, status in zip(df["caption"], df["key"], df["status"]):
-          if status != "success":
-            continue
-          tokenized = self.tokenize(text, image)
-          yield tokenized
-    return iterable()
-
-  def __iter__(self):
-    worker_info = torch.utils.data.get_worker_info()
-    start = 0
-    end = len(self.file_list)
-    if worker_info is None:  # single-process data loading, return the full iterator
-      iter_start = 0
-      iter_end = len(self.file_list)
-    else:  # in a worker process
-      # split workload
-      per_worker = int(
-          math.ceil(
-              (end -
-               start) /
-              float(
-                  worker_info.num_workers)))
-      worker_id = worker_info.id
-      iter_start = start + worker_id * per_worker
-      iter_end = min(iter_start + per_worker, self.end)
-    return self.build_iter(self.file_list[iter_start:iter_end])
-
 
 class LLaVA_CC3M_Dataset(Dataset):
   def __init__(self, source, processor_path, max_length=None):
@@ -238,23 +133,6 @@ class LLaVA_CC3M_Dataset(Dataset):
   def __len__(self):
     return len(self.sessions)
 
-
-chat_template = (
-    "{% for message in messages %}"
-    "{% if loop.first and messages[0]['role'] != 'system' %}"
-    "{{ '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}"
-    "{% endif %}"
-    "{% if (message['role'] in ['system', 'user']) %}"
-    "{{ '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' }}"
-    "{% else %}"
-    "{{ '<|im_start|>assistant\n' }}"
-    "{% generation %}"
-    "{{ message['content'] + '<|im_end|>\n' }}"
-    "{% endgeneration %}"
-    "{% endif %}"
-    "{% endfor %}")
-
-
 def zero_pad_sequences(sequences, side: str = "left", value=0):
   assert side in ("left", "right")
   max_len = max(seq.size(-1) for seq in sequences)
@@ -269,18 +147,22 @@ def zero_pad_sequences(sequences, side: str = "left", value=0):
 
 
 class ChatCompletionDataset(Dataset):
+  """Text Completion Dataset with ChatML format"""
   def __init__(self,
                source: Union[str, Iterable],
                tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast, str],
                input_key: str = "messages",
-               system_prompt: str = "You are a helpful assistant."):
+               system_prompt: str = "You are a helpful assistant.",
+               chat_template: str = "chat_template",
+               max_length: Optional[int] = None):
     super(ChatCompletionDataset).__init__()
     self.source = source
     if isinstance(tokenizer, str):
       tokenizer = AutoTokenizer.from_pretrained(tokenizer)
     self.tokenizer = tokenizer
     self.input_key = input_key
-    self.system_prompt = system_prompt
+    self.system_prompt = PromptLoader().load(system_prompt)
+    self.chat_template = get_template(chat_template)
     self.records = []
     if isinstance(source, str):
       # TODO: support parquet, support hdfs
@@ -289,6 +171,7 @@ class ChatCompletionDataset(Dataset):
           self.records.append(json.loads(line))
     else:
       self.records = source
+    self.max_length = max_length
 
   def __len__(self):
     return len(self.records)
@@ -304,20 +187,23 @@ class ChatCompletionDataset(Dataset):
         ] + messages
     tokenized = self.tokenizer.apply_chat_template(
         [messages],
-        chat_template=chat_template,
+        chat_template=self.chat_template,
         return_assistant_tokens_mask=True,
-        return_dict=True,
-        return_tensors="pt",
+        return_dict=True
     )
     tokenized["loss_mask"] = tokenized.pop("assistant_masks")
+    #TODO: improve truncation strategy
+    if self.max_length:
+      for key in list(tokenized.keys()):
+        tokenized[key] = tokenized[key][0][:self.max_length]
     return tokenized
 
   def collate_fn(self, items):
-    all_input_ids = [torch.tensor(item["input_ids"][0]) for item in items]
+    all_input_ids = [torch.tensor(item["input_ids"]) for item in items]
     all_attention_mask = [
         torch.tensor(
-            item["attention_mask"][0]) for item in items]
-    all_loss_mask = [torch.tensor(item["loss_mask"][0]) for item in items]
+            item["attention_mask"]) for item in items]
+    all_loss_mask = [torch.tensor(item["loss_mask"]) for item in items]
     batch = {}
     batch["input_ids"] = zero_pad_sequences(
         all_input_ids, "right", self.tokenizer.pad_token_id)

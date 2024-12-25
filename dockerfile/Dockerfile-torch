@@ -1,0 +1,7 @@
+FROM registry.corp.kuaishou.com/kml-supercomputing-project/cuda:11.8.0_python3.10.12
+
+RUN pip3 install ipython matplotlib tensorboard
+
+RUN export http_proxy=http://oversea-squid4.sgp.txyun:11080 https_proxy=http://oversea-squid4.sgp.txyun:11080 && \
+    pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 && \
+    pip3 install torchao --extra-index-url https://download.pytorch.org/whl/cu118
