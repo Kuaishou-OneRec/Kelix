@@ -152,8 +152,14 @@ class ChatCompletionDataset(Dataset):
                source: Union[str, Iterable],
                tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast, str],
                input_key: str = "messages",
+               role_key: str = "role",
+               content_key: str = "content",
+               system_name: str = "system",
+               user_name: str = "user",
+               assistant_name: str = "assistant", 
                system_prompt: str = "You are a helpful assistant.",
                chat_template: str = "chat_template",
+               file_format: str = "jsonl",
                max_length: Optional[int] = None):
     super(ChatCompletionDataset).__init__()
     self.source = source
@@ -161,14 +167,28 @@ class ChatCompletionDataset(Dataset):
       tokenizer = AutoTokenizer.from_pretrained(tokenizer)
     self.tokenizer = tokenizer
     self.input_key = input_key
+    self.role_key = role_key
+    self.content_key = content_key
+    self.role_name_mappings = {
+      system_name: "system",
+      user_name: "user",
+      assistant_name: "assistant", 
+    }
+    self.format = file_format
     self.system_prompt = PromptLoader().load(system_prompt)
     self.chat_template = get_template(chat_template)
     self.records = []
     if isinstance(source, str):
       # TODO: support parquet, support hdfs
-      with open(self.source, encoding="utf-8") as f:
-        for line in f:
-          self.records.append(json.loads(line))
+      if self.format == "jsonl":
+        with open(self.source, encoding="utf-8") as f:
+          for line in f:
+            self.records.append(json.loads(line))
+      elif self.format == "json":
+        with open(self.source, encoding="utf-8") as f:
+          self.records = json.loads(f.reads())
+      else:
+        raise NotImplementedError()
     else:
       self.records = source
     self.max_length = max_length
@@ -176,8 +196,18 @@ class ChatCompletionDataset(Dataset):
   def __len__(self):
     return len(self.records)
 
+  def rename(self, messages):
+    new_messages = []
+    for message in messages:
+      new_message = {}
+      new_message["role"] = \
+        self.role_name_mappings[message[self.role_key]]
+      new_message["content"] = message[self.content_key]
+      new_messages.append(new_message)
+    return new_messages
+
   def __getitem__(self, index):
-    messages = self.records[index][self.input_key]
+    messages = self.rename(self.records[index][self.input_key])
     if self.system_prompt:
       if messages[0]["role"] == "system":
         messages[0]["content"] = self.system_prompt

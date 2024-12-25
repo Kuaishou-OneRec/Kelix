@@ -1,13 +1,15 @@
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-72B-Instruct # Pretrained model path
-OUTPUT_DIR=/llm_reco_ssd/zhouyang12/output/NegativeFeedback/models/i2i/qwen2_72B/ds
+OUTPUT_DIR=/llm_reco_ssd/zhouyang12/output/NegativeFeedback/models/i2i/qwen2_72B/ds-1
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=/llm_reco_ssd/zhouyang12/code/RecoVLM:$PYTHONPATH
+
+#     --use_flash_attention_2 \
 
 deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
 	recipes/finetune.py --model_dir $MODEL_DIR \
@@ -16,10 +18,9 @@ deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --chat_template chat_template_with_generation_tag \
     --input_key conversations \
     --system_prompt /llm_reco_ssd/zhouyang12/code/RecoVLM/examples/i2i/prompts/pairwise.txt \
-    --enable_gradient_checkpointing \
     --max_length 2048 \
     --save_checkpoint_every_epoch \
-    --use_flash_attention_2 \
+    --enable_gradient_checkpointing \
     --num_epochs 1 \
     --logging_per_step 1 \
     --merge_checkpoint \

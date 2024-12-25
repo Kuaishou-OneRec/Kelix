@@ -73,3 +73,37 @@ def test_chat_completion():
                           collate_fn=dataset.collate_fn):
     for key, t in batch.items():
       assert torch.allclose(t, ans[key])
+
+  records = [
+      {
+          "conversations": [
+              {"from": "human", "value": "Hello!"},
+              {"from": "gpt", "value": "你好👋!"},
+          ]
+      },
+      {
+          "conversations": [
+              {"from": "human", "value": "こんにちは!"},
+              {"from": "gpt", "value": "你好!"},
+          ]
+      }
+  ]
+  dataset = ChatCompletionDataset(
+      source=records,
+      tokenizer=TOKENIZER,
+      input_key="conversations",
+      role_key="from",
+      content_key="value",
+      user_name="human",
+      assistant_name="gpt",
+      system_prompt="You are RecoVLM",
+      chat_template="chat_template_with_generation_tag",
+      max_length=128
+  )
+
+  for batch in DataLoader(dataset,
+                          batch_size=2,
+                          shuffle=False,
+                          collate_fn=dataset.collate_fn):
+    for key, t in batch.items():
+      assert torch.allclose(t, ans[key])
