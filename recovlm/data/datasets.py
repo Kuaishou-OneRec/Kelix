@@ -187,7 +187,7 @@ class ChatCompletionDataset(Dataset):
             self.records.append(json.loads(line))
       elif self.format == "json":
         with open(self.source, encoding="utf-8") as f:
-          self.records = json.loads(f.reads())
+          self.records = json.loads(f.read())
       else:
         raise NotImplementedError()
     else:

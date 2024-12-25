@@ -203,12 +203,14 @@ def train():
         args.model_dir)
     model_config.attn_implementation = \
       "flash_attention_2" if args.use_flash_attention_2 else "eager"
+    model_config.use_cache = False
     model = Qwen2ForCausalLM(model_config)
 
   load_zero3_state_dict(model, args.model_dir)
   model.train()
   if args.enable_gradient_checkpointing:
-    model.gradient_checkpointing_enable()
+    model.gradient_checkpointing_enable(
+      gradient_checkpointing_kwargs={"use_reentrant": False})
 
   model_engine, _, _, _ = deepspeed.initialize(args=args,
                                                model=model)
@@ -229,13 +231,14 @@ def train():
   )
   sampler = DistributedSampler(dataset)
   start_time = time.time()
-  show_cnt = 10
+  show_cnt = 3
   for epoch in range(args.num_epochs):
     for batch in torch.utils.data.DataLoader(
             dataset,
             batch_size=model_engine._config.train_micro_batch_size_per_gpu,
             sampler=sampler,
-            collate_fn=dataset.collate_fn):
+            collate_fn=dataset.collate_fn,
+            shuffle=False):
       if show_cnt > 0 and dist.get_rank() == 0:
         print_rank_0(f"Input Text:\n\n{tokenizer.decode(batch['input_ids'][0])}")
         show_cnt -= 1
@@ -251,9 +254,8 @@ def train():
           input_ids, labels=labels, attention_mask=attention_mask).loss
 
       model_engine.backward(loss)
-
       model_engine.step()
-      model_engine.zero_grad()
+      # model_engine.zero_grad()
       iteration = model_engine.global_steps
       if not args.save_checkpoint_every_epoch and \
           iteration % args.save_checkpoint_per_step == 0 and \

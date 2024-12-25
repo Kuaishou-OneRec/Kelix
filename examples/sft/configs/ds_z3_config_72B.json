@@ -1,5 +1,5 @@
 {
-    "gradient_accumulation_steps": 2,
+    "gradient_accumulation_steps": 1,
     "train_micro_batch_size_per_gpu": 1,
     "prescale_gradients": false,
     "zero_allow_untested_optimizer": true,
@@ -7,12 +7,12 @@
       "type": "AdamW",
       "params": {
         "lr": 5e-6,
-        "eps": 1.0e-8,
+        "eps": 1.0e-6,
         "betas": [
           0.9,
-          0.95
+          0.999
         ],
-        "weight_decay": 0.1
+        "weight_decay": 0.01
       }
     },
     "scheduler": {

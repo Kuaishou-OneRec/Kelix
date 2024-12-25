@@ -1,7 +1,7 @@
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-72B-Instruct # Pretrained model path
-OUTPUT_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-72B-Instruct-OpenHermes2_5
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct # Pretrained model path
+OUTPUT_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-OpenHermes2_5
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
@@ -22,7 +22,7 @@ deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --user_name human \
     --assistant_name gpt \
     --file_format json \
-    --max_length 1024 \
+    --max_length 2048 \
     --save_checkpoint_every_epoch \
     --enable_gradient_checkpointing \
     --num_epochs 1 \

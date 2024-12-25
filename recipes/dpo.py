@@ -99,7 +99,7 @@ def print_rank_0(*msg):
 
 def move_to_cuda(batch):
   for key in list(batch.keys()):
-    batch[key] = batch[key].cuda()
+    batch[key] = batch[key].cuda(torch.cuda.current_device())
 
 
 def load_safetensors(path):
@@ -165,7 +165,6 @@ def get_batch_logps(
         logits: torch.FloatTensor,
         labels: torch.LongTensor,
         attention_mask,
-        prompt_id_lens,
         average_log_prob: bool = False) -> torch.FloatTensor:
   """Compute the log probabilities of the given labels under the given logits.
 
@@ -328,16 +327,23 @@ def train():
             sampler=sampler,
             collate_fn=dataset.collate_fn):
       move_to_cuda(batch)
-      input_ids = batch["chosen_input_ids"]
-      loss_mask = batch["chosen_loss_mask"]
-      attention_mask = batch.get("chosen_attention_mask", None)
+      chosen_input_ids = batch["chosen_input_ids"]
+      chosen_attention_mask = batch.get("chosen_attention_mask", None)
 
-      input_ids = batch["rejected_input_ids"]
-      loss_mask = batch["rejected_loss_mask"]
-      attention_mask = batch.get("rejected_attention_mask", None)
+      rejected_input_ids = batch["rejected_input_ids"]
+      rejected_attention_mask = batch.get("rejected_attention_mask", None)
 
-      input_ids = input_ids * (input_ids > 0).to(torch.int64)
-      labels = input_ids * loss_mask + -100 * (1 - loss_mask)
+      chosen_logps, rejected_logps, aux_loss, nll_loss = concatenated_forward(
+        model,
+        chosen_input_ids, chosen_attention_mask,
+        rejected_input_ids, rejected_attention_mask
+      )
+      with torch.no_grad():
+        reference_chosen_logps, reference_rejected_logps, _, _ = concatenated_forward(
+          ref_model,
+          chosen_input_ids, chosen_attention_mask,
+          rejected_input_ids, rejected_attention_mask
+        )
 
       loss = model_engine(
           input_ids, labels=labels, attention_mask=attention_mask).loss
