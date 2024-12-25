@@ -29,6 +29,7 @@ def get_argument_parser():
   parser.add_argument("--model_dir", type=str, default=None,
                       help="The directory of the pretrained model.")
 
+  ############ Dataset args ############
   parser.add_argument("--dataset", type=str, default=None,
                       help="The path of training data.")
 
@@ -44,6 +45,22 @@ def get_argument_parser():
 
   parser.add_argument("--input_key", type=str, default="messages",
                       help="The column name for input data.")
+
+  parser.add_argument("--role_key", type=str, default="role",
+                      help="The key name for role field.")
+
+  parser.add_argument("--content_key", type=str, default="content",
+                      help="The key name for content field.")
+
+  parser.add_argument("--user_name", type=str, default="user",
+                      help="The name of user role")
+
+  parser.add_argument("--assistant_name", type=str, default="assistant",
+                      help="The name of assistant.")
+  
+  parser.add_argument("--file_format", type=str, default="jsonl",
+                      help="The format of file.")
+  ################################################
 
   parser.add_argument("--max_length", type=int, default=1024,
                       help="Max tokens per sentence in corpus")
@@ -196,22 +213,32 @@ def train():
   model_engine, _, _, _ = deepspeed.initialize(args=args,
                                                model=model)
 
+  tokenizer = AutoTokenizer.from_pretrained(args.model_dir)
   dataset = ChatCompletionDataset(
       source=args.dataset,
-      tokenizer=args.model_dir,
+      tokenizer=tokenizer,
       input_key=args.input_key,
       system_prompt=args.system_prompt,
       chat_template=args.chat_template,
+      role_key=args.role_key,
+      content_key=args.content_key,
+      user_name=args.user_name,
+      assistant_name=args.assistant_name,
+      file_format=args.file_format,
       max_length=args.max_length
   )
   sampler = DistributedSampler(dataset)
   start_time = time.time()
+  show_cnt = 10
   for epoch in range(args.num_epochs):
     for batch in torch.utils.data.DataLoader(
             dataset,
             batch_size=model_engine._config.train_micro_batch_size_per_gpu,
             sampler=sampler,
             collate_fn=dataset.collate_fn):
+      if show_cnt > 0 and dist.get_rank() == 0:
+        print_rank_0(f"Input Text:\n\n{tokenizer.decode(batch['input_ids'][0])}")
+        show_cnt -= 1
       move_to_cuda(batch)
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]

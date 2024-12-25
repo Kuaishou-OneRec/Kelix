@@ -150,7 +150,8 @@ class ChatCompletionDataset(Dataset):
   """Text Completion Dataset with ChatML format"""
   def __init__(self,
                source: Union[str, Iterable],
-               tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast, str],
+               tokenizer: \
+                Union[PreTrainedTokenizer, PreTrainedTokenizerFast, str],
                input_key: str = "messages",
                role_key: str = "role",
                content_key: str = "content",
