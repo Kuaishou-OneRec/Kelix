@@ -9,7 +9,7 @@ echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=/llm_reco_ssd/zhouyang12/code/RecoVLM:$PYTHONPATH
 
-#     --use_flash_attention_2 \
+#    --enable_gradient_checkpointing \
 
 deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
 	recipes/finetune.py --model_dir $MODEL_DIR \
@@ -22,9 +22,9 @@ deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --user_name human \
     --assistant_name gpt \
     --file_format json \
-    --max_length 1024 \
+    --max_length 512 \
+    --use_flash_attention_2 \
     --save_checkpoint_every_epoch \
-    --enable_gradient_checkpointing \
     --num_epochs 1 \
     --logging_per_step 1 \
     --merge_checkpoint \

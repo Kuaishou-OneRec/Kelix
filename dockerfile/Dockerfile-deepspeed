@@ -13,8 +13,12 @@ RUN export http_proxy=http://oversea-squid4.sgp.txyun:11080 https_proxy=http://o
     apt-get install openssh-client openssh-server openmpi-bin openmpi-doc libopenmpi-dev pdsh git-all iputils-ping lsof -y
 
 RUN python3 -m pip install --upgrade pip && \
+    pip3 install ninja && \
+    MAX_JOBS=16 pip3 install flash-attn --no-build-isolation && \
     pip3 install deepspeed && \
-    pip3 install qwen-vl-utils[decord]
+    pip3 install qwen-vl-utils[decord] && \
+    pip3 install rich pandas
+    
 
 RUN mkdir -p /root/.ssh && mkdir -p /var/run/sshd && rm -rf /etc/ssh/*
 COPY --from=registry.corp.kuaishou.com/kml-platform/horovod-release:v3 /root/.ssh/ /root/.ssh/

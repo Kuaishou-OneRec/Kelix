@@ -334,15 +334,15 @@ def train():
       rejected_attention_mask = batch.get("rejected_attention_mask", None)
 
       chosen_logps, rejected_logps, aux_loss, nll_loss = concatenated_forward(
-        model,
-        chosen_input_ids, chosen_attention_mask,
-        rejected_input_ids, rejected_attention_mask
+          model,
+          chosen_input_ids, chosen_attention_mask,
+          rejected_input_ids, rejected_attention_mask
       )
       with torch.no_grad():
         reference_chosen_logps, reference_rejected_logps, _, _ = concatenated_forward(
-          ref_model,
-          chosen_input_ids, chosen_attention_mask,
-          rejected_input_ids, rejected_attention_mask
+            ref_model,
+            chosen_input_ids, chosen_attention_mask,
+            rejected_input_ids, rejected_attention_mask
         )
 
       loss = model_engine(

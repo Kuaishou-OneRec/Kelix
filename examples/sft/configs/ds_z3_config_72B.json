@@ -18,15 +18,15 @@
     "scheduler": {
       "type": "WarmupDecayLR",
       "params": {
-          "warmup_min_lr": 6e-6,
+          "warmup_min_lr": 0,
           "warmup_max_lr": 5e-6,
-          "warmup_num_steps": 50,
-          "total_num_steps": 2000
+          "warmup_num_steps": 1000,
+          "total_num_steps": 10000
       }
     },
     "zero_optimization": {
       "stage": 3,
-      "overlap_comm": true,
+      "overlap_comm": false,
       "contiguous_gradients": true,
       "sub_group_size": 1e9,
       "reduce_scatter": true,

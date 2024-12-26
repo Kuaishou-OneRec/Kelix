@@ -1,7 +1,7 @@
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct # Pretrained model path
-OUTPUT_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-OpenHermes2_5
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B # Pretrained model path
+OUTPUT_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-OpenHermes2_5
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
@@ -11,6 +11,7 @@ export PYTHONPATH=/llm_reco_ssd/zhouyang12/code/RecoVLM:$PYTHONPATH
 
 #     --use_flash_attention_2 \
 
+#   --enable_gradient_checkpointing \
 deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
 	recipes/finetune.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
@@ -23,8 +24,8 @@ deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --assistant_name gpt \
     --file_format json \
     --max_length 2048 \
-    --save_checkpoint_every_epoch \
     --enable_gradient_checkpointing \
+    --save_checkpoint_every_epoch \
     --num_epochs 1 \
     --logging_per_step 1 \
     --merge_checkpoint \

@@ -1,3 +1,4 @@
+from rich import print
 import argparse
 
 import time
@@ -19,8 +20,11 @@ from qwen_vl_utils import process_vision_info
 
 from recovlm.data.datasets import ChatCompletionDataset
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
+from recovlm.losses import CrossEntropyLoss
 
 from torch.utils.tensorboard import SummaryWriter
+
+import torch.nn.functional as F
 
 
 def get_argument_parser():
@@ -57,7 +61,7 @@ def get_argument_parser():
 
   parser.add_argument("--assistant_name", type=str, default="assistant",
                       help="The name of assistant.")
-  
+
   parser.add_argument("--file_format", type=str, default="jsonl",
                       help="The format of file.")
   ################################################
@@ -119,7 +123,7 @@ def print_rank_0(*msg):
 
 def move_to_cuda(batch):
   for key in list(batch.keys()):
-    batch[key] = batch[key].cuda()
+    batch[key] = batch[key].cuda(torch.cuda.current_device())
 
 
 def load_safetensors(path):
@@ -197,20 +201,23 @@ def train():
     os.makedirs(args.output_dir, exist_ok=True)
     tb_writer = SummaryWriter(log_dir=os.path.join(args.output_dir, "log"))
 
+  # torch.cuda.memory._record_memory_history()
+
   with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config):
     # TODO: add support for other models
     model_config = Qwen2ForCausalLM.config_class.from_pretrained(
         args.model_dir)
     model_config.attn_implementation = \
-      "flash_attention_2" if args.use_flash_attention_2 else "eager"
+        "flash_attention_2" if args.use_flash_attention_2 else "eager"
     model_config.use_cache = False
     model = Qwen2ForCausalLM(model_config)
 
   load_zero3_state_dict(model, args.model_dir)
   model.train()
   if args.enable_gradient_checkpointing:
+    print_rank_0("Enable gradient checkpointing")
     model.gradient_checkpointing_enable(
-      gradient_checkpointing_kwargs={"use_reentrant": False})
+        gradient_checkpointing_kwargs={"use_reentrant": False})
 
   model_engine, _, _, _ = deepspeed.initialize(args=args,
                                                model=model)
@@ -229,6 +236,7 @@ def train():
       file_format=args.file_format,
       max_length=args.max_length
   )
+  loss_fn = CrossEntropyLoss(ignore_index=-100)
   sampler = DistributedSampler(dataset)
   start_time = time.time()
   show_cnt = 3
@@ -237,10 +245,10 @@ def train():
             dataset,
             batch_size=model_engine._config.train_micro_batch_size_per_gpu,
             sampler=sampler,
-            collate_fn=dataset.collate_fn,
-            shuffle=False):
+            collate_fn=dataset.collate_fn):
       if show_cnt > 0 and dist.get_rank() == 0:
-        print_rank_0(f"Input Text:\n\n{tokenizer.decode(batch['input_ids'][0])}")
+        print_rank_0(
+            f"Input Text:\n\n{tokenizer.decode(batch['input_ids'][0])}")
         show_cnt -= 1
       move_to_cuda(batch)
       input_ids = batch["input_ids"]
@@ -248,11 +256,24 @@ def train():
       attention_mask = batch.get("attention_mask", None)
 
       input_ids = input_ids * (input_ids > 0).to(torch.int64)
-      labels = input_ids * loss_mask + -100 * (1 - loss_mask)
+      labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
-      loss = model_engine(
-          input_ids, labels=labels, attention_mask=attention_mask).loss
+      empty_loss_ratio = 1 - (labels != loss_fn.ignore_index).sum(-1).float().mean().item()
 
+      if empty_loss_ratio > 0.3:
+        print_rank_0(f"WARN: {empty_loss_ratio * 100}% samples doesn't have loss.")
+
+      output = model_engine(
+          input_ids, attention_mask=attention_mask)
+
+      logits = output.logits
+
+      loss = loss_fn(logits=logits, labels=labels)
+
+      del logits
+      del labels
+      # loss = model_engine(
+      #     input_ids, labels=labels, attention_mask=attention_mask).loss
       model_engine.backward(loss)
       model_engine.step()
       # model_engine.zero_grad()
@@ -290,7 +311,8 @@ def train():
             f"Learning Rate: {learning_rate}, "
             f"Grad Norm: {model_engine.get_global_grad_norm()}, "
             f"Sec per Step: {sec_per_step}")
-
+    # if dist.get_rank() == 0:
+    #   torch.cuda.memory._dump_snapshot(f"7b_flash_snapshot.pickle")
     print_rank_0(f"Epoch {epoch} finished, save checkpoint...")
     if args.save_checkpoint_every_epoch:
       model_engine.save_checkpoint(save_dir=args.output_dir)
@@ -307,7 +329,6 @@ def train():
 
   if dist.get_rank() == 0:
     logging.info("Training finished!")
-
 
 if __name__ == "__main__":
   train()

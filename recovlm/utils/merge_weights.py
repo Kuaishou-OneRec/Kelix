@@ -21,52 +21,6 @@ def get_argument_parser():
 
   return parser
 
-# embeddings.class_embedding torch.Size([1280])
-# embeddings.patch_embedding.weight torch.Size([1280, 3, 14, 14])
-# embeddings.position_embedding.weight torch.Size([730, 1280])
-# pre_layrnorm.weight torch.Size([1280])
-# pre_layrnorm.bias torch.Size([1280])
-# encoder.layers.0.self_attn.k_proj.weight torch.Size([1280, 1280])
-# encoder.layers.0.self_attn.k_proj.bias torch.Size([1280])
-# encoder.layers.0.self_attn.v_proj.weight torch.Size([1280, 1280])
-# encoder.layers.0.self_attn.v_proj.bias torch.Size([1280])
-# encoder.layers.0.self_attn.q_proj.weight torch.Size([1280, 1280])
-# encoder.layers.0.self_attn.q_proj.bias torch.Size([1280])
-# encoder.layers.0.self_attn.out_proj.weight torch.Size([1280, 1280])
-# encoder.layers.0.self_attn.out_proj.bias torch.Size([1280])
-# encoder.layers.0.layer_norm1.weight torch.Size([1280])
-# encoder.layers.0.layer_norm1.bias torch.Size([1280])
-# encoder.layers.0.mlp.fc1.weight torch.Size([5120, 1280])
-# encoder.layers.0.mlp.fc1.bias torch.Size([5120])
-# encoder.layers.0.mlp.fc2.weight torch.Size([1280, 5120])
-# encoder.layers.0.mlp.fc2.bias torch.Size([1280])
-# encoder.layers.0.layer_norm2.weight torch.Size([1280])
-# encoder.layers.0.layer_norm2.bias torch.Size([1280])
-# post_layernorm.weight torch.Size([1280])
-# post_layernorm.bias torch.Size([1280])
-
-
-# patch_embed.proj.weight torch.Size([1280, 3, 2, 14, 14])
-
-# blocks.0.norm1.weight torch.Size([1280])
-# blocks.0.norm1.bias torch.Size([1280])
-# blocks.0.norm2.weight torch.Size([1280])
-# blocks.0.norm2.bias torch.Size([1280])
-# blocks.0.attn.qkv.weight torch.Size([3840, 1280])
-# blocks.0.attn.qkv.bias torch.Size([3840])
-# blocks.0.attn.proj.weight torch.Size([1280, 1280])
-# blocks.0.attn.proj.bias torch.Size([1280])
-# blocks.0.mlp.fc1.weight torch.Size([5120, 1280])
-# blocks.0.mlp.fc1.bias torch.Size([5120])
-# blocks.0.mlp.fc2.weight torch.Size([1280, 5120])
-# blocks.0.mlp.fc2.bias torch.Size([1280])
-
-# merger.ln_q.weight torch.Size([1280])
-# merger.ln_q.bias torch.Size([1280])
-# merger.mlp.0.weight torch.Size([5120, 5120])
-# merger.mlp.0.bias torch.Size([5120])
-# merger.mlp.2.weight torch.Size([3584, 5120])
-# merger.mlp.2.bias torch.Size([3584])
 
 def main():
   arg_parser = get_argument_parser()
