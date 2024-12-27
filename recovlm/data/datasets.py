@@ -1,4 +1,4 @@
-from typing import Union, Iterable, Optional
+from typing import Union, Iterable, Optional, List
 
 import os
 import re
@@ -6,7 +6,10 @@ import json
 import math
 import torch
 import tarfile
+import itertools
 import torch.distributed as dist
+
+import numpy as np
 
 from torch.utils.data import IterableDataset, Dataset, DataLoader
 
@@ -145,7 +148,6 @@ def zero_pad_sequences(sequences, side: str = "left", value=0):
 
 # TODO: use IterableDataset
 
-
 class ChatCompletionDataset(Dataset):
   """Text Completion Dataset with ChatML format"""
   def __init__(self,
@@ -243,3 +245,67 @@ class ChatCompletionDataset(Dataset):
     batch["loss_mask"] = zero_pad_sequences(
         all_loss_mask, "right")
     return batch
+
+class BlendedWebDataset(IterableDataset):
+  """Blend Multiple dataset"""
+  def __init__(self, source: str, start_seed: int = 123):
+    super(BlendedWebDataset).__init__()
+    with open(source, encoding="utf-8") as f:
+      self.datasets = json.loads(f.read())
+    self.indexes = []
+    self.path = []
+    # 加权的样本量
+    self.w_num_samples = []
+    # 预设的权重，>1=过采样，<1=降采样
+    self.weights = []
+    # 实际样本量
+    self.num_samples = []
+    # 自定义预处理
+    self.processors = []
+    for dataset in self.datasets:
+      index_file = dataset["index"]
+      with open(index_file, encoding="utf-8") as f:
+        index = json.loads(f.read())
+      self.indexes.append(index)
+      self.num_samples.append(self.get_num_samples(index))
+      self.path.append(os.path.dirname(index_file))
+      self.weights.append(dataset.get("weight", 1.0))
+      self.processors.append(dataset.get("processor", "default"))
+      self.w_num_samples.append(int(self.num_samples[-1] * self.weights[-1]))
+    self.length = sum(self.num_samples)
+    self.w_length = int(sum(self.w_num_samples))
+    self.buffer_size = 1000
+    self.normed_weights = self.normlize_weight(self.w_length)
+
+  def get_num_samples(self, index):
+    return sum([shard["nsamples"] for shard in index["shardlist"]])
+
+  def normlize_weight(self, weights: List[float]) -> np.array:
+    return weights / np.sum(weights)
+
+  def sample_buffer(self):
+    return np.random.choice(
+      list(range(len(self.datasets))),
+      size=self.buffer_size, p=self.normed_weights).tolist()
+
+  def __iter__(self):
+    worker_info = torch.utils.data.get_worker_info()
+    worker_id = 0 if worker_info is None else worker_info.id
+    num_workers = 0 if worker_info is None else worker_info.num_workers
+    this_datasets_consumed_cnt = defaultdict(int)
+    for i in itertools.count(start=self.start_seed):
+        np.random.seed(i)
+        if worker_id == num_workers - 1:
+            self._update_buffer_start_seed(i)
+        
+        this_worker_dataset_indices, this_worker_sample_indices = self._get_dataset_sample_index(worker_id, this_datasets_consumed_cnt)
+        for i in range(len(this_worker_dataset_indices)):
+
+            ann = self.datasets[this_worker_dataset_indices[i]][this_worker_sample_indices[i]]
+            ann["this_worker_sample_index"] = this_worker_sample_indices[i]
+            yield ann
+
+
+  def __len__(self):
+    # 训练使用加权的总长度
+    return self.w_length

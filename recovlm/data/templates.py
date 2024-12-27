@@ -28,8 +28,14 @@ chat_template_with_generation_tag = (
   "{% endfor %}"
 )
 
+chat_template_response_only = (
+  "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
+)
+
 def get_template(name):
   if name == "chat_template_with_generation_tag":
     return chat_template_with_generation_tag
+  elif name == "chat_template_response_only":
+    return chat_template_response_only
   else:
     return chat_template

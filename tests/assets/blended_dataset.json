@@ -1,0 +1,12 @@
+[
+  {
+    "index": "/llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json",
+    "processor": "default",
+    "weight": 0.5
+  },
+  {
+    "index": "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json",
+    "processor": "default",
+    "weight": 1.0
+  }
+]

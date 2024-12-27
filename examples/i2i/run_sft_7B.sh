@@ -11,10 +11,6 @@ echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=/llm_reco_ssd/zhouyang12/code/RecoVLM:$PYTHONPATH
 
-    # --enable_gradient_checkpointing \
-    # --use_flash_attention_2 \]
-
-#     --enable_gradient_checkpointing \
 
 deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
 	recipes/finetune.py --model_dir $MODEL_DIR \

@@ -258,10 +258,12 @@ def train():
       input_ids = input_ids * (input_ids > 0).to(torch.int64)
       labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
-      empty_loss_ratio = 1 - (labels != loss_fn.ignore_index).sum(-1).float().mean().item()
+      empty_loss_ratio = 1 - \
+          (labels != loss_fn.ignore_index).sum(-1).float().mean().item()
 
       if empty_loss_ratio > 0.3:
-        print_rank_0(f"WARN: {empty_loss_ratio * 100}% samples doesn't have loss.")
+        print_rank_0(
+            f"WARN: {empty_loss_ratio * 100}% samples doesn't have loss.")
 
       output = model_engine(
           input_ids, attention_mask=attention_mask)
@@ -329,6 +331,7 @@ def train():
 
   if dist.get_rank() == 0:
     logging.info("Training finished!")
+
 
 if __name__ == "__main__":
   train()

@@ -38,7 +38,7 @@ def get_argument_parser():
   parser.add_argument("--dataset", type=str, default=None,
                       help="The path of training data.")
 
-  #### Change to Vision Dataset
+  # Change to Vision Dataset
   # parser.add_argument("--chat_template", type=str,
   #                     default="chat_template_with_generation_tag",
   #                     help="The chat template to use")
@@ -113,6 +113,7 @@ def get_argument_parser():
 
   return parser
 
+
 def train():
   arg_parser = get_argument_parser()
   arg_parser = deepspeed.add_config_arguments(arg_parser)
@@ -148,7 +149,7 @@ def train():
                                                model=model)
 
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir)
-  ### Blended Datasets
+  # Blended Datasets
   dataset = ChatCompletionDataset(
       source=args.dataset,
       tokenizer=tokenizer,
@@ -186,7 +187,8 @@ def train():
       empty_loss_ratio = 1 - (labels != loss_fn.ignore_index).sum(-1).mean()
 
       if empty_loss_ratio > 0.3:
-        print_rank_0(f"WARN: {empty_loss_ratio * 100}% samples doesn't have loss.")
+        print_rank_0(
+            f"WARN: {empty_loss_ratio * 100}% samples doesn't have loss.")
 
       output = model_engine(
           input_ids, labels=labels, attention_mask=attention_mask,
@@ -251,6 +253,7 @@ def train():
 
   if dist.get_rank() == 0:
     logging.info("Training finished!")
+
 
 if __name__ == "__main__":
   train()

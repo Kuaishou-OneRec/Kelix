@@ -1,6 +1,7 @@
+import os
 import torch
 from torch.utils.data import DataLoader
-from recovlm.data.datasets import ChatCompletionDataset
+from recovlm.data.datasets import ChatCompletionDataset, BlendedWebDataset
 
 """
     # dataset = LLaVA_CC3M_Dataset(
@@ -107,3 +108,20 @@ def test_chat_completion():
                           collate_fn=dataset.collate_fn):
     for key, t in batch.items():
       assert torch.allclose(t, ans[key])
+
+
+def test_blended_dataset():
+  file = os.path.join(
+      os.path.dirname(__file__),
+      "assets",
+      "blended_dataset.json")
+  dataset = BlendedWebDataset(source=file)
+  assert len(dataset) == 462929045
+  assert dataset.path == [
+      "/llm_reco_ssd/luoxinchen/dataset/datacomp/large",
+      "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset"
+  ]
+  assert dataset.num_samples == [769525787, 78166152]
+  assert dataset.w_num_samples == [384762893, 78166152]
+  assert dataset.weights == [0.5, 1.0]
+  assert dataset.processors == ["default", "default"]

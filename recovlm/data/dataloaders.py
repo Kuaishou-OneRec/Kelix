@@ -1,4 +1,5 @@
-from typing import Optional
+from typing import Optional, Callable
+
 import torch
 import wids
 
@@ -10,7 +11,7 @@ from tqdm import tqdm
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
 
 
-def build_collate_fn(processor, max_length):
+def get_collate_fn(processor, max_length):
   def collate_fn(batch):
     prompt_messages = []
     response_messages = []
@@ -89,22 +90,25 @@ def build_collate_fn(processor, max_length):
   return collate_fn
 
 
-def create_indexed_dataloader(source: str,
-                              processor,
-                              batch_size: int,
-                              num_workers: int = 8,
-                              chunksize: int = 1000,
-                              shuffle: bool = True,
-                              max_length: Optional[int] = None,
-                              rank: Optional[int] = None):
-  dataset = wids.ShardListDataset(source)
+def get_indexed_dataloader(sources: str,
+                           processor,
+                           batch_size: int,
+                           num_workers: int = 8,
+                           chunksize: int = 1000,
+                           shuffle: bool = True,
+                           max_length: Optional[int] = None,
+                           rank: Optional[int] = None,
+                           collator: Optional[Callable] = None):
+  dataset = torch.utils.data.ConcatDataset(
+    [wids.ShardListDataset(source) for source in sources])
   sampler = wids.DistributedChunkedSampler(
       dataset, chunksize=chunksize, shuffle=shuffle,
-      rank=rank)
+      rank=rank
+  )
   dataloader = DataLoader(
       dataset, batch_size=batch_size, num_workers=num_workers,
       sampler=sampler,
-      collate_fn=build_collate_fn(processor, max_length=max_length)
+      collate_fn=collator
   )
   return dataloader
 
@@ -115,11 +119,14 @@ if __name__ == '__main__':
   #     "/llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json"
   # ],
   # source = "/llm_reco_ssd/luoxinchen/dataset/cc12m/cc12m-index.json"
-  source = "/llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json"
+  sources = [
+    "/llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json",
+    "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json"
+  ]
   processor = AutoProcessor.from_pretrained(
       "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct")
-  dataloader = create_indexed_dataloader(
-      source=source,
+  dataloader = get_indexed_dataloader(
+      sources=sources,
       processor=processor,
       batch_size=32,
       num_workers=4,
@@ -127,7 +134,17 @@ if __name__ == '__main__':
       max_length=1024,
       rank=1)
   for s in tqdm(dataloader):
-    for input_ids in s["input_ids"]:
-      print(processor.tokenizer.decode(input_ids))
-      print("=" * 10)
+    print(s["pixel_values"].shape)
+    print(s["image_grid_thw"].shape)
+    print(s["image_grid_thw"][0])
+    print(s["image_grid_thw"].prod())
+    t = 0
+    for a, b, c in s["image_grid_thw"]:
+        t += (a * b * c)
+    print("sssss", t)
+    assert t == s["pixel_values"].shape[0]
+    assert s["pixel_values"].shape[0] == s["image_grid_thw"].prod(dim)
+    # for input_ids in s["input_ids"]:
+    #   print(processor.tokenizer.decode(input_ids))
+    #   print("=" * 10)
     break
