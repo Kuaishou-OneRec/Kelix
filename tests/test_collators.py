@@ -8,13 +8,13 @@ from transformers import AutoProcessor
 
 
 def test_image_text_packing_collator():
+    # TODO: complete tests
     sources = [
         "/llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json",
         "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json"
     ]
     processor = AutoProcessor.from_pretrained(
         "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct")
-    print(processor)
     collator = ImageTextPackingCollator(
         processor = processor,
         max_length = 1024,
@@ -29,7 +29,6 @@ def test_image_text_packing_collator():
         max_retry = 5,
         multiple_of = 8
     )
-    print(collator)
     dataloader = get_indexed_dataloader(
         sources=sources,
         processor=processor,
@@ -41,4 +40,4 @@ def test_image_text_packing_collator():
         collator=collator)
     for s in dataloader:
         print(s)
-        gg
+        break
