@@ -15,7 +15,7 @@ export PYTHONPATH=/llm_reco_ssd/zhouyang12/code/RecoVLM:$PYTHONPATH
 deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
 	recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset /llm_reco_ssd/luoxinchen/dataset/datacomp/large,/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset \
+    --dataset /llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json,/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json \
     --max_length 2048 \
     --enable_gradient_checkpointing \
     --save_checkpoint_every_epoch \

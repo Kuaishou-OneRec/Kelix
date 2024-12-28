@@ -328,6 +328,4 @@ class ImageTextPackingCollator:
         continue
       all_inputs.append(_inputs)
     inputs = self._packing(all_inputs)
-    print(inputs)
-    gg
     return inputs
