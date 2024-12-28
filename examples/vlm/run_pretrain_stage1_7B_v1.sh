@@ -10,15 +10,17 @@ echo "Output: $OUTPUT_DIR"
 export PYTHONPATH=/llm_reco_ssd/zhouyang12/code/RecoVLM:$PYTHONPATH
 
 #     --use_flash_attention_2 \
-
+# enable_gradient_checkpointing + fa2好像会有问题
 #   --enable_gradient_checkpointing \
+# 
+# /llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json
 deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
 	recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset /llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json,/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json \
-    --max_length 2048 \
-    --enable_gradient_checkpointing \
+    --dataset /llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json \
+    --max_length 384 \
     --save_checkpoint_every_epoch \
+    --packing_batch_size 4 \
     --freeze_llm \
     --num_epochs 1 \
     --logging_per_step 1 \

@@ -99,6 +99,7 @@ def get_indexed_dataloader(sources: str,
                            max_length: Optional[int] = None,
                            rank: Optional[int] = None,
                            collator: Optional[Callable] = None):
+  # TODO: concat之后会有单个dataset index out of range的情况，而且数据没有被均匀shuffle，再排查下；考虑提前合并index
   dataset = torch.utils.data.ConcatDataset(
     [wids.ShardListDataset(source) for source in sources])
   sampler = wids.DistributedChunkedSampler(
