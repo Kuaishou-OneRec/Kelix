@@ -43,6 +43,12 @@ def get_argument_parser():
 
   ################################################
 
+  parser.add_argument("--freeze_llm", action="store_true",
+                      help="Freeze LLM parameters.")
+
+  parser.add_argument("--freeze_visual", action="store_true",
+                      help="Freeze visual encoder parameters.")
+
   parser.add_argument("--max_length", type=int, default=2048,
                       help="Max tokens per sentence in corpus")
 
@@ -191,6 +197,20 @@ def train():
 
   load_zero3_state_dict(model, args.model_dir)
   model.train()
+  if args.freeze_llm:
+    print_rank_0("Freeze LLM parameters.")
+    for name, param in model.named_parameters():
+      if not name.startswith("visual"):
+        print_rank_0(f"Disable LLM grad: {name}")
+        param.requires_grad = False
+  
+  if args.freeze_visual:
+    print_rank_0("Freeze visual encoder parameters.")
+    for name, param in model.named_parameters():
+      if name.startswith("visual"):
+        print_rank_0(f"Disable visual encoder grad: {name}")
+        param.requires_grad = False
+
   if args.enable_gradient_checkpointing:
     print_rank_0("Enable gradient checkpointing")
     model.gradient_checkpointing_enable(

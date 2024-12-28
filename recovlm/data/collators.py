@@ -327,5 +327,6 @@ class ImageTextPackingCollator:
       if failed:
         continue
       all_inputs.append(_inputs)
+    # TODO: fix empty all_inputs
     inputs = self._packing(all_inputs)
     return inputs

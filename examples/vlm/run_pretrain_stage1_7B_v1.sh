@@ -19,6 +19,7 @@ deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --max_length 2048 \
     --enable_gradient_checkpointing \
     --save_checkpoint_every_epoch \
+    --freeze_llm \
     --num_epochs 1 \
     --logging_per_step 1 \
     --merge_checkpoint \
