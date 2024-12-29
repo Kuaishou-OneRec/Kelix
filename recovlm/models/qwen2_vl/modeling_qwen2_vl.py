@@ -687,15 +687,21 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         ):
             sliding_window = self.config.sliding_window
         else:
-            sliding_window = None
+            sliding_window = -1
         
         if cu_seqlens is not None:
             # Sample packing with FA2
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            # print('forward cu_seqlens', cu_seqlens.dtype, cu_seqlens)
+            cu_seqlens = cu_seqlens.to(torch.int32)
+            # print('query_states', query_states.shape)
+            # print('key_states', key_states.shape)
+            # print('value_states', value_states.shape)
+            # exit()
             attn_output = flash_attn_varlen_func(
-                query_states,
-                key_states,
-                value_states,
+                query_states.squeeze(0),
+                key_states.squeeze(0),
+                value_states.squeeze(0),
                 cu_seqlens,
                 cu_seqlens,
                 max_seqlen,
@@ -1025,7 +1031,8 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             #  - FA2 requires that cu_seqlens_q must have dtype int32
             #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
             # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+            # dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+            dtype=torch.int32,
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
