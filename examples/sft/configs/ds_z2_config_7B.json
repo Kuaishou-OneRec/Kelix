@@ -1,6 +1,6 @@
 {
     "gradient_accumulation_steps": 1,
-    "train_micro_batch_size_per_gpu": 12,
+    "train_micro_batch_size_per_gpu": 10,
     "prescale_gradients": false,
     "zero_allow_untested_optimizer": true,
     "optimizer": {
@@ -18,7 +18,7 @@
     "scheduler": {
       "type": "WarmupCosineLR",
       "params": {
-          "total_num_steps": 50000,
+          "total_num_steps": 100000,
           "warmup_num_steps": 500,
           "cos_min_ratio": 0.005
       }

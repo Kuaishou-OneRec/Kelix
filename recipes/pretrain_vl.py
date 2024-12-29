@@ -71,7 +71,7 @@ def get_argument_parser():
   parser.add_argument("--use_flash_attention_2", action="store_true",
                       help="Whether to use flash attention 2")
   
-  parser.add_argument("--save_checkpoint_per_step", type=int, default=None,
+  parser.add_argument("--save_checkpoint_per_step", type=int, default=1000,
                       help="The number of steps to save a checkpoint")
 
   parser.add_argument("--save_checkpoint_every_epoch", action="store_true",
