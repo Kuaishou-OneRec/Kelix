@@ -318,13 +318,16 @@ class ImageTextPackingCollator:
     for sample in samples:
       max_visual_tokens = self.max_visual_tokens
       failed = True
-      for _ in range(self.max_retry):
-        _inputs = self._process_single(
-          sample, max_visual_tokens=max_visual_tokens)
-        if _inputs["input_ids"].shape[-1] <= self.max_length:
-          failed = False
-          break
-        max_visual_tokens = (max_visual_tokens * 0.9)
+      try:
+        for _ in range(self.max_retry):
+          _inputs = self._process_single(
+            sample, max_visual_tokens=max_visual_tokens)
+          if _inputs["input_ids"].shape[-1] <= self.max_length:
+            failed = False
+            break
+          max_visual_tokens = (max_visual_tokens * 0.9)
+      except:
+        failed = True
       if failed:
         continue
       all_inputs.append(_inputs)
