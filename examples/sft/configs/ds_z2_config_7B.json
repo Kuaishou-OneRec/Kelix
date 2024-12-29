@@ -25,17 +25,12 @@
       }
     },
     "zero_optimization": {
-      "stage": 3,
-      "sub_group_size": 5e8,
+      "stage": 2,
       "contiguous_gradients": true,
-      "allgather_bucket_size": 5e8,
-      "reduce_bucket_size": 5e8,
       "overlap_comm": true,
       "reduce_scatter": true,
-      "stage3_prefetch_bucket_size": 5e8,
-      "stage3_param_persistence_threshold": 5e8,
-      "stage3_max_live_parameters": 5e8,
-      "stage3_max_reuse_distance": 5e8
+      "reduce_bucket_size": 5e8,
+      "allgather_bucket_size": 5e8
     },
     "activation_checkpointing": {
       "partition_activations": true,
