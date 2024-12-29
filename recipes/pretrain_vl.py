@@ -193,14 +193,19 @@ def train():
 
   # torch.cuda.memory._record_memory_history()
 
-  with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config):
-    # TODO: add support for other models
-    model_config = Qwen2VLForConditionalGeneration.config_class.from_pretrained(
-        args.model_dir)
-    model_config.attn_implementation = \
-        "flash_attention_2" if args.use_flash_attention_2 else "eager"
-    model_config.use_cache = False
-    model = Qwen2VLForConditionalGeneration(model_config)
+  # with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config):
+  #   # TODO: add support for other models
+
+  #   model_config = Qwen2VLForConditionalGeneration.config_class.from_pretrained(
+  #       args.model_dir)
+  #   model_config._attn_implementation = \
+  #       "flash_attention_2" if args.use_flash_attention_2 else "eager"
+  #   model_config.use_cache = False
+  #   model = Qwen2VLForConditionalGeneration(model_config)
+
+  model = Qwen2VLForConditionalGeneration.from_pretrained(
+    args.model_dir, _attn_implementation="flash_attention_2", use_cache=False
+  )
 
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
@@ -216,12 +221,12 @@ def train():
         print_rank_0(f"Disable visual encoder grad: {name}")
         param.requires_grad = False
 
-  if args.enable_gradient_checkpointing:
-    print_rank_0("Enable gradient checkpointing")
-    model.gradient_checkpointing_enable(
-        gradient_checkpointing_kwargs={"use_reentrant": False})
+  # if args.enable_gradient_checkpointing:
+  #   print_rank_0("Enable gradient checkpointing")
+  #   model.gradient_checkpointing_enable(
+  #       gradient_checkpointing_kwargs={"use_reentrant": False})
 
-  load_zero3_state_dict(model, args.model_dir)
+  # load_zero3_state_dict(model, args.model_dir)
   model.train()
   model_engine, _, _, _ = deepspeed.initialize(args=args,
                                                model=model)
