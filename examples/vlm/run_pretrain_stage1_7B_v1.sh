@@ -10,19 +10,24 @@ echo "Output: $OUTPUT_DIR"
 export PYTHONPATH=/llm_reco_ssd/zhouyang12/code/RecoVLM:$PYTHONPATH
 
 #     --use_flash_attention_2 \
+# 
+# /llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json
+#     --enable_gradient_checkpointing \
+# --deepspeed --deepspeed_config examples/sft/configs/ds_z3_config_72B.json
 
-#   --enable_gradient_checkpointing \
 deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
 	recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset /llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json,/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json \
-    --max_length 2048 \
-    --enable_gradient_checkpointing \
+    --dataset /llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json \
+    --max_length 256 \
     --save_checkpoint_every_epoch \
+    --save_checkpoint_per_step 1000 \
+    --packing_batch_size 4 \
+    --use_flash_attention_2 \
     --freeze_llm \
     --num_epochs 1 \
     --logging_per_step 1 \
     --merge_checkpoint \
     --merge_checkpoint_dtype bf16 \
     --merge_checkpoint_output_file pytorch_model.bin \
-	--deepspeed --deepspeed_config examples/sft/configs/ds_z3_config_72B.json
+	--deepspeed --deepspeed_config examples/sft/configs/ds_z3_config_7B.json

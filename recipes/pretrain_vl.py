@@ -68,11 +68,11 @@ def get_argument_parser():
   parser.add_argument("--output_dir", type=str, default=None,
                       help="The directory to write the trained model")
 
-  parser.add_argument("--save_checkpoint_per_step", type=int, default=None,
-                      help="The number of steps to save a checkpoint")
-
   parser.add_argument("--use_flash_attention_2", action="store_true",
                       help="Whether to use flash attention 2")
+  
+  parser.add_argument("--save_checkpoint_per_step", type=int, default=None,
+                      help="The number of steps to save a checkpoint")
 
   parser.add_argument("--save_checkpoint_every_epoch", action="store_true",
                       help="Save checkpoint at the end of every epoch")
@@ -300,16 +300,10 @@ def train():
 
       del logits
       del labels
-      # loss = model_engine(
-      #     input_ids, labels=labels, attention_mask=attention_mask).loss
       model_engine.backward(loss)
       model_engine.step()
       # model_engine.zero_grad()
       iteration = model_engine.global_steps
-      if not args.save_checkpoint_every_epoch and \
-          iteration % args.save_checkpoint_per_step == 0 and \
-              iteration > 0 and model_engine.is_gradient_accumulation_boundary():
-        model_engine.save_checkpoint(save_dir=args.output_dir)
 
       avg_loss = torch.tensor(loss.item()).cuda()
       dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
@@ -344,14 +338,15 @@ def train():
             f"Sec per Step: {sec_per_step}",
             f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
             f"total_num_tokens: {total_num_tokens}")
-    # if dist.get_rank() == 0:
-    #   torch.cuda.memory._dump_snapshot(f"7b_flash_snapshot.pickle")
-    print_rank_0(f"Epoch {epoch} finished, save checkpoint...")
-    if args.save_checkpoint_every_epoch:
-      model_engine.save_checkpoint(save_dir=args.output_dir)
 
-  if not args.save_checkpoint_every_epoch:
-    model_engine.save_checkpoint(save_dir=args.output_dir)
+      if iteration % args.save_checkpoint_per_step == 0 and \
+          iteration > 0 and model_engine.is_gradient_accumulation_boundary():
+        model_engine.save_checkpoint(save_dir=args.output_dir)
+
+    print_rank_0(f"Epoch {epoch} finished.")
+    if args.save_checkpoint_every_epoch:
+      print_rank_0("Save checkpoint..")
+      model_engine.save_checkpoint(save_dir=args.output_dir)
 
   if args.merge_checkpoint and dist.get_rank() == 0:
     convert_zero_checkpoint_to_state_dict(
