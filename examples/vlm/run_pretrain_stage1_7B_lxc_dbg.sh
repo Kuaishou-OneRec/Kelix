@@ -9,7 +9,6 @@ echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=$PWD:$PYTHONPATH
 
-#     --use_flash_attention_2 \
 
 #   --enable_gradient_checkpointing \
 deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
@@ -19,6 +18,7 @@ deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --max_length 384 \
     --save_checkpoint_every_epoch \
     --packing_batch_size 4 \
+    --use_flash_attention_2 \
     --freeze_llm \
     --num_epochs 1 \
     --logging_per_step 1 \
