@@ -8,12 +8,19 @@ import logging
 import collections
 from typing import List
 
+os.environ["NCCL_IB_QPS_PER_CONNECTION"] = "2"
+os.environ["NCCL_IB_DISABLE"] = "0"
+os.environ["NCCL_IB_GID_INDEX"] = "3"
+os.environ["NCCL_IB_HCA"] = "mlx5_0,mlx5_1,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9"
+# os.environ["NCCL_TOPO_FILE"] = "/share/huzhiwen/baidu/topo_a800_hpc_bcc.xml"
+os.environ["NCCL_ALGO"]= "^NVLS,NVLSTree"
+
 import torch
 import deepspeed
 import torch.distributed as dist
 import numpy as np
-from transformers import AutoTokenizer, AutoProcessor, \
-  Qwen2VLForConditionalGeneration
+from transformers import AutoTokenizer, AutoProcessor
+from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 from safetensors import safe_open
 
 from qwen_vl_utils import process_vision_info
@@ -195,8 +202,6 @@ def train():
     model_config.use_cache = False
     model = Qwen2VLForConditionalGeneration(model_config)
 
-  load_zero3_state_dict(model, args.model_dir)
-  model.train()
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
     for name, param in model.named_parameters():
@@ -216,6 +221,8 @@ def train():
     model.gradient_checkpointing_enable(
         gradient_checkpointing_kwargs={"use_reentrant": False})
 
+  load_zero3_state_dict(model, args.model_dir)
+  model.train()
   model_engine, _, _, _ = deepspeed.initialize(args=args,
                                                model=model)
 
