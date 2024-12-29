@@ -236,6 +236,7 @@ class ImageTextPackingCollator:
     text = self.processor.apply_chat_template(
         [prompt], tokenize=False, add_generation_prompt=True
     )
+    # TODO: datacamp的aspect_ratio过大会触发异常，提前处理或丢掉？
     image_inputs, video_inputs = process_vision_info(prompt)
 
     inputs = self.processor(
@@ -296,11 +297,11 @@ class ImageTextPackingCollator:
     packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
     packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
 
-    if (
-        self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
-    ):  # not divisible by multiple_of; here we align for grouping
-        padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
-        packed_input_ids = F.pad(packed_input_ids, (0, padding_len), value=self.processor.tokenizer.pad_token_id)
+    # if (
+    #     self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
+    # ):  # not divisible by multiple_of; here we align for grouping
+    #     padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+    #     packed_input_ids = F.pad(packed_input_ids, (0, padding_len), value=self.processor.tokenizer.pad_token_id)
 
     inputs = {
       "input_ids": packed_input_ids,
@@ -308,7 +309,7 @@ class ImageTextPackingCollator:
       "loss_mask": packed_loss_mask,
       "pixel_values": packed_pixel_values,
       "image_grid_thw": packed_image_gird_thw,
-      "cu_seqlens": cu_seqlens
+      "cu_seqlens": torch.tensor(cu_seqlens)
     }
     return inputs
 

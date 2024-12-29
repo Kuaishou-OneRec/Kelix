@@ -5,6 +5,7 @@ from recovlm.data.collators import ImageTextPackingCollator
 from recovlm.data.dataloaders import get_indexed_dataloader
 
 from transformers import AutoProcessor
+from tqdm import tqdm
 
 
 def test_image_text_packing_collator():
@@ -32,12 +33,13 @@ def test_image_text_packing_collator():
     dataloader = get_indexed_dataloader(
         sources=sources,
         processor=processor,
-        batch_size=4,
+        batch_size=128,
         num_workers=4,
-        shuffle=False,
+        shuffle=True,
         max_length=1024,
         rank=1,
         collator=collator)
-    for s in dataloader:
-        print(s)
-        break
+    for s in tqdm(dataloader):
+        pass
+        # for key in s:
+        #     print(key, type(s[key]))
