@@ -7,21 +7,13 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 echo "Output: $OUTPUT_DIR"
 
-export NCCL_IB_DISABLE=0
-export NCCL_IB_QPS_PER_CONNECTION=4
-export NCCL_IB_GID_INDEX=3
-export NCCL_IB_HCA=mlx5
-export NCCL_DEBUG=WARN
-export NCCL_NET_OVERHEAD=1000
-export NCCL_PROTO=^LL128
 export PYTHONPATH=/llm_reco_ssd/zhouyang12/code/RecoVLM:$PYTHONPATH
 
 #     --use_flash_attention_2 \
-# enable_gradient_checkpointing + fa2好像会有问题
-#   --enable_gradient_checkpointing \
 # 
 # /llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json
-
+#     --enable_gradient_checkpointing \
+# --deepspeed --deepspeed_config examples/sft/configs/ds_z3_config_72B.json
 
 deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
 	recipes/pretrain_vl.py --model_dir $MODEL_DIR \
@@ -31,10 +23,11 @@ deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --save_checkpoint_every_epoch \
     --save_checkpoint_per_step 1000 \
     --packing_batch_size 4 \
+    --use_flash_attention_2 \
     --freeze_llm \
     --num_epochs 1 \
     --logging_per_step 1 \
     --merge_checkpoint \
     --merge_checkpoint_dtype bf16 \
     --merge_checkpoint_output_file pytorch_model.bin \
-	--deepspeed --deepspeed_config examples/sft/configs/ds_z3_config_72B.json
+	--deepspeed --deepspeed_config examples/sft/configs/ds_z3_config_7B.json

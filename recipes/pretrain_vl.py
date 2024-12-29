@@ -197,10 +197,11 @@ def train():
     # TODO: add support for other models
     model_config = Qwen2VLForConditionalGeneration.config_class.from_pretrained(
         args.model_dir)
-    model_config.attn_implementation = \
+    model_config._attn_implementation = \
         "flash_attention_2" if args.use_flash_attention_2 else "eager"
     model_config.use_cache = False
     model = Qwen2VLForConditionalGeneration(model_config)
+    model.tie_weights()
 
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
@@ -216,8 +217,19 @@ def train():
         print_rank_0(f"Disable visual encoder grad: {name}")
         param.requires_grad = False
 
+  # if args.enable_gradient_checkpointing:
+  #   print_rank_0("Enable gradient checkpointing")
+  #   model.gradient_checkpointing_enable(
+  #       gradient_checkpointing_kwargs={"use_reentrant": False})
+
   if args.enable_gradient_checkpointing:
     print_rank_0("Enable gradient checkpointing")
+    if hasattr(model, "enable_input_require_grads"):
+      model.enable_input_require_grads()
+    else:
+      def make_inputs_require_grad(module, input, output):
+        output.requires_grad_(True)
+      model.get_input_embeddings().register_forward_hook(make_inputs_require_grad)
     model.gradient_checkpointing_enable(
         gradient_checkpointing_kwargs={"use_reentrant": False})
 
@@ -337,8 +349,7 @@ def train():
       if iteration % args.save_checkpoint_per_step == 0 and \
           iteration > 0 and model_engine.is_gradient_accumulation_boundary():
         model_engine.save_checkpoint(save_dir=args.output_dir)
-    # if dist.get_rank() == 0:
-    #   torch.cuda.memory._dump_snapshot(f"7b_flash_snapshot.pickle")
+
     print_rank_0(f"Epoch {epoch} finished.")
     if args.save_checkpoint_every_epoch:
       print_rank_0("Save checkpoint..")
