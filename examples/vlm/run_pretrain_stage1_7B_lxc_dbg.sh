@@ -1,7 +1,7 @@
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained model path
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.2
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.3
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
@@ -11,13 +11,13 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 
 
 #   --enable_gradient_checkpointing \
-deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
+nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
 	recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
     --dataset /llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json \
     --max_length 512 \
     --save_checkpoint_every_epoch \
-    --packing_batch_size 16 \
+    --packing_batch_size 12 \
     --use_flash_attention_2 \
     --freeze_llm \
     --num_epochs 1 \
@@ -25,4 +25,4 @@ deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --merge_checkpoint \
     --merge_checkpoint_dtype bf16 \
     --merge_checkpoint_output_file pytorch_model.bin \
-	--deepspeed --deepspeed_config examples/sft/configs/ds_z2_config_7B.json
+	--deepspeed --deepspeed_config examples/sft/configs/ds_z2_config_7B.json > $OUTPUT_DIR/stdout.log 2>&1 &

@@ -6,7 +6,8 @@ import torch
 import torch.nn.functional as F
 
 from .templates import get_template
-from qwen_vl_utils import process_vision_info
+# from qwen_vl_utils import process_vision_info
+from recovlm.utils.qwen_vl_utils import process_vision_info
 
 
 def get_rope_index(
