@@ -22,6 +22,7 @@ deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --save_checkpoint_every_epoch \
     --packing_batch_size 4 \
     --freeze_llm \
+    --use_flash_attention_2 \
     --num_epochs 1 \
     --logging_per_step 1 \
     --merge_checkpoint \
