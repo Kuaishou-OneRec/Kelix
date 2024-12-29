@@ -1,1 +1,1 @@
-LD_PRELOAD=/home/luoxinchen/tianwenjie/libnccl.so.2.21.5.noece.cpu
+LD_PRELOAD=/share_l3/luoxinchen/libs/libnccl.so.2.21.5.noece.cpu
