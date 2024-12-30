@@ -4,6 +4,7 @@ from PIL import Image
 
 import torch
 import torch.nn.functional as F
+import traceback
 
 from .templates import get_template
 # from qwen_vl_utils import process_vision_info
@@ -328,6 +329,7 @@ class ImageTextPackingCollator:
             break
           max_visual_tokens = (max_visual_tokens * 0.9)
       except:
+        print(traceback.format_exc())
         failed = True
       if failed:
         continue

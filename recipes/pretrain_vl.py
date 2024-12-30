@@ -203,9 +203,10 @@ def train():
   #   model_config.use_cache = False
   #   model = Qwen2VLForConditionalGeneration(model_config)
 
-  model = Qwen2VLForConditionalGeneration.from_pretrained(
-    args.model_dir, _attn_implementation="flash_attention_2", use_cache=False
-  )
+  with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config, enabled=False):
+    model = Qwen2VLForConditionalGeneration.from_pretrained(
+      args.model_dir, _attn_implementation="flash_attention_2", use_cache=False
+    )
 
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
