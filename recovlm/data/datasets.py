@@ -439,7 +439,7 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
                shrink_ratio: float = 0.9,
                max_retry: int = 5,
                multiple_of: int = 8,
-               format: str = "completion"):
+               data_format: str = "completion"):
     super(ImageTextPairDatasetWithPacking).__init__()
     self.dataset = dataset
     self.processor = processor
@@ -456,17 +456,18 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
     self.patch_size = patch_size
     # Pad sequence to multiple of `multiple_of`
     self.multiple_of = multiple_of
-    self.format = format
+    self.data_format = data_format
 
   def _may_filter(self, sample):
     image = sample[".jpg"]
+    # caption = sample[".txt"]
     width, height = image.size
-    if max(height, width) / min(height, width) > 50:
+    if max(height, width) / min(height, width) > 10:
       raise ValueError("Too larged aspect ratio, skip samples")
     if (sample[".json"].get("clip_similarity_vitl14", 0.0) > 0.3):
-      logging.warning("Too low clip score")
-      return True
-    return False
+      raise ValueError("Too low clip score")
+    # if len(caption) < 1 or len(caption) > 512:
+    #   raise ValueError("Too long or too short text.")
 
   def _process_chat(self,
                     sample: Dict[str, Union[str, Image.Image]],
@@ -597,9 +598,9 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
     self._may_filter(sample)
     max_visual_tokens = self.max_visual_tokens
     for retry in range(self.max_retry):
-      if self.format == "chatml":
+      if self.data_format == "chatml":
         inputs = self._process_chat(sample, max_visual_tokens)
-      elif self.format == "completion":
+      elif self.data_format == "completion":
         inputs = self._process_completion(sample, max_visual_tokens)
       else:
         raise NotImplementedError(f"Unsupported dataset format `{self.format}`")

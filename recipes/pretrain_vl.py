@@ -2,6 +2,7 @@ from rich import print
 import argparse
 
 import time
+import wids
 import os
 import glob
 import logging
@@ -18,14 +19,17 @@ os.environ["NCCL_ALGO"]= "^NVLS,NVLSTree"
 import torch
 import deepspeed
 import torch.distributed as dist
+from torch.utils.data import DataLoader
 import numpy as np
-from transformers import AutoTokenizer, AutoProcessor
+# from transformers import AutoTokenizer, AutoProcessor
+from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 from safetensors import safe_open
 
 from qwen_vl_utils import process_vision_info
 
 from recovlm.data.dataloaders import get_indexed_dataloader
+from recovlm.data.datasets import ImageTextPairDatasetWithPacking
 from recovlm.data.collators import ImageTextPackingCollator
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
@@ -235,12 +239,14 @@ def train():
   # TODO: 检查下预训练的tokenizer配置是否需要改变
   # TODO: fix hard code
   # processor.image_processor.min_pixels / 28 ** 2
-  processor = AutoProcessor.from_pretrained(args.model_dir)
-  collator = ImageTextPackingCollator(
+  processor = Qwen2VLProcessor.from_pretrained(args.model_dir)
+  
+  dataset = ImageTextPairDatasetWithPacking(
+      dataset=wids.ShardListDataset(args.dataset),
       processor = processor,
       max_length = args.max_length,
       min_visual_tokens = 1,
-      max_visual_tokens = 1024,
+      max_visual_tokens = 512,
       spatial_merge_size = 2,
       image_token_id = 151655,
       video_token_id = 151656,
@@ -250,16 +256,23 @@ def train():
       max_retry = 5,
       multiple_of = 8
   )
-  sources = args.dataset.split(",")
-  dataloader = get_indexed_dataloader(
-      sources=sources,
-      processor=processor,
-      batch_size=args.packing_batch_size,
-      num_workers=8,
-      shuffle=True,
-      max_length=1024,
-      rank=dist.get_rank(),
-      collator=collator)
+  # sources = args.dataset.split(",")
+  # dataloader = get_indexed_dataloader(
+  #     sources=sources,
+  #     processor=processor,
+  #     batch_size=args.packing_batch_size,
+  #     num_workers=8,
+  #     shuffle=True,
+  #     max_length=1024,
+  #     rank=dist.get_rank(),
+  #     collator=collator)
+  dataloader = DataLoader(
+    dataset,
+    batch_size=1,
+    shuffle=True,
+    num_workers=4,
+    collate_fn=lambda x: x
+  )
   loss_fn = CrossEntropyLoss(ignore_index=-100)
   start_time = time.time()
   show_cnt = 3
