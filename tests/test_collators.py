@@ -40,6 +40,6 @@ def test_image_text_packing_collator():
         rank=1,
         collator=collator)
     for s in tqdm(dataloader):
-        pass
+        break
         # for key in s:
         #     print(key, type(s[key]))

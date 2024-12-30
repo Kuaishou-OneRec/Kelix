@@ -181,6 +181,7 @@ def get_rope_index(
 
     return position_ids
 
+
 class ImageTextPackingCollator:
   """Image Text Collator with Packing"""
 
@@ -276,6 +277,7 @@ class ImageTextPackingCollator:
     inputs.pop("attention_mask")
     return inputs
 
+  
   def _packing(self, all_inputs):
 
     packed_input_ids = []
