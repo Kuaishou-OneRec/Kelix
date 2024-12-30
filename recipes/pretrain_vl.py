@@ -232,6 +232,8 @@ def train():
   model_engine, _, _, _ = deepspeed.initialize(args=args,
                                                model=model)
 
+  model_engine.load_checkpoint(args.output_dir)
+
   # TODO: 检查下预训练的tokenizer配置是否需要改变
   # TODO: fix hard code
   # processor.image_processor.min_pixels / 28 ** 2
@@ -241,13 +243,14 @@ def train():
       max_length = args.max_length,
       min_visual_tokens = 1,
       max_visual_tokens = 1024,
+      max_text_length = 500,
       spatial_merge_size = 2,
       image_token_id = 151655,
       video_token_id = 151656,
       vision_start_token_id = 151652,
       patch_size = 14,
       shrink_ratio = 0.9,
-      max_retry = 5,
+      max_retry = 10,
       multiple_of = 8
   )
   sources = args.dataset.split(",")
