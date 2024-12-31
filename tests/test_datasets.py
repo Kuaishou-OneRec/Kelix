@@ -148,8 +148,7 @@ def test_image_text_pair_dataset_with_packing():
         # print(item)
         # print(processor.tokenizer.decode(item["input_ids"][0]))
         #print(item["input_ids"][0].shape)
-        for key in item:
-            print(item[key])
-        gg
+        # for key in item:
+        #     print(item[key])
         break
 

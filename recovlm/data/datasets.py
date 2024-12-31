@@ -13,6 +13,8 @@ import traceback
 import pickle
 import torch.distributed as dist
 
+import webdataset as wds
+
 from PIL import Image
 
 from collections import defaultdict
@@ -861,6 +863,31 @@ class BlendDatasetCkptManager:
       return self.state_dict
     else:
       return self.load_ckpt(max_step_ckpt_fn)
+
+def get_webdataset(sources: str):
+    # This is the basic WebDataset definition: it starts with a URL and add shuffling,
+    # decoding, and augmentation. Note `resampled=True`; this is essential for
+    # distributed training to work correctly.
+    urls = []
+    for source in sources.split(","):
+        with open(source, encoding="utf-8") as f:
+            index = json.loads(f.read())["shardlist"]
+            urls.extend([
+                os.path.join(os.path.dirname(source), item["url"]) for item in index]
+            )
+    dataset = wds.WebDataset(
+        urls,
+        resampled=True,
+        shardshuffle=True,
+        cache_dir="/tmp/_wids_cache",
+        nodesplitter=wds.split_by_node,
+        workersplitter=wds.split_by_worker
+    )
+  
+    dataset = dataset.shuffle(10000).decode("pil")
+
+    return dataset
+
 
 
 if __name__ == "__main__":
