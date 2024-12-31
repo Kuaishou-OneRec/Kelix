@@ -595,7 +595,7 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
     return inputs
 
   def _process(self, sample):
-    self._may_filter(sample)
+    # self._may_filter(sample)
     max_visual_tokens = self.max_visual_tokens
     for retry in range(self.max_retry):
       if self.data_format == "chatml":
@@ -655,7 +655,7 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
       try:
         inputs = self._process(sample)
       except:
-        print(traceback.format_exc())
+        # print(traceback.format_exc())
         continue
       sample_length = inputs["input_ids"].shape[-1]
       if cur_length + sample_length > self.max_length:
