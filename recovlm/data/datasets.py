@@ -10,6 +10,7 @@ import torch
 import tarfile
 import itertools
 import traceback
+import pickle
 import torch.distributed as dist
 
 from PIL import Image
@@ -680,10 +681,9 @@ class BlendedWebDataset(IterableDataset):
                rank: int,
                world_size: int,
                num_workers: int,
-               chunk_size=2000,
+               chunk_size=1000000,
                sample_buffer_size=1000,
-               random_seed=1024,
-               state_file=""):
+               random_seed=1024):
 
     super(BlendedWebDataset).__init__()
     
@@ -706,21 +706,18 @@ class BlendedWebDataset(IterableDataset):
     # print(f"zzxdebug: {self.dataset_range_idx}")
     # print(f"zzxdebug: {self.dataset_states}")
 
-    # load dataset state
-    if state_file != "" and os.path.isfile(state_file):
-      self._load_state(state_file)
-  
   def __len__(self):
     return self.total_samples
 
   def _chunked_sampler(self,):
-    dataset_range_idx = []
-    dataset_states = []
+    manager = multiprocessing.Manager()
+    dataset_range_idx = manager.list()
+    dataset_states = manager.list()
 
     num_replicas = self.world_size * self.num_workers
     for d_idx, dataset in enumerate(self.datasets):
-      dataset_range_idx.append([])
-      dataset_states.append([])
+      dataset_range_idx.append(manager.list())
+      dataset_states.append(manager.list())
 
       num_samples = len(dataset)
       for worker_id in range(self.num_workers):
@@ -729,18 +726,17 @@ class BlendedWebDataset(IterableDataset):
         worker_end = min(worker_start + worker_chunk, num_samples)
         ranges = [(i, min(i + self.chunk_size, worker_end)) for i in range(worker_start, worker_end, self.chunk_size)]
         random.Random(self.random_seed + worker_id).shuffle(ranges)
-        dataset_range_idx[d_idx].append(ranges)
-        dataset_states[d_idx].append([0, 0])
+        dataset_range_idx[d_idx].append(manager.list(ranges))
+        dataset_states[d_idx].append(manager.list([0, 0]))
       
     return dataset_range_idx, dataset_states
   
-  def _load_state(self, stat_file):
-    with open(stat_file, "rb") as fp:
-      state_str = fp.read()
-      state_dict = json.loads(state_str)
-      for d_idx, _ in enumerate(self.datasets):
-        for w_idx in range(self.num_workers):
-          self.dataset_states[d_idx][w_idx] =  state_dict[self.rank][d_idx][w_idx]
+  def set_state(self, state_dict):
+    for d_idx in state_dict:
+      for w_idx in state_dict[d_idx]:
+        chunk_idx, chunk_inner_idx, _ = state_dict[d_idx][w_idx]
+        self.dataset_states[d_idx][w_idx][0] = chunk_idx
+        self.dataset_states[d_idx][w_idx][1] = chunk_inner_idx
 
     print(f"load_success: {self.dataset_states}")
 
@@ -786,10 +782,87 @@ class BlendedWebDataset(IterableDataset):
       while len(idx_buffer) > 0:
         d_idx, data_indices, chunk_idx, chunk_inner_idx = idx_buffer.pop()
         ann = self.datasets[d_idx][data_indices]
-        ann["this_worker_sample_index"] = (d_idx, worker_id, chunk_idx, chunk_inner_idx)
+        ann["this_worker_sample_index"] = (d_idx, worker_id, chunk_idx, chunk_inner_idx, cur_samples)
         yield ann
         cur_samples += 1
   
+
+class BlendDatasetCkptManager:
+  def __init__(self, ckpt_path, rank, world_size, num_data_source, num_workers):
+    self.ckpt_path = ckpt_path
+    self.rank, self.world_size = rank, world_size
+    self.num_data_source = num_data_source
+    self.num_workers = num_workers
+
+    # init state_dict: state_dict[d_idx][w_idx]
+    self.state_dict = {}
+    self.latest_step = 0
+    
+  @staticmethod
+  def merge_all_state(state_list):
+    merge_state_dict = {}
+    for d_idx, worker_id, chunk_idx, chunk_inner_idx, sample_idx in state_list:
+      merge_state_dict.setdefault(d_idx, {})
+      if worker_id not in merge_state_dict[d_idx]:
+        merge_state_dict[d_idx][worker_id] = (chunk_idx, chunk_inner_idx, sample_idx)
+      else:
+        _, _, m_sample_idx = merge_state_dict[d_idx][worker_id]
+        if sample_idx > m_sample_idx:
+          merge_state_dict[d_idx][worker_id] = (chunk_idx, chunk_inner_idx, sample_idx)
+    return merge_state_dict
+  
+  def update_step(self, step, batch_state_dict):
+    self.latest_step = step
+    for d_idx in batch_state_dict:
+      self.state_dict.setdefault(d_idx, {})
+      for w_idx in batch_state_dict[d_idx]:
+        self.state_dict[d_idx].setdefault(w_idx, (0, 0, 0))
+        chunk_idx, chunk_inner_idx, sample_idx = batch_state_dict[d_idx][w_idx]
+        if self.state_dict[d_idx][w_idx][2] < sample_idx:
+          self.state_dict[d_idx][w_idx] = (chunk_idx, chunk_inner_idx, sample_idx)
+
+  def save_ckpt(self):
+    os.makedirs(self.ckpt_path, exist_ok=True)
+    ckpt_file = os.path.join(self.ckpt_path, f"rank{self.rank}-dataset-step{self.latest_step}.pkl")
+    with open(ckpt_file, "wb+") as fp:
+      pickle.dump(self.state_dict, fp)
+  
+  def load_ckpt(self, ckpt_file):
+    with open(ckpt_file, "rb") as fp:
+      self.state_dict = pickle.load(fp)
+    
+    # clear all sample idx
+    for d_idx in self.state_dict:
+      for w_idx in self.state_dict[d_idx]:
+        chunk_idx, chunk_inner_idx, _ = self.state_dict[d_idx][w_idx]
+        self.state_dict[d_idx][w_idx] = (chunk_idx, chunk_inner_idx, 0)
+    print(f"[rank{self.rank}] load dataset ckpt {ckpt_file} success.")
+    return self.state_dict
+  
+  def extract_rank_and_step(self, filename):
+    pattern = r'rank(\d+)-dataset-step(\d+)\.pkl'
+    match = re.match(pattern, filename)
+    if match:
+      rank = int(match.group(1))
+      step = int(match.group(2))
+      return rank, step
+    return None, None
+  
+  def load_latest_ckpt(self,):
+    max_step = 0
+    max_step_ckpt_fn = ""
+    for fn in os.listdir(self.ckpt_path):
+      rank, step = self.extract_rank_and_step(fn)
+      if rank is not None and step is not None:
+        if rank == self.rank and step > max_step:
+          max_step = step
+          max_step_ckpt_fn = os.path.join(self.ckpt_path, fn)
+    if max_step_ckpt_fn == "":
+      return self.state_dict
+    else:
+      return self.load_ckpt(max_step_ckpt_fn)
+
+
 if __name__ == "__main__":
   import wids
   sources = [
