@@ -30,6 +30,7 @@ from qwen_vl_utils import process_vision_info
 
 from recovlm.data.dataloaders import get_indexed_dataloader
 from recovlm.data.datasets import ImageTextPairDatasetWithPacking, BlendedWebDataset
+from recovlm.data.collators import ImageTextPackingCollator
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
 
@@ -50,6 +51,12 @@ def get_argument_parser():
   
   parser.add_argument("--packing_batch_size", type=int, default=1,
                       help="The batch size for sample packing.")
+  
+  parser.add_argument("--data_format", type=str, default="completion",
+                      help="The data format of training")
+
+  parser.add_argument("--max_visual_tokens", type=int, default=512,
+                      help="The max visual tokens to use")
 
   ################################################
 
@@ -234,28 +241,55 @@ def train():
 
 
   blend_ds = BlendedWebDataset(
-    datasets=datasets,
+    source_datasets=datasets,
     weights=weights,
+    num_workers=8,
     rank=dist.get_rank(),
     world_size=dist.get_world_size(),
     random_seed=args.seed
   )
 
-  dataset = ImageTextPairDatasetWithPacking(
-      dataset = blend_ds,
-      processor = processor,
-      max_length = args.max_length,
-      min_visual_tokens = 1,
-      max_visual_tokens = 512,
-      spatial_merge_size = 2,
-      image_token_id = 151655,
-      video_token_id = 151656,
-      vision_start_token_id = 151652,
-      patch_size = 14,
-      shrink_ratio = 0.9,
-      max_retry = 5,
-      multiple_of = 8
+  collator = ImageTextPackingCollator(
+    processor = processor,
+    max_length = args.max_length,
+    min_visual_tokens = 1,
+    max_visual_tokens = 1024,
+    max_text_length = 500,
+    spatial_merge_size = 2,
+    image_token_id = 151655,
+    video_token_id = 151656,
+    vision_start_token_id = 151652,
+    patch_size = 14,
+    shrink_ratio = 0.9,
+    max_retry = 10,
+    multiple_of = 8
   )
+
+  dataloader = DataLoader(
+    dataset, batch_size=batch_size, num_workers=num_workers,
+    sampler=sampler,
+    collate_fn=collator
+  )
+
+
+
+  # dataset = ImageTextPairDatasetWithPacking(
+  #     dataset = blend_ds,
+  #     processor = processor,
+  #     max_length = args.max_length,
+  #     min_visual_tokens = 1,
+  #     max_visual_tokens = args.max_visual_tokens,
+  #     spatial_merge_size = 2,
+  #     image_token_id = 151655,
+  #     video_token_id = 151656,
+  #     vision_start_token_id = 151652,
+  #     patch_size = 14,
+  #     shrink_ratio = 0.9,
+  #     max_retry = 5,
+  #     multiple_of = 8,
+  #     data_format = args.data_format
+  # )
+
   dataloader = DataLoader(
     dataset=dataset,
     batch_size=1,

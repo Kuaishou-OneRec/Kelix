@@ -190,6 +190,7 @@ class ImageTextPackingCollator:
                max_length: int,
                min_visual_tokens: int,
                max_visual_tokens: int,
+               max_text_length: int,
                spatial_merge_size: int,
                image_token_id: int,
                video_token_id: int,
@@ -202,6 +203,7 @@ class ImageTextPackingCollator:
     self.max_length = max_length
     self.min_visual_tokens = min_visual_tokens
     self.max_visual_tokens = max_visual_tokens
+    self.max_text_length = max_text_length
     self.patch_size = patch_size
     self.shrink_ratio = shrink_ratio
     self.max_retry = max_retry
@@ -219,6 +221,8 @@ class ImageTextPackingCollator:
     max_visual_tokens = max(max_visual_tokens, self.min_visual_tokens)
     image = sample[".jpg"]
     caption = sample[".txt"]
+    if len(caption) > self.max_text_length:
+      caption = caption[:self.max_text_length]
     if image.mode != "RGB":
       image = image.convert("RGB")
     prompt = [
@@ -277,7 +281,6 @@ class ImageTextPackingCollator:
     inputs.pop("attention_mask")
     return inputs
 
-  
   def _packing(self, all_inputs):
 
     packed_input_ids = []
@@ -329,11 +332,12 @@ class ImageTextPackingCollator:
           if _inputs["input_ids"].shape[-1] <= self.max_length:
             failed = False
             break
-          max_visual_tokens = (max_visual_tokens * 0.9)
+          max_visual_tokens = (max_visual_tokens * 0.6)
       except:
         print(traceback.format_exc())
         failed = True
       if failed:
+        print("collate failed")
         continue
       all_inputs.append(_inputs)
     # TODO: fix empty all_inputs
