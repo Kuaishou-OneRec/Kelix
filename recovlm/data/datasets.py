@@ -741,7 +741,7 @@ class BlendedWebDataset(IterableDataset):
       for d_idx, _ in enumerate(self.datasets):
         for w_idx in range(self.num_workers):
           self.dataset_states[d_idx][w_idx] =  state_dict[self.rank][d_idx][w_idx]
-    
+
     print(f"load_success: {self.dataset_states}")
 
   def _sample_buffer(self, worker_id):

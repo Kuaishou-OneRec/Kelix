@@ -240,34 +240,40 @@ def train():
     (wids.ShardListDataset(source), 1.0) for source in args.dataset.split(",")])
 
 
-  blend_ds = BlendedWebDataset(
-    source_datasets=datasets,
-    weights=weights,
-    num_workers=8,
-    rank=dist.get_rank(),
-    world_size=dist.get_world_size(),
-    random_seed=args.seed
-  )
+  # blend_ds = BlendedWebDataset(
+  #   source_datasets=datasets,
+  #   weights=weights,
+  #   num_workers=8,
+  #   rank=dist.get_rank(),
+  #   world_size=dist.get_world_size(),
+  #   random_seed=args.seed
+  # )
 
   collator = ImageTextPackingCollator(
-    processor = processor,
-    max_length = args.max_length,
-    min_visual_tokens = 1,
-    max_visual_tokens = 1024,
-    max_text_length = 500,
-    spatial_merge_size = 2,
-    image_token_id = 151655,
-    video_token_id = 151656,
-    vision_start_token_id = 151652,
-    patch_size = 14,
-    shrink_ratio = 0.9,
-    max_retry = 10,
-    multiple_of = 8
+      processor = processor,
+      max_length = args.max_length,
+      min_visual_tokens = 1,
+      max_visual_tokens = 1024,
+      max_text_length = 500,
+      spatial_merge_size = 2,
+      image_token_id = 151655,
+      video_token_id = 151656,
+      vision_start_token_id = 151652,
+      patch_size = 14,
+      shrink_ratio = 0.9,
+      max_retry = 10,
+      multiple_of = 8
   )
-
-  dataloader = DataLoader(
-    blend_ds, batch_size=args.packing_batch_size, num_workers=8,
-    collate_fn=collator
+  sources = args.dataset.split(",")
+  dataloader = get_indexed_dataloader(
+    sources=sources,
+    processor=processor,
+    batch_size=args.packing_batch_size,
+    num_workers=8,
+    shuffle=True,
+    max_length=1024,
+    rank=dist.get_rank(),
+    collator=collator
   )
 
   # dataset = ImageTextPairDatasetWithPacking(
