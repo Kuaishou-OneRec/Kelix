@@ -119,6 +119,7 @@ def test_image_text_pair_dataset_with_packing():
     )
     processor = Qwen2VLProcessor.from_pretrained(
         "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct")
+
     ds = ImageTextPairDatasetWithPacking(
         dataset = dataset,
         processor = processor,
@@ -134,9 +135,21 @@ def test_image_text_pair_dataset_with_packing():
         max_retry = 5,
         multiple_of = 8
     )
-    for item in ds:
+    def collate_fn(samples):
+        return samples[0]
+    dataloader = DataLoader(
+        dataset=ds,
+        batch_size=1,
+        shuffle=False,
+        num_workers=1,
+        collate_fn=collate_fn
+    )
+    for item in dataloader:
         # print(item)
         # print(processor.tokenizer.decode(item["input_ids"][0]))
         #print(item["input_ids"][0].shape)
+        for key in item:
+            print(item[key])
+        gg
         break
 

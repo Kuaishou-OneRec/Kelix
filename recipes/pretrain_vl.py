@@ -240,9 +240,11 @@ def train():
   # TODO: fix hard code
   # processor.image_processor.min_pixels / 28 ** 2
   processor = Qwen2VLProcessor.from_pretrained(args.model_dir)
-  
+
+  web_ds = wids.ShardListDataset(args.dataset)
+
   dataset = ImageTextPairDatasetWithPacking(
-      dataset=wids.ShardListDataset(args.dataset),
+      dataset=web_ds,
       processor = processor,
       max_length = args.max_length,
       min_visual_tokens = 1,
@@ -267,11 +269,10 @@ def train():
   #     rank=dist.get_rank(),
   #     collator=collator)
   dataloader = DataLoader(
-    dataset,
+    dataset=dataset,
     batch_size=1,
-    shuffle=True,
-    num_workers=4,
-    collate_fn=lambda x: x
+    shuffle=False,
+    collate_fn=lambda x: x[0]
   )
   loss_fn = CrossEntropyLoss(ignore_index=-100)
   start_time = time.time()

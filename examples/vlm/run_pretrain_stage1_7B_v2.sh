@@ -15,7 +15,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
 	recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
     --dataset /llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json \
-    --max_length 8192 \
+    --max_length 1024 \
     --save_checkpoint_every_epoch \
     --save_checkpoint_per_step 3000 \
     --use_flash_attention_2 \
