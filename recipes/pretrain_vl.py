@@ -29,8 +29,7 @@ from safetensors import safe_open
 from qwen_vl_utils import process_vision_info
 
 from recovlm.data.dataloaders import get_indexed_dataloader
-from recovlm.data.datasets import ImageTextPairDatasetWithPacking
-from recovlm.data.collators import ImageTextPackingCollator
+from recovlm.data.datasets import ImageTextPairDatasetWithPacking, BlendedWebDataset
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
 
@@ -183,6 +182,7 @@ def train():
   arg_parser = get_argument_parser()
   arg_parser = deepspeed.add_config_arguments(arg_parser)
   args = arg_parser.parse_args()
+  torch.manual_seed(args.seed)
 
   assert any([args.save_checkpoint_per_step, args.save_checkpoint_every_epoch]), \
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
@@ -194,18 +194,6 @@ def train():
   if dist.get_rank() == 0:
     os.makedirs(args.output_dir, exist_ok=True)
     tb_writer = SummaryWriter(log_dir=os.path.join(args.output_dir, "log"))
-
-  # torch.cuda.memory._record_memory_history()
-
-  # with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config):
-  #   # TODO: add support for other models
-
-  #   model_config = Qwen2VLForConditionalGeneration.config_class.from_pretrained(
-  #       args.model_dir)
-  #   model_config._attn_implementation = \
-  #       "flash_attention_2" if args.use_flash_attention_2 else "eager"
-  #   model_config.use_cache = False
-  #   model = Qwen2VLForConditionalGeneration(model_config)
 
   with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config, enabled=False):
     model = Qwen2VLForConditionalGeneration.from_pretrained(
@@ -241,10 +229,20 @@ def train():
   # processor.image_processor.min_pixels / 28 ** 2
   processor = Qwen2VLProcessor.from_pretrained(args.model_dir)
 
-  web_ds = wids.ShardListDataset(args.dataset)
+  datasets, weights = zip(*[
+    (wids.ShardListDataset(source), 1.0) for source in args.dataset.split(",")])
+
+
+  blend_ds = BlendedWebDataset(
+    datasets=datasets,
+    weights=weights,
+    rank=dist.get_rank(),
+    world_size=dist.get_world_size(),
+    random_seed=args.seed
+  )
 
   dataset = ImageTextPairDatasetWithPacking(
-      dataset=web_ds,
+      dataset = blend_ds,
       processor = processor,
       max_length = args.max_length,
       min_visual_tokens = 1,
@@ -258,16 +256,6 @@ def train():
       max_retry = 5,
       multiple_of = 8
   )
-  # sources = args.dataset.split(",")
-  # dataloader = get_indexed_dataloader(
-  #     sources=sources,
-  #     processor=processor,
-  #     batch_size=args.packing_batch_size,
-  #     num_workers=8,
-  #     shuffle=True,
-  #     max_length=1024,
-  #     rank=dist.get_rank(),
-  #     collator=collator)
   dataloader = DataLoader(
     dataset=dataset,
     batch_size=1,
@@ -315,7 +303,6 @@ def train():
       )
 
       logits = output.logits
-
       loss = loss_fn(logits=logits, labels=labels)
 
       del logits

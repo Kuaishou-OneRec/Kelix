@@ -16,6 +16,7 @@ from PIL import Image
 
 from collections import defaultdict
 
+import multiprocessing
 import numpy as np
 
 from torch.utils.data import IterableDataset, Dataset, DataLoader
@@ -666,3 +667,158 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
       else:
         buffer.append(inputs)
         cur_length += sample_length
+  def __len__(self):
+    # 训练使用加权的总长度
+    return self.w_length
+
+
+class BlendedWebDataset(IterableDataset):
+  """Blend Multiple dataset"""
+
+  def __init__(self, source_datasets: List[Dataset],
+               weights: List[float],
+               rank: int,
+               world_size: int,
+               num_workers: int,
+               chunk_size=2000,
+               sample_buffer_size=1000,
+               random_seed=1024,
+               state_file=""):
+
+    super(BlendedWebDataset).__init__()
+    
+    assert len(source_datasets) == len(weights)
+
+    self.datasets = source_datasets
+    # weights: >1=过采样，<1=降采样
+    self.weighted_data_len = [weights[idx] * len(d) for idx, d in enumerate(self.datasets)]
+    self.sample_ratio = [d_len / sum(self.weighted_data_len) for d_len in self.weighted_data_len]
+    self.total_samples = sum(self.weighted_data_len)
+
+    self.rank, self.world_size, self.num_workers = rank, world_size, num_workers
+    self.chunk_size, self.sample_buffer_size = chunk_size, sample_buffer_size
+    self.random_seed = random_seed
+
+    # dataset_sample_idx[data_idx][worker_idx] = [(chunk1_s, chunk1_e), ..., (chunkn_s, chunkn_e),]
+    # dataset_states[data_idx][worker_idx] = [chunk_idx, chunk_inner_idx]
+    self.dataset_range_idx, self.dataset_states = self._chunked_sampler()
+
+    # print(f"zzxdebug: {self.dataset_range_idx}")
+    # print(f"zzxdebug: {self.dataset_states}")
+
+    # load dataset state
+    if state_file != "" and os.path.isfile(state_file):
+      self._load_state(state_file)
+  
+  def __len__(self):
+    return self.total_samples
+
+  def _chunked_sampler(self,):
+    dataset_range_idx = []
+    dataset_states = []
+
+    num_replicas = self.world_size * self.num_workers
+    for d_idx, dataset in enumerate(self.datasets):
+      dataset_range_idx.append([])
+      dataset_states.append([])
+
+      num_samples = len(dataset)
+      for worker_id in range(self.num_workers):
+        worker_chunk = (num_samples + num_replicas - 1) // num_replicas
+        worker_start = worker_id * worker_chunk
+        worker_end = min(worker_start + worker_chunk, num_samples)
+        ranges = [(i, min(i + self.chunk_size, worker_end)) for i in range(worker_start, worker_end, self.chunk_size)]
+        random.Random(self.random_seed + worker_id).shuffle(ranges)
+        dataset_range_idx[d_idx].append(ranges)
+        dataset_states[d_idx].append([0, 0])
+      
+    return dataset_range_idx, dataset_states
+  
+  def _load_state(self, stat_file):
+    with open(stat_file, "rb") as fp:
+      state_str = fp.read()
+      state_dict = json.loads(state_str)
+      for d_idx, _ in enumerate(self.datasets):
+        for w_idx in range(self.num_workers):
+          self.dataset_states[d_idx][w_idx] =  state_dict[self.rank][d_idx][w_idx]
+    
+    print(f"load_success: {self.dataset_states}")
+
+  def _sample_buffer(self, worker_id):
+    np.random.seed(self.random_seed + worker_id) 
+    dataset_indices = np.random.choice(list(range(len(self.datasets))), size=self.sample_buffer_size, p=self.sample_ratio).tolist()
+
+    idx_buffer = []
+    for d_idx in dataset_indices:
+      chunk_idx, chunk_inner_idx = self.dataset_states[d_idx][worker_id]
+      d_start, d_end = self.dataset_range_idx[d_idx][worker_id][chunk_idx]
+      sample_indexes = list(range(d_start, d_end))
+      random.Random(self.random_seed + worker_id + chunk_idx).shuffle(sample_indexes)
+      
+      data_indices = sample_indexes[chunk_inner_idx]
+      idx_buffer.append((d_idx, data_indices, chunk_idx, chunk_inner_idx))
+
+      # update sampler index
+      chunk_inner_idx += 1 
+      if chunk_inner_idx >= len(sample_indexes):
+        chunk_inner_idx = 0
+        chunk_idx += 1
+        if chunk_idx >= len(self.dataset_range_idx[d_idx][worker_id]):
+          chunk_idx = 0
+      
+      self.dataset_states[d_idx][worker_id] = [chunk_idx, chunk_inner_idx]
+    
+    return idx_buffer
+  
+  def __iter__(self):
+    worker_info = torch.utils.data.get_worker_info()
+    worker_id = 0 if worker_info is None else worker_info.id
+    num_workers = 1 if worker_info is None else worker_info.num_workers
+
+    cur_samples = 0
+
+    assert num_workers == self.num_workers
+
+    while True:
+      if cur_samples > self.total_samples:
+        break
+      idx_buffer = self._sample_buffer(worker_id)
+      while len(idx_buffer) > 0:
+        d_idx, data_indices, chunk_idx, chunk_inner_idx = idx_buffer.pop()
+        ann = self.datasets[d_idx][data_indices]
+        ann["this_worker_sample_index"] = (d_idx, worker_id, chunk_idx, chunk_inner_idx)
+        yield ann
+        cur_samples += 1
+  
+if __name__ == "__main__":
+  import wids
+  sources = [
+    "/llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json",
+    "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json"
+  ]
+  datasets = [wids.ShardListDataset(source) for source in sources]
+
+  blend_dataset1 = BlendedWebDataset(datasets, [1.1, 0.5], 0, 1, 1)
+
+  datasets = [wids.ShardListDataset(source) for source in sources]
+
+  blend_dataset2 = BlendedWebDataset(datasets, [1.1, 0.5], 0, 1, 1)
+
+  assert blend_dataset1.dataset_range_idx == blend_dataset2.dataset_range_idx
+  assert blend_dataset1.dataset_states == blend_dataset2.dataset_states
+
+  for d in blend_dataset1:
+    print(d)
+    break
+
+  for d in blend_dataset2:
+    print(d)
+    break
+
+  # for d in datasets[0]:
+  #   print(d)
+  #   break
+
+  # for d in datasets[1]:
+  #   print(d)
+  #   break
