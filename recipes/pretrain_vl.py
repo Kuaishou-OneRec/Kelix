@@ -266,12 +266,9 @@ def train():
   )
 
   dataloader = DataLoader(
-    dataset, batch_size=batch_size, num_workers=num_workers,
-    sampler=sampler,
+    blend_ds, batch_size=args.packing_batch_size, num_workers=8,
     collate_fn=collator
   )
-
-
 
   # dataset = ImageTextPairDatasetWithPacking(
   #     dataset = blend_ds,
@@ -290,13 +287,13 @@ def train():
   #     data_format = args.data_format
   # )
 
-  dataloader = DataLoader(
-    dataset=dataset,
-    batch_size=1,
-    shuffle=False,
-    num_workers=8,
-    collate_fn=lambda x: x[0]
-  )
+  # dataloader = DataLoader(
+  #   dataset=dataset,
+  #   batch_size=1,
+  #   shuffle=False,
+  #   num_workers=8,
+  #   collate_fn=lambda x: x[0]
+  # )
   loss_fn = CrossEntropyLoss(ignore_index=-100)
   start_time = time.time()
   show_cnt = 3
