@@ -1,6 +1,8 @@
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
+
 from rich import print
 import argparse
-
 import time
 import wids
 import os
