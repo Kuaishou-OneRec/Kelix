@@ -62,7 +62,15 @@ class CC12MSampleFilter(SampleFilterBase):
         caption = sample["caption"]
         pattern = re.compile(r'<([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>(.*?)</\1>', re.DOTALL)
         new_text, num_subs = pattern.subn(r'\2', caption)
-        if (num_subs > 0) or (len(caption) <= 5) or ("<PERSON>" in caption) or ("<PERSONPERSON>" in caption) or ("" in in caption) or ("Image for" in caption) or ("The pictures for -->" in caption):
+        if (
+            (num_subs > 0) or 
+            (len(caption) <= 5) or 
+            ("<PERSON>" in caption) or 
+            ("<PERSONPERSON>" in caption) or 
+            ("" in caption) or 
+            ("Image for" in caption) or 
+            ("The pictures for -->" in caption)
+        ):
             return False
         else:
             return True
