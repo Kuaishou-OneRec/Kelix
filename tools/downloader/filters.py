@@ -55,6 +55,14 @@ class CoyoSampleFilter(SampleFilterBase):
         else:
             return False
 
+class CC12MSampleFilter(SampleFilterBase):
+
+    def __call__(self, sample: Dict[str, any]) -> bool:
+        caption = sample["caption"]
+        if ("<PERSON>" in caption) or ("<PERSONPERSON>" in caption):
+            return False
+        else:
+            return True
     
 def create_filter(class_name, kwargs):
     return eval(class_name)(**kwargs)
