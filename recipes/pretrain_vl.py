@@ -48,7 +48,7 @@ def get_argument_parser():
                       help="The directory of the pretrained model.")
 
   ############ Dataset args ############
-  parser.add_argument("--dataset", type=str, default=None,
+  parser.add_argument("--dataset", nargs='+', default=[],
                       help="The comma seperated path of indexed json file.")
   
   parser.add_argument("--packing_batch_size", type=int, default=1,

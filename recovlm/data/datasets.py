@@ -1,5 +1,6 @@
 from typing import Union, Iterable, Optional, List, Dict, Tuple
 from absl import logging
+from typing import Sequence
 
 import os
 import re
@@ -864,12 +865,13 @@ class BlendDatasetCkptManager:
     else:
       return self.load_ckpt(max_step_ckpt_fn)
 
-def get_webdataset(sources: str):
+def get_webdataset(sources: Sequence[str]):
     # This is the basic WebDataset definition: it starts with a URL and add shuffling,
     # decoding, and augmentation. Note `resampled=True`; this is essential for
     # distributed training to work correctly.
     urls = []
-    for source in sources.split(","):
+    assert len(sources) > 0
+    for source in sources:
         with open(source, encoding="utf-8") as f:
             index = json.loads(f.read())["shardlist"]
             urls.extend([
@@ -878,7 +880,7 @@ def get_webdataset(sources: str):
         
     dataset = wds.WebDataset(
         urls,
-        handler=wds.warn_and_continue,
+        handler=wds.ignore_and_continue,
         resampled=True,
         shardshuffle=True,
         cache_dir="/tmp/_wids_cache",
