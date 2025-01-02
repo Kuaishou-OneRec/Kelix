@@ -231,7 +231,9 @@ def train():
   # load_zero3_state_dict(model, args.model_dir)
   model.train()
   model_engine, _, _, _ = deepspeed.initialize(args=args,
-                                               model=model)
+    model=model)
+
+  model_engine.load_checkpoint(args.output_dir)
 
   # TODO: 检查下预训练的tokenizer配置是否需要改变
   # TODO: fix hard code

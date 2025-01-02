@@ -1,3 +1,4 @@
+from typing import Dict
 import pandas as pd
 import numpy as np
 
@@ -6,6 +7,11 @@ class FilterBase(object):
     def __call__(self, df: pd.DataFrame) -> pd.DataFrame:
         raise NotImplementedError
 
+
+class SampleFilterBase(object):
+
+    def __call__(self, sample: Dict[str, any]) -> bool:
+        raise NotImplementedError
 
 class ScoreFilter(FilterBase):
 

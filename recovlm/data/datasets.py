@@ -875,8 +875,10 @@ def get_webdataset(sources: str):
             urls.extend([
                 os.path.join(os.path.dirname(source), item["url"]) for item in index]
             )
+        
     dataset = wds.WebDataset(
         urls,
+        handler=wds.warn_and_continue,
         resampled=True,
         shardshuffle=True,
         cache_dir="/tmp/_wids_cache",
