@@ -1,0 +1,6 @@
+dataset_url: /llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json
+output_dir: /llm_reco_ssd/luoxinchen/dataset/coyo-700m/clean_data/webdataset
+output_shard_size: 10000
+filters:
+  - class_name: CoyoSampleFilter
+    kwargs: {}

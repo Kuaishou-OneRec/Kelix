@@ -36,6 +36,25 @@ class CaptionLengthFilter(FilterBase):
             for v in df[self.caption_name].values
         ]
         return df[mask]
+
+class CoyoSampleFilter(SampleFilterBase):
+
+    def __call__(self, sample: Dict[str, any]) -> bool:
+        word_count = len(sample["caption"].split(" "))
+        char_count = len(sample["caption"])
+        caption_mask = (word_count > 2) & (char_count > 5)
+        clip_score = sample["clip_similarity_vitb32"]
+        clip_score_mask = clip_score >= 0.315 
+        width = sample["width"]
+        height = sample["height"]
+        aspect_ratio = width / height if width > height else height / width
+        image_size = min(width, height)
+        image_mask = (image_size >= 200) & (aspect_ratio <= 3.0)
+        if caption_mask & image_mask & clip_score_mask:
+            return True
+        else:
+            return False
+
     
 def create_filter(class_name, kwargs):
     return eval(class_name)(**kwargs)
