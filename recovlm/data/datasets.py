@@ -880,7 +880,7 @@ def get_webdataset(sources: Sequence[str]):
         
     dataset = wds.WebDataset(
         urls,
-        handler=wds.ignore_and_continue,
+        handler=wds.warn_and_continue,
         resampled=True,
         shardshuffle=True,
         cache_dir="/tmp/_wids_cache",
@@ -888,7 +888,7 @@ def get_webdataset(sources: Sequence[str]):
         workersplitter=wds.split_by_worker
     )
   
-    dataset = dataset.shuffle(10000).decode("pil")
+    dataset = dataset.shuffle(10000).decode("pil", handler=wds.warn_and_continue)
 
     return dataset
 
