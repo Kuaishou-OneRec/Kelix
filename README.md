@@ -73,18 +73,18 @@ This project is designed to train VLMs from scratch.
 ```
 3. 文本 + 视频, 
    1. video  参数:
-      - video: required，video 路径
-      - video_start: optional, 起始时间戳, 
-      - video_end: optional, 结束时间戳
-      - nframes: optional, 表示从start-end等宽采样多少帧（nframes，fps 2选一必选）
-      - fps: optional, 当nframes没设置的话，根据fps来计算要采样的帧（可以不给）
-      - min_frames: optional, 最少采样帧数（nframes不填时，fps计算依赖，有默认值）
-      - max_frames: optional, 最大采样帧数（nframes不填时，fps计算依赖，有默认值）
-      - max_pixels: optional
-      - min_pixels: optional 
-      - total_pixels: optional
-      - resized_height: optional
-      - resized_width: optional
+      - **video**: required，video 路径
+      - **video_start**: optional, 起始时间戳, 
+      - **video_end**: optional, 结束时间戳
+      - **nframes**: optional, 表示从start-end等宽采样多少帧（nframes，fps 2选一必选）
+      - **fps**: optional, 当nframes没设置的话，根据fps来计算要采样的帧（可以不给）
+      - **min_frames**: optional, 最少采样帧数（nframes不填时，fps计算依赖，有默认值）
+      - **max_frames**: optional, 最大采样帧数（nframes不填时，fps计算依赖，有默认值）
+      - **max_pixels**: optional
+      - **min_pixels**: optional 
+      - **total_pixels**: optional
+      - **resized_height**: optional
+      - **resized_width**: optional
 ```json
 000000000.json
 {
