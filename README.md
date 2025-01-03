@@ -98,8 +98,8 @@ This project is designed to train VLMs from scratch.
                     "video": "file:///path/to/video1.mp4",
                     "max_pixels": 360 * 420,
                     "fps": 1.0,
-                    "start_ts": 0,
-                    "end_ts": 8,
+                    "video_start": 0,
+                    "video_end": 8,
                 },
                 {"type": "text", "text": "Describe this video."},
             ]
