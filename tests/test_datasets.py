@@ -137,7 +137,6 @@ def test_image_text_pair_dataset_with_packing():
     )
     def collate_fn(samples):
         return samples[0]
-
     dataloader = DataLoader(
         dataset=ds,
         batch_size=1,

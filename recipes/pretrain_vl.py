@@ -1,5 +1,6 @@
 import argparse
 import time
+import wids
 import os
 import glob
 import logging
@@ -133,6 +134,7 @@ def train():
   arg_parser = get_argument_parser()
   arg_parser = deepspeed.add_config_arguments(arg_parser)
   args = arg_parser.parse_args()
+  torch.manual_seed(args.seed)
 
   assert any([args.save_checkpoint_per_step, args.save_checkpoint_every_epoch]), \
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
