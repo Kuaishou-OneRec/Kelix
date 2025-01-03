@@ -1,7 +1,7 @@
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-72B-Instruct # Pretrained model path
-OUTPUT_DIR=/llm_reco_ssd/zhouyang12/output/NegativeFeedback/models/i2i/qwen2_72B/ds-1
+OUTPUT_DIR=/llm_reco_ssd/zhouyang12/output/NegativeFeedback/models/i2i/qwen2_72B/ds-2
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
@@ -18,7 +18,7 @@ deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --chat_template chat_template_with_generation_tag \
     --input_key conversations \
     --system_prompt /llm_reco_ssd/zhouyang12/code/RecoVLM/examples/i2i/prompts/pairwise.txt \
-    --max_length 2048 \
+    --max_length  128 \
     --save_checkpoint_every_epoch \
     --enable_gradient_checkpointing \
     --num_epochs 1 \

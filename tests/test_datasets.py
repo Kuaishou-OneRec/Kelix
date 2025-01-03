@@ -1,8 +1,11 @@
 import os
 import torch
-from torch.utils.data import DataLoader
-from recovlm.data.datasets import ChatCompletionDataset, BlendedWebDataset
 
+import wids
+
+from torch.utils.data import DataLoader
+from recovlm.data.datasets import ChatCompletionDataset, ImageTextPairDatasetWithPacking
+from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 """
     # dataset = LLaVA_CC3M_Dataset(
     #     source="/llm_reco_ssd/luoxinchen/dataset/LLaVA-CC3M-Pretrain-595K/",
@@ -109,19 +112,40 @@ def test_chat_completion():
     for key, t in batch.items():
       assert torch.allclose(t, ans[key])
 
+def test_image_text_pair_dataset_with_packing():
 
-def test_blended_dataset():
-  file = os.path.join(
-      os.path.dirname(__file__),
-      "assets",
-      "blended_dataset.json")
-  dataset = BlendedWebDataset(source=file)
-  assert len(dataset) == 462929045
-  assert dataset.path == [
-      "/llm_reco_ssd/luoxinchen/dataset/datacomp/large",
-      "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset"
-  ]
-  assert dataset.num_samples == [769525787, 78166152]
-  assert dataset.w_num_samples == [384762893, 78166152]
-  assert dataset.weights == [0.5, 1.0]
-  assert dataset.processors == ["default", "default"]
+    # dataset = wids.ShardListDataset(
+    #     "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json"
+    # )
+    processor = Qwen2VLProcessor.from_pretrained(
+        "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct")
+
+    ds = ImageTextPairDatasetWithPacking(
+        sources = "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json",
+        processor = processor,
+        max_length = 3072,
+        min_visual_tokens = 64,
+        max_visual_tokens = 512,
+        spatial_merge_size = 2,
+        image_token_id = 151655,
+        video_token_id = 151656,
+        vision_start_token_id = 151652,
+        patch_size = 14,
+        shrink_ratio = 0.9,
+        max_retry = 5,
+        multiple_of = 8
+    )
+    def collate_fn(samples):
+        return samples[0]
+
+    dataloader = DataLoader(
+        dataset=ds,
+        batch_size=1,
+        shuffle=False,
+        num_workers=8,
+        collate_fn=collate_fn
+    )
+    for item in dataloader:
+        print(item)
+        break
+
