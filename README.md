@@ -32,6 +32,7 @@ This project is designed to train VLMs from scratch.
 #### Stage2 & SFT Data Format
 
 参考文档：[WebDataset File Format Specification](https://docs.google.com/document/d/18OdLjruFNX74ILmgrdiCI9J1fQZuhzzRBCHV9URWto0/edit?tab=t.0)
+制作 webdataset 可以参考脚本 tools/downloader/main.py, 可以利用 mpi4py 同时拉起多个进程加速数据处理
 
 ##### 约定
 1. 如果样本里面有图片一起打包到 .tar 文件里面，如果有视频则存储视频对应的 ceph 路径。
@@ -70,7 +71,20 @@ This project is designed to train VLMs from scratch.
     "source": "XXXOCR"
 }
 ```
-3. 文本 + 视频, max_pixels, start_ts, end_ts, fps 留空后会采用配置的默认值
+3. 文本 + 视频, 
+   1. video  参数:
+      - video: required，video 路径
+      - video_start: optional, 起始时间戳, 
+      - video_end: optional, 结束时间戳
+      - nframes: optional, 表示从start-end等宽采样多少帧（nframes，fps 2选一必选）
+      - fps: optional, 当nframes没设置的话，根据fps来计算要采样的帧（可以不给）
+      - min_frames: optional, 最少采样帧数（nframes不填时，fps计算依赖，有默认值）
+      - max_frames: optional, 最大采样帧数（nframes不填时，fps计算依赖，有默认值）
+      - max_pixels: optional
+      - min_pixels: optional 
+      - total_pixels: optional
+      - resized_height: optional
+      - resized_width: optional
 ```json
 000000000.json
 {
