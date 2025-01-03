@@ -1,6 +1,5 @@
 from typing import Union, Iterable, Optional, List, Dict, Tuple
 from absl import logging
-from typing import Sequence
 
 import os
 import re
@@ -428,254 +427,6 @@ def get_rope_index(
 
     return position_ids
 
-class ImageTextPairDatasetWithPacking(IterableDataset):
-
-  def __init__(self,
-               dataset: Union[Dataset, IterableDataset],
-               processor,
-               max_length: int,
-               min_visual_tokens: int,
-               max_visual_tokens: int,
-               spatial_merge_size: int,
-               image_token_id: int,
-               video_token_id: int,
-               vision_start_token_id: int,
-               patch_size: int,
-               shrink_ratio: float = 0.9,
-               max_retry: int = 5,
-               multiple_of: int = 8,
-               data_format: str = "completion"):
-    super(ImageTextPairDatasetWithPacking).__init__()
-    self.dataset = dataset
-    self.processor = processor
-    self.max_length = max_length
-    self.min_visual_tokens = min_visual_tokens
-    self.max_visual_tokens = max_visual_tokens
-    self.patch_size = patch_size
-    self.shrink_ratio = shrink_ratio
-    self.max_retry = max_retry
-    self.spatial_merge_size = spatial_merge_size
-    self.image_token_id = image_token_id
-    self.video_token_id = video_token_id
-    self.vision_start_token_id = vision_start_token_id
-    self.patch_size = patch_size
-    # Pad sequence to multiple of `multiple_of`
-    self.multiple_of = multiple_of
-    self.data_format = data_format
-
-  def _may_filter(self, sample):
-    image = sample[".jpg"]
-    # caption = sample[".txt"]
-    width, height = image.size
-    if max(height, width) / min(height, width) > 10:
-      raise ValueError("Too larged aspect ratio, skip samples")
-    if (sample[".json"].get("clip_similarity_vitl14", 0.0) > 0.3):
-      raise ValueError("Too low clip score")
-    # if len(caption) < 1 or len(caption) > 512:
-    #   raise ValueError("Too long or too short text.")
-
-  def _process_chat(self,
-                    sample: Dict[str, Union[str, Image.Image]],
-                    max_visual_tokens: int = 1280):
-    max_visual_tokens = max(max_visual_tokens, self.min_visual_tokens)
-    image = sample[".jpg"]
-    caption = sample[".txt"]
-    if image.mode != "RGB":
-      image = image.convert("RGB")
-    prompt = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "image": image,
-                    "min_pixels": self.min_visual_tokens * self.patch_size ** 2,
-                    "max_pixels": max_visual_tokens * self.patch_size ** 2
-                },
-                {"type": "text", "text": "Describe this image."},
-            ],
-        }
-    ]
-
-    text = self.processor.apply_chat_template(
-        [prompt], tokenize=False, add_generation_prompt=True
-    )
-    # TODO: datacamp的aspect_ratio过大会触发异常，提前处理或丢掉？
-    image_inputs, video_inputs = process_vision_info(prompt)
-
-    inputs = self.processor(
-        text=text,
-        images=image_inputs,
-        videos=video_inputs,
-        return_tensors="pt"
-    )
-
-    resposne = [{"content": caption}]
-    response_ids = self.processor.tokenizer.apply_chat_template(
-      [resposne],
-      chat_template=get_template("chat_template_response_only"),
-      add_generation_prompt=False,
-      return_tensors="pt"
-    )
-
-    response_mask = (
-      response_ids != self.processor.tokenizer.pad_token_id).type(torch.int64)
-    loss_mask = torch.cat(
-      [torch.zeros_like(inputs["input_ids"]), response_mask], dim=-1
-    )
-    inputs["input_ids"] = torch.cat(
-        [inputs["input_ids"], response_ids], dim=-1)
-    inputs["loss_mask"] = loss_mask
-    inputs["position_ids"] = get_rope_index(
-        inputs["input_ids"],
-        image_grid_thw=inputs.get("image_grid_thw"),
-        video_grid_thw=inputs.get("video_grid_thw"),
-        spatial_merge_size=self.spatial_merge_size,
-        image_token_id=self.image_token_id,
-        video_token_id=self.video_token_id,
-        vision_start_token_id=self.vision_start_token_id
-    )
-    inputs.pop("attention_mask")
-    return inputs
-
-  def _process_completion(self,
-                          sample: Dict[str, Union[str, Image.Image]],
-                          max_visual_tokens: int = 128) -> Dict[str, torch.Tensor]:
-    max_visual_tokens = max(max_visual_tokens, self.min_visual_tokens)
-    image = sample[".jpg"]
-    caption = sample[".txt"]
-    if image.mode != "RGB":
-      image = image.convert("RGB")
-
-    # TODO: fix hard code
-    text = "<|vision_start|><|image_pad|><|vision_end|>"
-
-    image_inputs, video_inputs = process_vision_info([
-        {
-          "role": "user",
-          "content": [
-            {
-              "type": "image",
-              "image": image,
-              "min_pixels": self.min_visual_tokens * self.patch_size ** 2,
-              "max_pixels": max_visual_tokens * self.patch_size ** 2
-            },
-            {"type": "text", "text": "Describe this image."},
-          ],
-        }
-      ]
-    )
-
-    inputs = self.processor(
-        text=text,
-        images=image_inputs,
-        videos=video_inputs,
-        return_tensors="pt"
-    )
-
-    resposne = caption + self.processor.tokenizer.eos_token
-    response_ids = self.processor.tokenizer.encode(
-      resposne,
-      return_tensors="pt"
-    )
-
-    response_mask = (
-      response_ids != self.processor.tokenizer.pad_token_id).type(torch.int64)
-    loss_mask = torch.cat(
-      [torch.zeros_like(inputs["input_ids"]), response_mask], dim=-1
-    )
-    inputs["input_ids"] = torch.cat(
-        [inputs["input_ids"], response_ids], dim=-1)
-    inputs["loss_mask"] = loss_mask
-    inputs["position_ids"] = get_rope_index(
-        inputs["input_ids"],
-        image_grid_thw=inputs.get("image_grid_thw"),
-        video_grid_thw=inputs.get("video_grid_thw"),
-        spatial_merge_size=self.spatial_merge_size,
-        image_token_id=self.image_token_id,
-        video_token_id=self.video_token_id,
-        vision_start_token_id=self.vision_start_token_id
-    )
-    inputs.pop("attention_mask")
-    return inputs
-
-  def _process(self, sample):
-    # self._may_filter(sample)
-    max_visual_tokens = self.max_visual_tokens
-    for retry in range(self.max_retry):
-      if self.data_format == "chatml":
-        inputs = self._process_chat(sample, max_visual_tokens)
-      elif self.data_format == "completion":
-        inputs = self._process_completion(sample, max_visual_tokens)
-      else:
-        raise NotImplementedError(f"Unsupported dataset format `{self.format}`")
-      if not inputs:
-        raise ValueError("Empty inputs, skip")
-      if len(inputs["input_ids"]) > self.max_length:
-        max_visual_tokens = (max_visual_tokens * self.shrink_ratio)
-        continue
-      else:
-        return inputs
-    else:
-      raise ValueError(
-        f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
-      )
-
-  def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
-    packed_input_ids = []
-    packed_position_ids = []
-    packed_loss_mask = []
-    packed_pixel_values = []
-    packed_image_gird_thw = []
-    cu_seqlens = [0]
-
-    for inputs in buffer:
-      packed_input_ids.append(inputs["input_ids"].flatten())
-      packed_loss_mask.append(inputs["loss_mask"].flatten())
-      packed_position_ids.append(inputs["position_ids"])
-      packed_pixel_values.append(inputs["pixel_values"])
-      packed_image_gird_thw.append(inputs["image_grid_thw"])
-      cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
-
-    packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
-    packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
-    packed_position_ids = torch.cat(packed_position_ids, dim=-1)
-    packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
-    packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
-
-    inputs = {
-      "input_ids": packed_input_ids,
-      "position_ids": packed_position_ids,
-      "loss_mask": packed_loss_mask,
-      "pixel_values": packed_pixel_values,
-      "image_grid_thw": packed_image_gird_thw,
-      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32)
-    }
-    return inputs
-
-  def __iter__(self):
-    buffer = []
-    cur_length = 0
-    for sample in self.dataset:
-      try:
-        inputs = self._process(sample)
-      except:
-        # print(traceback.format_exc())
-        continue
-      sample_length = inputs["input_ids"].shape[-1]
-      if cur_length + sample_length > self.max_length:
-        packed_inputs = self._packing(buffer)
-        yield packed_inputs
-        buffer = [inputs]
-        cur_length = sample_length
-      else:
-        buffer.append(inputs)
-        cur_length += sample_length
-  def __len__(self):
-    # 训练使用加权的总长度
-    return self.w_length
-
-
 class BlendedWebDataset(IterableDataset):
   """Blend Multiple dataset"""
 
@@ -789,7 +540,6 @@ class BlendedWebDataset(IterableDataset):
         yield ann
         cur_samples += 1
   
-
 class BlendDatasetCkptManager:
   def __init__(self, ckpt_path, rank, world_size, num_data_source, num_workers):
     self.ckpt_path = ckpt_path
@@ -865,19 +615,51 @@ class BlendDatasetCkptManager:
     else:
       return self.load_ckpt(max_step_ckpt_fn)
 
-def get_webdataset(sources: Sequence[str]):
-    # This is the basic WebDataset definition: it starts with a URL and add shuffling,
-    # decoding, and augmentation. Note `resampled=True`; this is essential for
-    # distributed training to work correctly.
+class ImageTextPairDatasetWithPacking(IterableDataset):
+  def __init__(self,
+               sources: str,
+               processor,
+               max_length: int,
+               min_visual_tokens: int,
+               max_visual_tokens: int,
+               spatial_merge_size: int,
+               image_token_id: int,
+               video_token_id: int,
+               vision_start_token_id: int,
+               patch_size: int,
+               shrink_ratio: float = 0.9,
+               max_retry: int = 5,
+               multiple_of: int = 8,
+               data_format: str = "chatml",
+               shuffle_size: int = 100000):
+    super(ImageTextPairDatasetWithPacking).__init__()
+    self.processor = processor
+    self.max_length = max_length
+    self.min_visual_tokens = min_visual_tokens
+    self.max_visual_tokens = max_visual_tokens
+    self.patch_size = patch_size
+    self.shrink_ratio = shrink_ratio
+    self.max_retry = max_retry
+    self.spatial_merge_size = spatial_merge_size
+    self.image_token_id = image_token_id
+    self.video_token_id = video_token_id
+    self.vision_start_token_id = vision_start_token_id
+    self.patch_size = patch_size
+    # Pad sequence to multiple of `multiple_of`
+    self.multiple_of = multiple_of
+    self.data_format = data_format
+    self.total_samples = 0
     urls = []
-    assert len(sources) > 0
-    for source in sources:
-        with open(source, encoding="utf-8") as f:
-            index = json.loads(f.read())["shardlist"]
-            urls.extend([
-                os.path.join(os.path.dirname(source), item["url"]) for item in index]
-            )
-        
+    for source in sources.split(","):
+      with open(source, encoding="utf-8") as f:
+        index = json.loads(f.read())["shardlist"]
+        for item in index:
+          urls.append(os.path.join(os.path.dirname(source), item["url"]))
+          self.total_samples += item["nsamples"]
+
+    # def warn_and_continue(e):
+    #   print("Warning: skipping a corrupt sample.", e)
+
     dataset = wds.WebDataset(
         urls,
         handler=wds.warn_and_continue,
@@ -887,12 +669,219 @@ def get_webdataset(sources: Sequence[str]):
         nodesplitter=wds.split_by_node,
         workersplitter=wds.split_by_worker
     )
+
+    dataset = dataset.shuffle(shuffle_size).decode(
+      "pil", handler=wds.warn_and_continue)
+    
+    self.dataset = dataset
+
+  def _may_filter(self, sample):
+    image = sample["jpg"]
+    # caption = sample[".txt"]
+    width, height = image.size
+    if max(height, width) / min(height, width) > 10:
+      raise ValueError("Too larged aspect ratio, skip samples")
+    if (sample["json"].get("clip_similarity_vitl14", 0.0) > 0.3):
+      raise ValueError("Too low clip score")
+
+  def _process_chat(self,
+                    sample: Dict[str, Union[str, Image.Image]],
+                    max_visual_tokens: int = 1280):
+    max_visual_tokens = max(max_visual_tokens, self.min_visual_tokens)
+    image = sample["jpg"]
+    caption = sample["txt"]
+    if image.mode != "RGB":
+      image = image.convert("RGB")
+    prompt = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": image,
+                    "min_pixels": self.min_visual_tokens * self.patch_size ** 2,
+                    "max_pixels": max_visual_tokens * self.patch_size ** 2
+                },
+                {"type": "text", "text": "Describe this image."},
+            ],
+        }
+    ]
+
+    text = self.processor.apply_chat_template(
+        [prompt], tokenize=False, add_generation_prompt=True
+    )
+    # TODO: datacamp的aspect_ratio过大会触发异常，提前处理或丢掉？
+    image_inputs, video_inputs = process_vision_info(prompt)
+
+    inputs = self.processor(
+        text=text,
+        images=image_inputs,
+        videos=video_inputs,
+        return_tensors="pt"
+    )
+
+    resposne = [{"content": caption}]
+    response_ids = self.processor.tokenizer.apply_chat_template(
+      [resposne],
+      chat_template=get_template("chat_template_response_only"),
+      add_generation_prompt=False,
+      return_tensors="pt"
+    )
+
+    response_mask = (
+      response_ids != self.processor.tokenizer.pad_token_id).type(torch.int64)
+    loss_mask = torch.cat(
+      [torch.zeros_like(inputs["input_ids"]), response_mask], dim=-1
+    )
+    inputs["input_ids"] = torch.cat(
+        [inputs["input_ids"], response_ids], dim=-1)
+    inputs["loss_mask"] = loss_mask
+    inputs["position_ids"] = get_rope_index(
+        inputs["input_ids"],
+        image_grid_thw=inputs.get("image_grid_thw"),
+        video_grid_thw=inputs.get("video_grid_thw"),
+        spatial_merge_size=self.spatial_merge_size,
+        image_token_id=self.image_token_id,
+        video_token_id=self.video_token_id,
+        vision_start_token_id=self.vision_start_token_id
+    )
+    inputs.pop("attention_mask")
+    return inputs
+
+  def _process_completion(self,
+                          sample: Dict[str, Union[str, Image.Image]],
+                          max_visual_tokens: int = 128) -> Dict[str, torch.Tensor]:
+    max_visual_tokens = max(max_visual_tokens, self.min_visual_tokens)
+    image = sample["jpg"]
+    caption = sample["txt"]
+    if image.mode != "RGB":
+      image = image.convert("RGB")
+
+    # TODO: fix hard code
+    text = "<|vision_start|><|image_pad|><|vision_end|>"
+
+    image_inputs, video_inputs = process_vision_info([
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "image",
+              "image": image,
+              "min_pixels": self.min_visual_tokens * self.patch_size ** 2,
+              "max_pixels": max_visual_tokens * self.patch_size ** 2
+            },
+            {"type": "text", "text": "Describe this image."},
+          ],
+        }
+      ]
+    )
+
+    inputs = self.processor(
+        text=text,
+        images=image_inputs,
+        videos=video_inputs,
+        return_tensors="pt"
+    )
+
+    resposne = caption + self.processor.tokenizer.eos_token
+    response_ids = self.processor.tokenizer.encode(
+      resposne,
+      return_tensors="pt"
+    )
+
+    response_mask = (
+      response_ids != self.processor.tokenizer.pad_token_id).type(torch.int64)
+    loss_mask = torch.cat(
+      [torch.zeros_like(inputs["input_ids"]), response_mask], dim=-1
+    )
+    inputs["input_ids"] = torch.cat(
+        [inputs["input_ids"], response_ids], dim=-1)
+    inputs["loss_mask"] = loss_mask
+    inputs["position_ids"] = get_rope_index(
+        inputs["input_ids"],
+        image_grid_thw=inputs.get("image_grid_thw"),
+        video_grid_thw=inputs.get("video_grid_thw"),
+        spatial_merge_size=self.spatial_merge_size,
+        image_token_id=self.image_token_id,
+        video_token_id=self.video_token_id,
+        vision_start_token_id=self.vision_start_token_id
+    )
+    inputs.pop("attention_mask")
+    return inputs
+
+  def _process(self, sample):
+    # self._may_filter(sample)
+    max_visual_tokens = self.max_visual_tokens
+    for retry in range(self.max_retry):
+      if self.data_format == "chatml":
+        inputs = self._process_chat(sample, max_visual_tokens)
+      elif self.data_format == "completion":
+        inputs = self._process_completion(sample, max_visual_tokens)
+      else:
+        raise NotImplementedError(f"Unsupported dataset format `{self.format}`")
+      if not inputs:
+        raise ValueError("Empty inputs, skip")
+      if inputs["input_ids"].shape[-1] > self.max_length:
+        max_visual_tokens = (max_visual_tokens * self.shrink_ratio)
+        continue
+      else:
+        assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"
+        return inputs
+    else:
+      raise ValueError(
+        f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
+      )
   
-    dataset = dataset.shuffle(10000).decode("pil", handler=wds.warn_and_continue)
+  def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
+    packed_input_ids = []
+    packed_position_ids = []
+    packed_loss_mask = []
+    packed_pixel_values = []
+    packed_image_gird_thw = []
+    cu_seqlens = [0]
 
-    return dataset
+    for inputs in buffer:
+      packed_input_ids.append(inputs["input_ids"].flatten())
+      packed_loss_mask.append(inputs["loss_mask"].flatten())
+      packed_position_ids.append(inputs["position_ids"])
+      packed_pixel_values.append(inputs["pixel_values"])
+      packed_image_gird_thw.append(inputs["image_grid_thw"])
+      cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
 
+    packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
+    packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
+    packed_position_ids = torch.cat(packed_position_ids, dim=-1)
+    packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
+    packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
 
+    inputs = {
+      "input_ids": packed_input_ids,
+      "position_ids": packed_position_ids,
+      "loss_mask": packed_loss_mask,
+      "pixel_values": packed_pixel_values,
+      "image_grid_thw": packed_image_gird_thw,
+      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32)
+    }
+    return inputs
+
+  def __iter__(self):
+    buffer = []
+    cur_length = 0
+    for sample in self.dataset:
+      try:
+        inputs = self._process(sample)
+      except:
+        print(traceback.format_exc())
+        continue
+      sample_length = inputs["input_ids"].shape[-1]
+      if cur_length + sample_length > self.max_length:
+        packed_inputs = self._packing(buffer)
+        yield packed_inputs
+        buffer = [inputs]
+        cur_length = sample_length
+      else:
+        buffer.append(inputs)
+        cur_length += sample_length
 
 if __name__ == "__main__":
   import wids

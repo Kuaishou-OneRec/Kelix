@@ -17,6 +17,7 @@ def load_safetensors(path):
       tensors[k] = f.get_tensor(k)
   return tensors
 
+
 def load_zero3_state_dict(model, model_dir):
 
   missing_keys: List[str] = []

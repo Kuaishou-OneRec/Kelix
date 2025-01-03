@@ -114,16 +114,16 @@ def test_chat_completion():
 
 def test_image_text_pair_dataset_with_packing():
 
-    dataset = wids.ShardListDataset(
-        "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json"
-    )
+    # dataset = wids.ShardListDataset(
+    #     "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json"
+    # )
     processor = Qwen2VLProcessor.from_pretrained(
         "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct")
 
     ds = ImageTextPairDatasetWithPacking(
-        dataset = dataset,
+        sources = "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json",
         processor = processor,
-        max_length = 1024,
+        max_length = 3072,
         min_visual_tokens = 64,
         max_visual_tokens = 512,
         spatial_merge_size = 2,
@@ -141,14 +141,10 @@ def test_image_text_pair_dataset_with_packing():
         dataset=ds,
         batch_size=1,
         shuffle=False,
-        num_workers=1,
+        num_workers=8,
         collate_fn=collate_fn
     )
     for item in dataloader:
-        # print(item)
-        # print(processor.tokenizer.decode(item["input_ids"][0]))
-        #print(item["input_ids"][0].shape)
-        # for key in item:
-        #     print(item[key])
+        print(item)
         break
 

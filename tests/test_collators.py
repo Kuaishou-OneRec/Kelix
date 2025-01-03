@@ -21,6 +21,7 @@ def test_image_text_packing_collator():
         max_length = 1024,
         min_visual_tokens = 64,
         max_visual_tokens = 512,
+        max_text_length = 512,
         spatial_merge_size = 2,
         image_token_id = 151655,
         video_token_id = 151656,

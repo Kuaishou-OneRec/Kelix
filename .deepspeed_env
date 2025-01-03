@@ -1,1 +1,6 @@
 LD_PRELOAD=/llm_reco_ssd/luoxinchen/libs/libnccl.so.2.21.5.noece.cpu
+NCCL_IB_QPS_PER_CONNECTION=2
+NCCL_IB_DISABLE=0
+NCCL_IB_GID_INDEX=3
+NCCL_IB_HCA=mlx5_0,mlx5_1,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9
+NCCL_ALGO=^NVLS,NVLSTree

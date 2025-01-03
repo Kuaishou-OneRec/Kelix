@@ -1,7 +1,7 @@
-from .common import print_rank_0, move_to_cuda
+from .common import print_rank_0, to_device
 
 
 __all__ = [
     "print_rank_0",
-    "move_to_cuda"
+    "to_device"
 ]
