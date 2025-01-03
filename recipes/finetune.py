@@ -27,6 +27,12 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.nn.functional as F
 
 
+os.environ["NCCL_IB_QPS_PER_CONNECTION"] = "2"
+os.environ["NCCL_IB_DISABLE"] = "0"
+os.environ["NCCL_IB_GID_INDEX"] = "3"
+os.environ["NCCL_IB_HCA"] = "mlx5_0,mlx5_1,mlx5_4,mlx5_5,mlx5_6,mlx5_7,mlx5_8,mlx5_9"
+os.environ["NCCL_ALGO"]= "^NVLS,NVLSTree"
+
 def get_argument_parser():
   parser = argparse.ArgumentParser()
 

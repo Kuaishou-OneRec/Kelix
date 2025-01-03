@@ -181,6 +181,7 @@ def get_rope_index(
 
     return position_ids
 
+
 class ImageTextPackingCollator:
   """Image Text Collator with Packing"""
 
@@ -218,8 +219,8 @@ class ImageTextPackingCollator:
                       sample: Dict[str, Union[str, Image.Image]],
                       max_visual_tokens: 1.0) -> Dict[str, torch.Tensor]:
     max_visual_tokens = max(max_visual_tokens, self.min_visual_tokens)
-    image = sample[".jpg"]
-    caption = sample[".txt"]
+    image = sample["jpg"]
+    caption = sample["txt"]
     if len(caption) > self.max_text_length:
       caption = caption[:self.max_text_length]
     if image.mode != "RGB":
