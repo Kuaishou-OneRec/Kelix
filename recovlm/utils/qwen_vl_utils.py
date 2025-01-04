@@ -7,6 +7,7 @@ import os
 import sys
 import time
 import warnings
+import itertools
 from functools import lru_cache
 from io import BytesIO
 
@@ -18,6 +19,7 @@ from PIL import Image
 from torchvision import io, transforms
 from torchvision.transforms import InterpolationMode
 import traceback
+import io as py_io
 
 
 logger = logging.getLogger(__name__)
@@ -177,22 +179,38 @@ def _read_video_torchvision(
     Returns:
         torch.Tensor: the video tensor with shape (T, C, H, W).
     """
-    video_path = ele["video"]
-    if version.parse(torchvision.__version__) < version.parse("0.19.0"):
-        if "http://" in video_path or "https://" in video_path:
-            warnings.warn("torchvision < 0.19.0 does not support http/https video path, please upgrade to 0.19.0.")
-        if "file://" in video_path:
-            video_path = video_path[7:]
+    # process video url
     st = time.time()
-    video, audio, info = io.read_video(
-        video_path,
-        start_pts=ele.get("video_start", 0.0),
-        end_pts=ele.get("video_end", None),
-        pts_unit="sec",
-        output_format="TCHW",
-    )
-    total_frames, video_fps = video.size(0), info["video_fps"]
-    logger.info(f"torchvision:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
+    if isinstance(ele["video"], str):
+        ideo_path = ele["video"]
+        if version.parse(torchvision.__version__) < vervsion.parse("0.19.0"):
+            if "http://" in video_path or "https://" in video_path:
+                warnings.warn("torchvision < 0.19.0 does not support http/https video path, please upgrade to 0.19.0.")
+            if "file://" in video_path:
+                video_path = video_path[7:]
+        video, audio, info = io.read_video(
+            video_path,
+            start_pts=ele.get("video_start", 0.0),
+            end_pts=ele.get("video_end", None),
+            pts_unit="sec",
+            output_format="TCHW",
+        )
+        total_frames, video_fps = video.size(0), info["video_fps"]
+        logger.info(f"torchvision:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
+
+    elif isinstance(ele["video"], bytes):
+        video_reader = torchvision.io.VideoReader(ele["video"], "video")
+        video_meta = video_reader.get_metadata()["video"]
+
+        start_ptr = ele.get("video_start", 0.0)
+        end_pts = ele.get("video_end", video_meta["duration"][-1])
+        video = []
+        for frame in itertools.takewhile(lambda x: x['pts'] <= end_pts, video_reader.seek(start_ptr)):
+            video.append(frame['data'])
+        video = torch.stack(video)
+        total_frames, video_fps = video.size(0), video_meta["fps"][-1]
+        logger.info(f"torchvision:  {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
+    
     nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
     idx = torch.linspace(0, total_frames - 1, nframes).round().long()
     video = video[idx]
@@ -220,15 +238,21 @@ def _read_video_decord(
         torch.Tensor: the video tensor with shape (T, C, H, W).
     """
     import decord
-    video_path = ele["video"]
     st = time.time()
-    vr = decord.VideoReader(video_path)
+    if isinstance(ele["video"], bytes):
+        video_path = ""
+        fp = py_io.BytesIO(ele["video"])
+        vr = decord.VideoReader(fp)
+    else:
+        video_path = ele["video"]
+        vr = decord.VideoReader(video_path)
     # TODO: support start_pts and end_pts
     if 'video_start' in ele or 'video_end' in ele:
         raise NotImplementedError("not support start_pts and end_pts in decord for now.")
     total_frames, video_fps = len(vr), vr.get_avg_fps()
     logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
     nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    print(f"zzxdebug: nframes={nframes}")
     idx = torch.linspace(0, total_frames - 1, nframes).round().long().tolist()
     video = vr.get_batch(idx).asnumpy()
     video = torch.tensor(video).permute(0, 3, 1, 2)  # Convert to TCHW format
@@ -256,7 +280,7 @@ def get_video_reader_backend() -> str:
 
 
 def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR) -> torch.Tensor | list[Image.Image]:
-    if isinstance(ele["video"], str):
+    if isinstance(ele["video"], str) or isinstance(ele["video"], bytes):
         video_reader_backend = get_video_reader_backend()
         video = VIDEO_READER_BACKENDS[video_reader_backend](ele)
         nframes, _, height, width = video.shape
@@ -285,6 +309,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR) -> torch.Tensor | l
             interpolation=InterpolationMode.BICUBIC,
             antialias=True,
         ).float()
+        print(f"final video shape={video.shape}")
         return video
     else:
         assert isinstance(ele["video"], (list, tuple))
