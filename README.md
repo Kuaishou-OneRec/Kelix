@@ -32,6 +32,7 @@ This project is designed to train VLMs from scratch.
 #### Stage2 & SFT Data Format
 
 参考文档：[WebDataset File Format Specification](https://docs.google.com/document/d/18OdLjruFNX74ILmgrdiCI9J1fQZuhzzRBCHV9URWto0/edit?tab=t.0)
+
 制作 webdataset 可以参考脚本 tools/downloader/main.py, 可以利用 mpi4py 同时拉起多个进程加速数据处理
 
 ##### 约定
