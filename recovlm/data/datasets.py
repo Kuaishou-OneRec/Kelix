@@ -31,7 +31,7 @@ import random
 from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor, \
     PreTrainedTokenizer, PreTrainedTokenizerFast
 # from processing_qwen2_vl import Qwen2VLProcessor
-from qwen_vl_utils import process_vision_info
+from recovlm.utils.qwen_vl_utils import process_vision_info
 import glob
 
 from .templates import get_template
@@ -333,8 +333,8 @@ def get_rope_index(
       vision_start_indices = torch.argwhere(
           input_ids == vision_start_token_id).squeeze(1)
       vision_tokens = input_ids[vision_start_indices + 1]
-      image_nums = (vision_tokens == image_token_id).sum()
-      video_nums = (vision_tokens == video_token_id).sum()
+      image_nums = 0 if image_token_id == None else (vision_tokens == image_token_id).sum()
+      video_nums = 0 if video_token_id == None else (vision_tokens == video_token_id).sum()
       input_tokens = input_ids.tolist()
       llm_pos_ids_list: list = []
       st = 0
@@ -883,35 +883,261 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
         buffer.append(inputs)
         cur_length += sample_length
 
-if __name__ == "__main__":
-  import wids
-  sources = [
-    "/llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json",
-    "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json"
-  ]
-  datasets = [wids.ShardListDataset(source) for source in sources]
 
-  blend_dataset1 = BlendedWebDataset(datasets, [1.1, 0.5], 0, 1, 1)
+class VisionTextDatasetWithPacking(IterableDataset):
+  def __init__(self,
+               sources: str,
+               processor,
+               max_length: int,
+               min_visual_tokens: int,
+               max_visual_tokens: int,
+               spatial_merge_size: int,
+               image_token_id: int,
+               video_token_id: int,
+               vision_start_token_id: int,
+               patch_size: int,
+               shrink_ratio: float = 0.9,
+               max_retry: int = 5,
+               multiple_of: int = 8,
+               data_format: str = "chatml",
+               shuffle_size: int = 100000):
+    super(VisionTextDatasetWithPacking).__init__()
+    self.processor = processor
+    self.max_length = max_length
+    self.min_visual_tokens = min_visual_tokens
+    self.max_visual_tokens = max_visual_tokens
+    self.patch_size = patch_size
+    self.shrink_ratio = shrink_ratio
+    self.max_retry = max_retry
+    self.spatial_merge_size = spatial_merge_size
+    self.image_token_id = image_token_id
+    self.video_token_id = video_token_id
+    self.vision_start_token_id = vision_start_token_id
+    self.patch_size = patch_size
+    # Pad sequence to multiple of `multiple_of`
+    self.multiple_of = multiple_of
+    self.data_format = data_format
+    self.total_samples = 0
+    urls = []
+    for source in sources.split(","):
+      with open(source, encoding="utf-8") as f:
+        index = json.loads(f.read())["shardlist"]
+        for item in index:
+          urls.append(os.path.join(os.path.dirname(source), item["url"]))
+          self.total_samples += item["nsamples"]
 
-  datasets = [wids.ShardListDataset(source) for source in sources]
+    # def warn_and_continue(e):
+    #   print("Warning: skipping a corrupt sample.", e)
 
-  blend_dataset2 = BlendedWebDataset(datasets, [1.1, 0.5], 0, 1, 1)
+    dataset = wds.WebDataset(
+        urls,
+        handler=wds.warn_and_continue,
+        resampled=True,
+        shardshuffle=True,
+        cache_dir="/tmp/_wids_cache",
+        nodesplitter=wds.split_by_node,
+        workersplitter=wds.split_by_worker
+    ).shuffle(shuffle_size)
 
-  assert blend_dataset1.dataset_range_idx == blend_dataset2.dataset_range_idx
-  assert blend_dataset1.dataset_states == blend_dataset2.dataset_states
+    dataset = dataset.decode("pil", handler=wds.warn_and_continue) # for image decode
+    # dataset = dataset.decode("pil", handler=wds.warn_and_continue) # for video decode
+    
+    self.dataset = dataset
 
-  for d in blend_dataset1:
-    print(d)
-    break
+  def _split_messages(self, messages):
+    output_msg = None
+    input_msgs = []
+    for msg in messages:
+      if msg["role"] == "system" or msg["role"] == "user":
+        input_msgs.append(msg)
+      if msg["role"] == "assistant":
+        output_msg = msg
+    return input_msgs, output_msg
+  
+  def _get_text_content(self, message):
+    content_res = ""
+    assert "content" in message
+    content = message["content"]
+    if isinstance(content, str):
+      content_res = content
+    elif isinstance(content, list):
+      for c in content:
+        if c["type"] == "text":
+          content_res = c["text"]
+    return content_res
 
-  for d in blend_dataset2:
-    print(d)
-    break
+  def _fill_prompt(self, messages, videos, images):
+    for msg in messages:
+      if msg["role"] == "user":
+        for content in msg["content"]:
+          if content['type'] == "video" and content['video'] in videos:
+            content['video'] = videos[content['video']]
+          elif content['type'] == "image" and content['image'] in images:
+            content["image"] = images[content['image']]
+            # TODO: add a flag to check whether rewrite
+            content["min_pixels"] = self.min_visual_tokens * self.patch_size ** 2
+            content["max_pixels"] = self.max_visual_tokens * self.patch_size ** 2
+    return messages
 
-  # for d in datasets[0]:
-  #   print(d)
-  #   break
+  def _process_sample(self, samples):
+    videos = {}
+    images = {}
+    messages = []
+    for key in samples:
+      if key.endswith("jpg"):
+        images[key] = samples[key]
+        if images[key].mode != "RGB":
+          images[key] = images[key].convert("RGB")
+      elif key.endswith("mp4") or key.endswith("mov"):
+        videos[key] = samples[key]
+      elif key == "json":
+        if "messages" in samples["json"]:
+          messages = samples["json"]["messages"]
+          
+        # TODO: remove "message" key support
+        if "message" in samples["json"]:
+          messages = samples["json"]["message"]
 
-  # for d in datasets[1]:
-  #   print(d)
-  #   break
+    if len(messages) == 0:
+      raise ValueError(
+        f"Unable to generate sample without messages field."
+      )
+    
+    # generate prompt & response
+    input_msgs, output_msg = self._split_messages(messages)
+    if len(input_msgs) == 0 or output_msg is None:
+      raise ValueError(
+        f"Unable to generate prompt with incomplete message."
+      )
+    prompt = self._fill_prompt(input_msgs, videos, images)
+    text = self.processor.apply_chat_template(
+        prompt, tokenize=False, add_generation_prompt=True
+    )
+    # TODO: datacamp的aspect_ratio过大会触发异常，提前处理或丢掉？
+    image_inputs, video_inputs = process_vision_info(prompt)
+    inputs = self.processor(
+        text=text,
+        images=image_inputs,
+        videos=video_inputs,
+        return_tensors="pt"
+    )
+
+    response = [{"content": self._get_text_content(output_msg)}]
+    print(f"zzxdebug: {prompt=}, {output_msg=}, {response=}")
+    response_ids = self.processor.tokenizer.apply_chat_template(
+      [response],
+      chat_template=get_template("chat_template_response_only"),
+      add_generation_prompt=False,
+      return_tensors="pt"
+    )
+    response_mask = (
+      response_ids != self.processor.tokenizer.pad_token_id).type(torch.int64)
+    loss_mask = torch.cat(
+      [torch.zeros_like(inputs["input_ids"]), response_mask], dim=-1
+    )
+
+    inputs["input_ids"] = torch.cat(
+        [inputs["input_ids"], response_ids], dim=-1)
+    inputs["loss_mask"] = loss_mask
+    inputs["position_ids"] = get_rope_index(
+        inputs["input_ids"],
+        image_grid_thw=inputs.get("image_grid_thw"),
+        video_grid_thw=inputs.get("video_grid_thw"),
+        spatial_merge_size=self.spatial_merge_size,
+        image_token_id=self.image_token_id,
+        video_token_id=self.video_token_id,
+        vision_start_token_id=self.vision_start_token_id
+    )
+    inputs.pop("attention_mask")
+    return inputs
+
+  def _process(self, sample):
+    # self._may_filter(sample)
+    max_visual_tokens = self.max_visual_tokens
+    for retry in range(self.max_retry):
+      inputs = self._process_sample(sample)
+      if not inputs:
+        raise ValueError("Empty inputs, skip")
+      if inputs["input_ids"].shape[-1] > self.max_length:
+        max_visual_tokens = (max_visual_tokens * self.shrink_ratio)
+        continue
+      else:
+        assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"
+        return inputs
+    else:
+      raise ValueError(
+        f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
+      )
+  
+  def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
+    packed_input_ids = []
+    packed_position_ids = []
+    packed_loss_mask = []
+    packed_pixel_values = []
+    packed_image_gird_thw = []
+    packed_pixel_values_videos = []
+    packed_video_grid_thw = []
+    cu_seqlens = [0]
+
+    for inputs in buffer:
+      video_flag = False
+      image_flag = False
+      
+      packed_input_ids.append(inputs["input_ids"].flatten())
+      packed_loss_mask.append(inputs["loss_mask"].flatten())
+      packed_position_ids.append(inputs["position_ids"])
+      cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
+
+      if "pixel_values" in inputs:
+        packed_pixel_values.append(inputs["pixel_values"])
+        packed_image_gird_thw.append(inputs["image_grid_thw"])
+        image_flag = True
+        
+      if "pixel_values_videos" in inputs:
+        packed_pixel_values_videos.append(inputs["pixel_values_videos"])
+        packed_video_grid_thw.append(inputs["video_grid_thw"])
+        video_flag = True
+      
+
+    packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
+    packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
+    packed_position_ids = torch.cat(packed_position_ids, dim=-1)
+    inputs = {
+      "input_ids": packed_input_ids,
+      "position_ids": packed_position_ids,
+      "loss_mask": packed_loss_mask,
+      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32)
+    }
+
+    if image_flag:
+      packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
+      packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
+      inputs["pixel_values"] = packed_pixel_values
+      inputs["image_grid_thw"] = packed_image_gird_thw
+
+    if video_flag:
+      packed_pixel_values_videos = torch.cat(packed_pixel_values_videos, dim=0)
+      packed_video_grid_thw = torch.cat(packed_video_grid_thw, dim=0)
+      inputs["pixel_values_videos"] = packed_pixel_values_videos
+      inputs["video_grid_thw"] = packed_video_grid_thw
+    
+    return inputs
+
+  def __iter__(self):
+    buffer = []
+    cur_length = 0
+    for sample in self.dataset:
+      try:
+        inputs = self._process(sample)
+      except:
+        print(traceback.format_exc())
+        continue
+      sample_length = inputs["input_ids"].shape[-1]
+      if cur_length + sample_length > self.max_length:
+        packed_inputs = self._packing(buffer)
+        yield packed_inputs
+        buffer = [inputs]
+        cur_length = sample_length
+      else:
+        buffer.append(inputs)
+        cur_length += sample_length
