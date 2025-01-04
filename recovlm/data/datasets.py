@@ -955,13 +955,16 @@ class VisionTextDatasetWithPacking(IterableDataset):
     return input_msgs, output_msg
   
   def _get_text_content(self, message):
-    content = ""
-    #TODO: whether need to support multi content text???
-    assert "content" in message and len(message["content"]) == 1
-
-    for text_content in message["content"]:
-      content = text_content["text"]
-    return content
+    content_res = ""
+    assert "content" in message
+    content = message["content"]
+    if isinstance(content, str):
+      content_res = content
+    elif isinstance(content, list):
+      for c in content:
+        if c["type"] == "text":
+          content_res = c["text"]
+    return content_res
 
   def _fill_prompt(self, messages, videos, images):
     for msg in messages:

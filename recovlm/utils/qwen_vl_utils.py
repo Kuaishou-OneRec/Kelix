@@ -182,8 +182,8 @@ def _read_video_torchvision(
     # process video url
     st = time.time()
     if isinstance(ele["video"], str):
-        ideo_path = ele["video"]
-        if version.parse(torchvision.__version__) < vervsion.parse("0.19.0"):
+        video_path = ele["video"]
+        if version.parse(torchvision.__version__) < version.parse("0.19.0"):
             if "http://" in video_path or "https://" in video_path:
                 warnings.warn("torchvision < 0.19.0 does not support http/https video path, please upgrade to 0.19.0.")
             if "file://" in video_path:
@@ -252,7 +252,6 @@ def _read_video_decord(
     total_frames, video_fps = len(vr), vr.get_avg_fps()
     logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
     nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
-    print(f"zzxdebug: nframes={nframes}")
     idx = torch.linspace(0, total_frames - 1, nframes).round().long().tolist()
     video = vr.get_batch(idx).asnumpy()
     video = torch.tensor(video).permute(0, 3, 1, 2)  # Convert to TCHW format
@@ -309,7 +308,6 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR) -> torch.Tensor | l
             interpolation=InterpolationMode.BICUBIC,
             antialias=True,
         ).float()
-        print(f"final video shape={video.shape}")
         return video
     else:
         assert isinstance(ele["video"], (list, tuple))
