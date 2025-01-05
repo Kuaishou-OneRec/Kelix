@@ -25,7 +25,7 @@ from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
 from recovlm.data.dataloaders import get_indexed_dataloader
-from recovlm.data.datasets import ImageTextPairDatasetWithPacking
+from recovlm.data.datasets import ImageTextPairDatasetWithPacking, VisionTextDatasetWithPacking
 from recovlm.data.collators import ImageTextPackingCollator
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
@@ -221,12 +221,29 @@ def train():
   # TODO: remove hard code, dataloader配置化
   processor = Qwen2VLProcessor.from_pretrained(args.model_dir)
 
-  dataset = ImageTextPairDatasetWithPacking(
+  # dataset = ImageTextPairDatasetWithPacking(
+  #   sources = args.dataset,
+  #   processor = processor,
+  #   max_length = args.max_length,
+  #   min_visual_tokens = args.min_visual_tokens,
+  #   max_visual_tokens = args.max_visual_tokens,
+  #   spatial_merge_size = 2,
+  #   image_token_id = 151655,
+  #   video_token_id = 151656,
+  #   vision_start_token_id = 151652,
+  #   patch_size = 14,
+  #   shrink_ratio = 0.7,
+  #   max_retry = 10,
+  #   multiple_of = 8
+  # )
+  dataset = VisionTextDatasetWithPacking(
     sources = args.dataset,
     processor = processor,
     max_length = args.max_length,
     min_visual_tokens = args.min_visual_tokens,
     max_visual_tokens = args.max_visual_tokens,
+    min_video_visual_tokens = args.min_visual_tokens * 5,
+    max_video_visual_tokens = args.max_visual_tokens * 5,
     spatial_merge_size = 2,
     image_token_id = 151655,
     video_token_id = 151656,
@@ -236,6 +253,7 @@ def train():
     max_retry = 10,
     multiple_of = 8
   )
+  
   ### packing, batching size=1; shuffle in dataset
   dataloader = DataLoader(
     dataset=dataset,
