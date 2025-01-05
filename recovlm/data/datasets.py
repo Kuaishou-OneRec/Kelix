@@ -457,9 +457,6 @@ class BlendedWebDataset(IterableDataset):
     # dataset_states[data_idx][worker_idx] = [chunk_idx, chunk_inner_idx]
     self.dataset_range_idx, self.dataset_states = self._chunked_sampler()
 
-    # print(f"zzxdebug: {self.dataset_range_idx}")
-    # print(f"zzxdebug: {self.dataset_states}")
-
   def __len__(self):
     return self.total_samples
 
@@ -896,16 +893,21 @@ class VisionTextDatasetWithPacking(IterableDataset):
                video_token_id: int,
                vision_start_token_id: int,
                patch_size: int,
+               n_frames: int = -1,
+               min_video_visual_tokens: int = -1,
+               max_video_visual_tokens: int = -1,
                shrink_ratio: float = 0.9,
                max_retry: int = 5,
                multiple_of: int = 8,
-               data_format: str = "chatml",
                shuffle_size: int = 100000):
     super(VisionTextDatasetWithPacking).__init__()
     self.processor = processor
     self.max_length = max_length
     self.min_visual_tokens = min_visual_tokens
     self.max_visual_tokens = max_visual_tokens
+    self.n_frames = n_frames
+    self.min_video_visual_tokens = min_video_visual_tokens if min_video_visual_tokens > 0 else min_visual_tokens
+    self.max_video_visual_tokens = max_video_visual_tokens if max_video_visual_tokens > 0 else max_visual_tokens
     self.patch_size = patch_size
     self.shrink_ratio = shrink_ratio
     self.max_retry = max_retry
@@ -916,7 +918,6 @@ class VisionTextDatasetWithPacking(IterableDataset):
     self.patch_size = patch_size
     # Pad sequence to multiple of `multiple_of`
     self.multiple_of = multiple_of
-    self.data_format = data_format
     self.total_samples = 0
     urls = []
     for source in sources.split(","):
@@ -966,20 +967,43 @@ class VisionTextDatasetWithPacking(IterableDataset):
           content_res = c["text"]
     return content_res
 
-  def _fill_prompt(self, messages, videos, images):
+  def _gen_image_video_extend(self, max_visual_tokens, max_video_visual_tokens):
+    image_extend = {
+      "min_pixels": self.min_visual_tokens * self.patch_size ** 2,
+      "max_pixels": max_visual_tokens * self.patch_size ** 2
+    }
+
+    video_extend = {
+      "min_pixels": self.min_video_visual_tokens * self.patch_size ** 2,
+      "max_pixels": max_video_visual_tokens * self.patch_size ** 2
+    }
+    if self.n_frames > 0:
+      video_extend["nframes"] = self.n_frames
+
+    return image_extend, video_extend
+
+  def _fill_prompt(self, messages, videos, images,
+                   video_extend={}, image_extend={}):
     for msg in messages:
       if msg["role"] == "user":
         for content in msg["content"]:
-          if content['type'] == "video" and content['video'] in videos:
-            content['video'] = videos[content['video']]
-          elif content['type'] == "image" and content['image'] in images:
-            content["image"] = images[content['image']]
-            # TODO: add a flag to check whether rewrite
-            content["min_pixels"] = self.min_visual_tokens * self.patch_size ** 2
-            content["max_pixels"] = self.max_visual_tokens * self.patch_size ** 2
+          if content["type"] == "video":
+            content.update(video_extend) # TODO: add a flag to check whether rewrite
+            if content["video"] in videos:
+              content['video'] = videos[content['video']]
+          elif content["type"] == "image":
+            content.update(image_extend) # TODO: add a flag to check whether rewrite
+            if content['image'] in images:
+              content["image"] = images[content['image']]
+
     return messages
 
-  def _process_sample(self, samples):
+  def _process_sample(self, samples: Dict[str, Union[str, bytes, Image.Image]],
+                      max_visual_tokens: int = 1280, max_video_visual_tokens: int = 1280 * 5):
+
+    max_visual_tokens = max(max_visual_tokens, self.min_visual_tokens)
+    max_video_visual_tokens = max(max_video_visual_tokens, self.min_video_visual_tokens)
+
     videos = {}
     images = {}
     messages = []
@@ -993,23 +1017,26 @@ class VisionTextDatasetWithPacking(IterableDataset):
       elif key == "json":
         if "messages" in samples["json"]:
           messages = samples["json"]["messages"]
-          
+
         # TODO: remove "message" key support
         if "message" in samples["json"]:
           messages = samples["json"]["message"]
 
     if len(messages) == 0:
       raise ValueError(
-        f"Unable to generate sample without messages field."
+          f"Unable to generate sample without messages field."
       )
-    
+
     # generate prompt & response
     input_msgs, output_msg = self._split_messages(messages)
     if len(input_msgs) == 0 or output_msg is None:
       raise ValueError(
-        f"Unable to generate prompt with incomplete message."
+          f"Unable to generate prompt with incomplete message."
       )
-    prompt = self._fill_prompt(input_msgs, videos, images)
+    image_extend, video_extend = self._gen_image_video_extend(
+        max_visual_tokens, max_video_visual_tokens)
+    prompt = self._fill_prompt(
+        input_msgs, videos, images, image_extend=image_extend, video_extend=video_extend)
     text = self.processor.apply_chat_template(
         prompt, tokenize=False, add_generation_prompt=True
     )
@@ -1023,7 +1050,6 @@ class VisionTextDatasetWithPacking(IterableDataset):
     )
 
     response = [{"content": self._get_text_content(output_msg)}]
-    print(f"zzxdebug: {prompt=}, {output_msg=}, {response=}")
     response_ids = self.processor.tokenizer.apply_chat_template(
       [response],
       chat_template=get_template("chat_template_response_only"),
@@ -1054,12 +1080,15 @@ class VisionTextDatasetWithPacking(IterableDataset):
   def _process(self, sample):
     # self._may_filter(sample)
     max_visual_tokens = self.max_visual_tokens
+    max_video_visual_tokens = self.max_video_visual_tokens
+
     for retry in range(self.max_retry):
-      inputs = self._process_sample(sample)
+      inputs = self._process_sample(sample, max_visual_tokens, max_video_visual_tokens)
       if not inputs:
         raise ValueError("Empty inputs, skip")
       if inputs["input_ids"].shape[-1] > self.max_length:
         max_visual_tokens = (max_visual_tokens * self.shrink_ratio)
+        max_video_visual_tokens = (max_video_visual_tokens * self.shrink_ratio)
         continue
       else:
         assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"
@@ -1097,7 +1126,6 @@ class VisionTextDatasetWithPacking(IterableDataset):
         packed_pixel_values_videos.append(inputs["pixel_values_videos"])
         packed_video_grid_thw.append(inputs["video_grid_thw"])
         video_flag = True
-      
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
