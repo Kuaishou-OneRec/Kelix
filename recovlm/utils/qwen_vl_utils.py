@@ -279,7 +279,7 @@ def get_video_reader_backend() -> str:
 
 
 def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR) -> torch.Tensor | list[Image.Image]:
-    if isinstance(ele["video"], str) or isinstance(ele["video"], bytes):
+    if isinstance(ele["video"], str) or isinstance(ele["video"], bytes): 
         video_reader_backend = get_video_reader_backend()
         video = VIDEO_READER_BACKENDS[video_reader_backend](ele)
         nframes, _, height, width = video.shape
