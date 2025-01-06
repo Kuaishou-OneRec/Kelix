@@ -81,6 +81,18 @@ def get_argument_parser():
 
   parser.add_argument("--max_visual_tokens", type=int, default=512,
                       help="The max visual tokens to use")
+  
+  parser.add_argument("--video_n_frames", type=int, default=-1,
+                      help="The number of frames extracted from the video.")
+  
+  parser.add_argument("--video_fps", type=float, default=2.0,
+                      help="Video extractor fps of the video. (not work if set video_n_frames)")
+  
+  parser.add_argument("--min_frame_visual_tokens", type=int, default=512,
+                      help="The min visual tokens of each frame to use")
+  
+  parser.add_argument("--max_frame_visual_tokens", type=int, default=512,
+                      help="The max visual tokens of each frame to use")
 
   parser.add_argument("--max_length", type=int, default=None,
                       help="Max tokens per sentence in corpus")

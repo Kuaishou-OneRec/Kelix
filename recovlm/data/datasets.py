@@ -778,8 +778,8 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
             {
               "type": "image",
               "image": image,
-              "min_pixels": self.min_visual_tokens * self.patch_size ** 2,
-              "max_pixels": max_visual_tokens * self.patch_size ** 2
+              "min_pixels": self.min_visual_tokens * ((2 * self.patch_size) ** 2),
+              "max_pixels": max_visual_tokens * ((2 * self.patch_size) ** 2)
             },
             {"type": "text", "text": "Describe this image."},
           ],
