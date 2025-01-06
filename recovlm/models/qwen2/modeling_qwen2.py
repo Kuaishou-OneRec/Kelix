@@ -598,6 +598,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
                     hidden_states,
                     attention_mask,
                     position_ids,
+                    position_embeddings,
                     None,
                 )
             else:

@@ -1,6 +1,7 @@
-from recovlm.data.dataloaders import get_indexed_dataloader
-from recovlm.data.datasets import get_webdataset
+from recovlm.data.dataloaders import get_indexed_dataloader, get_dataloader
 from recovlm.data.collators import ImageTextPackingCollator
+
+import json
 
 from transformers import AutoProcessor
 
@@ -30,3 +31,15 @@ from torch.utils.data import DataLoader
 #     for s in DataLoader(dataset, batch_size=8, num_workers=8, collate_fn=collator):
 #         print(s)
 #         gg
+
+def test_chat_vision():
+    path = "/llm_reco_ssd/zhouyang12/code/RecoVLM/examples/vlm/configs/the_cauldron.json"
+    with open(path, encoding="utf-8") as f:
+        dataset_config = json.loads(f.read())
+    dataset = dataset_config.pop("name")
+    dataloader = get_dataloader(
+        name=dataset,
+        **dataset_config)
+    for idx, item in enumerate(dataloader):
+        print(item)
+        break
