@@ -40,6 +40,29 @@ This project is designed to train VLMs from scratch.
 2. json 里面应该包含数据来源 __key__, source 字段
 
 ##### Examples
+
+###### pretrain 数据
+```json
+000000000.0.jpg
+000000000.1.jpg
+000000000.2.jpg
+000000000.0.mp4
+000000000.json
+{
+    "__key__": 000000000, 
+    "segments": [
+        {"type": "image", "image": "0.jpg"},
+        {"type": "text", "text": "blablabla..."},
+        {"type": "image", "image": "1.jpg"},
+        {"type": "image", "image": "2.jpg"},
+        {"type": "text", "text": "blablabla..."},
+        {"type": "image", "image": "0.mp4"},
+        {"type": "text", "text": "blablabla..."}
+    ],
+    "source": "XXX"
+}
+```
+###### chat 数据
 1. 纯文本
 ```json
 000000000.json 
