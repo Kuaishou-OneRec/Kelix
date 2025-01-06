@@ -62,7 +62,7 @@ else:
 import torch.distributed as dist
 from deepspeed.sequence.layer import DistributedAttention
 
-from recovlm.training.parallel import get_sequence_parallel_group
+from recovlm.training.parallel import get_sequence_parallel_group, UlyssesAttention
 
 
 logger = logging.get_logger(__name__)
@@ -619,6 +619,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._ulysses_attn = UlyssesAttention()
 
     def forward(
         self,
@@ -695,25 +696,33 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
             sliding_window = -1
         
         if cu_seqlens is not None:
-            # Sample packing with FA2
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            # print('forward cu_seqlens', cu_seqlens.dtype, cu_seqlens)
-            cu_seqlens = cu_seqlens.to(torch.int32)
-            # print('query_states', query_states.shape)
-            # print('key_states', key_states.shape)
-            # print('value_states', value_states.shape)
-            # exit()
-            attn_output = flash_attn_varlen_func(
-                query_states.squeeze(0),
-                key_states.squeeze(0),
-                value_states.squeeze(0),
-                cu_seqlens,
-                cu_seqlens,
-                max_seqlen,
-                max_seqlen,
+            # # Sample packing with FA2
+            # max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            # # print('forward cu_seqlens', cu_seqlens.dtype, cu_seqlens)
+            # cu_seqlens = cu_seqlens.to(torch.int32)
+            # # print('query_states', query_states.shape)
+            # # print('key_states', key_states.shape)
+            # # print('value_states', value_states.shape)
+            # # exit()
+            # attn_output = flash_attn_varlen_func(
+            #     query_states.squeeze(0),
+            #     key_states.squeeze(0),
+            #     value_states.squeeze(0),
+            #     cu_seqlens,
+            #     cu_seqlens,
+            #     max_seqlen,
+            #     max_seqlen,
+            #     dropout_p=dropout_rate,
+            #     window_size=(sliding_window, sliding_window),
+            #     causal=self.is_causal
+            # )
+            attn_output = self._ulysses_attn(
+                query = query_states,
+                key = key_states,
+                value = value_states,
                 dropout_p=dropout_rate,
-                window_size=(sliding_window, sliding_window),
-                causal=self.is_causal
+                causal=True,
+                cu_seqlens = cu_seqlens
             )
         else:
             attn_output = _flash_attention_forward(
