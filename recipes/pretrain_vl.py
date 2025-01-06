@@ -78,6 +78,18 @@ def get_argument_parser():
 
   parser.add_argument("--max_visual_tokens", type=int, default=512,
                       help="The max visual tokens to use")
+  
+  parser.add_argument("--video_n_frames", type=int, default=-1,
+                      help="The number of frames extracted from the video.")
+  
+  parser.add_argument("--video_fps", type=float, default=2.0,
+                      help="Video extractor fps of the video. (not work if set video_n_frames)")
+  
+  parser.add_argument("--min_frame_visual_tokens", type=int, default=512,
+                      help="The min visual tokens of each frame to use")
+  
+  parser.add_argument("--max_frame_visual_tokens", type=int, default=512,
+                      help="The max visual tokens of each frame to use")
 
   parser.add_argument("--max_length", type=int, default=2048,
                       help="Max tokens per sentence in corpus")
@@ -221,30 +233,15 @@ def train():
   # TODO: remove hard code, dataloader配置化
   processor = Qwen2VLProcessor.from_pretrained(args.model_dir)
 
-  # dataset = ImageTextPairDatasetWithPacking(
-  #   sources = args.dataset,
-  #   processor = processor,
-  #   max_length = args.max_length,
-  #   min_visual_tokens = args.min_visual_tokens,
-  #   max_visual_tokens = args.max_visual_tokens,
-  #   spatial_merge_size = 2,
-  #   image_token_id = 151655,
-  #   video_token_id = 151656,
-  #   vision_start_token_id = 151652,
-  #   patch_size = 14,
-  #   shrink_ratio = 0.7,
-  #   max_retry = 10,
-  #   multiple_of = 8
-  # )
   dataset = VisionTextDatasetWithPacking(
     sources = args.dataset,
     processor = processor,
     max_length = args.max_length,
     min_visual_tokens = args.min_visual_tokens,
     max_visual_tokens = args.max_visual_tokens,
-    n_frames = 20,
-    min_video_visual_tokens = args.min_visual_tokens * 5,
-    max_video_visual_tokens = args.max_visual_tokens * 5,
+    fps = args.video_fps,
+    min_frame_visual_tokens = args.min_frame_visual_tokens,
+    max_frame_visual_tokens = args.max_frame_visual_tokens,
     spatial_merge_size = 2,
     image_token_id = 151655,
     video_token_id = 151656,
