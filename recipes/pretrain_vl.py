@@ -28,6 +28,9 @@ from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
   get_optimizer_grouped_parameters
 from recovlm.training.lr_schedulers import get_scheduler
 
+# reduce gpu memory frag
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 
 def get_argument_parser():
   parser = argparse.ArgumentParser()
