@@ -904,7 +904,8 @@ class VisionTextDatasetWithPacking(IterableDataset):
                shrink_ratio: float = 0.9,
                max_retry: int = 5,
                multiple_of: int = 8,
-               shuffle_size: int = 100000):
+               shuffle_size: int = 100000,
+               ):
     super(VisionTextDatasetWithPacking).__init__()
     self.processor = processor
     self.max_length = max_length
@@ -973,6 +974,14 @@ class VisionTextDatasetWithPacking(IterableDataset):
       for c in content:
         if c["type"] == "text":
           content_res = c["text"]
+
+    # check content_res not empty
+    content_res = content_res.strip()
+    if content_res == "":
+      raise ValueError(
+          f"response field is empty, skip this sample."
+      )
+
     return content_res
 
   def _gen_image_video_extend(self, max_visual_tokens, max_frame_visual_tokens):
@@ -1006,7 +1015,6 @@ class VisionTextDatasetWithPacking(IterableDataset):
             content.update(image_extend) # TODO: add a flag to check whether rewrite
             if content['image'] in images:
               content["image"] = images[content['image']]
-
     return messages
 
   def _process_sample(self, samples: Dict[str, Union[str, bytes, Image.Image]],
@@ -1028,8 +1036,6 @@ class VisionTextDatasetWithPacking(IterableDataset):
       elif key == "json":
         if "messages" in samples["json"]:
           messages = samples["json"]["messages"]
-
-        # TODO: remove "message" key support
         if "message" in samples["json"]:
           messages = samples["json"]["message"]
 
