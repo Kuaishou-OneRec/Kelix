@@ -8,7 +8,11 @@ from torch.utils.data import IterableDataset
 def lcm(a: int, b: int):
     return a * b // (math.gcd(a, b))
 
-class ParquetDataset(IterableDataset, MPIBase):
+class DistDataset(IterableDataset, MPIBase):
+    def __init__(self):
+        super().__init__()
+
+class ParquetDataset(DistDataset):
 
     def __init__(self, path, columns = None, user='mpi'):
         super().__init__()
@@ -45,7 +49,7 @@ class ParquetDataset(IterableDataset, MPIBase):
                 row = row.to_dict()
                 yield row
 
-class JsonlDataset(IterableDataset, MPIBase):
+class JsonlDataset(DistDataset):
     
     def __init__(self, path):
         super().__init__()
@@ -59,3 +63,16 @@ class JsonlDataset(IterableDataset, MPIBase):
         for l in self.lines:
             if l.strip() != '':
                 yield json.loads(l)
+
+class JsonDataset(DistDataset):
+
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+        with open(self.path, "r") as f:
+            self.data = json.load(f)
+        self.data = self.data[self.rank::self.world_size]
+    
+    def __iter__(self):
+        for s in self.data:
+            yield s

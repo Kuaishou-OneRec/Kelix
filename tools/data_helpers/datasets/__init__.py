@@ -1,7 +1,8 @@
 from .the_cauldron_dataset import TheCaulDronDataset
 from .dataset import (
     ParquetDataset,
-    JsonlDataset
+    JsonlDataset,
+    JsonDataset
 )
     
 def create_dataset(cfg):
