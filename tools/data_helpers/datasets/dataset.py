@@ -1,4 +1,5 @@
 import math
+import json
 import pyarrow as pa
 import pyarrow.parquet as pq
 from tools.data_helpers.utils import MPIBase
@@ -43,3 +44,18 @@ class ParquetDataset(IterableDataset, MPIBase):
             for _, row in df.iterrows():
                 row = row.to_dict()
                 yield row
+
+class JsonlDataset(IterableDataset, MPIBase):
+    
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+        with open(self.path, "r") as f:
+            lines = f.readlines()
+        shard_size = len(lines) // self.world_size
+        self.lines = lines[self.rank * shard_size: (self.rank + 1) * shard_size]
+    
+    def __iter__(self):
+        for l in self.lines:
+            if l.strip() != '':
+                yield json.loads(l)
