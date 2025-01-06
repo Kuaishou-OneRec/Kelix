@@ -1,5 +1,6 @@
 from typing import Union, Iterable, Optional, List, Dict, Tuple
-from absl import logging
+# from absl import logging
+import logging
 
 import os
 import re
@@ -38,6 +39,9 @@ from .templates import get_template
 from .prompts import PromptLoader
 
 # from utils import get_world_size, is_rank_0
+
+
+logger = logging.getLogger(__name__)
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
 
@@ -894,8 +898,9 @@ class VisionTextDatasetWithPacking(IterableDataset):
                vision_start_token_id: int,
                patch_size: int,
                n_frames: int = -1,
-               min_video_visual_tokens: int = -1,
-               max_video_visual_tokens: int = -1,
+               fps: int = -1,
+               min_frame_visual_tokens: int = -1,
+               max_frame_visual_tokens: int = -1,
                shrink_ratio: float = 0.9,
                max_retry: int = 5,
                multiple_of: int = 8,
@@ -905,9 +910,14 @@ class VisionTextDatasetWithPacking(IterableDataset):
     self.max_length = max_length
     self.min_visual_tokens = min_visual_tokens
     self.max_visual_tokens = max_visual_tokens
+
     self.n_frames = n_frames
-    self.min_video_visual_tokens = min_video_visual_tokens if min_video_visual_tokens > 0 else min_visual_tokens
-    self.max_video_visual_tokens = max_video_visual_tokens if max_video_visual_tokens > 0 else max_visual_tokens
+    self.fps = fps
+    if self.n_frames > 0 and self.fps > 0:
+      logger.info(f"{fps=} not work when n_frames>0 {n_frames=}")
+
+    self.min_frame_visual_tokens = min_frame_visual_tokens if min_frame_visual_tokens > 0 else min_visual_tokens
+    self.max_frame_visual_tokens = max_frame_visual_tokens if max_frame_visual_tokens > 0 else max_visual_tokens
     self.patch_size = patch_size
     self.shrink_ratio = shrink_ratio
     self.max_retry = max_retry
@@ -919,6 +929,8 @@ class VisionTextDatasetWithPacking(IterableDataset):
     # Pad sequence to multiple of `multiple_of`
     self.multiple_of = multiple_of
     self.total_samples = 0
+
+    # init webdataset
     urls = []
     for source in sources.split(","):
       with open(source, encoding="utf-8") as f:
@@ -926,10 +938,6 @@ class VisionTextDatasetWithPacking(IterableDataset):
         for item in index:
           urls.append(os.path.join(os.path.dirname(source), item["url"]))
           self.total_samples += item["nsamples"]
-
-    # def warn_and_continue(e):
-    #   print("Warning: skipping a corrupt sample.", e)
-
     dataset = wds.WebDataset(
         urls,
         handler=wds.warn_and_continue,
@@ -967,18 +975,21 @@ class VisionTextDatasetWithPacking(IterableDataset):
           content_res = c["text"]
     return content_res
 
-  def _gen_image_video_extend(self, max_visual_tokens, max_video_visual_tokens):
+  def _gen_image_video_extend(self, max_visual_tokens, max_frame_visual_tokens):
     image_extend = {
-      "min_pixels": self.min_visual_tokens * self.patch_size ** 2,
-      "max_pixels": max_visual_tokens * self.patch_size ** 2
+      "min_pixels": self.min_visual_tokens * ((2 * self.patch_size) ** 2),
+      "max_pixels": max_visual_tokens * ((2 * self.patch_size) ** 2)
     }
 
     video_extend = {
-      "min_pixels": self.min_video_visual_tokens * self.patch_size ** 2,
-      "max_pixels": max_video_visual_tokens * self.patch_size ** 2
+      "min_pixels": self.min_frame_visual_tokens * ((2 * self.patch_size) ** 2),
+      "max_pixels": max_frame_visual_tokens * ((2 * self.patch_size) ** 2)
     }
     if self.n_frames > 0:
       video_extend["nframes"] = self.n_frames
+    
+    if self.fps > 0:
+      video_extend["fps"] = self.fps
 
     return image_extend, video_extend
 
@@ -999,10 +1010,10 @@ class VisionTextDatasetWithPacking(IterableDataset):
     return messages
 
   def _process_sample(self, samples: Dict[str, Union[str, bytes, Image.Image]],
-                      max_visual_tokens: int = 1280, max_video_visual_tokens: int = 1280 * 5):
+                      max_visual_tokens: int = 1280, max_frame_visual_tokens: int = 1280 * 5):
 
     max_visual_tokens = max(max_visual_tokens, self.min_visual_tokens)
-    max_video_visual_tokens = max(max_video_visual_tokens, self.min_video_visual_tokens)
+    max_frame_visual_tokens = max(max_frame_visual_tokens, self.min_frame_visual_tokens)
 
     videos = {}
     images = {}
@@ -1034,7 +1045,7 @@ class VisionTextDatasetWithPacking(IterableDataset):
           f"Unable to generate prompt with incomplete message."
       )
     image_extend, video_extend = self._gen_image_video_extend(
-        max_visual_tokens, max_video_visual_tokens)
+        max_visual_tokens, max_frame_visual_tokens)
     prompt = self._fill_prompt(
         input_msgs, videos, images, image_extend=image_extend, video_extend=video_extend)
     text = self.processor.apply_chat_template(
@@ -1080,15 +1091,15 @@ class VisionTextDatasetWithPacking(IterableDataset):
   def _process(self, sample):
     # self._may_filter(sample)
     max_visual_tokens = self.max_visual_tokens
-    max_video_visual_tokens = self.max_video_visual_tokens
+    max_frame_visual_tokens = self.max_frame_visual_tokens
 
     for retry in range(self.max_retry):
-      inputs = self._process_sample(sample, max_visual_tokens, max_video_visual_tokens)
+      inputs = self._process_sample(sample, max_visual_tokens, max_frame_visual_tokens)
       if not inputs:
         raise ValueError("Empty inputs, skip")
       if inputs["input_ids"].shape[-1] > self.max_length:
         max_visual_tokens = (max_visual_tokens * self.shrink_ratio)
-        max_video_visual_tokens = (max_video_visual_tokens * self.shrink_ratio)
+        max_frame_visual_tokens = (max_frame_visual_tokens * self.shrink_ratio)
         continue
       else:
         assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"

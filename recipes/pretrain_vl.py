@@ -242,6 +242,7 @@ def train():
     max_length = args.max_length,
     min_visual_tokens = args.min_visual_tokens,
     max_visual_tokens = args.max_visual_tokens,
+    n_frames = 20,
     min_video_visual_tokens = args.min_visual_tokens * 5,
     max_video_visual_tokens = args.max_visual_tokens * 5,
     spatial_merge_size = 2,

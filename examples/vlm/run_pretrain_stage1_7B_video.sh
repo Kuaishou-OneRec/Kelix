@@ -16,7 +16,7 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset /llm_reco_ssd/zhangzixing/dataset/ShareGPT4Video_other/sharegpt4video_40k.webdataset/index.json \
+    --dataset /llm_reco_ssd/luoxinchen/dataset/kwai_video_caption/20250105/index.json \
     --max_length 3072 \
     --learning_rate 2e-4 \
     --min_lr 1e-6 \
