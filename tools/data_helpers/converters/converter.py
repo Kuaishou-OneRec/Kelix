@@ -1,9 +1,9 @@
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 
 class ConverterBase(object):
 
-    def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
+    def __call__(self, src: Dict[str, any]) -> Optional[Union[Dict[str, any], List[Dict[str, any]]]]:
         raise NotImplementedError
 
 class EmptyConverter(ConverterBase):

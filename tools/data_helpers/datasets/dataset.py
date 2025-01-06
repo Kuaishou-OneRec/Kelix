@@ -1,5 +1,7 @@
+import os
 import math
 import json
+from glob import glob
 import pyarrow as pa
 import pyarrow.parquet as pq
 from tools.data_helpers.utils import MPIBase
@@ -18,13 +20,16 @@ class ParquetDataset(DistDataset):
         super().__init__()
         self.path = path
         self.columns = list(columns)
-        self.fs = pa.hdfs.connect(user=user)
         self.shard_files = self.get_shard_files(path)
     
-    def get_shard_files(self, path):
+    def get_shard_files(self, path: str):
         if self.rank == 0:
-            files = self.fs.ls(path)
-            files = sorted([x for x in files if "SUCCESS" not in x])
+            if path.startswith("viewfs"):
+                self.fs = pa.hdfs.connect(user=user)
+                files = self.fs.ls(path)
+                files = sorted([x for x in files if "SUCCESS" not in x])
+            elif path.startswith("/"):
+                files = sorted(glob(os.path.join(path, "*.parquet")))
             num_files = len(files)
             lcm_num_files_world_size = lcm(num_files, self.world_size)
             num_single_file_shard = lcm_num_files_world_size // num_files
@@ -37,8 +42,8 @@ class ParquetDataset(DistDataset):
         else:
             shard_files = None
         shard_files = self.comm.bcast(shard_files, root=0)
-        # resharding the files
         shard_files = shard_files[self.rank::self.world_size]
+        self.mpi_print("shard_files", shard_files)
         return shard_files    
     
     def __iter__(self):
