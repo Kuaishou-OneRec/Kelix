@@ -1,4 +1,4 @@
-from typing import Union, Iterable, Optional, List, Dict, Tuple
+from typing import Union, Iterable, Optional, List, Dict, Tuple, Any
 from absl import logging
 
 import os
@@ -28,10 +28,12 @@ import torch.nn.functional as F
 
 
 import random
-from transformers import Qwen2VLForConditionalGeneration, AutoTokenizer, AutoProcessor, \
+from transformers import AutoTokenizer, AutoProcessor, \
     PreTrainedTokenizer, PreTrainedTokenizerFast
-# from processing_qwen2_vl import Qwen2VLProcessor
-from qwen_vl_utils import process_vision_info
+
+from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
+from recovlm.utils.qwen_vl_utils import process_vision_info
 import glob
 
 from .templates import get_template
@@ -617,22 +619,32 @@ class BlendDatasetCkptManager:
 
 class ImageTextPairDatasetWithPacking(IterableDataset):
   def __init__(self,
-               sources: str,
-               processor,
-               max_length: int,
-               min_visual_tokens: int,
-               max_visual_tokens: int,
-               spatial_merge_size: int,
-               image_token_id: int,
-               video_token_id: int,
-               vision_start_token_id: int,
-               patch_size: int,
+               sources: Union[str, List[str]],
+               max_length: int = 1024,
+               min_visual_tokens: int = 4,
+               max_visual_tokens: int = 512,
                shrink_ratio: float = 0.9,
                max_retry: int = 5,
                multiple_of: int = 8,
                data_format: str = "chatml",
-               shuffle_size: int = 100000):
+               shuffle_size: int = 100000,
+               base_model_dir: Optional[str] = None,
+               processor: Optional[Qwen2VLProcessor] = None,
+               spatial_merge_size: int = 2,
+               patch_size: int = 14,
+               image_token_id: int = 151655,
+               video_token_id: int = 151656,
+               vision_start_token_id: int = 151652):
     super(ImageTextPairDatasetWithPacking).__init__()
+    if base_model_dir:
+      processor = Qwen2VLProcessor.from_pretrained(base_model_dir)
+      model_config = Qwen2VLConfig.from_pretrained(base_model_dir)
+      spatial_merge_size = model_config.vision_config.spatial_merge_size
+      patch_size = model_config.vision_config.patch_size
+      image_token_id = model_config.image_token_id
+      video_token_id = model_config.video_token_id
+      vision_start_token_id = model_config.vision_start_token_id
+
     self.processor = processor
     self.max_length = max_length
     self.min_visual_tokens = min_visual_tokens
@@ -650,15 +662,14 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
     self.data_format = data_format
     self.total_samples = 0
     urls = []
-    for source in sources.split(","):
+    if isinstance(sources, str):
+      sources = sources.split(",")
+    for source in sources:
       with open(source, encoding="utf-8") as f:
         index = json.loads(f.read())["shardlist"]
         for item in index:
           urls.append(os.path.join(os.path.dirname(source), item["url"]))
           self.total_samples += item["nsamples"]
-
-    # def warn_and_continue(e):
-    #   print("Warning: skipping a corrupt sample.", e)
 
     dataset = wds.WebDataset(
         urls,
@@ -687,7 +698,7 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
   def _process_chat(self,
                     sample: Dict[str, Union[str, Image.Image]],
                     max_visual_tokens: int = 1280):
-    max_visual_tokens = max(max_visual_tokens, self.min_visual_tokens)
+    max_visual_tokens = max(max_visual_tokens, self.max_visual_tokens)
     image = sample["jpg"]
     caption = sample["txt"]
     if image.mode != "RGB":
@@ -699,8 +710,8 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
                 {
                     "type": "image",
                     "image": image,
-                    "min_pixels": self.min_visual_tokens * self.patch_size ** 2,
-                    "max_pixels": max_visual_tokens * self.patch_size ** 2
+                    "min_pixels": self.min_visual_tokens * (self.patch_size ** 2) * (self.spatial_merge_size ** 2),
+                    "max_pixels": max_visual_tokens * (self.patch_size ** 2) * (self.spatial_merge_size ** 2)
                 },
                 {"type": "text", "text": "Describe this image."},
             ],
@@ -823,6 +834,228 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
         raise ValueError("Empty inputs, skip")
       if inputs["input_ids"].shape[-1] > self.max_length:
         max_visual_tokens = (max_visual_tokens * self.shrink_ratio)
+        continue
+      else:
+        assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"
+        return inputs
+    else:
+      raise ValueError(
+        f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
+      )
+  
+  def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
+    packed_input_ids = []
+    packed_position_ids = []
+    packed_loss_mask = []
+    packed_pixel_values = []
+    packed_image_gird_thw = []
+    cu_seqlens = [0]
+
+    for inputs in buffer:
+      packed_input_ids.append(inputs["input_ids"].flatten())
+      packed_loss_mask.append(inputs["loss_mask"].flatten())
+      packed_position_ids.append(inputs["position_ids"])
+      packed_pixel_values.append(inputs["pixel_values"])
+      packed_image_gird_thw.append(inputs["image_grid_thw"])
+      cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
+
+    packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
+    packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
+    packed_position_ids = torch.cat(packed_position_ids, dim=-1)
+    packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
+    packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
+
+    inputs = {
+      "input_ids": packed_input_ids,
+      "position_ids": packed_position_ids,
+      "loss_mask": packed_loss_mask,
+      "pixel_values": packed_pixel_values,
+      "image_grid_thw": packed_image_gird_thw,
+      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32)
+    }
+    return inputs
+
+  def __iter__(self):
+    buffer = []
+    cur_length = 0
+    for sample in self.dataset:
+      try:
+        inputs = self._process(sample)
+      except:
+        print(traceback.format_exc())
+        continue
+      sample_length = inputs["input_ids"].shape[-1]
+      if cur_length + sample_length > self.max_length:
+        packed_inputs = self._packing(buffer)
+        yield packed_inputs
+        buffer = [inputs]
+        cur_length = sample_length
+      else:
+        buffer.append(inputs)
+        cur_length += sample_length
+
+def get_assistant_mask(batch_input_ids: torch.Tensor,
+                       start_pattern: Optional[List[int]],
+                       end_pattern: Optional[List[int]]):
+  if not start_pattern:
+    start_pattern = [151644, 77091, 198]
+  if not end_pattern:
+    end_pattern = [151645, 198]
+
+  masks = []
+  for input_ids in batch_input_ids:
+    mask = []
+    assistant_start = []
+    assistant_end = []
+    to_mask = False
+    for _id in input_ids:
+      mask.append(int(to_mask))
+      if not to_mask:
+        if _id in start_pattern:
+          assistant_start.append(_id.item())
+        else:
+          assistant_start = []
+        if assistant_start[-3:] == start_pattern:
+          to_mask = True
+          assistant_start = []
+      else:
+        if _id in end_pattern:
+          assistant_end.append(_id.item())
+        else:
+          assistant_end = []
+        if assistant_end[-2:] == end_pattern:
+          to_mask = False
+          assistant_end = []
+    masks.append(mask)
+  return torch.tensor(masks)
+class ChatCompletionVisionDataset(IterableDataset):
+  def __init__(self,
+               sources: Union[str, List[str]],
+               max_length: int = 1024,
+               min_visual_tokens_per_image: int = 4,
+               max_visual_tokens_per_image: int = 512,
+               shrink_ratio: float = 0.9,
+               max_retry: int = 5,
+               multiple_of: int = 8,
+               data_format: str = "chatml",
+               shuffle_size: int = 100000,
+               base_model_dir: Optional[str] = None,
+               processor: Optional[Qwen2VLProcessor] = None,
+               spatial_merge_size: int = 2,
+               patch_size: int = 14,
+               image_token_id: int = 151655,
+               video_token_id: int = 151656,
+               vision_start_token_id: int = 151652):
+    super(ChatCompletionVisionDataset).__init__()
+    if base_model_dir:
+      processor = Qwen2VLProcessor.from_pretrained(base_model_dir)
+      model_config = Qwen2VLConfig.from_pretrained(base_model_dir)
+      spatial_merge_size = model_config.vision_config.spatial_merge_size
+      patch_size = model_config.vision_config.patch_size
+      image_token_id = model_config.image_token_id
+      video_token_id = model_config.video_token_id
+      vision_start_token_id = model_config.vision_start_token_id
+
+    self.processor = processor
+    self.max_length = max_length
+    self.min_visual_tokens_per_image = min_visual_tokens_per_image
+    self.max_visual_tokens_per_image = max_visual_tokens_per_image
+    self.patch_size = patch_size
+    self.shrink_ratio = shrink_ratio
+    self.max_retry = max_retry
+    self.spatial_merge_size = spatial_merge_size
+    self.image_token_id = image_token_id
+    self.video_token_id = video_token_id
+    self.vision_start_token_id = vision_start_token_id
+    self.patch_size = patch_size
+    # Pad sequence to multiple of `multiple_of`
+    self.multiple_of = multiple_of
+    self.data_format = data_format
+    self.total_samples = 0
+    if isinstance(sources, str):
+      sources = sources.split(",")
+    urls = []
+    for source in sources:
+      with open(source, encoding="utf-8") as f:
+        index = json.loads(f.read())["shardlist"]
+        for item in index:
+          urls.append(os.path.join(os.path.dirname(source), item["url"]))
+          self.total_samples += item["nsamples"]
+
+    dataset = wds.WebDataset(
+        urls,
+        handler=wds.warn_and_continue,
+        resampled=True,
+        shardshuffle=True,
+        cache_dir="/tmp/_wids_cache",
+        nodesplitter=wds.split_by_node,
+        workersplitter=wds.split_by_worker
+    )
+
+    dataset = dataset.shuffle(shuffle_size).decode(
+      "pil", handler=wds.warn_and_continue)
+    
+    self.dataset = dataset
+
+  def _process_chat(self,
+                    sample: Dict[str, Any],
+                    max_visual_tokens_per_image: int = 128) -> Dict[str, torch.Tensor]:
+    max_visual_tokens_per_image = max(
+      max_visual_tokens_per_image, self.max_visual_tokens_per_image)
+    messages = sample["json"]["message"]
+    for turn in messages:
+      content = turn["content"]
+      for block in content:
+        if block["type"] == "image":
+          image = sample[block["image"]]
+          if image.mode != "RGB":
+            image = image.convert("RGB")
+          block["image"] = image
+          block["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
+            (self.spatial_merge_size ** 2)
+          block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
+            (self.spatial_merge_size ** 2)
+    text = self.processor.apply_chat_template(
+      [messages], tokenize=False, add_generation_prompt=False
+    )
+    image_inputs, video_inputs = process_vision_info(messages)
+
+    inputs = self.processor(
+        text=text,
+        images=image_inputs,
+        videos=video_inputs,
+        return_tensors="pt"
+    )
+    inputs["loss_mask"] = get_assistant_mask(
+      inputs["input_ids"],
+      start_pattern=[151644, 77091, 198],
+      end_pattern=[151645, 198]
+    )
+
+    inputs["position_ids"] = get_rope_index(
+      inputs["input_ids"],
+      image_grid_thw=inputs.get("image_grid_thw"),
+      video_grid_thw=inputs.get("video_grid_thw"),
+      spatial_merge_size=self.spatial_merge_size,
+      image_token_id=self.image_token_id,
+      video_token_id=self.video_token_id,
+      vision_start_token_id=self.vision_start_token_id
+    )
+    inputs.pop("attention_mask")
+    return inputs
+
+  def _process(self, sample):
+    # self._may_filter(sample)
+    max_visual_tokens_per_image = self.max_visual_tokens_per_image
+    for retry in range(self.max_retry):
+      if self.data_format == "chatml":
+        inputs = self._process_chat(sample, max_visual_tokens_per_image)
+      else:
+        raise NotImplementedError(f"Unsupported dataset format `{self.format}`")
+      if not inputs:
+        raise ValueError("Empty inputs, skip")
+      if inputs["input_ids"].shape[-1] > self.max_length:
+        max_visual_tokens_per_image = (max_visual_tokens_per_image * self.shrink_ratio)
         continue
       else:
         assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"

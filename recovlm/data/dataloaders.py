@@ -12,6 +12,9 @@ from qwen_vl_utils import process_vision_info
 from transformers import AutoProcessor
 from tqdm import tqdm
 
+from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
+    ChatCompletionVisionDataset
+
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
 
 
@@ -117,73 +120,76 @@ def get_indexed_dataloader(sources: str,
   )
   return dataloader
 
+def get_image_text_pair_with_packing_dataloader(sources: str,
+                                                max_length,
+                                                min_visual_tokens,
+                                                max_visual_tokens,
+                                                base_model_dir,
+                                                shrink_ratio,
+                                                max_retry,
+                                                multiple_of):
 
-def default_decoder(sample: Dict[str, Any], format: Optional[Union[bool, str]] = True):
-    """A default decoder for webdataset.
+    dataset = ImageTextPairDatasetWithPacking(
+        sources = sources,
+        max_length = max_length,
+        min_visual_tokens = min_visual_tokens,
+        max_visual_tokens = max_visual_tokens,
+        base_model_dir = base_model_dir,
+        shrink_ratio = shrink_ratio,
+        max_retry = max_retry,
+        multiple_of = multiple_of)
 
-    This handles common file extensions: .txt, .cls, .cls2,
-        .jpg, .png, .json, .npy, .mp, .pt, .pth, .pickle, .pkl.
-    These are the most common extensions used in webdataset.
-    For other extensions, users can provide their own decoder.
+    ### packing, batching size=1; shuffle in dataset
+    dataloader = DataLoader(
+        dataset=dataset,
+        shuffle=False,
+        batch_size=1,
+        num_workers=8,
+        collate_fn=lambda x: x[0]
+    )
+    return dataloader
 
-    Args:
-        sample: sample, modified in place
-    """
-    sample = dict(sample)
-    for key, stream in sample.items():
-        extensions = key.split(".")
-        if len(extensions) < 1:
-            continue
-        extension = extensions[-1]
-        if extension in ["gz"]:
-            decompressed = gzip.decompress(stream.read())
-            stream = io.BytesIO(decompressed)
-            if len(extensions) < 2:
-                sample[key] = stream
-                continue
-            extension = extensions[-2]
-        if key.startswith("__"):
-            continue
-        elif extension in ["txt", "text"]:
-            value = stream.read()
-            sample[key] = value.decode("utf-8")
-        elif extension in ["cls", "cls2"]:
-            value = stream.read()
-            sample[key] = int(value.decode("utf-8"))
-        elif extension in ["jpg", "png", "ppm", "pgm", "pbm", "pnm"]:
-            if format == "PIL":
-                import PIL.Image
+def get_chat_completion_vision_dataloader(sources: str,
+                                          max_length,
+                                          min_visual_tokens_per_image,
+                                          max_visual_tokens_per_image,
+                                          base_model_dir,
+                                          shrink_ratio,
+                                          max_retry,
+                                          multiple_of):
 
-                sample[key] = PIL.Image.open(stream)
-            elif format == "numpy":
-                import numpy as np
+    dataset = ChatCompletionVisionDataset(
+        sources = sources,
+        max_length = max_length,
+        min_visual_tokens_per_image = min_visual_tokens_per_image,
+        max_visual_tokens_per_image = max_visual_tokens_per_image,
+        base_model_dir = base_model_dir,
+        shrink_ratio = shrink_ratio,
+        max_retry = max_retry,
+        multiple_of = multiple_of)
 
-                sample[key] = np.asarray(PIL.Image.open(stream))
-            else:
-                raise ValueError(f"Unknown format: {format}")
-        elif extension == "json":
-            import json
+    ### packing, batching size=1; shuffle in dataset
+    dataloader = DataLoader(
+        dataset=dataset,
+        shuffle=False,
+        batch_size=1,
+        num_workers=8,
+        collate_fn=lambda x: x[0]
+    )
+    return dataloader
 
-            value = stream.read()
-            sample[key] = json.loads(value)
-        elif extension == "npy":
-            import numpy as np
 
-            sample[key] = np.load(stream)
-        elif extension == "mp":
-            import msgpack
-
-            value = stream.read()
-            sample[key] = msgpack.unpackb(value, raw=False)
-        elif extension in ["pt", "pth"]:
-            import torch
-
-            sample[key] = torch.load(stream)
-        elif extension in ["pickle", "pkl"]:
-            import pickle
-
-            sample[key] = pickle.load(stream)
-    return sample
+def get_dataloader(name: str, **kwargs):
+    if name == "image_text_pair":
+        return get_image_text_pair_with_packing_dataloader(
+            **kwargs
+        )
+    elif name == "chat_vision":
+        return get_chat_completion_vision_dataloader(
+            **kwargs
+        )
+    else:
+        raise NotImplementedError("Unsupported dataloader.")
 
 if __name__ == '__main__':
   # source=[

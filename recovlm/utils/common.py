@@ -55,3 +55,7 @@ def set_random_seed(seed):
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
 
+def increment_version(version):
+    major, minor, patch = map(int, version.split('.'))
+    patch += 1
+    return f"{major}.{minor}.{patch}"

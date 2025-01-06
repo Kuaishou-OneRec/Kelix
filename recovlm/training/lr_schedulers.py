@@ -1,18 +1,36 @@
 # Copy from torchtune
 import math
-from typing import Union
+from typing import Union, Optional
+from functools import partial
 
 import torch
+from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
 
-def get_cosine_schedule_with_warmup(
-    optimizer: torch.optim.Optimizer,
+def _get_cosine_schedule_with_warmup_lr_lambda(
+        current_step: int, *, num_warmup_steps: int,
+        num_training_steps: int,
+        num_cycles: float,
+        min_lr_rate: float = 0.0):
+    if current_step < num_warmup_steps:
+        return float(current_step) / float(max(1, num_warmup_steps))
+    if current_step > num_training_steps:
+        return min_lr_rate
+    progress = float(current_step - num_warmup_steps) /\
+        float(max(1, num_training_steps - num_warmup_steps))
+    factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+    factor = factor * (1 - min_lr_rate) + min_lr_rate
+    return max(0, factor)
+
+def get_cosine_scheduler(
+    optimizer: Optimizer,
     num_warmup_steps: int,
     num_training_steps: int,
     num_cycles: float = 0.5,
     last_epoch: int = -1,
-    min_lr: float = 0.0
-) -> LambdaLR:
+    min_lr: float = None,
+    min_lr_rate: float = None,
+    **kwargs) -> LambdaLR:
     """
     Create a learning rate schedule that linearly increases the learning rate from
     0.0 to lr over ``num_warmup_steps``, then decreases to 0.0 on a cosine schedule over
@@ -34,52 +52,38 @@ def get_cosine_schedule_with_warmup(
         torch.optim.lr_scheduler.LambdaLR with the appropriate schedule.
     """
 
-    def lr_lambda(current_step: int) -> float:
-        # linear warmup phase
-        if current_step < num_warmup_steps:
-            return current_step / max(1, num_warmup_steps)
-
-        # cosine
-        progress = (current_step - num_warmup_steps) / max(
-            1, num_training_steps - num_warmup_steps
+    if min_lr is not None and min_lr_rate is not None:
+        raise ValueError("Only one of min_lr or min_lr_rate should be set")
+    elif min_lr is not None:
+        min_lr_rate = min_lr / optimizer.defaults["lr"]
+    elif min_lr_rate is None:
+        raise ValueError(
+            "One of min_lr or min_lr_rate should be set through the `lr_scheduler_kwargs`"
         )
 
-        cosine_lr_multiple = 0.5 * (
-            1.0 + math.cos(math.pi * num_cycles * 2.0 * progress)
-        )
-        return max(min_lr, cosine_lr_multiple)
+    lr_lambda = partial(
+        _get_cosine_schedule_with_warmup_lr_lambda,
+        num_warmup_steps=num_warmup_steps,
+        num_training_steps=num_training_steps,
+        num_cycles=num_cycles,
+        min_lr_rate=min_lr_rate,
+    )
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
-    """
-    Full_finetune_distributed and full_finetune_single_device assume all optimizers have
-    the same LR, here to validate whether all the LR are the same and return if True.
-
-    Args:
-        optimizer (Union[torch.optim.Optimizer, OptimizerInBackwardWrapper]): A general
-            optimizer input that could whether be a general optimizer or an optimizer
-            warpper based on optimizer_in_backward.
-
-    Returns:
-        lr (float): The learning rate of the input optimizers.
-
-    Raises:
-        RuntimeError: If the learning rates of the input optimizer are not the same.
-    """
-    if isinstance(optimizer, OptimizerInBackwardWrapper):
-        param_groups = []
-        for param in optimizer.state_dict().values():
-            param_groups.append(param["param_groups"][0])
-    else:
-        param_groups = optimizer.param_groups
-    if len(param_groups) < 1:
-        raise RuntimeError(
-            f"Invalid optimizer param groups with len of: {len(param_groups)}"
+def get_scheduler(
+    name: str,
+    optimizer: Optimizer,
+    num_warmup_steps: Optional[int] = None,
+    num_training_steps: Optional[int] = None,
+    **kwargs):
+    if name == "cosine":
+        return get_cosine_scheduler(
+            optimizer=optimizer,
+            num_warmup_steps=num_warmup_steps,
+            num_training_steps=num_training_steps,
+            **kwargs
         )
+    else:
+        raise NotImplementedError(f"Unsupported LR schduler `{name}`")
 
-    # LR Schedulers are the same across all param groups for full_finetune right now
-    lr = param_groups[0]["lr"]
-    for group in param_groups:
-        if group["lr"] != lr:
-            raise RuntimeError("LR Schedulers are different across all param groups ")
-    return lr
