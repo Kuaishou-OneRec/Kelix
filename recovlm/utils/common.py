@@ -42,12 +42,11 @@ def print_rank_0(*msg):
 
 def to_device(batch, device):
   for key in list(batch.keys()):
-    if batch[key] is not None:
+    if isinstance(batch[key], torch.Tensor):
       batch[key] = batch[key].to(device=device)
 
 def to_cuda(batch):
-  if batch is not None:
-    to_device(batch, device=torch.cuda.current_device())
+  to_device(batch, device=torch.cuda.current_device())
 
 def set_random_seed(seed):
     if seed is not None:

@@ -333,8 +333,8 @@ def get_rope_index(
       vision_start_indices = torch.argwhere(
           input_ids == vision_start_token_id).squeeze(1)
       vision_tokens = input_ids[vision_start_indices + 1]
-      image_nums = 0 if image_token_id == None else (vision_tokens == image_token_id).sum()
-      video_nums = 0 if video_token_id == None else (vision_tokens == video_token_id).sum()
+      image_nums = (vision_tokens == image_token_id).sum()
+      video_nums = (vision_tokens == video_token_id).sum()
       input_tokens = input_ids.tolist()
       llm_pos_ids_list: list = []
       st = 0
@@ -1156,11 +1156,3 @@ class ChatCompletionVisionDataset(IterableDataset):
       else:
         buffer.append(inputs)
         cur_length += sample_length
-
-if __name__ == "__main__":
-  import wids
-  sources = [
-    "/llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json",
-    "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json"
-  ]
-  datasets = [wids.ShardListDataset(source) for source in sources]
