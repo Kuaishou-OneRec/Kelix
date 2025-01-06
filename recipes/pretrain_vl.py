@@ -27,6 +27,7 @@ from recovlm.losses import CrossEntropyLoss
 from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
   get_optimizer_grouped_parameters
 from recovlm.training.lr_schedulers import get_scheduler
+from recovlm.training.checkpoint import load_dist_attn_state_dict
 
 
 def get_argument_parser():
@@ -242,7 +243,8 @@ def train():
       f"Resume from checkpoint: {os.path.join(args.resume_from, ckpt_id)}, "
       f"load_weights_only={args.load_weights_only}")
     _, client_state = model.load_checkpoint(
-      args.resume_from, ckpt_id, load_module_only=args.load_weights_only)
+      args.resume_from, ckpt_id, load_module_only=args.load_weights_only,
+      custom_load_fn=load_dist_attn_state_dict)
     if not args.load_weights_only:
       total_num_tokens = client_state.get("total_num_tokens", 0)
       total_num_samples = client_state.get("total_num_samples", 0)

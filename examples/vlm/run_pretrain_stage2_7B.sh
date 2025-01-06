@@ -21,7 +21,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="测试stage2，打开LLM训练，使用the_cauldron，打开gradient\ checkpoint,\ max_length=16000,测试sequence_parallel"
+comment="测试stage2，打开LLM训练，使用the_cauldron，打开gradient\ checkpoint,\ max_length=16000,测试sequence_parallel,修复dist_attn的state_dict\ load"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
