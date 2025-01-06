@@ -1,0 +1,45 @@
+import math
+import pyarrow as pa
+import pyarrow.parquet as pq
+from tools.data_helpers.utils import MPIBase
+from torch.utils.data import IterableDataset
+
+def lcm(a: int, b: int):
+    return a * b // (math.gcd(a, b))
+
+class ParquetDataset(IterableDataset, MPIBase):
+
+    def __init__(self, path, columns = None, user='mpi'):
+        super().__init__()
+        self.path = path
+        self.columns = list(columns)
+        self.fs = pa.hdfs.connect(user=user)
+        self.shard_files = self.get_shard_files(path)
+    
+    def get_shard_files(self, path):
+        if self.rank == 0:
+            files = self.fs.ls(path)
+            files = sorted([x for x in files if "SUCCESS" not in x])
+            num_files = len(files)
+            lcm_num_files_world_size = lcm(num_files, self.world_size)
+            num_single_file_shard = lcm_num_files_world_size // num_files
+            shard_files = [
+                # filename, shard_id, shard_size
+                (fn, sid, num_single_file_shard)
+                for fn in files
+                for sid in range(num_single_file_shard)
+            ]
+        else:
+            shard_files = None
+        shard_files = self.comm.bcast(shard_files, root=0)
+        # resharding the files
+        shard_files = shard_files[self.rank::self.world_size]
+        return shard_files    
+    
+    def __iter__(self):
+        for fn, sid, shard_size in self.shard_files:
+            df = pq.read_table(fn, columns=self.columns).to_pandas()
+            df = df[df.index % shard_size == sid]
+            for _, row in df.iterrows():
+                row = row.to_dict()
+                yield row

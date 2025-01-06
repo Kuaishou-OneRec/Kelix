@@ -24,7 +24,8 @@ class DatasetConverterWorker(MPITarWriterWorker):
         for s in tqdm(self.dataset):
             try:
                 out = self.converter(s)
-                self.write_sample(out)
+                if out is not None:
+                    self.write_sample(out)
             except Exception as e:
                 print(e)
 
