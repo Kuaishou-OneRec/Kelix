@@ -59,6 +59,11 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
 
+import torch.distributed as dist
+from deepspeed.sequence.layer import DistributedAttention
+
+from recovlm.training.parallel import get_sequence_parallel_group
+
 
 logger = logging.get_logger(__name__)
 
@@ -842,6 +847,7 @@ class Qwen2VLDecoderLayer(nn.Module):
                 "unexpected results may be encountered."
             )
         self.self_attn = QWEN2_VL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+        self.self_attn = DistributedAttention(self.self_attn, get_sequence_parallel_group())
 
         self.mlp = Qwen2MLP(config)
         self.input_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
