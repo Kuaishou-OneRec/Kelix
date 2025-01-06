@@ -3,6 +3,7 @@ import webdataset as wds
 import torchvision
 import json
 import os
+import time
 import math
 from tqdm import tqdm
 # from recovlm.utils.qwen_vl_utils import process_vision_info
@@ -104,9 +105,16 @@ dataloader = DataLoader(
     collate_fn=lambda x: x[0]
 )
 
-
+start_ts = time.time()
+ans = 0
 for batch in tqdm(dataloader):
     batchid = id(batch)
+    ans += 1
+    if ans % 100 == 0:
+        print(f"{ans=}, perf={100 / (time.time() - start_ts)}")
+        start_ts = time.time()
+
+
 ##########debug webdataset########
 
 # source = "/llm_reco_ssd/luoxinchen/dataset/Stage2/the_cauldron/index.json"
