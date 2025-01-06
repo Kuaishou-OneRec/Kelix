@@ -1,5 +1,6 @@
 import argparse
 import time
+import datetime
 import os
 import glob
 import json
@@ -169,7 +170,8 @@ def train():
     args_dict = vars(args)
     args_str = json.dumps(args_dict, indent=4, ensure_ascii=False)
     print_rank_0(f"Training Arguments:\n{args_str}")
-    with open(os.path.join(args.output_dir, f"args-{args.commit_id}.json"), 'w',
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+    with open(os.path.join(args.output_dir, f"args-{args.commit_id}-{timestamp}.json"), 'w',
         encoding="utf-8") as f:
       f.write(args_str + "\n")
 
