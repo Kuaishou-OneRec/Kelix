@@ -1,10 +1,16 @@
-from typing import Dict, List
+from typing import Dict, List, Optional, Union
 
 
-class Converter(object):
+class ConverterBase(object):
 
-    def __call__(self, src: Dict[str, any]) -> Dict[str, any]:
+    def __call__(self, src: Dict[str, any]) -> Optional[Union[Dict[str, any], List[Dict[str, any]]]]:
         raise NotImplementedError
+
+class EmptyConverter(ConverterBase):
+
+    def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
+        return None
+
     
 def render_image_text(images):
     text = []

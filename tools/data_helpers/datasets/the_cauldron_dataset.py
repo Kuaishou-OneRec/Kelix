@@ -3,8 +3,9 @@ from glob import glob
 import pandas as pd
 from tools.data_helpers.utils import MPIBase
 from torch.utils.data import IterableDataset
+from .dataset import DistDataset
 
-class TheCaulDronDataset(IterableDataset, MPIBase):
+class TheCaulDronDataset(DistDataset):
 
     def __init__(self, path):
         super().__init__()

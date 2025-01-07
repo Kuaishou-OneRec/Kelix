@@ -2,17 +2,17 @@ import os
 import json
 from typing import Dict, List, Optional
 from .converter import (
-    Converter,
+    ConverterBase,
     render_image_text
 )
 import hashlib
 
-class TheCaulDronConverter(Converter):
+class TheCaulDronConverter(ConverterBase):
 
     def __init__(self, image_dir: Optional[str] = None):
         self.image_dir = image_dir
 
-    def __call__(self, src: Dict[str, any]) -> Dict[str, any]:
+    def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
         sample = dict()
         images = {}
         for i in range(len(src['images'])):

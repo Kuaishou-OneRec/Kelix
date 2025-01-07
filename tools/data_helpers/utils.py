@@ -1,5 +1,4 @@
 from mpi4py import MPI
-
 class MPIBase(object):
 
     def __init__(self):
@@ -9,3 +8,4 @@ class MPIBase(object):
     
     def mpi_print(self, *args, **kwargs):
         print(f"RANK[{self.rank}]", *args, **kwargs)
+
