@@ -923,6 +923,7 @@ def get_assistant_mask(batch_input_ids: torch.Tensor,
           assistant_end = []
     masks.append(mask)
   return torch.tensor(masks)
+  
 class ChatCompletionVisionDataset(IterableDataset):
   def __init__(self,
                sources: Union[str, List[str]],
@@ -936,7 +937,6 @@ class ChatCompletionVisionDataset(IterableDataset):
                shrink_ratio: float = 0.9,
                max_retry: int = 5,
                multiple_of: int = 8,
-               data_format: str = "chatml",
                shuffle_size: int = 100000,
                base_model_dir: Optional[str] = None,
                processor: Optional[Qwen2VLProcessor] = None,
@@ -978,7 +978,6 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.patch_size = patch_size
     # Pad sequence to multiple of `multiple_of`
     self.multiple_of = multiple_of
-    self.data_format = data_format
     self.total_samples = 0
     if isinstance(sources, str):
       sources = sources.split(",")
@@ -1000,16 +999,99 @@ class ChatCompletionVisionDataset(IterableDataset):
         workersplitter=wds.split_by_worker
     )
 
-    dataset = dataset.shuffle(shuffle_size).decode(
+    dataset = dataset.shuffle(shuffle_size, initial=20000).decode(
       "pil", handler=wds.warn_and_continue)
     
     self.dataset = dataset
+    self.sample_cnt = {}
+  
+  def _process_completion(self,
+                    sample: Dict[str, Any],
+                    max_visual_tokens_per_image: int = 128) -> Dict[str, torch.Tensor]:
+    assert "segments" in sample["json"]
+    max_visual_tokens_per_image = max(
+      max_visual_tokens_per_image, self.min_visual_tokens_per_image)
+
+    text = ""
+    vision_infos = []
+    segments = sample["json"]["segments"]
+    for segment in segments:
+      if segment["type"] == "text":
+        text += segment["text"]
+      elif segment["type"] == "image":
+        text += "<|vision_start|><|image_pad|><|vision_end|>"
+        if isinstance(segment["image"], str):
+          segment["image"] = sample[segment["image"]]
+        if segment["image"].mode != "RGB":
+          segment["image"] = segment["image"].convert("RGB")
+        segment["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
+          (self.spatial_merge_size ** 2)
+        segment["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
+          (self.spatial_merge_size ** 2)
+        vision_infos.append(segment)
+      elif segment["type"] == "video":
+        text += "<|vision_start|><|video_pad|><|vision_end|>"
+        if isinstance(segment["video"], str) and segment["video"] in sample:
+          segment["video"] = sample[segment["video"]]
+        # fill other params
+        segment["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
+          (self.spatial_merge_size ** 2)
+        segment["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
+          (self.spatial_merge_size ** 2)
+        # video split params
+        if self.video_nframe > 0:
+          segment["nframes"] = self.video_nframe
+        if self.video_fps > 0:
+          segment["fps"] = self.video_fps
+        if self.video_min_frames > 0:
+          segment["min_frames"] = self.video_min_frames
+        if self.video_max_frames > 0:
+          segment["max_frames"] = self.video_max_frames
+        vision_infos.append(segment)
+      else:
+        logger.warning(f"!!! Unsupport {segment['type']=}, skip this segment.")
+    image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos)
+    inputs = self.processor(
+        text=text,
+        images=image_inputs,
+        videos=video_inputs,
+        return_tensors="pt"
+    )
+
+    # For the Warning: (add by zzx)
+    #   Token indices sequence length is longer than the specified maximum 
+    #   sequence length for this model (**** > 32768). Running this sequence 
+    #.  through the model will result in indexing errors
+    if inputs["input_ids"].shape[-1] >= 32768:
+      raise ValueError(f"Sample is too long. {len(text)=}, token_len={input_ids.shape[-1]}")
+    
+    # mask all vision token
+    # <|vision_start|>: 151652 , <|vision_end|>: 151653, <|image_pad|>: 151655, <|video_pad|>: 151656
+    input_ids = inputs["input_ids"]
+    inputs["loss_mask"] = torch.ones_like(input_ids)
+    inputs["loss_mask"][(input_ids == 151652) | (input_ids == 151653) | (input_ids == 151655) | (input_ids == 151656)] = 0
+    if inputs["loss_mask"].sum() == 0:
+      raise ValueError(
+        f"Unable to generate sample with 0 loss_mask."
+      )
+
+    inputs["position_ids"] = get_rope_index(
+      inputs["input_ids"],
+      image_grid_thw=inputs.get("image_grid_thw"),
+      video_grid_thw=inputs.get("video_grid_thw"),
+      spatial_merge_size=self.spatial_merge_size,
+      image_token_id=self.image_token_id,
+      video_token_id=self.video_token_id,
+      vision_start_token_id=self.vision_start_token_id
+    )
+    inputs.pop("attention_mask")
+    return inputs
 
   def _process_chat(self,
                     sample: Dict[str, Any],
                     max_visual_tokens_per_image: int = 128) -> Dict[str, torch.Tensor]:
     max_visual_tokens_per_image = max(
-      max_visual_tokens_per_image, self.max_visual_tokens_per_image)
+      max_visual_tokens_per_image, self.min_visual_tokens_per_image)
     assert "message" in sample["json"] or "messages" in sample["json"]
     msg_key = "message" if "message" in sample["json"] else "messages"
     messages = sample["json"][msg_key]
@@ -1017,7 +1099,10 @@ class ChatCompletionVisionDataset(IterableDataset):
       content = turn["content"]
       for block in content:
         if block["type"] == "image":
-          image = sample[block["image"]]
+          if isinstance(block["image"], str):
+            image = sample[block["image"]]
+          else:
+            image = block["image"]
           if image.mode != "RGB":
             image = image.convert("RGB")
           block["image"] = image
@@ -1027,7 +1112,7 @@ class ChatCompletionVisionDataset(IterableDataset):
             (self.spatial_merge_size ** 2)
         elif block["type"] == "video":
           # video in local tar, replace by video bytes
-          if block["video"] in sample:
+          if isinstance(block["video"], str) and block["video"] in sample:
             block["video"] = sample[block["video"]]
           # fill other params
           block["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
@@ -1080,12 +1165,23 @@ class ChatCompletionVisionDataset(IterableDataset):
 
   def _process(self, sample):
     # self._may_filter(sample)
+
+    # get data format
+    if "messages" in sample["json"] or "message" in sample["json"]:
+      data_format = "chatml"
+    elif "segments" in sample["json"]:
+      data_format = "completion"
+    else:
+      raise NotImplementedError(f"Unsupported dataset format.")
+    
     max_visual_tokens_per_image = self.max_visual_tokens_per_image
     for retry in range(self.max_retry):
-      if self.data_format == "chatml":
+      if data_format == "chatml":
         inputs = self._process_chat(sample, max_visual_tokens_per_image)
+      elif data_format == "completion":
+        inputs = self._process_completion(sample, max_visual_tokens_per_image)
       else:
-        raise NotImplementedError(f"Unsupported dataset format `{self.format}`")
+        raise NotImplementedError(f"Unsupported dataset format `{data_format}`")
       if not inputs:
         raise ValueError("Empty inputs, skip")
       if inputs["input_ids"].shape[-1] > self.max_length:
@@ -1141,23 +1237,63 @@ class ChatCompletionVisionDataset(IterableDataset):
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32)
     }
     return inputs
+  
+  def _print_yiled_success_ratio(self, iter_step):
+    worker_info = torch.utils.data.get_worker_info()
+    worker_id = worker_info.id
+    rank = dist.get_rank()
+
+    log_msg = ""
+    for source_name in self.sample_cnt:
+      succ_ratio = 1.0 - (1.0 * self.sample_cnt[source_name][1] / self.sample_cnt[source_name][0])
+      log_msg += f"{source_name}: {succ_ratio}, "
+    logger.info(f"[R{rank}W{worker_id}] data_step={iter_step}, dataset_succ_dist: {log_msg}")
 
   def __iter__(self):
     buffer = []
     cur_length = 0
+    iter_step = 0
     for sample in self.dataset:
+      source_name = None
       try:
+        source_name = sample["json"]["source"]
+        self.sample_cnt.setdefault(source_name, [0, 0])
+        self.sample_cnt[source_name][0] += 1
         inputs = self._process(sample)
       except:
-        logger.error("ChatCompletionVisionDataset iter error!!")
-        print(traceback.format_exc(), file=sys.stderr)
+        sample_key = sample["__key__"] if "__key__" in sample else ""
+        sample_url = sample["__url__"] if "__url__" in sample else ""
+        if source_name is not None:
+          self.sample_cnt[source_name][1] += 1
+          error_ratio = self.sample_cnt[source_name][1] * 1.0 / self.sample_cnt[source_name][0]
+          logger.error(f"ChatCompletionVisionDataset process sample error. {source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, errmsg={traceback.format_exc()}")
+        else:
+          logger.error(f"ChatCompletionVisionDataset iter error. {sample_key=}, {sample_url=}, errmsg={traceback.format_exc()}")
         continue
+
       sample_length = inputs["input_ids"].shape[-1]
       if cur_length + sample_length > self.max_length:
         packed_inputs = self._packing(buffer)
-        yield packed_inputs
+
         buffer = [inputs]
         cur_length = sample_length
+        
+        # TODO: ugly! skip pure text sample
+        if packed_inputs["pixel_values"] is None and packed_inputs["pixel_values_videos"] is None:
+          logger.warning("Skip pure text sample.")
+          continue
+
+        # skip 0 label pack 
+        if packed_inputs["loss_mask"].sum() == 0:
+          logger.warning("Skip 0 lable sample.")
+          continue
+
+        yield packed_inputs
+
       else:
         buffer.append(inputs)
         cur_length += sample_length
+
+      iter_step += 1
+      if iter_step % 1000 == 0:
+        self._print_yiled_success_ratio(iter_step)

@@ -12,7 +12,7 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco_ssd/zhangzixing/output/RecoVLM/debug_stg2_v1
+OUTPUT_DIR=/llm_reco_ssd/zhangzixing/output/RecoVLM/debug_stg2_interleaving_256_all
 
 mkdir $OUTPUT_DIR
 

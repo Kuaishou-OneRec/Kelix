@@ -34,7 +34,7 @@ from torch.utils.data import DataLoader
 
 def test_chat_vision():
     # path = "/llm_reco_ssd/zhouyang12/code/RecoVLM/examples/vlm/configs/the_cauldron.json"
-    path = "./examples/vlm/configs/kwai_video_caption.json"
+    path = "/llm_reco/zhangzixing/recovlm/examples/vlm/configs/interleaving_dataset.json"
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
     dataset = dataset_config.pop("name")
@@ -43,8 +43,6 @@ def test_chat_vision():
         **dataset_config)
     for idx, item in enumerate(dataloader):
         print(item)
-        gg
-        break
 
 if __name__ == "__main__":
     test_chat_vision()

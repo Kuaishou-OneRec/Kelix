@@ -157,6 +157,7 @@ def get_chat_completion_vision_dataloader(sources: str,
                                           shrink_ratio,
                                           max_retry,
                                           multiple_of,
+                                          num_workers=8,
                                           video_nframe=-1,
                                           video_fps=2.0,
                                           video_min_frames=2,
@@ -181,7 +182,7 @@ def get_chat_completion_vision_dataloader(sources: str,
         dataset=dataset,
         shuffle=False,
         batch_size=1,
-        num_workers=8,
+        num_workers=num_workers,
         collate_fn=lambda x: x[0]
     )
     return dataloader
