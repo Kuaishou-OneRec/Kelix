@@ -21,5 +21,6 @@
     },
     "data_types": {
       "grad_accum_dtype": "fp32"
-    }
+    },
+    "communication_data_type": "fp32"
 }
