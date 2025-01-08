@@ -136,6 +136,32 @@ This project is designed to train VLMs from scratch.
 
 ### Training
 
+#### 约定
+
+1. 模型路径
+
+所有模型都放在`/llm_reco_ssd/luoxinchen/output/RecoVLM/`下，路径格式需要符合`/llm_reco_ssd/luoxinchen/output/RecoVLM/project/version`
+
+- `project`代表一组实验，`version`区分具体的版本，例如：`/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.4/`
+
+- `project`命名规范：{Model-Family}-{Model-Size}-{stage}，比如`Qwen2-VL-7B-stage2`中，`Qwen2-VL`就是model family，`7B`就是模型大小，`stage-2`表示二阶段预训练。
+
+- `version`规范：版本命名符合`major.minor.patch`的形式，需要正式发版的模型增加minor或major。
+
+- 目前stage约定如下：一阶段预训练：`stage1`，二阶段预训练：`stage2`，sft版本：`sft`，dpo版本：`dpo`，rl版本：`rl`
+
+2. 实验记录
+
+所有实验提交都要有commit链接，参考`examples/vlm/run_pretrain_stage1_7B.sh`，使用这个脚本会自动添加格式化的commit message，例如：
+
+```text
+email=zhouyang12@kuaishou.com,time=20250105 18:55:38,script=./examples/vlm/run_pretrain_stage2_7B.sh,node=10,comment=测试stage2，打开LLM训练，使用the_cauldron，修复lr_decay再跑,output=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.4
+```
+
+3. 版本记录
+
+暂时手动管理版本，将比较重要的实验登记在https://docs.corp.kuaishou.com/d/home/fcACueI9SxQVJoUayiA1dVNtE
+
 ### Evaluation
 
 ## Troubleshooting

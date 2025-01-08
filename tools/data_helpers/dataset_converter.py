@@ -6,6 +6,7 @@ from glob import glob
 from mpi4py import MPI
 import pandas as pd
 import webdataset as wds
+from typing import Dict, Sequence
 from tqdm import tqdm
 from omegaconf import OmegaConf
 from worker import MPITarWriterWorker
@@ -24,7 +25,12 @@ class DatasetConverterWorker(MPITarWriterWorker):
         for s in tqdm(self.dataset):
             try:
                 out = self.converter(s)
-                self.write_sample(out)
+                if out is not None:
+                    if isinstance(out, Dict):
+                        self.write_sample(out)
+                    elif isinstance(out, Sequence):
+                        for s in out:
+                            self.write_sample(s)
             except Exception as e:
                 print(e)
 
