@@ -750,7 +750,7 @@ class ChatCompletionVisionDataset(IterableDataset):
                max_retry: int = 5,
                multiple_of: int = 8,
                shuffle_size: int = 100000,
-               shuffle_initial_size: int = 100,
+               shuffle_initial_size: int = 20000,
                base_model_dir: Optional[str] = None,
                processor: Optional[Qwen2VLProcessor] = None,
                spatial_merge_size: int = 2,
