@@ -321,7 +321,6 @@ def train():
     model.backward(loss)
     model.step()
 
-    
     ########## dataset loss monitor ###############
     if args.monitor_datasource_loss:
       sample_idx = sample_idx.squeeze()[:-1]    # shift idx
