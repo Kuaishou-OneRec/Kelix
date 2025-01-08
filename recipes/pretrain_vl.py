@@ -154,9 +154,6 @@ def get_argument_parser():
   parser.add_argument("--monitor_datasource_loss", type=bool, default=True,
                       help="Whether to monitor loss of each datasource")
 
-  parser.add_argument("--monitor_datasource_loss", type=bool, default=True,
-                      help="Whether to monitor loss of each datasource")
-
   return parser
 
 def train():
