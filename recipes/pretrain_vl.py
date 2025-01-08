@@ -153,6 +153,9 @@ def get_argument_parser():
   
   parser.add_argument("--monitor_datasource_loss", type=bool, default=True,
                       help="Whether to monitor loss of each datasource")
+  
+  parser.add_argument("--monitor_datasource_cnt", type=bool, default=True,
+                      help="Whether to monitor cnt of each datasource")
 
   return parser
 
@@ -270,8 +273,11 @@ def train():
     dataset_config["max_length"] = args.max_length
   dataloader = get_dataloader(name=dataset, **dataset_config)
   ##############
+  if args.monitor_datasource_loss:
+    loss_fn = CrossEntropyLoss(ignore_index=-100, return_token_loss=True)
+  else:
+    loss_fn = CrossEntropyLoss(ignore_index=-100, return_token_loss=True)
 
-  loss_fn = CrossEntropyLoss(ignore_index=-100, return_token_loss=True)
   start_time = time.time()
   show_cnt = 3
 
@@ -314,6 +320,8 @@ def train():
     )
 
     logits = output.logits
+
+    # token_loss for dataset monitor
     loss, token_loss = loss_fn(logits=logits, labels=labels)
 
     del logits
@@ -323,7 +331,7 @@ def train():
 
     ########## dataset loss monitor ###############
     if args.monitor_datasource_loss:
-      sample_idx = sample_idx.squeeze()[:-1]    # shift idx
+      sample_idx = sample_idx.squeeze()[:-1]   # shift idx
       unique_sample_idx = sample_idx.unique()
       
       data_source_loss = {}
@@ -355,14 +363,15 @@ def train():
       #########################################
 
     ########## dataset source monitor ###############
-    data_source_cnt = {}
-    for data_source_name in data_source:
-      data_source_cnt.setdefault(data_source_name, 0.0)
-      data_source_cnt[data_source_name] += 1
-    data_source_cnt = dist_reduce_dict(data_source_cnt)
-    for k, v in data_source_cnt.items():
-      total_data_source_cnt.setdefault(k, 0)
-      total_data_source_cnt[k] += v
+    if args.monitor_datasource_cnt:
+      data_source_cnt = {}
+      for data_source_name in data_source:
+        data_source_cnt.setdefault(data_source_name, 0.0)
+        data_source_cnt[data_source_name] += 1
+      data_source_cnt = dist_reduce_dict(data_source_cnt)
+      for k, v in data_source_cnt.items():
+        total_data_source_cnt.setdefault(k, 0)
+        total_data_source_cnt[k] += v
     #########################################
 
     avg_loss = torch.tensor(loss.item()).cuda()
@@ -391,9 +400,10 @@ def train():
       if args.monitor_datasource_loss:
         for key, loss in data_source_mean_loss.items():
           log_dict[f"data_source_loss/{key}"] = loss
-      
-      for key, cnt in total_data_source_cnt.items():
-        log_dict[f"data_source_sample_ratio/{key}"] = 1.0 * cnt / total_num_samples
+
+      if args.monitor_datasource_cnt:
+        for key, cnt in total_data_source_cnt.items():
+          log_dict[f"data_source_sample_ratio/{key}"] = 1.0 * cnt / total_num_samples
 
       for name, data in log_dict.items():
         if data is not None and tb_writer:

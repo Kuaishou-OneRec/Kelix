@@ -66,4 +66,4 @@ class CrossEntropyLoss(torch.nn.Module):
       )
       if total_elements > 0:
         loss /= total_elements
-      return loss
+      return loss, None
