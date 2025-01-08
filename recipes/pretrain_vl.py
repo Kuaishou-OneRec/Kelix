@@ -151,10 +151,10 @@ def get_argument_parser():
   parser.add_argument("--seed", type=int, default=123,
                       help="Manual seed for RNG")
   
-  parser.add_argument("--monitor_datasource_loss", type=bool, default=True,
+  parser.add_argument("--monitor_datasource_loss", action="store_true",
                       help="Whether to monitor loss of each datasource")
   
-  parser.add_argument("--monitor_datasource_cnt", type=bool, default=True,
+  parser.add_argument("--monitor_datasource_cnt", action="store_true",
                       help="Whether to monitor cnt of each datasource")
 
   return parser
