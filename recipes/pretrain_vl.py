@@ -6,6 +6,7 @@ import glob
 import json
 import logging
 import collections
+import pickle
 
 import torch
 import deepspeed
@@ -25,7 +26,7 @@ from recovlm.data.dataloaders import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
 from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
-  get_optimizer_grouped_parameters
+  get_optimizer_grouped_parameters, dist_reduce_dict
 from recovlm.training.lr_schedulers import get_scheduler
 
 # reduce gpu memory frag
@@ -149,6 +150,12 @@ def get_argument_parser():
 
   parser.add_argument("--seed", type=int, default=123,
                       help="Manual seed for RNG")
+  
+  parser.add_argument("--monitor_datasource_loss", type=bool, default=True,
+                      help="Whether to monitor loss of each datasource")
+
+  parser.add_argument("--monitor_datasource_loss", type=bool, default=True,
+                      help="Whether to monitor loss of each datasource")
 
   return parser
 
@@ -233,6 +240,7 @@ def train():
 
   total_num_tokens = 0
   total_num_samples = 0
+  total_data_source_cnt = {}
   if not args.resume_from:
     args.resume_from = args.output_dir
   ckpt_id = args.resume_from_tag
@@ -266,7 +274,7 @@ def train():
   dataloader = get_dataloader(name=dataset, **dataset_config)
   ##############
 
-  loss_fn = CrossEntropyLoss(ignore_index=-100)
+  loss_fn = CrossEntropyLoss(ignore_index=-100, return_token_loss=True)
   start_time = time.time()
   show_cnt = 3
 
@@ -277,6 +285,9 @@ def train():
           f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n"
           f"=" * 100 + "\n\n")
       show_cnt -= 1
+
+    data_source = batch.pop("data_source") # dataset source list cur batch
+
     to_cuda(batch)
     input_ids = batch["input_ids"]
     loss_mask = batch["loss_mask"]
@@ -286,6 +297,7 @@ def train():
     image_grid_thw = batch.get("image_grid_thw", None)
     video_grid_thw = batch.get("video_grid_thw", None)
     cu_seqlens = batch.get("cu_seqlens", None)
+    sample_idx = batch["sample_idx"].to(torch.int32)
 
     num_tokens = torch.tensor(input_ids.shape[-1]).cuda()
     num_samples = torch.tensor(cu_seqlens.shape[-1] - 1).cuda()
@@ -305,12 +317,57 @@ def train():
     )
 
     logits = output.logits
-    loss = loss_fn(logits=logits, labels=labels)
+    loss, token_loss = loss_fn(logits=logits, labels=labels)
 
     del logits
     del labels
     model.backward(loss)
     model.step()
+
+    
+    ########## dataset loss monitor ###############
+    if args.monitor_datasource_loss:
+      sample_idx = sample_idx.squeeze()[:-1]    # shift idx
+      unique_sample_idx = sample_idx.unique()
+      
+      data_source_loss = {}
+      for s_idx in unique_sample_idx:
+        mask = (sample_idx == s_idx)
+        sum_loss = token_loss[mask].sum()
+        token_num = mask.sum()
+        key = data_source[int(s_idx.item())]
+        data_source_loss.setdefault(key, [0.0, 0.0])
+        data_source_loss[key][0] += sum_loss.item()
+        data_source_loss[key][1] += token_num.item()
+      
+      def data_source_loss_reduce(gathered_dicts):
+        sum_loss_dict = {}
+        token_num_dict = {}
+        loss_mean = {}
+        for tmp_dict in gathered_dicts:
+          for k, v in tmp_dict.items():
+            sum_loss, token_num = v
+            sum_loss_dict.setdefault(k, 0.0)
+            token_num_dict.setdefault(k, 0.0)
+            sum_loss_dict[k] += sum_loss
+            token_num_dict[k] += token_num
+        for k in sum_loss_dict:
+          loss_mean[k] = sum_loss_dict[k] / token_num_dict[k]
+        return loss_mean
+
+      data_source_mean_loss = dist_reduce_dict(data_source_loss, data_source_loss_reduce)
+      #########################################
+
+    ########## dataset source monitor ###############
+    data_source_cnt = {}
+    for data_source_name in data_source:
+      data_source_cnt.setdefault(data_source_name, 0.0)
+      data_source_cnt[data_source_name] += 1
+    data_source_cnt = dist_reduce_dict(data_source_cnt)
+    for k, v in data_source_cnt.items():
+      total_data_source_cnt.setdefault(k, 0)
+      total_data_source_cnt[k] += v
+    #########################################
 
     avg_loss = torch.tensor(loss.item()).cuda()
     dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
@@ -334,6 +391,14 @@ def train():
         "total_num_tokens": total_num_tokens,
         "total_num_samples": total_num_samples
       }
+
+      if args.monitor_datasource_loss:
+        for key, loss in data_source_mean_loss.items():
+          log_dict[f"data_source_loss/{key}"] = loss
+      
+      for key, cnt in total_data_source_cnt.items():
+        log_dict[f"data_source_sample_ratio/{key}"] = 1.0 * cnt / total_num_samples
+
       for name, data in log_dict.items():
         if data is not None and tb_writer:
           tb_writer.add_scalar(

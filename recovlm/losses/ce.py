@@ -20,9 +20,10 @@ class CrossEntropyLoss(torch.nn.Module):
   For more details, please refer to: https://github.com/pytorch/torchtune/pull/1390
   """
 
-  def __init__(self, ignore_index: int = -100):
+  def __init__(self, ignore_index: int = -100, return_token_loss: bool = False):
     super().__init__()
     self.ignore_index = ignore_index
+    self.return_token_loss = return_token_loss
 
   def forward(self, logits: torch.Tensor,
               labels: torch.Tensor) -> torch.Tensor:
@@ -47,11 +48,22 @@ class CrossEntropyLoss(torch.nn.Module):
     """
     total_elements = (labels != self.ignore_index).sum()
     vocab_size = logits.shape[-1]
-    loss = F.cross_entropy(
-      logits.float()[:,:-1,:].reshape(-1, vocab_size),
-      labels[:,1:].reshape(-1), ignore_index=self.ignore_index,
-      reduction="sum"
-    )
-    if total_elements > 0:
-      loss /= total_elements
-    return loss
+    if self.return_token_loss:
+      pos_loss = F.cross_entropy(
+        logits.float()[:,:-1,:].reshape(-1, vocab_size),
+        labels[:,1:].reshape(-1), ignore_index=self.ignore_index,
+        reduction="none"
+      )
+      loss = pos_loss.sum()
+      if total_elements > 0:
+        loss /= total_elements
+      return loss, pos_loss
+    else:
+      loss = F.cross_entropy(
+        logits.float()[:,:-1,:].reshape(-1, vocab_size),
+        labels[:,1:].reshape(-1), ignore_index=self.ignore_index,
+        reduction="sum"
+      )
+      if total_elements > 0:
+        loss /= total_elements
+      return loss

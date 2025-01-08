@@ -9,6 +9,7 @@ import json
 import traceback
 import pickle
 import random
+from datetime import datetime
 
 import webdataset as wds
 
@@ -33,6 +34,7 @@ from recovlm.utils.qwen_vl_utils import process_vision_info
 
 from .templates import get_template
 from .prompts import PromptLoader
+
 
 # from utils import get_world_size, is_rank_0
 
@@ -427,191 +429,6 @@ def get_rope_index(
 
     return position_ids
 
-class BlendedWebDataset(IterableDataset):
-  """Blend Multiple dataset"""
-
-  def __init__(self, source_datasets: List[Dataset],
-               weights: List[float],
-               rank: int,
-               world_size: int,
-               num_workers: int,
-               chunk_size=1000000,
-               sample_buffer_size=1000,
-               random_seed=1024):
-
-    super(BlendedWebDataset).__init__()
-    
-    assert len(source_datasets) == len(weights)
-
-    self.datasets = source_datasets
-    # weights: >1=过采样，<1=降采样
-    self.weighted_data_len = [weights[idx] * len(d) for idx, d in enumerate(self.datasets)]
-    self.sample_ratio = [d_len / sum(self.weighted_data_len) for d_len in self.weighted_data_len]
-    self.total_samples = sum(self.weighted_data_len)
-
-    self.rank, self.world_size, self.num_workers = rank, world_size, num_workers
-    self.chunk_size, self.sample_buffer_size = chunk_size, sample_buffer_size
-    self.random_seed = random_seed
-
-    # dataset_sample_idx[data_idx][worker_idx] = [(chunk1_s, chunk1_e), ..., (chunkn_s, chunkn_e),]
-    # dataset_states[data_idx][worker_idx] = [chunk_idx, chunk_inner_idx]
-    self.dataset_range_idx, self.dataset_states = self._chunked_sampler()
-
-  def __len__(self):
-    return self.total_samples
-
-  def _chunked_sampler(self,):
-    manager = multiprocessing.Manager()
-    dataset_range_idx = manager.list()
-    dataset_states = manager.list()
-
-    num_replicas = self.world_size * self.num_workers
-    for d_idx, dataset in enumerate(self.datasets):
-      dataset_range_idx.append(manager.list())
-      dataset_states.append(manager.list())
-
-      num_samples = len(dataset)
-      for worker_id in range(self.num_workers):
-        worker_chunk = (num_samples + num_replicas - 1) // num_replicas
-        worker_start = worker_id * worker_chunk
-        worker_end = min(worker_start + worker_chunk, num_samples)
-        ranges = [(i, min(i + self.chunk_size, worker_end)) for i in range(worker_start, worker_end, self.chunk_size)]
-        random.Random(self.random_seed + worker_id).shuffle(ranges)
-        dataset_range_idx[d_idx].append(manager.list(ranges))
-        dataset_states[d_idx].append(manager.list([0, 0]))
-      
-    return dataset_range_idx, dataset_states
-  
-  def set_state(self, state_dict):
-    for d_idx in state_dict:
-      for w_idx in state_dict[d_idx]:
-        chunk_idx, chunk_inner_idx, _ = state_dict[d_idx][w_idx]
-        self.dataset_states[d_idx][w_idx][0] = chunk_idx
-        self.dataset_states[d_idx][w_idx][1] = chunk_inner_idx
-
-    print(f"load_success: {self.dataset_states}")
-
-  def _sample_buffer(self, worker_id):
-    np.random.seed(self.random_seed + worker_id) 
-    dataset_indices = np.random.choice(list(range(len(self.datasets))), size=self.sample_buffer_size, p=self.sample_ratio).tolist()
-
-    idx_buffer = []
-    for d_idx in dataset_indices:
-      chunk_idx, chunk_inner_idx = self.dataset_states[d_idx][worker_id]
-      d_start, d_end = self.dataset_range_idx[d_idx][worker_id][chunk_idx]
-      sample_indexes = list(range(d_start, d_end))
-      random.Random(self.random_seed + worker_id + chunk_idx).shuffle(sample_indexes)
-      
-      data_indices = sample_indexes[chunk_inner_idx]
-      idx_buffer.append((d_idx, data_indices, chunk_idx, chunk_inner_idx))
-
-      # update sampler index
-      chunk_inner_idx += 1 
-      if chunk_inner_idx >= len(sample_indexes):
-        chunk_inner_idx = 0
-        chunk_idx += 1
-        if chunk_idx >= len(self.dataset_range_idx[d_idx][worker_id]):
-          chunk_idx = 0
-      
-      self.dataset_states[d_idx][worker_id] = [chunk_idx, chunk_inner_idx]
-    
-    return idx_buffer
-  
-  def __iter__(self):
-    worker_info = torch.utils.data.get_worker_info()
-    worker_id = 0 if worker_info is None else worker_info.id
-    num_workers = 1 if worker_info is None else worker_info.num_workers
-
-    cur_samples = 0
-
-    assert num_workers == self.num_workers
-
-    while True:
-      if cur_samples > self.total_samples:
-        break
-      idx_buffer = self._sample_buffer(worker_id)
-      while len(idx_buffer) > 0:
-        d_idx, data_indices, chunk_idx, chunk_inner_idx = idx_buffer.pop()
-        ann = self.datasets[d_idx][data_indices]
-        ann["this_worker_sample_index"] = (d_idx, worker_id, chunk_idx, chunk_inner_idx, cur_samples)
-        yield ann
-        cur_samples += 1
-  
-class BlendDatasetCkptManager:
-  def __init__(self, ckpt_path, rank, world_size, num_data_source, num_workers):
-    self.ckpt_path = ckpt_path
-    self.rank, self.world_size = rank, world_size
-    self.num_data_source = num_data_source
-    self.num_workers = num_workers
-
-    # init state_dict: state_dict[d_idx][w_idx]
-    self.state_dict = {}
-    self.latest_step = 0
-    
-  @staticmethod
-  def merge_all_state(state_list):
-    merge_state_dict = {}
-    for d_idx, worker_id, chunk_idx, chunk_inner_idx, sample_idx in state_list:
-      merge_state_dict.setdefault(d_idx, {})
-      if worker_id not in merge_state_dict[d_idx]:
-        merge_state_dict[d_idx][worker_id] = (chunk_idx, chunk_inner_idx, sample_idx)
-      else:
-        _, _, m_sample_idx = merge_state_dict[d_idx][worker_id]
-        if sample_idx > m_sample_idx:
-          merge_state_dict[d_idx][worker_id] = (chunk_idx, chunk_inner_idx, sample_idx)
-    return merge_state_dict
-  
-  def update_step(self, step, batch_state_dict):
-    self.latest_step = step
-    for d_idx in batch_state_dict:
-      self.state_dict.setdefault(d_idx, {})
-      for w_idx in batch_state_dict[d_idx]:
-        self.state_dict[d_idx].setdefault(w_idx, (0, 0, 0))
-        chunk_idx, chunk_inner_idx, sample_idx = batch_state_dict[d_idx][w_idx]
-        if self.state_dict[d_idx][w_idx][2] < sample_idx:
-          self.state_dict[d_idx][w_idx] = (chunk_idx, chunk_inner_idx, sample_idx)
-
-  def save_ckpt(self):
-    os.makedirs(self.ckpt_path, exist_ok=True)
-    ckpt_file = os.path.join(self.ckpt_path, f"rank{self.rank}-dataset-step{self.latest_step}.pkl")
-    with open(ckpt_file, "wb+") as fp:
-      pickle.dump(self.state_dict, fp)
-  
-  def load_ckpt(self, ckpt_file):
-    with open(ckpt_file, "rb") as fp:
-      self.state_dict = pickle.load(fp)
-    
-    # clear all sample idx
-    for d_idx in self.state_dict:
-      for w_idx in self.state_dict[d_idx]:
-        chunk_idx, chunk_inner_idx, _ = self.state_dict[d_idx][w_idx]
-        self.state_dict[d_idx][w_idx] = (chunk_idx, chunk_inner_idx, 0)
-    print(f"[rank{self.rank}] load dataset ckpt {ckpt_file} success.")
-    return self.state_dict
-  
-  def extract_rank_and_step(self, filename):
-    pattern = r'rank(\d+)-dataset-step(\d+)\.pkl'
-    match = re.match(pattern, filename)
-    if match:
-      rank = int(match.group(1))
-      step = int(match.group(2))
-      return rank, step
-    return None, None
-  
-  def load_latest_ckpt(self,):
-    max_step = 0
-    max_step_ckpt_fn = ""
-    for fn in os.listdir(self.ckpt_path):
-      rank, step = self.extract_rank_and_step(fn)
-      if rank is not None and step is not None:
-        if rank == self.rank and step > max_step:
-          max_step = step
-          max_step_ckpt_fn = os.path.join(self.ckpt_path, fn)
-    if max_step_ckpt_fn == "":
-      return self.state_dict
-    else:
-      return self.load_ckpt(max_step_ckpt_fn)
-
 class ImageTextPairDatasetWithPacking(IterableDataset):
   def __init__(self,
                sources: Union[str, List[str]],
@@ -988,6 +805,14 @@ class ChatCompletionVisionDataset(IterableDataset):
         for item in index:
           urls.append(os.path.join(os.path.dirname(source), item["url"]))
           self.total_samples += item["nsamples"]
+    
+    # broadcast all urls
+    urls.sort()
+    random.shuffle(urls)
+    t = [urls]
+    dist.broadcast_object_list(t, src=0)
+    urls = t[0]
+    logger.info(f"[RANK{dist.get_rank()}] {urls=}")
 
     dataset = wds.WebDataset(
         urls,
@@ -1003,7 +828,9 @@ class ChatCompletionVisionDataset(IterableDataset):
       "pil", handler=wds.warn_and_continue)
     
     self.dataset = dataset
-    self.sample_cnt = {}
+
+    self.source_sample_cnt = {}
+    self.source_error_cnt = {}
   
   def _process_completion(self,
                     sample: Dict[str, Any],
@@ -1063,7 +890,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
     if inputs["input_ids"].shape[-1] >= 32768:
-      raise ValueError(f"Sample is too long. {len(text)=}, token_len={input_ids.shape[-1]}")
+      raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
     
     # mask all vision token
     # <|vision_start|>: 151652 , <|vision_end|>: 151653, <|image_pad|>: 151655, <|video_pad|>: 151656
@@ -1140,6 +967,14 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
+
+    # For the Warning: (add by zzx)
+    #   Token indices sequence length is longer than the specified maximum 
+    #   sequence length for this model (**** > 32768). Running this sequence 
+    #.  through the model will result in indexing errors
+    if inputs["input_ids"].shape[-1] >= 32768:
+      raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
+    
     inputs["loss_mask"] = get_assistant_mask(
       inputs["input_ids"],
       start_pattern=[151644, 77091, 198],
@@ -1203,12 +1038,14 @@ class ChatCompletionVisionDataset(IterableDataset):
     packed_pixel_values_videos = []
     packed_image_gird_thw = []
     packed_video_grid_thw = []
+    packed_sample_idx = []
     cu_seqlens = [0]
 
-    for inputs in buffer:
+    for idx, inputs in enumerate(buffer):
       packed_input_ids.append(inputs["input_ids"].flatten())
       packed_loss_mask.append(inputs["loss_mask"].flatten())
       packed_position_ids.append(inputs["position_ids"])
+      packed_sample_idx.append(torch.ones_like(packed_input_ids[-1]) * idx)
       if "pixel_values" in inputs:
         packed_pixel_values.append(inputs["pixel_values"])
         packed_image_gird_thw.append(inputs["image_grid_thw"])
@@ -1220,6 +1057,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
+    packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
     
     packed_pixel_values = None if len(packed_pixel_values) == 0 else torch.cat(packed_pixel_values, dim=0)
     packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else torch.cat(packed_image_gird_thw, dim=0)
@@ -1234,51 +1072,56 @@ class ChatCompletionVisionDataset(IterableDataset):
       "image_grid_thw": packed_image_gird_thw,
       "pixel_values_videos": packed_pixel_values_videos,
       "video_grid_thw": packed_video_grid_thw,
-      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32)
+      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
+      "sample_idx": packed_sample_idx
     }
     return inputs
-  
-  def _print_yiled_success_ratio(self, iter_step):
-    worker_info = torch.utils.data.get_worker_info()
-    worker_id = worker_info.id
-    rank = dist.get_rank()
-
-    log_msg = ""
-    for source_name in self.sample_cnt:
-      succ_ratio = 1.0 - (1.0 * self.sample_cnt[source_name][1] / self.sample_cnt[source_name][0])
-      log_msg += f"{source_name}: {succ_ratio}, "
-    logger.info(f"[R{rank}W{worker_id}] data_step={iter_step}, dataset_succ_dist: {log_msg}")
 
   def __iter__(self):
     buffer = []
+    source_list = []
+    
     cur_length = 0
-    iter_step = 0
     for sample in self.dataset:
-      source_name = None
+      sample_key = sample["__key__"] if "__key__" in sample else ""
+      sample_url = sample["__url__"] if "__url__" in sample else ""
+
       try:
         source_name = sample["json"]["source"]
-        self.sample_cnt.setdefault(source_name, [0, 0])
-        self.sample_cnt[source_name][0] += 1
+        # WARN: ugly code, for dirty dataset.
+        if source_name.startswith("PDFA"):
+          source_name = "PDFA"
+        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          source_name = source_name.split("/")[4]
+      except:
+        source_name = "None"
+
+      self.source_sample_cnt.setdefault(source_name, 0)
+      self.source_sample_cnt[source_name] += 1
+
+      try:
         inputs = self._process(sample)
       except:
-        sample_key = sample["__key__"] if "__key__" in sample else ""
-        sample_url = sample["__url__"] if "__url__" in sample else ""
-        if source_name is not None:
-          self.sample_cnt[source_name][1] += 1
-          error_ratio = self.sample_cnt[source_name][1] * 1.0 / self.sample_cnt[source_name][0]
-          logger.error(f"ChatCompletionVisionDataset process sample error. {source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, errmsg={traceback.format_exc()}")
-        else:
-          logger.error(f"ChatCompletionVisionDataset iter error. {sample_key=}, {sample_url=}, errmsg={traceback.format_exc()}")
+        self.source_error_cnt.setdefault(source_name, 0)
+        self.source_error_cnt[source_name] += 1
+
+        error_ratio = self.source_error_cnt[source_name] * 1.0 / self.source_sample_cnt[source_name]
+        logger.error(f"ChatCompletionVisionDataset process sample error. {source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, errmsg={traceback.format_exc()}")
+
         continue
 
       sample_length = inputs["input_ids"].shape[-1]
       if cur_length + sample_length > self.max_length:
+
         packed_inputs = self._packing(buffer)
+        packed_inputs["data_source"] = source_list  # return source_list for dataset monitor
 
         buffer = [inputs]
+        source_list = [source_name]
+
         cur_length = sample_length
         
-        # TODO: ugly! skip pure text sample
+        # skip pure text sample
         if packed_inputs["pixel_values"] is None and packed_inputs["pixel_values_videos"] is None:
           logger.warning("Skip pure text sample.")
           continue
@@ -1292,8 +1135,5 @@ class ChatCompletionVisionDataset(IterableDataset):
 
       else:
         buffer.append(inputs)
+        source_list.append(source_name)
         cur_length += sample_length
-
-      iter_step += 1
-      if iter_step % 1000 == 0:
-        self._print_yiled_success_ratio(iter_step)

@@ -100,7 +100,34 @@ This project is designed to train VLMs from scratch.
                     "max_pixels": 360 * 420,
                     "fps": 1.0,
                     "video_start": 0,
-                    "video_end": 8,
+                    "video_end":
+                },
+                {"type": "text", "text": "Describe this video."},
+            ]
+        },
+        {"role": "assistant", "content": "The video describe ..."},
+    ],
+    "source": "kwai_video"
+}
+```
+
+对于已经处理成图片的视频，video字段使用image list填写（需要保证图片顺序），例如：
+
+```json
+000000000.json
+{
+    "__key__": 000000000, 
+    "messages": [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "video",
+                    "video": [
+                        {"type": "image", "image": "0.jpg"},
+                        {"type": "image", "image": "1.jpg"},
+                        {"type": "image", "image": "2.jpg"}
+                    ]
                 },
                 {"type": "text", "text": "Describe this video."},
             ]
