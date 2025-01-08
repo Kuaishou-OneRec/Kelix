@@ -32,7 +32,7 @@ def get_cosine_scheduler(
     num_warmup_steps: int,
     num_training_steps: int,
     num_cycles: float = 0.5,
-    num_stop_steps: int: 0,
+    num_stop_steps: int = 0,
     last_epoch: int = -1,
     min_lr: float = None,
     min_lr_rate: float = None,
