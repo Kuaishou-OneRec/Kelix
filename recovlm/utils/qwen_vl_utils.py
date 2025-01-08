@@ -314,15 +314,19 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR) -> torch.Tensor | l
         process_info = ele.copy()
         process_info.pop("type", None)
         process_info.pop("video", None)
-        images = [
-            fetch_image({"image": video_element, **process_info}, size_factor=image_factor)
-            for video_element in ele["video"]
-        ]
+        images = []
+        for video_element in ele["video"]:
+            # preprocess images
+            if isinstance(video_element, dict):
+                images.append(fetch_image(video_element, size_factor=image_factor))
+            else:
+                images.append(
+                    fetch_image({"image": video_element, **process_info}, size_factor=image_factor)
+                )
         nframes = ceil_by_factor(len(images), FRAME_FACTOR)
         if len(images) < nframes:
             images.extend([images[-1]] * (nframes - len(images)))
         return images
-
 
 def extract_vision_info(conversations: list[dict] | list[list[dict]]) -> list[dict]:
     vision_infos = []

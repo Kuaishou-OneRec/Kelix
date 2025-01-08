@@ -35,10 +35,6 @@ from recovlm.utils.qwen_vl_utils import process_vision_info
 from .templates import get_template
 from .prompts import PromptLoader
 
-
-# from utils import get_world_size, is_rank_0
-
-
 logger = logging.getLogger(__name__)
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
@@ -160,7 +156,6 @@ def zero_pad_sequences(sequences, side: str = "left", value=0):
   return torch.stack(padded_sequences, dim=0)
 
 # TODO: use IterableDataset
-
 class ChatCompletionDataset(Dataset):
   """Text Completion Dataset with ChatML format"""
   def __init__(self,
@@ -755,6 +750,7 @@ class ChatCompletionVisionDataset(IterableDataset):
                max_retry: int = 5,
                multiple_of: int = 8,
                shuffle_size: int = 100000,
+               shuffle_initial_size: int = 100,
                base_model_dir: Optional[str] = None,
                processor: Optional[Qwen2VLProcessor] = None,
                spatial_merge_size: int = 2,
@@ -824,13 +820,52 @@ class ChatCompletionVisionDataset(IterableDataset):
         workersplitter=wds.split_by_worker
     )
 
-    dataset = dataset.shuffle(shuffle_size, initial=20000).decode(
+    dataset = dataset.shuffle(shuffle_size, initial=shuffle_initial_size).decode(
       "pil", handler=wds.warn_and_continue)
     
     self.dataset = dataset
 
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
+
+  def _fill_image_block(self, block, max_visual_tokens_per_image, sample_dict):
+    if isinstance(block["image"], str):
+      image = sample_dict[block["image"]]
+    else:
+      image = block["image"]
+    if image.mode != "RGB":
+      image = image.convert("RGB")
+    block["image"] = image
+    block["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
+      (self.spatial_merge_size ** 2)
+    block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
+      (self.spatial_merge_size ** 2)
+  
+  def _fill_video_block(self, block, max_visual_tokens_per_image, sample_dict):
+    if isinstance(block["video"], list):
+      for image_block in block["video"]:
+        assert image_block["type"] == "image" and "image" in image_block
+        self._fill_image_block(image_block, max_visual_tokens_per_image, sample_dict)
+    elif isinstance(block["video"], str) or isinstance(block["video"], bytes):
+      # video in local tar, replace by video bytes
+      if isinstance(block["video"], str) and block["video"] in sample_dict:
+        block["video"] = sample_dict[block["video"]]
+      # fill other params
+      block["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
+        (self.spatial_merge_size ** 2)
+      block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
+        (self.spatial_merge_size ** 2)
+      # video split params
+      if self.video_nframe > 0:
+        block["nframes"] = self.video_nframe
+      if self.video_fps > 0:
+        block["fps"] = self.video_fps
+      if self.video_min_frames > 0:
+        block["min_frames"] = self.video_min_frames
+      if self.video_max_frames > 0:
+        block["max_frames"] = self.video_max_frames
+    else:
+      raise ValueError(f"Unsupport video type. {type(block['video'])=}")
   
   def _process_completion(self,
                     sample: Dict[str, Any],
@@ -847,33 +882,11 @@ class ChatCompletionVisionDataset(IterableDataset):
         text += segment["text"]
       elif segment["type"] == "image":
         text += "<|vision_start|><|image_pad|><|vision_end|>"
-        if isinstance(segment["image"], str):
-          segment["image"] = sample[segment["image"]]
-        if segment["image"].mode != "RGB":
-          segment["image"] = segment["image"].convert("RGB")
-        segment["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
-          (self.spatial_merge_size ** 2)
-        segment["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
-          (self.spatial_merge_size ** 2)
+        self._fill_image_block(segment, max_visual_tokens_per_image, sample)
         vision_infos.append(segment)
       elif segment["type"] == "video":
         text += "<|vision_start|><|video_pad|><|vision_end|>"
-        if isinstance(segment["video"], str) and segment["video"] in sample:
-          segment["video"] = sample[segment["video"]]
-        # fill other params
-        segment["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
-          (self.spatial_merge_size ** 2)
-        segment["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
-          (self.spatial_merge_size ** 2)
-        # video split params
-        if self.video_nframe > 0:
-          segment["nframes"] = self.video_nframe
-        if self.video_fps > 0:
-          segment["fps"] = self.video_fps
-        if self.video_min_frames > 0:
-          segment["min_frames"] = self.video_min_frames
-        if self.video_max_frames > 0:
-          segment["max_frames"] = self.video_max_frames
+        self._fill_video_block(segment, max_visual_tokens_per_image, sample)
         vision_infos.append(segment)
       else:
         logger.warning(f"!!! Unsupport {segment['type']=}, skip this segment.")
@@ -926,35 +939,9 @@ class ChatCompletionVisionDataset(IterableDataset):
       content = turn["content"]
       for block in content:
         if block["type"] == "image":
-          if isinstance(block["image"], str):
-            image = sample[block["image"]]
-          else:
-            image = block["image"]
-          if image.mode != "RGB":
-            image = image.convert("RGB")
-          block["image"] = image
-          block["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
-            (self.spatial_merge_size ** 2)
-          block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
-            (self.spatial_merge_size ** 2)
+          self._fill_image_block(block, max_visual_tokens_per_image, sample)
         elif block["type"] == "video":
-          # video in local tar, replace by video bytes
-          if isinstance(block["video"], str) and block["video"] in sample:
-            block["video"] = sample[block["video"]]
-          # fill other params
-          block["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
-            (self.spatial_merge_size ** 2)
-          block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
-            (self.spatial_merge_size ** 2)
-          # video split params
-          if self.video_nframe > 0:
-            block["nframes"] = self.video_nframe
-          if self.video_fps > 0:
-            block["fps"] = self.video_fps
-          if self.video_min_frames > 0:
-            block["min_frames"] = self.video_min_frames
-          if self.video_max_frames > 0:
-            block["max_frames"] = self.video_max_frames
+          self._fill_video_block(block, max_visual_tokens_per_image, sample)
 
     text = self.processor.apply_chat_template(
       [messages], tokenize=False, add_generation_prompt=False
