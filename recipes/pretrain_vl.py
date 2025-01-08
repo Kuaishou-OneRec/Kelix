@@ -230,7 +230,7 @@ def train():
     num_warmup_steps=args.num_warmup_steps,
     num_training_steps=args.num_training_steps,
     min_lr=args.min_lr,
-    num_stop_steps=10
+    num_stop_steps=20
   )
 
   model.train()
