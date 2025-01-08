@@ -18,5 +18,8 @@
     "wall_clock_breakdown": false,
     "bf16": {
       "enabled": true
+    },
+    "data_types": {
+      "grad_accum_dtype": "fp32"
     }
 }
