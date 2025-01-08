@@ -4,19 +4,30 @@ import torch.distributed as dist
 
 from flash_attn import flash_attn_varlen_func
 
-_N_GPUS_PER_NDOE = 8
+_SEQUENCE_PARALLEL_GROUP = None
+
+def initialize_model_parallel(sequence_parallel_size):
+    world_size = dist.get_world_size()
+    num_sequence_parallel_groups: int = world_size // sequence_parallel_size
+    global _SEQUENCE_PARALLEL_GROUP
+    for i in range(num_sequence_parallel_groups):
+        ranks = range(i * sequence_parallel_size, (i + 1) * sequence_parallel_size)
+        group = torch.distributed.new_group(ranks)
+        rank = dist.get_rank()
+        if rank in ranks:
+            _SEQUENCE_PARALLEL_GROUP = group
 
 def get_sequence_parallel_group():
-    rank = dist.get_rank()
-    
-    node_id = rank // _N_GPUS_PER_NDOE
-    
-    ranks = list(
-        range(node_id * _N_GPUS_PER_NDOE, (node_id + 1) * _N_GPUS_PER_NDOE))
+    """Get the sequence parallel group the caller rank belongs to."""
+    return _SEQUENCE_PARALLEL_GROUP
 
-    group = dist.new_group(ranks, backend="nccl")
+def get_sequence_parallel_world_size():
+    """Get the sequence parallel world size."""
+    return dist.get_world_size(group=get_sequence_parallel_group())
 
-    return group
+def get_sequence_parallel_rank():
+    """Get the sequence parallel rank."""
+    return dist.get_rank(group=get_sequence_parallel_group())
 
 def all_to_all_4D(
     input: torch.tensor, scatter_idx: int = 2, gather_idx: int = 1, group=None, use_sync: bool = False
@@ -139,7 +150,7 @@ class SeqAllToAll4D(torch.autograd.Function):
         )
 
 class UlyssesAttention(torch.nn.Module):
-    """Initialization.
+    """UlyssesAttention, current support FA2 with packing only.
 
         scatter_idx (int): scatter_idx for all2all comm
         gather_idx (int): gather_idx for all2all comm
@@ -148,8 +159,7 @@ class UlyssesAttention(torch.nn.Module):
     def __init__(
         self,
         scatter_idx: int = 2,
-        gather_idx: int = 1,
-    ) -> None:
+        gather_idx: int = 1) -> None:
 
         super(UlyssesAttention, self).__init__()
         self.spg = get_sequence_parallel_group()
@@ -161,17 +171,18 @@ class UlyssesAttention(torch.nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        dropout_p=0.0,
-        softmax_scale=None,
-        causal=False,
-        *kwargs: Any
+        *kwargs
     ) -> torch.Tensor:
 
+        # (b, N/P, h, d) -> (b, N, h/P, d)
         q = SeqAllToAll4D.apply(self.spg, query, self.scatter_idx, self.gather_idx)
         k = SeqAllToAll4D.apply(self.spg, key, self.scatter_idx, self.gather_idx)
         v = SeqAllToAll4D.apply(self.spg, value, self.scatter_idx, self.gather_idx)
-
-
+        
+        dropout_p = kwargs.get("dropout_p", 0.0)
+        causal = kwargs.get("causal", False)
+        sliding_window = kwargs.get("sliding_window", -1)
+        
         cu_seqlens = kwargs.get("cu_seqlens")
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
         cu_seqlens = cu_seqlens.to(torch.int32)
@@ -185,11 +196,11 @@ class UlyssesAttention(torch.nn.Module):
             max_seqlen,
             max_seqlen,
             dropout_p=dropout_p,
-            window_size=(-1, -1),
+            window_size=(sliding_window, sliding_window),
             causal=causal
         )
 
-        if  isinstance(context_layer, tuple):
+        if isinstance(context_layer, tuple):
             context_layer = context_layer[0]
 
         output = SeqAllToAll4D.apply(
