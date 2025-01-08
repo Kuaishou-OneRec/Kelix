@@ -29,6 +29,13 @@ This project is designed to train VLMs from scratch.
 
 ### Data Preparation
 
+#### 如何生成 index.json
+```shell
+pip install -e /llm_reco_ssd/luoxinchen/repos/webdataset/ --upgrade
+cd /PATH/TO/WEBDATASET/
+widsindex create *.tar --output index.json --process-num 256
+```
+
 #### Stage2 & SFT Data Format
 
 参考文档：[WebDataset File Format Specification](https://docs.google.com/document/d/18OdLjruFNX74ILmgrdiCI9J1fQZuhzzRBCHV9URWto0/edit?tab=t.0)
