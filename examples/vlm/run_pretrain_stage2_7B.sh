@@ -15,7 +15,7 @@ MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pre
 # OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.12
 OUTPUT_DIR=/llm_reco_ssd/zhangzixing/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.12-shuffle
 
-mkdir $OUTPUT_DIR
+mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
 
