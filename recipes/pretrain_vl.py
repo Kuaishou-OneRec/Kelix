@@ -297,8 +297,12 @@ def train():
       ]
     print_rank_0(f"before gather, {get_sequence_parallel_world_size()}")
     for key in gathered_batch:
+      print_rank_0(gathered_batch[key], raw_batch[key].contiguous())
+    for key in gathered_batch:
       dist.all_gather(
-        tensor_list=gathered_batch[key], tensor=raw_batch[key].contiguous())
+        tensor_list=gathered_batch[key], tensor=raw_batch[key].contiguous(),
+        group=get_sequence_parallel_group()
+      )
     print_rank_0("after gather", gathered_batch)
 
     gathered_batch = [
