@@ -864,7 +864,16 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
     packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
     packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
-
+    
+    # pad to multiple of, necessary for sequence parallel
+    if (
+      self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
+    ):  # not divisible by multiple_of; here we align for grouping
+      padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+      packed_input_ids = F.pad(packed_input_ids, (0, padding_len), value=self.processor.tokenizer.pad_token_id)
+      packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
+      packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
+ 
     inputs = {
       "input_ids": packed_input_ids,
       "position_ids": packed_position_ids,
