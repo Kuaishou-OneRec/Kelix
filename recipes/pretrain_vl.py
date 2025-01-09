@@ -244,8 +244,7 @@ def train():
       f"Resume from checkpoint: {os.path.join(args.resume_from, ckpt_id)}, "
       f"load_weights_only={args.load_weights_only}")
     _, client_state = model.load_checkpoint(
-      args.resume_from, ckpt_id, load_module_only=args.load_weights_only,
-      custom_load_fn=load_dist_attn_state_dict)
+      args.resume_from, ckpt_id, load_module_only=args.load_weights_only)
     if not args.load_weights_only:
       total_num_tokens = client_state.get("total_num_tokens", 0)
       total_num_samples = client_state.get("total_num_samples", 0)
