@@ -1,0 +1,21 @@
+meta_table: /llm_reco_ssd/luoxinchen/dataset/laion2B-en
+output_dir: /llm_reco_ssd/luoxinchen/dataset/laion2B-en/webdataset
+meta_columns: ["caption", "md5", "similarity"]
+txt_column: "caption"
+encode_format: "jpg"
+shard_size: 10000
+data_source:
+  class_name: BlobStoreDataSource
+  kwargs:
+    bucket: upload-dujuan-video
+    key_name: md5
+filters:
+  - class_name: ScoreFilter
+    kwargs: 
+      score_name: similarity
+      threshold: 0.352 # 80% 分位点
+  - class_name: CaptionLengthFilter
+    kwargs:
+      caption_name: caption
+      min_length: 3
+      max_length: 1024
