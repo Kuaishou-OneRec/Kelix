@@ -6,6 +6,7 @@ import glob
 import json
 import logging
 import collections
+import pickle
 
 import torch
 import deepspeed
@@ -25,8 +26,11 @@ from recovlm.data.dataloaders import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
 from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
-  get_optimizer_grouped_parameters
+  get_optimizer_grouped_parameters, dist_reduce_dict
 from recovlm.training.lr_schedulers import get_scheduler
+
+# reduce gpu memory frag
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 
 
 def get_argument_parser():
@@ -146,6 +150,12 @@ def get_argument_parser():
 
   parser.add_argument("--seed", type=int, default=123,
                       help="Manual seed for RNG")
+  
+  parser.add_argument("--monitor_datasource_loss", action="store_true",
+                      help="Whether to monitor loss of each datasource")
+  
+  parser.add_argument("--monitor_datasource_cnt", action="store_true",
+                      help="Whether to monitor cnt of each datasource")
 
   return parser
 
@@ -219,7 +229,8 @@ def train():
     optimizer=optimizer,
     num_warmup_steps=args.num_warmup_steps,
     num_training_steps=args.num_training_steps,
-    min_lr=args.min_lr
+    min_lr=args.min_lr,
+    num_stop_steps=20
   )
 
   model.train()
@@ -230,6 +241,7 @@ def train():
 
   total_num_tokens = 0
   total_num_samples = 0
+  total_data_source_cnt = {}
   if not args.resume_from:
     args.resume_from = args.output_dir
   ckpt_id = args.resume_from_tag
@@ -262,10 +274,18 @@ def train():
     dataset_config["max_length"] = args.max_length
   dataloader = get_dataloader(name=dataset, **dataset_config)
   ##############
+  if args.monitor_datasource_loss:
+    loss_fn = CrossEntropyLoss(ignore_index=-100, return_token_loss=True)
+  else:
+    loss_fn = CrossEntropyLoss(ignore_index=-100, return_token_loss=True)
 
-  loss_fn = CrossEntropyLoss(ignore_index=-100)
   start_time = time.time()
   show_cnt = 3
+
+  acc_step = 0
+  acc_avg_loss = 0.0
+  acc_num_tokens = 0
+  acc_num_samples = 0
 
   for batch in dataloader:
     if show_cnt > 0 and dist.get_rank() == 0:
@@ -274,6 +294,9 @@ def train():
           f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n"
           f"=" * 100 + "\n\n")
       show_cnt -= 1
+
+    data_source = batch.pop("data_source") # dataset source list cur batch
+
     to_cuda(batch)
     input_ids = batch["input_ids"]
     loss_mask = batch["loss_mask"]
@@ -283,6 +306,7 @@ def train():
     image_grid_thw = batch.get("image_grid_thw", None)
     video_grid_thw = batch.get("video_grid_thw", None)
     cu_seqlens = batch.get("cu_seqlens", None)
+    sample_idx = batch["sample_idx"].to(torch.int32)
 
     num_tokens = torch.tensor(input_ids.shape[-1]).cuda()
     num_samples = torch.tensor(cu_seqlens.shape[-1] - 1).cuda()
@@ -290,6 +314,9 @@ def train():
     dist.all_reduce(num_samples, op=dist.ReduceOp.SUM)
     total_num_tokens += num_tokens.item()
     total_num_samples += num_samples.item()
+
+    acc_num_tokens += num_tokens.item()
+    acc_num_samples += num_samples.item()
 
     input_ids = input_ids * (input_ids > 0).to(torch.int64)
     labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
@@ -302,24 +329,44 @@ def train():
     )
 
     logits = output.logits
-    loss = loss_fn(logits=logits, labels=labels)
+
+    # token_loss for dataset monitor
+    loss, token_loss = loss_fn(logits=logits, labels=labels)
 
     del logits
     del labels
     model.backward(loss)
     model.step()
 
+    ########## dataset source monitor ###############
+    if args.monitor_datasource_cnt:
+      data_source_cnt = {}
+      for data_source_name in data_source:
+        data_source_cnt.setdefault(data_source_name, 0.0)
+        data_source_cnt[data_source_name] += 1
+      data_source_cnt = dist_reduce_dict(data_source_cnt)
+      for k, v in data_source_cnt.items():
+        total_data_source_cnt.setdefault(k, 0)
+        total_data_source_cnt[k] += v
+    #########################################
+
     avg_loss = torch.tensor(loss.item()).cuda()
     dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
     avg_loss = avg_loss.item() / dist.get_world_size()
+
+    acc_avg_loss += avg_loss
+    acc_step += 1
+
     iteration = model.global_steps
     if iteration % args.logging_per_step == 0 and dist.get_rank() == 0 and \
             model.is_gradient_accumulation_boundary():
       learning_rate = model.lr_scheduler.get_lr()[0]
       end_time = time.time()
-      sec_per_step = (end_time - start_time) / args.logging_per_step
-      tokens_per_sec_per_gpu = num_tokens / dist.get_world_size() / (end_time - start_time)
-      samples_per_sec_per_gpu = num_samples / dist.get_world_size() / (end_time - start_time)
+      sec_per_step = (end_time - start_time) / acc_step
+      tokens_per_sec_per_gpu = acc_num_tokens / dist.get_world_size() / (end_time - start_time)
+      samples_per_sec_per_gpu = acc_num_samples / dist.get_world_size() / (end_time - start_time)
+      avg_loss = acc_avg_loss / acc_step
+
       start_time = end_time
       log_dict = {
         "loss": avg_loss,
@@ -331,11 +378,59 @@ def train():
         "total_num_tokens": total_num_tokens,
         "total_num_samples": total_num_samples
       }
+
       for name, data in log_dict.items():
         if data is not None and tb_writer:
           tb_writer.add_scalar(
               name,
               data,
+              global_step=iteration,
+              new_style=True)
+
+      if args.monitor_datasource_loss and tb_writer:
+        sample_idx = sample_idx.squeeze()[:-1]   # shift idx
+        unique_sample_idx = sample_idx.unique()
+        
+        data_source_loss = {}
+        for s_idx in unique_sample_idx:
+          mask = (sample_idx == s_idx)
+          sum_loss = token_loss[mask].sum()
+          token_num = mask.sum()
+          key = data_source[int(s_idx.item())]
+          data_source_loss.setdefault(key, [0.0, 0.0])
+          data_source_loss[key][0] += sum_loss.item()
+          data_source_loss[key][1] += token_num.item()
+        
+        def data_source_loss_reduce(gathered_dicts):
+          sum_loss_dict = {}
+          token_num_dict = {}
+          loss_mean = {}
+          for tmp_dict in gathered_dicts:
+            for k, v in tmp_dict.items():
+              sum_loss, token_num = v
+              sum_loss_dict.setdefault(k, 0.0)
+              token_num_dict.setdefault(k, 0.0)
+              sum_loss_dict[k] += sum_loss
+              token_num_dict[k] += token_num
+          for k in sum_loss_dict:
+            loss_mean[k] = sum_loss_dict[k] / token_num_dict[k]
+          return loss_mean
+
+        data_source_mean_loss = dist_reduce_dict(data_source_loss, data_source_loss_reduce)
+        for k, v in loss_mean.items():
+          tb_writer.add_scalar(
+                f"data_source_loss/{key}",
+                v,
+                global_step=iteration,
+                new_style=True)
+
+      if args.monitor_datasource_cnt and tb_writer:
+        source_ratio_dict = {}
+        for key, cnt in total_data_source_cnt.items():
+          source_ratio_dict[f"{key}"] = 1.0 * cnt / total_num_samples
+          tb_writer.add_scalar(
+              f"data_source_sample_ratio/{key}",
+              1.0 * cnt / total_num_samples,
               global_step=iteration,
               new_style=True)
 
@@ -349,6 +444,11 @@ def train():
         f"total_num_tokens: {total_num_tokens}",
         f"total_num_samples: {total_num_samples}",
       )
+
+      acc_step = 0
+      acc_avg_loss = 0.0
+      acc_num_samples = 0
+      acc_num_tokens = 0
 
     if iteration % args.save_checkpoint_per_step == 0 and \
         iteration > 0 and model.is_gradient_accumulation_boundary():
