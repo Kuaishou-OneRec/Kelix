@@ -2,10 +2,12 @@ from recovlm.data.dataloaders import get_indexed_dataloader, get_dataloader
 from recovlm.data.collators import ImageTextPackingCollator
 
 import json
+import os
 
 from transformers import AutoProcessor
 
 from torch.utils.data import DataLoader
+import torch.distributed as dist
 
 # def test_web_dataloader():
 #     dataset = get_webdataset(
@@ -32,8 +34,18 @@ from torch.utils.data import DataLoader
 #         print(s)
 #         gg
 
+
+def init_processes(rank, size, backend='gloo'):
+    """ Initialize the distributed environment. """
+    os.environ['MASTER_ADDR'] = '127.0.0.1'
+    os.environ['MASTER_PORT'] = '1234'
+    dist.init_process_group(backend, rank=rank, world_size=size)
+
+
 def test_chat_vision():
-    path = "/llm_reco_ssd/zhouyang12/code/RecoVLM/examples/vlm/configs/the_cauldron.json"
+    init_processes(0, 1)
+    # path = "/llm_reco_ssd/zhouyang12/code/RecoVLM/examples/vlm/configs/the_cauldron.json"
+    path = "/llm_reco/zhangzixing/recovlm/examples/vlm/configs/interleaving_dataset.json"
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
     dataset = dataset_config.pop("name")
@@ -43,3 +55,6 @@ def test_chat_vision():
     for idx, item in enumerate(dataloader):
         print(item)
         break
+
+if __name__ == "__main__":
+    test_chat_vision()

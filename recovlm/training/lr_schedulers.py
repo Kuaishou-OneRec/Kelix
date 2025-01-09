@@ -11,22 +11,28 @@ def _get_cosine_schedule_with_warmup_lr_lambda(
         current_step: int, *, num_warmup_steps: int,
         num_training_steps: int,
         num_cycles: float,
+        num_stop_steps: int = 0,
         min_lr_rate: float = 0.0):
-    if current_step < num_warmup_steps:
-        return float(current_step) / float(max(1, num_warmup_steps))
-    if current_step > num_training_steps:
-        return min_lr_rate
-    progress = float(current_step - num_warmup_steps) /\
-        float(max(1, num_training_steps - num_warmup_steps))
-    factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
-    factor = factor * (1 - min_lr_rate) + min_lr_rate
-    return max(0, factor)
+        
+    if num_stop_steps > 0 and current_step < num_stop_steps:
+        return 0.0
+    else:
+        if current_step < num_warmup_steps:
+            return float(current_step) / float(max(1, num_warmup_steps))
+        if current_step > num_training_steps:
+            return min_lr_rate
+        progress = float(current_step - num_warmup_steps) /\
+            float(max(1, num_training_steps - num_warmup_steps))
+        factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+        factor = factor * (1 - min_lr_rate) + min_lr_rate
+        return max(0, factor)
 
 def get_cosine_scheduler(
     optimizer: Optimizer,
     num_warmup_steps: int,
     num_training_steps: int,
     num_cycles: float = 0.5,
+    num_stop_steps: int = 0,
     last_epoch: int = -1,
     min_lr: float = None,
     min_lr_rate: float = None,
@@ -67,6 +73,7 @@ def get_cosine_scheduler(
         num_training_steps=num_training_steps,
         num_cycles=num_cycles,
         min_lr_rate=min_lr_rate,
+        num_stop_steps=num_stop_steps,
     )
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)

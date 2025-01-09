@@ -156,13 +156,22 @@ def get_chat_completion_vision_dataloader(sources: str,
                                           base_model_dir,
                                           shrink_ratio,
                                           max_retry,
-                                          multiple_of):
+                                          multiple_of,
+                                          num_workers=8,
+                                          video_nframe=-1,
+                                          video_fps=2.0,
+                                          video_min_frames=2,
+                                          video_max_frames=120):
 
     dataset = ChatCompletionVisionDataset(
         sources = sources,
         max_length = max_length,
         min_visual_tokens_per_image = min_visual_tokens_per_image,
         max_visual_tokens_per_image = max_visual_tokens_per_image,
+        video_nframe=video_nframe,
+        video_fps=video_fps,
+        video_min_frames=video_min_frames,
+        video_max_frames=video_max_frames,
         base_model_dir = base_model_dir,
         shrink_ratio = shrink_ratio,
         max_retry = max_retry,
@@ -173,7 +182,7 @@ def get_chat_completion_vision_dataloader(sources: str,
         dataset=dataset,
         shuffle=False,
         batch_size=1,
-        num_workers=8,
+        num_workers=num_workers,
         collate_fn=lambda x: x[0]
     )
     return dataloader
