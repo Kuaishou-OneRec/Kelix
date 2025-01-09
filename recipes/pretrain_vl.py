@@ -293,7 +293,7 @@ def train():
         tensor_list=gathered_batch[key], tensor=raw_batch[key].contiguous())
 
     gathered_batch = [
-      dict(zip(data.keys(), values)) for values in zip(*data.values())
+      dict(zip(gathered_batch.keys(), values)) for values in zip(*gathered_batch.values())
     ]
 
     for batch in gathered_batch:
