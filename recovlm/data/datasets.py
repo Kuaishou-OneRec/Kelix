@@ -870,9 +870,11 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
       self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
     ):  # not divisible by multiple_of; here we align for grouping
       padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
-      packed_input_ids = F.pad(packed_input_ids, (0, padding_len), value=self.processor.tokenizer.pad_token_id)
+      packed_input_ids = F.pad(
+        packed_input_ids, (0, padding_len), value=self.processor.tokenizer.pad_token_id)
       packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
       packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
+      cu_seqlens.append(cu_seqlens[-1] + padding_len)
  
     inputs = {
       "input_ids": packed_input_ids,
@@ -937,6 +939,7 @@ def get_assistant_mask(batch_input_ids: torch.Tensor,
           assistant_end = []
     masks.append(mask)
   return torch.tensor(masks)
+
 class ChatCompletionVisionDataset(IterableDataset):
   def __init__(self,
                sources: Union[str, List[str]],
@@ -1095,6 +1098,17 @@ class ChatCompletionVisionDataset(IterableDataset):
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
     packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
     packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
+
+    # pad to multiple of, necessary for sequence parallel
+    if (
+      self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
+    ):  # not divisible by multiple_of; here we align for grouping
+      padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+      packed_input_ids = F.pad(
+        packed_input_ids, (0, padding_len), value=self.processor.tokenizer.pad_token_id)
+      packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
+      packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
+      cu_seqlens.append(cu_seqlens[-1] + padding_len)
 
     inputs = {
       "input_ids": packed_input_ids,
