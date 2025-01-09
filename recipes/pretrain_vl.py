@@ -172,7 +172,8 @@ def train():
   torch.distributed.barrier()
 
   initialize_model_parallel(args.sequence_parallel_size)
-  print_rank_0(f"Sequence parallel size: {args.sequence_parallel_size}")
+  print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
+  print(f"Sequence parallel rank: {get_sequence_parallel_rank()}, group: {get_sequence_parallel_group()}")
 
   if dist.get_rank() == 0:
     args_dict = vars(args)
