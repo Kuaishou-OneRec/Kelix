@@ -29,7 +29,7 @@ from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
 from recovlm.training.lr_schedulers import get_scheduler
 from recovlm.training.parallel import get_sequence_parallel_group, \
   get_sequence_parallel_rank, get_sequence_parallel_world_size, \
-  get_local_sequence_boundary
+  get_local_sequence_boundary, initialize_model_parallel
 
 def get_argument_parser():
   parser = argparse.ArgumentParser()
@@ -136,6 +136,9 @@ def get_argument_parser():
 
   parser.add_argument("--enable_gradient_checkpointing", action="store_true",
                       help="Enable gradient checkpointing during training")
+  
+  parser.add_argument("--sequence_parallel_size", type=int, default=1,
+                      help="Enable gradient checkpointing during training")
 
   parser.add_argument("--logging_per_step", type=int, default=100,
                       help="The number of steps to log training info")
@@ -167,6 +170,9 @@ def train():
 
   set_random_seed(args.seed)
   torch.distributed.barrier()
+
+  initialize_model_parallel(args.sequence_parallel_size)
+  print_rank_0(f"Sequence parallel size: {args.sequence_parallel_size}")
 
   if dist.get_rank() == 0:
     args_dict = vars(args)
@@ -288,7 +294,7 @@ def train():
         torch.zeros_like(raw_batch[key]) for _ in \
           range(get_sequence_parallel_world_size())
       ]
-    print_rank_0("before gather")
+    print_rank_0(f"before gather, {get_sequence_parallel_world_size()} ")
     for key in gathered_batch:
       dist.all_gather(
         tensor_list=gathered_batch[key], tensor=raw_batch[key].contiguous())
