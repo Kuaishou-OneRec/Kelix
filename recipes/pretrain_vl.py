@@ -288,15 +288,18 @@ def train():
         torch.zeros_like(raw_batch[key]) for _ in \
           range(get_sequence_parallel_world_size())
       ]
+    print_rank_0("before gather")
     for key in gathered_batch:
       dist.all_gather(
         tensor_list=gathered_batch[key], tensor=raw_batch[key].contiguous())
+    print_rank_0("after gather", gathered_batch)
 
     gathered_batch = [
       dict(zip(gathered_batch.keys(), values)) for values in zip(*gathered_batch.values())
     ]
 
     for batch in gathered_batch:
+      print_rank_0("batch", batch)
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
       attention_mask = batch.get("attention_mask", None)
