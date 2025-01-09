@@ -12,7 +12,7 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.16.10
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.16.11
 
 mkdir -p $OUTPUT_DIR
 
@@ -55,7 +55,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --merge_checkpoint_output_file pytorch_model.bin \
     --comment "$comment" \
     --commit_id $git_hash \
-    --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json >> $OUTPUT_DIR/stdout.log 2>>$OUTPUT_DIR/stderr.log &
+    --deepspeed --deepspeed_config examples/vlm/configs/ds_z2_config_7B.json >> $OUTPUT_DIR/stdout.log 2>>$OUTPUT_DIR/stderr.log &
 
 #     --resume_from /llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36 \
 #     --resume_from_tag global_step90000 \
