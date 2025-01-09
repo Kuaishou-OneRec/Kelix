@@ -12,7 +12,7 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.8
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.20
 
 mkdir $OUTPUT_DIR
 
@@ -21,7 +21,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="测试stage2，打开LLM训练，使用the_cauldron，打开gradient\ checkpoint,\ max_length=16000,测试sequence_parallel,修复dist_attn的state_dict\ load"
+comment="测试stage2，打开LLM训练，使用the_cauldron，打开gradient\ checkpoint,\ max_length=16000,测试sequence_parallel,使用ulysses"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
