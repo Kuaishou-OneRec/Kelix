@@ -277,6 +277,7 @@ def train():
           f"=" * 100 + "\n\n")
       show_cnt -= 1
     # TODO: 改成gloo，不用提前放到GPU
+    print_rank_0("jjjjjjjjj")
     to_cuda(raw_batch)
     # gather sequence among sequence_parallel groups
     gathered_batch = {}
