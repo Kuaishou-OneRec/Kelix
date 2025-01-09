@@ -14,3 +14,7 @@ Qwen-VL-Chat-Int4/
 SimSun.ttf
 hostfile
 *.txt
+
+*.log
+*.err
+*.bin

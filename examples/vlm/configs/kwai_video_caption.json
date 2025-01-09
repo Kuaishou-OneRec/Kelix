@@ -1,0 +1,14 @@
+{
+    "name": "chat_vision",
+    "sources":  "/llm_reco_ssd/luoxinchen/dataset/kwai_video_caption/20250105/index.json",
+    "max_length": 1024,
+    "min_visual_tokens_per_image": 4,
+    "max_visual_tokens_per_image": 512,
+    "video_fps": 1.0,
+    "video_min_frames": 2,
+    "video_max_frames": 60,
+    "base_model_dir": "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
+    "shrink_ratio": 0.7,
+    "max_retry": 10,
+    "multiple_of": 8
+}
