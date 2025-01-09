@@ -60,10 +60,9 @@ else:
     flash_attn_varlen_func = None
 
 import torch.distributed as dist
-from deepspeed.sequence.layer import DistributedAttention
 
-from recovlm.training.parallel import get_sequence_parallel_group, UlyssesAttention
-
+from recovlm.training.parallel import UlyssesAttention, get_sequence_parallel_group, \
+    get_sequence_parallel_world_size, get_sequence_parallel_rank
 
 logger = logging.get_logger(__name__)
 
@@ -839,7 +838,7 @@ class Qwen2VLSdpaAttention(Qwen2VLAttention):
 QWEN2_VL_ATTENTION_CLASSES = {
     "eager": Qwen2VLAttention,
     "flash_attention_2": Qwen2VLFlashAttention2,
-    "sdpa": Qwen2VLSdpaAttention
+    "sdpa": Qwen2VLSdpaAttention,
 }
 
 
@@ -1145,6 +1144,16 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # shard hidden_states & position_embeddings
+        sp_size = get_sequence_parallel_world_size()
+        sp_rank = get_sequence_parallel_rank()
+        local_seqlen = hidden_states.shape[1] // sp_size
+        start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
+        hidden_states = hidden_states[:, start:end, :]
+        sin, cos = position_embeddings
+        print("xxxxxxx", sin.shape, cos.shape)
+        position_embeddings = (sin[:, start:end, :], cos[:, start:end, :])
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None

@@ -47,9 +47,15 @@ class CrossEntropyLoss(torch.nn.Module):
     """
     total_elements = (labels != self.ignore_index).sum()
     vocab_size = logits.shape[-1]
+    # TODO: 暂时修改，labels外部shirft
+    # loss = F.cross_entropy(
+    #   logits.float()[:,:-1,:].reshape(-1, vocab_size),
+    #   labels[:,1:].reshape(-1), ignore_index=self.ignore_index,
+    #   reduction="sum"
+    # )
     loss = F.cross_entropy(
-      logits.float()[:,:-1,:].reshape(-1, vocab_size),
-      labels[:,1:].reshape(-1), ignore_index=self.ignore_index,
+      logits.float().reshape(-1, vocab_size),
+      labels.reshape(-1), ignore_index=self.ignore_index,
       reduction="sum"
     )
     if total_elements > 0:

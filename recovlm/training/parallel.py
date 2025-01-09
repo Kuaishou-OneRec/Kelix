@@ -29,6 +29,13 @@ def get_sequence_parallel_rank():
     """Get the sequence parallel rank."""
     return dist.get_rank(group=get_sequence_parallel_group())
 
+def get_local_sequence_boundary(seq_len):
+    sp_size = get_sequence_parallel_world_size()
+    sp_rank = get_sequence_parallel_rank()
+    local_seqlen = seq_len // sp_size
+    start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
+    return start, end
+
 def all_to_all_4D(
     input: torch.tensor, scatter_idx: int = 2, gather_idx: int = 1, group=None, use_sync: bool = False
 ) -> torch.tensor:
