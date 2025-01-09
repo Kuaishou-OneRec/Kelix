@@ -43,7 +43,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --max_length 4096 \
     --load_weights_only \
     --learning_rate 5e-5 \
-    --min_lr 1e-6 \
+    --min_lr 1e-5 \
     --weight_decay 0.1 \
     --lr_scheduler_type cosine \
     --num_warmup_steps 500 \
