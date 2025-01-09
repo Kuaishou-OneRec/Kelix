@@ -277,7 +277,7 @@ def train():
           f"=" * 100 + "\n\n")
       show_cnt -= 1
     # TODO: 改成gloo，不用提前放到GPU
-    to_cuda(batch)
+    to_cuda(raw_batch)
     # gather sequence among sequence_parallel groups
     gathered_batch = {}
     for key in raw_batch:
@@ -322,9 +322,11 @@ def train():
       )
       # (b, N/P, V)
       logits = output.logits
+      print_rank_0(f"Logits shape: {logits.shape}")
       
       # 提前shirft logits & labels
       start, end = get_local_sequence_boundary(labels.shape[-1])
+      print(f"Rank: {dist.get_rank()}, Start: {start}, End: {end}")
       labels = labels[:, 1:]
       local_labels = labels[start:end]
       loss = loss_fn(logits=logits[:, :-1, :], labels=local_labels)
