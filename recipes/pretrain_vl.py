@@ -294,7 +294,7 @@ def train():
         torch.zeros_like(raw_batch[key]) for _ in \
           range(get_sequence_parallel_world_size())
       ]
-    print_rank_0(f"before gather, {get_sequence_parallel_world_size()} ")
+    print_rank_0(f"before gather, {get_sequence_parallel_world_size()}")
     for key in gathered_batch:
       dist.all_gather(
         tensor_list=gathered_batch[key], tensor=raw_batch[key].contiguous())
