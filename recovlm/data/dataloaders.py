@@ -176,7 +176,7 @@ def get_chat_completion_vision_dataloader(sources: str,
         batch_size=1,
         num_workers=8,
         collate_fn=lambda x: x[0],
-        worker_init_fn=worker_init_fn
+        # worker_init_fn=worker_init_fn
     )
     return dataloader
 
