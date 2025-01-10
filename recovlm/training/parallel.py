@@ -7,6 +7,7 @@ from flash_attn import flash_attn_varlen_func
 from recovlm.utils.common import print_rank_0
 
 _SEQUENCE_PARALLEL_GROUP = None
+_SEQUENCE_PARALLEL_GROUP_GLOO = None
 
 def initialize_model_parallel(sequence_parallel_size):
     world_size = dist.get_world_size()
@@ -16,19 +17,28 @@ def initialize_model_parallel(sequence_parallel_size):
         ranks = range(i * sequence_parallel_size, (i + 1) * sequence_parallel_size)
         print_rank_0(f"Group: {i}, Ranks: {ranks}")
         group = torch.distributed.new_group(ranks)
+        group_gloo = torch.distributed.new_group(ranks, backend="gloo")
         rank = dist.get_rank()
         if rank in ranks:
             _SEQUENCE_PARALLEL_GROUP = group
+            _SEQUENCE_PARALLEL_GROUP_GLOO = group_gloo
 
-def get_sequence_parallel_group():
+
+def get_sequence_parallel_group(backend="nccl"):
     """Get the sequence parallel group the caller rank belongs to."""
-    return _SEQUENCE_PARALLEL_GROUP
+    if backend == "nccl":
+        return _SEQUENCE_PARALLEL_GROUP
+    elif backend == "gloo":
+        return _SEQUENCE_PARALLEL_GROUP_GLOO
+    else:
+        raise NotImplementedError(f"Unsupport sequence parallel backend: {backend}")
 
 def get_sequence_parallel_world_size():
     """Get the sequence parallel world size."""
     return dist.get_world_size(group=get_sequence_parallel_group())
+    
 
-def get_sequence_parallel_rank():
+def get_sequence_parallel_rank(backend="nccl"):
     """Get the sequence parallel rank."""
     return dist.get_rank(group=get_sequence_parallel_group())
 
@@ -218,3 +228,6 @@ class UlyssesAttention(torch.nn.Module):
         )
 
         return output
+
+def pad_across_rank(batch, group: dist.ProcessGroup):
+  input_ids = batch["input_ids"]

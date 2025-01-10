@@ -172,8 +172,12 @@ def train():
   torch.distributed.barrier()
 
   initialize_model_parallel(args.sequence_parallel_size)
+
   print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
-  print(f"Sequence parallel rank: {get_sequence_parallel_rank()}, group: {get_sequence_parallel_group()}")
+  print(
+    f"Sequence parallel rank: {get_sequence_parallel_rank()}, "
+    f"group: {get_sequence_parallel_group(backend="nccl")}, "
+    f"group_gloo: {get_sequence_parallel_group(backend="gloo")}")
 
   if dist.get_rank() == 0:
     args_dict = vars(args)
@@ -285,7 +289,7 @@ def train():
       show_cnt -= 1
     # TODO: 改成gloo，不用提前放到GPU
     print_rank_0("jjjjjjjjj")
-    to_cuda(raw_batch)
+    # to_cuda(raw_batch)
     # gather sequence among sequence_parallel groups
     gathered_batch = {}
     for key in raw_batch:
@@ -301,8 +305,8 @@ def train():
     print(f"Rank: {dist.get_rank()}, seqlen: {raw_batch['input_ids'].shape}, pixel_values: {raw_batch['pixel_values'].shape}")
     for key in ["input_ids"]:
       dist.all_gather(
-        tensor_list=gathered_batch[key], tensor=raw_batch[key].contiguous()[:,1024],
-        group=get_sequence_parallel_group()
+        tensor_list=gathered_batch[key], tensor=raw_batch[key].contiguous(),
+        group=get_sequence_parallel_group(backend="gloo")
       )
     print_rank_0("after gather", gathered_batch)
 
@@ -313,6 +317,7 @@ def train():
     for batch in gathered_batch:
       print_rank_0("sb")
       print_rank_0("batch", batch)
+      to_cuda(batch)
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
       attention_mask = batch.get("attention_mask", None)
