@@ -1135,7 +1135,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     print_rank_0("Before gather....")
     for key in gathered_inputs:
       dist.all_gather(
-        tensor_list=packed_inputs[key], tensor=packed_inputs[key].contiguous(),
+        tensor_list=gathered_inputs[key], tensor=packed_inputs[key].contiguous(),
         group=get_sequence_parallel_group(backend="gloo")
       )
     print_rank_0("After gather....")

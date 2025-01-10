@@ -167,6 +167,8 @@ def train():
       "save_checkpoint_every_epoch should be set."
 
   deepspeed.init_distributed()
+  ### initialize model parallel group
+  initialize_model_parallel(args.sequence_parallel_size)
 
   set_random_seed(args.seed)
   torch.distributed.barrier()
@@ -278,9 +280,6 @@ def train():
     dataset_config["max_length"] = args.max_length
   dataloader = get_dataloader(name=dataset, **dataset_config)
   ##############
-
-  ### initialize model parallel group
-  initialize_model_parallel(args.sequence_parallel_size)
 
   loss_fn = CrossEntropyLoss(ignore_index=-100)
   start_time = time.time()
