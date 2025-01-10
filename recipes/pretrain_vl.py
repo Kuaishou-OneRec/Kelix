@@ -319,7 +319,6 @@ def train():
       image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
       cu_seqlens=cu_seqlens
     )
-
     # (b, N/P, V)
     logits = output.logits
     print_rank_0(f"Logits shape: {logits.shape}")
@@ -340,7 +339,6 @@ def train():
     dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
     avg_loss = avg_loss.item() / dist.get_world_size()
     iteration = model.global_steps
-
     if iteration % args.logging_per_step == 0 and dist.get_rank() == 0 and \
             model.is_gradient_accumulation_boundary():
       learning_rate = model.lr_scheduler.get_lr()[0]

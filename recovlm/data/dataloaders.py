@@ -98,7 +98,6 @@ def get_collate_fn(processor, max_length):
     return inputs
   return collate_fn
 
-
 def get_indexed_dataloader(sources: str,
                            processor,
                            batch_size: int,

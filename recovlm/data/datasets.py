@@ -36,6 +36,7 @@ from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.training.parallel import get_sequence_parallel_group, \
   get_sequence_parallel_world_size
+from recovlm.utils.common import print_rank_0
 import glob
 
 from .templates import get_template
@@ -1131,17 +1132,22 @@ class ChatCompletionVisionDataset(IterableDataset):
         torch.empty_like(packed_inputs[key]) for _ in \
           range(get_sequence_parallel_world_size())
       ]
-
+    print_rank_0("Before gather....")
     for key in gathered_inputs:
       dist.all_gather(
         tensor_list=packed_inputs[key], tensor=packed_inputs[key].contiguous(),
         group=get_sequence_parallel_group(backend="gloo")
       )
+    print_rank_0("After gather....")
 
     gathered_inputs = [
       dict(zip(packed_inputs.keys(), values)) for values in \
         zip(*packed_inputs.values())
     ]
+
+    for inputs in gathered_inputs:
+      for key in inputs:
+        print_rank_0(f"{key}: {inputs[key].shape}")
     return gathered_inputs
 
   def __iter__(self):
