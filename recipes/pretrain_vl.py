@@ -176,8 +176,8 @@ def train():
   print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
   print(
     f"Sequence parallel rank: {get_sequence_parallel_rank()}, "
-    f"group: {get_sequence_parallel_group(backend="nccl")}, "
-    f"group_gloo: {get_sequence_parallel_group(backend="gloo")}")
+    f"group: {get_sequence_parallel_group(backend='nccl')}, "
+    f"group_gloo: {get_sequence_parallel_group(backend='gloo')}")
 
   if dist.get_rank() == 0:
     args_dict = vars(args)
