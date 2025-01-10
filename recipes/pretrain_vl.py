@@ -171,6 +171,10 @@ def train():
   set_random_seed(args.seed)
   torch.distributed.barrier()
 
+  dist.init_process_group(
+    "gloo", rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"])
+  )
+
   initialize_model_parallel(args.sequence_parallel_size)
 
   print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
