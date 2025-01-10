@@ -298,7 +298,7 @@ def train():
     print_rank_0(f"before gather, {get_sequence_parallel_world_size()}")
     for key in gathered_batch:
       print(key, gathered_batch[key], raw_batch[key].contiguous())
-    print(f"Rank: {dist.get_rank()}, seqlen: {raw_batch["input_ids"].shape}, pixel_values: {raw_batch["pixel_values"].shape}")
+    print(f"Rank: {dist.get_rank()}, seqlen: {raw_batch['input_ids'].shape}, pixel_values: {raw_batch['pixel_values'].shape}")
     for key in ["input_ids"]:
       dist.all_gather(
         tensor_list=gathered_batch[key], tensor=raw_batch[key].contiguous()[:,1024],
