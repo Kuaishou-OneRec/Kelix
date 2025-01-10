@@ -34,6 +34,8 @@ from transformers import AutoTokenizer, AutoProcessor, \
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
+from recovlm.training.parallel import get_sequence_parallel_group, \
+  get_sequence_parallel_world_size
 import glob
 
 from .templates import get_template
@@ -1120,6 +1122,28 @@ class ChatCompletionVisionDataset(IterableDataset):
     }
     return inputs
 
+  def gather(self, packed_inputs):
+    gathered_inputs = {}
+    for key in packed_inputs:
+      if packed_inputs[key] is None:
+        continue
+      gathered_inputs[key] = [
+        torch.empty_like(packed_inputs[key]) for _ in \
+          range(get_sequence_parallel_world_size())
+      ]
+
+    for key in gathered_inputs:
+      dist.all_gather(
+        tensor_list=packed_inputs[key], tensor=packed_inputs[key].contiguous(),
+        group=get_sequence_parallel_group(backend="gloo")
+      )
+
+    gathered_inputs = [
+      dict(zip(packed_inputs.keys(), values)) for values in \
+        zip(*packed_inputs.values())
+    ]
+    return gathered_inputs
+
   def __iter__(self):
     buffer = []
     cur_length = 0
@@ -1132,7 +1156,10 @@ class ChatCompletionVisionDataset(IterableDataset):
       sample_length = inputs["input_ids"].shape[-1]
       if cur_length + sample_length > self.max_length:
         packed_inputs = self._packing(buffer)
-        yield packed_inputs
+        # gather in sequence parallel ranks first,
+        # each rank in the same sp_group will yield same data
+        yield from self.gather(packed_inputs)
+        # yield packed_inputs
         buffer = [inputs]
         cur_length = sample_length
       else:
