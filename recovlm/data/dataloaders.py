@@ -12,6 +12,8 @@ from qwen_vl_utils import process_vision_info
 from transformers import AutoProcessor
 from tqdm import tqdm
 
+from recovlm.training.parallel import worker_init_fn
+
 from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
     ChatCompletionVisionDataset
 
@@ -174,7 +176,8 @@ def get_chat_completion_vision_dataloader(sources: str,
         shuffle=False,
         batch_size=1,
         num_workers=8,
-        collate_fn=lambda x: x[0]
+        collate_fn=lambda x: x[0],
+        worker_init_fn=worker_init_fn
     )
     return dataloader
 

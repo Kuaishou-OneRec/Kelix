@@ -1,4 +1,5 @@
 from typing import Any, Tuple
+import os
 import torch
 import torch.distributed as dist
 
@@ -13,6 +14,7 @@ def initialize_model_parallel(sequence_parallel_size):
     world_size = dist.get_world_size()
     num_sequence_parallel_groups: int = world_size // sequence_parallel_size
     global _SEQUENCE_PARALLEL_GROUP
+    global _SEQUENCE_PARALLEL_GROUP_GLOO
     for i in range(num_sequence_parallel_groups):
         ranks = range(i * sequence_parallel_size, (i + 1) * sequence_parallel_size)
         print_rank_0(f"Group: {i}, Ranks: {ranks}")
@@ -23,6 +25,14 @@ def initialize_model_parallel(sequence_parallel_size):
             _SEQUENCE_PARALLEL_GROUP = group
             _SEQUENCE_PARALLEL_GROUP_GLOO = group_gloo
 
+def worker_init_fn(worker_id):
+    if os.getenv("WORKER_MASTER_PORT", None) is None:
+        os.environ["WORKER_MASTER_PORT"] = \
+            str(int(os.environ["MASTER_PORT"]) + worker_id + 1)
+    os.environ["MASTER_PORT"] = os.environ["WORKER_MASTER_PORT"]
+    dist.init_process_group(
+        "gloo", rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"])
+    )
 
 def get_sequence_parallel_group(backend="nccl"):
     """Get the sequence parallel group the caller rank belongs to."""
