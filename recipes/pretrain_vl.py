@@ -310,6 +310,7 @@ def train():
     ]
 
     for batch in gathered_batch:
+      print_rank_0("sb")
       print_rank_0("batch", batch)
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
