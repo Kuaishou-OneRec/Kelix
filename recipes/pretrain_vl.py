@@ -286,12 +286,41 @@ def train():
   show_cnt = 3
 
   for batch in dataloader:
-    if show_cnt > 0 and dist.get_rank() == 0:
-      print_rank_0(batch)
-      print_rank_0(
-          f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n"
-          f"=" * 100 + "\n\n")
-      show_cnt -= 1
+    # if show_cnt > 0 and dist.get_rank() == 0:
+    #   print_rank_0(batch)
+    #   print_rank_0(
+    #       f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n"
+    #       f"=" * 100 + "\n\n")
+    #   show_cnt -= 1
+
+    gathered_inputs = {}
+    for key in batch:
+      if batch[key] is None:
+        continue
+      # gathered_inputs[key] = [
+      #   torch.empty_like(packed_inputs[key]) for _ in \
+      #     range(get_sequence_parallel_world_size())
+      # ]
+      gathered_inputs[key] = [
+        None for _ in \
+          range(get_sequence_parallel_world_size())
+      ]
+    
+    for key in gathered_inputs:
+      dist.all_gather_object(
+        object_list=gathered_inputs[key], obj=batch[key],
+        group=get_sequence_parallel_group("gloo")
+      )
+    print_rank_0("After gather....")
+
+    gathered_inputs = [
+      dict(zip(gathered_inputs.keys(), values)) for values in \
+        zip(*gathered_inputs.values())
+    ]
+
+    for inputs in gathered_inputs:
+      for key in inputs:
+        print_rank_0(f"{key}: {inputs[key].shape}")
 
     to_cuda(batch)
     input_ids = batch["input_ids"]

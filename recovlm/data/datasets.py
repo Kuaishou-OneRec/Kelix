@@ -1173,8 +1173,8 @@ class ChatCompletionVisionDataset(IterableDataset):
         packed_inputs = self._packing(buffer)
         # gather in sequence parallel ranks first,
         # each rank in the same sp_group will yield same data
-        yield from self.gather(packed_inputs)
-        # yield packed_inputs
+        # yield from self.gather(packed_inputs)
+        yield packed_inputs
         buffer = [inputs]
         cur_length = sample_length
       else:
