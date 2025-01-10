@@ -1128,15 +1128,24 @@ class ChatCompletionVisionDataset(IterableDataset):
     for key in packed_inputs:
       if packed_inputs[key] is None:
         continue
+      # gathered_inputs[key] = [
+      #   torch.empty_like(packed_inputs[key]) for _ in \
+      #     range(get_sequence_parallel_world_size())
+      # ]
       gathered_inputs[key] = [
-        torch.empty_like(packed_inputs[key]) for _ in \
+        None for _ in \
           range(get_sequence_parallel_world_size())
       ]
     print_rank_0("Before gather....")
+    # for key in gathered_inputs:
+    #   dist.all_gather(
+    #     tensor_list=gathered_inputs[key], tensor=packed_inputs[key].contiguous(),
+    #     group=get_sequence_parallel_group(backend="gloo")
+    #   )
     for key in gathered_inputs:
-      dist.all_gather(
-        tensor_list=gathered_inputs[key], tensor=packed_inputs[key].contiguous(),
-        group=get_sequence_parallel_group(backend="gloo")
+      dist.all_gather_object(
+        object_list=gathered_inputs[key], obj=packed_inputs[key],
+        group=get_sequence_parallel_group("gloo")
       )
     print_rank_0("After gather....")
 
