@@ -4,6 +4,8 @@ import torch.distributed as dist
 
 from flash_attn import flash_attn_varlen_func
 
+from recovlm.utils.common import print_rank_0
+
 _SEQUENCE_PARALLEL_GROUP = None
 
 def initialize_model_parallel(sequence_parallel_size):
@@ -12,6 +14,7 @@ def initialize_model_parallel(sequence_parallel_size):
     global _SEQUENCE_PARALLEL_GROUP
     for i in range(num_sequence_parallel_groups):
         ranks = range(i * sequence_parallel_size, (i + 1) * sequence_parallel_size)
+        print_rank_0(f"Group: {i}, Ranks: {ranks}")
         group = torch.distributed.new_group(ranks)
         rank = dist.get_rank()
         if rank in ranks:

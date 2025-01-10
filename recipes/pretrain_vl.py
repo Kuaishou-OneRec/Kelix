@@ -292,7 +292,7 @@ def train():
       if raw_batch[key] is None:
         continue
       gathered_batch[key] = [
-        torch.zeros_like(raw_batch[key]) for _ in \
+        torch.empry_like(raw_batch[key]) for _ in \
           range(get_sequence_parallel_world_size())
       ]
     print_rank_0(f"before gather, {get_sequence_parallel_world_size()}")
