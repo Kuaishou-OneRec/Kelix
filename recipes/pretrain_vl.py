@@ -301,7 +301,7 @@ def train():
     for key in ["input_ids"]:
       dist.all_gather(
         tensor_list=gathered_batch[key], tensor=raw_batch[key].contiguous(),
-        group=get_sequence_parallel_group(), backend="nccl"
+        group=get_sequence_parallel_group()
       )
     print_rank_0("after gather", gathered_batch)
 
