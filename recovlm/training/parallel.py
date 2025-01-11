@@ -201,7 +201,7 @@ class UlyssesAttention(torch.nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        *kwargs
+        **kwargs
     ) -> torch.Tensor:
 
         # (b, N/P, h, d) -> (b, N, h/P, d)
