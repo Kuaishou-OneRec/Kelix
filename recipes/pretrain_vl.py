@@ -286,29 +286,32 @@ def train():
   show_cnt = 1
 
   for raw_batch in dataloader:
-    print_rank_0("gather batches....")
-    s = time.time()
-    gathered_batches = {}
-    for key in raw_batch:
-      if raw_batch[key] is None:
-        continue
-      gathered_batches[key] = [
-        None for _ in \
-          range(get_sequence_parallel_world_size())
-      ]
-    
-    for key in gathered_batches:
-      dist.all_gather_object(
-        object_list=gathered_batches[key], obj=raw_batch[key],
-        group=get_sequence_parallel_group("gloo")
-      )
-    t = time.time()
-    print_rank_0(f"After gather...., {t - s}")
+    if args.sequence_parallel_size > 1:
+      print_rank_0("gather batches....")
+      s = time.time()
+      gathered_batches = {}
+      for key in raw_batch:
+        if raw_batch[key] is None:
+          continue
+        gathered_batches[key] = [
+          None for _ in \
+            range(get_sequence_parallel_world_size())
+        ]
+      
+      for key in gathered_batches:
+        dist.all_gather_object(
+          object_list=gathered_batches[key], obj=raw_batch[key],
+          group=get_sequence_parallel_group("gloo")
+        )
+      t = time.time()
+      print_rank_0(f"After gather...., {t - s}")
 
-    gathered_batches = [
-      dict(zip(gathered_batches.keys(), values)) for values in \
-        zip(*gathered_batches.values())
-    ]
+      gathered_batches = [
+        dict(zip(gathered_batches.keys(), values)) for values in \
+          zip(*gathered_batches.values())
+      ]
+    else:
+      gathered_batches = [raw_batch]
 
     for batch in gathered_batches:
       if show_cnt > 0 and dist.get_rank() == 0:
@@ -341,7 +344,7 @@ def train():
         input_ids, attention_mask=attention_mask,
         pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
         image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-        cu_seqlens=cu_seqlens
+        cu_seqlens=cu_seqlens, sequence_parallel_size=args.sequence_parallel_size
       )
       # (b, N/P, V)
       logits = output.logits

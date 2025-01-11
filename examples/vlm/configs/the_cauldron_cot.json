@@ -1,0 +1,11 @@
+{
+    "name": "chat_vision",
+    "sources": "/llm_reco_ssd/luoxinchen/dataset/Stage2/the_cauldron_cot_v1/index.json",
+    "max_length": 3072,
+    "min_visual_tokens_per_image": 4,
+    "max_visual_tokens_per_image": 512,
+    "base_model_dir": "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
+    "shrink_ratio": 0.7,
+    "max_retry": 10,
+    "multiple_of": 32
+}

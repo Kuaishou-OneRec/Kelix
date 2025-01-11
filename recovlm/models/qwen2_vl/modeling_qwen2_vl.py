@@ -62,7 +62,8 @@ else:
 import torch.distributed as dist
 
 from recovlm.training.parallel import UlyssesAttention, get_sequence_parallel_group, \
-    get_sequence_parallel_world_size, get_sequence_parallel_rank
+    get_sequence_parallel_world_size, get_sequence_parallel_rank, \
+    get_local_sequence_boundary
 
 logger = logging.get_logger(__name__)
 
@@ -630,7 +631,8 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        cu_seqlens: Optional[torch.Tensor] = None
+        cu_seqlens: Optional[torch.Tensor] = None,
+        sequence_parallel_size: int = 1
     ):
         bsz, q_len, _ = hidden_states.size()
 
@@ -695,47 +697,46 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         else:
             sliding_window = -1
         
-        # if cu_seqlens is not None:
-        #     # Sample packing with FA2
-        #     max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-        #     cu_seqlens = cu_seqlens.to(torch.int32)
-        #     # remove batch_dim first: q.squeeze(0)
-        #     attn_output = flash_attn_varlen_func(
-        #         query_states.squeeze(0),
-        #         key_states.squeeze(0),
-        #         value_states.squeeze(0),
-        #         cu_seqlens,
-        #         cu_seqlens,
-        #         max_seqlen,
-        #         max_seqlen,
-        #         dropout_p=dropout_rate,
-        #         window_size=(sliding_window, sliding_window),
-        #         causal=self.is_causal
-        #     )
-        # else:
-        #     attn_output = _flash_attention_forward(
-        #         query_states,
-        #         key_states,
-        #         value_states,
-        #         attention_mask,
-        #         q_len,
-        #         dropout=dropout_rate,
-        #         sliding_window=sliding_window,
-        #         is_causal=self.is_causal,
-        #         use_top_left_mask=self._flash_attn_uses_top_left_mask,
-        #     )
-
-        # TODO: compatible FA2 without cu_seqlens
-        # print(f"query={query_states.shape}, key={key_states.shape}, value={value_states.shape}")
-        attn_output = self._dist_attn(
-            query=query_states,
-            key=key_states,
-            value=value_states,
-            cu_seqlens=cu_seqlens,
-            dropout_p=dropout_rate,
-            sliding_window=sliding_window,
-            causal=self.is_causal
-        )
+        if sequence_parallel_size > 1:
+            attn_output = self._dist_attn(
+                query=query_states,
+                key=key_states,
+                value=value_states,
+                cu_seqlens=cu_seqlens,
+                dropout_p=dropout_rate,
+                sliding_window=sliding_window,
+                causal=self.is_causal
+            )
+        else:
+            if cu_seqlens is not None:
+                # Sample packing with FA2
+                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                cu_seqlens = cu_seqlens.to(torch.int32)
+                # remove batch_dim first: q.squeeze(0)
+                attn_output = flash_attn_varlen_func(
+                    query_states.squeeze(0),
+                    key_states.squeeze(0),
+                    value_states.squeeze(0),
+                    cu_seqlens,
+                    cu_seqlens,
+                    max_seqlen,
+                    max_seqlen,
+                    dropout_p=dropout_rate,
+                    window_size=(sliding_window, sliding_window),
+                    causal=self.is_causal
+                )
+            else:
+                attn_output = _flash_attention_forward(
+                    query_states,
+                    key_states,
+                    value_states,
+                    attention_mask,
+                    q_len,
+                    dropout=dropout_rate,
+                    sliding_window=sliding_window,
+                    is_causal=self.is_causal,
+                    use_top_left_mask=self._flash_attn_uses_top_left_mask,
+                )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -959,6 +960,7 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
+    sequence_parallel_size = 1
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -970,7 +972,9 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
+    
+    def set_model_parallel_params(self, sequence_parallel_size=1):
+        self.sequence_parallel_size = sequence_parallel_size
 
 class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     config_class = Qwen2VLVisionConfig
@@ -1147,15 +1151,16 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         # shard hidden_states & position_embeddings
-        sp_size = get_sequence_parallel_world_size()
-        sp_rank = get_sequence_parallel_rank()
-        local_seqlen = hidden_states.shape[1] // sp_size
-        start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
-        hidden_states = hidden_states[:, start:end, :]
-        sin, cos = position_embeddings
-        position_embeddings = (sin[:,:,start:end,:], cos[:,:,start:end,:])
-        #print(f"Rank: {dist.get_rank()} start: {start}, end: {end}, hidden_states: {hidden_states.shape}, sin.shape: {position_embeddings[0].shape} cos.shape: {position_embeddings[1].shape}")
-        
+        # sp_size = get_sequence_parallel_world_size()
+        # sp_rank = get_sequence_parallel_rank()
+        # local_seqlen = hidden_states.shape[1] // sp_size
+        # start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
+        sequence_parallel_size = kwargs.get("sequence_parallel_size", 1)
+        if sequence_parallel_size > 1:
+            start, end = get_local_sequence_boundary(hidden_states.shape[1])
+            sin, cos = position_embeddings
+            position_embeddings = (sin[:,:,start:end,:], cos[:,:,start:end,:])
+            hidden_states = hidden_states[:, start:end, :]       
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
