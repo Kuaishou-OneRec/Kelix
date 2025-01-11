@@ -283,15 +283,9 @@ def train():
 
   loss_fn = CrossEntropyLoss(ignore_index=-100)
   start_time = time.time()
-  show_cnt = 3
+  show_cnt = 1
 
   for raw_batch in dataloader:
-    # if show_cnt > 0 and dist.get_rank() == 0:
-    #   print_rank_0(batch)
-    #   print_rank_0(
-    #       f"Input Text:\n\n{processor.tokenizer.decode(raw_batch['input_ids'][0])}\n"
-    #       f"=" * 100 + "\n\n")
-    #   show_cnt -= 1
     print_rank_0("gather batches....")
     s = time.time()
     gathered_batches = {}
@@ -317,6 +311,12 @@ def train():
     ]
 
     for batch in gathered_batches:
+      if show_cnt > 0 and dist.get_rank() == 0:
+        print_rank_0(batch)
+        print_rank_0(
+            f"Input Text:\n\n{processor.tokenizer.decode(raw_batch['input_ids'][0])}\n"
+            f"=" * 100 + "\n\n")
+        show_cnt -= 1
       to_cuda(batch)
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
@@ -383,14 +383,14 @@ def train():
         samples_per_sec_per_gpu = num_samples / dist.get_world_size() / (end_time - start_time)
         start_time = end_time
         log_dict = {
-          "loss": avg_loss,
+          "losses/loss": avg_loss,
           "learning_rate": learning_rate,
-          "grad_norm": model.get_global_grad_norm(),
-          "sec_per_step": sec_per_step,
-          "tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
-          "samples_per_sec_per_gpu": samples_per_sec_per_gpu,
-          "total_num_tokens": total_num_tokens,
-          "total_num_samples": total_num_samples
+          "losses/grad_norm": model.get_global_grad_norm(),
+          "perf/sec_per_step": sec_per_step,
+          "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
+          "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
+          "perf/total_num_tokens": total_num_tokens,
+          "perf/total_num_samples": total_num_samples
         }
         for name, data in log_dict.items():
           if data is not None and tb_writer:
