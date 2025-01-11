@@ -348,7 +348,7 @@ def train():
     
       # 提前shirft logits & labels
       start, end = get_local_sequence_boundary(labels.shape[-1])
-      pad = torch.full((batch_size, 1), loss_fn.ignore_index, dtype=labels.dtype).to(
+      pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index, dtype=labels.dtype).to(
           device=torch.cuda.current_device())
       print_rank_0(f"labels: {labels.shape}, pad: {pad.shape}")
       labels = torch.cat(
