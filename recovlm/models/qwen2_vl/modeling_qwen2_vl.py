@@ -631,8 +631,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        cu_seqlens: Optional[torch.Tensor] = None,
-        sequence_parallel_size: int = 1
+        cu_seqlens: Optional[torch.Tensor] = None
     ):
         bsz, q_len, _ = hidden_states.size()
 
@@ -697,7 +696,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         else:
             sliding_window = -1
         
-        if sequence_parallel_size > 1:
+        if get_sequence_parallel_world_size() > 1:
             attn_output = self._dist_attn(
                 query=query_states,
                 key=key_states,
@@ -960,7 +959,6 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_static_cache = True
-    sequence_parallel_size = 1
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -972,9 +970,6 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-    
-    def set_model_parallel_params(self, sequence_parallel_size=1):
-        self.sequence_parallel_size = sequence_parallel_size
 
 class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     config_class = Qwen2VLVisionConfig
@@ -1155,8 +1150,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         # sp_rank = get_sequence_parallel_rank()
         # local_seqlen = hidden_states.shape[1] // sp_size
         # start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
-        sequence_parallel_size = kwargs.get("sequence_parallel_size", 1)
-        if sequence_parallel_size > 1:
+        if get_sequence_parallel_world_size() > 1:
             start, end = get_local_sequence_boundary(hidden_states.shape[1])
             sin, cos = position_embeddings
             position_embeddings = (sin[:,:,start:end,:], cos[:,:,start:end,:])

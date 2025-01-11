@@ -310,7 +310,7 @@ def train():
     if show_cnt > 0 and dist.get_rank() == 0:
       print_rank_0(batch)
       print_rank_0(
-          f"Input Text:\n\n{processor.tokenizer.decode(raw_batch['input_ids'][0])}\n"
+          f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n"
           f"=" * 100 + "\n\n")
       show_cnt -= 1
 
@@ -483,14 +483,6 @@ def train():
         f"bwd_time": {bwd_time},
         f"data_fetch_time": {data_fetch_time}
       )
-
-      for name, data in log_dict.items():
-        if data is not None and tb_writer:
-          tb_writer.add_scalar(
-              name,
-              data,
-              global_step=iteration,
-              new_style=True)
 
       if iteration % args.save_checkpoint_per_step == 0 and \
           iteration > 0 and model.is_gradient_accumulation_boundary():
