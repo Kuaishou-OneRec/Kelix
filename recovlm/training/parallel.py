@@ -268,7 +268,7 @@ def gather_batches(batch, group):
       ]
     else:
       gathered_batches = [batch]
-    print_rank_0(f"Num batches: {len(gather_batches)}")
+    print_rank_0(f"Num batches: {len(gathered_batches)}")
     return gathered_batches
 
 def gather_by_group(dataloader, group):
