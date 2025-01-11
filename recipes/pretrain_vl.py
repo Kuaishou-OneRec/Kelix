@@ -350,7 +350,7 @@ def train():
       start, end = get_local_sequence_boundary(labels.shape[-1])
       pad = torch.tensor(
         loss_fn.ignore_index, dtype=labels.dtype).unsqueeze(0).to(
-          device=torch.current_device())
+          device=torch.cuda.current_device())
       labels = torch.cat(
         [labels[:, 1:], pad],
         dim=-1) # shirft
