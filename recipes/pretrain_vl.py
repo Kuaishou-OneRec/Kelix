@@ -298,7 +298,7 @@ def train():
     for key in raw_batch:
       if raw_batch[key] is None:
         continue
-      gathered_inputs[key] = [
+      gathered_batches[key] = [
         None for _ in \
           range(get_sequence_parallel_world_size())
       ]
@@ -311,9 +311,9 @@ def train():
     t = time.time()
     print_rank_0(f"After gather...., {t - s}")
 
-    gathered_inputs = [
-      dict(zip(gathered_inputs.keys(), values)) for values in \
-        zip(*gathered_inputs.values())
+    gathered_batches = [
+      dict(zip(gathered_batches.keys(), values)) for values in \
+        zip(*gathered_batches.values())
     ]
 
     for batch in gathered_batches:
