@@ -338,7 +338,7 @@ def train():
       labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
       output = model(
-        input_ids, labels=labels, attention_mask=attention_mask,
+        input_ids, attention_mask=attention_mask,
         pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
         image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
         cu_seqlens=cu_seqlens
