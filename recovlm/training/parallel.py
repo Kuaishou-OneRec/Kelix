@@ -230,14 +230,11 @@ class UlyssesAttention(torch.nn.Module):
             causal=causal
         )
 
-        if isinstance(context_layer, tuple):
-            context_layer = context_layer[0]
+        # if isinstance(attn_output, tuple):
+        #     attn_output = attn_output[0]
 
         output = SeqAllToAll4D.apply(
-            self.spg, context_layer, self.gather_idx, self.scatter_idx
+            self.spg, attn_output, self.gather_idx, self.scatter_idx
         )
 
         return output
-
-def pad_across_rank(batch, group: dist.ProcessGroup):
-  input_ids = batch["input_ids"]
