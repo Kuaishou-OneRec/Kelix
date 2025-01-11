@@ -281,11 +281,12 @@ def train():
       f"{dataset_config['max_length']} -> {args.max_length}")
     dataset_config["max_length"] = args.max_length
   
-  with open(os.path.join(args.output_dir,
-      f"dataset-{args.commit_id}-{timestamp}.json"), 'w',
-      encoding="utf-8") as f:
-    f.write(json.dumps(
-      dataset_config, ensure_ascii=False, indent=2) + "\n")
+  if dist.get_rank() == 0:
+    with open(os.path.join(args.output_dir,
+        f"dataset-{args.commit_id}-{timestamp}.json"), 'w',
+        encoding="utf-8") as f:
+      f.write(json.dumps(
+        dataset_config, ensure_ascii=False, indent=2) + "\n")
 
   dataloader = get_dataloader(name=dataset, **dataset_config)
   ##############
