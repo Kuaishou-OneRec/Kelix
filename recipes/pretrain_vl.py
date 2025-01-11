@@ -345,13 +345,12 @@ def train():
       )
       # (b, N/P, V)
       logits = output.logits
-      print_rank_0(f"Logits shape: {logits.shape}")
     
       # 提前shirft logits & labels
       start, end = get_local_sequence_boundary(labels.shape[-1])
-      print(f"Rank: {dist.get_rank()}, Start: {start}, End: {end}")
-      labels = labels[:, 1:]
-      local_labels = labels[start:end]
+      labels = labels[:, 1:] # shirft
+      local_labels = labels[:, start:end]
+      print_rank_0(f"Logits shape: {logits.shape}, local_labels: {local_labels.shape}")
       loss = loss_fn(logits=logits[:, :-1, :], labels=local_labels)
 
       del logits
