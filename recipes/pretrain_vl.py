@@ -348,10 +348,11 @@ def train():
     
       # 提前shirft logits & labels
       start, end = get_local_sequence_boundary(labels.shape[-1])
-      labels = labels[:, 1:] # shirft
+      labels = torch.cat(
+        labels[:, 1:], torch.tensor(loss_fn.ignore_index, dtype=labels.dtype).unsqueeze(0), dim=-1) # shirft
       local_labels = labels[:, start:end]
       print_rank_0(f"Logits shape: {logits.shape}, local_labels: {local_labels.shape}")
-      loss = loss_fn(logits=logits[:, :-1, :], labels=local_labels)
+      loss = loss_fn(logits=logits, labels=local_labels)
 
       del logits
       del labels
