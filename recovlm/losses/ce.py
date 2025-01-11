@@ -27,7 +27,7 @@ class CrossEntropyLoss(torch.nn.Module):
     super().__init__()
     self.ignore_index = ignore_index
     self.return_token_loss = return_token_loss
-    self.shift_labels = shift
+    self.shift_labels = shift_labels
 
   def forward(self, logits: torch.Tensor,
               labels: torch.Tensor) -> torch.Tensor:
@@ -53,7 +53,7 @@ class CrossEntropyLoss(torch.nn.Module):
     total_elements = (labels != self.ignore_index).sum()
     vocab_size = logits.shape[-1]
 
-    if self.shift:
+    if self.shift_labels:
       logits = logits[:, :-1, :]
       labels = labels[:, 1:]
     per_token_loss = F.cross_entropy(
