@@ -1176,6 +1176,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
                     use_cache,
                     cache_position,
                     position_embeddings,
+                    **kwargs
                 )
             else:
                 layer_outputs = decoder_layer(
