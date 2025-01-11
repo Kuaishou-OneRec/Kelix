@@ -318,6 +318,7 @@ def train():
 
     for batch in gathered_batches:
       to_cuda(batch)
+      print_rank_0("bbbbbbbb", batch)
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
       attention_mask = batch.get("attention_mask", None)
