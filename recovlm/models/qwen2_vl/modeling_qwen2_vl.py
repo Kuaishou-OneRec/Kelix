@@ -726,7 +726,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         #     )
 
         # TODO: compatible FA2 without cu_seqlens
-        print(f"query={query_states.shape}, key={key_states.shape}, value={value_states.shape}")
+        # print(f"query={query_states.shape}, key={key_states.shape}, value={value_states.shape}")
         attn_output = self._dist_attn(
             query=query_states,
             key=key_states,
@@ -1154,7 +1154,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         hidden_states = hidden_states[:, start:end, :]
         sin, cos = position_embeddings
         position_embeddings = (sin[:,:,start:end,:], cos[:,:,start:end,:])
-        print(f"Rank: {dist.get_rank()} start: {start}, end: {end}, hidden_states: {hidden_states.shape}, sin.shape: {position_embeddings[0].shape} cos.shape: {position_embeddings[1].shape}")
+        #print(f"Rank: {dist.get_rank()} start: {start}, end: {end}, hidden_states: {hidden_states.shape}, sin.shape: {position_embeddings[0].shape} cos.shape: {position_embeddings[1].shape}")
         
 
         # decoder layers

@@ -208,7 +208,7 @@ class UlyssesAttention(torch.nn.Module):
         q = SeqAllToAll4D.apply(self.spg, query, self.scatter_idx, self.gather_idx)
         k = SeqAllToAll4D.apply(self.spg, key, self.scatter_idx, self.gather_idx)
         v = SeqAllToAll4D.apply(self.spg, value, self.scatter_idx, self.gather_idx)
-        print_rank_0(kwargs)
+        # print_rank_0(kwargs)
         dropout_p = kwargs.get("dropout_p", 0.0)
         causal = kwargs.get("causal", False)
         sliding_window = kwargs.get("sliding_window", -1)

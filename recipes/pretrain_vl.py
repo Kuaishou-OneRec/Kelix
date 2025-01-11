@@ -318,7 +318,7 @@ def train():
 
     for batch in gathered_batches:
       to_cuda(batch)
-      print_rank_0("bbbbbbbb", batch)
+      # print_rank_0("bbbbbbbb", batch)
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
       attention_mask = batch.get("attention_mask", None)
@@ -350,12 +350,11 @@ def train():
       start, end = get_local_sequence_boundary(labels.shape[-1])
       pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index, dtype=labels.dtype).to(
           device=torch.cuda.current_device())
-      print_rank_0(f"labels: {labels.shape}, pad: {pad.shape}")
       labels = torch.cat(
         [labels[:, 1:], pad],
         dim=-1) # shirft
       local_labels = labels[:, start:end]
-      print_rank_0(f"Logits shape: {logits.shape}, local_labels: {local_labels.shape}")
+      # print_rank_0(f"Logits shape: {logits.shape}, local_labels: {local_labels.shape}")
       loss = loss_fn(logits=logits, labels=local_labels)
 
       del logits
