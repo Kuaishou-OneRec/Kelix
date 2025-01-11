@@ -234,7 +234,7 @@ class UlyssesAttention(torch.nn.Module):
         #     attn_output = attn_output[0]
 
         output = SeqAllToAll4D.apply(
-            self.spg, attn_output, self.gather_idx, self.scatter_idx
+            self.spg, attn_output.unsqueeze(0), self.gather_idx, self.scatter_idx
         )
 
         return output

@@ -726,6 +726,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         #     )
 
         # TODO: compatible FA2 without cu_seqlens
+        print_rank_0(f"query={query.shape}, key={key.shape}, value={value.shape}")
         attn_output = self._dist_attn(
             query=query_states,
             key=key_states,
