@@ -291,7 +291,7 @@ def train():
   ##############
 
   loss_fn = CrossEntropyLoss(
-    ignore_index=-100, return_token_loss=True, shift=False)
+    ignore_index=-100, return_token_loss=True, shift_labels=False)
 
   start_time = time.time()
   show_cnt = 1
@@ -393,7 +393,7 @@ def train():
             model.is_gradient_accumulation_boundary():
       learning_rate = model.lr_scheduler.get_lr()[0]
       end_time = time.time()
-      sec_per_step = (end_time - start_time) / args.logging_per_step
+      sec_per_step = (end_time - start_time) / acc_step
       tokens_per_sec_per_gpu = acc_num_tokens / dist.get_world_size() / (end_time - start_time)
       samples_per_sec_per_gpu = acc_num_samples / dist.get_world_size() / (end_time - start_time)
       avg_loss = acc_avg_loss / acc_step
@@ -484,6 +484,13 @@ def train():
         f"data_fetch_time: {data_fetch_time}"
       )
 
+      acc_step = 0
+      acc_avg_loss = 0.0
+      acc_num_samples = 0
+      acc_num_tokens = 0
+      acc_fwd_time = 0.0
+      acc_bwd_time = 0.0
+
       if iteration % args.save_checkpoint_per_step == 0 and \
           iteration > 0 and model.is_gradient_accumulation_boundary():
         torch.cuda.empty_cache()
@@ -493,13 +500,6 @@ def train():
             "total_num_samples": total_num_samples
           }
         )
-
-      acc_step = 0
-      acc_avg_loss = 0.0
-      acc_num_samples = 0
-      acc_num_tokens = 0
-      acc_fwd_time = 0.0
-      acc_bwd_time = 0.0
 
     s = time.time()
 
