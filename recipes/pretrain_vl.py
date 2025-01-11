@@ -286,12 +286,12 @@ def train():
   show_cnt = 3
 
   for raw_batch in dataloader:
-    # if show_cnt > 0 and dist.get_rank() == 0:
-    #   print_rank_0(batch)
-    #   print_rank_0(
-    #       f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n"
-    #       f"=" * 100 + "\n\n")
-    #   show_cnt -= 1
+    if show_cnt > 0 and dist.get_rank() == 0:
+      print_rank_0(batch)
+      print_rank_0(
+          f"Input Text:\n\n{processor.tokenizer.decode(raw_batch['input_ids'][0])}\n"
+          f"=" * 100 + "\n\n")
+      show_cnt -= 1
     print_rank_0("gather batches....")
     s = time.time()
     gathered_batches = {}
@@ -318,7 +318,6 @@ def train():
 
     for batch in gathered_batches:
       to_cuda(batch)
-      # print_rank_0("bbbbbbbb", batch)
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
       attention_mask = batch.get("attention_mask", None)
@@ -337,6 +336,7 @@ def train():
       input_ids = input_ids * (input_ids > 0).to(torch.int64)
       labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
+      s = time.time()
       output = model(
         input_ids, attention_mask=attention_mask,
         pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
@@ -359,8 +359,16 @@ def train():
 
       del logits
       del labels
+      t = time.time()
+
+      print_rank_0(f"Forward time: {t - s}")
+
+      s = time.time()
       model.backward(loss)
       model.step()
+      t = time.time()
+
+      print_rank_0(f"Backward time: {t - s}")
 
       avg_loss = torch.tensor(loss.item()).cuda()
       dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
