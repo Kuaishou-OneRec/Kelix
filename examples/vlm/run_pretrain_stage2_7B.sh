@@ -21,7 +21,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="测试stage2，打开LLM训练，使用the_cauldron，打开gradient\ checkpoint,\ max_length=16000,测试sequence_parallel,使用ulysses,跑通测下速度"
+comment="测试stage2，打开LLM训练，使用the_cauldron，打开gradient\ checkpoint,\ max_length=16000,测试sequence_parallel,使用ulysses,测试32k"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
@@ -40,7 +40,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --resume_from /llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36 \
     --resume_from_tag global_step90000 \
     --enable_gradient_checkpointing \
-    --max_length 16000 \
+    --max_length 32000 \
     --load_weights_only \
     --learning_rate 5e-5 \
     --min_lr 1e-6 \
