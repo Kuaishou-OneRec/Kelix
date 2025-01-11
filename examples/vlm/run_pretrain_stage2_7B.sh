@@ -36,7 +36,7 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config /llm_reco_ssd/zhouyang12/code/RecoVLM/examples/vlm/configs/the_cauldron_cot.json \
+    --dataset_config examples/vlm/configs/the_cauldron_cot.json \
     --resume_from /llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36 \
     --resume_from_tag global_step90000 \
     --enable_gradient_checkpointing \
