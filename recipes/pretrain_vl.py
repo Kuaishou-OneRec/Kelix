@@ -479,9 +479,9 @@ def train():
         f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
         f"total_num_tokens: {total_num_tokens}",
         f"total_num_samples: {total_num_samples}",
-        f"fwd_time": {fwd_time},
-        f"bwd_time": {bwd_time},
-        f"data_fetch_time": {data_fetch_time}
+        f"fwd_time: {fwd_time}",
+        f"bwd_time: {bwd_time}",
+        f"data_fetch_time: {data_fetch_time}"
       )
 
       if iteration % args.save_checkpoint_per_step == 0 and \
