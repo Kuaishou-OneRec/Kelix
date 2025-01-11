@@ -285,134 +285,129 @@ def train():
   start_time = time.time()
   show_cnt = 3
 
-  for batch in dataloader:
+  for raw_batch in dataloader:
     # if show_cnt > 0 and dist.get_rank() == 0:
     #   print_rank_0(batch)
     #   print_rank_0(
     #       f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n"
     #       f"=" * 100 + "\n\n")
     #   show_cnt -= 1
-
-    gathered_inputs = {}
-    for key in batch:
-      if batch[key] is None:
+    print_rank_0("gather batches....")
+    s = time.time()
+    gathered_batches = {}
+    for key in raw_batch:
+      if raw_batch[key] is None:
         continue
-      # gathered_inputs[key] = [
-      #   torch.empty_like(packed_inputs[key]) for _ in \
-      #     range(get_sequence_parallel_world_size())
-      # ]
       gathered_inputs[key] = [
         None for _ in \
           range(get_sequence_parallel_world_size())
       ]
     
-    for key in gathered_inputs:
+    for key in gathered_batches:
       dist.all_gather_object(
-        object_list=gathered_inputs[key], obj=batch[key],
+        object_list=gathered_batches[key], obj=raw_batch[key],
         group=get_sequence_parallel_group("gloo")
       )
-    print_rank_0("After gather....")
+    t = time.time()
+    print_rank_0(f"After gather...., {t - s}")
 
     gathered_inputs = [
       dict(zip(gathered_inputs.keys(), values)) for values in \
         zip(*gathered_inputs.values())
     ]
 
-    for inputs in gathered_inputs:
-      for key in inputs:
-        print_rank_0(f"{key}: {inputs[key].shape}")
+    for batch in gathered_batches:
+      to_cuda(batch)
+      input_ids = batch["input_ids"]
+      loss_mask = batch["loss_mask"]
+      attention_mask = batch.get("attention_mask", None)
+      pixel_values = batch.get("pixel_values", None)
+      pixel_values_videos = batch.get("pixel_values_videos", None)
+      image_grid_thw = batch.get("image_grid_thw", None)
+      video_grid_thw = batch.get("video_grid_thw", None)
+      cu_seqlens = batch.get("cu_seqlens", None)
+      num_tokens = torch.tensor(input_ids.shape[-1]).cuda()
+      num_samples = torch.tensor(cu_seqlens.shape[-1] - 1).cuda()
+      dist.all_reduce(num_tokens, op=dist.ReduceOp.SUM)
+      dist.all_reduce(num_samples, op=dist.ReduceOp.SUM)
+      total_num_tokens += num_tokens.item()
+      total_num_samples += num_samples.item()
 
-    to_cuda(batch)
-    input_ids = batch["input_ids"]
-    loss_mask = batch["loss_mask"]
-    attention_mask = batch.get("attention_mask", None)
-    pixel_values = batch.get("pixel_values", None)
-    pixel_values_videos = batch.get("pixel_values_videos", None)
-    image_grid_thw = batch.get("image_grid_thw", None)
-    video_grid_thw = batch.get("video_grid_thw", None)
-    cu_seqlens = batch.get("cu_seqlens", None)
-    num_tokens = torch.tensor(input_ids.shape[-1]).cuda()
-    num_samples = torch.tensor(cu_seqlens.shape[-1] - 1).cuda()
-    dist.all_reduce(num_tokens, op=dist.ReduceOp.SUM)
-    dist.all_reduce(num_samples, op=dist.ReduceOp.SUM)
-    total_num_tokens += num_tokens.item()
-    total_num_samples += num_samples.item()
+      input_ids = input_ids * (input_ids > 0).to(torch.int64)
+      labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
-    input_ids = input_ids * (input_ids > 0).to(torch.int64)
-    labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
-
-    output = model(
-      input_ids, labels=labels, attention_mask=attention_mask,
-      pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
-      image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-      cu_seqlens=cu_seqlens
-    )
-    # (b, N/P, V)
-    logits = output.logits
-    print_rank_0(f"Logits shape: {logits.shape}")
-    
-    # 提前shirft logits & labels
-    start, end = get_local_sequence_boundary(labels.shape[-1])
-    print(f"Rank: {dist.get_rank()}, Start: {start}, End: {end}")
-    labels = labels[:, 1:]
-    local_labels = labels[start:end]
-    loss = loss_fn(logits=logits[:, :-1, :], labels=local_labels)
-
-    del logits
-    del labels
-    model.backward(loss)
-    model.step()
-
-    avg_loss = torch.tensor(loss.item()).cuda()
-    dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
-    avg_loss = avg_loss.item() / dist.get_world_size()
-    iteration = model.global_steps
-    if iteration % args.logging_per_step == 0 and dist.get_rank() == 0 and \
-            model.is_gradient_accumulation_boundary():
-      learning_rate = model.lr_scheduler.get_lr()[0]
-      end_time = time.time()
-      sec_per_step = (end_time - start_time) / args.logging_per_step
-      tokens_per_sec_per_gpu = num_tokens / dist.get_world_size() / (end_time - start_time)
-      samples_per_sec_per_gpu = num_samples / dist.get_world_size() / (end_time - start_time)
-      start_time = end_time
-      log_dict = {
-        "loss": avg_loss,
-        "learning_rate": learning_rate,
-        "grad_norm": model.get_global_grad_norm(),
-        "sec_per_step": sec_per_step,
-        "tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
-        "samples_per_sec_per_gpu": samples_per_sec_per_gpu,
-        "total_num_tokens": total_num_tokens,
-        "total_num_samples": total_num_samples
-      }
-      for name, data in log_dict.items():
-        if data is not None and tb_writer:
-          tb_writer.add_scalar(
-              name,
-              data,
-              global_step=iteration,
-              new_style=True)
-
-      print_rank_0(
-        f"Step: {iteration}, Loss: {avg_loss}, "
-        f"Learning Rate: {learning_rate}, "
-        f"Grad Norm: {model.get_global_grad_norm()}, "
-        f"Sec per Step: {sec_per_step}",
-        f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
-        f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
-        f"total_num_tokens: {total_num_tokens}",
-        f"total_num_samples: {total_num_samples}",
+      output = model(
+        input_ids, labels=labels, attention_mask=attention_mask,
+        pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+        image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+        cu_seqlens=cu_seqlens
       )
+      # (b, N/P, V)
+      logits = output.logits
+      print_rank_0(f"Logits shape: {logits.shape}")
+    
+      # 提前shirft logits & labels
+      start, end = get_local_sequence_boundary(labels.shape[-1])
+      print(f"Rank: {dist.get_rank()}, Start: {start}, End: {end}")
+      labels = labels[:, 1:]
+      local_labels = labels[start:end]
+      loss = loss_fn(logits=logits[:, :-1, :], labels=local_labels)
 
-    if iteration % args.save_checkpoint_per_step == 0 and \
-        iteration > 0 and model.is_gradient_accumulation_boundary():
-      torch.cuda.empty_cache()
-      model.save_checkpoint(
-        save_dir=args.output_dir, client_state = {
+      del logits
+      del labels
+      model.backward(loss)
+      model.step()
+
+      avg_loss = torch.tensor(loss.item()).cuda()
+      dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
+      avg_loss = avg_loss.item() / dist.get_world_size()
+      iteration = model.global_steps
+      if iteration % args.logging_per_step == 0 and dist.get_rank() == 0 and \
+              model.is_gradient_accumulation_boundary():
+        learning_rate = model.lr_scheduler.get_lr()[0]
+        end_time = time.time()
+        sec_per_step = (end_time - start_time) / args.logging_per_step
+        tokens_per_sec_per_gpu = num_tokens / dist.get_world_size() / (end_time - start_time)
+        samples_per_sec_per_gpu = num_samples / dist.get_world_size() / (end_time - start_time)
+        start_time = end_time
+        log_dict = {
+          "loss": avg_loss,
+          "learning_rate": learning_rate,
+          "grad_norm": model.get_global_grad_norm(),
+          "sec_per_step": sec_per_step,
+          "tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
+          "samples_per_sec_per_gpu": samples_per_sec_per_gpu,
           "total_num_tokens": total_num_tokens,
           "total_num_samples": total_num_samples
         }
-      )
+        for name, data in log_dict.items():
+          if data is not None and tb_writer:
+            tb_writer.add_scalar(
+                name,
+                data,
+                global_step=iteration,
+                new_style=True)
+
+        print_rank_0(
+          f"Step: {iteration}, Loss: {avg_loss}, "
+          f"Learning Rate: {learning_rate}, "
+          f"Grad Norm: {model.get_global_grad_norm()}, "
+          f"Sec per Step: {sec_per_step}",
+          f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
+          f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
+          f"total_num_tokens: {total_num_tokens}",
+          f"total_num_samples: {total_num_samples}",
+        )
+
+      if iteration % args.save_checkpoint_per_step == 0 and \
+          iteration > 0 and model.is_gradient_accumulation_boundary():
+        torch.cuda.empty_cache()
+        model.save_checkpoint(
+          save_dir=args.output_dir, client_state = {
+            "total_num_tokens": total_num_tokens,
+            "total_num_samples": total_num_samples
+          }
+        )
 
 
   print_rank_0("Save checkpoint..")

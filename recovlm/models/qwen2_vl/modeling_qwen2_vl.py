@@ -1152,7 +1152,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
         hidden_states = hidden_states[:, start:end, :]
         sin, cos = position_embeddings
-        print(f"Rank: start: {start}, end: {end}, {dist.rank()} sin.shape: {sin.shape} cos.shape: {cos.shape}")
+        print(f"Rank: {dist.get_rank()} start: {start}, end: {end}, sin.shape: {sin.shape} cos.shape: {cos.shape}")
         position_embeddings = (sin[:, start:end, :], cos[:, start:end, :])
 
         # decoder layers
