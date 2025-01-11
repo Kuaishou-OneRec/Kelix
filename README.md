@@ -29,6 +29,13 @@ This project is designed to train VLMs from scratch.
 
 ### Data Preparation
 
+#### 如何生成 index.json
+```shell
+pip install -e /llm_reco_ssd/luoxinchen/repos/webdataset/ --upgrade
+cd /PATH/TO/WEBDATASET/
+widsindex create *.tar --output index.json --process-num 256
+```
+
 #### Stage2 & SFT Data Format
 
 参考文档：[WebDataset File Format Specification](https://docs.google.com/document/d/18OdLjruFNX74ILmgrdiCI9J1fQZuhzzRBCHV9URWto0/edit?tab=t.0)
@@ -123,7 +130,34 @@ This project is designed to train VLMs from scratch.
                     "max_pixels": 360 * 420,
                     "fps": 1.0,
                     "video_start": 0,
-                    "video_end": 8,
+                    "video_end":
+                },
+                {"type": "text", "text": "Describe this video."},
+            ]
+        },
+        {"role": "assistant", "content": "The video describe ..."},
+    ],
+    "source": "kwai_video"
+}
+```
+
+对于已经处理成图片的视频，video字段使用image list填写（需要保证图片顺序），例如：
+
+```json
+000000000.json
+{
+    "__key__": 000000000, 
+    "messages": [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "video",
+                    "video": [
+                        {"type": "image", "image": "0.jpg"},
+                        {"type": "image", "image": "1.jpg"},
+                        {"type": "image", "image": "2.jpg"}
+                    ]
                 },
                 {"type": "text", "text": "Describe this video."},
             ]

@@ -1,0 +1,12 @@
+output_dir: /llm_reco_ssd/luoxinchen/dataset/laion2B-multi-zh/lxc_laion2b_multi_chinese_subset_filter_0109
+shard_size: 10000
+dataset:
+  class_name: ParquetDataset
+  kwargs:
+    path: viewfs://hadoop-lt-cluster/home/reco_kaiworks/dw/reco_kaiworks.db/lxc_laion2b_multi_chinese_subset_filter_0109
+converter:
+  class_name: BlobstoreDownloaderConverter
+  kwargs:
+    bucket_name: upload-dujuan-video
+    key_name: md5
+    text_name: text

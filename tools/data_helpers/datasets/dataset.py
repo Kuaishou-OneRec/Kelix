@@ -19,13 +19,16 @@ class ParquetDataset(DistDataset):
     def __init__(self, path, columns = None, user='mpi'):
         super().__init__()
         self.path = path
-        self.columns = list(columns)
+        if columns is not None:
+            columns = list(columns)
+        self.columns = columns
+        self.user = user
         self.shard_files = self.get_shard_files(path)
     
     def get_shard_files(self, path: str):
         if self.rank == 0:
             if path.startswith("viewfs"):
-                self.fs = pa.hdfs.connect(user=user)
+                self.fs = pa.hdfs.connect(user=self.user)
                 files = self.fs.ls(path)
                 files = sorted([x for x in files if "SUCCESS" not in x])
             elif path.startswith("/"):

@@ -1,17 +1,15 @@
 from typing import Union, Iterable, Optional, List, Dict, Tuple, Any
-from absl import logging
+import logging
 
 import os
+import sys
 import re
 import wids
 import json
-import math
-import torch
-import tarfile
-import itertools
 import traceback
 import pickle
-import torch.distributed as dist
+import random
+from datetime import datetime
 
 import webdataset as wds
 
@@ -22,18 +20,18 @@ from collections import defaultdict
 import multiprocessing
 import numpy as np
 
+import torch
+import torch.distributed as dist
+import torch.nn.functional as F
 from torch.utils.data import IterableDataset, Dataset, DataLoader
 
-import torch.nn.functional as F
-
-
-import random
 from transformers import AutoTokenizer, AutoProcessor, \
     PreTrainedTokenizer, PreTrainedTokenizerFast
 
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
+
 from recovlm.training.parallel import get_sequence_parallel_group, \
   get_sequence_parallel_world_size
 from recovlm.utils.common import print_rank_0
@@ -42,115 +40,9 @@ import glob
 from .templates import get_template
 from .prompts import PromptLoader
 
-# from utils import get_world_size, is_rank_0
+logger = logging.getLogger(__name__)
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
-
-class LLaVA_CC3M_Dataset(Dataset):
-  def __init__(self, source, processor_path, max_length=None):
-    super(LLaVA_CC3M_Dataset).__init__()
-    self.source = source
-    with open(os.path.join(self.source, "chat.json"), encoding="utf-8") as f:
-      self.sessions = json.loads(f.read())
-    self.processor = AutoProcessor.from_pretrained(processor_path)
-    self.tokenizer = AutoTokenizer.from_pretrained(
-        processor_path, use_fast=False)
-    self.tokenizer.padding_side = "right"
-    self.max_length = max_length
-    if not self.max_length:
-      self.max_length = self.tokenizer.model_max_length
-
-  def __getitem__(self, index):
-    session = self.sessions[index]
-    return session
-
-  def build_collate_fn(self):
-    # TODO: SUPPORT TRUNCATE
-    def collate_fn(sessions):
-      prompt_messages = []
-      for session in sessions:
-        prompt = session["conversations"][0]["value"]
-        img = os.path.join(self.source, session["image"])
-        if prompt.endswith("<image>"):
-          content = [
-              {"type": "text", "text": re.sub(r"\n<image>", "", prompt)},
-              {
-                  "type": "image",
-                  "image": img,
-                  "resized_height": 224,
-                  "resized_width": 224,
-              }
-          ]
-        else:
-          content = [
-              {
-                  "type": "image",
-                  "image": img,
-                  "resized_height": 224,
-                  "resized_width": 224,
-              },
-              {"type": "text", "text": re.sub(r"<image>\n", "", prompt)}
-          ]
-        prompt_messages.append([{
-            "role": "user",
-            "content": content,
-        }])
-      text = self.processor.apply_chat_template(
-          prompt_messages, tokenize=False, add_generation_prompt=True
-      )
-      image_inputs, video_inputs = process_vision_info(prompt_messages)
-      inputs = self.processor(
-          text=text,
-          images=image_inputs,
-          videos=video_inputs,
-          padding=True,
-          padding_side="left",
-          return_tensors="pt",
-      )
-
-      response_messages = []
-      for session in sessions:
-        response = session["conversations"][1]["value"]
-        response_messages.append([{"content": response}])
-      # right pad response to concat with prompt
-      response_inputs = self.tokenizer.apply_chat_template(
-          response_messages,
-          chat_template=RESPONSE_TEMPLATE,
-          padding=True,
-          padding_side="right",
-          add_generation_prompt=False,
-          return_tensors="pt",
-      )
-      response_mask = (
-          response_inputs != self.tokenizer.pad_token_id).type(torch.int64)
-      loss_mask = torch.cat(
-          [torch.zeros_like(inputs["input_ids"]), response_mask], dim=-1
-      )
-      inputs["attention_mask"] = torch.cat(
-          [inputs["attention_mask"], response_mask], dim=-1)
-      inputs["input_ids"] = torch.cat(
-          [inputs["input_ids"], response_inputs], dim=-1)
-      inputs["loss_mask"] = loss_mask
-
-      # TODO: improve truncate
-      for key in ["input_ids", "attention_mask", "loss_mask"]:
-        inputs[key] = inputs[key][:, :self.max_length]
-      _type = {
-          "input_ids": torch.int64,
-          "attention_mask": torch.int64,
-          "pixel_values": torch.float32,
-          "image_grid_thw": torch.int64,
-          "video_grid_thw": torch.int64,
-          "loss_mask": torch.int64
-      }
-      assert inputs["input_ids"].shape == inputs["loss_mask"].shape
-      assert inputs["input_ids"].shape == inputs["attention_mask"].shape
-      return inputs
-
-    return collate_fn
-
-  def __len__(self):
-    return len(self.sessions)
 
 def zero_pad_sequences(sequences, side: str = "left", value=0):
   assert side in ("left", "right")
@@ -163,7 +55,6 @@ def zero_pad_sequences(sequences, side: str = "left", value=0):
   return torch.stack(padded_sequences, dim=0)
 
 # TODO: use IterableDataset
-
 class ChatCompletionDataset(Dataset):
   """Text Completion Dataset with ChatML format"""
   def __init__(self,
@@ -432,194 +323,6 @@ def get_rope_index(
 
     return position_ids
 
-class BlendedWebDataset(IterableDataset):
-  """Blend Multiple dataset"""
-
-  def __init__(self, source_datasets: List[Dataset],
-               weights: List[float],
-               rank: int,
-               world_size: int,
-               num_workers: int,
-               chunk_size=1000000,
-               sample_buffer_size=1000,
-               random_seed=1024):
-
-    super(BlendedWebDataset).__init__()
-    
-    assert len(source_datasets) == len(weights)
-
-    self.datasets = source_datasets
-    # weights: >1=过采样，<1=降采样
-    self.weighted_data_len = [weights[idx] * len(d) for idx, d in enumerate(self.datasets)]
-    self.sample_ratio = [d_len / sum(self.weighted_data_len) for d_len in self.weighted_data_len]
-    self.total_samples = sum(self.weighted_data_len)
-
-    self.rank, self.world_size, self.num_workers = rank, world_size, num_workers
-    self.chunk_size, self.sample_buffer_size = chunk_size, sample_buffer_size
-    self.random_seed = random_seed
-
-    # dataset_sample_idx[data_idx][worker_idx] = [(chunk1_s, chunk1_e), ..., (chunkn_s, chunkn_e),]
-    # dataset_states[data_idx][worker_idx] = [chunk_idx, chunk_inner_idx]
-    self.dataset_range_idx, self.dataset_states = self._chunked_sampler()
-
-    # print(f"zzxdebug: {self.dataset_range_idx}")
-    # print(f"zzxdebug: {self.dataset_states}")
-
-  def __len__(self):
-    return self.total_samples
-
-  def _chunked_sampler(self,):
-    manager = multiprocessing.Manager()
-    dataset_range_idx = manager.list()
-    dataset_states = manager.list()
-
-    num_replicas = self.world_size * self.num_workers
-    for d_idx, dataset in enumerate(self.datasets):
-      dataset_range_idx.append(manager.list())
-      dataset_states.append(manager.list())
-
-      num_samples = len(dataset)
-      for worker_id in range(self.num_workers):
-        worker_chunk = (num_samples + num_replicas - 1) // num_replicas
-        worker_start = worker_id * worker_chunk
-        worker_end = min(worker_start + worker_chunk, num_samples)
-        ranges = [(i, min(i + self.chunk_size, worker_end)) for i in range(worker_start, worker_end, self.chunk_size)]
-        random.Random(self.random_seed + worker_id).shuffle(ranges)
-        dataset_range_idx[d_idx].append(manager.list(ranges))
-        dataset_states[d_idx].append(manager.list([0, 0]))
-      
-    return dataset_range_idx, dataset_states
-  
-  def set_state(self, state_dict):
-    for d_idx in state_dict:
-      for w_idx in state_dict[d_idx]:
-        chunk_idx, chunk_inner_idx, _ = state_dict[d_idx][w_idx]
-        self.dataset_states[d_idx][w_idx][0] = chunk_idx
-        self.dataset_states[d_idx][w_idx][1] = chunk_inner_idx
-
-    print(f"load_success: {self.dataset_states}")
-
-  def _sample_buffer(self, worker_id):
-    np.random.seed(self.random_seed + worker_id) 
-    dataset_indices = np.random.choice(list(range(len(self.datasets))), size=self.sample_buffer_size, p=self.sample_ratio).tolist()
-
-    idx_buffer = []
-    for d_idx in dataset_indices:
-      chunk_idx, chunk_inner_idx = self.dataset_states[d_idx][worker_id]
-      d_start, d_end = self.dataset_range_idx[d_idx][worker_id][chunk_idx]
-      sample_indexes = list(range(d_start, d_end))
-      random.Random(self.random_seed + worker_id + chunk_idx).shuffle(sample_indexes)
-      
-      data_indices = sample_indexes[chunk_inner_idx]
-      idx_buffer.append((d_idx, data_indices, chunk_idx, chunk_inner_idx))
-
-      # update sampler index
-      chunk_inner_idx += 1 
-      if chunk_inner_idx >= len(sample_indexes):
-        chunk_inner_idx = 0
-        chunk_idx += 1
-        if chunk_idx >= len(self.dataset_range_idx[d_idx][worker_id]):
-          chunk_idx = 0
-      
-      self.dataset_states[d_idx][worker_id] = [chunk_idx, chunk_inner_idx]
-    
-    return idx_buffer
-  
-  def __iter__(self):
-    worker_info = torch.utils.data.get_worker_info()
-    worker_id = 0 if worker_info is None else worker_info.id
-    num_workers = 1 if worker_info is None else worker_info.num_workers
-
-    cur_samples = 0
-
-    assert num_workers == self.num_workers
-
-    while True:
-      if cur_samples > self.total_samples:
-        break
-      idx_buffer = self._sample_buffer(worker_id)
-      while len(idx_buffer) > 0:
-        d_idx, data_indices, chunk_idx, chunk_inner_idx = idx_buffer.pop()
-        ann = self.datasets[d_idx][data_indices]
-        ann["this_worker_sample_index"] = (d_idx, worker_id, chunk_idx, chunk_inner_idx, cur_samples)
-        yield ann
-        cur_samples += 1
-  
-class BlendDatasetCkptManager:
-  def __init__(self, ckpt_path, rank, world_size, num_data_source, num_workers):
-    self.ckpt_path = ckpt_path
-    self.rank, self.world_size = rank, world_size
-    self.num_data_source = num_data_source
-    self.num_workers = num_workers
-
-    # init state_dict: state_dict[d_idx][w_idx]
-    self.state_dict = {}
-    self.latest_step = 0
-    
-  @staticmethod
-  def merge_all_state(state_list):
-    merge_state_dict = {}
-    for d_idx, worker_id, chunk_idx, chunk_inner_idx, sample_idx in state_list:
-      merge_state_dict.setdefault(d_idx, {})
-      if worker_id not in merge_state_dict[d_idx]:
-        merge_state_dict[d_idx][worker_id] = (chunk_idx, chunk_inner_idx, sample_idx)
-      else:
-        _, _, m_sample_idx = merge_state_dict[d_idx][worker_id]
-        if sample_idx > m_sample_idx:
-          merge_state_dict[d_idx][worker_id] = (chunk_idx, chunk_inner_idx, sample_idx)
-    return merge_state_dict
-  
-  def update_step(self, step, batch_state_dict):
-    self.latest_step = step
-    for d_idx in batch_state_dict:
-      self.state_dict.setdefault(d_idx, {})
-      for w_idx in batch_state_dict[d_idx]:
-        self.state_dict[d_idx].setdefault(w_idx, (0, 0, 0))
-        chunk_idx, chunk_inner_idx, sample_idx = batch_state_dict[d_idx][w_idx]
-        if self.state_dict[d_idx][w_idx][2] < sample_idx:
-          self.state_dict[d_idx][w_idx] = (chunk_idx, chunk_inner_idx, sample_idx)
-
-  def save_ckpt(self):
-    os.makedirs(self.ckpt_path, exist_ok=True)
-    ckpt_file = os.path.join(self.ckpt_path, f"rank{self.rank}-dataset-step{self.latest_step}.pkl")
-    with open(ckpt_file, "wb+") as fp:
-      pickle.dump(self.state_dict, fp)
-  
-  def load_ckpt(self, ckpt_file):
-    with open(ckpt_file, "rb") as fp:
-      self.state_dict = pickle.load(fp)
-    
-    # clear all sample idx
-    for d_idx in self.state_dict:
-      for w_idx in self.state_dict[d_idx]:
-        chunk_idx, chunk_inner_idx, _ = self.state_dict[d_idx][w_idx]
-        self.state_dict[d_idx][w_idx] = (chunk_idx, chunk_inner_idx, 0)
-    print(f"[rank{self.rank}] load dataset ckpt {ckpt_file} success.")
-    return self.state_dict
-  
-  def extract_rank_and_step(self, filename):
-    pattern = r'rank(\d+)-dataset-step(\d+)\.pkl'
-    match = re.match(pattern, filename)
-    if match:
-      rank = int(match.group(1))
-      step = int(match.group(2))
-      return rank, step
-    return None, None
-  
-  def load_latest_ckpt(self,):
-    max_step = 0
-    max_step_ckpt_fn = ""
-    for fn in os.listdir(self.ckpt_path):
-      rank, step = self.extract_rank_and_step(fn)
-      if rank is not None and step is not None:
-        if rank == self.rank and step > max_step:
-          max_step = step
-          max_step_ckpt_fn = os.path.join(self.ckpt_path, fn)
-    if max_step_ckpt_fn == "":
-      return self.state_dict
-    else:
-      return self.load_ckpt(max_step_ckpt_fn)
-
 class ImageTextPairDatasetWithPacking(IterableDataset):
   def __init__(self,
                sources: Union[str, List[str]],
@@ -781,8 +484,8 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
             {
               "type": "image",
               "image": image,
-              "min_pixels": self.min_visual_tokens * self.patch_size ** 2,
-              "max_pixels": max_visual_tokens * self.patch_size ** 2
+              "min_pixels": self.min_visual_tokens * (self.patch_size ** 2) * (self.spatial_merge_size ** 2),
+              "max_pixels": max_visual_tokens * (self.patch_size ** 2) * (self.spatial_merge_size ** 2)
             },
             {"type": "text", "text": "Describe this image."},
           ],
@@ -943,17 +646,22 @@ def get_assistant_mask(batch_input_ids: torch.Tensor,
     masks.append(mask)
   return torch.tensor(masks)
 
+
 class ChatCompletionVisionDataset(IterableDataset):
   def __init__(self,
                sources: Union[str, List[str]],
                max_length: int = 1024,
                min_visual_tokens_per_image: int = 4,
                max_visual_tokens_per_image: int = 512,
+               video_nframe: int = -1,
+               video_fps: float = 2.0,
+               video_min_frames: int = -1,
+               video_max_frames: int = 120,
                shrink_ratio: float = 0.9,
                max_retry: int = 5,
                multiple_of: int = 8,
-               data_format: str = "chatml",
                shuffle_size: int = 100000,
+               shuffle_initial_size: int = 20000,
                base_model_dir: Optional[str] = None,
                processor: Optional[Qwen2VLProcessor] = None,
                spatial_merge_size: int = 2,
@@ -975,6 +683,15 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.max_length = max_length
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
+    self.video_nframe = video_nframe
+    self.video_fps = video_fps
+    self.video_min_frames = video_min_frames
+    self.video_max_frames = video_max_frames
+    if video_nframe > 0 and (video_fps > 0 or video_min_frames > 0 or video_max_frames > 0):
+      logger.warning(
+        f"ChatCompletionVisionDataset(video_fps=...): video_fps, video_min_frames, "\
+          f"video_max_frames will be ignored when video_nframe>0 ({video_nframe=})"
+      )
     self.patch_size = patch_size
     self.shrink_ratio = shrink_ratio
     self.max_retry = max_retry
@@ -985,7 +702,6 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.patch_size = patch_size
     # Pad sequence to multiple of `multiple_of`
     self.multiple_of = multiple_of
-    self.data_format = data_format
     self.total_samples = 0
     if isinstance(sources, str):
       sources = sources.split(",")
@@ -996,6 +712,14 @@ class ChatCompletionVisionDataset(IterableDataset):
         for item in index:
           urls.append(os.path.join(os.path.dirname(source), item["url"]))
           self.total_samples += item["nsamples"]
+    
+    # broadcast all urls
+    urls.sort()
+    random.shuffle(urls)
+    t = [urls]
+    dist.broadcast_object_list(t, src=0)
+    urls = t[0]
+    logger.info(f"[RANK{dist.get_rank()}] {urls=}")
 
     dataset = wds.WebDataset(
         urls,
@@ -1007,29 +731,129 @@ class ChatCompletionVisionDataset(IterableDataset):
         workersplitter=wds.split_by_worker
     )
 
-    dataset = dataset.shuffle(shuffle_size).decode(
+    dataset = dataset.shuffle(shuffle_size, initial=shuffle_initial_size).decode(
       "pil", handler=wds.warn_and_continue)
     
     self.dataset = dataset
+
+    self.source_sample_cnt = {}
+    self.source_error_cnt = {}
+
+  def _fill_image_block(self, block, max_visual_tokens_per_image, sample_dict):
+    if isinstance(block["image"], str):
+      image = sample_dict[block["image"]]
+    else:
+      image = block["image"]
+    if image.mode != "RGB":
+      image = image.convert("RGB")
+    block["image"] = image
+    block["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
+      (self.spatial_merge_size ** 2)
+    block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
+      (self.spatial_merge_size ** 2)
+  
+  def _fill_video_block(self, block, max_visual_tokens_per_image, sample_dict):
+    if isinstance(block["video"], list):
+      for image_block in block["video"]:
+        assert image_block["type"] == "image" and "image" in image_block
+        self._fill_image_block(image_block, max_visual_tokens_per_image, sample_dict)
+    elif isinstance(block["video"], str) or isinstance(block["video"], bytes):
+      # video in local tar, replace by video bytes
+      if isinstance(block["video"], str) and block["video"] in sample_dict:
+        block["video"] = sample_dict[block["video"]]
+      # fill other params
+      block["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
+        (self.spatial_merge_size ** 2)
+      block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
+        (self.spatial_merge_size ** 2)
+      # video split params
+      if self.video_nframe > 0:
+        block["nframes"] = self.video_nframe
+      if self.video_fps > 0:
+        block["fps"] = self.video_fps
+      if self.video_min_frames > 0:
+        block["min_frames"] = self.video_min_frames
+      if self.video_max_frames > 0:
+        block["max_frames"] = self.video_max_frames
+    else:
+      raise ValueError(f"Unsupport video type. {type(block['video'])=}")
+  
+  def _process_completion(self,
+                    sample: Dict[str, Any],
+                    max_visual_tokens_per_image: int = 128) -> Dict[str, torch.Tensor]:
+    assert "segments" in sample["json"]
+    max_visual_tokens_per_image = max(
+      max_visual_tokens_per_image, self.min_visual_tokens_per_image)
+
+    text = ""
+    vision_infos = []
+    segments = sample["json"]["segments"]
+    for segment in segments:
+      if segment["type"] == "text":
+        text += segment["text"]
+      elif segment["type"] == "image":
+        text += "<|vision_start|><|image_pad|><|vision_end|>"
+        self._fill_image_block(segment, max_visual_tokens_per_image, sample)
+        vision_infos.append(segment)
+      elif segment["type"] == "video":
+        text += "<|vision_start|><|video_pad|><|vision_end|>"
+        self._fill_video_block(segment, max_visual_tokens_per_image, sample)
+        vision_infos.append(segment)
+      else:
+        logger.warning(f"!!! Unsupport {segment['type']=}, skip this segment.")
+    image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos)
+    inputs = self.processor(
+        text=text,
+        images=image_inputs,
+        videos=video_inputs,
+        return_tensors="pt"
+    )
+
+    # For the Warning: (add by zzx)
+    #   Token indices sequence length is longer than the specified maximum 
+    #   sequence length for this model (**** > 32768). Running this sequence 
+    #.  through the model will result in indexing errors
+    if inputs["input_ids"].shape[-1] >= 32768:
+      raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
+    
+    # mask all vision token
+    # <|vision_start|>: 151652 , <|vision_end|>: 151653, <|image_pad|>: 151655, <|video_pad|>: 151656
+    input_ids = inputs["input_ids"]
+    inputs["loss_mask"] = torch.ones_like(input_ids)
+    inputs["loss_mask"][(input_ids == 151652) | (input_ids == 151653) | (input_ids == 151655) | (input_ids == 151656)] = 0
+    if inputs["loss_mask"].sum() == 0:
+      raise ValueError(
+        f"Unable to generate sample with 0 loss_mask."
+      )
+
+    inputs["position_ids"] = get_rope_index(
+      inputs["input_ids"],
+      image_grid_thw=inputs.get("image_grid_thw"),
+      video_grid_thw=inputs.get("video_grid_thw"),
+      spatial_merge_size=self.spatial_merge_size,
+      image_token_id=self.image_token_id,
+      video_token_id=self.video_token_id,
+      vision_start_token_id=self.vision_start_token_id
+    )
+    inputs.pop("attention_mask")
+    return inputs
 
   def _process_chat(self,
                     sample: Dict[str, Any],
                     max_visual_tokens_per_image: int = 128) -> Dict[str, torch.Tensor]:
     max_visual_tokens_per_image = max(
-      max_visual_tokens_per_image, self.max_visual_tokens_per_image)
-    messages = sample["json"]["message"]
+      max_visual_tokens_per_image, self.min_visual_tokens_per_image)
+    assert "message" in sample["json"] or "messages" in sample["json"]
+    msg_key = "message" if "message" in sample["json"] else "messages"
+    messages = sample["json"][msg_key]
     for turn in messages:
       content = turn["content"]
       for block in content:
         if block["type"] == "image":
-          image = sample[block["image"]]
-          if image.mode != "RGB":
-            image = image.convert("RGB")
-          block["image"] = image
-          block["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
-            (self.spatial_merge_size ** 2)
-          block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
-            (self.spatial_merge_size ** 2)
+          self._fill_image_block(block, max_visual_tokens_per_image, sample)
+        elif block["type"] == "video":
+          self._fill_video_block(block, max_visual_tokens_per_image, sample)
+
     text = self.processor.apply_chat_template(
       [messages], tokenize=False, add_generation_prompt=False
     )
@@ -1041,11 +865,24 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
+
+    # For the Warning: (add by zzx)
+    #   Token indices sequence length is longer than the specified maximum 
+    #   sequence length for this model (**** > 32768). Running this sequence 
+    #.  through the model will result in indexing errors
+    if inputs["input_ids"].shape[-1] >= 32768:
+      raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
+    
     inputs["loss_mask"] = get_assistant_mask(
       inputs["input_ids"],
       start_pattern=[151644, 77091, 198],
       end_pattern=[151645, 198]
     )
+
+    if inputs["loss_mask"].sum() == 0:
+      raise ValueError(
+        f"Unable to generate sample with 0 loss_mask."
+      )
 
     inputs["position_ids"] = get_rope_index(
       inputs["input_ids"],
@@ -1061,12 +898,23 @@ class ChatCompletionVisionDataset(IterableDataset):
 
   def _process(self, sample):
     # self._may_filter(sample)
+
+    # get data format
+    if "messages" in sample["json"] or "message" in sample["json"]:
+      data_format = "chatml"
+    elif "segments" in sample["json"]:
+      data_format = "completion"
+    else:
+      raise NotImplementedError(f"Unsupported dataset format.")
+    
     max_visual_tokens_per_image = self.max_visual_tokens_per_image
     for retry in range(self.max_retry):
-      if self.data_format == "chatml":
+      if data_format == "chatml":
         inputs = self._process_chat(sample, max_visual_tokens_per_image)
+      elif data_format == "completion":
+        inputs = self._process_completion(sample, max_visual_tokens_per_image)
       else:
-        raise NotImplementedError(f"Unsupported dataset format `{self.format}`")
+        raise NotImplementedError(f"Unsupported dataset format `{data_format}`")
       if not inputs:
         raise ValueError("Empty inputs, skip")
       if inputs["input_ids"].shape[-1] > self.max_length:
@@ -1085,22 +933,34 @@ class ChatCompletionVisionDataset(IterableDataset):
     packed_position_ids = []
     packed_loss_mask = []
     packed_pixel_values = []
+    packed_pixel_values_videos = []
     packed_image_gird_thw = []
+    packed_video_grid_thw = []
+    packed_sample_idx = []
     cu_seqlens = [0]
 
-    for inputs in buffer:
+    for idx, inputs in enumerate(buffer):
       packed_input_ids.append(inputs["input_ids"].flatten())
       packed_loss_mask.append(inputs["loss_mask"].flatten())
       packed_position_ids.append(inputs["position_ids"])
-      packed_pixel_values.append(inputs["pixel_values"])
-      packed_image_gird_thw.append(inputs["image_grid_thw"])
+      packed_sample_idx.append(torch.ones_like(packed_input_ids[-1]) * idx)
+      if "pixel_values" in inputs:
+        packed_pixel_values.append(inputs["pixel_values"])
+        packed_image_gird_thw.append(inputs["image_grid_thw"])
+      if "pixel_values_videos" in inputs:
+        packed_pixel_values_videos.append(inputs["pixel_values_videos"])
+        packed_video_grid_thw.append(inputs["video_grid_thw"])
       cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
-    packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
-    packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
+    packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
+    
+    packed_pixel_values = None if len(packed_pixel_values) == 0 else torch.cat(packed_pixel_values, dim=0)
+    packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else torch.cat(packed_image_gird_thw, dim=0)
+    packed_pixel_values_videos = None if len(packed_pixel_values_videos) == 0 else torch.cat(packed_pixel_values_videos, dim=0)
+    packed_video_grid_thw = None if len(packed_video_grid_thw) == 0 else torch.cat(packed_video_grid_thw, dim=0)
 
     # pad to multiple of, necessary for sequence parallel
     if (
@@ -1119,97 +979,73 @@ class ChatCompletionVisionDataset(IterableDataset):
       "loss_mask": packed_loss_mask,
       "pixel_values": packed_pixel_values,
       "image_grid_thw": packed_image_gird_thw,
-      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32)
+      "pixel_values_videos": packed_pixel_values_videos,
+      "video_grid_thw": packed_video_grid_thw,
+      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
+      "sample_idx": packed_sample_idx
     }
     return inputs
 
-  def gather(self, packed_inputs):
-    gathered_inputs = {}
-    for key in packed_inputs:
-      if packed_inputs[key] is None:
-        continue
-      # gathered_inputs[key] = [
-      #   torch.empty_like(packed_inputs[key]) for _ in \
-      #     range(get_sequence_parallel_world_size())
-      # ]
-      gathered_inputs[key] = [
-        None for _ in \
-          range(get_sequence_parallel_world_size())
-      ]
-    print_rank_0("Before gather....")
-    # for key in gathered_inputs:
-    #   dist.all_gather(
-    #     tensor_list=gathered_inputs[key], tensor=packed_inputs[key].contiguous(),
-    #     group=get_sequence_parallel_group(backend="gloo")
-    #   )
-    for key in gathered_inputs:
-      dist.all_gather_object(
-        object_list=gathered_inputs[key], obj=packed_inputs[key],
-        group=get_sequence_parallel_group("gloo")
-      )
-    print_rank_0("After gather....")
-
-    gathered_inputs = [
-      dict(zip(packed_inputs.keys(), values)) for values in \
-        zip(*packed_inputs.values())
-    ]
-
-    for inputs in gathered_inputs:
-      for key in inputs:
-        print_rank_0(f"{key}: {inputs[key].shape}")
-    return gathered_inputs
-
   def __iter__(self):
     buffer = []
+    source_list = []
+    
     cur_length = 0
     for sample in self.dataset:
+      sample_key = sample["__key__"] if "__key__" in sample else ""
+      sample_url = sample["__url__"] if "__url__" in sample else ""
+
+      try:
+        source_name = sample["json"]["source"]
+        # WARN: ugly code, for dirty dataset.
+        if source_name.startswith("PDFA"):
+          source_name = "PDFA"
+        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          source_name = source_name.split("/")[4]
+      except:
+        source_name = "None"
+
+      self.source_sample_cnt.setdefault(source_name, 0)
+      self.source_sample_cnt[source_name] += 1
+
       try:
         inputs = self._process(sample)
       except:
-        print(traceback.format_exc())
+        self.source_error_cnt.setdefault(source_name, 0)
+        self.source_error_cnt[source_name] += 1
+        error_ratio = self.source_error_cnt[source_name] * 1.0 / \
+          self.source_sample_cnt[source_name]
+        logger.error(
+          f"ChatCompletionVisionDataset process sample error. "
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
+          f"errmsg={traceback.format_exc()}")
         continue
+
       sample_length = inputs["input_ids"].shape[-1]
       if cur_length + sample_length > self.max_length:
+
         packed_inputs = self._packing(buffer)
-        # gather in sequence parallel ranks first,
-        # each rank in the same sp_group will yield same data
-        # yield from self.gather(packed_inputs)
-        yield packed_inputs
+        # return source_list for dataset monitor
+        packed_inputs["data_source"] = source_list
+
         buffer = [inputs]
+        source_list = [source_name]
+
         cur_length = sample_length
+        
+        # skip pure text sample
+        if packed_inputs["pixel_values"] is None and packed_inputs["pixel_values_videos"] is None:
+          logger.warning("Skip pure text sample.")
+          continue
+
+        # skip 0 label pack 
+        if packed_inputs["loss_mask"].sum() == 0:
+          logger.warning("Skip 0 lable sample.")
+          continue
+
+        yield packed_inputs
+
       else:
         buffer.append(inputs)
+        source_list.append(source_name)
         cur_length += sample_length
-
-if __name__ == "__main__":
-  import wids
-  sources = [
-    "/llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json",
-    "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json"
-  ]
-  datasets = [wids.ShardListDataset(source) for source in sources]
-
-  blend_dataset1 = BlendedWebDataset(datasets, [1.1, 0.5], 0, 1, 1)
-
-  datasets = [wids.ShardListDataset(source) for source in sources]
-
-  blend_dataset2 = BlendedWebDataset(datasets, [1.1, 0.5], 0, 1, 1)
-
-  assert blend_dataset1.dataset_range_idx == blend_dataset2.dataset_range_idx
-  assert blend_dataset1.dataset_states == blend_dataset2.dataset_states
-
-  for d in blend_dataset1:
-    print(d)
-    break
-
-  for d in blend_dataset2:
-    print(d)
-    break
-
-  # for d in datasets[0]:
-  #   print(d)
-  #   break
-
-  # for d in datasets[1]:
-  #   print(d)
-  #   break

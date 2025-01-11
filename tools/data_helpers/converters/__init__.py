@@ -7,6 +7,7 @@ from .kwai_video import KwaiVideoCaptionConverter
 from .dense_fusion_converter import DenseFusionConverter
 from .llava_cc3m_converter import LlavaCC3MPretrainConverter
 from .doc_matrix_converter import DocmatrixConverter
+from .blobstore_downloader_converter import BlobstoreDownloaderConverter
 
 
 def create_converter(cfg) -> ConverterBase:

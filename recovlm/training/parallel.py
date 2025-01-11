@@ -1,5 +1,6 @@
 from typing import Any, Tuple
 import os
+import time
 import torch
 import torch.distributed as dist
 
@@ -238,3 +239,37 @@ class UlyssesAttention(torch.nn.Module):
         )
 
         return output
+
+def gather_batches(batch, group):
+    world_size = dist.get_world_size(group)
+    if world_size > 1:
+      print_rank_0("gather batches....")
+      s = time.time()
+      gathered_batches = {}
+      for key in batch:
+        if batch[key] is None:
+          continue
+        gathered_batches[key] = [
+          None for _ in \
+            range(world_size)
+        ]
+      
+      for key in gathered_batches:
+        dist.all_gather_object(
+          object_list=gathered_batches[key], obj=batch[key],
+          group=group
+        )
+      t = time.time()
+      print_rank_0(f"After gather...., {t - s}")
+
+      gathered_batches = [
+        dict(zip(gathered_batches.keys(), values)) for values in \
+          zip(*gathered_batches.values())
+      ]
+    else:
+      gathered_batches = [batch]
+    return gather_batches
+
+def gather_by_group(dataloader, group):
+    for raw_batch in dataloader:
+        yield from gather_batches(batch, group)
