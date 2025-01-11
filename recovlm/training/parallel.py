@@ -271,5 +271,5 @@ def gather_batches(batch, group):
     return gather_batches
 
 def gather_by_group(dataloader, group):
-    for raw_batch in dataloader:
+    for batch in dataloader:
         yield from gather_batches(batch, group)
