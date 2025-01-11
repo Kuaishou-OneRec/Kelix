@@ -286,12 +286,12 @@ def train():
   show_cnt = 3
 
   for raw_batch in dataloader:
-    if show_cnt > 0 and dist.get_rank() == 0:
-      print_rank_0(batch)
-      print_rank_0(
-          f"Input Text:\n\n{processor.tokenizer.decode(raw_batch['input_ids'][0])}\n"
-          f"=" * 100 + "\n\n")
-      show_cnt -= 1
+    # if show_cnt > 0 and dist.get_rank() == 0:
+    #   print_rank_0(batch)
+    #   print_rank_0(
+    #       f"Input Text:\n\n{processor.tokenizer.decode(raw_batch['input_ids'][0])}\n"
+    #       f"=" * 100 + "\n\n")
+    #   show_cnt -= 1
     print_rank_0("gather batches....")
     s = time.time()
     gathered_batches = {}
