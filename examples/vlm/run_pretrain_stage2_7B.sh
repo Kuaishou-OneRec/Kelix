@@ -40,7 +40,6 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --dataset_config ./examples/vlm/configs/stage2_mix_v2.json \
     --enable_gradient_checkpointing \
     --max_length 8192 \
-    --load_weights_only \
     --learning_rate 5e-5 \
     --min_lr 1e-6 \
     --weight_decay 0.1 \
@@ -62,3 +61,4 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
 
 #     --resume_from /llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36 \
 #     --resume_from_tag global_step90000 \
+#     --load_weights_only \
