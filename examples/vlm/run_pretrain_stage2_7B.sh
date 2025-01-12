@@ -59,4 +59,4 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --monitor_datasource_cnt \
     --comment "$comment" \
     --commit_id $git_hash \
-    --deepspeed --deepspeed_config examples/vlm/configs/ds_z2_config_7B.json >> $OUTPUT_DIR/stdout.log 2>>$OUTPUT_DIR/stderr.log &
+    --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json >> $OUTPUT_DIR/stdout.log 2>>$OUTPUT_DIR/stderr.log &
