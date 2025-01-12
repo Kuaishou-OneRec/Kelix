@@ -13,7 +13,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained/Base model path
 
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.20.2
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.20.3
 
 mkdir -p $OUTPUT_DIR
 
@@ -38,7 +38,9 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config examples/vlm/configs/the_cauldron.json \
+    --dataset_config examples/vlm/configs/stage2_mix_v1.json \
+    --monitor_datasource_cnt \
+    --monitor_datasource_loss \
     --resume_from /llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36 \
     --resume_from_tag global_step90000 \
     --enable_gradient_checkpointing \
