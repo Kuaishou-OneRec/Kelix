@@ -362,6 +362,7 @@ def train():
 
     del logits
     del labels
+    del local_labels
     t = time.time()
     acc_fwd_time += (t - s)
 
@@ -454,7 +455,7 @@ def train():
           return loss_mean
 
         data_source_mean_loss = dist_reduce_dict(data_source_loss, data_source_loss_reduce)
-        for k, v in loss_mean.items():
+        for k, v in data_source_mean_loss.items():
           tb_writer.add_scalar(
                 f"data_source_loss/{key}",
                 v,
