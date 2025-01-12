@@ -23,7 +23,7 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
 
-comment="测试stage2，打开LLM训练，使用stage2_mix_v1，打开gradient\ checkpoint,\ max_length=32000,测试sequence_parallel"
+comment="测试stage2，打开LLM训练，the_cauldron_cot，打开gradient\ checkpoint,\ max_length=32000,测试sequence_parallel"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
@@ -38,7 +38,7 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config examples/vlm/configs/stage2_mix_v1.json \
+    --dataset_config examples/vlm/configs/the_cauldron_cot.json \
     --monitor_datasource_cnt \
     --monitor_datasource_loss \
     --resume_from /llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36 \
