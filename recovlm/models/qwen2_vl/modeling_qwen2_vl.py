@@ -714,6 +714,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
                 causal=self.is_causal
             )
         else:
+            raise NotImplementedError("must have cu_seqlens")
             attn_output = _flash_attention_forward(
                 query_states,
                 key_states,
@@ -1157,6 +1158,7 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
                     use_cache,
                     cache_position,
                     position_embeddings,
+                    **kwargs,
                 )
             else:
                 layer_outputs = decoder_layer(
