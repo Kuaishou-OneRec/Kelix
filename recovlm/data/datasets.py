@@ -6,6 +6,7 @@ import sys
 import re
 import wids
 import json
+import time
 import traceback
 import pickle
 import random
@@ -713,9 +714,14 @@ class ChatCompletionVisionDataset(IterableDataset):
           urls.append(os.path.join(os.path.dirname(source), item["url"]))
           self.total_samples += item["nsamples"]
     
+    print_rank_0(len(urls))
+    _s = time.time()
     # broadcast all urls
     urls.sort()
     random.shuffle(urls)
+    _t = time.time()
+    print_rank_0("tttttttt", _t - _s)
+
     t = [urls]
     dist.broadcast_object_list(t, src=0)
     urls = t[0]
