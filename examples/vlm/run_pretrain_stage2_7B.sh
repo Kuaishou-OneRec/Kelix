@@ -23,7 +23,7 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
 
-comment="测试stage2，打开LLM训练，the_cauldron_cot，打开gradient\ checkpoint,\ max_length=32000,测试sequence_parallel"
+comment="测试stage2，打开LLM训练，the_cauldron_cot，打开gradient\ checkpoint,\ max_length=32000,测试sequence_parallel,修复cot数据后重跑"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
