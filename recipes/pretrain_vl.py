@@ -241,6 +241,7 @@ def train():
 
   total_num_tokens = 0
   total_num_samples = 0
+  total_num_valid_tokens = 0
   total_data_source_cnt = {}
   if not args.resume_from:
     args.resume_from = args.output_dir
@@ -286,6 +287,7 @@ def train():
   acc_avg_loss = 0.0
   acc_num_tokens = 0
   acc_num_samples = 0
+  acc_valid_num_tokens = 0
 
   for batch in dataloader:
     if show_cnt > 0 and dist.get_rank() == 0:
@@ -307,16 +309,24 @@ def train():
     video_grid_thw = batch.get("video_grid_thw", None)
     cu_seqlens = batch.get("cu_seqlens", None)
     sample_idx = batch["sample_idx"].to(torch.int32)
+    valid_token_num = batch["valid_token_num"]
+    valid_sample_num = batch["valid_sample_num"]
 
     num_tokens = torch.tensor(input_ids.shape[-1]).cuda()
-    num_samples = torch.tensor(cu_seqlens.shape[-1] - 1).cuda()
+    num_samples = torch.tensor(valid_sample_num).cuda()
+    num_valid_tokens = torch.tensor(valid_token_num).cuda()
+
     dist.all_reduce(num_tokens, op=dist.ReduceOp.SUM)
     dist.all_reduce(num_samples, op=dist.ReduceOp.SUM)
+    dist.all_reduce(num_valid_tokens, op=dist.ReduceOp.SUM)
+
     total_num_tokens += num_tokens.item()
     total_num_samples += num_samples.item()
+    total_num_valid_tokens += num_valid_tokens.item()
 
     acc_num_tokens += num_tokens.item()
     acc_num_samples += num_samples.item()
+    acc_valid_num_tokens += num_valid_tokens.item()
 
     input_ids = input_ids * (input_ids > 0).to(torch.int64)
     labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
@@ -338,10 +348,50 @@ def train():
     model.backward(loss)
     model.step()
 
+    iteration = model.global_steps
+
     ########## dataset source monitor ###############
+    if args.monitor_datasource_loss and \
+      iteration % args.logging_per_step == 0 and \
+        model.is_gradient_accumulation_boundary():
+
+      sample_idx = sample_idx.squeeze()[:-1]   # shift idx
+      unique_sample_idx = sample_idx.unique()
+      
+      data_source_loss = {}
+      for s_idx in unique_sample_idx:
+        key = data_source[int(s_idx.item())]
+        if key == "pad":
+          continue
+        mask = (sample_idx == s_idx)
+        sum_loss = token_loss[mask].sum()
+        token_num = mask.sum()
+        
+        data_source_loss.setdefault(key, [0.0, 0.0])
+        data_source_loss[key][0] += sum_loss.item()
+        data_source_loss[key][1] += token_num.item()
+      
+      def data_source_loss_reduce(gathered_dicts):
+        sum_loss_dict = {}
+        token_num_dict = {}
+        loss_mean = {}
+        for tmp_dict in gathered_dicts:
+          for k, v in tmp_dict.items():
+            sum_loss, token_num = v
+            sum_loss_dict.setdefault(k, 0.0)
+            token_num_dict.setdefault(k, 0.0)
+            sum_loss_dict[k] += sum_loss
+            token_num_dict[k] += token_num
+        for k in sum_loss_dict:
+          loss_mean[k] = sum_loss_dict[k] / token_num_dict[k]
+        return loss_mean
+      data_source_mean_loss = dist_reduce_dict(data_source_loss, data_source_loss_reduce)
+
     if args.monitor_datasource_cnt:
       data_source_cnt = {}
       for data_source_name in data_source:
+        if data_source_name == "pad":
+          continue
         data_source_cnt.setdefault(data_source_name, 0.0)
         data_source_cnt[data_source_name] += 1
       data_source_cnt = dist_reduce_dict(data_source_cnt)
@@ -357,7 +407,6 @@ def train():
     acc_avg_loss += avg_loss
     acc_step += 1
 
-    iteration = model.global_steps
     if iteration % args.logging_per_step == 0 and dist.get_rank() == 0 and \
             model.is_gradient_accumulation_boundary():
       learning_rate = model.lr_scheduler.get_lr()[0]
@@ -365,6 +414,7 @@ def train():
       sec_per_step = (end_time - start_time) / acc_step
       tokens_per_sec_per_gpu = acc_num_tokens / dist.get_world_size() / (end_time - start_time)
       samples_per_sec_per_gpu = acc_num_samples / dist.get_world_size() / (end_time - start_time)
+      valid_tokens_per_sec_per_gpu = acc_valid_num_tokens / dist.get_world_size() / (end_time - start_time)
       avg_loss = acc_avg_loss / acc_step
 
       start_time = end_time
@@ -376,7 +426,10 @@ def train():
         "tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
         "samples_per_sec_per_gpu": samples_per_sec_per_gpu,
         "total_num_tokens": total_num_tokens,
-        "total_num_samples": total_num_samples
+        "total_num_samples": total_num_samples,
+        "valid_tokens/total_num_tokens": total_num_valid_tokens,
+        "valid_tokens/tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
+        "valid_tokens/valid_token_ration": total_num_valid_tokens / total_num_tokens,
       }
 
       for name, data in log_dict.items():
@@ -386,38 +439,9 @@ def train():
               data,
               global_step=iteration,
               new_style=True)
-
+      
       if args.monitor_datasource_loss and tb_writer:
-        sample_idx = sample_idx.squeeze()[:-1]   # shift idx
-        unique_sample_idx = sample_idx.unique()
-        
-        data_source_loss = {}
-        for s_idx in unique_sample_idx:
-          mask = (sample_idx == s_idx)
-          sum_loss = token_loss[mask].sum()
-          token_num = mask.sum()
-          key = data_source[int(s_idx.item())]
-          data_source_loss.setdefault(key, [0.0, 0.0])
-          data_source_loss[key][0] += sum_loss.item()
-          data_source_loss[key][1] += token_num.item()
-        
-        def data_source_loss_reduce(gathered_dicts):
-          sum_loss_dict = {}
-          token_num_dict = {}
-          loss_mean = {}
-          for tmp_dict in gathered_dicts:
-            for k, v in tmp_dict.items():
-              sum_loss, token_num = v
-              sum_loss_dict.setdefault(k, 0.0)
-              token_num_dict.setdefault(k, 0.0)
-              sum_loss_dict[k] += sum_loss
-              token_num_dict[k] += token_num
-          for k in sum_loss_dict:
-            loss_mean[k] = sum_loss_dict[k] / token_num_dict[k]
-          return loss_mean
-
-        data_source_mean_loss = dist_reduce_dict(data_source_loss, data_source_loss_reduce)
-        for k, v in loss_mean.items():
+        for k, v in data_source_mean_loss.items():
           tb_writer.add_scalar(
                 f"data_source_loss/{key}",
                 v,
@@ -438,17 +462,21 @@ def train():
         f"Step: {iteration}, Loss: {avg_loss}, "
         f"Learning Rate: {learning_rate}, "
         f"Grad Norm: {model.get_global_grad_norm()}, "
-        f"Sec per Step: {sec_per_step}",
-        f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
-        f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
-        f"total_num_tokens: {total_num_tokens}",
-        f"total_num_samples: {total_num_samples}",
+        f"Sec per Step: {sec_per_step}, "
+        f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}, "
+        f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}, "
+        f"valid_tokens_per_sec_per_gpu: {valid_tokens_per_sec_per_gpu}, "
+        f"total_num_tokens: {total_num_tokens}, "
+        f"total_num_samples: {total_num_samples}, "
+        f"total_num_valid_tokens: {total_num_valid_tokens}, "
+        f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, "
       )
 
       acc_step = 0
       acc_avg_loss = 0.0
       acc_num_samples = 0
       acc_num_tokens = 0
+      acc_valid_num_tokens = 0
 
     if iteration % args.save_checkpoint_per_step == 0 and \
         iteration > 0 and model.is_gradient_accumulation_boundary():

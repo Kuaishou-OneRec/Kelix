@@ -12,8 +12,7 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco_ssd/zhangzixing/output/RecoVLM/debug_stg2_shuffle_gradacc_minlr_fixtb
-
+OUTPUT_DIR=/llm_reco_ssd/zhangzixing/output/RecoVLM/stage2_mix_v2_monitor_valid_imagePad
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
@@ -23,7 +22,7 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 # 注意修改实验内容备注
 comment="测试"
 
-git add --all
+# git add --all
 # git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
 git_hash=$(git rev-parse --short HEAD)
 
@@ -36,11 +35,11 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config /llm_reco/zhangzixing/recovlm/examples/vlm/configs/stage2_mix_v1.json \
+    --dataset_config ./examples/vlm/configs/stage2_mix_v2.json \
+    --enable_gradient_checkpointing \
     --resume_from /llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36 \
     --resume_from_tag global_step90000 \
-    --enable_gradient_checkpointing \
-    --max_length 8000 \
+    --max_length 8192 \
     --load_weights_only \
     --learning_rate 1.25e-5 \
     --min_lr 2.5e-7 \
@@ -48,7 +47,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --lr_scheduler_type cosine \
     --num_warmup_steps 500 \
     --num_training_steps 20000 \
-    --save_checkpoint_per_step 3000 \
+    --save_checkpoint_per_step 800 \
     --use_flash_attention_2 \
     --logging_per_step 1 \
     --seed 19260817 \
@@ -56,6 +55,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --merge_checkpoint_dtype bf16 \
     --merge_checkpoint_output_file pytorch_model.bin \
     --monitor_datasource_cnt \
+    --monitor_datasource_loss \
     --comment "$comment" \
     --commit_id $git_hash \
-    --deepspeed --deepspeed_config examples/vlm/configs/ds_z2_config_7B_grad_acc.json >> $OUTPUT_DIR/stdout.log 2>>$OUTPUT_DIR/stderr.log &
+    --deepspeed --deepspeed_config examples/vlm/configs/ds_z2_config_7B.json >> $OUTPUT_DIR/stdout.log 2>>$OUTPUT_DIR/stderr.log &
