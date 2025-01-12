@@ -695,7 +695,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
             sliding_window = self.config.sliding_window
         else:
             sliding_window = -1
-        print("pppppppppppp")
+
         if get_sequence_parallel_world_size() > 1:
             attn_output = self._dist_attn(
                 query=query_states,

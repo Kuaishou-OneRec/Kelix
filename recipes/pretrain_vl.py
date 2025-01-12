@@ -341,8 +341,6 @@ def train():
     input_ids = input_ids * (input_ids > 0).to(torch.int64)
     labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
-    print_rank_0("kkkkkkkkk")
-
     s = time.time()
     output = model(
       input_ids, attention_mask=attention_mask,
@@ -350,7 +348,6 @@ def train():
       image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
       cu_seqlens=cu_seqlens
     )
-    print_rank_0("ttttttt")
     # (b, N/P, V)
     logits = output.logits
   
@@ -363,8 +360,6 @@ def train():
 
     loss, token_loss = loss_fn(logits=logits, labels=local_labels)
 
-    print_rank_0("111111")
-
     del logits
     del labels
     del local_labels
@@ -376,8 +371,6 @@ def train():
     model.step()
     t = time.time()
     acc_bwd_time += (t - s)
-
-    print_rank_0("222222")
 
     ########## dataset source monitor ###############
     if args.monitor_datasource_cnt:
@@ -400,7 +393,6 @@ def train():
     iteration = model.global_steps
     if iteration % args.logging_per_step == 0 and dist.get_rank() == 0 and \
             model.is_gradient_accumulation_boundary():
-      print("fffffff")
       learning_rate = model.lr_scheduler.get_lr()[0]
       end_time = time.time()
       sec_per_step = (end_time - start_time) / acc_step
