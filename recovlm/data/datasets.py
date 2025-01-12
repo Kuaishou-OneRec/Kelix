@@ -722,8 +722,11 @@ class ChatCompletionVisionDataset(IterableDataset):
     _t = time.time()
     print_rank_0("tttttttt", _t - _s)
 
+    _s = time.time()
     t = [urls]
     dist.broadcast_object_list(t, src=0)
+    _t = time.time()
+    print_rank_0("ggggggggg", _t - _s)
     urls = t[0]
     logger.info(f"[RANK{dist.get_rank()}] {urls=}")
 
