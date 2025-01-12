@@ -7,7 +7,7 @@ import os
 from transformers import AutoProcessor
 
 from torch.utils.data import DataLoader
-import torch.distributed as dist
+from tests.utils import init_processes
 
 # def test_web_dataloader():
 #     dataset = get_webdataset(
@@ -35,26 +35,25 @@ import torch.distributed as dist
 #         gg
 
 
-def init_processes(rank, size, backend='gloo'):
-    """ Initialize the distributed environment. """
-    os.environ['MASTER_ADDR'] = '127.0.0.1'
-    os.environ['MASTER_PORT'] = '1234'
-    dist.init_process_group(backend, rank=rank, world_size=size)
-
-
 def test_chat_vision():
     init_processes(0, 1)
-    # path = "/llm_reco_ssd/zhouyang12/code/RecoVLM/examples/vlm/configs/the_cauldron.json"
-    path = "/llm_reco/zhangzixing/recovlm/examples/vlm/configs/interleaving_dataset.json"
+    path = "./examples/vlm/configs/video.json"
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
     dataset = dataset_config.pop("name")
     dataloader = get_dataloader(
         name=dataset,
         **dataset_config)
+    # dataloader = get_dataloader(
+    #     name=dataset, num_workers=1, need_padding=True,
+    #     **dataset_config)
     for idx, item in enumerate(dataloader):
-        print(item)
-        break
+        print(idx)
+        # print(item)
+        # break
+        item_id = id(item)
+        if idx > 100:
+            break
 
 if __name__ == "__main__":
     test_chat_vision()
