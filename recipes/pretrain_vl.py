@@ -431,12 +431,17 @@ def train():
       for data_source_name in data_source:
         data_source_cnt.setdefault(data_source_name, 0.0)
         data_source_cnt[data_source_name] += 1
+      print_rank_0("reduce data source cnt")
+      _ss = time.time()
       data_source_cnt = dist_reduce_dict(data_source_cnt)
       for k, v in data_source_cnt.items():
         total_data_source_cnt.setdefault(k, 0)
         total_data_source_cnt[k] += v
+      _tt = time.time()
+      print_rank_0("reduce data source cnt", _tt - _ss)
     #########################################
 
+    print_rank_0("ttttttt")
     avg_loss = torch.tensor(loss.item()).cuda()
     dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
     avg_loss = avg_loss.item() / dist.get_world_size()
@@ -445,6 +450,7 @@ def train():
 
     if iteration % args.logging_per_step == 0 and dist.get_rank() == 0 and \
             model.is_gradient_accumulation_boundary():
+      print_rank_0("gggggg")
       learning_rate = model.lr_scheduler.get_lr()[0]
       end_time = time.time()
       sec_per_step = (end_time - start_time) / acc_step
@@ -482,20 +488,6 @@ def train():
               new_style=True)
       
       if args.monitor_datasource_loss and tb_writer:
-        sample_idx = sample_idx.squeeze()[:-1]   # shift idx
-        unique_sample_idx = sample_idx.unique()
-      
-        data_source_loss = {}
-        for s_idx in unique_sample_idx:
-          mask = (sample_idx == s_idx)
-          sum_loss = token_loss[mask].sum()
-          token_num = mask.sum()
-          key = data_source[int(s_idx.item())]
-          data_source_loss.setdefault(key, [0.0, 0.0])
-          data_source_loss[key][0] += sum_loss.item()
-          data_source_loss[key][1] += token_num.item()
-
-        data_source_mean_loss = dist_reduce_dict(data_source_loss, data_source_loss_reduce)
         for k, v in data_source_mean_loss.items():
           tb_writer.add_scalar(
                 f"data_source_loss/{key}",
