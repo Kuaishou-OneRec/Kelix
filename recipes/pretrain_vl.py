@@ -306,8 +306,9 @@ def train():
   acc_num_tokens = 0
   acc_num_samples = 0
   acc_valid_num_tokens = 0
-  data_source_loss = collections.defaultdict(lambda: [0.0, 0.0])
-  data_source_cnt = collections.defaultdict(int)
+  data_source_loss = collections.defaultdict(float)
+  data_source_tokens = collections.defaultdict(int)
+  data_source_samples = collections.defaultdict(int)
 
   for batch in gather_by_group(dataloader, get_sequence_parallel_group("gloo")):
     if show_cnt > 0 and dist.get_rank() == 0:
@@ -395,30 +396,14 @@ def train():
         token_num = mask.sum()
 
         key = data_source[int(s_idx.item())]
-        data_source_loss[key][0] += sum_loss.item()
-        data_source_loss[key][1] += token_num.item()
-
-      def data_source_loss_reduce(gathered_dicts):
-        loss_dict = collections.defaultdict(lambda: [0.0, 0.0])
-        for tmp_dict in gathered_dicts:
-          for k, v in tmp_dict.items():
-            sum_loss, token_num = v
-            loss_dict[k][0] += sum_loss
-            loss_dict[k][1] += token_num
-        return loss_dict
-
-      with Timer("reduce data source loss"):
-        data_source_loss = dist_reduce_dict(
-          data_source_loss, data_source_loss_reduce)
+        data_source_loss[key] += sum_loss.item()
+        data_source_tokens[key] += token_num.item()
 
     if args.monitor_datasource_cnt:
       for data_source_name in data_source:
-        data_source_cnt[data_source_name] += 1
+        data_source_samples[data_source_name] += 1
   
-      with Timer("reduce data source cnt"):
-        data_source_cnt = dist_reduce_dict(data_source_cnt)
     #########################################
-
     avg_loss = torch.tensor(loss.item()).cuda()
     dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
     avg_loss = avg_loss.item() / dist.get_world_size()
@@ -427,6 +412,15 @@ def train():
 
     if iteration % args.logging_per_step == 0 and \
             model.is_gradient_accumulation_boundary():
+
+      with Timer("reduce data source metrics"):
+        data_source_metrics = dist_reduce_dict(
+          {
+            "loss": data_source_loss,
+            "tokens": data_source_tokens,
+            "samples": data_source_samples
+          })
+
 
       if dist.get_rank() == 0:
         learning_rate = model.lr_scheduler.get_lr()[0]
@@ -463,43 +457,44 @@ def train():
                 new_style=True)
 
         if args.monitor_datasource_loss and tb_writer:
-          for key, (loss_sum, token_cnt) in data_source_loss.items():
+          for key, loss_sum in data_source_metrics["loss"].items():
             tb_writer.add_scalar(
                   f"data_source_loss/{key}",
-                  loss_sum / token_cnt,
+                  loss_sum / data_source_metrics["tokens"][key],
                   global_step=iteration,
                   new_style=True)
 
         if args.monitor_datasource_cnt and tb_writer:
-          for key, cnt in data_source_cnt.items():
+          for key, samples in data_source_metrics["samples"].items():
             tb_writer.add_scalar(
                 f"data_source_sample_ratio/{key}",
-                1.0 * cnt / total_num_samples,
+                1.0 * samples / total_num_samples,
                 global_step=iteration,
                 new_style=True)
 
-      print_rank_0(
-        f"Step: {iteration}, Loss: {avg_loss}, "
-        f"Learning Rate: {learning_rate}, "
-        f"Grad Norm: {model.get_global_grad_norm()}, "
-        f"Sec per Step: {sec_per_step}",
-        f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
-        f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
-        f"total_num_tokens: {total_num_tokens}",
-        f"total_num_samples: {total_num_samples}",
-        f"valid_tokens_per_sec_per_gpu: {valid_tokens_per_sec_per_gpu}, "
-        f"total_num_tokens: {total_num_tokens}, "
-        f"total_num_samples: {total_num_samples}, "
-        f"total_num_valid_tokens: {total_num_valid_tokens}, "
-        f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, "
-      )
+        print_rank_0(
+          f"Step: {iteration}, Loss: {avg_loss}, "
+          f"Learning Rate: {learning_rate}, "
+          f"Grad Norm: {model.get_global_grad_norm()}, "
+          f"Sec per Step: {sec_per_step}",
+          f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
+          f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
+          f"total_num_tokens: {total_num_tokens}",
+          f"total_num_samples: {total_num_samples}",
+          f"valid_tokens_per_sec_per_gpu: {valid_tokens_per_sec_per_gpu}, "
+          f"total_num_tokens: {total_num_tokens}, "
+          f"total_num_samples: {total_num_samples}, "
+          f"total_num_valid_tokens: {total_num_valid_tokens}, "
+          f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, "
+        )
 
       acc_step = 0
       acc_avg_loss = 0.0
       acc_num_samples = 0
       acc_num_tokens = 0
       acc_valid_num_tokens = 0
-      data_source_loss = collections.defaultdict(lambda: [0.0, 0.0])
+      data_source_loss = collections.defaultdict(float)
+      data_source_tokens = collections.defaultdict(int)
 
     if iteration % args.save_checkpoint_per_step == 0 and \
         iteration > 0 and model.is_gradient_accumulation_boundary():
