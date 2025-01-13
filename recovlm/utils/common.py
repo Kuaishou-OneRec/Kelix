@@ -59,16 +59,15 @@ def set_random_seed(seed):
         torch.cuda.manual_seed_all(seed)
 
 def increment_version(version):
-    major, minor, patch = map(int, version.split('.'))
-    patch += 1
-    return f"{major}.{minor}.{patch}"
+  major, minor, patch = map(int, version.split('.'))
+  patch += 1
+  return f"{major}.{minor}.{patch}"
 
 def dist_reduce_dict(local_dict, group=None):
-
   gather_list = [None for _ in range(dist.get_world_size(group=group))]
-  dist.gather_object(
-    obj=local_dict, object_gather_list=gather_list, dst=0, group=group
-  )
+
+  dist.all_gather_object(
+    object_list=gather_list, obj=local_dict, group=group)
 
   def reduce_dicts(dicts):
     def _reduce(d1, d2):
