@@ -24,7 +24,7 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
 
-comment="测试stage2，打开LLM训练，the_cauldron_cot，打开gradient\ checkpoint,\ max_length=32000,测试sequence_parallel,合并master,测试"
+comment="测试sequence_parallel,stage2_mix_v2,\ max_length=32000,合并master,测试"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
@@ -41,7 +41,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --output_dir $OUTPUT_DIR \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
-    --dataset_config examples/vlm/configs/the_cauldron_cot.json \
+    --dataset_config examples/vlm/configs/stage2_mix_v2.json \
     --resume_from /llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36 \
     --resume_from_tag global_step90000 \
     --enable_gradient_checkpointing \
