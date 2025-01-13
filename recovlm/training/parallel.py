@@ -18,7 +18,7 @@ def initialize_model_parallel(sequence_parallel_size):
     global _SEQUENCE_PARALLEL_GROUP_GLOO
     for i in range(num_sequence_parallel_groups):
         ranks = range(i * sequence_parallel_size, (i + 1) * sequence_parallel_size)
-        print_rank_0(f"Group: {i}, Ranks: {ranks}")
+        print_rank_0(f"Sequence Parallel Group: {i}, Ranks: {ranks}")
         group = torch.distributed.new_group(ranks)
         group_gloo = torch.distributed.new_group(ranks, backend="gloo")
         rank = dist.get_rank()
