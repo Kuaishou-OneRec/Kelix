@@ -24,7 +24,7 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
 
-comment="测试stage2，打开LLM训练，the_cauldron_cot，打开gradient\ checkpoint,\ max_length=32000,测试sequence_parallel,修复cot数据后重跑"
+comment="测试stage2，打开LLM训练，the_cauldron_cot，打开gradient\ checkpoint,\ max_length=32000,测试sequence_parallel,合并master,测试"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
@@ -51,7 +51,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --lr_scheduler_type cosine \
     --num_warmup_steps 500 \
     --num_training_steps 20000 \
-    --save_checkpoint_per_step 3000 \
+    --save_checkpoint_per_step 300 \
     --sequence_parallel_size 4 \
     --use_flash_attention_2 \
     --logging_per_step 1 \
