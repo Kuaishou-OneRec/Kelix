@@ -12,8 +12,6 @@ from qwen_vl_utils import process_vision_info
 from transformers import AutoProcessor
 from tqdm import tqdm
 
-from recovlm.training.parallel import worker_init_fn
-
 from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
     ChatCompletionVisionDataset
 

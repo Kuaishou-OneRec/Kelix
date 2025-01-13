@@ -710,6 +710,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
                 causal=self.is_causal
             )
         else:
+            assert cu_seqlens is not None, "Pass cu_seqlens for FA2"
             if cu_seqlens is not None:
                 # Sample packing with FA2
                 max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
@@ -1148,16 +1149,12 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # shard hidden_states & position_embeddings
-        # sp_size = get_sequence_parallel_world_size()
-        # sp_rank = get_sequence_parallel_rank()
-        # local_seqlen = hidden_states.shape[1] // sp_size
-        # start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
+        # shard hidden_states & position_embeddings for sequence parallel
         if get_sequence_parallel_world_size() > 1:
             start, end = get_local_sequence_boundary(hidden_states.shape[1])
             sin, cos = position_embeddings
-            position_embeddings = (sin[:,:,start:end,:], cos[:,:,start:end,:])
-            hidden_states = hidden_states[:, start:end, :]       
+            position_embeddings = (sin[:, :, start:end, :], cos[:, :, start:end, :])
+            hidden_states = hidden_states[:, start:end, :]
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None

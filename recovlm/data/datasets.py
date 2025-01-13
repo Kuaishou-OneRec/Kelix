@@ -720,20 +720,12 @@ class ChatCompletionVisionDataset(IterableDataset):
         for item in index:
           urls.append(os.path.join(os.path.dirname(source), item["url"]))
           self.total_samples += item["nsamples"]
-    
-    print_rank_0(len(urls))
-    _s = time.time()
+
     # broadcast all urls
     urls.sort()
     random.shuffle(urls)
-    _t = time.time()
-    print_rank_0("tttttttt", _t - _s)
-
-    _s = time.time()
     t = [urls]
     dist.broadcast_object_list(t, src=0)
-    _t = time.time()
-    print_rank_0("ggggggggg", _t - _s)
     urls = t[0]
     logger.info(f"[RANK{dist.get_rank()}] {urls=}")
 
