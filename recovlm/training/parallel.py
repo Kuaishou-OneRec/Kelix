@@ -272,7 +272,9 @@ def gather_batches(buffer, group):
 def gather_by_group(dataloader, group, buffer_size=1):
     buffer = []
     for batch in dataloader:
+        buffer.append(batch)
         if len(buffer) >= buffer_size:
             yield from gather_batches(buffer, group)
-        else:
-            buffer.append(batch)
+            buffer = []
+    if len(buffer) > 0:
+        yield from gather_batches(buffer, group)
