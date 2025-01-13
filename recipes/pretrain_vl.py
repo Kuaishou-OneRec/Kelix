@@ -417,7 +417,7 @@ def train():
             token_num_dict.setdefault(k, 0.0)
             sum_loss_dict[k] += sum_loss
             token_num_dict[k] += token_num
-        for k, v in sum_loss_dict:
+        for k, v in sum_loss_dict.items():
           loss_mean[k] = v / token_num_dict[k]
         return loss_mean
       data_source_mean_loss = dist_reduce_dict(
