@@ -309,8 +309,8 @@ def train():
   data_source_loss = collections.defaultdict(float)
   data_source_tokens = collections.defaultdict(int)
   data_source_samples = collections.defaultdict(int)
-
-  for batch in gather_by_group(dataloader, get_sequence_parallel_group("gloo")):
+  # get_sequence_parallel_group("gloo")
+  for batch in gather_by_group(dataloader, get_sequence_parallel_group()):
     if show_cnt > 0 and dist.get_rank() == 0:
       with Timer("Show data"):
         print_rank_0(batch)
