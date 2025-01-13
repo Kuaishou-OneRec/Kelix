@@ -359,12 +359,12 @@ def train():
     )
     # (b, N/P, V)
     logits = output.logits
-  
-    # 提前shirft logits & labels
+
+    # 提前shift logits & labels
     start, end = get_local_sequence_boundary(labels.shape[-1])
-    pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index, dtype=labels.dtype).to(
-        device=torch.cuda.current_device())
-    labels = torch.cat([labels[:, 1:], pad], dim=-1) # shirft
+    pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
+        dtype=labels.dtype).to(device=labels.device)
+    labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
     local_labels = labels[:, start:end]
 
     loss, token_loss = loss_fn(logits=logits, labels=local_labels)
