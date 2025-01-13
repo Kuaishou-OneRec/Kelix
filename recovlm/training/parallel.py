@@ -49,7 +49,7 @@ def get_sequence_parallel_world_size():
     return dist.get_world_size(group=get_sequence_parallel_group())
     
 
-def get_sequence_parallel_rank(backend="nccl"):
+def get_sequence_parallel_rank():
     """Get the sequence parallel rank."""
     return dist.get_rank(group=get_sequence_parallel_group())
 
@@ -59,6 +59,19 @@ def get_local_sequence_boundary(seq_len):
     local_seqlen = seq_len // sp_size
     start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
     return start, end
+
+def get_local_sequence(sequence: torch.Tensor, seq_idx: int = 1):
+    if get_sequence_parallel_world_size() > 1:
+        seq_len = sequence.shape[seq_idx]
+        start, end = get_local_sequence_boundary(seq_len)
+        # Create a slice object for the specified dimension
+        slices = [slice(None)] * sequence.dim()
+        slices[seq_idx] = slice(start, end)
+        # Use the slice object to index the tensor
+        local_sequence = sequence[tuple(slices)]
+
+        return local_sequence
+    return sequence
 
 def all_to_all_4D(
     input: torch.tensor, scatter_idx: int = 2, gather_idx: int = 1, group=None, use_sync: bool = False

@@ -31,7 +31,8 @@ from recovlm.training.lr_schedulers import get_scheduler
 
 from recovlm.training.parallel import get_sequence_parallel_group, \
   get_sequence_parallel_rank, get_sequence_parallel_world_size, \
-  get_local_sequence_boundary, initialize_model_parallel, gather_by_group
+  get_local_sequence_boundary, initialize_model_parallel, gather_by_group, \
+  get_local_sequence
 
 def get_argument_parser():
   parser = argparse.ArgumentParser()
@@ -153,10 +154,10 @@ def get_argument_parser():
 
   parser.add_argument("--seed", type=int, default=123,
                       help="Manual seed for RNG")
-  
+
   parser.add_argument("--monitor_datasource_loss", action="store_true",
                       help="Whether to monitor loss of each datasource")
-  
+
   parser.add_argument("--monitor_datasource_cnt", action="store_true",
                       help="Whether to monitor cnt of each datasource")
 
@@ -327,7 +328,7 @@ def train():
     image_grid_thw = batch.get("image_grid_thw", None)
     video_grid_thw = batch.get("video_grid_thw", None)
     cu_seqlens = batch.get("cu_seqlens", None)
-    sample_idx = batch["sample_idx"].to(torch.int32)
+    sample_idx = batch["sample_idx"]
     valid_token_num = batch["valid_token_num"]
     valid_sample_num = batch["valid_sample_num"]
 
@@ -388,22 +389,23 @@ def train():
       iteration % args.logging_per_step == 0 and \
         model.is_gradient_accumulation_boundary():
 
-      sample_idx = sample_idx.squeeze()[:-1]   # shift idx
-      unique_sample_idx = sample_idx.unique()
+      local_sample_idx = get_local_sequence(sample_idx).squeeze()
+      print_rank_0(f"local sample idx: {local_sample_idx.shape}")
+      unique_sample_idx = local_sample_idx.unique()
       
       data_source_loss = {}
       for s_idx in unique_sample_idx:
-        key = data_source[int(s_idx.item())]
-        if key == "pad":
+        if s_idx < 0:
           continue
-        mask = (sample_idx == s_idx)
+        mask = (local_sample_idx == s_idx)
         sum_loss = token_loss[mask].sum()
         token_num = mask.sum()
-        
+
+        key = data_source[int(s_idx.item())]
         data_source_loss.setdefault(key, [0.0, 0.0])
         data_source_loss[key][0] += sum_loss.item()
         data_source_loss[key][1] += token_num.item()
-      
+
       def data_source_loss_reduce(gathered_dicts):
         sum_loss_dict = {}
         token_num_dict = {}
@@ -415,16 +417,15 @@ def train():
             token_num_dict.setdefault(k, 0.0)
             sum_loss_dict[k] += sum_loss
             token_num_dict[k] += token_num
-        for k in sum_loss_dict:
-          loss_mean[k] = sum_loss_dict[k] / token_num_dict[k]
+        for k, v in sum_loss_dict:
+          loss_mean[k] = v / token_num_dict[k]
         return loss_mean
-      data_source_mean_loss = dist_reduce_dict(data_source_loss, data_source_loss_reduce)
+      data_source_mean_loss = dist_reduce_dict(
+        data_source_loss, data_source_loss_reduce)
 
     if args.monitor_datasource_cnt:
       data_source_cnt = {}
       for data_source_name in data_source:
-        if data_source_name == "pad":
-          continue
         data_source_cnt.setdefault(data_source_name, 0.0)
         data_source_cnt[data_source_name] += 1
       data_source_cnt = dist_reduce_dict(data_source_cnt)

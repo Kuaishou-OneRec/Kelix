@@ -1039,13 +1039,16 @@ class ChatCompletionVisionDataset(IterableDataset):
                              packed_image_gird_thw: List[torch.Tensor],
                              packed_video_grid_thw: List[torch.Tensor],
                              packed_sample_idx: List[torch.Tensor],
-                             cu_seqlens: List[int]):
+                             cu_seqlens: List[int],
+                             sample_idx: Optional[int] = None):
 
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
     packed_position_ids.append(inputs["position_ids"])
+    if sample_idx is None:
+      sample_idx = len(cu_seqlens) - 1
     packed_sample_idx.append(
-      torch.full_like(packed_input_ids[-1], len(cu_seqlens) - 1))
+      torch.full_like(packed_input_ids[-1], sample_idx))
 
     if "pixel_values" in inputs:
       packed_pixel_values.append(inputs["pixel_values"])
@@ -1091,7 +1094,8 @@ class ChatCompletionVisionDataset(IterableDataset):
                                 packed_image_gird_thw,
                                 packed_video_grid_thw,
                                 packed_sample_idx,
-                                cu_seqlens)
+                                cu_seqlens,
+                                sample_idx=-1)
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
@@ -1108,7 +1112,6 @@ class ChatCompletionVisionDataset(IterableDataset):
       torch.cat(packed_video_grid_thw, dim=0)
 
     # pad seq len to multiple_of
-    is_pad = False
     if (
       self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
     ):
@@ -1121,7 +1124,6 @@ class ChatCompletionVisionDataset(IterableDataset):
       packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
       packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
       cu_seqlens.append(cu_seqlens[-1] + padding_len)
-      is_pad = True
 
     inputs = {
       "input_ids": packed_input_ids,
@@ -1132,8 +1134,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       "pixel_values_videos": packed_pixel_values_videos,
       "video_grid_thw": packed_video_grid_thw,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
-      "sample_idx": packed_sample_idx,
-      "is_pad": is_pad,
+      "sample_idx": torch.tensor(packed_sample_idx, dtype=torch.int32),
       "valid_token_num": valid_seq_len,
       "valid_sample_num": len(buffer)
     }
@@ -1177,18 +1178,13 @@ class ChatCompletionVisionDataset(IterableDataset):
       sample_length = inputs["input_ids"].shape[-1]
       if cur_length + sample_length > self.max_length:
         packed_inputs = self._packing(buffer)
-        is_pad = packed_inputs.pop("is_pad")
-        # 2: image_pad + text_pad or 1: image_pad
-        pad_num = 2 if is_pad else 1
-        # return source_list for dataset monitor
-        packed_inputs["data_source"] = source_list + ["pad"] * pad_num
-
+        packed_inputs["data_source"] = source_list
         buffer = [inputs]
         source_list = [source_name]
         cur_length = sample_length
 
         # skip pure text sample
-        # 原则上不会出现纯文本输入，因为有pad image
+        # 有pad image，原则上不会出现纯文本输入
         if packed_inputs["pixel_values"] is None and \
             packed_inputs["pixel_values_videos"] is None:
           logger.warning("Skip pure text sample.")
