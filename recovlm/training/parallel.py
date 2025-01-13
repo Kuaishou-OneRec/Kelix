@@ -6,7 +6,7 @@ import torch.distributed as dist
 
 from flash_attn import flash_attn_varlen_func
 
-from recovlm.utils.common import print_rank_0
+from recovlm.utils.common import print_rank_0, Timer
 
 _SEQUENCE_PARALLEL_GROUP = None
 _SEQUENCE_PARALLEL_GROUP_GLOO = None
@@ -253,37 +253,26 @@ class UlyssesAttention(torch.nn.Module):
 
         return output
 
-def gather_batches(batch, group):
+def gather_batches(buffer, group):
     world_size = dist.get_world_size(group)
     if world_size > 1:
-      print_rank_0("gather batches....")
-      s = time.time()
-      gathered_batches = {}
-      for key in batch:
-        if batch[key] is None:
-          continue
-        gathered_batches[key] = [
-          None for _ in \
-            range(world_size)
-        ]
-      
-      for key in gathered_batches:
+      with Timer("Gather batches"):
+        gathered_batches = [None for _ in range(world_size)]
         dist.all_gather_object(
-          object_list=gathered_batches[key], obj=batch[key],
-          group=group
+            object_list=gathered_batches, obj=buffer,
+            group=group
         )
-      t = time.time()
-      print_rank_0(f"After gather...., {t - s}")
 
-      gathered_batches = [
-        dict(zip(gathered_batches.keys(), values)) for values in \
-          zip(*gathered_batches.values())
-      ]
+      gathered_batches = sum(gathered_batches, [])
     else:
-      gathered_batches = [batch]
+      gathered_batches = buffer
     print_rank_0(f"Num batches: {len(gathered_batches)}")
     return gathered_batches
 
-def gather_by_group(dataloader, group):
+def gather_by_group(dataloader, group, buffer_size=8):
+    buffer = []
     for batch in dataloader:
-        yield from gather_batches(batch, group)
+        if len(buffer) >= buffer_size:
+            yield from gather_batches(buffer, group)
+        else:
+            buffer.append(batch)

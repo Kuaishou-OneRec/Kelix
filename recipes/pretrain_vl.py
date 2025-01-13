@@ -26,7 +26,7 @@ from recovlm.data.dataloaders import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
 from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
-  get_optimizer_grouped_parameters, dist_reduce_dict
+  get_optimizer_grouped_parameters, dist_reduce_dict, Timer
 from recovlm.training.lr_schedulers import get_scheduler
 
 from recovlm.training.parallel import get_sequence_parallel_group, \
@@ -312,11 +312,12 @@ def train():
   for batch in gather_by_group(dataloader, get_sequence_parallel_group("gloo")):
     acc_data_fetch_time = time.time() - s
     if show_cnt > 0 and dist.get_rank() == 0:
-      print_rank_0(batch)
-      print_rank_0(
-          f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n"
-          f"=" * 100 + "\n\n")
-      show_cnt -= 1
+      with Timer("Show data"):
+        print_rank_0(batch)
+        print_rank_0(
+            f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n"
+            f"=" * 100 + "\n\n")
+        show_cnt -= 1
 
     data_source = batch.pop("data_source") # dataset source list cur batch
     to_cuda(batch)
@@ -351,36 +352,34 @@ def train():
     input_ids = input_ids * (input_ids > 0).to(torch.int64)
     labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
-    s = time.time()
-    output = model(
-      input_ids, attention_mask=attention_mask,
-      pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
-      image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-      cu_seqlens=cu_seqlens
-    )
-    # (b, N/P, V)
-    logits = output.logits
+    with Timer("Fwd") as t:
+      output = model(
+        input_ids, attention_mask=attention_mask,
+        pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+        image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+        cu_seqlens=cu_seqlens
+      )
+      # (b, N/P, V)
+      logits = output.logits
 
-    # 提前shift logits & labels
-    start, end = get_local_sequence_boundary(labels.shape[-1])
-    pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
-        dtype=labels.dtype).to(device=labels.device)
-    labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
-    local_labels = labels[:, start:end]
+      # 提前shift logits & labels
+      start, end = get_local_sequence_boundary(labels.shape[-1])
+      pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
+          dtype=labels.dtype).to(device=labels.device)
+      labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
+      local_labels = labels[:, start:end]
 
-    loss, token_loss = loss_fn(logits=logits, labels=local_labels)
+      loss, token_loss = loss_fn(logits=logits, labels=local_labels)
 
-    del logits
-    del labels
-    del local_labels
-    t = time.time()
-    acc_fwd_time += (t - s)
+      del logits
+      del labels
+      del local_labels
+    acc_fwd_time += t.elapsed
 
-    s = time.time()
-    model.backward(loss)
-    model.step()
-    t = time.time()
-    acc_bwd_time += (t - s)
+    with Timer("bwd") as t:
+      model.backward(loss)
+      model.step()
+    acc_bwd_time += t.elapsed
 
     iteration = model.global_steps
 
@@ -419,29 +418,24 @@ def train():
         for k, v in sum_loss_dict.items():
           loss_mean[k] = v / token_num_dict[k]
         return loss_mean
-      print_rank_0("reduce datasource")
-      _ss = time.time() 
-      data_source_mean_loss = dist_reduce_dict(
-        data_source_loss, data_source_loss_reduce)
-      _tt = time.time()
-      print_rank_0(f"reduce datasource, {_tt - _ss}")
+  
+      with Timer("reduce data source loss"):
+        data_source_mean_loss = dist_reduce_dict(
+          data_source_loss, data_source_loss_reduce)
 
     if args.monitor_datasource_cnt:
       data_source_cnt = {}
       for data_source_name in data_source:
         data_source_cnt.setdefault(data_source_name, 0.0)
         data_source_cnt[data_source_name] += 1
-      print_rank_0("reduce data source cnt")
-      _ss = time.time()
-      data_source_cnt = dist_reduce_dict(data_source_cnt)
-      for k, v in data_source_cnt.items():
-        total_data_source_cnt.setdefault(k, 0)
-        total_data_source_cnt[k] += v
-      _tt = time.time()
-      print_rank_0("reduce data source cnt", _tt - _ss)
+
+      with Timer("reduce data source cnt"):
+        data_source_cnt = dist_reduce_dict(data_source_cnt)
+        for k, v in data_source_cnt.items():
+          total_data_source_cnt.setdefault(k, 0)
+          total_data_source_cnt[k] += v
     #########################################
 
-    print_rank_0("ttttttt")
     avg_loss = torch.tensor(loss.item()).cuda()
     dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
     avg_loss = avg_loss.item() / dist.get_world_size()
@@ -450,7 +444,7 @@ def train():
 
     if iteration % args.logging_per_step == 0 and dist.get_rank() == 0 and \
             model.is_gradient_accumulation_boundary():
-      print_rank_0("gggggg")
+
       learning_rate = model.lr_scheduler.get_lr()[0]
       end_time = time.time()
       sec_per_step = (end_time - start_time) / acc_step
@@ -535,14 +529,13 @@ def train():
       if iteration % args.save_checkpoint_per_step == 0 and \
           iteration > 0 and model.is_gradient_accumulation_boundary():
         torch.cuda.empty_cache()
-        model.save_checkpoint(
-          save_dir=args.output_dir, client_state = {
-            "total_num_tokens": total_num_tokens,
-            "total_num_samples": total_num_samples
-          }
-        )
-
-    s = time.time()
+        with Timer("save checkpoint"):
+          model.save_checkpoint(
+            save_dir=args.output_dir, client_state = {
+              "total_num_tokens": total_num_tokens,
+              "total_num_samples": total_num_samples
+            }
+          )
 
   print_rank_0("Save checkpoint..")
   model.save_checkpoint(save_dir=args.output_dir, client_state = {

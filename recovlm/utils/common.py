@@ -1,5 +1,6 @@
 # TODO: clean utils
 from rich import print
+import time
 import torch
 import random
 import numpy as np
@@ -90,3 +91,15 @@ def dist_reduce_dict(local_dict, dict_reduce_func=None):
         else:
           reduce_dict[k] += v
     return reduce_dict
+
+class Timer:
+  def __enter__(self, desc: str=""):
+    self.desc = desc
+    print_rank_0(f"Start... {self.desc}")
+    self.start = time.time()
+    return self
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    self.end = time.time()
+    self.elapsed = self.end - self.start
+    print_rank_0(f"End..., elapsed: {self.elapsed} {desc}")
