@@ -158,6 +158,7 @@ def get_chat_completion_vision_dataloader(sources: str,
                                           shrink_ratio,
                                           max_retry,
                                           multiple_of,
+                                          need_padding=False,
                                           num_workers=8,
                                           video_nframe=-1,
                                           video_fps=2.0,
@@ -173,10 +174,11 @@ def get_chat_completion_vision_dataloader(sources: str,
         video_fps=video_fps,
         video_min_frames=video_min_frames,
         video_max_frames=video_max_frames,
-        base_model_dir = base_model_dir,
-        shrink_ratio = shrink_ratio,
-        max_retry = max_retry,
-        multiple_of = multiple_of)
+        base_model_dir=base_model_dir,
+        shrink_ratio=shrink_ratio,
+        max_retry=max_retry,
+        multiple_of=multiple_of,
+        need_padding=need_padding)
 
     ### packing, batching size=1; shuffle in dataset
     dataloader = DataLoader(

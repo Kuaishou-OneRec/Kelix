@@ -6,6 +6,7 @@ import wids
 from torch.utils.data import DataLoader
 from recovlm.data.datasets import ChatCompletionDataset, ImageTextPairDatasetWithPacking, ChatCompletionVisionDataset
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from tests.utils import init_processes
 """
     # dataset = LLaVA_CC3M_Dataset(
     #     source="/llm_reco_ssd/luoxinchen/dataset/LLaVA-CC3M-Pretrain-595K/",
@@ -152,7 +153,7 @@ def test_image_text_pair_dataset_with_packing():
 def test_chat_vision_dataset_with_packing():
     # processor = Qwen2VLProcessor.from_pretrained(
     #     "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct")
-
+    init_processes(0, 1)
     ds = ChatCompletionVisionDataset(
         sources = "/llm_reco_ssd/luoxinchen/dataset/Stage2/the_cauldron/index.json",
         max_length = 3072,

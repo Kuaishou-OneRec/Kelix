@@ -652,6 +652,7 @@ class ChatCompletionVisionDataset(IterableDataset):
   def __init__(self,
                sources: Union[str, List[str]],
                max_length: int = 1024,
+               need_padding: bool = False,
                min_visual_tokens_per_image: int = 4,
                max_visual_tokens_per_image: int = 512,
                video_nframe: int = -1,
@@ -669,7 +670,9 @@ class ChatCompletionVisionDataset(IterableDataset):
                patch_size: int = 14,
                image_token_id: int = 151655,
                video_token_id: int = 151656,
-               vision_start_token_id: int = 151652):
+               vision_start_token_id: int = 151652,
+               vision_end_token_id: int = 151653,
+               pad_token_id: int = 151643):
     super(ChatCompletionVisionDataset).__init__()
     if base_model_dir:
       processor = Qwen2VLProcessor.from_pretrained(base_model_dir)
@@ -679,9 +682,11 @@ class ChatCompletionVisionDataset(IterableDataset):
       image_token_id = model_config.image_token_id
       video_token_id = model_config.video_token_id
       vision_start_token_id = model_config.vision_start_token_id
+      vision_end_token_id = model_config.vision_end_token_id
+      pad_token_id = model_config.pad_token_id
 
     self.processor = processor
-    self.max_length = max_length
+    self.need_padding = need_padding
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
     self.video_nframe = video_nframe
@@ -700,6 +705,8 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.image_token_id = image_token_id
     self.video_token_id = video_token_id
     self.vision_start_token_id = vision_start_token_id
+    self.vision_end_token_id = vision_end_token_id
+    self.pad_token_id = pad_token_id
     self.patch_size = patch_size
     # Pad sequence to multiple of `multiple_of`
     self.multiple_of = multiple_of
@@ -748,7 +755,22 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
 
-  def _fill_image_block(self, block, max_visual_tokens_per_image, sample_dict):
+    # append image_pad for each packing
+    # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
+    image_pad_len = 6
+    self.max_length = max_length - image_pad_len
+    assert self.max_length > 0
+
+  def _fill_image_block(self, block, sample_dict, 
+                          min_visual_tokens_per_image=None, 
+                          max_visual_tokens_per_image=None):
+    
+    if min_visual_tokens_per_image is None:
+      min_visual_tokens_per_image = self.min_visual_tokens_per_image
+
+    if max_visual_tokens_per_image is None:
+      max_visual_tokens_per_image = self.max_visual_tokens_per_image
+
     if isinstance(block["image"], str):
       image = sample_dict[block["image"]]
     else:
@@ -756,22 +778,32 @@ class ChatCompletionVisionDataset(IterableDataset):
     if image.mode != "RGB":
       image = image.convert("RGB")
     block["image"] = image
-    block["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
+    block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
       (self.spatial_merge_size ** 2)
     block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
       (self.spatial_merge_size ** 2)
   
-  def _fill_video_block(self, block, max_visual_tokens_per_image, sample_dict):
+  def _fill_video_block(self, block, sample_dict, 
+                          min_visual_tokens_per_image=None, 
+                          max_visual_tokens_per_image=None):
+    if min_visual_tokens_per_image is None:
+      min_visual_tokens_per_image = self.min_visual_tokens_per_image
+
+    if max_visual_tokens_per_image is None:
+      max_visual_tokens_per_image = self.max_visual_tokens_per_image
+
     if isinstance(block["video"], list):
       for image_block in block["video"]:
         assert image_block["type"] == "image" and "image" in image_block
-        self._fill_image_block(image_block, max_visual_tokens_per_image, sample_dict)
+        self._fill_image_block(image_block, sample_dict,
+                                min_visual_tokens_per_image=min_visual_tokens_per_image,
+                                max_visual_tokens_per_image=max_visual_tokens_per_image)
     elif isinstance(block["video"], str) or isinstance(block["video"], bytes):
       # video in local tar, replace by video bytes
       if isinstance(block["video"], str) and block["video"] in sample_dict:
         block["video"] = sample_dict[block["video"]]
       # fill other params
-      block["min_pixels"] = self.min_visual_tokens_per_image * (self.patch_size ** 2) * \
+      block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
         (self.spatial_merge_size ** 2)
       block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
         (self.spatial_merge_size ** 2)
@@ -802,14 +834,19 @@ class ChatCompletionVisionDataset(IterableDataset):
         text += segment["text"]
       elif segment["type"] == "image":
         text += "<|vision_start|><|image_pad|><|vision_end|>"
-        self._fill_image_block(segment, max_visual_tokens_per_image, sample)
+        self._fill_image_block(segment, sample,
+                                max_visual_tokens_per_image=max_visual_tokens_per_image)
         vision_infos.append(segment)
       elif segment["type"] == "video":
         text += "<|vision_start|><|video_pad|><|vision_end|>"
-        self._fill_video_block(segment, max_visual_tokens_per_image, sample)
+        self._fill_video_block(segment, sample,
+                                max_visual_tokens_per_image=max_visual_tokens_per_image)
         vision_infos.append(segment)
       else:
         logger.warning(f"!!! Unsupport {segment['type']=}, skip this segment.")
+    
+    # append EOS token
+    text += "<|endoftext|>"
     image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos)
     inputs = self.processor(
         text=text,
@@ -829,7 +866,14 @@ class ChatCompletionVisionDataset(IterableDataset):
     # <|vision_start|>: 151652 , <|vision_end|>: 151653, <|image_pad|>: 151655, <|video_pad|>: 151656
     input_ids = inputs["input_ids"]
     inputs["loss_mask"] = torch.ones_like(input_ids)
-    inputs["loss_mask"][(input_ids == 151652) | (input_ids == 151653) | (input_ids == 151655) | (input_ids == 151656)] = 0
+    inputs["loss_mask"][
+        (input_ids == self.vision_start_token_id) | 
+        (input_ids == self.vision_end_token_id) |
+        (input_ids == self.image_token_id) |
+        (input_ids == self.video_token_id)
+      ] = 0
+    # mask EOS token
+    inputs["loss_mask"][-1][-1] = 0
     if inputs["loss_mask"].sum() == 0:
       raise ValueError(
         f"Unable to generate sample with 0 loss_mask."
@@ -859,15 +903,19 @@ class ChatCompletionVisionDataset(IterableDataset):
       content = turn["content"]
       for block in content:
         if block["type"] == "image":
-          self._fill_image_block(block, max_visual_tokens_per_image, sample)
+          self._fill_image_block(block, sample, 
+                                  max_visual_tokens_per_image=max_visual_tokens_per_image)
         elif block["type"] == "video":
-          self._fill_video_block(block, max_visual_tokens_per_image, sample)
+          self._fill_video_block(block, sample,
+                                  max_visual_tokens_per_image=max_visual_tokens_per_image)
 
     text = self.processor.apply_chat_template(
-      [messages], tokenize=False, add_generation_prompt=False
+      messages, tokenize=False, add_generation_prompt=False
     )
-    image_inputs, video_inputs = process_vision_info(messages)
 
+    # append EOS token
+    text += "<|endoftext|>"
+    image_inputs, video_inputs = process_vision_info(messages)
     inputs = self.processor(
         text=text,
         images=image_inputs,
@@ -887,7 +935,8 @@ class ChatCompletionVisionDataset(IterableDataset):
       start_pattern=[151644, 77091, 198],
       end_pattern=[151645, 198]
     )
-
+    # mask EOS token
+    inputs["loss_mask"][-1][-1] = 0
     if inputs["loss_mask"].sum() == 0:
       raise ValueError(
         f"Unable to generate sample with 0 loss_mask."
@@ -902,6 +951,55 @@ class ChatCompletionVisionDataset(IterableDataset):
       video_token_id=self.video_token_id,
       vision_start_token_id=self.vision_start_token_id
     )
+    inputs.pop("attention_mask")
+    return inputs
+  
+  def _gen_pad_input(self, pad_len):
+    text = "<|endoftext|>" * pad_len
+    inputs = self.processor.tokenizer(text)
+    inputs["input_ids"] = torch.tensor([inputs["input_ids"]], dtype=torch.int64) # shape=[1, N], for get_rope_index
+    inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
+    inputs["position_ids"] = get_rope_index(
+      inputs["input_ids"],
+      spatial_merge_size=self.spatial_merge_size,
+      image_token_id=self.image_token_id,
+      video_token_id=self.video_token_id,
+      vision_start_token_id=self.vision_start_token_id
+    )
+    inputs.pop("attention_mask")
+    return inputs
+  
+  def _gen_img_pad(self):
+    """
+    append an image, to trigger vit for pure text sample
+    return 6 token: vstart, 4 * image_token, vend
+    """
+    text = "<|vision_start|><|image_pad|><|vision_end|>"
+    pad_image = {
+      "type": "image",
+      "image": Image.new("RGB", (1, 1), (255, 255, 255))
+    }
+
+    self._fill_image_block(pad_image, {}, 1, 1)
+    image_inputs, _ = process_vision_info(vision_infos = [pad_image])
+    inputs = self.processor(
+        text=text,
+        images=image_inputs,
+        videos=None,
+        return_tensors="pt"
+    )
+
+    inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
+    inputs["position_ids"] = get_rope_index(
+      inputs["input_ids"],
+      image_grid_thw=inputs.get("image_grid_thw"),
+      video_grid_thw=inputs.get("video_grid_thw"),
+      spatial_merge_size=self.spatial_merge_size,
+      image_token_id=self.image_token_id,
+      video_token_id=self.video_token_id,
+      vision_start_token_id=self.vision_start_token_id
+    )
+
     inputs.pop("attention_mask")
     return inputs
 
@@ -924,8 +1022,10 @@ class ChatCompletionVisionDataset(IterableDataset):
         inputs = self._process_completion(sample, max_visual_tokens_per_image)
       else:
         raise NotImplementedError(f"Unsupported dataset format `{data_format}`")
+
       if not inputs:
         raise ValueError("Empty inputs, skip")
+        
       if inputs["input_ids"].shape[-1] > self.max_length:
         max_visual_tokens_per_image = (max_visual_tokens_per_image * self.shrink_ratio)
         continue
@@ -937,50 +1037,99 @@ class ChatCompletionVisionDataset(IterableDataset):
         f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
       )
   
-  def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
-    packed_input_ids = []
-    packed_position_ids = []
-    packed_loss_mask = []
-    packed_pixel_values = []
-    packed_pixel_values_videos = []
-    packed_image_gird_thw = []
-    packed_video_grid_thw = []
-    packed_sample_idx = []
-    cu_seqlens = [0]
+  def _append_sample_packing(self,
+                             inputs: Dict[str, torch.Tensor],
+                             packed_input_ids: List[torch.Tensor],
+                             packed_position_ids: List[torch.Tensor],
+                             packed_loss_mask: List[torch.Tensor],
+                             packed_pixel_values: List[torch.Tensor],
+                             packed_pixel_values_videos: List[torch.Tensor],
+                             packed_image_gird_thw: List[torch.Tensor],
+                             packed_video_grid_thw: List[torch.Tensor],
+                             packed_sample_idx: List[torch.Tensor],
+                             cu_seqlens: List[int]):
 
-    for idx, inputs in enumerate(buffer):
-      packed_input_ids.append(inputs["input_ids"].flatten())
-      packed_loss_mask.append(inputs["loss_mask"].flatten())
-      packed_position_ids.append(inputs["position_ids"])
-      packed_sample_idx.append(torch.ones_like(packed_input_ids[-1]) * idx)
-      if "pixel_values" in inputs:
-        packed_pixel_values.append(inputs["pixel_values"])
-        packed_image_gird_thw.append(inputs["image_grid_thw"])
-      if "pixel_values_videos" in inputs:
-        packed_pixel_values_videos.append(inputs["pixel_values_videos"])
-        packed_video_grid_thw.append(inputs["video_grid_thw"])
-      cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
+    packed_input_ids.append(inputs["input_ids"].flatten())
+    packed_loss_mask.append(inputs["loss_mask"].flatten())
+    packed_position_ids.append(inputs["position_ids"])
+    packed_sample_idx.append(
+      torch.full_like(packed_input_ids[-1], len(cu_seqlens) - 1))
+
+    if "pixel_values" in inputs:
+      packed_pixel_values.append(inputs["pixel_values"])
+      packed_image_gird_thw.append(inputs["image_grid_thw"])
+    if "pixel_values_videos" in inputs:
+      packed_pixel_values_videos.append(inputs["pixel_values_videos"])
+      packed_video_grid_thw.append(inputs["video_grid_thw"])
+    cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
+    return len(inputs["input_ids"][0])
+
+  def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
+    packed_input_ids: List[torch.Tensor] = []
+    packed_position_ids: List[torch.Tensor] = []
+    packed_loss_mask: List[torch.Tensor] = []
+    packed_pixel_values: List[torch.Tensor] = []
+    packed_pixel_values_videos: List[torch.Tensor] = []
+    packed_image_gird_thw: List[torch.Tensor] = []
+    packed_video_grid_thw: List[torch.Tensor] = []
+    packed_sample_idx: List[torch.Tensor] = []
+    cu_seqlens: List[int] = [0]
+
+    valid_seq_len = 0
+    for _, inputs in enumerate(buffer):
+      valid_seq_len += self._append_sample_packing(inputs,
+                                      packed_input_ids,
+                                      packed_position_ids,
+                                      packed_loss_mask,
+                                      packed_pixel_values,
+                                      packed_pixel_values_videos,
+                                      packed_image_gird_thw,
+                                      packed_video_grid_thw,
+                                      packed_sample_idx,
+                                      cu_seqlens)
+
+    # append a pad image sequence to trigger ViT
+    image_pad = self._gen_img_pad()
+    self._append_sample_packing(image_pad,
+                                packed_input_ids,
+                                packed_position_ids,
+                                packed_loss_mask,
+                                packed_pixel_values,
+                                packed_pixel_values_videos,
+                                packed_image_gird_thw,
+                                packed_video_grid_thw,
+                                packed_sample_idx,
+                                cu_seqlens)
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
     packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
-    
-    packed_pixel_values = None if len(packed_pixel_values) == 0 else torch.cat(packed_pixel_values, dim=0)
-    packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else torch.cat(packed_image_gird_thw, dim=0)
-    packed_pixel_values_videos = None if len(packed_pixel_values_videos) == 0 else torch.cat(packed_pixel_values_videos, dim=0)
-    packed_video_grid_thw = None if len(packed_video_grid_thw) == 0 else torch.cat(packed_video_grid_thw, dim=0)
+    packed_pixel_values = None if len(packed_pixel_values) == 0 else \
+      torch.cat(packed_pixel_values, dim=0)
+    packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else \
+      torch.cat(packed_image_gird_thw, dim=0)
+    packed_pixel_values_videos = \
+      None if len(packed_pixel_values_videos) == 0 else \
+        torch.cat(packed_pixel_values_videos, dim=0)
+    packed_video_grid_thw = None if len(packed_video_grid_thw) == 0 else \
+      torch.cat(packed_video_grid_thw, dim=0)
 
-    # pad to multiple of, necessary for sequence parallel
+    # pad seq len to multiple_of
+    is_pad = False
     if (
       self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
     ):
       padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
       packed_input_ids = F.pad(
-        packed_input_ids, (0, padding_len), value=self.processor.tokenizer.pad_token_id)
+        packed_input_ids, (0, padding_len),
+        value=self.processor.tokenizer.pad_token_id)
+      packed_sample_idx = F.pad(
+        packed_sample_idx, (0, padding_len), value=-1)
       packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
       packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
       cu_seqlens.append(cu_seqlens[-1] + padding_len)
+      is_pad = True
 
     inputs = {
       "input_ids": packed_input_ids,
@@ -991,15 +1140,18 @@ class ChatCompletionVisionDataset(IterableDataset):
       "pixel_values_videos": packed_pixel_values_videos,
       "video_grid_thw": packed_video_grid_thw,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
-      "sample_idx": packed_sample_idx
+      "sample_idx": packed_sample_idx,
+      "is_pad": is_pad,
+      "valid_token_num": valid_seq_len,
+      "valid_sample_num": len(buffer)
     }
     return inputs
 
   def __iter__(self):
     buffer = []
     source_list = []
-    
     cur_length = 0
+
     for sample in self.dataset:
       sample_key = sample["__key__"] if "__key__" in sample else ""
       sample_url = sample["__url__"] if "__url__" in sample else ""
@@ -1032,22 +1184,25 @@ class ChatCompletionVisionDataset(IterableDataset):
 
       sample_length = inputs["input_ids"].shape[-1]
       if cur_length + sample_length > self.max_length:
-
         packed_inputs = self._packing(buffer)
+        is_pad = packed_inputs.pop("is_pad")
+        # 2: image_pad + text_pad or 1: image_pad
+        pad_num = 2 if is_pad else 1
         # return source_list for dataset monitor
-        packed_inputs["data_source"] = source_list
+        packed_inputs["data_source"] = source_list + ["pad"] * pad_num
 
         buffer = [inputs]
         source_list = [source_name]
-
         cur_length = sample_length
-        
+
         # skip pure text sample
-        if packed_inputs["pixel_values"] is None and packed_inputs["pixel_values_videos"] is None:
+        # 原则上不会出现纯文本输入，因为有pad image
+        if packed_inputs["pixel_values"] is None and \
+            packed_inputs["pixel_values_videos"] is None:
           logger.warning("Skip pure text sample.")
           continue
 
-        # skip 0 label pack 
+        # skip 0 label pack
         if packed_inputs["loss_mask"].sum() == 0:
           logger.warning("Skip 0 lable sample.")
           continue
