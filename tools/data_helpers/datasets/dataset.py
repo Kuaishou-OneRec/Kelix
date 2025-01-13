@@ -1,11 +1,13 @@
 import os
 import math
 import json
+from tqdm import tqdm
 from glob import glob
 import pyarrow as pa
 import pyarrow.parquet as pq
 from tools.data_helpers.utils import MPIBase
 from torch.utils.data import IterableDataset
+import webdataset as wds
 
 def lcm(a: int, b: int):
     return a * b // (math.gcd(a, b))
@@ -83,4 +85,39 @@ class JsonDataset(DistDataset):
     
     def __iter__(self):
         for s in self.data:
+            yield s
+
+
+class WebDataset(DistDataset):
+
+    def __init__(self, index_list):
+        super().__init__()
+        if self.rank == 0:
+            items = []
+            for index_fn in index_list:
+                with open(index_fn, encoding="utf-8") as f:
+                    index = json.loads(f.read())["shardlist"]
+                    for item in index:
+                        item['url'] = os.path.join(
+                            os.path.dirname(index_fn),
+                            item['url']
+                        )
+                        items.append(item)
+        else:
+            items = None
+        self.items = self.comm.bcast(items, root=0)
+        self.items = self.items[self.rank::self.world_size]
+        self.total_samples = sum([x['nsamples'] for x in self.items])
+        self.mpi_print(f"urls {len(self.items)}, total_samples {self.total_samples}")
+    
+    def __len__(self):
+        return self.total_samples
+    
+    def __iter__(self):
+        ds = wds.WebDataset(
+            [x['url'] for x in self.items],
+            handler=wds.warn_and_continue,
+        )
+
+        for s in ds:
             yield s
