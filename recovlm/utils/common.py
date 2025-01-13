@@ -93,8 +93,10 @@ def dist_reduce_dict(local_dict, dict_reduce_func=None):
     return reduce_dict
 
 class Timer:
-  def __enter__(self, desc: str=""):
+  def __init__(self, desc: str = ""):
     self.desc = desc
+
+  def __enter__(self):
     print_rank_0(f"Start... {self.desc}")
     self.start = time.time()
     return self
@@ -102,4 +104,4 @@ class Timer:
   def __exit__(self, exc_type, exc_value, traceback):
     self.end = time.time()
     self.elapsed = self.end - self.start
-    print_rank_0(f"End..., elapsed: {self.elapsed} {desc}")
+    print_rank_0(f"End... {self.desc} elapsed: {self.elapsed:.3f} ")

@@ -299,6 +299,8 @@ def train():
   start_time = time.time()
   show_cnt = 1
 
+  # Metrics, acc_ account for gradient accumulation
+  # TODO: use mestrics manager
   acc_step = 0
   acc_avg_loss = 0.0
   acc_num_tokens = 0
@@ -307,6 +309,8 @@ def train():
   acc_bwd_time = 0.0
   acc_data_fetch_time = 0.0
   acc_valid_num_tokens = 0
+  data_source_loss = collections.defaultdict(lambda: [0.0, 0.0])
+  data_source_cnt = collections.defaultdict(int)
 
   s = time.time()
   for batch in gather_by_group(dataloader, get_sequence_parallel_group("gloo")):
@@ -384,56 +388,25 @@ def train():
     iteration = model.global_steps
 
     ########## dataset source monitor ###############
-    if args.monitor_datasource_loss and \
-      iteration % args.logging_per_step == 0 and \
-        model.is_gradient_accumulation_boundary():
+    if args.monitor_datasource_loss:
 
       local_sample_idx = get_local_sequence(sample_idx).squeeze()
       unique_sample_idx = local_sample_idx.unique()
-      
-      data_source_loss = {}
+
       for s_idx in unique_sample_idx:
         if s_idx < 0:
           continue
-        mask = (local_sample_idx == s_idx)
+        mask = local_sample_idx == s_idx
         sum_loss = token_loss[mask].sum()
         token_num = mask.sum()
 
         key = data_source[int(s_idx.item())]
-        data_source_loss.setdefault(key, [0.0, 0.0])
         data_source_loss[key][0] += sum_loss.item()
         data_source_loss[key][1] += token_num.item()
 
-      def data_source_loss_reduce(gathered_dicts):
-        sum_loss_dict = {}
-        token_num_dict = {}
-        loss_mean = {}
-        for tmp_dict in gathered_dicts:
-          for k, v in tmp_dict.items():
-            sum_loss, token_num = v
-            sum_loss_dict.setdefault(k, 0.0)
-            token_num_dict.setdefault(k, 0.0)
-            sum_loss_dict[k] += sum_loss
-            token_num_dict[k] += token_num
-        for k, v in sum_loss_dict.items():
-          loss_mean[k] = v / token_num_dict[k]
-        return loss_mean
-  
-      with Timer("reduce data source loss"):
-        data_source_mean_loss = dist_reduce_dict(
-          data_source_loss, data_source_loss_reduce)
-
     if args.monitor_datasource_cnt:
-      data_source_cnt = {}
       for data_source_name in data_source:
-        data_source_cnt.setdefault(data_source_name, 0.0)
         data_source_cnt[data_source_name] += 1
-
-      with Timer("reduce data source cnt"):
-        data_source_cnt = dist_reduce_dict(data_source_cnt)
-        for k, v in data_source_cnt.items():
-          total_data_source_cnt.setdefault(k, 0)
-          total_data_source_cnt[k] += v
     #########################################
 
     avg_loss = torch.tensor(loss.item()).cuda()
@@ -448,9 +421,12 @@ def train():
       learning_rate = model.lr_scheduler.get_lr()[0]
       end_time = time.time()
       sec_per_step = (end_time - start_time) / acc_step
-      tokens_per_sec_per_gpu = acc_num_tokens / dist.get_world_size() / (end_time - start_time)
-      samples_per_sec_per_gpu = acc_num_samples / dist.get_world_size() / (end_time - start_time)
-      valid_tokens_per_sec_per_gpu = acc_valid_num_tokens / dist.get_world_size() / (end_time - start_time)
+      tokens_per_sec_per_gpu = \
+        acc_num_tokens / dist.get_world_size() / (end_time - start_time)
+      samples_per_sec_per_gpu = \
+        acc_num_samples / dist.get_world_size() / (end_time - start_time)
+      valid_tokens_per_sec_per_gpu = \
+        acc_valid_num_tokens / dist.get_world_size() / (end_time - start_time)
       avg_loss = acc_avg_loss / acc_step
       fwd_time = acc_fwd_time / acc_step
       bwd_time = acc_bwd_time / acc_step
@@ -482,16 +458,33 @@ def train():
               new_style=True)
       
       if args.monitor_datasource_loss and tb_writer:
-        for k, v in data_source_mean_loss.items():
+        
+        def data_source_loss_reduce(gathered_dicts):
+          loss_dict = collections.defaultdict(lambda: [0.0, 0.0])
+          for tmp_dict in gathered_dicts:
+            for k, v in tmp_dict.items():
+              sum_loss, token_num = v
+              loss_dict[k][0] += sum_loss
+              loss_dict[k][1] += token_num
+          return loss_dict
+
+        with Timer("reduce data source loss"):
+          data_source_loss = dist_reduce_dict(
+            data_source_loss, data_source_loss_reduce)
+
+        for k, (_loss_sum, _token_cnt) in data_source_loss.items():
           tb_writer.add_scalar(
                 f"data_source_loss/{key}",
-                v,
+                _loss_sum / _token_cnt,
                 global_step=iteration,
                 new_style=True)
 
       if args.monitor_datasource_cnt and tb_writer:
+        with Timer("reduce data source cnt"):
+          data_source_cnt = dist_reduce_dict(data_source_cnt)
+
         source_ratio_dict = {}
-        for key, cnt in total_data_source_cnt.items():
+        for key, cnt in data_source_cnt.items():
           source_ratio_dict[f"{key}"] = 1.0 * cnt / total_num_samples
           tb_writer.add_scalar(
               f"data_source_sample_ratio/{key}",
@@ -525,6 +518,8 @@ def train():
       acc_fwd_time = 0.0
       acc_bwd_time = 0.0
       acc_valid_num_tokens = 0
+      data_source_loss = collections.defaultdict(lambda: [0.0, 0.0])
+      data_source_cnt = collections.defaultdict(int)
 
       if iteration % args.save_checkpoint_per_step == 0 and \
           iteration > 0 and model.is_gradient_accumulation_boundary():
