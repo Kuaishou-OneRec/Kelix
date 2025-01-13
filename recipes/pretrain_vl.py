@@ -390,7 +390,6 @@ def train():
         model.is_gradient_accumulation_boundary():
 
       local_sample_idx = get_local_sequence(sample_idx).squeeze()
-      print_rank_0(f"local sample idx: {local_sample_idx.shape}")
       unique_sample_idx = local_sample_idx.unique()
       
       data_source_loss = {}
@@ -420,8 +419,12 @@ def train():
         for k, v in sum_loss_dict.items():
           loss_mean[k] = v / token_num_dict[k]
         return loss_mean
+      print_rank_0("reduce datasource")
+      _ss = time.time() 
       data_source_mean_loss = dist_reduce_dict(
         data_source_loss, data_source_loss_reduce)
+      _tt = time.time()
+      print_rank_0(f"reduce datasource, {_tt - _ss}")
 
     if args.monitor_datasource_cnt:
       data_source_cnt = {}
