@@ -305,16 +305,11 @@ def train():
   acc_avg_loss = 0.0
   acc_num_tokens = 0
   acc_num_samples = 0
-  acc_fwd_time = 0.0
-  acc_bwd_time = 0.0
-  acc_data_fetch_time = 0.0
   acc_valid_num_tokens = 0
   data_source_loss = collections.defaultdict(lambda: [0.0, 0.0])
   data_source_cnt = collections.defaultdict(int)
 
-  s = time.time()
   for batch in gather_by_group(dataloader, get_sequence_parallel_group("gloo")):
-    acc_data_fetch_time = time.time() - s
     if show_cnt > 0 and dist.get_rank() == 0:
       with Timer("Show data"):
         print_rank_0(batch)
@@ -356,7 +351,7 @@ def train():
     input_ids = input_ids * (input_ids > 0).to(torch.int64)
     labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
-    with Timer("Fwd") as t:
+    with Timer("Fwd"):
       output = model(
         input_ids, attention_mask=attention_mask,
         pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
@@ -378,12 +373,11 @@ def train():
       del logits
       del labels
       del local_labels
-    acc_fwd_time += t.elapsed
 
-    with Timer("bwd") as t:
+
+    with Timer("bwd"):
       model.backward(loss)
       model.step()
-    acc_bwd_time += t.elapsed
 
     iteration = model.global_steps
 
@@ -431,92 +425,81 @@ def train():
     acc_avg_loss += avg_loss
     acc_step += 1
 
-    if iteration % args.logging_per_step == 0 and dist.get_rank() == 0 and \
+    if iteration % args.logging_per_step == 0 and \
             model.is_gradient_accumulation_boundary():
 
-      learning_rate = model.lr_scheduler.get_lr()[0]
-      end_time = time.time()
-      sec_per_step = (end_time - start_time) / acc_step
-      tokens_per_sec_per_gpu = \
-        acc_num_tokens / dist.get_world_size() / (end_time - start_time)
-      samples_per_sec_per_gpu = \
-        acc_num_samples / dist.get_world_size() / (end_time - start_time)
-      valid_tokens_per_sec_per_gpu = \
-        acc_valid_num_tokens / dist.get_world_size() / (end_time - start_time)
-      avg_loss = acc_avg_loss / acc_step
-      fwd_time = acc_fwd_time / acc_step
-      bwd_time = acc_bwd_time / acc_step
-      data_fetch_time = acc_data_fetch_time / acc_step
-      start_time = end_time
-      log_dict = {
-        "losses/loss": avg_loss,
-        "losses/grad_norm": model.get_global_grad_norm(),
-        "learning_rate": learning_rate,
-        "perf/sec_per_step": sec_per_step,
-        "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
-        "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
-        "perf/total_num_tokens": total_num_tokens,
-        "perf/total_num_samples": total_num_samples,
-        "perf/fwd_time": fwd_time,
-        "perf/bwd_time": bwd_time,
-        "perf/data_fetch_time": data_fetch_time,
-        "perf/valid_total_num_tokens": total_num_valid_tokens,
-        "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
-        "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
-      }
+      if dist.get_rank() == 0:
+        learning_rate = model.lr_scheduler.get_lr()[0]
+        end_time = time.time()
+        sec_per_step = (end_time - start_time) / acc_step
+        tokens_per_sec_per_gpu = \
+          acc_num_tokens / dist.get_world_size() / (end_time - start_time)
+        samples_per_sec_per_gpu = \
+          acc_num_samples / dist.get_world_size() / (end_time - start_time)
+        valid_tokens_per_sec_per_gpu = \
+          acc_valid_num_tokens / dist.get_world_size() / (end_time - start_time)
+        avg_loss = acc_avg_loss / acc_step
+        start_time = end_time
+        log_dict = {
+          "losses/loss": avg_loss,
+          "losses/grad_norm": model.get_global_grad_norm(),
+          "learning_rate": learning_rate,
+          "perf/sec_per_step": sec_per_step,
+          "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
+          "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
+          "perf/total_num_tokens": total_num_tokens,
+          "perf/total_num_samples": total_num_samples,
+          "perf/valid_total_num_tokens": total_num_valid_tokens,
+          "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
+          "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
+        }
 
-      for name, data in log_dict.items():
-        if data is not None and tb_writer:
-          tb_writer.add_scalar(
-              name,
-              data,
-              global_step=iteration,
-              new_style=True)
-
-      if args.monitor_datasource_loss and tb_writer:
-        for key, (loss_sum, token_cnt) in data_source_loss.items():
-          tb_writer.add_scalar(
-                f"data_source_loss/{key}",
-                loss_sum / token_cnt,
+        for name, data in log_dict.items():
+          if data is not None and tb_writer:
+            tb_writer.add_scalar(
+                name,
+                data,
                 global_step=iteration,
                 new_style=True)
 
-      if args.monitor_datasource_cnt and tb_writer:
-        for key, cnt in data_source_cnt.items():
-          tb_writer.add_scalar(
-              f"data_source_sample_ratio/{key}",
-              1.0 * cnt / total_num_samples,
-              global_step=iteration,
-              new_style=True)
+        if args.monitor_datasource_loss and tb_writer:
+          for key, (loss_sum, token_cnt) in data_source_loss.items():
+            tb_writer.add_scalar(
+                  f"data_source_loss/{key}",
+                  loss_sum / token_cnt,
+                  global_step=iteration,
+                  new_style=True)
 
-    print_rank_0(
-      f"Step: {iteration}, Loss: {avg_loss}, "
-      f"Learning Rate: {learning_rate}, "
-      f"Grad Norm: {model.get_global_grad_norm()}, "
-      f"Sec per Step: {sec_per_step}",
-      f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
-      f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
-      f"total_num_tokens: {total_num_tokens}",
-      f"total_num_samples: {total_num_samples}",
-      f"fwd_time: {fwd_time}",
-      f"bwd_time: {bwd_time}",
-      f"data_fetch_time: {data_fetch_time}",
-      f"valid_tokens_per_sec_per_gpu: {valid_tokens_per_sec_per_gpu}, "
-      f"total_num_tokens: {total_num_tokens}, "
-      f"total_num_samples: {total_num_samples}, "
-      f"total_num_valid_tokens: {total_num_valid_tokens}, "
-      f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, "
-    )
+        if args.monitor_datasource_cnt and tb_writer:
+          for key, cnt in data_source_cnt.items():
+            tb_writer.add_scalar(
+                f"data_source_sample_ratio/{key}",
+                1.0 * cnt / total_num_samples,
+                global_step=iteration,
+                new_style=True)
 
-    acc_step = 0
-    acc_avg_loss = 0.0
-    acc_num_samples = 0
-    acc_num_tokens = 0
-    acc_fwd_time = 0.0
-    acc_bwd_time = 0.0
-    acc_valid_num_tokens = 0
-    data_source_loss = collections.defaultdict(lambda: [0.0, 0.0])
-    data_source_cnt = collections.defaultdict(int)
+      print_rank_0(
+        f"Step: {iteration}, Loss: {avg_loss}, "
+        f"Learning Rate: {learning_rate}, "
+        f"Grad Norm: {model.get_global_grad_norm()}, "
+        f"Sec per Step: {sec_per_step}",
+        f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
+        f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
+        f"total_num_tokens: {total_num_tokens}",
+        f"total_num_samples: {total_num_samples}",
+        f"valid_tokens_per_sec_per_gpu: {valid_tokens_per_sec_per_gpu}, "
+        f"total_num_tokens: {total_num_tokens}, "
+        f"total_num_samples: {total_num_samples}, "
+        f"total_num_valid_tokens: {total_num_valid_tokens}, "
+        f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, "
+      )
+
+      acc_step = 0
+      acc_avg_loss = 0.0
+      acc_num_samples = 0
+      acc_num_tokens = 0
+      acc_valid_num_tokens = 0
+      data_source_loss = collections.defaultdict(lambda: [0.0, 0.0])
 
     if iteration % args.save_checkpoint_per_step == 0 and \
         iteration > 0 and model.is_gradient_accumulation_boundary():
