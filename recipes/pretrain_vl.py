@@ -315,7 +315,7 @@ def train():
         print_rank_0(batch)
         print_rank_0(
             f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n"
-            f"=" * 100 + "\n\n")
+            "=" * 100 + "\n\n")
         show_cnt -= 1
 
     data_source = batch.pop("data_source") # dataset source list cur batch
@@ -397,7 +397,7 @@ def train():
         key = data_source[int(s_idx.item())]
         data_source_loss[key][0] += sum_loss.item()
         data_source_loss[key][1] += token_num.item()
-      
+
       def data_source_loss_reduce(gathered_dicts):
         loss_dict = collections.defaultdict(lambda: [0.0, 0.0])
         for tmp_dict in gathered_dicts:

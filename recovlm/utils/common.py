@@ -67,19 +67,21 @@ def dist_reduce_dict(local_dict, dict_reduce_func=None):
   rank = dist.get_rank()
   world_size = dist.get_world_size()
 
-  serialized_dict = pickle.dumps(local_dict)
-  tensor = torch.ByteTensor(list(serialized_dict)).cuda()
-  tensor_size = torch.tensor([tensor.size(0)], dtype=torch.int64).cuda()
-  all_sizes = [torch.tensor([0], dtype=torch.int64).cuda() for _ in range(world_size)]
-  dist.all_gather(all_sizes, tensor_size)
+  # serialized_dict = pickle.dumps(local_dict)
+  # tensor = torch.ByteTensor(list(serialized_dict)).cuda()
+  # tensor_size = torch.tensor([tensor.size(0)], dtype=torch.int64).cuda()
+  # all_sizes = [torch.tensor([0], dtype=torch.int64).cuda() for _ in range(world_size)]
+  # dist.all_gather(all_sizes, tensor_size)
 
-  max_size = max([t.item() for t in all_sizes])
-  buffer_tensor = torch.zeros(max_size, dtype=torch.uint8).cuda()
-  buffer_tensor[:tensor.size(0)] = tensor
-  gathered_tensors = [torch.zeros(max_size, dtype=torch.uint8).cuda() for _ in range(world_size)]
-  dist.all_gather(gathered_tensors, buffer_tensor)
+  # max_size = max([t.item() for t in all_sizes])
+  # buffer_tensor = torch.zeros(max_size, dtype=torch.uint8).cuda()
+  # buffer_tensor[:tensor.size(0)] = tensor
+  # gathered_tensors = [torch.zeros(max_size, dtype=torch.uint8).cuda() for _ in range(world_size)]
+  # dist.all_gather(gathered_tensors, buffer_tensor)
 
-  gathered_dicts = [pickle.loads(bytes(t.cpu().tolist())) for t in gathered_tensors]
+  # gathered_dicts = [pickle.loads(bytes(t.cpu().tolist())) for t in gathered_tensors]
+  gather_dicts = [None for _ in range(world_size)]
+  dist.all_gather_object(object_list=gather_dicts, obj=local_dict)
   if dict_reduce_func is not None:
     return dict_reduce_func(gathered_dicts)
   else:
