@@ -241,7 +241,7 @@ def train():
     min_lr=args.min_lr,
     num_stop_steps=20
   )
-
+  print_rank_0("ggggg")
   model.train()
   model, optimizer, _, lr_scheduler = deepspeed.initialize(args=args,
                                                            model=model,
