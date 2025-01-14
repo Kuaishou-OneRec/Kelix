@@ -60,7 +60,6 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --use_flash_attention_2 \
     --logging_per_step 1 \
     --seed 19260817 \
-    --freeze_llm \
     --merge_checkpoint \
     --merge_checkpoint_dtype bf16 \
     --merge_checkpoint_output_file pytorch_model.bin \
