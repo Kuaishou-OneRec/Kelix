@@ -14,7 +14,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained/Base model path
 
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.20.9
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.20.8
 
 
 mkdir -p $OUTPUT_DIR
@@ -25,7 +25,7 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
 
-comment="关闭序列并行，the_cauldron_recaption"
+comment="序列并行基线，the_cauldron_recaption"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
@@ -56,7 +56,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --num_warmup_steps 500 \
     --num_training_steps 40000 \
     --save_checkpoint_per_step 2000 \
-    --sequence_parallel_size 1 \
+    --sequence_parallel_size 4 \
     --use_flash_attention_2 \
     --logging_per_step 10 \
     --seed 19260817 \

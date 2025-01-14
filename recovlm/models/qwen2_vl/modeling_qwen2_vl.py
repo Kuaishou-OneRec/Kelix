@@ -699,6 +699,8 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         else:
             sliding_window = -1
 
+        # TODO: 暂时不考虑不packing的情况
+        assert cu_seqlens is not None, "Pass cu_seqlens for FA2"
         if get_sequence_parallel_world_size() > 1:
             attn_output = self._dist_attn(
                 query=query_states,
@@ -710,7 +712,6 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
                 causal=self.is_causal
             )
         else:
-            assert cu_seqlens is not None, "Pass cu_seqlens for FA2"
             if cu_seqlens is not None:
                 # Sample packing with FA2
                 max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()

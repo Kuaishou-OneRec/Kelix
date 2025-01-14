@@ -182,7 +182,7 @@ def train():
   print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
 
   set_random_seed(args.seed)
-  torch.distributed.barrier()
+  dist.barrier()
 
 
   if dist.get_rank() == 0:
@@ -190,7 +190,8 @@ def train():
     args_str = json.dumps(args_dict, indent=4, ensure_ascii=False)
     print_rank_0(f"Training Arguments:\n{args_str}")
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-    with open(os.path.join(args.output_dir, f"args-{args.commit_id}-{timestamp}.json"), 'w',
+    with open(os.path.join(args.output_dir,
+          f"args-{args.commit_id}-{timestamp}.json"), 'w',
         encoding="utf-8") as f:
       f.write(args_str + "\n")
 
@@ -200,10 +201,11 @@ def train():
     tb_writer = SummaryWriter(log_dir=os.path.join(args.output_dir, "log"))
 
   # enabled=False when zero stage < 3
-  with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config, enabled=False):
+  with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config,
+                           enabled=False):
     model = Qwen2VLForConditionalGeneration.from_pretrained(
-      args.model_dir, _attn_implementation="flash_attention_2", use_cache=False
-    )
+      args.model_dir, _attn_implementation="flash_attention_2",
+      use_cache=False)
 
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
@@ -243,10 +245,11 @@ def train():
   )
   with Timer("Initialize deepspeed model."):
     model.train()
-    model, optimizer, _, lr_scheduler = deepspeed.initialize(args=args,
-                                                            model=model,
-                                                            optimizer=optimizer,
-                                                            lr_scheduler=lr_scheduler)
+    model, optimizer, _, lr_scheduler = \
+      deepspeed.initialize(args=args,
+                           model=model,
+                           optimizer=optimizer,
+                           lr_scheduler=lr_scheduler)
 
   total_num_tokens = 0
   total_num_samples = 0
@@ -313,13 +316,13 @@ def train():
   for batch in gather_by_group(dataloader, get_sequence_parallel_group()):
     if show_cnt > 0 and dist.get_rank() == 0:
       with Timer("Show data"):
-        print_rank_0(batch)
+        input_text = processor.tokenizer.decode(batch['input_ids'][0])
         print_rank_0(
-            f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n" + 
-            "=" * 100 + "\n\n")
+            f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
+        print_rank_0(batch)
         show_cnt -= 1
 
-    data_source = batch.pop("data_source") # dataset source list cur batch
+    data_source = batch.pop("data_source", None) # dataset source list cur batch
     to_cuda(batch)
     input_ids = batch["input_ids"]
     loss_mask = batch["loss_mask"]
@@ -363,13 +366,11 @@ def train():
       logits = output.logits
 
       # 提前shift logits & labels
-      start, end = get_local_sequence_boundary(labels.shape[-1])
       pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
           dtype=labels.dtype).to(device=labels.device)
       labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
-      local_labels = labels[:, start:end]
-
-      loss, token_loss = loss_fn(logits=logits, labels=local_labels)
+      local_labels = get_local_sequence(labels, seq_idx=1)
+      loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
 
       del logits
       del labels
@@ -392,7 +393,7 @@ def train():
         if s_idx < 0:
           continue
         mask = local_sample_idx == s_idx
-        sum_loss = token_loss[mask].sum()
+        sum_loss = per_token_loss[mask].sum()
         token_num = mask.sum()
 
         key = data_source[int(s_idx.item())]
@@ -421,7 +422,6 @@ def train():
             "samples": data_source_samples
           })
 
-
       if dist.get_rank() == 0:
         learning_rate = model.lr_scheduler.get_lr()[0]
         end_time = time.time()
@@ -435,9 +435,9 @@ def train():
         avg_loss = acc_avg_loss / acc_step
         start_time = end_time
         log_dict = {
-          "losses/loss": avg_loss,
-          "losses/grad_norm": model.get_global_grad_norm(),
-          "learning_rate": learning_rate,
+          "training/loss": avg_loss,
+          "training/grad_norm": model.get_global_grad_norm(),
+          "training/learning_rate": learning_rate,
           "perf/sec_per_step": sec_per_step,
           "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
           "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
