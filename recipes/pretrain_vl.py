@@ -247,11 +247,11 @@ def train():
                                                            model=model,
                                                            optimizer=optimizer,
                                                            lr_scheduler=lr_scheduler)
+  print_rank_0("ttttt")
 
   total_num_tokens = 0
   total_num_samples = 0
   total_num_valid_tokens = 0
-  total_data_source_cnt = {}
   if not args.resume_from:
     args.resume_from = args.output_dir
   ckpt_id = args.resume_from_tag
@@ -269,6 +269,7 @@ def train():
       total_num_tokens = client_state.get("total_num_tokens", 0)
       total_num_samples = client_state.get("total_num_samples", 0)
 
+  print_rank_0("gggggg")
   dist.barrier()
 
   processor = Qwen2VLProcessor.from_pretrained(args.model_dir)
@@ -315,7 +316,7 @@ def train():
       with Timer("Show data"):
         print_rank_0(batch)
         print_rank_0(
-            f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n"
+            f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n" + 
             "=" * 100 + "\n\n")
         show_cnt -= 1
 
