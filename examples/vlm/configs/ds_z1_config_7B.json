@@ -16,5 +16,8 @@
     "wall_clock_breakdown": false,
     "bf16": {
       "enabled": true
+    },
+    "compile": {
+      "disable": false
     }
 }
