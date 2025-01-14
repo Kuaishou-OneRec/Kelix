@@ -3,7 +3,8 @@ from .dataset import (
     DistDataset,
     ParquetDataset,
     JsonlDataset,
-    JsonDataset
+    JsonDataset,
+    WebDataset,
 )
     
 def create_dataset(cfg) -> DistDataset:
