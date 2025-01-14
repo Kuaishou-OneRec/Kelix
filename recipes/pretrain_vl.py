@@ -376,7 +376,6 @@ def train():
       del labels
       del local_labels
 
-
     with Timer("bwd"):
       model.backward(loss)
       model.step()
