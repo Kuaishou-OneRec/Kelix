@@ -1,6 +1,6 @@
 hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=512
+np=2048
 
 KWS_SERVICE_REGION=HB2
 KWS_SERVICE_DC=WLF2
@@ -31,6 +31,4 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        python3 tools/data_helpers/all_shuffle.py \
-        --input_dir viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_mmc4 \
-        --output_dir viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_mmc4_shuffle
+        python3 tools/data_helpers/parquet_writer_worker.py tools/data_helpers/config/wds_to_parquet_no_interleave.yaml

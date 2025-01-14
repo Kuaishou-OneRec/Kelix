@@ -1,5 +1,7 @@
+import sys
 import os
 import uuid
+import traceback
 from tqdm import tqdm
 import argparse
 import pandas as pd
@@ -14,13 +16,13 @@ class Shuffler(MPIBase):
         input_dir, 
         output_dir,
         buffer_mem_size=16*1024*1024*1024,
-        shuffle_partition=64,
+        out_partition=2048,
     ):
         super().__init__()
         self.input_dir = input_dir
         self.output_dir = output_dir
         self.buffer_mem_size = buffer_mem_size
-        self.shuffle_partition = shuffle_partition
+        self.out_partition = out_partition
         self.tmp_dir = os.path.join(self.output_dir, ".tmp")
         self.fs = pa.hdfs.connect(user="mpi")
         if self.rank == 0:
@@ -37,20 +39,22 @@ class Shuffler(MPIBase):
         self.files = files[self.rank::self.world_size]
     
     def write_df(self, df):
-        for i in range(0, len(df), self.out_split_size):
-            cur_df = df.iloc[i:i+self.out_split_size]
-            basename = f"rank-{self.rank}-{str(uuid.uuid1())}.parquet"
-            tmp_file = os.path.join(self.tmp_dir, basename)
-            filename = os.path.join(self.output_dir, basename)
-            pq.write_table(pa.Table.from_pandas(cur_df), tmp_file)
-            self.fs.mv(tmp_file, filename)
-            self.mpi_print(f"write to {filename} success")
+        basename = f"rank-{self.rank}-{str(uuid.uuid1())}.parquet"
+        tmp_file = os.path.join(self.tmp_dir, basename)
+        filename = os.path.join(self.output_dir, basename)
+        pq.write_table(pa.Table.from_pandas(df), tmp_file)
+        self.fs.mv(tmp_file, filename)
+        self.mpi_print(f"write to {filename} success")
     
     def shard_shuffle(self, df):
         df['hash'] = [hash(x) for x in df.uuid.values]
-        for i in range(self.shuffle_partition):
-            cur_df = df[df.hash % self.shuffle_partition == i]
-            self.write_df(cur_df)
+        df.sort_values(by='hash', inplace=True)
+        for i in range(0, len(df), self.out_partition):
+            cur_df = df.iloc[i:i+self.out_partition]
+            try:
+                self.write_df(cur_df)
+            except Exception as e:
+                print(traceback.format_exc())
     
     def run(self):
         buffer = []
@@ -58,12 +62,17 @@ class Shuffler(MPIBase):
         for fn in tqdm(self.files):
             df = pq.read_table(fn).to_pandas()
             buffer.append(df)
-            mem_size += df.memory_usage().sum()
+            mem_size += sys.getsizeof(df)
             if mem_size >= self.buffer_mem_size:
                 df = pd.concat(buffer)
                 buffer = []
                 mem_size = 0
                 self.shard_shuffle(df)
+
+        df = pd.concat(buffer)
+        buffer = []
+        mem_size = 0
+        self.shard_shuffle(df)
     
 def main():
     parser = argparse.ArgumentParser()
