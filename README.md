@@ -29,18 +29,38 @@ This project is designed to train VLMs from scratch.
 
 ### Data Preparation
 
-#### 如何生成 index.json
+#### Parquet Data Format
+
+由于 webdataset 无法很好的利用 spark & mapreduce 的大数据处理能力，后续在做数据过滤和处理时更困难。因此使用 parquet 格式能够有更好的数据处理工具以及利用 hdfs 大规模的存储，减少 ssd ceph 存储的压力。
+
+##### 格式约定
+
+| Field name | Field dtype | comment |
+| ---------- | ----------- | ------- |
+| images     | string      | json string, 实际是 map<string, string> 内容是 image key -> image bytes base64 |
+| videos     | string      | json string, 实际是 list<string> 内容是 messages 或者 segments 里面所有的 video path|
+| source     | string      | 数据来源 |
+| messages   | string      | json string, chat 格式的数据，参考 [chat 数据](#chat-数据)
+| segments   | string      | json string, pretrain 格式的数据，参考 [pretrain 数据](#pretrain-数据)
+| metadata   | string      | json string, map<string, string> 其他 meta 信息
+| uuid       | string      | 样本 uuid，用来唯一标识一条样本 |
+
+##### 数据路径 
+- Stage1 数据 **viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/{dataset_name}**
+- Stage2 数据 **viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/{dataset_name}**
+
+#### WebDataset Data Format
+
+参考文档：[WebDataset File Format Specification](https://docs.google.com/document/d/18OdLjruFNX74ILmgrdiCI9J1fQZuhzzRBCHV9URWto0/edit?tab=t.0)
+
+制作 webdataset 可以参考脚本 tools/downloader/main.py, 可以利用 mpi4py 同时拉起多个进程加速数据处理
+
+##### 如何生成 index.json
 ```shell
 pip install -e /llm_reco_ssd/luoxinchen/repos/webdataset/ --upgrade
 cd /PATH/TO/WEBDATASET/
 widsindex create *.tar --output index.json --process-num 256
 ```
-
-#### Stage2 & SFT Data Format
-
-参考文档：[WebDataset File Format Specification](https://docs.google.com/document/d/18OdLjruFNX74ILmgrdiCI9J1fQZuhzzRBCHV9URWto0/edit?tab=t.0)
-
-制作 webdataset 可以参考脚本 tools/downloader/main.py, 可以利用 mpi4py 同时拉起多个进程加速数据处理
 
 ##### 约定
 1. 如果样本里面有图片一起打包到 .tar 文件里面，如果有视频则存储视频对应的 ceph 路径。

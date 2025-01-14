@@ -1,0 +1,40 @@
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_no_interleave
+split_size: 536870912
+dataset:
+  class_name: WebDataset
+  kwargs:
+    index_list:
+      - /llm_reco_ssd/luoxinchen/dataset/Stage2/the_cauldron/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/kwai_video_caption/20250105/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/Stage2/DenseFusion-1M/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/Stage2/DenseFusion-4V-100k/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/Stage2/LLaVA-CC3M-Pretrain-595K/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/Stage2/Docmatrix/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/imagenet-21k/OpenDataLab___ImageNet-21k/raw/webdataset/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/Stage2/Recaption/tar/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/rvl-cdip/rvl-cdip/data/webdataset/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/google-landmarks/webdataset/index.json
+      - /llm_reco_ssd/renlejian/datasets/ArT.json
+      - /llm_reco_ssd/renlejian/datasets/COCOText.json
+      - /llm_reco_ssd/renlejian/datasets/CTW.json
+      - /llm_reco_ssd/renlejian/datasets/LSVT.json
+      - /llm_reco_ssd/renlejian/datasets/MLT.json
+      - /llm_reco_ssd/renlejian/datasets/MTWI.json
+      - /llm_reco_ssd/renlejian/datasets/RCTW.json
+      - /llm_reco_ssd/renlejian/datasets/SROIE.json
+      - /llm_reco_ssd/renlejian/datasets/TextOCR.json
+      - /llm_reco_ssd/renlejian/datasets/UberText.json
+      - /llm_reco_ssd/renlejian/datasets/synthdog.json
+      - /llm_reco_ssd/renlejian/datasets/ReCTS.json
+      - /llm_reco_ssd/luoxinchen/dataset/uni-chart/webdataset/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/Stage2/LLaVA-OneVision/out/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/Stage2/sharegptvideo/sft/video_240k_caption_15k/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/Stage2/sharegptvideo/sft/video_caption_300k/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/Stage2/sharegptvideo/pretrain/video_caption_pretrain/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/docvqa/spdocvqa_imdb/webdataset/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/Stage2/sharegpt4o/video_conversations/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/Stage2/sharegpt4o/image_conversations/index.json
+      - /llm_reco_ssd/luoxinchen/dataset/chatqa/OpenDataLab___ChartQA/ChartQA/ChartQA-Dataset/webdataset/index.json
+converter:
+  class_name: WDSToParquetConverter
+  kwargs: {}
