@@ -57,10 +57,10 @@ class CrossEntropyLoss(torch.nn.Module):
         >>> loss = loss_fn(output_chunks, labels)
     """
     total_elements = (labels != self.ignore_index).sum().cuda()
-    if get_sequence_parallel_world_size() > 1:
-      dist.all_reduce(
-        total_elements, op=dist.ReduceOp.SUM,
-        group=get_sequence_parallel_group())
+    # if get_sequence_parallel_world_size() > 1:
+    #   dist.all_reduce(
+    #     total_elements, op=dist.ReduceOp.SUM,
+    #     group=get_sequence_parallel_group())
     vocab_size = logits.shape[-1]
 
     if self.shift_labels:
