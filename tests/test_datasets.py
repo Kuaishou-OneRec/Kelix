@@ -150,40 +150,13 @@ TOKENIZER = "/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct"
 #         print(item)
 #         break
 
-# def test_chat_vision_dataset_with_packing():
-#     # processor = Qwen2VLProcessor.from_pretrained(
-#     #     "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct")
-#     init_processes(0, 1)
-#     ds = ChatCompletionVisionDataset(
-#         sources = "/llm_reco_ssd/luoxinchen/dataset/Stage2/the_cauldron/index.json",
-#         max_length = 3072,
-#         min_visual_tokens_per_image = 4,
-#         max_visual_tokens_per_image = 512,
-#         base_model_dir = "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
-#         shrink_ratio = 0.9,
-#         max_retry = 5,
-#         multiple_of = 8
-#     )
-#     def collate_fn(samples):
-#         return samples[0]
-
-#     dataloader = DataLoader(
-#         dataset=ds,
-#         batch_size=1,
-#         shuffle=False,
-#         num_workers=8,
-#         collate_fn=collate_fn
-#     )
-#     for idx, item in enumerate(dataloader):
-#         print(item)
-#         break
-
-
-def test_interleaving():
+def test_chat_vision_dataset_with_packing():
+    # processor = Qwen2VLProcessor.from_pretrained(
+    #     "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct")
     init_processes(0, 1)
     ds = ChatCompletionVisionDataset(
-        sources = "/llm_reco_ssd/luoxinchen/dataset/Stage2/MMC4FF.json",
-        max_length = 512,
+        sources = "/llm_reco/luoxinchen/dataset/Stage2/the_cauldron_recaption_v1/index.json",
+        max_length = 3072,
         min_visual_tokens_per_image = 4,
         max_visual_tokens_per_image = 512,
         base_model_dir = "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
@@ -202,21 +175,48 @@ def test_interleaving():
         collate_fn=collate_fn
     )
     for idx, item in enumerate(dataloader):
-        input_ids = item["input_ids"]
-        loss_mask = item["loss_mask"]
-        segments = []
-        cur_mask = -1
-        for _id, _mask in zip(input_ids[0], loss_mask[0]):
-            if _mask == cur_mask:
-                segments[-1].append(_id)
-            else:
-                segments.append([])
-                cur_mask = _mask
-                segments[-1].append(_id)
-        print(input_ids)
-        print(loss_mask)
-        for segment in segments:
-            print(ds.processor.tokenizer.decode(segment))
-            print("=" * 10)
-        gg
+        print(item)
         break
+
+
+# def test_interleaving():
+#     init_processes(0, 1)
+#     ds = ChatCompletionVisionDataset(
+#         sources = "/llm_reco_ssd/luoxinchen/dataset/Stage2/MMC4FF.json",
+#         max_length = 512,
+#         min_visual_tokens_per_image = 4,
+#         max_visual_tokens_per_image = 512,
+#         base_model_dir = "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
+#         shrink_ratio = 0.9,
+#         max_retry = 5,
+#         multiple_of = 8
+#     )
+#     def collate_fn(samples):
+#         return samples[0]
+
+#     dataloader = DataLoader(
+#         dataset=ds,
+#         batch_size=1,
+#         shuffle=False,
+#         num_workers=8,
+#         collate_fn=collate_fn
+#     )
+#     for idx, item in enumerate(dataloader):
+#         input_ids = item["input_ids"]
+#         loss_mask = item["loss_mask"]
+#         segments = []
+#         cur_mask = -1
+#         for _id, _mask in zip(input_ids[0], loss_mask[0]):
+#             if _mask == cur_mask:
+#                 segments[-1].append(_id)
+#             else:
+#                 segments.append([])
+#                 cur_mask = _mask
+#                 segments[-1].append(_id)
+#         print(input_ids)
+#         print(loss_mask)
+#         for segment in segments:
+#             print(ds.processor.tokenizer.decode(segment))
+#             print("=" * 10)
+#         gg
+#         break
