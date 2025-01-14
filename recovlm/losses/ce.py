@@ -2,6 +2,7 @@ from typing import List
 
 import torch
 import torch.nn.functional as F
+import torch.distributed as dist
 
 from recovlm.training.parallel import get_sequence_parallel_world_size
 
