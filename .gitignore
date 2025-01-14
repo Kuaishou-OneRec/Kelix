@@ -18,3 +18,4 @@ hostfile
 *.log
 *.err
 *.bin
+*.out
