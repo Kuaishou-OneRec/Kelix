@@ -4,7 +4,8 @@ import torch
 import torch.nn.functional as F
 import torch.distributed as dist
 
-from recovlm.training.parallel import get_sequence_parallel_world_size
+from recovlm.training.parallel import get_sequence_parallel_world_size, \
+  get_sequence_parallel_group
 
 class CrossEntropyLoss(torch.nn.Module):
   """
@@ -57,7 +58,9 @@ class CrossEntropyLoss(torch.nn.Module):
     """
     total_elements = (labels != self.ignore_index).sum().cuda()
     if get_sequence_parallel_world_size() > 1:
-      dist.all_reduce(total_elements, op=dist.ReduceOp.SUM)
+      dist.all_reduce(
+        total_elements, op=dist.ReduceOp.SUM,
+        group=get_sequence_parallel_group())
     vocab_size = logits.shape[-1]
 
     if self.shift_labels:
