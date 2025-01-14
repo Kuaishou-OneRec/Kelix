@@ -241,13 +241,12 @@ def train():
     min_lr=args.min_lr,
     num_stop_steps=20
   )
-  print_rank_0("ggggg")
-  model.train()
-  model, optimizer, _, lr_scheduler = deepspeed.initialize(args=args,
-                                                           model=model,
-                                                           optimizer=optimizer,
-                                                           lr_scheduler=lr_scheduler)
-  print_rank_0("ttttt")
+  with Timer("Initialize deepspeed model."):
+    model.train()
+    model, optimizer, _, lr_scheduler = deepspeed.initialize(args=args,
+                                                            model=model,
+                                                            optimizer=optimizer,
+                                                            lr_scheduler=lr_scheduler)
 
   total_num_tokens = 0
   total_num_samples = 0
@@ -269,7 +268,6 @@ def train():
       total_num_tokens = client_state.get("total_num_tokens", 0)
       total_num_samples = client_state.get("total_num_samples", 0)
 
-  print_rank_0("gggggg")
   dist.barrier()
 
   processor = Qwen2VLProcessor.from_pretrained(args.model_dir)
@@ -291,7 +289,8 @@ def train():
       f.write(json.dumps(
         dataset_config, ensure_ascii=False, indent=2) + "\n")
 
-  dataloader = get_dataloader(name=dataset, **dataset_config)
+  with Timer("Build dataloader"):
+    dataloader = get_dataloader(name=dataset, **dataset_config)
   ##############
 
   loss_fn = CrossEntropyLoss(

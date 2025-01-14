@@ -35,7 +35,8 @@ from recovlm.utils.qwen_vl_utils import process_vision_info
 
 from recovlm.training.parallel import get_sequence_parallel_group, \
   get_sequence_parallel_world_size
-from recovlm.utils.common import print_rank_0
+from recovlm.utils.common import print_rank_0, Timer
+
 import glob
 
 from .templates import get_template
@@ -713,34 +714,37 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.total_samples = 0
     if isinstance(sources, str):
       sources = sources.split(",")
-    urls = []
-    for source in sources:
-      with open(source, encoding="utf-8") as f:
-        index = json.loads(f.read())["shardlist"]
-        for item in index:
-          urls.append(os.path.join(os.path.dirname(source), item["url"]))
-          self.total_samples += item["nsamples"]
+    with Timer("Read urls"):
+      urls = []
+      for source in sources:
+        with open(source, encoding="utf-8") as f:
+          index = json.loads(f.read())["shardlist"]
+          for item in index:
+            urls.append(os.path.join(os.path.dirname(source), item["url"]))
+            self.total_samples += item["nsamples"]
 
-    # broadcast all urls
-    urls.sort()
-    random.shuffle(urls)
-    t = [urls]
-    dist.broadcast_object_list(t, src=0)
-    urls = t[0]
-    logger.info(f"[RANK{dist.get_rank()}] {urls=}")
+    with Timer("Sort -> Shuffle -> Broadcast"):
+      # broadcast all urls
+      urls.sort()
+      random.shuffle(urls)
+      t = [urls]
+      dist.broadcast_object_list(t, src=0)
+      urls = t[0]
+      logger.info(f"[RANK{dist.get_rank()}] {urls=}")
 
-    dataset = wds.WebDataset(
-        urls,
-        handler=wds.warn_and_continue,
-        resampled=True,
-        shardshuffle=True,
-        cache_dir="/tmp/_wids_cache",
-        nodesplitter=wds.split_by_node,
-        workersplitter=wds.split_by_worker
-    )
+    with Timer("Build dataset"):
+      dataset = wds.WebDataset(
+          urls,
+          handler=wds.warn_and_continue,
+          resampled=True,
+          shardshuffle=True,
+          cache_dir="/tmp/_wids_cache",
+          nodesplitter=wds.split_by_node,
+          workersplitter=wds.split_by_worker
+      )
 
-    dataset = dataset.shuffle(shuffle_size, initial=shuffle_initial_size).decode(
-      "pil", handler=wds.warn_and_continue)
+      dataset = dataset.shuffle(shuffle_size, initial=shuffle_initial_size).decode(
+        "pil", handler=wds.warn_and_continue)
     
     self.dataset = dataset
 
