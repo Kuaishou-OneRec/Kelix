@@ -13,12 +13,9 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained/Base model path
-<<<<<<< HEAD
 
 OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.20.6
-=======
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage2/0.0.23
->>>>>>> d56484a15e5adde57af74c1a65e5baf10eb11f0b
+
 
 mkdir -p $OUTPUT_DIR
 
@@ -50,12 +47,8 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --resume_from_tag global_step90000 \
     --load_weights_only \
     --enable_gradient_checkpointing \
-<<<<<<< HEAD
     --max_length 32000 \
     --load_weights_only \
-=======
-    --max_length 8192 \
->>>>>>> d56484a15e5adde57af74c1a65e5baf10eb11f0b
     --learning_rate 5e-5 \
     --min_lr 1e-6 \
     --weight_decay 0.1 \
@@ -75,7 +68,3 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --comment "$comment" \
     --commit_id $git_hash \
     --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json >> $OUTPUT_DIR/stdout.log 2>>$OUTPUT_DIR/stderr.log &
-<<<<<<< HEAD
-=======
-
->>>>>>> d56484a15e5adde57af74c1a65e5baf10eb11f0b
