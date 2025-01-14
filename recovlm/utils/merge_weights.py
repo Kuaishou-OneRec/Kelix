@@ -27,9 +27,21 @@ def main():
   args = arg_parser.parse_args()
 
   # llm weights
-  model = transformers.Qwen2VLForConditionalGeneration.from_pretrained(
-      args.model_dir)
+  model_config = transformers.Qwen2VLForConditionalGeneration.config_class.from_pretrained(
+    args.new_model_dir)
+  model = transformers.Qwen2VLForConditionalGeneration(model_config)
+
+  text_model = transformers.AutoModelForCausalLM.from_pretrained(
+    args.model_dir)
+
   sd = model.state_dict()
+  text_sd = text_model.state_dict()
+
+  for name in text_sd.keys():
+    assert name in sd
+    print(name)
+    sd[name] = text_sd[name]
+
   if args.vision_encoder_dir:
     vision_encoder = transformers.CLIPModel.from_pretrained(
         args.vision_encoder_dir)
