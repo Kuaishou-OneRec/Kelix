@@ -4,6 +4,7 @@ import uuid
 import traceback
 from tqdm import tqdm
 import argparse
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -31,6 +32,7 @@ class Shuffler(MPIBase):
                 x for x in files
                 if "parquet" in x
             ]
+            np.random.shuffle(files)
             self.fs.mkdir(self.output_dir)
             self.fs.mkdir(self.tmp_dir)
         else:
