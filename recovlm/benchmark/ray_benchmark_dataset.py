@@ -249,29 +249,8 @@ def OCRBench_parse(sample) -> dict:
     ]
     return {"messages": json.dumps({"id": "OCRBench", "answer": answer, "inputs": messages, "question_type": question_type, "dataset": dataset})} 
 
-def Flickr30k_parse(sample) -> dict:
-    image = "/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/flickr30k/flickr30k-images/" + sample["filename"]
-    messages = [
-        {"role": "system", "content": "You are a helpful assistant."},
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "image": base64.b64encode(open(image, "rb").read()).decode("utf-8"),
-                },
-                {
-                    "type": "text", 
-                    "text": "Caption the above image using one simple sentence."
-                },
-            ],
-        },
-    ]
-    return {"messages": json.dumps({"id": sample["img_id"], "answer": sample["raw"], "inputs": messages})} 
-
 # def Flickr30k_parse(sample) -> dict:
-#     image_name = sample['image'].split('/')[-1]
-#     image = "/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/flickr30k/flickr30k-images/" + image_name
+#     image = "/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/flickr30k/flickr30k-images/" + sample["filename"]
 #     messages = [
 #         {"role": "system", "content": "You are a helpful assistant."},
 #         {
@@ -288,4 +267,25 @@ def Flickr30k_parse(sample) -> dict:
 #             ],
 #         },
 #     ]
-#     return {"messages": json.dumps({"id": sample["image_id"], "answer": sample["caption"], "inputs": messages})} 
+#     return {"messages": json.dumps({"id": sample["img_id"], "answer": sample["raw"], "inputs": messages})} 
+
+def Flickr30k_parse(sample) -> dict:
+    image_name = sample['image'].split('/')[-1]
+    image = "/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/flickr30k/flickr30k-images/" + image_name
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": base64.b64encode(open(image, "rb").read()).decode("utf-8"),
+                },
+                {
+                    "type": "text", 
+                    "text": "Caption the above image using one simple sentence."
+                },
+            ],
+        },
+    ]
+    return {"messages": json.dumps({"id": sample["image_id"], "answer": sample["caption"], "inputs": messages})} 

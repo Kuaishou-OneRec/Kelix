@@ -1,3 +1,12 @@
+# Filename: cider.py
+#
+# Description: Describes the class to compute the CIDEr (Consensus-Based Image Description Evaluation) Metric
+#               by Vedantam, Zitnick, and Parikh (http://arxiv.org/abs/1411.5726)
+#
+# Creation Date: Sun Feb  8 14:16:54 2015
+#
+# Authors: Ramakrishna Vedantam <vrama91@vt.edu> and Tsung-Yi Lin <tl483@cornell.edu>
+
 #!/usr/bin/env python
 # Tsung-Yi Lin <tl483@cornell.edu>
 # Ramakrishna Vedantam <vrama91@vt.edu>
@@ -15,6 +24,7 @@ from collections import defaultdict
 import numpy as np
 import math
 import os
+
 import subprocess
 import tempfile
 import itertools
@@ -24,7 +34,7 @@ STANFORD_CORENLP_3_4_1_JAR = 'stanford-corenlp-3.4.1.jar'
 
 # punctuations to be removed from the sentences
 PUNCTUATIONS = ["''", "'", "``", "`", "-LRB-", "-RRB-", "-LCB-", "-RCB-", \
-        ".", "?", "!", ",", ":", "-", "--", "...", ";"] 
+        ".", "?", "!", ",", ":", "-", "--", "...", ";"]
 
 class PTBTokenizer:
     """Python wrapper of Stanford PTBTokenizer"""
@@ -39,14 +49,14 @@ class PTBTokenizer:
         # ======================================================
         final_tokenized_captions_for_image = {}
         image_id = [k for k, v in captions_for_image.items() for _ in range(len(v))]
-        sentences = '\n'.join([c.replace('\n', ' ') for k, v in captions_for_image.items() for c in v])
+        sentences = '\n'.join([c['caption'].replace('\n', ' ') for k, v in captions_for_image.items() for c in v])
 
         # ======================================================
         # save sentences to temporary file
         # ======================================================
         path_to_jar_dirname=os.path.dirname(os.path.abspath(__file__))
-        tmp_file = tempfile.NamedTemporaryFile(delete=False, dir=path_to_jar_dirname, mode="w", encoding="utf-8")
-        tmp_file.write(sentences)
+        tmp_file = tempfile.NamedTemporaryFile(delete=False, dir=path_to_jar_dirname)
+        tmp_file.write(sentences.encode())
         tmp_file.close()
 
         # ======================================================
@@ -55,7 +65,8 @@ class PTBTokenizer:
         cmd.append(os.path.basename(tmp_file.name))
         p_tokenizer = subprocess.Popen(cmd, cwd=path_to_jar_dirname, \
                 stdout=subprocess.PIPE)
-        token_lines = p_tokenizer.communicate(input=sentences.rstrip())[0].decode("utf-8")
+        token_lines = p_tokenizer.communicate(input=sentences.rstrip())[0]
+        token_lines = token_lines.decode()
         lines = token_lines.split('\n')
         # remove temp file
         os.remove(tmp_file.name)
@@ -270,7 +281,6 @@ class CiderScorer(object):
         # print score
         return np.mean(np.array(score)), np.array(score)
 
-
 class Cider(object):
     """Main Class to compute the CIDEr metric"""
     def __init__(self, df, test=None, refs=None, n=4, sigma=6.0):
@@ -287,10 +297,6 @@ class Cider(object):
                 ref_for_image (dict)  : dictionary with key <image> and value <tokenized reference sentence>
         :return: cider (float) : computed CIDEr score for the corpus
         """
-        tokenizer = PTBTokenizer()
-        gts  = tokenizer.tokenize(gts)
-        res = tokenizer.tokenize(res)
-
         assert(gts.keys() == res.keys())
         imgIds = gts.keys()
 
@@ -305,15 +311,85 @@ class Cider(object):
             assert(len(hypo) == 1)
             assert(type(ref) is list)
             assert(len(ref) > 0)
-            print(f"hypo: {hypo}")
-            print(f"ref: {ref}")
+
             cider_scorer += (hypo[0], ref)
 
         (score, scores) = cider_scorer.compute_score(self._dfMode)
-        print(f"scores: {scores}")
 
-
-        return score
+        return score, scores
 
     def method(self):
         return "CIDEr"
+
+
+from builtins import dict
+class COCOEvalCap:
+    def __init__(self, coco, cocoRes, df="corpus"):
+        self.evalImgs = []
+        self.eval = dict()
+        self.imgToEval = dict()
+        self.coco = coco
+        self.cocoRes = cocoRes
+        self.params = {'image_id': coco.getImgIds()}
+
+        self.gts = None
+        self.res = None
+        self.df = df
+
+    def tokenize(self):
+        imgIds = self.params['image_id']
+        # imgIds = self.coco.getImgIds()
+        gts = dict()
+        res = dict()
+        for imgId in imgIds:
+            gts[imgId] = self.coco.imgToAnns[imgId]
+            res[imgId] = self.cocoRes.imgToAnns[imgId]
+
+        # =================================================
+        # Set up scorers
+        # =================================================
+        print('tokenization...')
+        tokenizer = PTBTokenizer()
+        self.gts  = tokenizer.tokenize(gts)
+        self.res = tokenizer.tokenize(res)
+
+    def evaluate(self):
+        self.tokenize()
+
+        # =================================================
+        # Set up scorers
+        # =================================================
+        print('setting up scorers...')
+        scorers = [
+            (Cider(self.df), "CIDEr")
+        ]
+
+        # =================================================
+        # Compute scores
+        # =================================================
+        for scorer, method in scorers:
+            print('computing %s score...'%(scorer.method()))
+            score, scores = scorer.compute_score(self.gts, self.res)
+            if type(method) == list:
+                for sc, scs, m in zip(score, scores, method):
+                    self.setEval(sc, m)
+                    self.setImgToEvalImgs(scs, self.gts.keys(), m)
+                    print("%s: %0.3f"%(m, sc))
+            else:
+                self.setEval(score, method)
+                self.setImgToEvalImgs(scores, self.gts.keys(), method)
+                print("%s: %0.3f"%(method, score))
+        self.setEvalImgs()
+
+    def setEval(self, score, method):
+        self.eval[method] = score
+
+    def setImgToEvalImgs(self, scores, imgIds, method):
+        for imgId, score in zip(imgIds, scores):
+            if not imgId in self.imgToEval:
+                self.imgToEval[imgId] = dict()
+                self.imgToEval[imgId]["image_id"] = imgId
+            self.imgToEval[imgId][method] = score
+
+    def setEvalImgs(self):
+        self.evalImgs = [eval for imgId, eval in self.imgToEval.items()]
