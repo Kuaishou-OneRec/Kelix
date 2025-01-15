@@ -185,15 +185,6 @@ def train():
   initialize_model_parallel(args.sequence_parallel_size)
   print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
 
-  if dist.get_rank() == 0:
-    import subprocess
-
-    print_rank_0(os.environ["HADOOP_HOME"])
-
-    command = f'HADOOP_CLIENT_OPTS="-Xmx4g" hdfs dfs -ls viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen'
-    result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
-    print(result)
-
   set_random_seed(args.seed)
   dist.barrier()
 
