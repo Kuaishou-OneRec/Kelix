@@ -179,8 +179,8 @@ def infer_and_eval(dataset_response, output_folder, model_step, text2index=None,
             output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
 
         elif dataset_name in ["Flickr30k"]:
-            rsp[key] = [output]
-            anw[key] = json.loads(response["answers"])
+            rsp[key] = output
+            anw[key] = response["answers"]
             output_original_resp.write(json.dumps({key:output}) + "\n")
             output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
 

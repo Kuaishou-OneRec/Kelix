@@ -6,7 +6,7 @@ import collections
 
 from tqdm import tqdm
 from vllm import LLM, SamplingParams
-from ray_benchmark_dataset_1 import * 
+from ray_benchmark_dataset import * 
 from torch.utils.data import DataLoader
 import pandas as pd
 import sys
@@ -17,6 +17,7 @@ from eval.MMBench.mmbench_evaluation_tricky import MMBenchEvaluation
 from eval.MME_eval import MMEEval
 from eval.OCRBench_eval import eval_OCRBench
 from eval.cider_eval import Cider
+from eval.cider_eval import COCOEvalCap
 from torch.utils.tensorboard import SummaryWriter
 import re
 import os
@@ -39,7 +40,6 @@ from transformers import AutoProcessor
 from qwen_vl_utils import process_vision_info
 from llm_predict import LLMPredictor
 from utils_infer import get_acc, infer_and_eval
-from pycocoevalcap.eval import COCOEvalCap
 from pycocotools.coco import COCO
 import time
 
@@ -351,7 +351,9 @@ def main(_):
     #OCRBench
     OCRBench_dataset = ray.data.read_parquet(FLAGS.OCRBench_path).map(OCRBench_parse)
 
-    Flickr30k_dataset = ray.data.read_csv(FLAGS.Flickr30k_path).map(Flickr30k_parse)
+    with open(FLAGS.Flickr30k_path, 'r') as file_:
+        Flickr30k_data = json.load(file_)["annotations"]
+    Flickr30k_dataset = ray.data.from_items(Flickr30k_data).map(Flickr30k_parse)
 
 ############################################################################# Infer ################################################################
     if not os.path.exists(FLAGS.output_path):
@@ -588,8 +590,19 @@ def main(_):
                                             **resources_kwarg,
                                         ).take_all()
                 rsp, anw = infer_and_eval(Flickr30k_dataset_response, FLAGS.output_path, model_path, dataset_name="Flickr30k")
-                cider = Cider(df="corpus")
-                result = cider.compute_score(anw, rsp)
+                results = []
+                for key, val in rsp.items():
+                    results.append({
+                        'image_id': int(key),
+                        'caption': val,
+                    })
+                results_file = 'tmp.json'
+                json.dump(results, open(results_file, 'w'))
+                coco = COCO(FLAGS.Flickr30k_path)
+                coco_result = coco.loadRes(results_file)
+                coco_eval = COCOEvalCap(coco, coco_result)
+                coco_eval.evaluate()
+                result = coco_eval.eval["CIDEr"] 
                 print(f"Flickr30k dataset eval result for {model_path} in {model_folder}: {result}")
                 writer.add_scalar(f'benchmark/Flickr30k_test_score', result, cur_step)
                 fw = open(FLAGS.Flickr30k_infer_chekpoint_file, "w")
