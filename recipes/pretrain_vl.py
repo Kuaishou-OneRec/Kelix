@@ -333,11 +333,10 @@ def train():
     video_grid_thw = batch.get("video_grid_thw", None)
     cu_seqlens = batch.get("cu_seqlens", None)
     sample_idx = batch["sample_idx"]
-    local_sample_idx = get_local_sequence(sample_idx).squeeze()
+    local_sample_idx = get_local_sequence(sample_idx, seq_idx=1).squeeze()
 
-    num_samples, _ = local_sample_idx.max(dim=-1)
-    num_samples = (num_samples + 1).sum().cuda()
-    num_tokens = torch.tensor(local_sample_idx.numel()).cuda()
+    num_samples = (local_sample_idx.max() + 1).sum().cuda()
+    num_tokens = torch.tensor(input_ids.numel()).cuda()
     num_valid_tokens = num_tokens - (local_sample_idx == -1).sum().cuda()
 
     dist.all_reduce(num_tokens, op=dist.ReduceOp.SUM)
@@ -348,8 +347,8 @@ def train():
     total_num_tokens += num_tokens.item()
     total_num_valid_tokens += num_valid_tokens.item()
 
-    acc_num_tokens += num_tokens.item()
     acc_num_samples += num_samples.item()
+    acc_num_tokens += num_tokens.item()
     acc_valid_num_tokens += num_valid_tokens.item()
 
     input_ids = input_ids * (input_ids > 0).to(torch.int64)
@@ -381,7 +380,6 @@ def train():
       model.step()
 
     iteration = model.global_steps
-
     ########## dataset source monitor ###############
     if args.monitor_datasource_loss:
 
