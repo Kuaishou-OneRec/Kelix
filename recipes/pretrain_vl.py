@@ -354,8 +354,9 @@ def train():
 
     token_metrics = torch.tensor(
       [num_tokens, num_samples, num_valid_tokens]).cuda()
-    # dist.all_reduce(
-    #   token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+    print_rank_0(num_tokens, num_samples, num_valid_tokens)
+    dist.all_reduce(
+      token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
     num_tokens = token_metrics[0]
     num_samples = token_metrics[1]
