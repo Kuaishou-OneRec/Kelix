@@ -46,7 +46,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --resume_from /llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36 \
     --resume_from_tag global_step90000 \
     --load_weights_only \
-    --max_length 16000 \
+    --max_length 8192 \
     --load_weights_only \
     --learning_rate 1e-5 \
     --min_lr 1e-6 \
