@@ -415,6 +415,7 @@ def train():
         data_source_tokens = dist_reduce_dict(data_source_tokens)
         data_source_samples = dist_reduce_dict(
           data_source_samples, group=get_data_parallel_group())
+        data_source_samples = collections.defaultdict(int, data_source_samples)
 
       if dist.get_rank() == 0:
         learning_rate = model.lr_scheduler.get_lr()[0]
