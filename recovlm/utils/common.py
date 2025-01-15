@@ -109,7 +109,7 @@ class Timer:
 
 def shell_hdfs_ls(source_dir):
   try:
-    command = f"hdfs dfs -ls {source_dir}"
+    command = f'HADOOP_CLIENT_OPTS="-Xmx4g" hdfs dfs -ls {source_dir}'
     result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
     files = []
     for line in result.stdout.splitlines():
