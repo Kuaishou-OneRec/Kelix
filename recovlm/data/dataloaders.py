@@ -8,12 +8,13 @@ import wids
 import webdataset as wds
 
 from torch.utils.data import DataLoader
+from torchdata.stateful_dataloader import StatefulDataLoader
 from qwen_vl_utils import process_vision_info
 from transformers import AutoProcessor
 from tqdm import tqdm
 
 from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
-    ChatCompletionVisionDataset
+    ChatCompletionVisionDataset, ChatCompletionVisionParquetDataset
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
 
@@ -189,6 +190,48 @@ def get_chat_completion_vision_dataloader(sources: str,
     )
     return dataloader
 
+def get_chat_completion_vision_parquet_dataloader(sources: str,
+                                          max_length,
+                                          min_visual_tokens_per_image,
+                                          max_visual_tokens_per_image,
+                                          base_model_dir,
+                                          shrink_ratio,
+                                          max_retry,
+                                          multiple_of,
+                                          shuffle_seed=1024,
+                                          need_padding=False,
+                                          num_workers=8,
+                                          video_nframe=-1,
+                                          video_fps=2.0,
+                                          video_min_frames=2,
+                                          video_max_frames=120):
+
+    dataset = ChatCompletionVisionParquetDataset(
+        sources = sources,
+        num_workers = num_workers,
+        shuffle_seed = shuffle_seed,
+        max_length = max_length,
+        min_visual_tokens_per_image = min_visual_tokens_per_image,
+        max_visual_tokens_per_image = max_visual_tokens_per_image,
+        video_nframe=video_nframe,
+        video_fps=video_fps,
+        video_min_frames=video_min_frames,
+        video_max_frames=video_max_frames,
+        base_model_dir=base_model_dir,
+        shrink_ratio=shrink_ratio,
+        max_retry=max_retry,
+        multiple_of=multiple_of,
+        need_padding=need_padding)
+
+    ### packing, batching size=1; shuffle in dataset
+    dataloader = StatefulDataLoader(
+        dataset=dataset,
+        shuffle=False,
+        batch_size=1,
+        num_workers=num_workers,
+        collate_fn=lambda x: x[0]
+    )
+    return dataloader
 
 def get_dataloader(name: str, **kwargs):
     if name == "image_text_pair":
@@ -197,6 +240,10 @@ def get_dataloader(name: str, **kwargs):
         )
     elif name == "chat_vision":
         return get_chat_completion_vision_dataloader(
+            **kwargs
+        )
+    elif name == "chat_vision_parquet":
+        return get_chat_completion_vision_parquet_dataloader(
             **kwargs
         )
     else:
