@@ -2,9 +2,13 @@ import os
 import torch
 
 import wids
+import logging
+import json
+
+from recovlm.utils.common import shell_hdfs_ls
 
 from torch.utils.data import DataLoader
-from recovlm.data.datasets import ChatCompletionDataset, ImageTextPairDatasetWithPacking, ChatCompletionVisionDataset
+from recovlm.data.datasets import ChatCompletionDataset, ImageTextPairDatasetWithPacking, ChatCompletionVisionDataset, ParquetDataset, ChatCompletionVisionParquetDataset
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from tests.utils import init_processes
 """
@@ -177,3 +181,28 @@ def test_chat_vision_dataset_with_packing():
     for idx, item in enumerate(dataloader):
         print(item)
         break
+
+def test_parquet_dataset():
+    dataset_folder = "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_test/p_date=20250113"
+    data_file = shell_hdfs_ls(dataset_folder)
+
+    dataset = ParquetDataset(data_file, num_workers=1)
+    for s in dataset:
+        print(s)
+        break
+
+def test_ChatCompletionVisionParquetDataset():
+    init_processes(0, 1)
+    path = "./examples/vlm/configs/stage2_parquet.json"
+    with open(path, encoding="utf-8") as f:
+        dataset_config = json.loads(f.read())
+    dataset_config.pop("name")
+    dataset_config["num_workers"] = 1
+
+    dataset = ChatCompletionVisionParquetDataset(**dataset_config)
+    for s in dataset:
+        print(s)
+        break
+
+if __name__ == "__main__":
+    test_parquet_dataset()

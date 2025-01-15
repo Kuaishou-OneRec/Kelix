@@ -20,3 +20,4 @@ hostfile
 *.bin
 *.out
 *checkpoint.ipynb
+*.parquet
