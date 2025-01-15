@@ -47,7 +47,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --resume_from_tag global_step90000 \
     --load_weights_only \
     --enable_gradient_checkpointing \
-    --max_length 16000 \
+    --max_length 32768 \
     --load_weights_only \
     --learning_rate 1e-5 \
     --min_lr 1e-6 \
@@ -56,7 +56,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --num_warmup_steps 500 \
     --num_training_steps 40000 \
     --save_checkpoint_per_step 2000 \
-    --sequence_parallel_size 2 \
+    --sequence_parallel_size 4 \
     --use_flash_attention_2 \
     --logging_per_step 10 \
     --seed 19260817 \
