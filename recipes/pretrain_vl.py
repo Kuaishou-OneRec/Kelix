@@ -190,7 +190,7 @@ def train():
 
     print_rank_0(os.environ["HADOOP_HOME"])
 
-    command = f'HADOOP_CLIENT_OPTS="-Xmx4g" hdfs dfs -ls viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_stage1_shuffle_20250115'
+    command = f'HADOOP_CLIENT_OPTS="-Xmx4g" hdfs dfs -ls viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen'
     result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
     print(result)
 
