@@ -7,5 +7,5 @@
     "base_model_dir": "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
     "shrink_ratio": 0.7,
     "max_retry": 10,
-    "multiple_of": 32
+    "multiple_of": 1024
 }
