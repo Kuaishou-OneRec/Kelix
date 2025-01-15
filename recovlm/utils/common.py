@@ -110,12 +110,15 @@ class Timer:
 def shell_hdfs_ls(source_dir):
   try:
     command = f'HADOOP_CLIENT_OPTS="-Xmx4g" hdfs dfs -ls {source_dir}'
+    print_rank_0(source_dir)
     result = subprocess.run(command, shell=True, check=True, capture_output=True, text=True)
     files = []
     for line in result.stdout.splitlines():
       parts = line.split()
       if len(parts) > 0 and parts[-1].startswith('viewfs://'):
         files.append(parts[-1])
+    print_rank_0(files[:-10])
+    print_rank_0(len(files))
     return files
 
   except subprocess.CalledProcessError as e:
