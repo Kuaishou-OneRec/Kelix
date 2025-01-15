@@ -763,7 +763,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       )
 
       dataset = dataset.shuffle(
-          shuffle_size, initial=shuffle_initial_size).decode(
+          self.shuffle_size, initial=self.shuffle_initial_size).decode(
         "pil", handler=wds.warn_and_continue)
       
     return dataset, total_samples
