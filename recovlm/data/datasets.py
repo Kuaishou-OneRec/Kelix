@@ -1396,7 +1396,7 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
       elif isinstance(sources, list):
         for source in sources:
           hdfs_files = shell_hdfs_ls(source)
-          data_fiels += [fn for fn in hdfs_files if fn.endswith(".parquet")]
+          data_files += [fn for fn in hdfs_files if fn.endswith(".parquet")]
 
     data_files.sort()
     self.rng.shuffle(data_files)
