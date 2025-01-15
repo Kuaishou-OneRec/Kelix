@@ -333,19 +333,19 @@ def train():
     video_grid_thw = batch.get("video_grid_thw", None)
     cu_seqlens = batch.get("cu_seqlens", None)
     sample_idx = batch["sample_idx"]
-    valid_token_num = batch["valid_token_num"]
-    valid_sample_num = batch["valid_sample_num"]
+    local_sample_idx = get_local_sequence(sample_idx).squeeze()
 
-    num_tokens = torch.tensor(input_ids.shape[-1]).cuda()
-    num_samples = torch.tensor(valid_sample_num).cuda()
-    num_valid_tokens = torch.tensor(valid_token_num).cuda()
+    num_samples, _ = local_sample_idx.max(dim=-1)
+    num_samples = (num_samples + 1).sum().cuda()
+    num_tokens = torch.tensor(local_sample_idx.numel()).cuda()
+    num_valid_tokens = num_tokens - (local_sample_idx == -1).sum().cuda()
 
     dist.all_reduce(num_tokens, op=dist.ReduceOp.SUM)
     dist.all_reduce(num_samples, op=dist.ReduceOp.SUM)
     dist.all_reduce(num_valid_tokens, op=dist.ReduceOp.SUM)
 
-    total_num_tokens += num_tokens.item()
     total_num_samples += num_samples.item()
+    total_num_tokens += num_tokens.item()
     total_num_valid_tokens += num_valid_tokens.item()
 
     acc_num_tokens += num_tokens.item()
@@ -385,7 +385,6 @@ def train():
     ########## dataset source monitor ###############
     if args.monitor_datasource_loss:
 
-      local_sample_idx = get_local_sequence(sample_idx).squeeze()
       unique_sample_idx = local_sample_idx.unique()
 
       for s_idx in unique_sample_idx:
@@ -501,6 +500,7 @@ def train():
       with Timer("save checkpoint"):
         model.save_checkpoint(
           save_dir=args.output_dir, client_state = {
+            "total_num_valid_tokens": total_num_valid_tokens,
             "total_num_tokens": total_num_tokens,
             "total_num_samples": total_num_samples
           }
@@ -508,8 +508,10 @@ def train():
 
   print_rank_0("Save checkpoint..")
   model.save_checkpoint(save_dir=args.output_dir, client_state = {
-    "total_num_tokens": total_num_tokens,
-    "total_num_samples": total_num_samples}
+      "total_num_valid_tokens": total_num_valid_tokens,
+      "total_num_tokens": total_num_tokens,
+      "total_num_samples": total_num_samples
+    }
   )
 
   if args.merge_checkpoint and dist.get_rank() == 0:

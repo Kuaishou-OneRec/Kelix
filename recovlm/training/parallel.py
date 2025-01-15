@@ -10,6 +10,7 @@ from recovlm.utils.common import print_rank_0, Timer
 
 _SEQUENCE_PARALLEL_GROUP = None
 _SEQUENCE_PARALLEL_GROUP_GLOO = None
+_DATA_PARALLEL_GROUP = None
 
 def initialize_model_parallel(sequence_parallel_size):
     world_size = dist.get_world_size()

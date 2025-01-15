@@ -1139,8 +1139,8 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_grid_thw": packed_video_grid_thw,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": torch.tensor(packed_sample_idx, dtype=torch.int32),
-      "valid_token_num": valid_seq_len,
-      "valid_sample_num": len(buffer)
+      # "valid_token_num": valid_seq_len,
+      # "valid_sample_num": len(buffer)
     }
     return inputs
 
