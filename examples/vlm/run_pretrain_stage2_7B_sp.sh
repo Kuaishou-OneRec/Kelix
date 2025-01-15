@@ -63,7 +63,6 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --merge_checkpoint \
     --merge_checkpoint_dtype bf16 \
     --merge_checkpoint_output_file pytorch_model.bin \
-    --monitor_datasource_cnt \
     --comment "$comment" \
     --commit_id $git_hash \
     --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
