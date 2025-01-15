@@ -19,3 +19,4 @@ hostfile
 *.err
 *.bin
 *.out
+*checkpoint.ipynb
