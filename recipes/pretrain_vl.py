@@ -188,8 +188,6 @@ def train():
   set_random_seed(args.seed)
   dist.barrier()
 
-
-
   if dist.get_rank() == 0:
     args_dict = vars(args)
     args_str = json.dumps(args_dict, indent=4, ensure_ascii=False)
@@ -356,8 +354,8 @@ def train():
 
     token_metrics = torch.tensor(
       [num_tokens, num_samples, num_valid_tokens]).cuda()
-    dist.all_reduce(
-      token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+    # dist.all_reduce(
+    #   token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
     num_tokens = token_metrics[0]
     num_samples = token_metrics[1]
