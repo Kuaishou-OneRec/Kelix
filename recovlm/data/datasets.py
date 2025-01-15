@@ -10,10 +10,13 @@ import time
 import traceback
 import pickle
 import random
+import base64
+import pyarrow.parquet as pq
 from datetime import datetime
 
 import webdataset as wds
 
+from io import BytesIO
 from PIL import Image
 
 from collections import defaultdict
@@ -32,6 +35,7 @@ from transformers import AutoTokenizer, AutoProcessor, \
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
+from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
 
 from recovlm.training.parallel import get_sequence_parallel_group, \
   get_sequence_parallel_world_size
@@ -674,7 +678,6 @@ class ChatCompletionVisionDataset(IterableDataset):
                vision_start_token_id: int = 151652,
                vision_end_token_id: int = 151653,
                pad_token_id: int = 151643):
-    super(ChatCompletionVisionDataset).__init__()
     if base_model_dir:
       processor = Qwen2VLProcessor.from_pretrained(base_model_dir)
       model_config = Qwen2VLConfig.from_pretrained(base_model_dir)
@@ -711,7 +714,23 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.patch_size = patch_size
     # Pad sequence to multiple of `multiple_of`
     self.multiple_of = multiple_of
-    self.total_samples = 0
+    self.shuffle_size = shuffle_size
+    self.shuffle_initial_size = shuffle_initial_size
+    
+    self.dataset, self.total_samples = self._build_source_dataset(sources)
+
+    # for data_source monitor
+    self.source_sample_cnt = {}
+    self.source_error_cnt = {}
+
+    # append image_pad for each packing
+    # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
+    image_pad_len = 6
+    self.max_length = max_length - image_pad_len
+    assert self.max_length > 0
+  
+  def _build_source_dataset(self, sources):
+    total_samples = 0
     if isinstance(sources, str):
       sources = sources.split(",")
     with Timer("Read urls"):
@@ -748,14 +767,10 @@ class ChatCompletionVisionDataset(IterableDataset):
     
     self.dataset = dataset
 
-    self.source_sample_cnt = {}
-    self.source_error_cnt = {}
-
-    # append image_pad for each packing
-    # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
-    image_pad_len = 6
-    self.max_length = max_length - image_pad_len
-    assert self.max_length > 0
+    dataset = dataset.decode(
+      "pil", handler=wds.warn_and_continue)
+      
+    return dataset, total_samples
 
   def _fill_image_block(self, block, sample_dict, 
                           min_visual_tokens_per_image=None, 
@@ -1205,3 +1220,205 @@ class ChatCompletionVisionDataset(IterableDataset):
         buffer.append(inputs)
         source_list.append(source_name)
         cur_length += sample_length
+
+class ParquetDataset(IterableDataset):
+  def __init__(self, data_files, num_workers):
+    self.data_files = data_files
+    self.num_workers = num_workers
+
+    manager = multiprocessing.Manager()
+
+    self.finish_dict_all = manager.dict()
+    self.offset_dict_all = manager.dict()
+    for i in range(self.num_workers):
+      self.finish_dict_all[i] = manager.dict()
+      self.offset_dict_all[i] = manager.dict()
+
+  def state_dict(self,):
+    rank, world_size, worker, num_workers = pytorch_worker_info()
+
+    state_dict = {
+      "finish_dict": dict(self.finish_dict_all[worker]),
+      "offset_dict": dict(self.offset_dict_all[worker])
+    }
+    return state_dict
+  
+  def load_state_dict(self, state_dict):
+    rank, world_size, worker, num_workers = pytorch_worker_info()
+    finish_dict = state_dict["finish_dict"]
+    offset_dict = state_dict["offset_dict"]
+    # clear cur state
+    self.finish_dict_all[worker].clear()
+    self.offset_dict_all[worker].clear()
+
+    # update
+    self.finish_dict_all[worker].update(finish_dict)
+    self.offset_dict_all[worker].update(offset_dict)
+    logger.warning(f"[rank{rank}-woker{worker}] load checkpoint success.")
+
+  def _parser(self, raw_row_data, file_url):
+    try:
+      messages = None
+      segments = None
+
+      if "messages" in raw_row_data:
+        messages = raw_row_data["messages"]
+        if isinstance(messages, str):
+          messages = json.loads(messages)
+          
+      if "segments" in raw_row_data:
+        segments = raw_row_data["segments"]
+        if isinstance(segments, str):
+          segments = json.loads(segments)
+          
+      images = raw_row_data["images"]
+      data_source = raw_row_data["source"]
+      key = raw_row_data["uuid"]
+
+      samples = {
+        "__key__": key,
+        "__url__": file_url,
+      }
+
+      # process message or segments -> webdataset_key = json
+      sample_data = {
+        "source": data_source,
+      }
+
+      if messages is not None:
+        sample_data["messages"] = messages
+      elif segments is not None:
+        sample_data["segments"] = segments
+      else:
+        raise NotImplementedError(f"Unsupported sample, {messages=}, {segements=}")
+      samples["json"] = sample_data
+
+      # process images
+      if isinstance(images, str):
+        images = json.loads(images)
+      elif isinstance(images, dict):
+        pass
+      else:
+        raise NotImplementedError(f"Unsupported image field type, {teyp(raw_row_data['images'])=}")
+
+      for image_name in images:
+        image_b64 = images[image_name]
+        image_bytes = base64.b64decode(image_b64)
+        image_bytes_stream = BytesIO(image_bytes)
+        image = Image.open(image_bytes_stream)
+        samples[image_name] = image
+      return samples
+    except:
+      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}")
+      return None
+  
+  def _encode_path_group(self, path, group_idx):
+    return f"{path}|{group_idx}"
+
+  def _decode_path_group(self, encoded_str):
+    path, offset_str = encoded_str.split('|')
+    group_idx = int(group_idx)
+    return path, group_idx
+
+  def __iter__(self,):
+    rank, world_size, worker, num_workers = pytorch_worker_info()
+    assert num_workers == self.num_workers
+
+    finish_dict = self.finish_dict_all[worker]
+    offset_dict = self.offset_dict_all[worker]
+
+    total_num_workers = num_workers * world_size
+    local_worker_idx = rank * num_workers + worker
+    fn_list = [fn for idx, fn in enumerate(self.data_files) if idx % total_num_workers == local_worker_idx]
+    logger.warning(
+      f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
+    )
+    
+    for fn in fn_list:
+      if fn in finish_dict:
+        logger.warning(f"[Rank{rank}-{worker}] skip {fn}")
+        continue
+      
+      # open parquet file
+      try:
+        parquet_file = pq.ParquetFile(fn)
+      except:
+        logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
+        parquet_file = None
+      
+      # process file content
+      if parquet_file is not None:
+        for group_idx in range(parquet_file.num_row_groups):
+          try:
+            offset = 0
+            fn_group_key = self._encode_path_group(fn, group_idx)
+            if fn_group_key in offset_dict:
+              if offset_dict[fn_group_key] == -1:
+                logger.warning(f"[Rank{rank}-{worker}] skip {fn}-group{group_idx}")
+                continue
+              else:
+                offset = offset_dict[fn_group_key] + 1
+            
+            row_group = parquet_file.read_row_group(group_idx)
+            if offset >= row_group.num_rows:
+              continue
+            logger.warning(f"[Rank{rank}-{worker}] start {fn}-group{group_idx}-{offset=}")
+            row_pandas = row_group.to_pandas().reset_index()
+
+            for row_idx, row in row_pandas.iterrows():
+              if row_idx < offset:
+                logger.warning(f"[Rank{rank}-{worker}] skip {fn}-group{group_idx}-row{offset}")
+                continue
+
+              sample = self._parser(row, fn)
+              if sample != None:
+                yield sample
+              offset_dict[fn_group_key] = row_idx
+          except:
+            logger.error(f"ParquetDataset loop file_content error!!! error_msg={traceback.format_exc()}")
+
+          # group finish
+          logger.warning(f"[Rank{rank}-{worker}] {fn}-group{group_idx} finish.")
+          offset_dict[fn_group_key] = -1
+        
+        # file finish
+        logger.warning(f"[Rank{rank}-{worker}] {fn} finish.")
+        finish_dict[fn] = True
+
+
+class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, **kargs):
+    self.rng = random.Random(shuffle_seed)
+    self.num_workers = num_workers
+    super().__init__(sources, **kargs)
+
+  def _build_source_dataset(self, sources):
+    data_files = []
+    if dist.get_rank() == 0:
+      if isinstance(sources, str) and sources.endswith(".json"):
+        with open(sources, "r") as fp:
+          data_files = json.loads(fp.read())
+          data_files = [fn for fn in data_files if fn.endswith(".parquet")]
+      elif isinstance(sources, list):
+        for source in sources:
+          hdfs_files = shell_hdfs_ls(source)
+          data_fiels += [fn for fn in hdfs_files if fn.endswith(".parquet")]
+
+    data_files.sort()
+    self.rng.shuffle(data_files)
+
+    t = [data_files]
+    dist.broadcast_object_list(t, src=0)
+    data_files = t[0]
+    
+    if len(data_files) == 0:
+      raise ValueError(f"no datafile found!")
+
+    dataset = ParquetDataset(data_files, self.num_workers)
+    return dataset, -1
+
+  def state_dict(self, ):
+    return self.dataset.state_dict()
+  
+  def load_state_dict(self, state_dict):
+    self.dataset.load_state_dict(state_dict)

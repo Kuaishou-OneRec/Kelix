@@ -35,6 +35,7 @@ from tests.utils import init_processes
 #         gg
 
 
+
 # def test_chat_vision():
 #     init_processes(0, 1)
 #     path = "./examples/vlm/configs/video.json"
@@ -55,5 +56,65 @@ from tests.utils import init_processes
 #         if idx > 1:
 #             break
 
-if __name__ == "__main__":
-    test_chat_vision()
+def test_chat_vision():
+    init_processes(0, 1)
+    path = "./examples/vlm/configs/stage2_mix_v1.json"
+    with open(path, encoding="utf-8") as f:
+        dataset_config = json.loads(f.read())
+    dataset = dataset_config.pop("name")
+    dataloader = get_dataloader(
+        name=dataset,
+        **dataset_config)
+    for idx, item in enumerate(dataloader):
+        # print(idx)
+        # print(item)
+        # break
+        item_id = id(item)
+        if idx > 10:
+            break
+
+
+def test_chat_vision_parquet():
+    init_processes(0, 1)
+    path = "./examples/vlm/configs/stage2_parquet.json"
+    with open(path, encoding="utf-8") as f:
+        dataset_config = json.loads(f.read())
+    dataset = dataset_config.pop("name")
+    dataloader1 = get_dataloader(
+        name=dataset,
+        **dataset_config)
+    dataloader2 = get_dataloader(
+        name=dataset,
+        **dataset_config)
+    iter1 = iter(dataloader1)
+    for idx in range(10):
+        batch_data = next(iter1)
+        if idx % 5 == 0:
+            state_dict = dataloader1.state_dict()
+            print(f"step={idx}, {json.dumps(state_dict)}")
+
+    print("load_state_dict")
+    state_dict = dataloader1.state_dict()
+    dataloader2.load_state_dict(state_dict)
+    iter2 = iter(dataloader2)
+    print("finish state load")
+    for idx in range(10):
+        batch_data1 = next(iter1)
+        batch_data2 = next(iter2)
+        print(f"{batch_data1=}, {batch_data2=}")
+
+        if idx % 10 == 0:
+            state_dict1 = dataloader1.state_dict()
+            state_dict2 = dataloader2.state_dict()
+            print(f"{json.dumps(state_dict1)}")
+            print(f"{json.dumps(state_dict2)}")
+
+
+# if __name__ == "__main__":
+#     # test_chat_vision_parquet()
+#     from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
+#     hdfs_files = shell_hdfs_ls("viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_no_interleave_shuffle")
+#     import json
+#     hdfs_files = [fn for fn in hdfs_files if fn.endswith(".parquet")]
+#     jstr = json.dumps(hdfs_files)
+#     print(jstr)

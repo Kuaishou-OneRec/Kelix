@@ -48,6 +48,9 @@ def get_argument_parser():
   parser.add_argument("--resume_from_tag", type=str, default=None,
                       help="Specify the checkpoint tag to resume from.")
   
+  parser.add_argument("--resume_dataloader", action="store_true",
+                      help="Whether to resume dataloader checkpoint")
+  
   parser.add_argument("--save_checkpoint_per_step", type=int, default=1000,
                       help="The number of steps to save a checkpoint")
 
@@ -255,6 +258,9 @@ def train():
   total_num_tokens = 0
   total_num_samples = 0
   total_num_valid_tokens = 0
+  total_data_source_cnt = {}
+  dataloader_state_dict = None
+
   if not args.resume_from:
     args.resume_from = args.output_dir
   ckpt_id = args.resume_from_tag
@@ -268,6 +274,11 @@ def train():
       f"load_weights_only={args.load_weights_only}")
     _, client_state = model.load_checkpoint(
       args.resume_from, ckpt_id, load_module_only=args.load_weights_only)
+
+    if args.resume_dataloader:
+      dataloader_resume_path = os.path.join(args.resume_from, "dataloader_ckpt", f"rank{dist.get_rank()}_{ckpt_id}.pth")
+      dataloader_state_dict = torch.load(dataloader_resume_path)["dataloader_state_dict"]
+
     if not args.load_weights_only:
       total_num_tokens = client_state.get("total_num_tokens", 0)
       total_num_samples = client_state.get("total_num_samples", 0)
@@ -295,6 +306,9 @@ def train():
 
   with Timer("Build dataloader"):
     dataloader = get_dataloader(name=dataset, **dataset_config)
+    if args.resume_dataloader and dataloader_state_dict is not None:
+      dataloader.load_state_dict(dataloader_state_dict)
+
   ##############
 
   loss_fn = CrossEntropyLoss(
@@ -335,13 +349,15 @@ def train():
     cu_seqlens = batch.get("cu_seqlens", None)
     sample_idx = batch["sample_idx"]
 
-    num_samples = (sample_idx.max() + 1).sum().cuda()
-    num_tokens = torch.tensor(input_ids.numel()).cuda()
-    num_valid_tokens = num_tokens - (sample_idx == -1).sum().cuda()
+    token_metrics = torch.tensor([
+      (sample_idx.max() + 1).sum(),
+      input_ids.numel(),
+      num_tokens - (sample_idx == -1).sum()]).cuda()
+    dist.all_reduce(token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
-    dist.all_reduce(num_tokens, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-    dist.all_reduce(num_samples, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-    dist.all_reduce(num_valid_tokens, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+    num_tokens = token_metrics[0]
+    num_samples = token_metrics[1]
+    num_valid_tokens = token_metrics[2]
 
     total_num_samples += num_samples.item()
     total_num_tokens += num_tokens.item()
@@ -492,7 +508,9 @@ def train():
 
     if iteration % args.save_checkpoint_per_step == 0 and \
         iteration > 0 and model.is_gradient_accumulation_boundary():
+      
       torch.cuda.empty_cache()
+
       with Timer("save checkpoint"):
         model.save_checkpoint(
           save_dir=args.output_dir, client_state = {
@@ -501,6 +519,25 @@ def train():
             "total_num_samples": total_num_samples
           }
         )
+        try:
+          dataloader_state_dict = {
+            "dataloader_state_dict": dataloader.state_dict()
+          }
+        except:
+          dataloader_state_dict = None
+          logging.error(f"Dataloader cannot dump state_dict!!!!!!!!")
+        if dataloader_state_dict is not None:
+          # dataloader ckpt
+          dataloader_path = os.path.join(args.output_dir, "dataloader_ckpt")
+          if dist.get_rank() == 0:
+            os.makedirs(dataloader_path, exist_ok=True)
+          dist.barrier()
+          torch.save(
+            dataloader_state_dict,
+            os.path.join(
+              dataloader_path,
+              f"rank{dist.get_rank()}_global_step{iteration}.pth")
+            )
 
   print_rank_0("Save checkpoint..")
   model.save_checkpoint(save_dir=args.output_dir, client_state = {
@@ -509,6 +546,20 @@ def train():
       "total_num_samples": total_num_samples
     }
   )
+  try:
+    # dataloader ckpt
+    dataloader_state_dict = {
+      "dataloader_state_dict": dataloader.state_dict()
+    }
+  except:
+    dataloader_state_dict = None
+    logging.error(f"Dataloader cannot dump state_dict!!!!!!!!")
+    
+  if dataloader_state_dict is not None:
+    if dist.get_rank() == 0:
+      os.makedirs(dataloader_path, exist_ok=True)
+    dist.barrier()
+    torch.save(dataloader_state_dict, os.path.join(dataloader_path, f"rank{dist.get_rank()}_global_step{iteration}.pth"))
 
   if args.merge_checkpoint and dist.get_rank() == 0:
     convert_zero_checkpoint_to_state_dict(

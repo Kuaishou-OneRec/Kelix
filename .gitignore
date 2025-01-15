@@ -18,3 +18,5 @@ hostfile
 *.log
 *.err
 *.bin
+*.parquet
+*.out
