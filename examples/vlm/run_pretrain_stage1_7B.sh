@@ -35,7 +35,7 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config /llm_reco_ssd/zhouyang12/code/RecoVLM/examples/vlm/configs/stage1_mix_v2_parquet.json  \
+    --dataset_config ./examples/vlm/configs/stage1_mix_v2_parquet.json  \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
     --max_length 2048 \
