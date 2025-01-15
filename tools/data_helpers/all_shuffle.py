@@ -1,6 +1,7 @@
 import sys
 import os
 import uuid
+import time
 import traceback
 from tqdm import tqdm
 import argparse
@@ -45,6 +46,7 @@ class Shuffler(MPIBase):
         tmp_file = os.path.join(self.tmp_dir, basename)
         filename = os.path.join(self.output_dir, basename)
         pq.write_table(pa.Table.from_pandas(df), tmp_file)
+        time.sleep(0.1)
         self.fs.mv(tmp_file, filename)
         self.mpi_print(f"write to {filename} success")
     
@@ -62,7 +64,11 @@ class Shuffler(MPIBase):
         buffer = []
         mem_size = 0
         for fn in tqdm(self.files):
-            df = pq.read_table(fn).to_pandas()
+            try:
+                df = pq.read_table(fn).to_pandas()
+            except Exception as e:
+                print(f"read {fn} error {e}")
+                print(traceback.format_exc())
             buffer.append(df)
             mem_size += sys.getsizeof(df)
             if mem_size >= self.buffer_mem_size:
@@ -75,6 +81,7 @@ class Shuffler(MPIBase):
         buffer = []
         mem_size = 0
         self.shard_shuffle(df)
+        self.comm.barrier()
     
 def main():
     parser = argparse.ArgumentParser()
