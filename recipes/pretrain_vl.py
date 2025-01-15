@@ -413,9 +413,8 @@ def train():
       with Timer("reduce data source metrics"):
         data_source_loss = dist_reduce_dict(data_source_loss)
         data_source_tokens = dist_reduce_dict(data_source_tokens)
-        data_source_samples = dist_reduce_dict(
+        total_data_source_samples = dist_reduce_dict(
           data_source_samples, group=get_data_parallel_group())
-        data_source_samples = collections.defaultdict(int, data_source_samples)
 
       if dist.get_rank() == 0:
         learning_rate = model.lr_scheduler.get_lr()[0]
@@ -460,7 +459,7 @@ def train():
                   new_style=True)
 
         if args.monitor_datasource_cnt and tb_writer:
-          for key, samples in data_source_samples.items():
+          for key, samples in total_data_source_samples.items():
             tb_writer.add_scalar(
                 f"data_source_sample_ratio/{key}",
                 1.0 * samples / total_num_samples,
