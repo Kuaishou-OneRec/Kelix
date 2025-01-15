@@ -740,7 +740,7 @@ class ChatCompletionVisionDataset(IterableDataset):
           index = json.loads(f.read())["shardlist"]
           for item in index:
             urls.append(os.path.join(os.path.dirname(source), item["url"]))
-            self.total_samples += item["nsamples"]
+            total_samples += item["nsamples"]
 
     with Timer("Sort -> Shuffle -> Broadcast"):
       # broadcast all urls
@@ -762,13 +762,9 @@ class ChatCompletionVisionDataset(IterableDataset):
           workersplitter=wds.split_by_worker
       )
 
-      dataset = dataset.shuffle(shuffle_size, initial=shuffle_initial_size).decode(
+      dataset = dataset.shuffle(
+          shuffle_size, initial=shuffle_initial_size).decode(
         "pil", handler=wds.warn_and_continue)
-    
-    self.dataset = dataset
-
-    dataset = dataset.decode(
-      "pil", handler=wds.warn_and_continue)
       
     return dataset, total_samples
 
