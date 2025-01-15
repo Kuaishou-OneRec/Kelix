@@ -349,11 +349,14 @@ def train():
     cu_seqlens = batch.get("cu_seqlens", None)
     sample_idx = batch["sample_idx"]
 
-    token_metrics = torch.tensor([
-      (sample_idx.max() + 1).sum(),
-      input_ids.numel(),
-      num_tokens - (sample_idx == -1).sum()]).cuda()
-    dist.all_reduce(token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+    num_tokens = input_ids.numel()
+    num_samples = (sample_idx.max() + 1).sum()
+    num_valid_tokens = num_tokens - (sample_idx == -1).sum()
+
+    token_metrics = torch.tensor(
+      [num_tokens, num_samples, num_valid_tokens]).cuda()
+    dist.all_reduce(
+      token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
     num_tokens = token_metrics[0]
     num_samples = token_metrics[1]
