@@ -15,8 +15,10 @@ _DATA_PARALLEL_GROUP = None
 def initialize_model_parallel(sequence_parallel_size):
     world_size = dist.get_world_size()
     num_sequence_parallel_groups: int = world_size // sequence_parallel_size
+    num_data_parallel_groups: int = sequence_parallel_size
     global _SEQUENCE_PARALLEL_GROUP
     global _SEQUENCE_PARALLEL_GROUP_GLOO
+    global _DATA_PARALLEL_GROUP
     for i in range(num_sequence_parallel_groups):
         ranks = range(i * sequence_parallel_size, (i + 1) * sequence_parallel_size)
         print_rank_0(f"Sequence Parallel Group: {i}, Ranks: {ranks}")
@@ -26,6 +28,13 @@ def initialize_model_parallel(sequence_parallel_size):
         if rank in ranks:
             _SEQUENCE_PARALLEL_GROUP = group
             _SEQUENCE_PARALLEL_GROUP_GLOO = group_gloo
+    for i in range(num_data_parallel_groups):
+        ranks = [r for r in range(world_size) if r % sequence_parallel_size == i]
+        print_rank_0(f"Data Parallel Group: {i}, Ranks: {ranks}")
+        group = torch.distributed.new_group(ranks)
+        rank = dist.get_rank()
+        if rank in ranks:
+            _DATA_PARALLEL_GROUP = group
 
 def worker_init_fn(worker_id):
     if os.getenv("WORKER_MASTER_PORT", None) is None:
@@ -48,7 +57,6 @@ def get_sequence_parallel_group(backend="nccl"):
 def get_sequence_parallel_world_size():
     """Get the sequence parallel world size."""
     return dist.get_world_size(group=get_sequence_parallel_group())
-    
 
 def get_sequence_parallel_rank():
     """Get the sequence parallel rank."""
@@ -73,6 +81,15 @@ def get_local_sequence(sequence: torch.Tensor, seq_idx: int = 1):
 
         return local_sequence
     return sequence
+
+def get_data_parallel_group():
+    return _DATA_PARALLEL_GROUP
+
+def get_data_parallel_rank():
+    return dist.get_rank(group=get_data_parallel_group())
+
+def get_data_parallel_world_size():
+    return dist.get_world_size(group=get_data_parallel_group())
 
 def all_to_all_4D(
     input: torch.tensor, scatter_idx: int = 2, gather_idx: int = 1, group=None, use_sync: bool = False

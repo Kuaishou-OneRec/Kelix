@@ -32,7 +32,8 @@ from recovlm.training.lr_schedulers import get_scheduler
 from recovlm.training.parallel import get_sequence_parallel_group, \
   get_sequence_parallel_rank, get_sequence_parallel_world_size, \
   get_local_sequence_boundary, initialize_model_parallel, gather_by_group, \
-  get_local_sequence
+  get_local_sequence, get_data_parallel_group, get_data_parallel_world_size, \
+  get_data_parallel_rank
 
 def get_argument_parser():
   parser = argparse.ArgumentParser()
@@ -333,15 +334,14 @@ def train():
     video_grid_thw = batch.get("video_grid_thw", None)
     cu_seqlens = batch.get("cu_seqlens", None)
     sample_idx = batch["sample_idx"]
-    local_sample_idx = get_local_sequence(sample_idx, seq_idx=1).squeeze()
 
-    num_samples = (local_sample_idx.max() + 1).sum().cuda()
+    num_samples = (sample_idx.max() + 1).sum().cuda()
     num_tokens = torch.tensor(input_ids.numel()).cuda()
-    num_valid_tokens = num_tokens - (local_sample_idx == -1).sum().cuda()
+    num_valid_tokens = num_tokens - (sample_idx == -1).sum().cuda()
 
-    dist.all_reduce(num_tokens, op=dist.ReduceOp.SUM)
-    dist.all_reduce(num_samples, op=dist.ReduceOp.SUM)
-    dist.all_reduce(num_valid_tokens, op=dist.ReduceOp.SUM)
+    dist.all_reduce(num_tokens, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+    dist.all_reduce(num_samples, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+    dist.all_reduce(num_valid_tokens, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
     total_num_samples += num_samples.item()
     total_num_tokens += num_tokens.item()
@@ -382,19 +382,19 @@ def train():
     iteration = model.global_steps
     ########## dataset source monitor ###############
     if args.monitor_datasource_loss:
-
-      unique_sample_idx = local_sample_idx.unique()
+      # WARN: assume batch_size = 1
+      local_sample_idx = get_local_sequence(sample_idx)
+      unique_sample_idx = sample_idx.squeeze().unique()
 
       for s_idx in unique_sample_idx:
         if s_idx < 0:
           continue
         mask = local_sample_idx == s_idx
         sum_loss = per_token_loss[mask].sum()
-        token_num = mask.sum()
 
         key = data_source[int(s_idx.item())]
         data_source_loss[key] += sum_loss.item()
-        data_source_tokens[key] += token_num.item()
+        data_source_tokens[key] += mask.sum().item()
 
     if args.monitor_datasource_cnt:
       for data_source_name in data_source:
@@ -411,12 +411,10 @@ def train():
             model.is_gradient_accumulation_boundary():
 
       with Timer("reduce data source metrics"):
-        data_source_metrics = dist_reduce_dict(
-          {
-            "loss": data_source_loss,
-            "tokens": data_source_tokens,
-            "samples": data_source_samples
-          })
+        data_source_loss = dist_reduce_dict(data_source_loss)
+        data_source_tokens = dist_reduce_dict(data_source_tokens)
+        data_source_samples = dist_reduce_dict(
+          data_source_samples, group=get_data_parallel_group())
 
       if dist.get_rank() == 0:
         learning_rate = model.lr_scheduler.get_lr()[0]
@@ -453,15 +451,15 @@ def train():
                 new_style=True)
 
         if args.monitor_datasource_loss and tb_writer:
-          for key, loss_sum in data_source_metrics["loss"].items():
+          for key, loss_sum in data_source_loss.items():
             tb_writer.add_scalar(
                   f"data_source_loss/{key}",
-                  loss_sum / data_source_metrics["tokens"][key],
+                  loss_sum / data_source_tokens[key],
                   global_step=iteration,
                   new_style=True)
 
         if args.monitor_datasource_cnt and tb_writer:
-          for key, samples in data_source_metrics["samples"].items():
+          for key, samples in data_source_samples.items():
             tb_writer.add_scalar(
                 f"data_source_sample_ratio/{key}",
                 1.0 * samples / total_num_samples,
