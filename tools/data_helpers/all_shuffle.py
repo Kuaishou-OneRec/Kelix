@@ -17,8 +17,8 @@ class Shuffler(MPIBase):
         self, 
         input_dir, 
         output_dir,
-        buffer_mem_size=16*1024*1024*1024,
-        out_partition=2048,
+        buffer_mem_size=14*1024*1024*1024,
+        out_partition=1024,
     ):
         super().__init__()
         self.input_dir = input_dir
@@ -28,7 +28,9 @@ class Shuffler(MPIBase):
         self.tmp_dir = os.path.join(self.output_dir, ".tmp")
         self.fs = pa.hdfs.connect(user="mpi")
         if self.rank == 0:
-            files = self.fs.ls(input_dir)
+            files = []
+            for d in tqdm(input_dir, desc="list directory"):
+                files.extend(self.fs.ls(d))
             files = [
                 x for x in files
                 if "parquet" in x
@@ -85,7 +87,7 @@ class Shuffler(MPIBase):
     
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_dir", type=str, required=True)
+    parser.add_argument("--input_dir", type=str, nargs="*", required=True)
     parser.add_argument("--output_dir", type=str, required=True)
     args = parser.parse_args()
     worker = Shuffler(args.input_dir, args.output_dir)
