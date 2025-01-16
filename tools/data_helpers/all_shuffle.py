@@ -1,6 +1,7 @@
 import sys
 import os
 import uuid
+import time
 import traceback
 from tqdm import tqdm
 import argparse
@@ -16,8 +17,8 @@ class Shuffler(MPIBase):
         self, 
         input_dir, 
         output_dir,
-        buffer_mem_size=16*1024*1024*1024,
-        out_partition=2048,
+        buffer_mem_size=14*1024*1024*1024,
+        out_partition=1024,
     ):
         super().__init__()
         self.input_dir = input_dir
@@ -27,7 +28,9 @@ class Shuffler(MPIBase):
         self.tmp_dir = os.path.join(self.output_dir, ".tmp")
         self.fs = pa.hdfs.connect(user="mpi")
         if self.rank == 0:
-            files = self.fs.ls(input_dir)
+            files = []
+            for d in tqdm(input_dir, desc="list directory"):
+                files.extend(self.fs.ls(d))
             files = [
                 x for x in files
                 if "parquet" in x
@@ -45,6 +48,7 @@ class Shuffler(MPIBase):
         tmp_file = os.path.join(self.tmp_dir, basename)
         filename = os.path.join(self.output_dir, basename)
         pq.write_table(pa.Table.from_pandas(df), tmp_file)
+        time.sleep(0.1)
         self.fs.mv(tmp_file, filename)
         self.mpi_print(f"write to {filename} success")
     
@@ -62,7 +66,11 @@ class Shuffler(MPIBase):
         buffer = []
         mem_size = 0
         for fn in tqdm(self.files):
-            df = pq.read_table(fn).to_pandas()
+            try:
+                df = pq.read_table(fn).to_pandas()
+            except Exception as e:
+                print(f"read {fn} error {e}")
+                print(traceback.format_exc())
             buffer.append(df)
             mem_size += sys.getsizeof(df)
             if mem_size >= self.buffer_mem_size:
@@ -75,10 +83,11 @@ class Shuffler(MPIBase):
         buffer = []
         mem_size = 0
         self.shard_shuffle(df)
+        self.comm.barrier()
     
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--input_dir", type=str, required=True)
+    parser.add_argument("--input_dir", type=str, nargs="*", required=True)
     parser.add_argument("--output_dir", type=str, required=True)
     args = parser.parse_args()
     worker = Shuffler(args.input_dir, args.output_dir)

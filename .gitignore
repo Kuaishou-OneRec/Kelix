@@ -18,5 +18,6 @@ hostfile
 *.log
 *.err
 *.bin
-*.parquet
 *.out
+*checkpoint.ipynb
+*.parquet
