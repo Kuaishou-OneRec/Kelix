@@ -11,7 +11,8 @@ from utils.eval_utils import evaluate, parse_multi_choice_response, parse_open_r
 class MainEvalOnly:
     def __init__(self, output):
         self.output = output
-        self.answer_path = "/reco-root/krp/pub/wangqianqian/video_llm/infer_benchmark/MMMU_infer/eval/MMMU/mmmu/answer_dict_val.json"
+        cur_dir = os.getcwd()
+        self.answer_path = os.path.join(cur_dir, "eval/MMMU/mmmu/answer_dict_val.json")
     def eval(self):
         output_dict = self.output
         answer_dict = json.load(open(self.answer_path))
