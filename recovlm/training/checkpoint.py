@@ -2,6 +2,7 @@
 from typing import List
 import collections
 
+import re
 import os
 import glob
 from safetensors import safe_open
@@ -68,3 +69,14 @@ def load_zero3_state_dict(model, model_dir):
 
   load(model, state_dict, prefix="")
 
+def load_dist_attn_state_dict(src, dst):
+  # src: state_dict
+  # dst: module
+  new_state_dict = collections.OrderedDict()
+  for k, v in src.items():
+    if re.match(r"model.layers.(\d+).self_attn.*", k):
+      new_k = re.sub(r'self_attn', 'self_attn.local_attn', k)
+      print_rank_0(f"Replace key from {k} to {new_k}")
+      k = new_k
+    new_state_dict[k] = v
+  dst.load_state_dict(new_state_dict, strict=True)

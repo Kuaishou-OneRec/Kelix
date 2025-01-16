@@ -35,6 +35,27 @@ from tests.utils import init_processes
 #         gg
 
 
+
+# def test_chat_vision():
+#     init_processes(0, 1)
+#     path = "./examples/vlm/configs/video.json"
+#     with open(path, encoding="utf-8") as f:
+#         dataset_config = json.loads(f.read())
+#     dataset = dataset_config.pop("name")
+#     dataloader = get_dataloader(
+#         name=dataset,
+#         **dataset_config)
+#     # dataloader = get_dataloader(
+#     #     name=dataset, num_workers=1, need_padding=True,
+#     #     **dataset_config)
+#     for idx, item in enumerate(dataloader):
+#         print(idx)
+#         # print(item)
+#         # break
+#         item_id = id(item)
+#         if idx > 1:
+#             break
+
 def test_chat_vision():
     init_processes(0, 1)
     path = "./examples/vlm/configs/stage2_mix_v1.json"
@@ -51,6 +72,7 @@ def test_chat_vision():
         item_id = id(item)
         if idx > 10:
             break
+
 
 def test_chat_vision_parquet():
     init_processes(0, 1)

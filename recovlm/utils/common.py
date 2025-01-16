@@ -1,11 +1,13 @@
 # TODO: clean utils
 from rich import print
+import time
 import torch
 import random
 import numpy as np
 from transformers import set_seed as set_transformers_seed
 import torch.distributed as dist
 import pickle
+import traceback
 import subprocess
 import os
 
@@ -64,34 +66,46 @@ def increment_version(version):
   patch += 1
   return f"{major}.{minor}.{patch}"
 
-def dist_reduce_dict(local_dict, dict_reduce_func=None):
-  rank = dist.get_rank()
-  world_size = dist.get_world_size()
+def dist_reduce_dict(local_dict, group=None):
+  gather_list = [None for _ in range(dist.get_world_size(group=group))]
 
-  serialized_dict = pickle.dumps(local_dict)
-  tensor = torch.ByteTensor(list(serialized_dict)).cuda()
-  tensor_size = torch.tensor([tensor.size(0)], dtype=torch.int64).cuda()
-  all_sizes = [torch.tensor([0], dtype=torch.int64).cuda() for _ in range(world_size)]
-  dist.all_gather(all_sizes, tensor_size)
+  dist.all_gather_object(
+    object_list=gather_list, obj=local_dict, group=group)
 
-  max_size = max([t.item() for t in all_sizes])
-  buffer_tensor = torch.zeros(max_size, dtype=torch.uint8).cuda()
-  buffer_tensor[:tensor.size(0)] = tensor
-  gathered_tensors = [torch.zeros(max_size, dtype=torch.uint8).cuda() for _ in range(world_size)]
-  dist.all_gather(gathered_tensors, buffer_tensor)
-
-  gathered_dicts = [pickle.loads(bytes(t.cpu().tolist())) for t in gathered_tensors]
-  if dict_reduce_func is not None:
-    return dict_reduce_func(gathered_dicts)
-  else:
-    reduce_dict = {}
-    for tmp_dict in gathered_dicts:
-      for k, v in tmp_dict.items():
-        if k not in reduce_dict:
-          reduce_dict[k] = v
+  def reduce_dicts(dicts):
+    def _reduce(d1, d2):
+      for key, value in d2.items():
+        if isinstance(value, dict):
+          if key not in d1:
+            d1[key] = {}
+          _reduce(d1[key], value)
         else:
-          reduce_dict[k] += v
-    return reduce_dict
+          if key in d1:
+            d1[key] += value
+          else:
+            d1[key] = value
+      return d1
+
+    result = {}
+    for d in dicts:
+        result = _reduce(result, d)
+    return result
+
+  return reduce_dicts(gather_list)
+
+class Timer:
+  def __init__(self, desc: str = ""):
+    self.desc = desc
+
+  def __enter__(self):
+    print_rank_0(f"Start... {self.desc}")
+    self.start = time.time()
+    return self
+
+  def __exit__(self, exc_type, exc_value, traceback):
+    self.end = time.time()
+    self.elapsed = self.end - self.start
+    print_rank_0(f"End... {self.desc} elapsed: {self.elapsed:.3f} ")
 
 def shell_hdfs_ls(source_dir):
   try:

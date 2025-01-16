@@ -26,12 +26,14 @@ from recovlm.data.dataloaders import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
 from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
-  get_optimizer_grouped_parameters, dist_reduce_dict
+  get_optimizer_grouped_parameters, dist_reduce_dict, Timer
 from recovlm.training.lr_schedulers import get_scheduler
 
-# reduce gpu memory frag
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-
+from recovlm.training.parallel import get_sequence_parallel_group, \
+  get_sequence_parallel_rank, get_sequence_parallel_world_size, \
+  get_local_sequence_boundary, initialize_model_parallel, gather_by_group, \
+  get_local_sequence, get_data_parallel_group, get_data_parallel_world_size, \
+  get_data_parallel_rank
 
 def get_argument_parser():
   parser = argparse.ArgumentParser()
@@ -141,6 +143,9 @@ def get_argument_parser():
 
   parser.add_argument("--enable_gradient_checkpointing", action="store_true",
                       help="Enable gradient checkpointing during training")
+  
+  parser.add_argument("--sequence_parallel_size", type=int, default=1,
+                      help="Enable gradient checkpointing during training")
 
   parser.add_argument("--logging_per_step", type=int, default=100,
                       help="The number of steps to log training info")
@@ -153,10 +158,10 @@ def get_argument_parser():
 
   parser.add_argument("--seed", type=int, default=123,
                       help="Manual seed for RNG")
-  
+
   parser.add_argument("--monitor_datasource_loss", action="store_true",
                       help="Whether to monitor loss of each datasource")
-  
+
   parser.add_argument("--monitor_datasource_cnt", action="store_true",
                       help="Whether to monitor cnt of each datasource")
 
@@ -176,15 +181,20 @@ def train():
 
   deepspeed.init_distributed()
 
+  ### initialize model parallel group
+  initialize_model_parallel(args.sequence_parallel_size)
+  print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
+
   set_random_seed(args.seed)
-  torch.distributed.barrier()
+  dist.barrier()
 
   if dist.get_rank() == 0:
     args_dict = vars(args)
     args_str = json.dumps(args_dict, indent=4, ensure_ascii=False)
     print_rank_0(f"Training Arguments:\n{args_str}")
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-    with open(os.path.join(args.output_dir, f"args-{args.commit_id}-{timestamp}.json"), 'w',
+    with open(os.path.join(args.output_dir,
+          f"args-{args.commit_id}-{timestamp}.json"), 'w',
         encoding="utf-8") as f:
       f.write(args_str + "\n")
 
@@ -194,10 +204,11 @@ def train():
     tb_writer = SummaryWriter(log_dir=os.path.join(args.output_dir, "log"))
 
   # enabled=False when zero stage < 3
-  with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config, enabled=False):
+  with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config,
+                           enabled=False):
     model = Qwen2VLForConditionalGeneration.from_pretrained(
-      args.model_dir, _attn_implementation="flash_attention_2", use_cache=False
-    )
+      args.model_dir, _attn_implementation="flash_attention_2",
+      use_cache=False)
 
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
@@ -235,12 +246,13 @@ def train():
     min_lr=args.min_lr,
     num_stop_steps=20
   )
-
-  model.train()
-  model, optimizer, _, lr_scheduler = deepspeed.initialize(args=args,
-                                                           model=model,
-                                                           optimizer=optimizer,
-                                                           lr_scheduler=lr_scheduler)
+  with Timer("Initialize deepspeed model."):
+    model.train()
+    model, optimizer, _, lr_scheduler = \
+      deepspeed.initialize(args=args,
+                           model=model,
+                           optimizer=optimizer,
+                           lr_scheduler=lr_scheduler)
 
   total_num_tokens = 0
   total_num_samples = 0
@@ -283,33 +295,48 @@ def train():
       f"Overwrite max_length in dataset_config: "
       f"{dataset_config['max_length']} -> {args.max_length}")
     dataset_config["max_length"] = args.max_length
-  dataloader = get_dataloader(name=dataset, **dataset_config)
-  if args.resume_dataloader and dataloader_state_dict is not None:
-    dataloader.load_state_dict(dataloader_state_dict)
+  
+  if dist.get_rank() == 0:
+    with open(os.path.join(args.output_dir,
+        f"dataset-{args.commit_id}-{timestamp}.json"), 'w',
+        encoding="utf-8") as f:
+      f.write(json.dumps(
+        dataset_config, ensure_ascii=False, indent=2) + "\n")
+
+  with Timer("Build dataloader"):
+    dataloader = get_dataloader(name=dataset, **dataset_config)
+    if args.resume_dataloader and dataloader_state_dict is not None:
+      dataloader.load_state_dict(dataloader_state_dict)
+
   ##############
-  if args.monitor_datasource_loss:
-    loss_fn = CrossEntropyLoss(ignore_index=-100, return_token_loss=True)
-  else:
-    loss_fn = CrossEntropyLoss(ignore_index=-100, return_token_loss=True)
+
+  loss_fn = CrossEntropyLoss(
+    ignore_index=-100, return_token_loss=True, shift_labels=False)
 
   start_time = time.time()
-  show_cnt = 3
+  show_cnt = 1
 
+  # Metrics, acc_ account for gradient accumulation
+  # TODO: use mestrics manager
   acc_step = 0
   acc_avg_loss = 0.0
   acc_num_tokens = 0
   acc_num_samples = 0
   acc_valid_num_tokens = 0
-
-  for batch in dataloader:
+  data_source_loss = collections.defaultdict(float)
+  data_source_tokens = collections.defaultdict(int)
+  data_source_samples = collections.defaultdict(int)
+  # get_sequence_parallel_group("gloo")
+  for batch in gather_by_group(dataloader, get_sequence_parallel_group()):
     if show_cnt > 0 and dist.get_rank() == 0:
-      print_rank_0(batch)
-      print_rank_0(
-          f"Input Text:\n\n{processor.tokenizer.decode(batch['input_ids'][0])}\n" + f"=" * 100 + "\n\n")
-      show_cnt -= 1
+      with Timer("Show data"):
+        input_text = processor.tokenizer.decode(batch['input_ids'][0])
+        print_rank_0(
+            f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
+        print_rank_0(batch)
+        show_cnt -= 1
 
-    data_source = batch.pop("data_source") # dataset source list cur batch
-
+    data_source = batch.pop("data_source", None) # dataset source list cur batch
     to_cuda(batch)
     input_ids = batch["input_ids"]
     loss_mask = batch["loss_mask"]
@@ -319,206 +346,208 @@ def train():
     image_grid_thw = batch.get("image_grid_thw", None)
     video_grid_thw = batch.get("video_grid_thw", None)
     cu_seqlens = batch.get("cu_seqlens", None)
-    sample_idx = batch["sample_idx"].to(torch.int32)
-    valid_token_num = batch["valid_token_num"]
-    valid_sample_num = batch["valid_sample_num"]
+    sample_idx = batch["sample_idx"]
 
-    # packing nccl
-    num_pack_buffer = torch.tensor([input_ids.shape[-1], valid_sample_num, valid_token_num]).cuda()
-    dist.all_reduce(num_pack_buffer, op=dist.ReduceOp.SUM)
-    
-    num_tokens = num_pack_buffer[0]
-    num_samples = num_pack_buffer[1]
-    num_valid_tokens = num_pack_buffer[2]
+    num_tokens = input_ids.numel()
+    num_samples = (sample_idx.max() + 1).sum()
+    num_valid_tokens = num_tokens - (sample_idx == -1).sum()
 
-    total_num_tokens += num_tokens.item()
+    token_metrics = torch.tensor(
+      [num_tokens, num_samples, num_valid_tokens]).cuda()
+    print_rank_0(num_tokens, num_samples, num_valid_tokens)
+    dist.all_reduce(
+      token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+
+    num_tokens = token_metrics[0]
+    num_samples = token_metrics[1]
+    num_valid_tokens = token_metrics[2]
+
     total_num_samples += num_samples.item()
+    total_num_tokens += num_tokens.item()
     total_num_valid_tokens += num_valid_tokens.item()
 
-    acc_num_tokens += num_tokens.item()
     acc_num_samples += num_samples.item()
+    acc_num_tokens += num_tokens.item()
     acc_valid_num_tokens += num_valid_tokens.item()
 
     input_ids = input_ids * (input_ids > 0).to(torch.int64)
     labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
-    output = model(
-      input_ids, labels=labels, attention_mask=attention_mask,
-      pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
-      image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-      cu_seqlens=cu_seqlens
-    )
+    with Timer("Fwd"):
+      output = model(
+        input_ids, attention_mask=attention_mask,
+        pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+        image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+        cu_seqlens=cu_seqlens
+      )
+      # (b, N/P, V)
+      logits = output.logits
 
-    logits = output.logits
+      # 提前shift logits & labels
+      pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
+          dtype=labels.dtype).to(device=labels.device)
+      labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
+      local_labels = get_local_sequence(labels, seq_idx=1)
+      loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
 
-    # token_loss for dataset monitor
-    loss, token_loss = loss_fn(logits=logits, labels=labels)
+      del logits
+      del labels
+      del local_labels
 
-    del logits
-    del labels
-    model.backward(loss)
-    model.step()
+    with Timer("bwd"):
+      model.backward(loss)
+      model.step()
 
     iteration = model.global_steps
-
     ########## dataset source monitor ###############
-    if args.monitor_datasource_loss and \
-      iteration % args.logging_per_step == 0 and \
-        model.is_gradient_accumulation_boundary():
+    if args.monitor_datasource_loss:
+      # WARN: assume batch_size = 1
+      local_sample_idx = get_local_sequence(sample_idx).squeeze()
+      unique_sample_idx = local_sample_idx.unique()
 
-      sample_idx = sample_idx.squeeze()[:-1]   # shift idx
-      unique_sample_idx = sample_idx.unique()
-      
-      data_source_loss = {}
       for s_idx in unique_sample_idx:
-        key = data_source[int(s_idx.item())]
-        if key == "pad":
+        if s_idx < 0:
           continue
-        mask = (sample_idx == s_idx)
-        sum_loss = token_loss[mask].sum()
-        token_num = mask.sum()
-        
-        data_source_loss.setdefault(key, [0.0, 0.0])
-        data_source_loss[key][0] += sum_loss.item()
-        data_source_loss[key][1] += token_num.item()
-      
-      def data_source_loss_reduce(gathered_dicts):
-        sum_loss_dict = {}
-        token_num_dict = {}
-        loss_mean = {}
-        for tmp_dict in gathered_dicts:
-          for k, v in tmp_dict.items():
-            sum_loss, token_num = v
-            sum_loss_dict.setdefault(k, 0.0)
-            token_num_dict.setdefault(k, 0.0)
-            sum_loss_dict[k] += sum_loss
-            token_num_dict[k] += token_num
-        for k in sum_loss_dict:
-          loss_mean[k] = sum_loss_dict[k] / token_num_dict[k]
-        return loss_mean
-      data_source_mean_loss = dist_reduce_dict(data_source_loss, data_source_loss_reduce)
+        mask = local_sample_idx == s_idx
+        sum_loss = per_token_loss[mask].sum()
+
+        key = data_source[int(s_idx.item())]
+        data_source_loss[key] += sum_loss.item()
+        data_source_tokens[key] += mask.sum().item()
 
     if args.monitor_datasource_cnt:
-      data_source_cnt = {}
       for data_source_name in data_source:
-        if data_source_name == "pad":
-          continue
-        data_source_cnt.setdefault(data_source_name, 0.0)
-        data_source_cnt[data_source_name] += 1
-      data_source_cnt = dist_reduce_dict(data_source_cnt)
-      for k, v in data_source_cnt.items():
-        total_data_source_cnt.setdefault(k, 0)
-        total_data_source_cnt[k] += v
+        data_source_samples[data_source_name] += 1
+  
     #########################################
-
     avg_loss = torch.tensor(loss.item()).cuda()
     dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
     avg_loss = avg_loss.item() / dist.get_world_size()
-
     acc_avg_loss += avg_loss
     acc_step += 1
 
-    if iteration % args.logging_per_step == 0 and dist.get_rank() == 0 and \
+    if iteration % args.logging_per_step == 0 and \
             model.is_gradient_accumulation_boundary():
-      learning_rate = model.lr_scheduler.get_lr()[0]
-      end_time = time.time()
-      sec_per_step = (end_time - start_time) / acc_step
-      tokens_per_sec_per_gpu = acc_num_tokens / dist.get_world_size() / (end_time - start_time)
-      samples_per_sec_per_gpu = acc_num_samples / dist.get_world_size() / (end_time - start_time)
-      valid_tokens_per_sec_per_gpu = acc_valid_num_tokens / dist.get_world_size() / (end_time - start_time)
-      avg_loss = acc_avg_loss / acc_step
 
-      start_time = end_time
-      log_dict = {
-        "loss": avg_loss,
-        "learning_rate": learning_rate,
-        "grad_norm": model.get_global_grad_norm(),
-        "sec_per_step": sec_per_step,
-        "tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
-        "samples_per_sec_per_gpu": samples_per_sec_per_gpu,
-        "total_num_tokens": total_num_tokens,
-        "total_num_samples": total_num_samples,
-        "valid_tokens/total_num_tokens": total_num_valid_tokens,
-        "valid_tokens/tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
-        "valid_tokens/valid_token_ration": total_num_valid_tokens / total_num_tokens,
-      }
+      with Timer("reduce data source metrics"):
+        data_source_loss = dist_reduce_dict(data_source_loss)
+        data_source_tokens = dist_reduce_dict(data_source_tokens)
+        total_data_source_samples = dist_reduce_dict(
+          data_source_samples, group=get_data_parallel_group())
 
-      for name, data in log_dict.items():
-        if data is not None and tb_writer:
-          tb_writer.add_scalar(
-              name,
-              data,
-              global_step=iteration,
-              new_style=True)
-      
-      if args.monitor_datasource_loss and tb_writer:
-        for k, v in data_source_mean_loss.items():
-          tb_writer.add_scalar(
-                f"data_source_loss/{key}",
-                v,
+      if dist.get_rank() == 0:
+        learning_rate = model.lr_scheduler.get_lr()[0]
+        end_time = time.time()
+        sec_per_step = (end_time - start_time) / acc_step
+        tokens_per_sec_per_gpu = \
+          acc_num_tokens / dist.get_world_size() / (end_time - start_time)
+        samples_per_sec_per_gpu = \
+          acc_num_samples / dist.get_world_size() / (end_time - start_time)
+        valid_tokens_per_sec_per_gpu = \
+          acc_valid_num_tokens / dist.get_world_size() / (end_time - start_time)
+        avg_loss = acc_avg_loss / acc_step
+        start_time = end_time
+        log_dict = {
+          "training/loss": avg_loss,
+          "training/grad_norm": model.get_global_grad_norm(),
+          "training/learning_rate": learning_rate,
+          "perf/sec_per_step": sec_per_step,
+          "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
+          "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
+          "perf/total_num_tokens": total_num_tokens,
+          "perf/total_num_samples": total_num_samples,
+          "perf/valid_total_num_tokens": total_num_valid_tokens,
+          "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
+          "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
+        }
+
+        for name, data in log_dict.items():
+          if data is not None and tb_writer:
+            tb_writer.add_scalar(
+                name,
+                data,
                 global_step=iteration,
                 new_style=True)
 
-      if args.monitor_datasource_cnt and tb_writer:
-        source_ratio_dict = {}
-        for key, cnt in total_data_source_cnt.items():
-          source_ratio_dict[f"{key}"] = 1.0 * cnt / total_num_samples
-          tb_writer.add_scalar(
-              f"data_source_sample_ratio/{key}",
-              1.0 * cnt / total_num_samples,
-              global_step=iteration,
-              new_style=True)
+        if args.monitor_datasource_loss and tb_writer:
+          for key, loss_sum in data_source_loss.items():
+            tb_writer.add_scalar(
+                  f"data_source_loss/{key}",
+                  loss_sum / data_source_tokens[key],
+                  global_step=iteration,
+                  new_style=True)
 
-      print_rank_0(
-        f"Step: {iteration}, Loss: {avg_loss}, "
-        f"Learning Rate: {learning_rate}, "
-        f"Grad Norm: {model.get_global_grad_norm()}, "
-        f"Sec per Step: {sec_per_step}, "
-        f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}, "
-        f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}, "
-        f"valid_tokens_per_sec_per_gpu: {valid_tokens_per_sec_per_gpu}, "
-        f"total_num_tokens: {total_num_tokens}, "
-        f"total_num_samples: {total_num_samples}, "
-        f"total_num_valid_tokens: {total_num_valid_tokens}, "
-        f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, "
-      )
+        if args.monitor_datasource_cnt and tb_writer:
+          for key, samples in total_data_source_samples.items():
+            tb_writer.add_scalar(
+                f"data_source_sample_ratio/{key}",
+                1.0 * samples / total_num_samples,
+                global_step=iteration,
+                new_style=True)
+
+        print_rank_0(
+          f"Step: {iteration}, Loss: {avg_loss}, "
+          f"Learning Rate: {learning_rate}, "
+          f"Grad Norm: {model.get_global_grad_norm()}, "
+          f"Sec per Step: {sec_per_step}",
+          f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
+          f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
+          f"total_num_tokens: {total_num_tokens}",
+          f"total_num_samples: {total_num_samples}",
+          f"valid_tokens_per_sec_per_gpu: {valid_tokens_per_sec_per_gpu}, "
+          f"total_num_tokens: {total_num_tokens}, "
+          f"total_num_samples: {total_num_samples}, "
+          f"total_num_valid_tokens: {total_num_valid_tokens}, "
+          f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, "
+        )
 
       acc_step = 0
       acc_avg_loss = 0.0
       acc_num_samples = 0
       acc_num_tokens = 0
       acc_valid_num_tokens = 0
+      data_source_loss = collections.defaultdict(float)
+      data_source_tokens = collections.defaultdict(int)
 
     if iteration % args.save_checkpoint_per_step == 0 and \
         iteration > 0 and model.is_gradient_accumulation_boundary():
       
       torch.cuda.empty_cache()
-      model.save_checkpoint(
-        save_dir=args.output_dir, client_state = {
-          "total_num_tokens": total_num_tokens,
-          "total_num_samples": total_num_samples
-        }
-      )
 
-      try:
-        dataloader_state_dict = {
-          "dataloader_state_dict": dataloader.state_dict()
-        }
-      except:
-        dataloader_state_dict = None
-        logging.error(f"Dataloader cannot dump state_dict!!!!!!!!")
-      if dataloader_state_dict is not None:
-        # dataloader ckpt
-        dataloader_path = os.path.join(args.output_dir, "dataloader_ckpt")
-        if dist.get_rank() == 0:
-          os.makedirs(dataloader_path, exist_ok=True)
-        dist.barrier()
-        torch.save(dataloader_state_dict, os.path.join(dataloader_path, f"rank{dist.get_rank()}_global_step{iteration}.pth"))
+      with Timer("save checkpoint"):
+        model.save_checkpoint(
+          save_dir=args.output_dir, client_state = {
+            "total_num_valid_tokens": total_num_valid_tokens,
+            "total_num_tokens": total_num_tokens,
+            "total_num_samples": total_num_samples
+          }
+        )
+        try:
+          dataloader_state_dict = {
+            "dataloader_state_dict": dataloader.state_dict()
+          }
+        except:
+          dataloader_state_dict = None
+          logging.error(f"Dataloader cannot dump state_dict!!!!!!!!")
+        if dataloader_state_dict is not None:
+          # dataloader ckpt
+          dataloader_path = os.path.join(args.output_dir, "dataloader_ckpt")
+          if dist.get_rank() == 0:
+            os.makedirs(dataloader_path, exist_ok=True)
+          dist.barrier()
+          torch.save(
+            dataloader_state_dict,
+            os.path.join(
+              dataloader_path,
+              f"rank{dist.get_rank()}_global_step{iteration}.pth")
+            )
 
   print_rank_0("Save checkpoint..")
   model.save_checkpoint(save_dir=args.output_dir, client_state = {
-    "total_num_tokens": total_num_tokens,
-    "total_num_samples": total_num_samples}
+      "total_num_valid_tokens": total_num_valid_tokens,
+      "total_num_tokens": total_num_tokens,
+      "total_num_samples": total_num_samples
+    }
   )
   try:
     # dataloader ckpt

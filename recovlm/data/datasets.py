@@ -6,6 +6,7 @@ import sys
 import re
 import wids
 import json
+import time
 import traceback
 import pickle
 import random
@@ -36,118 +37,18 @@ from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
 
+from recovlm.training.parallel import get_sequence_parallel_group, \
+  get_sequence_parallel_world_size
+from recovlm.utils.common import print_rank_0, Timer
+
+import glob
+
 from .templates import get_template
 from .prompts import PromptLoader
 
 logger = logging.getLogger(__name__)
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
-
-class LLaVA_CC3M_Dataset(Dataset):
-  def __init__(self, source, processor_path, max_length=None):
-    super(LLaVA_CC3M_Dataset).__init__()
-    self.source = source
-    with open(os.path.join(self.source, "chat.json"), encoding="utf-8") as f:
-      self.sessions = json.loads(f.read())
-    self.processor = AutoProcessor.from_pretrained(processor_path)
-    self.tokenizer = AutoTokenizer.from_pretrained(
-        processor_path, use_fast=False)
-    self.tokenizer.padding_side = "right"
-    self.max_length = max_length
-    if not self.max_length:
-      self.max_length = self.tokenizer.model_max_length
-
-  def __getitem__(self, index):
-    session = self.sessions[index]
-    return session
-
-  def build_collate_fn(self):
-    # TODO: SUPPORT TRUNCATE
-    def collate_fn(sessions):
-      prompt_messages = []
-      for session in sessions:
-        prompt = session["conversations"][0]["value"]
-        img = os.path.join(self.source, session["image"])
-        if prompt.endswith("<image>"):
-          content = [
-              {"type": "text", "text": re.sub(r"\n<image>", "", prompt)},
-              {
-                  "type": "image",
-                  "image": img,
-                  "resized_height": 224,
-                  "resized_width": 224,
-              }
-          ]
-        else:
-          content = [
-              {
-                  "type": "image",
-                  "image": img,
-                  "resized_height": 224,
-                  "resized_width": 224,
-              },
-              {"type": "text", "text": re.sub(r"<image>\n", "", prompt)}
-          ]
-        prompt_messages.append([{
-            "role": "user",
-            "content": content,
-        }])
-      text = self.processor.apply_chat_template(
-          prompt_messages, tokenize=False, add_generation_prompt=True
-      )
-      image_inputs, video_inputs = process_vision_info(prompt_messages)
-      inputs = self.processor(
-          text=text,
-          images=image_inputs,
-          videos=video_inputs,
-          padding=True,
-          padding_side="left",
-          return_tensors="pt",
-      )
-
-      response_messages = []
-      for session in sessions:
-        response = session["conversations"][1]["value"]
-        response_messages.append([{"content": response}])
-      # right pad response to concat with prompt
-      response_inputs = self.tokenizer.apply_chat_template(
-          response_messages,
-          chat_template=RESPONSE_TEMPLATE,
-          padding=True,
-          padding_side="right",
-          add_generation_prompt=False,
-          return_tensors="pt",
-      )
-      response_mask = (
-          response_inputs != self.tokenizer.pad_token_id).type(torch.int64)
-      loss_mask = torch.cat(
-          [torch.zeros_like(inputs["input_ids"]), response_mask], dim=-1
-      )
-      inputs["attention_mask"] = torch.cat(
-          [inputs["attention_mask"], response_mask], dim=-1)
-      inputs["input_ids"] = torch.cat(
-          [inputs["input_ids"], response_inputs], dim=-1)
-      inputs["loss_mask"] = loss_mask
-
-      # TODO: improve truncate
-      for key in ["input_ids", "attention_mask", "loss_mask"]:
-        inputs[key] = inputs[key][:, :self.max_length]
-      _type = {
-          "input_ids": torch.int64,
-          "attention_mask": torch.int64,
-          "pixel_values": torch.float32,
-          "image_grid_thw": torch.int64,
-          "video_grid_thw": torch.int64,
-          "loss_mask": torch.int64
-      }
-      assert inputs["input_ids"].shape == inputs["loss_mask"].shape
-      assert inputs["input_ids"].shape == inputs["attention_mask"].shape
-      return inputs
-
-    return collate_fn
-
-  def __len__(self):
-    return len(self.sessions)
 
 def zero_pad_sequences(sequences, side: str = "left", value=0):
   assert side in ("left", "right")
@@ -675,7 +576,18 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
     packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
     packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
-
+    
+    # pad to multiple of, necessary for sequence parallel
+    if (
+      self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
+    ):  # not divisible by multiple_of; here we align for grouping
+      padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+      packed_input_ids = F.pad(
+        packed_input_ids, (0, padding_len), value=self.processor.tokenizer.pad_token_id)
+      packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
+      packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
+      cu_seqlens.append(cu_seqlens[-1] + padding_len)
+ 
     inputs = {
       "input_ids": packed_input_ids,
       "position_ids": packed_position_ids,
@@ -739,7 +651,8 @@ def get_assistant_mask(batch_input_ids: torch.Tensor,
           assistant_end = []
     masks.append(mask)
   return torch.tensor(masks)
-  
+
+
 class ChatCompletionVisionDataset(IterableDataset):
   def __init__(self,
                sources: Union[str, List[str]],
@@ -820,36 +733,38 @@ class ChatCompletionVisionDataset(IterableDataset):
     total_samples = 0
     if isinstance(sources, str):
       sources = sources.split(",")
-    urls = []
-    for source in sources:
-      with open(source, encoding="utf-8") as f:
-        index = json.loads(f.read())["shardlist"]
-        for item in index:
-          urls.append(os.path.join(os.path.dirname(source), item["url"]))
-          total_samples += item["nsamples"]
-    
-    # broadcast all urls
-    urls.sort()
-    random.shuffle(urls)
-    t = [urls]
-    dist.broadcast_object_list(t, src=0)
-    urls = t[0]
+    with Timer("Read urls"):
+      urls = []
+      for source in sources:
+        with open(source, encoding="utf-8") as f:
+          index = json.loads(f.read())["shardlist"]
+          for item in index:
+            urls.append(os.path.join(os.path.dirname(source), item["url"]))
+            total_samples += item["nsamples"]
 
-    dataset = wds.WebDataset(
-        urls,
-        handler=wds.warn_and_continue,
-        resampled=True,
-        shardshuffle=True,
-        cache_dir="/tmp/_wids_cache",
-        nodesplitter=wds.split_by_node,
-        workersplitter=wds.split_by_worker
-    )
+    with Timer("Sort -> Shuffle -> Broadcast"):
+      # broadcast all urls
+      urls.sort()
+      random.shuffle(urls)
+      t = [urls]
+      dist.broadcast_object_list(t, src=0)
+      urls = t[0]
+      logger.info(f"[RANK{dist.get_rank()}] {urls=}")
 
-    dataset = dataset.shuffle(self.shuffle_size, 
-      initial=self.shuffle_initial_size)
+    with Timer("Build dataset"):
+      dataset = wds.WebDataset(
+          urls,
+          handler=wds.warn_and_continue,
+          resampled=True,
+          shardshuffle=True,
+          cache_dir="/tmp/_wids_cache",
+          nodesplitter=wds.split_by_node,
+          workersplitter=wds.split_by_worker
+      )
 
-    dataset = dataset.decode(
-      "pil", handler=wds.warn_and_continue)
+      dataset = dataset.shuffle(
+          self.shuffle_size, initial=self.shuffle_initial_size).decode(
+        "pil", handler=wds.warn_and_continue)
       
     return dataset, total_samples
 
@@ -1061,7 +976,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     inputs.pop("attention_mask")
     return inputs
   
-  def _gen_img_pad(self,):
+  def _gen_img_pad(self):
     """
     append an image, to trigger vit for pure text sample
     return 6 token: vstart, 4 * image_token, vend
@@ -1069,8 +984,9 @@ class ChatCompletionVisionDataset(IterableDataset):
     text = "<|vision_start|><|image_pad|><|vision_end|>"
     pad_image = {
       "type": "image",
-      "image": Image.new("RGB", (1, 1), (255,255,255))
+      "image": Image.new("RGB", (1, 1), (255, 255, 255))
     }
+
     self._fill_image_block(pad_image, {}, 1, 1)
     image_inputs, _ = process_vision_info(vision_infos = [pad_image])
     inputs = self.processor(
@@ -1079,6 +995,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=None,
         return_tensors="pt"
     )
+
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
     inputs["position_ids"] = get_rope_index(
       inputs["input_ids"],
@@ -1089,6 +1006,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       video_token_id=self.video_token_id,
       vision_start_token_id=self.vision_start_token_id
     )
+
     inputs.pop("attention_mask")
     return inputs
 
@@ -1126,21 +1044,27 @@ class ChatCompletionVisionDataset(IterableDataset):
         f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
       )
   
-  def _append_sample_packing(self, inputs, cur_sample_idx,
-                                  packed_input_ids: List[torch.Tensor],
-                                  packed_position_ids: List[torch.Tensor],
-                                  packed_loss_mask: List[torch.Tensor],
-                                  packed_pixel_values: List[torch.Tensor],
-                                  packed_pixel_values_videos: List[torch.Tensor],
-                                  packed_image_gird_thw: List[torch.Tensor],
-                                  packed_video_grid_thw: List[torch.Tensor],
-                                  packed_sample_idx: List[torch.Tensor],
-                                  cu_seqlens: List[int]):
+  def _append_sample_packing(self,
+                             inputs: Dict[str, torch.Tensor],
+                             packed_input_ids: List[torch.Tensor],
+                             packed_position_ids: List[torch.Tensor],
+                             packed_loss_mask: List[torch.Tensor],
+                             packed_pixel_values: List[torch.Tensor],
+                             packed_pixel_values_videos: List[torch.Tensor],
+                             packed_image_gird_thw: List[torch.Tensor],
+                             packed_video_grid_thw: List[torch.Tensor],
+                             packed_sample_idx: List[torch.Tensor],
+                             cu_seqlens: List[int],
+                             sample_idx: Optional[int] = None):
 
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
     packed_position_ids.append(inputs["position_ids"])
-    packed_sample_idx.append(torch.ones_like(packed_input_ids[-1]) * cur_sample_idx)
+    if sample_idx is None:
+      sample_idx = len(cu_seqlens) - 1
+    packed_sample_idx.append(
+      torch.full_like(packed_input_ids[-1], sample_idx))
+
     if "pixel_values" in inputs:
       packed_pixel_values.append(inputs["pixel_values"])
       packed_image_gird_thw.append(inputs["image_grid_thw"])
@@ -1151,57 +1075,70 @@ class ChatCompletionVisionDataset(IterableDataset):
     return len(inputs["input_ids"][0])
 
   def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
-    packed_input_ids = []
-    packed_position_ids = []
-    packed_loss_mask = []
-    packed_pixel_values = []
-    packed_pixel_values_videos = []
-    packed_image_gird_thw = []
-    packed_video_grid_thw = []
-    packed_sample_idx = []
-    cu_seqlens = [0]
+    packed_input_ids: List[torch.Tensor] = []
+    packed_position_ids: List[torch.Tensor] = []
+    packed_loss_mask: List[torch.Tensor] = []
+    packed_pixel_values: List[torch.Tensor] = []
+    packed_pixel_values_videos: List[torch.Tensor] = []
+    packed_image_gird_thw: List[torch.Tensor] = []
+    packed_video_grid_thw: List[torch.Tensor] = []
+    packed_sample_idx: List[torch.Tensor] = []
+    cu_seqlens: List[int] = [0]
 
     valid_seq_len = 0
+    for _, inputs in enumerate(buffer):
+      valid_seq_len += self._append_sample_packing(inputs,
+                                      packed_input_ids,
+                                      packed_position_ids,
+                                      packed_loss_mask,
+                                      packed_pixel_values,
+                                      packed_pixel_values_videos,
+                                      packed_image_gird_thw,
+                                      packed_video_grid_thw,
+                                      packed_sample_idx,
+                                      cu_seqlens)
 
-    sample_idx = 0
-    for idx, inputs in enumerate(buffer):
-      valid_seq_len += self._append_sample_packing(inputs, sample_idx, 
-                                      packed_input_ids, packed_position_ids, packed_loss_mask,
-                                      packed_pixel_values, packed_pixel_values_videos,
-                                      packed_image_gird_thw, packed_video_grid_thw,
-                                      packed_sample_idx, cu_seqlens)
-      sample_idx += 1
-    
-    pad_flag = False
-    pad_len = self.max_length - valid_seq_len
-
-    if self.need_padding and pad_len > 0:
-      pad_input = self._gen_pad_input(pad_len)
-      self._append_sample_packing(pad_input, sample_idx, 
-                                      packed_input_ids, packed_position_ids, packed_loss_mask,
-                                      packed_pixel_values, packed_pixel_values_videos,
-                                      packed_image_gird_thw, packed_video_grid_thw,
-                                      packed_sample_idx, cu_seqlens)
-      sample_idx += 1
-      pad_flag = True
-    
     # append a pad image sequence to trigger ViT
     image_pad = self._gen_img_pad()
-    self._append_sample_packing(image_pad, sample_idx, 
-                                      packed_input_ids, packed_position_ids, packed_loss_mask,
-                                      packed_pixel_values, packed_pixel_values_videos,
-                                      packed_image_gird_thw, packed_video_grid_thw,
-                                      packed_sample_idx, cu_seqlens)
-    sample_idx += 1
+    self._append_sample_packing(image_pad,
+                                packed_input_ids,
+                                packed_position_ids,
+                                packed_loss_mask,
+                                packed_pixel_values,
+                                packed_pixel_values_videos,
+                                packed_image_gird_thw,
+                                packed_video_grid_thw,
+                                packed_sample_idx,
+                                cu_seqlens,
+                                sample_idx=-1)
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
-    packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)    
-    packed_pixel_values = None if len(packed_pixel_values) == 0 else torch.cat(packed_pixel_values, dim=0)
-    packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else torch.cat(packed_image_gird_thw, dim=0)
-    packed_pixel_values_videos = None if len(packed_pixel_values_videos) == 0 else torch.cat(packed_pixel_values_videos, dim=0)
-    packed_video_grid_thw = None if len(packed_video_grid_thw) == 0 else torch.cat(packed_video_grid_thw, dim=0)
+    packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
+    packed_pixel_values = None if len(packed_pixel_values) == 0 else \
+      torch.cat(packed_pixel_values, dim=0)
+    packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else \
+      torch.cat(packed_image_gird_thw, dim=0)
+    packed_pixel_values_videos = \
+      None if len(packed_pixel_values_videos) == 0 else \
+        torch.cat(packed_pixel_values_videos, dim=0)
+    packed_video_grid_thw = None if len(packed_video_grid_thw) == 0 else \
+      torch.cat(packed_video_grid_thw, dim=0)
+
+    # pad seq len to multiple_of
+    if (
+      self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
+    ):
+      padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+      packed_input_ids = F.pad(
+        packed_input_ids, (0, padding_len),
+        value=self.processor.tokenizer.pad_token_id)
+      packed_sample_idx = F.pad(
+        packed_sample_idx, (0, padding_len), value=-1)
+      packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
+      packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
+      cu_seqlens.append(cu_seqlens[-1] + padding_len)
 
     inputs = {
       "input_ids": packed_input_ids,
@@ -1212,10 +1149,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       "pixel_values_videos": packed_pixel_values_videos,
       "video_grid_thw": packed_video_grid_thw,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
-      "sample_idx": packed_sample_idx,
-      "is_pad": pad_flag,
-      "valid_token_num": valid_seq_len,
-      "valid_sample_num": len(buffer)
+      "sample_idx": torch.tensor(packed_sample_idx, dtype=torch.int32)
     }
     return inputs
 
@@ -1246,29 +1180,30 @@ class ChatCompletionVisionDataset(IterableDataset):
       except:
         self.source_error_cnt.setdefault(source_name, 0)
         self.source_error_cnt[source_name] += 1
-        error_ratio = self.source_error_cnt[source_name] * 1.0 / self.source_sample_cnt[source_name]
-        logger.error(f"ChatCompletionVisionDataset process sample error. "
-                      f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
-                      f"errmsg={traceback.format_exc()}")
+        error_ratio = self.source_error_cnt[source_name] * 1.0 / \
+          self.source_sample_cnt[source_name]
+        logger.error(
+          f"ChatCompletionVisionDataset process sample error. "
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
+          f"errmsg={traceback.format_exc()}")
         continue
 
       sample_length = inputs["input_ids"].shape[-1]
       if cur_length + sample_length > self.max_length:
         packed_inputs = self._packing(buffer)
-        is_pad = packed_inputs.pop("is_pad")
-        pad_num = 2 if is_pad else 1 # 2: image_pad + text_pad or 1: image_pad
-        packed_inputs["data_source"] = source_list + ["pad"] * pad_num # return source_list for dataset monitor
-
+        packed_inputs["data_source"] = source_list
         buffer = [inputs]
         source_list = [source_name]
         cur_length = sample_length
-        
+
         # skip pure text sample
-        if packed_inputs["pixel_values"] is None and packed_inputs["pixel_values_videos"] is None:
+        # 有pad image，原则上不会出现纯文本输入
+        if packed_inputs["pixel_values"] is None and \
+            packed_inputs["pixel_values_videos"] is None:
           logger.warning("Skip pure text sample.")
           continue
 
-        # skip 0 label pack 
+        # skip 0 label pack
         if packed_inputs["loss_mask"].sum() == 0:
           logger.warning("Skip 0 lable sample.")
           continue
@@ -1461,7 +1396,7 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
       elif isinstance(sources, list):
         for source in sources:
           hdfs_files = shell_hdfs_ls(source)
-          data_fiels += [fn for fn in hdfs_files if fn.endswith(".parquet")]
+          data_files += [fn for fn in hdfs_files if fn.endswith(".parquet")]
 
     data_files.sort()
     self.rng.shuffle(data_files)

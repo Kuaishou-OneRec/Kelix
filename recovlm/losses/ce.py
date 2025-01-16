@@ -2,6 +2,10 @@ from typing import List
 
 import torch
 import torch.nn.functional as F
+import torch.distributed as dist
+
+from recovlm.training.parallel import get_sequence_parallel_world_size, \
+  get_sequence_parallel_group
 
 class CrossEntropyLoss(torch.nn.Module):
   """
@@ -20,10 +24,16 @@ class CrossEntropyLoss(torch.nn.Module):
   For more details, please refer to: https://github.com/pytorch/torchtune/pull/1390
   """
 
-  def __init__(self, ignore_index: int = -100, return_token_loss: bool = False):
+  def __init__(self,
+               ignore_index: int = -100,
+               return_token_loss: bool = False,
+               shift_labels: bool = True,
+               reduction: str = "mean"):
     super().__init__()
     self.ignore_index = ignore_index
     self.return_token_loss = return_token_loss
+    self.shift_labels = shift_labels
+    self.reduction = reduction
 
   def forward(self, logits: torch.Tensor,
               labels: torch.Tensor) -> torch.Tensor:
@@ -46,24 +56,24 @@ class CrossEntropyLoss(torch.nn.Module):
         >>> labels = torch.tensor([bsz, num_tokens])
         >>> loss = loss_fn(output_chunks, labels)
     """
-    total_elements = (labels != self.ignore_index).sum()
+    total_elements = (labels != self.ignore_index).sum().cuda()
+    # if get_sequence_parallel_world_size() > 1:
+    #   dist.all_reduce(
+    #     total_elements, op=dist.ReduceOp.SUM,
+    #     group=get_sequence_parallel_group())
     vocab_size = logits.shape[-1]
+
+    if self.shift_labels:
+      logits = logits[:, :-1, :]
+      labels = labels[:, 1:]
+    per_token_loss = F.cross_entropy(
+      logits.float().reshape(-1, vocab_size),
+      labels.reshape(-1), ignore_index=self.ignore_index,
+      reduction="none"
+    )
+    loss = per_token_loss.sum()
+    if self.reduction == "mean" and total_elements > 0:
+      loss /= total_elements
     if self.return_token_loss:
-      pos_loss = F.cross_entropy(
-        logits.float()[:,:-1,:].reshape(-1, vocab_size),
-        labels[:,1:].reshape(-1), ignore_index=self.ignore_index,
-        reduction="none"
-      )
-      loss = pos_loss.sum()
-      if total_elements > 0:
-        loss /= total_elements
-      return loss, pos_loss
-    else:
-      loss = F.cross_entropy(
-        logits.float()[:,:-1,:].reshape(-1, vocab_size),
-        labels[:,1:].reshape(-1), ignore_index=self.ignore_index,
-        reduction="sum"
-      )
-      if total_elements > 0:
-        loss /= total_elements
-      return loss, None
+      return loss, per_token_loss
+    return loss

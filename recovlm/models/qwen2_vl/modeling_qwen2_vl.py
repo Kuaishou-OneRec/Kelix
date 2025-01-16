@@ -61,6 +61,11 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
 
+import torch.distributed as dist
+
+from recovlm.training.parallel import UlyssesAttention, get_sequence_parallel_group, \
+    get_sequence_parallel_world_size, get_sequence_parallel_rank, \
+    get_local_sequence_boundary
 
 logger = logging.get_logger(__name__)
 
@@ -617,6 +622,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self._dist_attn = UlyssesAttention(scatter_idx=2, gather_idx=1)
 
     def forward(
         self,
@@ -679,6 +685,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
             value_states = value_states.to(target_dtype)
 
         # Reashape to the expected shape for Flash Attention
+        # (b, h, N, d) -> (b, N, h, d)
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
@@ -691,41 +698,49 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
             sliding_window = self.config.sliding_window
         else:
             sliding_window = -1
-        
-        if cu_seqlens is not None:
-            # Sample packing with FA2
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            # print('forward cu_seqlens', cu_seqlens.dtype, cu_seqlens)
-            cu_seqlens = cu_seqlens.to(torch.int32)
-            # print('query_states', query_states.shape)
-            # print('key_states', key_states.shape)
-            # print('value_states', value_states.shape)
-            # exit()
-            attn_output = flash_attn_varlen_func(
-                query_states.squeeze(0),
-                key_states.squeeze(0),
-                value_states.squeeze(0),
-                cu_seqlens,
-                cu_seqlens,
-                max_seqlen,
-                max_seqlen,
+
+        # TODO: 暂时不考虑不packing的情况
+        assert cu_seqlens is not None, "Pass cu_seqlens for FA2"
+        if get_sequence_parallel_world_size() > 1:
+            attn_output = self._dist_attn(
+                query=query_states,
+                key=key_states,
+                value=value_states,
+                cu_seqlens=cu_seqlens,
                 dropout_p=dropout_rate,
-                window_size=(sliding_window, sliding_window),
+                sliding_window=sliding_window,
                 causal=self.is_causal
             )
         else:
-            raise NotImplementedError("must have cu_seqlens")
-            attn_output = _flash_attention_forward(
-                query_states,
-                key_states,
-                value_states,
-                attention_mask,
-                q_len,
-                dropout=dropout_rate,
-                sliding_window=sliding_window,
-                is_causal=self.is_causal,
-                use_top_left_mask=self._flash_attn_uses_top_left_mask,
-            )
+            if cu_seqlens is not None:
+                # Sample packing with FA2
+                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                cu_seqlens = cu_seqlens.to(torch.int32)
+                # remove batch_dim first: q.squeeze(0)
+                attn_output = flash_attn_varlen_func(
+                    query_states.squeeze(0),
+                    key_states.squeeze(0),
+                    value_states.squeeze(0),
+                    cu_seqlens,
+                    cu_seqlens,
+                    max_seqlen,
+                    max_seqlen,
+                    dropout_p=dropout_rate,
+                    window_size=(sliding_window, sliding_window),
+                    causal=self.is_causal
+                )
+            else:
+                attn_output = _flash_attention_forward(
+                    query_states,
+                    key_states,
+                    value_states,
+                    attention_mask,
+                    q_len,
+                    dropout=dropout_rate,
+                    sliding_window=sliding_window,
+                    is_causal=self.is_causal,
+                    use_top_left_mask=self._flash_attn_uses_top_left_mask,
+                )
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -734,7 +749,6 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
-
 
 class Qwen2VLSdpaAttention(Qwen2VLAttention):
     """
@@ -826,7 +840,6 @@ class Qwen2VLSdpaAttention(Qwen2VLAttention):
         attn_output = self.o_proj(attn_output)
 
         return attn_output, None, past_key_value
-
 
 QWEN2_VL_ATTENTION_CLASSES = {
     "eager": Qwen2VLAttention,
@@ -962,7 +975,6 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
 
 class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     config_class = Qwen2VLVisionConfig
@@ -1137,6 +1149,13 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # shard hidden_states & position_embeddings for sequence parallel
+        if get_sequence_parallel_world_size() > 1:
+            start, end = get_local_sequence_boundary(hidden_states.shape[1])
+            sin, cos = position_embeddings
+            position_embeddings = (sin[:, :, start:end, :], cos[:, :, start:end, :])
+            hidden_states = hidden_states[:, start:end, :]
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None

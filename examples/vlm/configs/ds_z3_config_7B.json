@@ -44,5 +44,8 @@
     },
     "bf16": {
       "enabled": true
+    },
+    "compile": {
+      "disable": false
     }
 }
