@@ -18,7 +18,7 @@ class Shuffler(MPIBase):
         input_dir, 
         output_dir,
         buffer_mem_size=14*1024*1024*1024,
-        out_partition=1024,
+        out_partition=2048,
     ):
         super().__init__()
         self.input_dir = input_dir
