@@ -1081,8 +1081,10 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         # hidden_states = SeqAllGather.apply(hidden_states, gather_idx=0)  
         # local_hidden_states: (N/P, d), perform a sequence allGather
         hidden_states = mpu.AllGather.apply(
-            local_hidden_states, gather_idx=0,
-            group=get_sequence_parallel_group())
+            local_hidden_states,
+            get_sequence_parallel_group(),
+            0
+        )
         return self.merger(hidden_states)
 
 @add_start_docstrings(
