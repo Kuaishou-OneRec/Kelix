@@ -381,9 +381,11 @@ class VisionFlashAttention2(nn.Module):
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
         # q,k,v = (N/P, h, d), rotary_pos_emb = (N/P, h, d)
+        print_rank_0(f"attn hidden_states, {hidden_states.shape}")
         q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
         k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
+        print_rank_0(f"attn q={q.shape}, k={k.shape}, v={v.shape}")
         if get_sequence_parallel_world_size() > 1:
             attn_output = self._dist_attn(
                 query=q.unsqueeze(0),
@@ -396,6 +398,7 @@ class VisionFlashAttention2(nn.Module):
             attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
                 seq_length, -1
             )
+        print_rank_0(f"attn_output, {attn_output.shape}")
         attn_output = self.proj(attn_output)
         return attn_output
 
@@ -1068,9 +1071,10 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
-        print_rank_0(f"rotary_pos_emb shape, {rotary_pos_emb.shape}")
         local_hidden_states = get_local_sequence(hidden_states, seq_idx=0)
         local_rotary_pos_emb = get_local_sequence(rotary_pos_emb, seq_idx=0)
+        print_rank_0(
+            f"hidden_states={hidden_states.shape}, rotary_pos_emb shape, {rotary_pos_emb.shape}")
 
         for blk in self.blocks:
             if self.gradient_checkpointing and self.training:
