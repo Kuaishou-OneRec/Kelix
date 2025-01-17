@@ -864,7 +864,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] >= 32768:
+    if inputs["input_ids"].shape[-1] > 32768:
       raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
     
     # mask all vision token
@@ -932,7 +932,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] >= 32768:
+    if inputs["input_ids"].shape[-1] > 32768:
       raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
     
     inputs["loss_mask"] = get_assistant_mask(
@@ -1239,13 +1239,36 @@ class ParquetDataset(IterableDataset):
     rank, world_size, worker, num_workers = pytorch_worker_info()
     finish_dict = state_dict["finish_dict"]
     offset_dict = state_dict["offset_dict"]
+
+    # support old ckpt format
+    tmp_finish_dict = dict()
+    tmp_offset_dict = dict()
+
+    for k, v in finish_dict.items():
+      if isinstance(k, str):
+        tmp_finish_dict[(k, 0)] = v
+      elif isinstance(k, tuple) and len(k) == 2:
+        tmp_finish_dict[k] = v
+      else:
+        raise NotImplementedError(f"Unsupported dataloader checkpoint format.") 
+    
+    for k, v in offset_dict.items():
+      if isinstance(k, str):
+        fn, group_idx = k.split("|")
+        group_idx = int(group_idx)
+        tmp_offset_dict[(fn, 0, group_idx)] = v
+      elif isinstance(k, tuple) and len(k) == 3:
+        tmp_offset_dict[k] = v
+      else:
+        raise NotImplementedError(f"Unsupported dataloader checkpoint format.") 
+
     # clear cur state
     self.finish_dict_all[worker].clear()
     self.offset_dict_all[worker].clear()
 
     # update
-    self.finish_dict_all[worker].update(finish_dict)
-    self.offset_dict_all[worker].update(offset_dict)
+    self.finish_dict_all[worker].update(tmp_finish_dict)
+    self.offset_dict_all[worker].update(tmp_offset_dict)
     logger.warning(f"[rank{rank}-woker{worker}] load checkpoint success.")
 
   def _parser(self, raw_row_data, file_url):
@@ -1303,14 +1326,6 @@ class ParquetDataset(IterableDataset):
     except:
       logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}")
       return None
-  
-  def _encode_path_group(self, path, group_idx):
-    return f"{path}|{group_idx}"
-
-  def _decode_path_group(self, encoded_str):
-    path, offset_str = encoded_str.split('|')
-    group_idx = int(group_idx)
-    return path, group_idx
 
   def __iter__(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
@@ -1326,8 +1341,9 @@ class ParquetDataset(IterableDataset):
       f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
     )
     
-    for fn in fn_list:
-      if fn in finish_dict:
+    for epoch_fn in fn_list:
+      fn, epoch_idx = epoch_fn
+      if (fn, epoch_idx) in finish_dict:
         logger.warning(f"[Rank{rank}-{worker}] skip {fn}")
         continue
       
@@ -1343,10 +1359,10 @@ class ParquetDataset(IterableDataset):
         for group_idx in range(parquet_file.num_row_groups):
           try:
             offset = 0
-            fn_group_key = self._encode_path_group(fn, group_idx)
+            fn_group_key = (fn, epoch_idx, group_idx)
             if fn_group_key in offset_dict:
               if offset_dict[fn_group_key] == -1:
-                logger.warning(f"[Rank{rank}-{worker}] skip {fn}-group{group_idx}")
+                logger.warning(f"[Rank{rank}-{worker}] skip {fn}-epoch{epoch_idx}-group{group_idx}")
                 continue
               else:
                 offset = offset_dict[fn_group_key] + 1
@@ -1354,7 +1370,7 @@ class ParquetDataset(IterableDataset):
             row_group = parquet_file.read_row_group(group_idx)
             if offset >= row_group.num_rows:
               continue
-            logger.warning(f"[Rank{rank}-{worker}] start {fn}-group{group_idx}-{offset=}")
+            logger.warning(f"[Rank{rank}-{worker}] start {fn}-epoch{epoch_idx}-group{group_idx}-{offset=}")
             row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
 
             for row_idx, row in row_pandas.iterrows():
@@ -1370,23 +1386,25 @@ class ParquetDataset(IterableDataset):
             logger.error(f"ParquetDataset loop file_content error!!! error_msg={traceback.format_exc()}")
 
           # group finish
-          logger.warning(f"[Rank{rank}-{worker}] {fn}-group{group_idx} finish.")
+          logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx}-group{group_idx} finish.")
           offset_dict[fn_group_key] = -1
         
         # file finish
         logger.warning(f"[Rank{rank}-{worker}] {fn} finish.")
-        finish_dict[fn] = True
+        finish_dict[(fn, epoch_idx)] = True
 
 
 class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
-  def __init__(self, sources, num_workers, shuffle_seed=1024, **kargs):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
     self.rng = random.Random(shuffle_seed)
     self.num_workers = num_workers
+    self.num_epochs = num_epochs
     super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
-    data_files = []
+    data_file_list = []
     if dist.get_rank() == 0:
+      data_files = []
       if isinstance(sources, str) and sources.endswith(".json"):
         with open(sources, "r") as fp:
           data_files = json.loads(fp.read())
@@ -1395,18 +1413,22 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
         for source in sources:
           hdfs_files = shell_hdfs_ls(source)
           data_files += [fn for fn in hdfs_files if fn.endswith(".parquet")]
+      # repeat
+      for i in range(self.num_epochs):
+        data_files.sort()
+        self.rng.shuffle(data_files)
+        data_file_list += [(fn, i) for fn in data_files]
+      logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: ori_file_num={len(data_files)} file_num={len(data_file_list)}")
 
-    data_files.sort()
-    self.rng.shuffle(data_files)
-
-    t = [data_files]
+    t = [data_file_list]
     dist.broadcast_object_list(t, src=0)
-    data_files = t[0]
-    
-    if len(data_files) == 0:
+    data_file_list = t[0]
+
+    logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: file_num={len(data_file_list)}")
+    if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
 
-    dataset = ParquetDataset(data_files, self.num_workers)
+    dataset = ParquetDataset(data_file_list, self.num_workers)
     return dataset, -1
 
   def state_dict(self, ):
