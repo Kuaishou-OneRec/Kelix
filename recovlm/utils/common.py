@@ -10,6 +10,7 @@ import pickle
 import traceback
 import subprocess
 import os
+from infra.perflog import create_perf_context
 
 def get_optimizer_grouped_parameters(model,
                                      weight_decay,
@@ -163,3 +164,17 @@ def pytorch_worker_info(group=None):  # sourcery skip: use-contextlib-suppress
       pass
 
   return rank, world_size, worker, num_workers
+
+def get_task_tag():
+    kml_id = os.environ.get("KML_ID", "")
+    kml_task_id = os.environ.get("KML_TASK_ID", "")
+    if kml_id.strip() == "" or kml_task_id.strip() == "":
+        raise ValueError(f"env not set!!!! KML_ID={kml_id} KML_TASK={kml_task_id}")
+    task_tag = f"kml-task-{kml_task_id}-record-{kml_id}"
+    return task_tag
+
+def heart_beat(num_tokens):
+    current_file = os.path.abspath(__file__)
+    log_ctx = create_perf_context('reco_vllm.pretrain', get_task_tag(), biz_def='infra', extra1=current_file)
+    log_ctx.logstash_only(count=num_tokens)
+    log_ctx.persist_data()

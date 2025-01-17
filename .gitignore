@@ -21,3 +21,6 @@ hostfile
 *.out
 *checkpoint.ipynb
 *.parquet
+
+recovlm/benchmark/eval/tmp*
+recovlm/benchmark/tmp*
