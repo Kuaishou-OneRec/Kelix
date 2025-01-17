@@ -211,6 +211,15 @@ class SeqAllToAll4D(torch.autograd.Function):
             None,
         )
 
+class SeqAllGather(torch.autograd.Function):
+    @staticmethod
+    def forward() -> torch.Tensor:
+        pass
+
+    @staticmethod
+    def backward(ctx: Any, *grad_output: torch.Tensor) -> Tuple[None, torch.Tensor, None, None]:
+        return ()
+
 class UlyssesAttention(torch.nn.Module):
     """UlyssesAttention, current support FA2 with packing only.
 
