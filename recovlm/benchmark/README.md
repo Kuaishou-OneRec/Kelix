@@ -1,4 +1,4 @@
-镜像：registry.corp.kuaishou.com/kml-supercomputing-project/vllm:v0.6.1_ray_vlm_flash_attn_torch2.5.1_cuda11.8.0_python3.10.12
+镜像：registry.corp.kuaishou.com/kml-supercomputing-project/vllm:v0.6.1_ray_vlm_flash_attn_torch2.5.1_cuda11.8.0_python3.10.12_jdk8
 第一步sh -x run_config.sh配置好环境
 
 第二步bash init_ray_cluster.sh 启动ray

@@ -657,7 +657,6 @@ class ChatCompletionVisionDataset(IterableDataset):
   def __init__(self,
                sources: Union[str, List[str]],
                max_length: int = 1024,
-               need_padding: bool = False,
                min_visual_tokens_per_image: int = 4,
                max_visual_tokens_per_image: int = 512,
                video_nframe: int = -1,
@@ -690,7 +689,6 @@ class ChatCompletionVisionDataset(IterableDataset):
       pad_token_id = model_config.pad_token_id
 
     self.processor = processor
-    self.need_padding = need_padding
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
     self.video_nframe = video_nframe
@@ -1149,7 +1147,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       "pixel_values_videos": packed_pixel_values_videos,
       "video_grid_thw": packed_video_grid_thw,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
-      "sample_idx": torch.tensor(packed_sample_idx, dtype=torch.int32)
+      "sample_idx": packed_sample_idx.to(torch.int32)
     }
     return inputs
 
@@ -1357,11 +1355,11 @@ class ParquetDataset(IterableDataset):
             if offset >= row_group.num_rows:
               continue
             logger.warning(f"[Rank{rank}-{worker}] start {fn}-group{group_idx}-{offset=}")
-            row_pandas = row_group.to_pandas().reset_index()
+            row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
 
             for row_idx, row in row_pandas.iterrows():
               if row_idx < offset:
-                logger.warning(f"[Rank{rank}-{worker}] skip {fn}-group{group_idx}-row{offset}")
+                # logger.warning(f"[Rank{rank}-{worker}] skip {fn}-group{group_idx}-row{offset}")
                 continue
 
               sample = self._parser(row, fn)
