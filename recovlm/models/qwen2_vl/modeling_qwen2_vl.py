@@ -1063,17 +1063,12 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             #  - FA2 requires that cu_seqlens_q must have dtype int32
             #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
             # dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-            dtype=torch.int32,
-        print_rank_0(
-            f"hidden_states={hidden_states.shape}, rotary_pos_emb shape, {rotary_pos_emb.shape}")
+            dtype=torch.int32
+        )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
-        print_rank_0(
-            f"hidden_states={hidden_states.shape}, rotary_pos_emb shape, {rotary_pos_emb.shape}")
         local_hidden_states = get_local_sequence(hidden_states, seq_idx=0)
         local_rotary_pos_emb = get_local_sequence(rotary_pos_emb, seq_idx=0)
-        print_rank_0(
-            f"hidden_states={hidden_states.shape}, rotary_pos_emb shape, {rotary_pos_emb.shape}")
 
         for blk in self.blocks:
             if self.gradient_checkpointing and self.training:
