@@ -26,7 +26,7 @@ from recovlm.data.dataloaders import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
 from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
-  get_optimizer_grouped_parameters, dist_reduce_dict, Timer
+  get_optimizer_grouped_parameters, dist_reduce_dict, Timer, heart_beat
 from recovlm.training.lr_schedulers import get_scheduler
 
 from recovlm.training.parallel import get_sequence_parallel_group, \
@@ -50,6 +50,12 @@ def get_argument_parser():
   
   parser.add_argument("--resume_dataloader", action="store_true",
                       help="Whether to resume dataloader checkpoint")
+  
+  parser.add_argument("--auto_resume_local_latest", action="store_true",
+                      help="Auto resume checkpoint from output dir if the latest ckpt exists." \
+                            "Note: If the latest ckpt exists and the this option is enabled, " \
+                            "the --resume_dataloader switch will be turned on, " \
+                            "while the --load_weights_only option will be turned off.")
   
   parser.add_argument("--save_checkpoint_per_step", type=int, default=1000,
                       help="The number of steps to save a checkpoint")
@@ -165,7 +171,35 @@ def get_argument_parser():
   parser.add_argument("--monitor_datasource_cnt", action="store_true",
                       help="Whether to monitor cnt of each datasource")
 
+  ############ System Vars ############
+
+  parser.add_argument("--kml_id", type=str, default=None,
+                      help="KML_ID")
+
+  parser.add_argument("--kml_task_id", type=str, default=None,
+                      help="KML_TASK_ID")
+  
+  parser.add_argument("--heartbeat_monitor", action="store_true",
+                      help="Whether to upload heartbeat to remote")
+  
+
   return parser
+
+def get_resume_info(args):
+  # return: ckpt_folder, ckpt_tag, rewrite_flag
+  if not args.auto_resume_local_latest:
+    return args.resume_from, args.resume_from_tag, False
+  else:
+    # check local ckpt
+    latest_file = os.path.join(args.output_dir, "latest")
+    if os.path.exists(latest_file):
+      with open(latest_file, encoding="utf-8") as f:
+        ckpt_id = f.read()
+      print_rank_0(f"Check output_ckpt exists, auto resume from output_folder." \
+                   f"checkpoint: resume_from={args.output_dir}, resume_tag={ckpt_id}")
+      return args.output_dir, ckpt_id, True
+    else:
+      return args.resume_from, args.resume_from_tag, False
 
 def train():
   arg_parser = get_argument_parser()
@@ -175,10 +209,17 @@ def train():
   assert all([args.commit_id, args.seed, args.comment]), \
     "Git commit, seed, and comment is required for reproducibility"
 
+  assert all([args.kml_id, args.kml_task_id]), \
+    "Kml task infomation, for task alive monitor."
+
   assert any([args.save_checkpoint_per_step, args.save_checkpoint_every_epoch]), \
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
       "save_checkpoint_every_epoch should be set."
 
+  # init model params
+  os.environ["KML_ID"] = args.kml_id
+  os.environ["KML_TASK_ID"] = args.kml_task_id
+  
   deepspeed.init_distributed()
 
   ### initialize model parallel group
@@ -257,30 +298,38 @@ def train():
   total_num_tokens = 0
   total_num_samples = 0
   total_num_valid_tokens = 0
-  total_data_source_cnt = {}
   dataloader_state_dict = None
+  local_acc_data_source_samples = collections.defaultdict(int)
+  total_data_source_tokens = collections.defaultdict(int)
 
-  if not args.resume_from:
-    args.resume_from = args.output_dir
-  ckpt_id = args.resume_from_tag
-  latest = os.path.join(args.resume_from, "latest")
-  if not ckpt_id and os.path.exists(latest):
-    with open(latest, encoding="utf-8") as f:
-      ckpt_id = f.read()
+  resume_from, ckpt_id, rewrite_resume_flag = get_resume_info(args)
+
+  if rewrite_resume_flag:
+    args.resume_dataloader = True
+    args.load_weights_only = False
+    print_rank_0(f"WARN: --resume_dataloader is rewrited to True \n" \
+                 f"WARN: --load_weights_only is rewrited to False \n")
+    
   if ckpt_id:
     print_rank_0(
-      f"Resume from checkpoint: {os.path.join(args.resume_from, ckpt_id)}, "
+      f"Resume from checkpoint: {os.path.join(resume_from, ckpt_id)}, "
       f"load_weights_only={args.load_weights_only}")
     _, client_state = model.load_checkpoint(
-      args.resume_from, ckpt_id, load_module_only=args.load_weights_only)
+      resume_from, ckpt_id, load_module_only=args.load_weights_only)
 
     if args.resume_dataloader:
-      dataloader_resume_path = os.path.join(args.resume_from, "dataloader_ckpt", f"rank{dist.get_rank()}_{ckpt_id}.pth")
+      dataloader_resume_path = os.path.join(resume_from, "dataloader_ckpt", f"rank{dist.get_rank()}_{ckpt_id}.pth")
       dataloader_state_dict = torch.load(dataloader_resume_path)["dataloader_state_dict"]
 
     if not args.load_weights_only:
       total_num_tokens = client_state.get("total_num_tokens", 0)
       total_num_samples = client_state.get("total_num_samples", 0)
+      total_num_valid_tokens = client_state.get("total_num_valid_tokens", 0)
+
+      # accumulate total_data_source_samples to rank0, 0 init others.
+      if dist.get_rank() == 0:
+        local_acc_data_source_samples.update(client_state.get("total_data_source_samples", {}))
+        total_data_source_tokens.update(client_state.get("total_data_source_tokens", {}))
 
   dist.barrier()
 
@@ -323,9 +372,9 @@ def train():
   acc_num_tokens = 0
   acc_num_samples = 0
   acc_valid_num_tokens = 0
-  data_source_loss = collections.defaultdict(float)
-  data_source_tokens = collections.defaultdict(int)
-  data_source_samples = collections.defaultdict(int)
+  batch_data_source_loss = collections.defaultdict(float)
+  batch_data_source_tokens = collections.defaultdict(int)
+  
   # get_sequence_parallel_group("gloo")
   for batch in gather_by_group(dataloader, get_sequence_parallel_group()):
     if show_cnt > 0 and dist.get_rank() == 0:
@@ -411,12 +460,12 @@ def train():
         sum_loss = per_token_loss[mask].sum()
 
         key = data_source[int(s_idx.item())]
-        data_source_loss[key] += sum_loss.item()
-        data_source_tokens[key] += mask.sum().item()
+        batch_data_source_loss[key] += sum_loss.item()
+        batch_data_source_tokens[key] += mask.sum().item()
 
     if args.monitor_datasource_cnt:
       for data_source_name in data_source:
-        data_source_samples[data_source_name] += 1
+        local_acc_data_source_samples[data_source_name] += 1
   
     #########################################
     avg_loss = torch.tensor(loss.item()).cuda()
@@ -429,10 +478,13 @@ def train():
             model.is_gradient_accumulation_boundary():
 
       with Timer("reduce data source metrics"):
-        data_source_loss = dist_reduce_dict(data_source_loss)
-        data_source_tokens = dist_reduce_dict(data_source_tokens)
+        batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
+        batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
         total_data_source_samples = dist_reduce_dict(
-          data_source_samples, group=get_data_parallel_group())
+          local_acc_data_source_samples, group=get_data_parallel_group())
+        for ds_key, ds_num_tokens in batch_data_source_tokens.items():
+          total_data_source_tokens[ds_key] += ds_num_tokens
+        
 
       if dist.get_rank() == 0:
         learning_rate = model.lr_scheduler.get_lr()[0]
@@ -468,11 +520,20 @@ def train():
                 global_step=iteration,
                 new_style=True)
 
+            # log metric by valid tokens
+            if name.startswith("training/"):
+              tb_writer.add_scalar(
+                f"x_token_{name}",
+                data,
+                global_step=total_num_valid_tokens,
+                new_style=True
+              )
+
         if args.monitor_datasource_loss and tb_writer:
-          for key, loss_sum in data_source_loss.items():
+          for key, loss_sum in batch_data_source_loss.items():
             tb_writer.add_scalar(
                   f"data_source_loss/{key}",
-                  loss_sum / data_source_tokens[key],
+                  loss_sum / batch_data_source_tokens[key],
                   global_step=iteration,
                   new_style=True)
 
@@ -481,6 +542,13 @@ def train():
             tb_writer.add_scalar(
                 f"data_source_sample_ratio/{key}",
                 1.0 * samples / total_num_samples,
+                global_step=iteration,
+                new_style=True)
+
+          for key, num_tokens in total_data_source_tokens.items():
+            tb_writer.add_scalar(
+                f"data_source_token_ratio/{key}",
+                1.0 * num_tokens / total_num_valid_tokens,
                 global_step=iteration,
                 new_style=True)
 
@@ -500,13 +568,17 @@ def train():
           f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, "
         )
 
+        # upload heart_beat to remote
+        if args.heartbeat_monitor:
+          heart_beat(int(acc_num_tokens))
+
       acc_step = 0
       acc_avg_loss = 0.0
       acc_num_samples = 0
       acc_num_tokens = 0
       acc_valid_num_tokens = 0
-      data_source_loss = collections.defaultdict(float)
-      data_source_tokens = collections.defaultdict(int)
+      batch_data_source_loss = collections.defaultdict(float)
+      batch_data_source_tokens = collections.defaultdict(int)
 
     if iteration % args.save_checkpoint_per_step == 0 and \
         iteration > 0 and model.is_gradient_accumulation_boundary():
@@ -518,7 +590,9 @@ def train():
           save_dir=args.output_dir, client_state = {
             "total_num_valid_tokens": total_num_valid_tokens,
             "total_num_tokens": total_num_tokens,
-            "total_num_samples": total_num_samples
+            "total_num_samples": total_num_samples,
+            "total_data_source_samples": total_data_source_samples,
+            "total_data_source_tokens": total_data_source_tokens,
           }
         )
         try:
@@ -545,7 +619,9 @@ def train():
   model.save_checkpoint(save_dir=args.output_dir, client_state = {
       "total_num_valid_tokens": total_num_valid_tokens,
       "total_num_tokens": total_num_tokens,
-      "total_num_samples": total_num_samples
+      "total_num_samples": total_num_samples,
+      "total_data_source_samples": total_data_source_samples,
+      "total_data_source_tokens": total_data_source_tokens
     }
   )
   try:

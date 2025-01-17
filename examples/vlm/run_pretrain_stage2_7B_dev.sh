@@ -33,6 +33,11 @@ git_hash=$(git rev-parse --short HEAD)
 
 set -x
 
+SCRIPT_FILE=$(readlink -f $0)
+echo "task: kml-task-${KML_TASK_ID}-record-${KML_ID}" > $OUTPUT_DIR/task_info.log
+echo "script: ${SCRIPT_FILE}" >> $OUTPUT_DIR/task_info.log
+echo "commit_id: ${git_hash}" >> $OUTPUT_DIR/task_info.log
+
 echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=$PWD:$PYTHONPATH
@@ -47,6 +52,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --resume_from_tag global_step90000 \
     --load_weights_only \
     --max_length 32768 \
+    --auto_resume_local_latest \
     --load_weights_only \
     --learning_rate 1e-5 \
     --min_lr 1e-6 \
@@ -64,4 +70,6 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --merge_checkpoint_output_file pytorch_model.bin \
     --comment "$comment" \
     --commit_id $git_hash \
+    --kml_id $KML_ID \
+    --kml_task_id $KML_TASK_ID \
     --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
