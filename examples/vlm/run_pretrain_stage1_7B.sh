@@ -12,7 +12,7 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-DFN5B-ViT-H-14 # Pretrained model path
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage1/0.0.38 # 
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage1/0.0.39 # 
 
 mkdir -p $OUTPUT_DIR
 
@@ -20,7 +20,7 @@ mkdir -p /tmp/_wids_cache
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
-comment="一阶段训练,20250115,frompretrained"
+comment="一阶段训练,20250116,增加数据,frompretrained,seq=4096,step=400k"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
@@ -35,15 +35,15 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config ./examples/vlm/configs/stage1_mix_v2_parquet.json  \
+    --dataset_config ./examples/vlm/configs/stage1_mix_20250116_parquet.json  \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
-    --max_length 2048 \
+    --max_length 4096 \
     --learning_rate 2e-4 \
     --min_lr 1e-6 \
     --lr_scheduler_type cosine \
     --num_warmup_steps 1000 \
-    --num_training_steps 150000 \
+    --num_training_steps 400000 \
     --save_checkpoint_per_step 3000 \
     --use_flash_attention_2 \
     --logging_per_step 10 \
