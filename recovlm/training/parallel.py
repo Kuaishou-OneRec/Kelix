@@ -212,8 +212,9 @@ class SeqAllToAll4D(torch.autograd.Function):
         )
 
 def all_gather(
-    inputs: torch.tensor,
-    group=None,
+    input_tensor: torch.tensor,
+    group: dist.ProcessGroup = None,
+    gather_idx: int = 0,
     use_sync: bool = False) -> torch.tensor:
     """
     all-gather for Sequence
@@ -226,56 +227,78 @@ def all_gather(
     Returns:
         torch.tensor: gathered tensor (bs, seqlen, h)
     """
-    assert (
-        input.dim() == 3
-    ), f"input must be 3D tensor, got {input.dim()} and shape {input.shape}"
 
     seq_world_size = dist.get_world_size(group)
 
-    # input (torch.tensor): a tensor sharded along dim 1 (bs, seqlen/P, hc, hs) output: (bs, seqlen, hc/P, hs)
-    bs, shard_seqlen, h = input.shape
-    seqlen = shard_seqlen * seq_world_size
-
-    # transpose groups of heads with the seq-len parallel dimension, so that we can scatter them!
-    # (bs, seqlen/P, hc, hs) -reshape-> (bs, seq_len/P, P, hc/P, hs) -transpose(0,2)-> (P, seq_len/P, bs, hc/P, hs)
-    input_t = (
-        input.reshape(bs, shard_seqlen, seq_world_size, shard_hc, hs)
-        .transpose(0, 2)
-        .contiguous()
-    )
-
-    output = [torch.empty_like(inputs) for _ in range(seq_world_size)]
-
-    dist.all_gather()
-
     if seq_world_size > 1:
-        dist.all_to_all_single(output, input_t, group=group)
+        output = [torch.empty_like(input_tensor) for _ in range(seq_world_size)]
+        dist.all_gather(
+            tensor_list=output, tensor=input_tensor.contiguous(), group=group)
         if use_sync:
             torch.cuda.synchronize()
+
+        return torch.cat(output, dim=1)
     else:
-        output = input_t
-    # if scattering the seq-dim, transpose the heads back to the original dimension
-    output = output.reshape(seqlen, bs, shard_hc, hs)
+        return input_tensor
 
-    # (seq_len, bs, hc/P, hs) -reshape-> (bs, seq_len, hc/P, hs)
-    output = output.transpose(0, 1).contiguous().reshape(bs, seqlen, shard_hc, hs)
+def scatter(
+    input_tensor: torch.tensor,
+    group=None,
+    scatter_idx: int = 0,
+    use_sync: bool = False) -> torch.tensor:
+    """
+    scatter for Sequence
 
-    return output
+    Args:
+        input_tensor (torch.tensor): a tensor to gather, default with shape (bs, seqlen, h)
+        group : torch process group
+        scatter_idx: the dim to scatter
+        use_sync (bool): whether to synchronize after all-gather
 
+    Returns:
+        torch.tensor: scattered tensor (bs, seqlen/P, h)
+    """
+    seq_world_size = dist.get_world_size(group)
 
+    if seq_world_size > 1:
+        scatter_list = torch.split(input_tensor, seq_world_size, dim=scatter_idx)
+        output_tensor = [torch.empty_like(t) for t in scatter_list]
+        dist.scatter(
+            tensor=output_tensor, scatter_list=scatter_list, group=group)
+        if use_sync:
+            torch.cuda.synchronize()
 
-class SeqAllGather(torch.autograd.Function):
+        return output_tensor
+    else:
+        return input_tensor
+
+class AllGather(torch.autograd.Function):
     @staticmethod
     def forward(ctx: Any,
-                group: dist.ProcessGroup,
                 inputs: torch.Tensor,
-                gather_idx: int) -> torch.Tensor:
+                group: dist.ProcessGroup,
+                gather_idx: int = 0,
+                use_sync: bool = False) -> torch.Tensor:
         ctx.group = group
         ctx.gather_idx = gather_idx
+        ctx.use_sync = use_sync
+        return all_gather(inputs, group=group, gather_idx=gather_idx)
 
     @staticmethod
-    def backward(ctx: Any, *grad_output: torch.Tensor) -> Tuple[None, torch.Tensor, None, None]:
-        return ()
+    def backward(ctx: Any,
+                 *grad_output: torch.Tensor
+        ) -> Tuple[None, torch.Tensor, None, None]:
+        return (
+            None,
+            scatter(
+                *grad_output,
+                group=ctx.group,
+                scatter_idx=ctx.gather_idx,
+                use_sync=ctx.use_sync),
+            None,
+            None,
+            None,
+        )
 
 class UlyssesAttention(torch.nn.Module):
     """UlyssesAttention, current support FA2 with packing only.

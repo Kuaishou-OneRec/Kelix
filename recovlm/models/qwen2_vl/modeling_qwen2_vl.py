@@ -67,6 +67,8 @@ from recovlm.training.parallel import UlyssesAttention, get_sequence_parallel_gr
     get_sequence_parallel_world_size, get_sequence_parallel_rank, \
     get_local_sequence_boundary, get_local_sequence
 
+from recovlm.training import parallel as mpu
+
 from recovlm.utils.common import print_rank_0
 
 logger = logging.get_logger(__name__)
@@ -1080,6 +1082,10 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         # TODO: gather hidden states
         # hidden_states = SeqAllGather.apply(hidden_states, gather_idx=0)  
         # local_hidden_states: (N/P, d), perform a sequence allGather
+        hidden_states = mpu.AllGather(
+            local_hidden_states, gather_idx=0,
+            group=get_sequence_parallel_group()
+        )
         return self.merger(hidden_states)
 
 @add_start_docstrings(
