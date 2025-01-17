@@ -14,7 +14,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained/Base model path
 
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage2/0.0.20.24
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM-dev/Qwen2-VL-7B-stage2/0.0.21
 
 
 mkdir -p $OUTPUT_DIR
@@ -25,7 +25,7 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
 
-comment="序列并行基线,两路并行,64卡,切换到the_cauldron_recaption测试性能"
+comment="打开vit序列并行"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
@@ -46,7 +46,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --resume_from /llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36 \
     --resume_from_tag global_step90000 \
     --load_weights_only \
-    --max_length 8192 \
+    --max_length 32768 \
     --load_weights_only \
     --learning_rate 1e-5 \
     --min_lr 1e-6 \
