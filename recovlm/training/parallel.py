@@ -211,10 +211,67 @@ class SeqAllToAll4D(torch.autograd.Function):
             None,
         )
 
+def all_gather(
+    inputs: torch.tensor,
+    group=None,
+    use_sync: bool = False) -> torch.tensor:
+    """
+    all-gather for Sequence
+
+    Args:
+        inputs (torch.tensor): a tensor to gather, with shape (bs, seqlen/P, h)
+        group : torch process group
+        use_sync (bool): whether to synchronize after all-gather
+
+    Returns:
+        torch.tensor: gathered tensor (bs, seqlen, h)
+    """
+    assert (
+        input.dim() == 3
+    ), f"input must be 3D tensor, got {input.dim()} and shape {input.shape}"
+
+    seq_world_size = dist.get_world_size(group)
+
+    # input (torch.tensor): a tensor sharded along dim 1 (bs, seqlen/P, hc, hs) output: (bs, seqlen, hc/P, hs)
+    bs, shard_seqlen, h = input.shape
+    seqlen = shard_seqlen * seq_world_size
+
+    # transpose groups of heads with the seq-len parallel dimension, so that we can scatter them!
+    # (bs, seqlen/P, hc, hs) -reshape-> (bs, seq_len/P, P, hc/P, hs) -transpose(0,2)-> (P, seq_len/P, bs, hc/P, hs)
+    input_t = (
+        input.reshape(bs, shard_seqlen, seq_world_size, shard_hc, hs)
+        .transpose(0, 2)
+        .contiguous()
+    )
+
+    output = [torch.empty_like(inputs) for _ in range(seq_world_size)]
+
+    dist.all_gather()
+
+    if seq_world_size > 1:
+        dist.all_to_all_single(output, input_t, group=group)
+        if use_sync:
+            torch.cuda.synchronize()
+    else:
+        output = input_t
+    # if scattering the seq-dim, transpose the heads back to the original dimension
+    output = output.reshape(seqlen, bs, shard_hc, hs)
+
+    # (seq_len, bs, hc/P, hs) -reshape-> (bs, seq_len, hc/P, hs)
+    output = output.transpose(0, 1).contiguous().reshape(bs, seqlen, shard_hc, hs)
+
+    return output
+
+
+
 class SeqAllGather(torch.autograd.Function):
     @staticmethod
-    def forward() -> torch.Tensor:
-        pass
+    def forward(ctx: Any,
+                group: dist.ProcessGroup,
+                inputs: torch.Tensor,
+                gather_idx: int) -> torch.Tensor:
+        ctx.group = group
+        ctx.gather_idx = gather_idx
 
     @staticmethod
     def backward(ctx: Any, *grad_output: torch.Tensor) -> Tuple[None, torch.Tensor, None, None]:

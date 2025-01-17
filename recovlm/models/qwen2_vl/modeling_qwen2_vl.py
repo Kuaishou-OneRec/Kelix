@@ -1077,7 +1077,8 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
                 )
             else:
                 local_hidden_states = blk(local_hidden_states, cu_seqlens=cu_seqlens, rotary_pos_emb=local_rotary_pos_emb)
-        
+        # TODO: gather hidden states
+        # hidden_states = SeqAllGather.apply(hidden_states, gather_idx=0)  
         # local_hidden_states: (N/P, d), perform a sequence allGather
         return self.merger(hidden_states)
 
