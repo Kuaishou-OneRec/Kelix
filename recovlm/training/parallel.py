@@ -264,7 +264,7 @@ def scatter(
         scatter_list = torch.split(input_tensor, seq_world_size, dim=scatter_idx)
         output_tensor = torch.empty_like(scatter_list[0])
         dist.scatter(
-            tensor=output_tensor, scatter_list=scatter_list, group=group)
+            tensor=output_tensor, scatter_list=list(scatter_list), group=group)
         if use_sync:
             torch.cuda.synchronize()
 
