@@ -5,6 +5,8 @@ from .dataset import (
     JsonlDataset,
     JsonDataset,
     WebDataset,
+    TgzImageDataset,
+    VlmTextJsonl
 )
     
 def create_dataset(cfg) -> DistDataset:
