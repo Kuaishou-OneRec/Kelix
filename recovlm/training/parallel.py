@@ -279,11 +279,11 @@ def all_gather(
 def scatter(input_tensor, group, scatter_idx):
     world_size = dist.get_world_size(group)
     rank = dist.get_world_size(group)
-    print_rank_0(f"{type(input_tensor)}")
+    print_rank_0(f"{input_tensor.shape}")
     print_rank_0(input_tensor)
     local_tensor = torch.split(
         input_tensor, world_size, dim=scatter_idx)[rank]
-    print_rank_0("xxxx", local_tensor)
+    print_rank_0("xxxx", local_tensor.shape)
     return local_tensor
 
 class AllGather(torch.autograd.Function):
@@ -303,7 +303,6 @@ class AllGather(torch.autograd.Function):
                  *grad_output: torch.Tensor
         ) -> Tuple[None, torch.Tensor, None, None]:
         return (
-            None,
             scatter(
                 *grad_output,
                 ctx.group,
