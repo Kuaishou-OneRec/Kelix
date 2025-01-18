@@ -1,0 +1,12 @@
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_sft/vlm_sft_image_text
+split_size: 536870912
+dataset:
+  class_name: TgzImageDataset
+  kwargs:
+    path:
+      /llm_reco_ssd/luoxinchen/dataset/VLM-SFT/images
+converter:
+  class_name: VlmSftImageConverter
+  kwargs:
+    data_file:
+      /llm_reco_ssd/luoxinchen/dataset/VLM-SFT/clean_data.jsonl
