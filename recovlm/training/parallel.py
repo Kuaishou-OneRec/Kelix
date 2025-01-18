@@ -237,7 +237,7 @@ def all_gather(
         if use_sync:
             torch.cuda.synchronize()
 
-        return torch.cat(output, dim=1)
+        return torch.cat(output, dim=gather_idx)
     else:
         return input_tensor
 
