@@ -281,7 +281,7 @@ def scatter(input_tensor, group, scatter_idx):
     rank = dist.get_world_size(group)
     print_rank_0(f"{input_tensor.shape}")
     print_rank_0(input_tensor)
-    local_tensor = torch.split(
+    local_tensor = torch.chunk(
         input_tensor, world_size, dim=scatter_idx)[rank]
     print_rank_0("xxxx", local_tensor.shape)
     return local_tensor
