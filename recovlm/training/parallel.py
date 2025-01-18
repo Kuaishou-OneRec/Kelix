@@ -241,50 +241,14 @@ def all_gather(
     else:
         return input_tensor
 
-# def scatter(
-#     input_tensor: torch.tensor,
-#     group=None,
-#     scatter_idx: int = 0,
-#     use_sync: bool = False) -> torch.tensor:
-#     """
-#     scatter for Sequence
-
-#     Args:
-#         input_tensor (torch.tensor): a tensor to gather, default with shape (bs, seqlen, h)
-#         group : torch process group
-#         scatter_idx: the dim to scatter
-#         use_sync (bool): whether to synchronize after all-gather
-
-#     Returns:
-#         torch.tensor: scattered tensor (bs, seqlen/P, h)
-#     """
-#     seq_world_size = dist.get_world_size(group)
-
-#     if seq_world_size > 1:
-#         scatter_list = None
-#         if dist.get_rank(group) == 0:
-#             scatter_list = torch.split(input_tensor, seq_world_size, dim=scatter_idx)
-#         else:
-#             scatter_list
-#         output_tensor = torch.empty_like(scatter_list[0])
-#         dist.scatter(
-#             tensor=output_tensor, scatter_list=list(scatter_list), group=group)
-#         if use_sync:
-#             torch.cuda.synchronize()
-
-#         return output_tensor
-#     else:
-#         return input_tensor
-
-def scatter(input_tensor, group, scatter_idx):
+def shard(input_tensor, group, shard_idx):
     world_size = dist.get_world_size(group)
-    rank = dist.get_rank(group)
-    print_rank_0(f"{input_tensor.shape}")
-    print_rank_0(input_tensor)
-    local_tensor = torch.chunk(
-        input_tensor, world_size, dim=scatter_idx)[rank]
-    print_rank_0("xxxx", local_tensor.shape)
-    return local_tensor
+    if world_size > 1:
+        rank = dist.get_rank(group)
+        local_tensor = torch.chunk(
+            input_tensor, world_size, dim=shard_idx)[rank]
+        return local_tensor
+    return input_tensor
 
 class AllGather(torch.autograd.Function):
     @staticmethod
@@ -296,14 +260,16 @@ class AllGather(torch.autograd.Function):
         ctx.group = group
         ctx.gather_idx = gather_idx
         ctx.use_sync = use_sync
-        return all_gather(inputs, group=group, gather_idx=gather_idx, use_sync=use_sync)
+        return all_gather(
+            inputs, group=group, gather_idx=gather_idx,
+            use_sync=use_sync)
 
     @staticmethod
     def backward(ctx: Any,
                  *grad_output: torch.Tensor
         ) -> Tuple[None, torch.Tensor, None, None]:
         return (
-            scatter(
+            shard(
                 *grad_output,
                 ctx.group,
                 ctx.gather_idx
