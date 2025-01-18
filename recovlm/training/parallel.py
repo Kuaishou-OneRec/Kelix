@@ -241,40 +241,50 @@ def all_gather(
     else:
         return input_tensor
 
-def scatter(
-    input_tensor: torch.tensor,
-    group=None,
-    scatter_idx: int = 0,
-    use_sync: bool = False) -> torch.tensor:
-    """
-    scatter for Sequence
+# def scatter(
+#     input_tensor: torch.tensor,
+#     group=None,
+#     scatter_idx: int = 0,
+#     use_sync: bool = False) -> torch.tensor:
+#     """
+#     scatter for Sequence
 
-    Args:
-        input_tensor (torch.tensor): a tensor to gather, default with shape (bs, seqlen, h)
-        group : torch process group
-        scatter_idx: the dim to scatter
-        use_sync (bool): whether to synchronize after all-gather
+#     Args:
+#         input_tensor (torch.tensor): a tensor to gather, default with shape (bs, seqlen, h)
+#         group : torch process group
+#         scatter_idx: the dim to scatter
+#         use_sync (bool): whether to synchronize after all-gather
 
-    Returns:
-        torch.tensor: scattered tensor (bs, seqlen/P, h)
-    """
-    seq_world_size = dist.get_world_size(group)
+#     Returns:
+#         torch.tensor: scattered tensor (bs, seqlen/P, h)
+#     """
+#     seq_world_size = dist.get_world_size(group)
 
-    if seq_world_size > 1:
-        scatter_list = None
-        if dist.get_rank(group) == 0:
-            scatter_list = torch.split(input_tensor, seq_world_size, dim=scatter_idx)
-        else:
-            scatter_list
-        output_tensor = torch.empty_like(scatter_list[0])
-        dist.scatter(
-            tensor=output_tensor, scatter_list=list(scatter_list), group=group)
-        if use_sync:
-            torch.cuda.synchronize()
+#     if seq_world_size > 1:
+#         scatter_list = None
+#         if dist.get_rank(group) == 0:
+#             scatter_list = torch.split(input_tensor, seq_world_size, dim=scatter_idx)
+#         else:
+#             scatter_list
+#         output_tensor = torch.empty_like(scatter_list[0])
+#         dist.scatter(
+#             tensor=output_tensor, scatter_list=list(scatter_list), group=group)
+#         if use_sync:
+#             torch.cuda.synchronize()
 
-        return output_tensor
-    else:
-        return input_tensor
+#         return output_tensor
+#     else:
+#         return input_tensor
+
+def scatter(input_tensor, group, scatter_idx):
+    world_size = dist.get_world_size(group)
+    rank = dist.get_world_size(group)
+    print_rank_0(f"{type(input_tensor)}")
+    print_rank_0(input_tensor)
+    local_tensor = torch.split(
+        input_tensor, world_size, dim=scatter_idx)[rank]
+    print_rank_0("xxxx", local_tensor)
+    return local_tensor
 
 class AllGather(torch.autograd.Function):
     @staticmethod
@@ -292,14 +302,13 @@ class AllGather(torch.autograd.Function):
     def backward(ctx: Any,
                  *grad_output: torch.Tensor
         ) -> Tuple[None, torch.Tensor, None, None]:
-        world_size = dist.get_world_size(ctx.group)
-        rank = dist.get_world_size(ctx.group)
-        print_rank_0(f"{type(grad_output)}, {len(grad_output)}")
-        local_grad_output = torch.split(
-            grad_output[0], world_size, dim=ctx.gather_idx)[rank]
         return (
             None,
-            local_grad_output,
+            scatter(
+                *grad_output,
+                ctx.group,
+                ctx.gather_idx
+            ),
             None,
             None,
             None,
