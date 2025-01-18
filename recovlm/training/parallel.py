@@ -278,7 +278,7 @@ def all_gather(
 
 def scatter(input_tensor, group, scatter_idx):
     world_size = dist.get_world_size(group)
-    rank = dist.get_world_size(group)
+    rank = dist.get_rank(group)
     print_rank_0(f"{input_tensor.shape}")
     print_rank_0(input_tensor)
     local_tensor = torch.chunk(
