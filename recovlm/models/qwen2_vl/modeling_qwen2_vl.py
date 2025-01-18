@@ -490,7 +490,7 @@ class Qwen2MLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        print_rank_0(f"mlp input: {x.shape}")
+        #print_rank_0(f"mlp input: {x.shape}")
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
@@ -758,7 +758,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
-        print_rank_0(f"FA2 attn_output: {attn_output.shape}")
+        #print_rank_0(f"FA2 attn_output: {attn_output.shape}")
         if not output_attentions:
             attn_weights = None
 
@@ -1086,7 +1086,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             get_sequence_parallel_group(),
             0
         )
-        print_rank_0(f"local_hidden_states, {local_hidden_states.shape}, hidden_states: {hidden_states.shape}")
+        #print_rank_0(f"local_hidden_states, {local_hidden_states.shape}, hidden_states: {hidden_states.shape}")
         return self.merger(hidden_states)
 
 @add_start_docstrings(
@@ -1719,7 +1719,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.get_dtype())
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-                print_rank_0(f"image_embds: {image_embeds.shape}")
+                #print_rank_0(f"image_embds: {image_embeds.shape}")
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 n_image_features = image_embeds.shape[0]
                 if n_image_tokens != n_image_features:

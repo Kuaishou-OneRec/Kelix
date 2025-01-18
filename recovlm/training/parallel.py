@@ -262,7 +262,7 @@ def scatter(
 
     if seq_world_size > 1:
         scatter_list = torch.split(input_tensor, seq_world_size, dim=scatter_idx)
-        output_tensor = [torch.empty_like(t) for t in scatter_list]
+        output_tensor = torch.empty_like(scatter_list[0])
         dist.scatter(
             tensor=output_tensor, scatter_list=scatter_list, group=group)
         if use_sync:
