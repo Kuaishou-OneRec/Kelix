@@ -294,7 +294,9 @@ class AllGather(torch.autograd.Function):
         ) -> Tuple[None, torch.Tensor, None, None]:
         world_size = dist.get_world_size(ctx.group)
         rank = dist.get_world_size(ctx.group)
-        local_grad_output = torch.split(grad_output, world_size, dim=ctx.gather_idx)[rank]
+        print_rank_0(f"{type(grad_output)}, {len(grad_output)}")
+        local_grad_output = torch.split(
+            grad_output[0], world_size, dim=ctx.gather_idx)[rank]
         return (
             None,
             local_grad_output,
