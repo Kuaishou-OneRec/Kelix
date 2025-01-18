@@ -261,7 +261,11 @@ def scatter(
     seq_world_size = dist.get_world_size(group)
 
     if seq_world_size > 1:
-        scatter_list = torch.split(input_tensor, seq_world_size, dim=scatter_idx)
+        scatter_list = None
+        if dist.get_rank(group) == 0:
+            scatter_list = torch.split(input_tensor, seq_world_size, dim=scatter_idx)
+        else:
+            scatter_list
         output_tensor = torch.empty_like(scatter_list[0])
         dist.scatter(
             tensor=output_tensor, scatter_list=list(scatter_list), group=group)
@@ -282,19 +286,18 @@ class AllGather(torch.autograd.Function):
         ctx.group = group
         ctx.gather_idx = gather_idx
         ctx.use_sync = use_sync
-        return all_gather(inputs, group=group, gather_idx=gather_idx)
+        return all_gather(inputs, group=group, gather_idx=gather_idx, use_sync=use_sync)
 
     @staticmethod
     def backward(ctx: Any,
                  *grad_output: torch.Tensor
         ) -> Tuple[None, torch.Tensor, None, None]:
+        world_size = dist.get_world_size(ctx.group)
+        rank = dist.get_world_size(ctx.group)
+        local_grad_output = torch.split(grad_output, world_size, dim=ctx.gather_idx)[rank]
         return (
             None,
-            scatter(
-                *grad_output,
-                group=ctx.group,
-                scatter_idx=ctx.gather_idx,
-                use_sync=ctx.use_sync),
+            local_grad_output,
             None,
             None,
             None,
