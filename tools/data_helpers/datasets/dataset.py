@@ -8,6 +8,8 @@ import pyarrow.parquet as pq
 from tools.data_helpers.utils import MPIBase
 from torch.utils.data import IterableDataset
 import webdataset as wds
+import tarfile
+import base64
 
 def lcm(a: int, b: int):
     return a * b // (math.gcd(a, b))
@@ -121,3 +123,54 @@ class WebDataset(DistDataset):
 
         for s in ds:
             yield s
+
+class TgzImageDataset(DistDataset):
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+        self.fns = []
+        self.data_cnt = 0
+        fn_list = [fn for fn in os.listdir(path) if fn.endswith("tar.gz")]
+        for idx, fn in enumerate(fn_list):
+            if idx % self.world_size == self.rank:
+                self.fns.append(os.path.join(self.path, fn))
+                with tarfile.open(os.path.join(self.path, fn), 'r:gz') as tar:
+                    file_list = tar.getnames()
+                    file_count = len(file_list)
+                    self.data_cnt += file_count
+        print(self.data_cnt, self.fns)
+    
+    def __len__(self):
+        return self.data_cnt
+    
+    def __iter__(self):
+        for fn in self.fns:
+            with tarfile.open(fn, 'r:gz') as tar:
+                for member in tar.getmembers():
+                    file = tar.extractfile(member)
+                    name = member.name
+                    if file is not None:
+                        file_bytes = file.read()
+                        image_sample = (name, base64.b64encode(file_bytes).decode('ascii'))
+                        yield image_sample
+
+class VlmTextJsonl(DistDataset):
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+        with open(self.path, "r") as f:
+            lines = f.readlines()
+        shard_size = len(lines) // self.world_size
+        self.lines = lines[self.rank * shard_size: (self.rank + 1) * shard_size]
+    
+    def __len__(self):
+        return len(self.lines)
+    
+    def __iter__(self):
+        for l in self.lines:
+            if l.strip() != '':
+                src = json.loads(l)
+                if src["images"] is not None and len(src["images"]) > 0:
+                    pass
+                else:
+                    yield src

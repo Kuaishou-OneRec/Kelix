@@ -9,6 +9,7 @@ from .llava_cc3m_converter import LlavaCC3MPretrainConverter
 from .doc_matrix_converter import DocmatrixConverter
 from .blobstore_downloader_converter import BlobstoreDownloaderConverter
 from .wds_to_parquet_converter import WDSToParquetConverter
+from .vlm_sft_converter import VlmSftImageConverter, VlmSftTextConverter
 
 
 def create_converter(cfg) -> ConverterBase:
