@@ -37,23 +37,28 @@ class MMBenchEvaluation:
         identity_indexes = list(set([int(_ % 1e6) for _ in self.index2predictions.keys()]))
         correct = 0
         total = 0
+        correct_keys = []
         for index in identity_indexes:
             raw_preds = []
             raw_answer = []
+            cur_keys = []
             for _ in range(4):
                 cycle_index = int(_ * 1e6 + index)
                 if self.index2predictions.get(cycle_index, None) is not None:
                     raw_answer = self.index2rawanswer[cycle_index]
                     raw_pred = self.index2choices[cycle_index][self.index2predictions[cycle_index]]
                     raw_preds.append(raw_pred)
+                    cur_keys.append(cycle_index)
 
             if len(set(raw_preds)) == 1:
                 if raw_preds[0] == raw_answer:
                     correct += 1
+                    correct_keys += cur_keys
             else:
                 result = self.most_common_elements(raw_preds)
                 if result == raw_answer:
                     correct += 1
+                    correct_keys += cur_keys
             total += 1
 
-        return [correct, total, correct / total * 100]
+        return [correct, total, correct / total * 100], correct_keys
