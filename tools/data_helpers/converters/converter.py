@@ -12,6 +12,11 @@ class EmptyConverter(ConverterBase):
         print('src', src.keys())
         return None
 
+class IdentityConverter(ConverterBase):
+
+    def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
+        return src
+
     
 def render_image_text(images):
     text = []

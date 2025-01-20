@@ -74,7 +74,8 @@ class MPIParquetWriterWorker(MPIBase):
         self.mpi_print(f"write to {filename} success")
 
     def run(self):
-        for s in tqdm(self.dataset, total=len(self.dataset)):
+        total_rows = None if not hasattr(self.dataset, "__len__") else len(self.dataset)
+        for s in tqdm(self.dataset, total=total_rows):
             try:
                 out = self.converter(s)
                 if out is not None:
