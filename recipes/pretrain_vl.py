@@ -376,7 +376,7 @@ def train():
   batch_data_source_tokens = collections.defaultdict(int)
   
   # get_sequence_parallel_group("gloo")
-  for batch in gather_by_group(dataloader, get_sequence_parallel_group()):
+  for batch in gather_by_group(dataloader, get_sequence_parallel_group(), buffer_size=8):
     if show_cnt > 0 and dist.get_rank() == 0:
       with Timer("Show data"):
         input_text = processor.tokenizer.decode(batch['input_ids'][0])
