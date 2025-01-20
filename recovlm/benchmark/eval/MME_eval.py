@@ -149,7 +149,7 @@ class MMEEval:
                         acc_plus_correct_num += 1
 
                 for i in range(len(gts)):
-                    if gts[i] == "yes" and preds[i] == "yes":
+                    if gts[i] == preds[i]:
                         correct_keys.append(cur_keys[i])
 
                 # cal TP precision acc, etc.
