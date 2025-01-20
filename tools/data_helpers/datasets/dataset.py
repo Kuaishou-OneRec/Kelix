@@ -17,7 +17,7 @@ def lcm(a: int, b: int):
 class DistDataset(IterableDataset, MPIBase):
     def __init__(self):
         super().__init__()
-
+    
 class ParquetDataset(DistDataset):
 
     def __init__(self, path, columns = None, user='mpi'):
@@ -34,7 +34,7 @@ class ParquetDataset(DistDataset):
             if path.startswith("viewfs"):
                 self.fs = pa.hdfs.connect(user=self.user)
                 files = self.fs.ls(path)
-                files = sorted([x for x in files if "SUCCESS" not in x])
+                files = sorted([x for x in files if x.endswith("parquet")])
             elif path.startswith("/"):
                 files = sorted(glob(os.path.join(path, "*.parquet")))
             num_files = len(files)
