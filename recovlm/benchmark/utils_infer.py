@@ -74,9 +74,10 @@ def mathvista_extract_answer(response, question_type, answer_type, choices, prec
 
     if question_type == 'multi_choice':
         # extract "A" from "(A) text"
-        letter = re.findall(r'\(([a-zA-Z])\)', extraction)
-        if len(letter) > 0:
-            extraction = letter[0].upper()
+        #letter = re.findall(r'\(([a-zA-Z])\)', extraction)
+        #if len(letter) > 0:
+        #    extraction = letter[0].upper()
+        extraction = extract_characters_regex(extraction)
 
         sequential_characters = [chr(ord('A') + i) for i in range(len(choices))]
 
