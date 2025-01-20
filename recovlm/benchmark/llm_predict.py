@@ -88,8 +88,12 @@ class LLMPredictor:
 
     def __call__(self, batch):
         samples = []
+        sample_messages = []
         for messages in batch["messages"]:
             samples.append(self.process(messages))
+            data_json = json.loads(messages)
+            sample_messages.append(data_json["inputs"][1])
+            #sample_messages.append("None")
         batch = self.collate(samples)
         outputs = self.llm.generate(batch["inputs"], self.sampling_params)
         generated: List[str] = []
@@ -100,6 +104,9 @@ class LLMPredictor:
         choices = []
         precisions = []
         datasets = []
+        images = []
+        questions = []
+        task_types = []
         for i in range(len(outputs)):
             output = outputs[i]
             generated.append(output.outputs[0].text)
@@ -122,9 +129,21 @@ class LLMPredictor:
             else:
                 precisions.append("None")
             if "dataset" in batch:
-                datasets.append(batch["dataset"])
+                datasets.append(batch["dataset"][i])
             else:
                 datasets.append("None")
+            if "image" in batch:
+                images.append(batch["image"][i])
+            else:
+                images.append("None")
+            if "question" in batch:
+                questions.append(batch["question"][i])
+            else:
+                questions.append("None")
+            if "task_type" in batch:
+                task_types.append(batch["task_type"][i])
+            else:
+                task_types.append("None")
 
         return {
             "generated_text": generated,
@@ -134,5 +153,9 @@ class LLMPredictor:
             "answer_type": answer_types,
             "choices": choices,
             "precision": precisions,
-            "dataset": datasets
+            "dataset": datasets,
+            "image": images,
+            "messages": sample_messages,
+            "question": questions,
+            "task_type": task_types
         }

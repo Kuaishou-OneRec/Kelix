@@ -112,11 +112,13 @@ def mathvista_extract_answer(response, question_type, answer_type, choices, prec
 def get_acc(answers_dict, response_dict):
     all_count = 0
     correct = 0
+    correct_keys = []
     for key, val in answers_dict.items():
         if answers_dict[key] == response_dict[key]:
+            correct_keys.append(key)
             correct += 1
         all_count += 1
-    return correct/all_count
+    return correct/all_count, correct_keys
 
 def infer_and_eval(dataset_response, output_folder, model_step, text2index=None, is_random=False, dataset_name=""):
     if not os.path.exists(os.path.join(output_folder, model_step)):
@@ -142,7 +144,10 @@ def infer_and_eval(dataset_response, output_folder, model_step, text2index=None,
                 print(f"extract is empty: {output}")
                 rsp[key] = random.randint(0, 3)
             else:
-                rsp[key] = text2index[extract]
+                try:
+                    rsp[key] = text2index[extract]
+                except:
+                    rsp[key] = -1
             output_original_resp.write(json.dumps({key:output}) + "\n")
             output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
         elif dataset_name in ["MMMU", "VideoMME", "MMTBench", "MMStar"]:
@@ -166,7 +171,7 @@ def infer_and_eval(dataset_response, output_folder, model_step, text2index=None,
             output_original_resp.write(json.dumps({row:output}) + "\n")
             output_answer_resp.write(json.dumps({row:anw[row]}) + "\n")
             row += 1
-        elif dataset_name in ["MME"]:
+        elif dataset_name in ["MME", "Benchmark_v21"]:
             rsp[key] = output
             anw[key] = response["answers"]
             output_original_resp.write(json.dumps({key:output}) + "\n")
@@ -187,3 +192,26 @@ def infer_and_eval(dataset_response, output_folder, model_step, text2index=None,
     output_original_resp.close()
     output_answer_resp.close()
     return (rsp, anw)
+
+def dump_predict_answer(correct_keys, responses, output_path, model_path, dataset_name):
+    output_error_data_path = os.path.join(os.path.join(output_path, os.path.join(model_path, dataset_name)), "predict_error_data.json")
+    output_correct_data_path = os.path.join(os.path.join(output_path, os.path.join(model_path, dataset_name)), "predict_correct_data.json")
+    correct_lines = []
+    error_lines = []
+    for i in range(len(responses)):
+        cur_response = responses[i]
+        cur_line = {}
+        key = cur_response["ids"]
+        cur_line["key"] = key
+        cur_line["answer"] = cur_response["answers"]
+        cur_line["messages"] = cur_response["messages"]
+        cur_line["predict"] = cur_response["generated_text"]
+        if key in correct_keys:
+            correct_lines.append(cur_line)
+        else:
+            error_lines.append(cur_line)
+    with open(output_error_data_path, "w") as fw:
+        json.dump(error_lines, fw, indent=4, separators=(',', ':'))
+    with open(output_correct_data_path, "w") as fw:
+        json.dump(correct_lines, fw, indent=4, separators=(',', ':'))
+    return

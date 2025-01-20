@@ -18,6 +18,7 @@ from eval.MME_eval import MMEEval
 from eval.OCRBench_eval import eval_OCRBench
 from eval.cider_eval import Cider
 from eval.cider_eval import COCOEvalCap
+from eval.benchmark_v21_eval import eval_Benchmark_v21
 from torch.utils.tensorboard import SummaryWriter
 import re
 import os
@@ -39,9 +40,14 @@ import base64
 from transformers import AutoProcessor
 from qwen_vl_utils import process_vision_info
 from llm_predict import LLMPredictor
-from utils_infer import get_acc, infer_and_eval
+from utils_infer import get_acc, infer_and_eval, dump_predict_answer
 from pycocotools.coco import COCO
 import time
+ray.init(
+    runtime_env={
+        "env_vars": {"LD_PRELOAD": "/llm_reco_ssd/luoxinchen/libs/libnccl.so.2.21.5.noece.cpu"},
+    }
+)
 
 FLAGS = flags.FLAGS
 
@@ -63,6 +69,10 @@ flags.DEFINE_integer(
 
 flags.DEFINE_integer(
     "tp", 4, "The tensor_parallel_size"
+)
+
+flags.DEFINE_integer(
+    "GPU_num", 8, "The GPU number"
 )
 
 flags.DEFINE_string(
@@ -110,6 +120,10 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_string(
+    "Benchmark_v21_path", None, "Benchmark_v21 dataset path"
+)
+
+flags.DEFINE_string(
     "output_path", None, "The path of file to write results." 
 )
 
@@ -118,7 +132,7 @@ flags.DEFINE_integer(
 )
 
 flags.DEFINE_integer(
-    "batch_size", 10, "The batch size for inference."
+    "batch_size", 40, "The batch size for inference."
 )
 
 flags.DEFINE_float(
@@ -173,8 +187,16 @@ flags.DEFINE_string(
     "Flickr30k_infer_chekpoint_file", "", "save infer checkpoint file"
 )
 
+flags.DEFINE_string(
+    "Benchmark_v21_infer_chekpoint_file", "", "save infer checkpoint file"
+)
+
 flags.DEFINE_integer(
     "infer_MMMU", 0, "infer MMMU dataset"
+)
+
+flags.DEFINE_integer(
+    "infer_VideoMME", 0, "infer VideoMME dataset"
 )
 
 flags.DEFINE_integer(
@@ -209,6 +231,9 @@ flags.DEFINE_integer(
     "infer_Flickr30k", 0, "infer flickr30k dataset"
 )
 
+flags.DEFINE_integer(
+    "infer_Benchmark_v21", 0, "infer Benchmark_v21 dataset"
+)
 
 
 def scheduling_strategy_fn():
@@ -224,6 +249,8 @@ def scheduling_strategy_fn():
         pg, placement_group_capture_child_tasks=True))
 
 def main(_):
+    print(f"all GPUs number is {FLAGS.GPU_num}")
+    concurrency_num = int(FLAGS.GPU_num/FLAGS.tp)
     if not os.path.exists(FLAGS.logging_folder):
         os.mkdir(FLAGS.logging_folder)
     writer = SummaryWriter(FLAGS.logging_folder)
@@ -268,6 +295,11 @@ def main(_):
         for line in fr.readlines():
             last_steps.append(int(line.strip()))
 
+    if FLAGS.infer_Benchmark_v21 == 1 and os.path.exists(FLAGS.Benchmark_v21_infer_chekpoint_file):
+        fr = open(FLAGS.Benchmark_v21_infer_chekpoint_file, "r")
+        for line in fr.readlines():
+            last_steps.append(int(line.strip()))
+
     print(f"last step is {last_steps}")
 
     resources_kwarg: Dict[str, Any] = {}
@@ -302,19 +334,21 @@ def main(_):
 
     ################################################################# Get Dataset ##########################################################
     #MMMU
-    data_files = []
-    for subfolder in os.listdir(FLAGS.MMMU_path):
-        for subfile in os.listdir(os.path.join(FLAGS.MMMU_path, subfolder)):
-            if subfile.startswith("validation"):
-                file_name = os.path.join(FLAGS.MMMU_path, subfolder, subfile)
-                data_files.append("local://" + file_name)
-    print(f"data files: {data_files}")
-    MMMU_dataset = ray.data.read_parquet(data_files).map(MMMU_parse)
+    if FLAGS.infer_MMMU == 1:
+        data_files = []
+        for subfolder in os.listdir(FLAGS.MMMU_path):
+            for subfile in os.listdir(os.path.join(FLAGS.MMMU_path, subfolder)):
+                if subfile.startswith("validation"):
+                    file_name = os.path.join(FLAGS.MMMU_path, subfolder, subfile)
+                    data_files.append("local://" + file_name)
+        print(f"data files: {data_files}")
+        MMMU_dataset = ray.data.read_parquet(data_files).map(MMMU_parse)
 
     #VideoMME
-    with open(FLAGS.VideoMME_path, 'r') as file_:
-            videoMME_data = json.load(file_)["annotations"]
-    VideoMME_dataset = ray.data.from_items(videoMME_data).map(VideoMME_parse)
+    if FLAGS.infer_VideoMME == 1:
+        with open(FLAGS.VideoMME_path, 'r') as file_:
+                videoMME_data = json.load(file_)["annotations"]
+        VideoMME_dataset = ray.data.from_items(videoMME_data).map(VideoMME_parse)
 
     #ChartQA
     # with open(FLAGS.ChartQA_path, 'r') as file_:
@@ -323,40 +357,56 @@ def main(_):
 
     #TextVQA
     #MME
-    with open(FLAGS.MME_path, 'r') as file_:
-            MME_data = json.load(file_)["annotations"]
-    MME_dataset = ray.data.from_items(MME_data).map(MME_parse)
+    if FLAGS.infer_MME == 1:
+        with open(FLAGS.MME_path, 'r') as file_:
+                MME_data = json.load(file_)["annotations"]
+        MME_dataset = ray.data.from_items(MME_data).map(MME_parse)
 
     #MMT-Bench
-    with open(FLAGS.MMTBench_path, 'r') as file_:
-            MMTBench_data = json.load(file_)["annotations"]
-    MMTBench_dataset = ray.data.from_items(MMTBench_data).map(MMTBench_parse)
+    if FLAGS.infer_MMTBench == 1:
+        with open(FLAGS.MMTBench_path, 'r') as file_:
+                MMTBench_data = json.load(file_)["annotations"]
+        MMTBench_dataset = ray.data.from_items(MMTBench_data).map(MMTBench_parse)
 
     #MMStar
-    with open(FLAGS.MMStar_path, 'r') as file_:
-            MMStar_data = json.load(file_)["annotations"]
-    MMStar_dataset = ray.data.from_items(MMStar_data).map(MMStar_parse)
+    if FLAGS.infer_MMStar == 1:
+        with open(FLAGS.MMStar_path, 'r') as file_:
+                MMStar_data = json.load(file_)["annotations"]
+        MMStar_dataset = ray.data.from_items(MMStar_data).map(MMStar_parse)
 
     #MathVista
-    with open(FLAGS.MathVista_path, 'r') as file_:
-            MathVista_data = json.load(file_)["annotations"]
-    MathVista_dataset = ray.data.from_items(MathVista_data).map(MathVista_parse)
+    if FLAGS.infer_MathVista == 1:
+        with open(FLAGS.MathVista_path, 'r') as file_:
+                MathVista_data = json.load(file_)["annotations"]
+        MathVista_dataset = ray.data.from_items(MathVista_data).map(MathVista_parse)
 
     #MMBench_EN
-    MMBenchEN_dataset = ray.data.read_parquet(FLAGS.MMBenchEN_path).map(MMBench_parse)
+    if FLAGS.infer_MMBenchEN == 1:
+        MMBenchEN_dataset = ray.data.read_parquet(FLAGS.MMBenchEN_path).map(MMBench_parse)
 
     #MMBench_CN
-    MMBenchCN_dataset = ray.data.read_parquet(FLAGS.MMBenchCN_path).map(MMBench_parse)
+    if FLAGS.infer_MMBenchCN == 1:
+        MMBenchCN_dataset = ray.data.read_parquet(FLAGS.MMBenchCN_path).map(MMBench_parse)
 
     #OCRBench
-    OCRBench_dataset = ray.data.read_parquet(FLAGS.OCRBench_path).map(OCRBench_parse)
+    if FLAGS.infer_OCRBench == 1:
+        OCRBench_dataset = ray.data.read_parquet(FLAGS.OCRBench_path).map(OCRBench_parse)
 
-    with open(FLAGS.Flickr30k_path, 'r') as file_:
-        Flickr30k_data = json.load(file_)["annotations"]
-    Flickr30k_dataset = ray.data.from_items(Flickr30k_data).map(Flickr30k_parse)
+    if FLAGS.infer_Flickr30k == 1:
+        with open(FLAGS.Flickr30k_path, 'r') as file_:
+            Flickr30k_data = json.load(file_)["annotations"]
+        Flickr30k_dataset = ray.data.from_items(Flickr30k_data).map(Flickr30k_parse)
+
+    #Benchmark v21
+    if FLAGS.infer_Benchmark_v21 == 1:
+        with open(FLAGS.Benchmark_v21_path, 'r') as file_:
+                Benchmark_v21_data = json.load(file_)["annotations"]
+        Benchmark_v21_dataset = ray.data.from_items(Benchmark_v21_data).map(Benchmark_v21_parse)
 
 ############################################################################# Infer ################################################################
+
     if not os.path.exists(FLAGS.output_path):
+        print(f"output path is {FLAGS.output_path}")
         os.mkdir(FLAGS.output_path)
 
     model_paths = [val for val in os.listdir(model_folder) if val.startswith("global_step")]
@@ -380,14 +430,15 @@ def main(_):
                                             LLMPredictor,
                                             fn_constructor_kwargs=fn_constructor_kwargs,
                                             # Set the concurrency to the number of LLM instances.
-                                            concurrency=6,
-                                            batch_size=40,
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
                                             # Specify the batch size for inference.
                                             **resources_kwarg,
                                         ).take_all()
                 rsp, anw = infer_and_eval(MMMU_dataset_response, FLAGS.output_path, model_path, is_random=False, dataset_name="MMMU") 
                 eval_data = MainEvalOnly(rsp)
-                result = eval_data.eval()
+                result, correct_keys = eval_data.eval()
+                dump_predict_answer(correct_keys, MMMU_dataset_response, FLAGS.output_path, model_path, "MMMU")
                 print(f"MMMU dataset eval result for {model_path} in {model_folder}: {result}")
                 writer.add_scalar(f'benchmark/MMMU_val_acc', result["acc"], cur_step)
                 fw = open(FLAGS.MMMU_infer_chekpoint_file, "w")
@@ -400,8 +451,8 @@ def main(_):
             #                             LLMPredictor,
             #                             fn_constructor_kwargs=fn_constructor_kwargs,
             #                             # Set the concurrency to the number of LLM instances.
-            #                             concurrency=8,
-            #                             batch_size=40,
+            #                             concurrency=concurrency_num,
+            #                             batch_size=FLAGS.batch_size,
             #                             # Specify the batch size for inference.
             #                             **resources_kwarg,
             #                         ).take_all()
@@ -431,14 +482,15 @@ def main(_):
                                             LLMPredictor,
                                             fn_constructor_kwargs=fn_constructor_kwargs,
                                             # Set the concurrency to the number of LLM instances.
-                                            concurrency=6,
-                                            batch_size=40,
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
                                             # Specify the batch size for inference.
                                             **resources_kwarg,
                                         ).take_all()
                 rsp, anw = infer_and_eval(MME_dataset_response, FLAGS.output_path, model_path, is_random=False, dataset_name="MME")
                 MME_eval_obj = MMEEval()
-                score = MME_eval_obj.process_result(rsp, anw)
+                score, correct_keys = MME_eval_obj.process_result(rsp, anw)
+                dump_predict_answer(correct_keys, MME_dataset_response, FLAGS.output_path, model_path, "MME")
                 print(f"MME dataset eval result for {model_path} in {model_folder}: {score}")
                 writer.add_scalar(f'benchmark/MME_val_score', score, cur_step)
                 fw = open(FLAGS.MME_infer_chekpoint_file, "w")
@@ -452,13 +504,14 @@ def main(_):
                                             LLMPredictor,
                                             fn_constructor_kwargs=fn_constructor_kwargs,
                                             # Set the concurrency to the number of LLM instances.
-                                            concurrency=6,
-                                            batch_size=40,
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
                                             # Specify the batch size for inference.
                                             **resources_kwarg,
                                         ).take_all()
                 rsp, anw = infer_and_eval(MMTBench_dataset_response, FLAGS.output_path, model_path, is_random=False, dataset_name="MMTBench")
-                acc = get_acc(anw, rsp)
+                acc, correct_keys = get_acc(anw, rsp)
+                dump_predict_answer(correct_keys, MMTBench_dataset_response, FLAGS.output_path, model_path, "MMTBench")
                 print(f"MMTBench dataset eval result for {model_path} in {model_folder}: {acc}")
                 writer.add_scalar(f'benchmark/MMTBench_val_acc', acc, cur_step)
                 fw = open(FLAGS.MMTBench_infer_chekpoint_file, "w")
@@ -472,13 +525,14 @@ def main(_):
                                             LLMPredictor,
                                             fn_constructor_kwargs=fn_constructor_kwargs,
                                             # Set the concurrency to the number of LLM instances.
-                                            concurrency=6,
-                                            batch_size=40,
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
                                             # Specify the batch size for inference.
                                             **resources_kwarg,
                                         ).take_all()
                 rsp, anw = infer_and_eval(MMStar_dataset_response, FLAGS.output_path, model_path, is_random=False, dataset_name="MMStar")
-                acc = get_acc(anw, rsp)
+                acc, correct_keys = get_acc(anw, rsp)
+                dump_predict_answer(correct_keys, MMStar_dataset_response, FLAGS.output_path, model_path, "MMStar")
                 print(f"MMStar dataset eval result for {model_path} in {model_folder}: {acc}")
                 writer.add_scalar(f'benchmark/MMStar_val_acc', acc, cur_step)
                 fw = open(FLAGS.MMStar_infer_chekpoint_file, "w")
@@ -492,13 +546,14 @@ def main(_):
                                             LLMPredictor,
                                             fn_constructor_kwargs=fn_constructor_kwargs,
                                             # Set the concurrency to the number of LLM instances.
-                                            concurrency=6,
-                                            batch_size=40,
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
                                             # Specify the batch size for inference.
                                             **resources_kwarg,
                                         ).take_all()
                 rsp, anw = infer_and_eval(MathVista_dataset_response, FLAGS.output_path, model_path, is_random=False, dataset_name="MathVista")
-                acc = get_acc(anw, rsp)
+                acc, correct_keys = get_acc(anw, rsp)
+                dump_predict_answer(correct_keys, MathVista_dataset_response, FLAGS.output_path, model_path, "MathVista")
                 print(f"MathVista dataset eval result for {model_path} in {model_folder}: {acc}")
                 writer.add_scalar(f'benchmark/MathVista_val_acc', acc, cur_step)
                 fw = open(FLAGS.MathVista_infer_chekpoint_file, "w")
@@ -512,15 +567,16 @@ def main(_):
                                             LLMPredictor,
                                             fn_constructor_kwargs=fn_constructor_kwargs,
                                             # Set the concurrency to the number of LLM instances.
-                                            concurrency=6,
-                                            batch_size=40,
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
                                             # Specify the batch size for inference.
                                             **resources_kwarg,
                                         ).take_all()
-                text2index = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
+                text2index = {'A': 0, 'B': 1, 'C': 2, 'D': 3 }
                 rsp, anw = infer_and_eval(MMBenchEN_dataset_response, FLAGS.output_path, model_path, text2index=text2index, dataset_name="MMBenchEN")
                 eval_data = MMBenchEvaluation(rsp, FLAGS.mmbenchEn_benchmark_original_data)
-                result = eval_data.eval()
+                result, correct_keys = eval_data.eval()
+                dump_predict_answer(correct_keys, MMBenchEN_dataset_response, FLAGS.output_path, model_path, "MMBenchEN")
                 print(f"MMBenchEN dataset eval result for {model_path} in {model_folder}: {result}")
                 writer.add_scalar(f'benchmark/MMBenchEN_dev_acc', result[-1]/100, cur_step)
                 fw = open(FLAGS.MMBenchEN_infer_chekpoint_file, "w")
@@ -534,15 +590,16 @@ def main(_):
                                             LLMPredictor,
                                             fn_constructor_kwargs=fn_constructor_kwargs,
                                             # Set the concurrency to the number of LLM instances.
-                                            concurrency=6,
-                                            batch_size=40,
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
                                             # Specify the batch size for inference.
                                             **resources_kwarg,
                                         ).take_all()
                 text2index = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
                 rsp, anw = infer_and_eval(MMBenchCN_dataset_response, FLAGS.output_path, model_path, text2index=text2index, dataset_name="MMBenchCN")
                 eval_data = MMBenchEvaluation(rsp, FLAGS.mmbenchCn_benchmark_original_data)
-                result = eval_data.eval()
+                result, correct_keys = eval_data.eval()
+                dump_predict_answer(correct_keys, MMBenchCN_dataset_response, FLAGS.output_path, model_path, "MMBenchCN")
                 print(f"MMBenchCN dataset eval result for {model_path} in {model_folder}: {result}")
                 writer.add_scalar(f'benchmark/MMBenchCN_dev_acc', result[-1]/100, cur_step)
                 fw = open(FLAGS.MMBenchCN_infer_chekpoint_file, "w")
@@ -555,8 +612,8 @@ def main(_):
                                             LLMPredictor,
                                             fn_constructor_kwargs=fn_constructor_kwargs,
                                             # Set the concurrency to the number of LLM instances.
-                                            concurrency=6,
-                                            batch_size=40,
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
                                             # Specify the batch size for inference.
                                             **resources_kwarg,
                                         ).take_all()
@@ -569,8 +626,16 @@ def main(_):
                     cur_row["dataset"] = cur_response["dataset"]
                     cur_row["answer"] = cur_response["answers"]
                     cur_row["predict"] = rsp[i]
+                    cur_row["image"] = cur_response["image"]
+                    cur_row["messages"] = cur_response["messages"]
                     data.append(cur_row)
-                result = eval_OCRBench(data)
+                output_error_data_path = os.path.join(os.path.join(FLAGS.output_path, os.path.join(model_path, "OCRBench")), "predict_error_data.json")
+                output_correct_data_path = os.path.join(os.path.join(FLAGS.output_path, os.path.join(model_path, "OCRBench")), "predict_correct_data.json")
+                fw_error = open(output_error_data_path, "w")
+                fw_correct = open(output_correct_data_path, "w")
+                result = eval_OCRBench(data, fw_error, fw_correct)
+                fw_error.close()
+                fw_correct.close()
                 print(f"OCRBench dataset eval result for {model_path} in {model_folder}: {result}")
                 writer.add_scalar(f'benchmark/OCRBench_test_score', result, cur_step)
                 fw = open(FLAGS.OCRBench_infer_chekpoint_file, "w")
@@ -584,12 +649,23 @@ def main(_):
                                             LLMPredictor,
                                             fn_constructor_kwargs=fn_constructor_kwargs,
                                             # Set the concurrency to the number of LLM instances.
-                                            concurrency=6,
-                                            batch_size=30,
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
                                             # Specify the batch size for inference.
                                             **resources_kwarg,
                                         ).take_all()
                 rsp, anw = infer_and_eval(Flickr30k_dataset_response, FLAGS.output_path, model_path, dataset_name="Flickr30k")
+
+                img2messages = {}
+                for i in range(len(Flickr30k_dataset_response)):
+                    cur_response = Flickr30k_dataset_response[i]
+                    img_id = int(cur_response["ids"])
+                    if img_id not in img2messages:
+                        img2messages[img_id] = {}
+                    img2messages[img_id]["answer"] = cur_response["answers"]
+                    img2messages[img_id]["messages"] = cur_response["messages"]
+                    img2messages[img_id]["predict"] = cur_response["generated_text"] 
+                    
                 results = []
                 for key, val in rsp.items():
                     results.append({
@@ -605,7 +681,55 @@ def main(_):
                 result = coco_eval.eval["CIDEr"] 
                 print(f"Flickr30k dataset eval result for {model_path} in {model_folder}: {result}")
                 writer.add_scalar(f'benchmark/Flickr30k_test_score', result, cur_step)
+
+                output_data_path = os.path.join(os.path.join(FLAGS.output_path, os.path.join(model_path, "Flickr30k")), "predict_data.json")
+                imgToEval = coco_eval.imgToEval
+                sorted_imgToEval = sorted(imgToEval.items(), key = lambda kv:(kv[1], kv[0]))
+                output_lines = []
+                for (key, val) in sorted_imgToEval:
+                    cur_row = {}
+                    cur_row["image_id"] = key
+                    cur_row["answer"] = img2messages[key]["answer"]
+                    cur_row["messages"] = img2messages[key]["messages"]
+                    cur_row["predict"] = img2messages[key]["predict"]
+                    cur_row["cider_score"] = val
+                    output_lines.append(cur_row)
+                with open(output_data_path, "w") as fw:
+                    json.dump(output_lines, fw, indent=4, separators=(',', ':'))
+
                 fw = open(FLAGS.Flickr30k_infer_chekpoint_file, "w")
+                for step in last_steps:
+                    fw.write(str(step) + "\n")
+                fw.close()
+
+            # Benchmark_v21
+            if FLAGS.infer_Benchmark_v21 == 1:
+                Benchmark_v21_dataset_response = Benchmark_v21_dataset.map_batches(
+                                            LLMPredictor,
+                                            fn_constructor_kwargs=fn_constructor_kwargs,
+                                            # Set the concurrency to the number of LLM instances.
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
+                                            # Specify the batch size for inference.
+                                            **resources_kwarg,
+                                        ).take_all()
+                rsp, anw = infer_and_eval(Benchmark_v21_dataset_response, FLAGS.output_path, model_path, dataset_name="Benchmark_v21")
+                output_data_folder = os.path.join(FLAGS.output_path, os.path.join(model_path, "Benchmark_v21"))
+                output_data_path = os.path.join(output_data_folder, "infer_for_gpt.json")
+                with open(FLAGS.Benchmark_v21_path, 'r') as file_:
+                    Benchmark_v21_data = json.load(file_)
+                annotations = Benchmark_v21_data["annotations"]
+                for i in range(len(annotations)):
+                    key = annotations[i]["key"]
+                    annotations[i]["model_output"] = rsp[key]
+                with open(output_data_path, "w") as fw: 
+                    json.dump(Benchmark_v21_data, fw, indent=4, separators=(',', ':'))
+                result_dict, correct_keys = eval_Benchmark_v21(output_data_folder, output_data_path)
+                dump_predict_answer(correct_keys, Benchmark_v21_dataset_response, FLAGS.output_path, model_path, "Benchmark_v21")
+                print(f"Benchmark_v21 dataset eval result for {model_path} in {model_folder}: {result_dict}")
+                for key,val in result_dict.items():
+                    writer.add_scalar(f'benchmark/Benchmark_v21/{key}_acc', val, cur_step)
+                fw = open(FLAGS.Benchmark_v21_infer_chekpoint_file, "w")
                 for step in last_steps:
                     fw.write(str(step) + "\n")
                 fw.close()

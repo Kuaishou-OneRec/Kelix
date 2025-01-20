@@ -89,6 +89,7 @@ class MMEEval:
         keys = response_dict.keys()
         keys = sorted(keys, key=lambda x:("_".join(x.split("_")[:-1]), int(x.split("_")[-1])))
         scores_all = 0
+        correct_keys = []
 
         for eval_type, task_name_list in eval_type_dict.items():
             print("===========", eval_type, "===========")
@@ -147,6 +148,10 @@ class MMEEval:
                     if img_correct_num == 2:
                         acc_plus_correct_num += 1
 
+                for i in range(len(gts)):
+                    if gts[i] == preds[i]:
+                        correct_keys.append(cur_keys[i])
+
                 # cal TP precision acc, etc.
                 metric_dict = self.compute_metric(gts, preds)
                 acc_plus = acc_plus_correct_num / img_num
@@ -165,4 +170,4 @@ class MMEEval:
                 print("\t", task_name, " score:", score)
             print("\n")
         
-        return scores_all
+        return scores_all, correct_keys
