@@ -65,7 +65,11 @@ import torch.distributed as dist
 
 from recovlm.training.parallel import UlyssesAttention, get_sequence_parallel_group, \
     get_sequence_parallel_world_size, get_sequence_parallel_rank, \
-    get_local_sequence_boundary
+    get_local_sequence_boundary, get_local_sequence
+
+from recovlm.training import parallel as mpu
+
+from recovlm.utils.common import print_rank_0
 
 logger = logging.get_logger(__name__)
 
@@ -370,19 +374,28 @@ class VisionFlashAttention2(nn.Module):
         self.num_heads = num_heads
         self.qkv = nn.Linear(dim, dim * 3, bias=True)
         self.proj = nn.Linear(dim, dim)
+        self._dist_attn = UlyssesAttention(scatter_idx=2, gather_idx=1)
 
     def forward(
         self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
+        # q,k,v = (N/P, h, d), rotary_pos_emb = (N/P, h, d)
         q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
         k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
-
-        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-        attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
-            seq_length, -1
-        )
+        if get_sequence_parallel_world_size() > 1:
+            attn_output = self._dist_attn(
+                query=q.unsqueeze(0),
+                key=k.unsqueeze(0),
+                value=v.unsqueeze(0),
+                cu_seqlens=cu_seqlens
+            ).reshape(seq_length, -1)
+        else:
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
+                seq_length, -1
+            )
         attn_output = self.proj(attn_output)
         return attn_output
 
@@ -744,7 +757,6 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
 
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
-
         if not output_attentions:
             attn_weights = None
 
@@ -1038,7 +1050,10 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         return rotary_pos_emb
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+        # (M, d), M: number of patches, d: embed_size
         hidden_states = self.patch_embed(hidden_states)
+        assert hidden_states.shape[0] % get_sequence_parallel_world_size() == 0, \
+            f"Sequence length should be dividable by sp_world_size={get_sequence_parallel_world_size()}"
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
 
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
@@ -1046,20 +1061,29 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             # Select dtype based on the following factors:
             #  - FA2 requires that cu_seqlens_q must have dtype int32
             #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
             # dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-            dtype=torch.int32,
+            dtype=torch.int32
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
+        local_hidden_states = get_local_sequence(hidden_states, seq_idx=0)
+        local_rotary_pos_emb = get_local_sequence(rotary_pos_emb, seq_idx=0)
+
         for blk in self.blocks:
             if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    blk.__call__, hidden_states, cu_seqlens, rotary_pos_emb
+                local_hidden_states = self._gradient_checkpointing_func(
+                    blk.__call__, local_hidden_states, cu_seqlens, local_rotary_pos_emb
                 )
             else:
-                hidden_states = blk(hidden_states, cu_seqlens=cu_seqlens, rotary_pos_emb=rotary_pos_emb)
-
+                local_hidden_states = blk(local_hidden_states, cu_seqlens=cu_seqlens, rotary_pos_emb=local_rotary_pos_emb)
+        # TODO: gather hidden states
+        # hidden_states = SeqAllGather.apply(hidden_states, gather_idx=0)  
+        # local_hidden_states: (N/P, d), perform a sequence allGather
+        hidden_states = mpu.AllGather.apply(
+            local_hidden_states,
+            get_sequence_parallel_group(),
+            0
+        )
         return self.merger(hidden_states)
 
 @add_start_docstrings(

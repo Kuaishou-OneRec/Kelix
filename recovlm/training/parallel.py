@@ -211,6 +211,74 @@ class SeqAllToAll4D(torch.autograd.Function):
             None,
         )
 
+def all_gather(
+    input_tensor: torch.tensor,
+    group: dist.ProcessGroup = None,
+    gather_idx: int = 0,
+    use_sync: bool = False) -> torch.tensor:
+    """
+    all-gather for Sequence
+
+    Args:
+        inputs (torch.tensor): a tensor to gather, with shape (bs, seqlen/P, h)
+        group : torch process group
+        use_sync (bool): whether to synchronize after all-gather
+
+    Returns:
+        torch.tensor: gathered tensor (bs, seqlen, h)
+    """
+
+    seq_world_size = dist.get_world_size(group)
+
+    if seq_world_size > 1:
+        output = [torch.empty_like(input_tensor) for _ in range(seq_world_size)]
+        dist.all_gather(
+            tensor_list=output, tensor=input_tensor.contiguous(), group=group)
+        if use_sync:
+            torch.cuda.synchronize()
+
+        return torch.cat(output, dim=gather_idx)
+    else:
+        return input_tensor
+
+def shard(input_tensor, group, shard_idx):
+    world_size = dist.get_world_size(group)
+    if world_size > 1:
+        rank = dist.get_rank(group)
+        local_tensor = torch.chunk(
+            input_tensor, world_size, dim=shard_idx)[rank]
+        return local_tensor
+    return input_tensor
+
+class AllGather(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx: Any,
+                inputs: torch.Tensor,
+                group: dist.ProcessGroup,
+                gather_idx: int = 0,
+                use_sync: bool = False) -> torch.Tensor:
+        ctx.group = group
+        ctx.gather_idx = gather_idx
+        ctx.use_sync = use_sync
+        return all_gather(
+            inputs, group=group, gather_idx=gather_idx,
+            use_sync=use_sync)
+
+    @staticmethod
+    def backward(ctx: Any,
+                 *grad_output: torch.Tensor
+        ) -> Tuple[None, torch.Tensor, None, None]:
+        return (
+            shard(
+                *grad_output,
+                ctx.group,
+                ctx.gather_idx
+            ),
+            None,
+            None,
+            None,
+        )
+
 class UlyssesAttention(torch.nn.Module):
     """UlyssesAttention, current support FA2 with packing only.
 
