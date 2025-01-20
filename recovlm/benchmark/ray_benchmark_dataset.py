@@ -247,7 +247,7 @@ def OCRBench_parse(sample) -> dict:
             ],
         },
     ]
-    return {"messages": json.dumps({"id": "OCRBench", "answer": answer, "inputs": messages, "question_type": question_type, "dataset": dataset})} 
+    return {"messages": json.dumps({"id": "OCRBench", "answer": answer, "inputs": messages, "question_type": question_type, "dataset": dataset, "image": base64.b64encode(image).decode("utf-8")})} 
 
 # def Flickr30k_parse(sample) -> dict:
 #     image = "/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/flickr30k/flickr30k-images/" + sample["filename"]
@@ -289,3 +289,26 @@ def Flickr30k_parse(sample) -> dict:
         },
     ]
     return {"messages": json.dumps({"id": sample["image_id"], "answer": sample["caption"], "inputs": messages})} 
+
+def Benchmark_v21_parse(sample) -> dict:
+    prompt = '''根据以上图片，回答下述问题，问题： {}'''.format(sample["question"])
+    messages = [
+        {"role": "system", "content": "你是一个有帮助且精准的助手."},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": base64.b64encode(open(sample["image_path"], "rb").read()).decode("utf-8")
+                },
+                {"type": "text", "text": prompt},
+            ],
+        },
+    ]
+
+    return {"messages": json.dumps({"id": sample["key"], 
+            "answer": sample["answer"], 
+            "inputs": messages, 
+            "question_type": sample["question_type"], 
+            "task_type": sample["task_type"], 
+            "question": sample["question"]})}

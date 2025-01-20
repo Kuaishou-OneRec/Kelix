@@ -35,6 +35,7 @@ class MainEvalOnly:
 
         evaluation_result = {}
 
+        correct_keys = []
         for category in CAT_SHORT2LONG.values():
             print("Evaluating: {}".format(category))
             # get cat_outputs and cat_answers
@@ -61,6 +62,7 @@ class MainEvalOnly:
                 })
 
             judge_dict, metric_dict = evaluate(exampels_to_eval)
+            correct_keys += [key for key, val in judge_dict.items() if val == "Correct"]
             metric_dict.update({"num_example": len(exampels_to_eval)})
 
             evaluation_result[category] = metric_dict
@@ -91,4 +93,4 @@ class MainEvalOnly:
         printable_results['Overall'] = {"num": sum([cat_results['num_example'] for cat_results in evaluation_result.values()]),
                                         "acc": round(all_ins_acc, 3)
                                         }
-        return printable_results['Overall'] 
+        return printable_results['Overall'], correct_keys 
