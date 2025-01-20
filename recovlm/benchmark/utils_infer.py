@@ -70,7 +70,26 @@ def mathvista_extract_answer(response, question_type, answer_type, choices, prec
     if response == "":
         return ""
 
-    extraction = response.strip() 
+    extraction = response.strip().split("\n")[0] 
+    answer_prefixes = [
+        "The best answer is",
+        "The correct answer is",
+        "The answer is",
+        "The answer",
+        "The best option is"
+        "The correct option is",
+        "Best answer:"
+        "Best option:",
+        "Answer:",
+        "Option:",
+        "The correct answer",
+        "The correct option",
+        "The perimeter is",
+        "The total cost is"
+    ]
+    for answer_prefix in answer_prefixes:
+        extraction = extraction.replace(answer_prefix, "")
+    extraction = extraction.strip()
 
     if question_type == 'multi_choice':
         # extract "A" from "(A) text"
@@ -91,12 +110,18 @@ def mathvista_extract_answer(response, question_type, answer_type, choices, prec
         assert normalized_extraction in choices
 
     elif answer_type == 'integer':
+        extraction = extraction.split(" ")[0]
+        if extraction.endswith("."):
+            extraction = extraction[:-1]
         try:
             normalized_extraction = str(int(float(extraction)))
         except Exception:
             normalized_extraction = None
 
     elif answer_type == 'float':
+        extraction = extraction.split(" ")[0].replace("$", "")
+        if extraction.endswith("."):
+            extraction = extraction[:-1]
         try:
             normalized_extraction = str(round(float(extraction), int(precision)))
         except Exception:
@@ -194,7 +219,7 @@ def infer_and_eval(dataset_response, output_folder, model_step, text2index=None,
     output_answer_resp.close()
     return (rsp, anw)
 
-def dump_predict_answer(correct_keys, responses, output_path, model_path, dataset_name):
+def dump_predict_answer(correct_keys, responses, output_path, model_path, dataset_name, rsp):
     output_error_data_path = os.path.join(os.path.join(output_path, os.path.join(model_path, dataset_name)), "predict_error_data.json")
     output_correct_data_path = os.path.join(os.path.join(output_path, os.path.join(model_path, dataset_name)), "predict_correct_data.json")
     correct_lines = []
@@ -203,6 +228,7 @@ def dump_predict_answer(correct_keys, responses, output_path, model_path, datase
         cur_response = responses[i]
         cur_line = {}
         key = cur_response["ids"]
+        cur_line["process_predict"] = rsp[key]
         cur_line["key"] = key
         cur_line["answer"] = cur_response["answers"]
         cur_line["messages"] = cur_response["messages"]
