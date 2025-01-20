@@ -389,7 +389,7 @@ class COCOEvalCap:
             if not imgId in self.imgToEval:
                 self.imgToEval[imgId] = dict()
                 self.imgToEval[imgId]["image_id"] = imgId
-            self.imgToEval[imgId][method] = score
+            self.imgToEval[imgId] = score
 
     def setEvalImgs(self):
         self.evalImgs = [eval for imgId, eval in self.imgToEval.items()]
