@@ -13,7 +13,7 @@ HDFS_DIR="$1"
 temp_file=$(mktemp)
 
 # 获取目录下所有文件及其大小
-hadoop fs -ls -R $HDFS_DIR | awk '{if ($5 < 1048576) print $5, $8}' | while read -r size file; do
+hadoop fs -ls -R $HDFS_DIR | awk '{if ($5 < 1024) print $5, $8}' | while read -r size file; do
   # 输出当前文件和大小
   echo "Marking for deletion: $file, Size: $size bytes"
   # 将文件路径添加到临时文件中
