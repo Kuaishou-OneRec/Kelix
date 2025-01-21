@@ -13,6 +13,7 @@ from typing import Optional
 from datasets import create_dataset
 from converters import create_converter
 from typing import Dict, List, Sequence, Optional
+import gc
 
 pa.jemalloc_set_decay_ms(0)
 
@@ -64,14 +65,17 @@ class MPIParquetWriterWorker(MPIBase):
             self.flush()
 
     def flush(self):
-        tempfile = os.path.join(self.temp_dir, f"rank-{self.rank}-{str(uuid.uuid1())}.parquet")
-        filename = os.path.join(self.output_dir, f"rank-{self.rank}-{str(uuid.uuid1())}.parquet")
-        df = pd.DataFrame(self._buffer)
-        self._buffer = []
-        self._buffer_size = 0
-        pq.write_table(pa.Table.from_pandas(df, nthreads=1), tempfile)
-        self.fs.mv(tempfile, filename)
-        self.mpi_print(f"write to {filename} success")
+        if self._buffer_size > 0:
+            tempfile = os.path.join(self.temp_dir, f"rank-{self.rank}-{str(uuid.uuid1())}.parquet")
+            filename = os.path.join(self.output_dir, f"rank-{self.rank}-{str(uuid.uuid1())}.parquet")
+            df = pd.DataFrame(self._buffer)
+            self._buffer = []
+            self._buffer_size = 0
+            pq.write_table(pa.Table.from_pandas(df, nthreads=1), tempfile)
+            self.fs.mv(tempfile, filename)
+            self.mpi_print(f"write to {filename} success")
+        gc.collect()
+
 
     def run(self):
         total_rows = None if not hasattr(self.dataset, "__len__") else len(self.dataset)
@@ -86,6 +90,8 @@ class MPIParquetWriterWorker(MPIBase):
                             self.write_sample(s)
             except Exception as e:
                 print(traceback.format_exc())
+        self.flush()
+        self.comm.barrier()
 
 def main():
     parser = argparse.ArgumentParser(
@@ -97,7 +103,6 @@ def main():
     print("config", cfg)
     worker = MPIParquetWriterWorker(cfg)
     worker.run()
-    worker.flush()
 
 if __name__ == "__main__":
     main()
