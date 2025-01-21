@@ -24,3 +24,5 @@ hostfile
 
 recovlm/benchmark/eval/tmp*
 recovlm/benchmark/tmp*
+
+examples/notebooks/message_format.ipynb
