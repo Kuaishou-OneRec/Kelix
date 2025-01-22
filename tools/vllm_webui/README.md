@@ -15,10 +15,10 @@ bash run_vllm.sh ckpt_path deploy_path model_tag gpu_id port
 
 ```
 
-目前每个gpu绑定一个模型，在启动的时候需要手动指定模型的gpu和端口，gpu和端口不能重复，否则可能会启动失败，token默认密码123456，可以curl访问url测试服务可用性
+目前每个gpu绑定一个模型，在启动的时候需要手动指定模型的gpu和端口，gpu和端口不能重复，否则可能会启动失败，token默认密码token-123456，可以curl访问url测试服务可用性
 
 ```shell
-curl http://ip:port/v1/models -H "Authorization: Bearer 123456" | jq
+curl http://ip:port/v1/models -H "Authorization: Bearer token-123456" | jq
 
 ```
 
@@ -69,7 +69,7 @@ DEMO：https://kml-dtmachine-18465-prod.kmlhb2az1l3-2.corp.kuaishou.com/
 
 **添加模型**：左下角管理员面板 -> 上方tab的设置 -> 外部连接
 
-url填写vllm对应的url（注意链接以v1结尾），密钥为vllm启动的token（默认：123456），进行模型配置，verfy connection OK后将模型保存。点击"模型"选项，此时应能看到部署的模型tag
+url填写vllm对应的url（注意链接以v1结尾），密钥为vllm启动的token（默认：token-123456），进行模型配置，verfy connection OK后将模型保存。点击"模型"选项，此时应能看到部署的模型tag
 
 **参数配置**：模型的推理参数会导致infer结果飞掉，建议可修改默认配置
 
