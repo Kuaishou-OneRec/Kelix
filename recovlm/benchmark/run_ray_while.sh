@@ -1,4 +1,4 @@
-machines=$(head -n 1 /etc/mpi/hostfile | grep -Eo '[0-9]+$')
+machines=$(grep -n  "" /etc/mpi/hostfile | wc -l)
 slots=8
 echo "machines:"
 echo $machines
