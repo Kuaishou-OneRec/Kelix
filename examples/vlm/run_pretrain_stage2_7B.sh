@@ -13,9 +13,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained/Base model path
-
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM-dev/Qwen2-VL-7B-stage2/0.0.22
-
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage2/0.0.25.6
 
 mkdir -p $OUTPUT_DIR
 
@@ -24,8 +22,8 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
+comment="stage2，vs 25.5: base Qwen2-VL-7B-stage1/0.0.39 & lr=5e-5"
 
-comment="关闭vit序列并行，对比吞吐"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
@@ -74,3 +72,6 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --kml_id $KML_ID \
     --kml_task_id $KML_TASK_ID \
     --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+
+
+#     --heartbeat_monitor \
