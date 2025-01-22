@@ -18,8 +18,7 @@ do
                 --VideoMME_path="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/VideoMME/video_mme_hetu_format.json" \
                 --MMBenchEN_path="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/en/dev-00000-of-00001.parquet" \
                 --MMBenchCN_path="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/cn/dev-00000-of-00001.parquet" \
-                --ChartQA_path="/hetu_group/wenbin/mllm/benchmark/VQA_Power/ChartQA.json" \
-                --MME_path="/hetu_group/huyifei/work_dir/20230509_MLLM_Benchmark/7.MLLM_Benchmark_dataset/MME/MME.json" \
+                --MME_path="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MME/MME.json" \
                 --MMTBench_path="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMTBench/mmt_bench_485_hetu_format.json" \
                 --MMStar_path="/mmu_mllm_hdd/shiyaya/dataset/mm_reasoning/benchmark/MMStar/YuanQi/mmstar.json" \
                 --MathVista_path="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MathVista/mathvista.json" \
