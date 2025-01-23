@@ -161,7 +161,8 @@ def get_chat_completion_vision_dataloader(sources: str,
                                           video_nframe=-1,
                                           video_fps=2.0,
                                           video_min_frames=2,
-                                          video_max_frames=120):
+                                          video_max_frames=120,
+                                          datasource_config={}):
 
     dataset = ChatCompletionVisionDataset(
         sources = sources,
@@ -175,7 +176,8 @@ def get_chat_completion_vision_dataloader(sources: str,
         base_model_dir=base_model_dir,
         shrink_ratio=shrink_ratio,
         max_retry=max_retry,
-        multiple_of=multiple_of)
+        multiple_of=multiple_of,
+        datasource_config=datasource_config)
 
     ### packing, batching size=1; shuffle in dataset
     dataloader = DataLoader(
@@ -201,7 +203,8 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           video_nframe=-1,
                                           video_fps=2.0,
                                           video_min_frames=2,
-                                          video_max_frames=120):
+                                          video_max_frames=120,
+                                          datasource_config={}):
 
     dataset = ChatCompletionVisionParquetDataset(
         sources = sources,
@@ -218,7 +221,8 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
         base_model_dir=base_model_dir,
         shrink_ratio=shrink_ratio,
         max_retry=max_retry,
-        multiple_of=multiple_of)
+        multiple_of=multiple_of,
+        datasource_config=datasource_config)
 
     ### packing, batching size=1; shuffle in dataset
     dataloader = StatefulDataLoader(

@@ -4,6 +4,7 @@ import torch
 import wids
 import logging
 import json
+import time
 
 from recovlm.utils.common import shell_hdfs_ls
 
@@ -235,17 +236,39 @@ def test_parquet_dataset():
 
 def test_ChatCompletionVisionParquetDataset():
     init_processes(0, 1)
-    path = "./examples/vlm/configs/stage2_parquet.json"
+    processor = Qwen2VLProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14")
+    path = "./examples/vlm/configs/stage2_parquet_l2.json"
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
     dataset_config.pop("name")
     dataset_config["num_workers"] = 1
+    dataset_config["shuffle_seed"] = int(time.time())
+    dataset_config["max_length"] = 2048
 
     dataset = ChatCompletionVisionParquetDataset(**dataset_config)
+    ans = 0
     for s in dataset:
-        print(s)
+        
+        input_ids = s["input_ids"].squeeze()
+        loss_mask = s["loss_mask"].squeeze()
+        decode_char = processor.tokenizer.convert_ids_to_tokens(input_ids)
+
+        decode_char = [f"\"{word}\"" for word in decode_char]
+
+        assert len(decode_char) == len(loss_mask)
+        output = ""
+        for i in range(len(decode_char)):
+            output+= f"{decode_char[i]}:{loss_mask[i].item()}"
+            if i % 8 == 0:
+                output += "\n"
+            else:
+                output += "\t"
+        
+        print(output)
+        print(s["data_source"])
+        print("==========================")
         break
 
 if __name__ == "__main__":
-    test_parquet_dataset()
+    test_ChatCompletionVisionParquetDataset()
 

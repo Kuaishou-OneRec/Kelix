@@ -676,7 +676,19 @@ class ChatCompletionVisionDataset(IterableDataset):
                video_token_id: int = 151656,
                vision_start_token_id: int = 151652,
                vision_end_token_id: int = 151653,
-               pad_token_id: int = 151643):
+               pad_token_id: int = 151643,
+               datasource_config:Dict[str, Dict[str, Any]] = {}):
+    """
+    datasource_config: 默认覆盖全局配置
+                      key: datasource_name
+                      Dict: datasource config, support params:
+                        min_visual_tokens_per_image
+                        max_visual_tokens_per_image
+                        video_nframe
+                        video_fps
+                        video_min_frames
+                        video_max_frames
+    """
     if base_model_dir:
       processor = Qwen2VLProcessor.from_pretrained(base_model_dir)
       model_config = Qwen2VLConfig.from_pretrained(base_model_dir)
@@ -726,6 +738,9 @@ class ChatCompletionVisionDataset(IterableDataset):
     image_pad_len = 6
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
+
+    self.datasource_config = datasource_config
+    print(f"datasource_config: {self.datasource_config}")
   
   def _build_source_dataset(self, sources):
     total_samples = 0
@@ -766,15 +781,12 @@ class ChatCompletionVisionDataset(IterableDataset):
       
     return dataset, total_samples
 
-  def _fill_image_block(self, block, sample_dict, 
-                          min_visual_tokens_per_image=None, 
-                          max_visual_tokens_per_image=None):
-    
-    if min_visual_tokens_per_image is None:
-      min_visual_tokens_per_image = self.min_visual_tokens_per_image
+  def _fill_image_block(self, block: Dict[str, Any],
+                        sample_dict: Dict[str, Any],
+                        conf: Dict[str, Any]):
 
-    if max_visual_tokens_per_image is None:
-      max_visual_tokens_per_image = self.max_visual_tokens_per_image
+    min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
+    max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
 
     if isinstance(block["image"], str):
       image = sample_dict[block["image"]]
@@ -784,52 +796,49 @@ class ChatCompletionVisionDataset(IterableDataset):
       image = image.convert("RGB")
     block["image"] = image
     block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
-      (self.spatial_merge_size ** 2)
+        (self.spatial_merge_size ** 2)
     block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
-      (self.spatial_merge_size ** 2)
+        (self.spatial_merge_size ** 2)
   
-  def _fill_video_block(self, block, sample_dict, 
-                          min_visual_tokens_per_image=None, 
-                          max_visual_tokens_per_image=None):
-    if min_visual_tokens_per_image is None:
-      min_visual_tokens_per_image = self.min_visual_tokens_per_image
+  def _fill_video_block(self, block: Dict[str, Any],
+                        sample_dict: Dict[str, Any],
+                        conf: Dict[str, Any]):
 
-    if max_visual_tokens_per_image is None:
-      max_visual_tokens_per_image = self.max_visual_tokens_per_image
+    min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
+    max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
 
     if isinstance(block["video"], list):
       for image_block in block["video"]:
         assert image_block["type"] == "image" and "image" in image_block
-        self._fill_image_block(image_block, sample_dict,
-                                min_visual_tokens_per_image=min_visual_tokens_per_image,
-                                max_visual_tokens_per_image=max_visual_tokens_per_image)
+        self._fill_image_block(image_block, sample_dict, conf)
+
     elif isinstance(block["video"], str) or isinstance(block["video"], bytes):
       # video in local tar, replace by video bytes
       if isinstance(block["video"], str) and block["video"] in sample_dict:
         block["video"] = sample_dict[block["video"]]
       # fill other params
       block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
-        (self.spatial_merge_size ** 2)
+          (self.spatial_merge_size ** 2)
       block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
-        (self.spatial_merge_size ** 2)
+          (self.spatial_merge_size ** 2)
       # video split params
-      if self.video_nframe > 0:
-        block["nframes"] = self.video_nframe
-      if self.video_fps > 0:
-        block["fps"] = self.video_fps
-      if self.video_min_frames > 0:
-        block["min_frames"] = self.video_min_frames
-      if self.video_max_frames > 0:
-        block["max_frames"] = self.video_max_frames
+      if conf["video_nframe"] > 0:
+        block["nframes"] = conf["video_nframe"]
+      if conf["video_fps"] > 0:
+        block["fps"] = conf["video_fps"]
+      if conf["video_min_frames"] > 0:
+        block["min_frames"] = conf["video_min_frames"]
+      if conf["video_max_frames"] > 0:
+        block["max_frames"] = conf["video_max_frames"]
     else:
       raise ValueError(f"Unsupport video type. {type(block['video'])=}")
   
   def _process_completion(self,
                     sample: Dict[str, Any],
-                    max_visual_tokens_per_image: int = 128) -> Dict[str, torch.Tensor]:
+                    data_conf: Dict[str, Any] = {}) -> Dict[str, torch.Tensor]:
     assert "segments" in sample["json"]
-    max_visual_tokens_per_image = max(
-      max_visual_tokens_per_image, self.min_visual_tokens_per_image)
+    data_conf["max_visual_tokens_per_image"] = max(
+        data_conf["max_visual_tokens_per_image"], data_conf["min_visual_tokens_per_image"])
 
     text = ""
     vision_infos = []
@@ -840,12 +849,12 @@ class ChatCompletionVisionDataset(IterableDataset):
       elif segment["type"] == "image":
         text += "<|vision_start|><|image_pad|><|vision_end|>"
         self._fill_image_block(segment, sample,
-                                max_visual_tokens_per_image=max_visual_tokens_per_image)
+                                conf=data_conf)
         vision_infos.append(segment)
       elif segment["type"] == "video":
         text += "<|vision_start|><|video_pad|><|vision_end|>"
         self._fill_video_block(segment, sample,
-                                max_visual_tokens_per_image=max_visual_tokens_per_image)
+                                conf=data_conf)
         vision_infos.append(segment)
       else:
         logger.warning(f"!!! Unsupport {segment['type']=}, skip this segment.")
@@ -898,10 +907,11 @@ class ChatCompletionVisionDataset(IterableDataset):
 
   def _process_chat(self,
                     sample: Dict[str, Any],
-                    max_visual_tokens_per_image: int = 128) -> Dict[str, torch.Tensor]:
-    max_visual_tokens_per_image = max(
-      max_visual_tokens_per_image, self.min_visual_tokens_per_image)
+                    data_conf: Dict[str, Any] = {}) -> Dict[str, torch.Tensor]:
     assert "message" in sample["json"] or "messages" in sample["json"]
+    data_conf["max_visual_tokens_per_image"] = max(
+        data_conf["max_visual_tokens_per_image"], data_conf["min_visual_tokens_per_image"])
+    
     msg_key = "message" if "message" in sample["json"] else "messages"
     messages = sample["json"][msg_key]
     for turn in messages:
@@ -909,10 +919,10 @@ class ChatCompletionVisionDataset(IterableDataset):
       for block in content:
         if block["type"] == "image":
           self._fill_image_block(block, sample, 
-                                  max_visual_tokens_per_image=max_visual_tokens_per_image)
+                                  conf=data_conf)
         elif block["type"] == "video":
           self._fill_video_block(block, sample,
-                                  max_visual_tokens_per_image=max_visual_tokens_per_image)
+                                  conf=data_conf)
 
     text = self.processor.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
@@ -981,12 +991,19 @@ class ChatCompletionVisionDataset(IterableDataset):
     """
     text = "<|vision_start|><|image_pad|><|vision_end|>"
     pad_image = {
-      "type": "image",
-      "image": Image.new("RGB", (1, 1), (255, 255, 255))
+        "type": "image",
+        "image": Image.new("RGB", (1, 1), (255, 255, 255))
     }
 
-    self._fill_image_block(pad_image, {}, 1, 1)
-    image_inputs, _ = process_vision_info(vision_infos = [pad_image])
+    self._fill_image_block(pad_image, sample_dict={}, conf={
+        "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
+        "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
+        "video_nframe": self.video_nframe,
+        "video_fps": self.video_fps,
+        "video_min_frames": self.video_min_frames,
+        "video_max_frames": self.video_max_frames
+    })
+    image_inputs, _ = process_vision_info(vision_infos=[pad_image])
     inputs = self.processor(
         text=text,
         images=image_inputs,
@@ -996,19 +1013,19 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
     inputs["position_ids"] = get_rope_index(
-      inputs["input_ids"],
-      image_grid_thw=inputs.get("image_grid_thw"),
-      video_grid_thw=inputs.get("video_grid_thw"),
-      spatial_merge_size=self.spatial_merge_size,
-      image_token_id=self.image_token_id,
-      video_token_id=self.video_token_id,
-      vision_start_token_id=self.vision_start_token_id
+        inputs["input_ids"],
+        image_grid_thw=inputs.get("image_grid_thw"),
+        video_grid_thw=inputs.get("video_grid_thw"),
+        spatial_merge_size=self.spatial_merge_size,
+        image_token_id=self.image_token_id,
+        video_token_id=self.video_token_id,
+        vision_start_token_id=self.vision_start_token_id
     )
 
     inputs.pop("attention_mask")
     return inputs
 
-  def _process(self, sample):
+  def _process(self, sample, source_name=None):
     # self._may_filter(sample)
 
     # get data format
@@ -1019,27 +1036,42 @@ class ChatCompletionVisionDataset(IterableDataset):
     else:
       raise NotImplementedError(f"Unsupported dataset format.")
     
-    max_visual_tokens_per_image = self.max_visual_tokens_per_image
+    source_conf = {
+      "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
+      "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
+      "video_nframe": self.video_nframe,
+      "video_fps": self.video_fps,
+      "video_min_frames": self.video_min_frames,
+      "video_max_frames": self.video_max_frames
+    }
+
+    if source_name != None and source_name in self.datasource_config:
+      for key in source_conf:
+        if key in self.datasource_config[source_name]:
+          source_conf[key] = self.datasource_config[source_name][key]
+    
     for retry in range(self.max_retry):
       if data_format == "chatml":
-        inputs = self._process_chat(sample, max_visual_tokens_per_image)
+        inputs = self._process_chat(sample, source_conf)
       elif data_format == "completion":
-        inputs = self._process_completion(sample, max_visual_tokens_per_image)
+        inputs = self._process_completion(sample, source_conf)
       else:
-        raise NotImplementedError(f"Unsupported dataset format `{data_format}`")
+        raise NotImplementedError(
+            f"Unsupported dataset format `{data_format}`")
 
       if not inputs:
         raise ValueError("Empty inputs, skip")
-        
+
       if inputs["input_ids"].shape[-1] > self.max_length:
-        max_visual_tokens_per_image = (max_visual_tokens_per_image * self.shrink_ratio)
+        source_conf["max_visual_tokens_per_image"] = (
+            source_conf["max_visual_tokens_per_image"] * self.shrink_ratio)
         continue
       else:
         assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"
         return inputs
     else:
       raise ValueError(
-        f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
+          f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
       )
   
   def _append_sample_packing(self,
@@ -1174,7 +1206,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       self.source_sample_cnt[source_name] += 1
 
       try:
-        inputs = self._process(sample)
+        inputs = self._process(sample, source_name)
       except:
         self.source_error_cnt.setdefault(source_name, 0)
         self.source_error_cnt[source_name] += 1
