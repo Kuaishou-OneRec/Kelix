@@ -11,7 +11,8 @@ class CleanHtmlConverter(ConverterBase):
 
     def __call__(self, src: Dict[str, any]) -> Dict[str, any]:
         src['messages'] = iter_messages(src['messages'], self.clean_html)
-        src['segments'] = iter_segments(src['segments'], self.clean_html)
+        # 跳过第一个，第一个是 <source_name>
+        src['segments'] = iter_segments(src['segments'], self.clean_html, start_offset=1)
         return src
     
     def clean_html(self, text):

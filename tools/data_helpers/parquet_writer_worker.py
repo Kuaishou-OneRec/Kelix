@@ -60,15 +60,27 @@ class MPIParquetWriterWorker(MPIBase):
         self._pre_filters = []
         if "pre_filters" in config:
             for cfg in config['pre_filters']:
-                self._pre_filters.append(create_filter(cfg))
+                self._pre_filters.append(self.create_filter(cfg))
         
         self._post_filters = []
         if "post_filters" in config:
             for cfg in config['post_filters']:
-                self._post_filters.append(create_filter(cfg))
+                self._post_filters.append(self.create_filter(cfg))
         
         self._filtered_cnt = 0
         self._success_cnt = 0
+        self._filter_reason = dict()
+    
+    def create_filter(self, cfg):
+        return self.filter_wrapper(cfg.class_name, create_filter(cfg))
+    
+    def filter_wrapper(self, name, filter_func):
+        def f(x):
+            rst = filter_func(x)
+            if not rst:
+                self._filter_reason[name] = self._filter_reason.get(name, 0) + 1
+            return rst
+        return f
     
     def is_sample_valid(self, sample):
         for k, t in SCHEMA_DICT.items():
@@ -99,6 +111,7 @@ class MPIParquetWriterWorker(MPIBase):
             pq.write_table(pa.Table.from_pandas(df, nthreads=1), tempfile)
             self.fs.mv(tempfile, filename)
             self.mpi_print(f"write to {filename} success, total filtered_cnt {self._filtered_cnt} success_cnt {self._success_cnt}")
+            self.mpi_print(f"filter_reason {self._filter_reason}")
         gc.collect()
 
 

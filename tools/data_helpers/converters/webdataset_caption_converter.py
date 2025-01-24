@@ -29,9 +29,9 @@ class WebDatasetCaptionConverter(ConverterBase):
         ]
         result = {
             "images": json.dumps(images),
-            "videos": "null",
+            "videos": None,
             "source": self.source,
-            "messages": "null",
+            "messages": None,
             "segments": json.dumps(segments),
             "metadata": json.dumps(metadata),
             "uuid": str(uuid.uuid1()),

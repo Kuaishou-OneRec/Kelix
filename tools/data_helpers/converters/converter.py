@@ -31,7 +31,7 @@ def iter_messages(messages, text_fn):
     if messages is None:
         return None
     messages = json.loads(messages)
-    if messages == 'null':
+    if messages is None or messages == 'null':
         return None
     for msg in messages:
         content = msg['content']
@@ -46,13 +46,13 @@ def iter_messages(messages, text_fn):
             raise ValueError(f"invalid msg {msg}")
     return json.dumps(messages)
 
-def iter_segments(segments, text_fn):
+def iter_segments(segments, text_fn, start_offset: int = 0):
     if segments is None:
         return None
-    if segments == 'null':
+    if segments is None or segments == 'null':
         return None
     segments = json.loads(segments)
-    for i in range(len(segments)):
+    for i in range(start_offset, len(segments)):
         seg = segments[i]
         if isinstance(seg, str):
             segments[i] = text_fn(seg)
