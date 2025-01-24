@@ -90,6 +90,7 @@ class MMEEval:
         keys = sorted(keys, key=lambda x:("_".join(x.split("_")[:-1]), int(x.split("_")[-1])))
         scores_all = 0
         correct_keys = []
+        res_scores = {}
 
         for eval_type, task_name_list in eval_type_dict.items():
             print("===========", eval_type, "===========")
@@ -164,10 +165,11 @@ class MMEEval:
                 
                 scores += task_score
 
+            res_scores[eval_type] = scores
             scores_all += scores
             print("total score:", scores, "\n")
             for task_name, score in task_score_dict.items():
                 print("\t", task_name, " score:", score)
             print("\n")
-        
-        return scores_all, correct_keys
+        res_scores["all_score"] = scores_all
+        return res_scores, correct_keys
