@@ -250,7 +250,7 @@ def calc_gpt4_parallel(check_path, input_file, eval_item, output_dir):
                             que, question, model_output, answer, question_type])
 
     from multiprocessing import Pool
-    p = Pool(500)
+    p = Pool(5)
     for inp in input_list:
         p.apply_async(process_, args=(inp, output_dir, ))
         # process_(inp, output_dir)

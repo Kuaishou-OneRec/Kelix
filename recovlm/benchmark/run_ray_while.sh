@@ -10,7 +10,8 @@ do
     then
       :
     else
-      for val in MMMU MMBenchEN MMBenchCN MME MMTBench MMStar MathVista OCRBench Flickr30k Benchmark_v21
+      #for val in MMMU MMBenchEN MMBenchCN MME MMTBench MMStar MathVista OCRBench Flickr30k Benchmark_v21 VideoMME
+      for val in MME
       do
         python3 -u ray_batch_infer.py \
 		--GPU_num=$(($slots*$machines)) \
@@ -27,6 +28,7 @@ do
 		--Benchmark_v21_path="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/Benchmark_v21/Benchmark_v21.json" \
                 --mmbenchEn_benchmark_original_data="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/en/dev-00000-of-00001.parquet" \
                 --mmbenchCn_benchmark_original_data="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/cn/dev-00000-of-00001.parquet" \
+                --infer_steps=1 \
                 --model_folder=$model \
                 --logging_folder="${model}/log/benchmark/" \
                 --output_path="${model}/benchmark_output/" \
