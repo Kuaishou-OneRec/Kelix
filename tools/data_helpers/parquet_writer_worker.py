@@ -12,6 +12,7 @@ from utils import MPIBase
 from typing import Optional
 from datasets import create_dataset
 from converters import create_converter
+from filters import create_filter
 from typing import Dict, List, Sequence, Optional
 import gc
 
@@ -44,7 +45,42 @@ class MPIParquetWriterWorker(MPIBase):
         self._buffer_size = 0
 
         self.dataset = create_dataset(config.dataset)
-        self.converter = create_converter(config.converter)
+
+        self._converters = []
+        if "converter" in config:
+            self._converters.append(
+                create_converter(config.converter)
+            )
+        if "converters" in config:
+            for cfg in config['converters']:
+                self._converters.append(
+                    create_converter(cfg)
+                )
+
+        self._pre_filters = []
+        if "pre_filters" in config:
+            for cfg in config['pre_filters']:
+                self._pre_filters.append(self.create_filter(cfg))
+        
+        self._post_filters = []
+        if "post_filters" in config:
+            for cfg in config['post_filters']:
+                self._post_filters.append(self.create_filter(cfg))
+        
+        self._filtered_cnt = 0
+        self._success_cnt = 0
+        self._filter_reason = dict()
+    
+    def create_filter(self, cfg):
+        return self.filter_wrapper(cfg.class_name, create_filter(cfg))
+    
+    def filter_wrapper(self, name, filter_func):
+        def f(x):
+            rst = filter_func(x)
+            if not rst:
+                self._filter_reason[name] = self._filter_reason.get(name, 0) + 1
+            return rst
+        return f
     
     def is_sample_valid(self, sample):
         for k, t in SCHEMA_DICT.items():
@@ -61,6 +97,7 @@ class MPIParquetWriterWorker(MPIBase):
     def write_sample(self, sample):
         self._buffer.append(sample)
         self._buffer_size += self.sample_size(sample)
+        self._success_cnt += 1
         if self._buffer_size >= self.split_size:
             self.flush()
 
@@ -73,7 +110,8 @@ class MPIParquetWriterWorker(MPIBase):
             self._buffer_size = 0
             pq.write_table(pa.Table.from_pandas(df, nthreads=1), tempfile)
             self.fs.mv(tempfile, filename)
-            self.mpi_print(f"write to {filename} success")
+            self.mpi_print(f"write to {filename} success, total filtered_cnt {self._filtered_cnt} success_cnt {self._success_cnt}")
+            self.mpi_print(f"filter_reason {self._filter_reason}")
         gc.collect()
 
 
@@ -81,7 +119,15 @@ class MPIParquetWriterWorker(MPIBase):
         total_rows = None if not hasattr(self.dataset, "__len__") else len(self.dataset)
         for s in tqdm(self.dataset, total=total_rows):
             try:
-                out = self.converter(s)
+                if not all([f(s) for f in self._pre_filters]):
+                    self._filtered_cnt += 1
+                    continue
+                out = s
+                for cvt in self._converters:
+                    out = cvt(out)
+                if not all([f(s) for f in self._post_filters]):
+                    self._filtered_cnt += 1
+                    continue
                 if out is not None:
                     if isinstance(out, Dict):
                         self.write_sample(out)
