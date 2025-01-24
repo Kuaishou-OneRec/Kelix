@@ -14,6 +14,7 @@ sys.path.insert(0, 'eval/MMMU/mmmu')
 sys.path.insert(0, 'eval/MMBench')
 from eval.MMMU.mmmu.main_eval_only import MainEvalOnly
 from eval.MMBench.mmbench_evaluation_tricky import MMBenchEvaluation
+from eval.RealWorldQA.real_world_qa_evaluation_tricky import RealWorldQAEvaluation
 from torch.utils.tensorboard import SummaryWriter
 import re
 import os

@@ -10,7 +10,7 @@ do
     then
       :
     else
-      for val in MMMU MMBenchEN MMBenchCN MME MMTBench MMStar MathVista OCRBench Flickr30k Benchmark_v21 AI2D AI2D_no_mask InfoVQA RealWorldQA
+      for val in InfoVQA 
       do
         python3 -u ray_batch_infer.py \
 		--GPU_num=$(($slots*$machines)) \
@@ -39,5 +39,5 @@ do
         wait
       done
     fi
-  done < monitor_models.conf
+  done < monitor_models_qwen.conf
 done

@@ -32,6 +32,29 @@ from Levenshtein import distance
 from transformers import AutoProcessor
 from qwen_vl_utils import process_vision_info
 
+
+def remove_prefix(s):
+    s = s.strip()
+    answer_prefixes = [
+        "The best answer is",
+        "The correct answer is",
+        "The answer is",
+        "The answer",
+        "The best option is"
+        "The correct option is",
+        "Best answer:"
+        "Best option:",
+        "Answer:",
+        "Option:",
+        "The correct answer",
+        "The correct option",
+    ]
+    for answer_prefix in answer_prefixes:
+        s = s.replace(answer_prefix, "")
+
+    return s.strip()
+
+
 def extract_characters_regex(s):
     s = s.strip()
     answer_prefixes = [
@@ -214,6 +237,36 @@ def infer_and_eval(dataset_response, output_folder, model_step, text2index=None,
             anw[key] = response["answers"]
             output_original_resp.write(json.dumps({key:output}) + "\n")
             output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
+        
+            # todo:
+        elif dataset_name in ["AI2D"]:
+            rsp[key] = remove_prefix(output)
+            anw[key] = response["answers"]
+
+            output_original_resp.write(json.dumps({key:output}) + "\n")
+            output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
+        
+        elif dataset_name in ["AI2D_no_mask"]:
+            rsp[key] = remove_prefix(output)
+            anw[key] = response["answers"]
+            output_original_resp.write(json.dumps({key:output}) + "\n")
+            output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
+
+        elif dataset_name in ["InfoVQA"]:
+            rsp[key] = remove_prefix(output)
+            anw[key] = response["answers"]
+            output_original_resp.write(json.dumps({key:output}) + "\n")
+            output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
+        
+        elif dataset_name in ["RealWorldQA"]:
+            rsp[key] = remove_prefix(output)
+            anw[key] = response["answers"]
+            output_original_resp.write(json.dumps({key:output}) + "\n")
+            output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
+        
+        else:
+            raise ValueError("Wrong dataset name {}.".format(dataset_name))
+            # todo:
 
     output_original_resp.close()
     output_answer_resp.close()

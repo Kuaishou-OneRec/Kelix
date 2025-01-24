@@ -2,8 +2,9 @@
 from absl import flags, app
 
 import json
+import shutil
 import collections
-
+import os.path as osp
 from tqdm import tqdm
 from vllm import LLM, SamplingParams
 from ray_benchmark_dataset import * 
@@ -14,6 +15,9 @@ sys.path.insert(0, 'eval/MMMU/mmmu')
 sys.path.insert(0, 'eval/MMBench')
 from eval.MMMU.mmmu.main_eval_only import MainEvalOnly
 from eval.MMBench.mmbench_evaluation_tricky import MMBenchEvaluation
+from eval.RealWorldQA.real_world_qa_evaluation_tricky import RealWorldQAEvaluation
+from eval.AI2D.ai2d_evaluation_tricky import AI2DEvaluation
+from eval.QA.qa_evaluation_tricky import ANLSEvaluator
 from eval.MME_eval import MMEEval
 from eval.OCRBench_eval import eval_OCRBench
 from eval.cider_eval import Cider
@@ -124,6 +128,22 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_string(
+    "AI2D_path", None, "AI2D dataset path"
+)
+
+flags.DEFINE_string(
+    "AI2D_no_mask_path", None, "AI2D no mask dataset path"
+)
+
+flags.DEFINE_string(
+    "InfoVQA_path", None, "InfoVQA dataset path"
+)
+
+flags.DEFINE_string(
+    "RealWorldQA_path", None, "RealWorldQA dataset path"
+)
+
+flags.DEFINE_string(
     "output_path", None, "The path of file to write results." 
 )
 
@@ -191,6 +211,22 @@ flags.DEFINE_string(
     "Benchmark_v21_infer_chekpoint_file", "", "save infer checkpoint file"
 )
 
+flags.DEFINE_string(
+    "AI2D_infer_chekpoint_file", "", "save infer checkpoint file"
+)
+
+flags.DEFINE_string(
+    "AI2D_no_mask_infer_chekpoint_file", "", "save infer checkpoint file"
+)
+
+flags.DEFINE_string(
+    "InfoVQA_infer_chekpoint_file", "", "save infer checkpoint file"
+)
+
+flags.DEFINE_string(
+    "RealWorldQA_infer_chekpoint_file", "", "save infer checkpoint file"
+)
+
 flags.DEFINE_integer(
     "infer_MMMU", 0, "infer MMMU dataset"
 )
@@ -233,6 +269,22 @@ flags.DEFINE_integer(
 
 flags.DEFINE_integer(
     "infer_Benchmark_v21", 0, "infer Benchmark_v21 dataset"
+)
+
+flags.DEFINE_integer(
+    "infer_AI2D", 0, "infer AI2D dataset"
+)
+
+flags.DEFINE_integer(
+    "infer_AI2D_no_mask", 0, "infer AI2D no mask dataset"
+)
+
+flags.DEFINE_integer(
+    "infer_InfoVQA", 0, "infer InfoVQA dataset"
+)
+
+flags.DEFINE_integer(
+    "infer_RealWorldQA", 0, "infer RealWorldQA dataset"
 )
 
 
@@ -299,7 +351,27 @@ def main(_):
         fr = open(FLAGS.Benchmark_v21_infer_chekpoint_file, "r")
         for line in fr.readlines():
             last_steps.append(int(line.strip()))
+    
+    if FLAGS.infer_AI2D == 1 and os.path.exists(FLAGS.AI2D_infer_chekpoint_file):
+        fr = open(FLAGS.AI2D_infer_chekpoint_file, "r")
+        for line in fr.readlines():
+            last_steps.append(int(line.strip()))
+    
+    if FLAGS.infer_AI2D_no_mask == 1 and os.path.exists(FLAGS.AI2D_no_mask_infer_chekpoint_file):
+        fr = open(FLAGS.AI2D_no_mask_infer_chekpoint_file, "r")
+        for line in fr.readlines():
+            last_steps.append(int(line.strip()))
 
+    if FLAGS.infer_InfoVQA == 1 and os.path.exists(FLAGS.InfoVQA_infer_chekpoint_file):
+        fr = open(FLAGS.InfoVQA_infer_chekpoint_file, "r")
+        for line in fr.readlines():
+            last_steps.append(int(line.strip()))
+    
+    if FLAGS.infer_RealWorldQA == 1 and os.path.exists(FLAGS.RealWorldQA_infer_chekpoint_file):
+        fr = open(FLAGS.RealWorldQA_infer_chekpoint_file, "r")
+        for line in fr.readlines():
+            last_steps.append(int(line.strip()))
+    
     print(f"last step is {last_steps}")
 
     resources_kwarg: Dict[str, Any] = {}
@@ -313,8 +385,26 @@ def main(_):
         resources_kwarg["num_gpus"] = 0
         resources_kwarg["ray_remote_args_fn"] = scheduling_strategy_fn
 
-    fn_constructor_kwargs = {
+    if osp.exists(osp.join(model_folder, "global_step2000", "mp_rank_00_model_states.pt")):
+        fn_constructor_kwargs = {
             "model_folder": "vllm_model_ray", 
+            "tp": FLAGS.tp, 
+            "limit_mm": FLAGS.limit_mm_per_prompt, 
+            "temperature": FLAGS.temperature, 
+            "top_p": FLAGS.top_p, 
+            "repetition_penalty": FLAGS.repetition_penalty, 
+            "max_tokens": FLAGS.max_tokens
+        }
+    else:
+        step_folder = osp.join(model_folder, "global_step2000")
+        files = [osp.join(step_folder, file) for file in os.listdir(step_folder) if osp.isfile(osp.join(step_folder, file))]
+
+        for source_file in files:
+            dir_name = osp.dirname(osp.abspath(__file__))
+            dest_file = osp.join(dir_name, "vllm_model_ray_qwen", osp.basename(source_file))
+            shutil.copy(source_file, dest_file)
+        fn_constructor_kwargs = {
+            "model_folder": "vllm_model_ray_qwen", 
             "tp": FLAGS.tp, 
             "limit_mm": FLAGS.limit_mm_per_prompt, 
             "temperature": FLAGS.temperature, 
@@ -402,6 +492,26 @@ def main(_):
         with open(FLAGS.Benchmark_v21_path, 'r') as file_:
                 Benchmark_v21_data = json.load(file_)["annotations"]
         Benchmark_v21_dataset = ray.data.from_items(Benchmark_v21_data).map(Benchmark_v21_parse)
+    
+    # todo: 
+    #AI2D
+    if FLAGS.infer_AI2D == 1:
+        AI2D_dataset = ray.data.read_parquet(FLAGS.AI2D_path).map(AI2D_parse)
+    
+    #AI2D no mask
+    if FLAGS.infer_AI2D_no_mask == 1:
+        AI2D_no_mask_dataset = ray.data.read_parquet(FLAGS.AI2D_no_mask_path).map(AI2D_no_mask_parse)
+
+    #InfoVQA
+    if FLAGS.infer_InfoVQA == 1:
+        with open(FLAGS.InfoVQA_path, 'r') as file_:
+                InfoVQA_data = json.load(file_)["annotations"]
+        InfoVQA_dataset = ray.data.from_items(InfoVQA_data).map(InfoVQA_parse)
+
+    #RealWorldQA
+    if FLAGS.infer_RealWorldQA == 1:
+        RealWorldQA_dataset = ray.data.read_parquet(FLAGS.RealWorldQA_path).map(RealWorldQA_parse)
+    # todo:
 
 ############################################################################# Infer ################################################################
 
@@ -420,8 +530,12 @@ def main(_):
             step_folder = os.path.join(model_folder, model_path)
             print(f"evaluate dataset for {model_path} in {model_folder}")
             # transform model to vllm format
-            checkpoint_model = torch.load(os.path.join(step_folder, "mp_rank_00_model_states.pt"), map_location="cpu")
-            torch.save(checkpoint_model["module"], os.path.join("vllm_model_ray", "pytorch_model.bin"))
+            if osp.exists(osp.join(step_folder, "mp_rank_00_model_states.pt")):
+
+                checkpoint_model = torch.load(osp.join(step_folder, "mp_rank_00_model_states.pt"), map_location="cpu")
+                torch.save(checkpoint_model["module"], os.path.join("vllm_model_ray", "pytorch_model.bin"))
+            else:
+                pass
 
             #Input the model name or path. Can be GPTQ or AWQ models.
             # MMMU
@@ -730,6 +844,170 @@ def main(_):
                 for key,val in result_dict.items():
                     writer.add_scalar(f'benchmark/Benchmark_v21/{key}_acc', val, cur_step)
                 fw = open(FLAGS.Benchmark_v21_infer_chekpoint_file, "w")
+                for step in last_steps:
+                    fw.write(str(step) + "\n")
+                fw.close()
+
+            # AI2D
+            if FLAGS.infer_AI2D == 1:
+                AI2D_dataset_response = AI2D_dataset.map_batches(
+                                            LLMPredictor,
+                                            fn_constructor_kwargs=fn_constructor_kwargs,
+                                            # Set the concurrency to the number of LLM instances.
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
+                                            # Specify the batch size for inference.
+                                            **resources_kwarg,
+                                        ).take_all()
+                rsp, anw = infer_and_eval(AI2D_dataset_response, FLAGS.output_path, model_path, dataset_name="AI2D")
+
+                eval_data = AI2DEvaluation(anw, rsp)
+                result, correct_keys = eval_data.eval()
+
+                dump_predict_answer(correct_keys, AI2D_dataset_response, FLAGS.output_path, model_path, "AI2D", rsp)
+
+                print(f"AI2D dataset eval result for {model_path} in {model_folder}: {result}")
+
+                writer.add_scalar(f'benchmark/AI2D_test_acc', result[-1] / 100, cur_step)
+
+                fw = open(FLAGS.AI2D_infer_chekpoint_file, "w")
+                for step in last_steps:
+                    fw.write(str(step) + "\n")
+                fw.close()
+            
+            # AI2D no mask
+            if FLAGS.infer_AI2D_no_mask == 1:
+                AI2D_no_mask_dataset_response = AI2D_no_mask_dataset.map_batches(
+                                            LLMPredictor,
+                                            fn_constructor_kwargs=fn_constructor_kwargs,
+                                            # Set the concurrency to the number of LLM instances.
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
+                                            # Specify the batch size for inference.
+                                            **resources_kwarg,
+                                        ).take_all()
+                rsp, anw = infer_and_eval(AI2D_no_mask_dataset_response, FLAGS.output_path, model_path, dataset_name="AI2D_no_mask")
+
+                eval_data = AI2DEvaluation(anw, rsp)
+                result, correct_keys = eval_data.eval()
+
+                dump_predict_answer(correct_keys, AI2D_no_mask_dataset_response, FLAGS.output_path, model_path, "AI2D_no_mask", rsp)
+
+                print(f"AI2D_no_mask dataset eval result for {model_path} in {model_folder}: {result}")
+
+                writer.add_scalar(f'benchmark/AI2D_no_mask_test_acc', result[-1] / 100, cur_step)
+
+                fw = open(FLAGS.AI2D_no_mask_infer_chekpoint_file, "w")
+                for step in last_steps:
+                    fw.write(str(step) + "\n")
+                fw.close()
+
+            # InfoVQA
+            if FLAGS.infer_InfoVQA == 1:
+                InfoVQA_dataset_response = InfoVQA_dataset.map_batches(
+                                            LLMPredictor,
+                                            fn_constructor_kwargs=fn_constructor_kwargs,
+                                            # Set the concurrency to the number of LLM instances.
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
+                                            # Specify the batch size for inference.
+                                            **resources_kwarg,
+                                        ).take_all()
+                rsp, anw = infer_and_eval(InfoVQA_dataset_response, FLAGS.output_path, model_path, dataset_name="InfoVQA")
+
+                eval_data = ANLSEvaluator(anw, rsp)
+                result, avg_anls = eval_data.eval()
+
+                # dump_predict_answer(correct_keys, RealWorldQA_dataset_response, FLAGS.output_path, model_path, "AI2D_no_mask", rsp)
+
+                # print(f"AI2D_no_mask dataset eval result for {model_path} in {model_folder}: {result}")
+
+                # writer.add_scalar(f'benchmark/AI2D_no_mask_test_acc', result[-1] / 100, cur_step)
+
+                # fw = open(FLAGS.AI2D_no_mask_infer_chekpoint_file, "w")
+                # for step in last_steps:
+                #     fw.write(str(step) + "\n")
+                # fw.close()
+
+                img2messages = {}
+                for i in range(len(InfoVQA_dataset_response)):
+                    cur_response = InfoVQA_dataset_response[i]
+                    img_id = int(cur_response["ids"])
+                    if img_id not in img2messages:
+                        img2messages[img_id] = {}
+                    img2messages[img_id]["answer"] = cur_response["answers"]
+                    img2messages[img_id]["messages"] = cur_response["messages"]
+                    img2messages[img_id]["predict"] = cur_response["generated_text"] 
+                
+                # answers_dict = dict()
+                # predict_dict = dict()
+
+                # for key in img2messages.keys():
+                #     answers_dict[key] = img2messages[key]["answer"]
+                #     predict_dict[key] = img2messages[key]["predict"]
+                
+                # result, 
+                # results = []
+                # for key, val in rsp.items():
+                #     results.append({
+                #         'image_id': int(key),
+                #         'caption': val,
+                #     })
+                # results_file = 'tmp.json'
+                # json.dump(results, open(results_file, 'w'))
+                # coco = COCO(FLAGS.InfoVQA_path)
+                # coco_result = coco.loadRes(results_file)
+                # coco_eval = COCOEvalCap(coco, coco_result)
+                # coco_eval.evaluate()
+                # result = coco_eval.eval["CIDEr"] 
+                print(f"InfoVQA dataset eval result for {model_path} in {model_folder}: {result}")
+                writer.add_scalar(f'benchmark/InfoVQA_val_anls_score', result[-1], cur_step)
+
+                output_data_path = osp.join(FLAGS.output_path, model_path, "InfoVQA", "predict_data.json")
+                # imgToEval = coco_eval.imgToEval
+                imgToEval = result[1]
+
+                sorted_imgToEval = sorted(imgToEval.items(), key = lambda kv:(kv[1], kv[0]))
+                output_lines = []
+                for (key, val) in sorted_imgToEval:
+                    cur_row = {}
+                    cur_row["image_id"] = key
+                    cur_row["answer"] = img2messages[key]["answer"]
+                    cur_row["messages"] = img2messages[key]["messages"]
+                    cur_row["predict"] = img2messages[key]["predict"]
+                    cur_row["anls_score"] = val
+                    output_lines.append(cur_row)
+                with open(output_data_path, "w") as fw:
+                    json.dump(output_lines, fw, indent=4, separators=(',', ':'))
+
+                fw = open(FLAGS.InfoVQA_infer_chekpoint_file, "w")
+                for step in last_steps:
+                    fw.write(str(step) + "\n")
+                fw.close()
+            
+            # RealWorldQA
+            if FLAGS.infer_RealWorldQA == 1:
+                RealWorldQA_dataset_response = RealWorldQA_dataset.map_batches(
+                                            LLMPredictor,
+                                            fn_constructor_kwargs=fn_constructor_kwargs,
+                                            # Set the concurrency to the number of LLM instances.
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
+                                            # Specify the batch size for inference.
+                                            **resources_kwarg,
+                                        ).take_all()
+                rsp, anw = infer_and_eval(RealWorldQA_dataset_response, FLAGS.output_path, model_path, dataset_name="RealWorldQA")
+
+                eval_data = RealWorldQAEvaluation(anw, rsp)
+                result, correct_keys = eval_data.eval()
+
+                dump_predict_answer(correct_keys, RealWorldQA_dataset_response, FLAGS.output_path, model_path, "RealWorldQA", rsp)
+
+                print(f"RealWorldQA dataset eval result for {model_path} in {model_folder}: {result}")
+
+                writer.add_scalar(f'benchmark/RealWorldQA_test_acc', result[-1] / 100, cur_step)
+
+                fw = open(FLAGS.RealWorldQA_infer_chekpoint_file, "w")
                 for step in last_steps:
                     fw.write(str(step) + "\n")
                 fw.close()
