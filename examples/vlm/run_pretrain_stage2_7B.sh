@@ -13,7 +13,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage2/0.0.25.6
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage2/0.0.29
 
 mkdir -p $OUTPUT_DIR
 
@@ -22,7 +22,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="stage2，vs 25.5: base Qwen2-VL-7B-stage1/0.0.39 & lr=5e-5"
+comment="stage2，春节前全部stg2数据，修复content: str类型样本，以及message=‘null’样本"
 
 
 git add --all
@@ -47,7 +47,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --output_dir $OUTPUT_DIR \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
-    --dataset_config examples/vlm/configs/the_cauldron_recaption.json \
+    --dataset_config examples/vlm/configs/stage2_parquet_0125.json \
     --resume_from /llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36 \
     --resume_from_tag global_step90000 \
     --load_weights_only \
@@ -59,8 +59,8 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --weight_decay 0.1 \
     --lr_scheduler_type cosine \
     --num_warmup_steps 500 \
-    --num_training_steps 40000 \
-    --save_checkpoint_per_step 2000 \
+    --num_training_steps 120000 \
+    --save_checkpoint_per_step 3000 \
     --enable_gradient_checkpointing \
     --sequence_parallel_size 1 \
     --use_flash_attention_2 \
@@ -73,7 +73,5 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --commit_id $git_hash \
     --kml_id $KML_ID \
     --kml_task_id $KML_TASK_ID \
+    --heartbeat_monitor \
     --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
-
-
-#     --heartbeat_monitor \

@@ -916,6 +916,8 @@ class ChatCompletionVisionDataset(IterableDataset):
     messages = sample["json"][msg_key]
     for turn in messages:
       content = turn["content"]
+      if isinstance(content, str):
+        continue
       for block in content:
         if block["type"] == "image":
           self._fill_image_block(block, sample, 
@@ -923,6 +925,10 @@ class ChatCompletionVisionDataset(IterableDataset):
         elif block["type"] == "video":
           self._fill_video_block(block, sample,
                                   conf=data_conf)
+        elif block["type"] == "text":
+          continue
+        else:
+          raise ValueError(f"sample process error, unsupport value type: {block['type']}")
 
     text = self.processor.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
@@ -953,9 +959,16 @@ class ChatCompletionVisionDataset(IterableDataset):
     # mask EOS token
     inputs["loss_mask"][-1][-1] = 0
     if inputs["loss_mask"].sum() == 0:
-      raise ValueError(
-        f"Unable to generate sample with 0 loss_mask."
+      # try to process no text block, like content=""
+      inputs["loss_mask"] = get_assistant_mask(
+        inputs["input_ids"],
+        start_pattern=[151644, 77091],
+        end_pattern=[151645, 198]
       )
+      if inputs["loss_mask"].sum() == 0:
+        raise ValueError(
+          f"Unable to generate sample with 0 loss_mask."
+        )
 
     inputs["position_ids"] = get_rope_index(
       inputs["input_ids"],
@@ -1332,9 +1345,9 @@ class ParquetDataset(IterableDataset):
         "source": data_source,
       }
 
-      if messages is not None:
+      if messages is not None and isinstance(messages, list):
         sample_data["messages"] = messages
-      elif segments is not None:
+      elif segments is not None and isinstance(segments, list):
         sample_data["segments"] = segments
       else:
         raise NotImplementedError(f"Unsupported sample, {messages=}, {segements=}")
