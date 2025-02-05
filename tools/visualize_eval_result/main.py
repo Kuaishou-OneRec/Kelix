@@ -37,6 +37,15 @@ def extract_messages(data):
             rst += s['text']
     return rst
 
+def extract_image(data):
+    """提取image字段"""
+    content = data['content']
+    rst = []
+    for s in content:
+        if s['type'] == 'image':
+            rst.append(s['image'])
+    return rst
+
 def resize_base64_image(base64_str, max_pixels):
     """调整base64编码图片的大小"""
     try:
@@ -130,6 +139,9 @@ def index():
     try:
         data = load_data() if DATA_PATH else []
         df = pd.DataFrame(data)
+
+        if 'image' not in df.columns:
+            df['image'] = df['messages'].apply(lambda x: extract_image(x))
         
         if not df.empty:
             # 添加resize_image列
