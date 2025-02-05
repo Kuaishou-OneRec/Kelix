@@ -6,6 +6,7 @@ import os
 from PIL import Image
 import io
 import base64
+import argparse
 
 app = Flask(__name__)
 
@@ -159,4 +160,9 @@ def index():
                          current_data_path=DATA_PATH)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    parser = argparse.ArgumentParser(description='Run the Flask application')
+    parser.add_argument('--port', type=int, default=5000, help='Port to run the server on')
+    parser.add_argument('--host', type=str, default='127.0.0.1', help='Host to run the server on')
+    
+    args = parser.parse_args()
+    app.run(debug=True, host=args.host, port=args.port)
