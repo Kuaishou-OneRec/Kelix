@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>数据标注工具</title>
+    <style>
+        table {border-collapse: collapse; width: 100%;}
+        th, td {border: 1px solid #ddd; padding: 8px; text-align: left;}
+        th {background-color: #f2f2f2;}
+        tr:nth-child(even) {background-color: #f9f9f9;}
+        select {padding: 3px; width: 120px;}
+    </style>
+</head>
+<body>
+    <h1>数据标注工具</h1>
+    <form method="post">
+        <table>
+            <tr>
+                <th>Messages</th>
+                <th>Answer</th>
+                <th>Predict</th>
+                <th>Image</th>
+                <th>标注</th>
+            </tr>
+            {% for row in data %}
+            <tr>
+                <td>{{ row.messages }}</td>
+                <td>{{ row.answer }}</td>
+                <td>{{ row.predict }}</td>
+                <td>
+                    {% if row.image %}
+                    <img src="{{ url_for('static', filename=row.image) }}" 
+                         style="max-height: 50px;">
+                    {% endif %}
+                </td>
+                <td>
+                    <select name="label_{{ loop.index0 }}">
+                        {% for option in label_options %}
+                        <option value="{{ option }}">{{ option }}</option>
+                        {% endfor %}
+                    </select>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+        <br>
+        <button type="submit">保存标注结果</button>
+    </form>
+</body>
+</html>
