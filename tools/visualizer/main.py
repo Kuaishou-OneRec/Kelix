@@ -1,4 +1,4 @@
-from flask import Flask, request, render_template, redirect, url_for
+from flask import Flask, request, render_template, redirect, url_for, jsonify
 import pandas as pd
 import numpy as np
 import json
@@ -223,26 +223,27 @@ def visualize_data():
         
         if data_path:
             try:
-                # 使用新的读取函数
-                df = read_parquet_with_nrows(data_path, nrows)
-                
-                # 处理数据
-                samples = []
-                for _, row in df.iterrows():
-                    sample = {
-                        'source': row['source'],
-                        'images': json.loads(row['images']) if row['images'] else None,
-                        'messages': json.loads(row['messages']) if row['messages'] else None,
-                        'segments': json.loads(row['segments']) if row['segments'] else None
-                    }
-                    samples.append(sample)
-                return render_template('visualize_data.html', 
-                                    samples=samples,
-                                    current_data_path=data_path,
-                                    current_nrows=nrows)
+                # 添加加载状态返回
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    # 使用新的读取函数
+                    df = read_parquet_with_nrows(data_path, nrows)
+                    
+                    # 处理数据
+                    samples = []
+                    for _, row in df.iterrows():
+                        sample = {
+                            'source': row['source'],
+                            'images': json.loads(row['images']) if row['images'] else None,
+                            'messages': json.loads(row['messages']) if row['messages'] else None,
+                            'segments': json.loads(row['segments']) if row['segments'] else None
+                        }
+                        samples.append(sample)
+                    return jsonify({'success': True, 'samples': samples})
+                return render_template('visualize_data.html')
             except Exception as e:
-                return render_template('visualize_data.html', 
-                                    error=f"加载数据失败: {str(e)}")
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return jsonify({'success': False, 'error': str(e)})
+                return render_template('visualize_data.html', error=f"加载数据失败: {str(e)}")
         else:
             return render_template('visualize_data.html', 
                                 error="请提供文件路径")

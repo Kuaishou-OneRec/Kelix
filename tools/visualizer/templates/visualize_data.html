@@ -155,13 +155,56 @@
             border: 1px solid #ddd;
             border-radius: 4px;
         }
+
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+
+        .loading-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
     <h1>数据可视化</h1>
     
+    <!-- 添加加载提示 -->
+    <div id="loading" class="loading">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div>正在加载数据，请稍候...</div>
+        </div>
+    </div>
+
     <div class="input-form">
-        <form method="post">
+        <form id="dataForm" method="post">
             <div class="form-row">
                 <label for="data_path">数据文件路径：</label>
                 <input type="text" id="data_path" name="data_path" 
@@ -176,6 +219,10 @@
             </div>
             <button type="submit">加载数据</button>
         </form>
+    </div>
+
+    <div id="samples-container">
+        <!-- 样本数据将在这里动态加载 -->
     </div>
 
     {% if error %}
@@ -262,6 +309,104 @@
             if (event.target == modal) {
                 closeModal();
             }
+        }
+
+        document.getElementById('dataForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const loading = document.getElementById('loading');
+            const samplesContainer = document.getElementById('samples-container');
+            loading.style.display = 'block';
+
+            const formData = new FormData(this);
+            
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                loading.style.display = 'none';
+                if (data.success) {
+                    // 渲染样本数据
+                    samplesContainer.innerHTML = renderSamples(data.samples);
+                } else {
+                    samplesContainer.innerHTML = `<div class="error">${data.error}</div>`;
+                }
+            })
+            .catch(error => {
+                loading.style.display = 'none';
+                samplesContainer.innerHTML = `<div class="error">加载失败: ${error}</div>`;
+            });
+        });
+
+        function renderSamples(samples) {
+            return samples.map((sample, index) => `
+                <div class="sample">
+                    <div class="source">
+                        <span>来源: ${sample.source}</span>
+                        <span class="sample-number">样本 #${index + 1}</span>
+                    </div>
+                    ${renderMessages(sample)}
+                    ${renderSegments(sample)}
+                </div>
+            `).join('');
+        }
+
+        function renderMessages(sample) {
+            if (!sample.messages) return '';
+            
+            return `
+                <h3>Messages:</h3>
+                ${sample.messages.map(message => `
+                    <div class="message">
+                        <div class="role">[${message.role}]:</div>
+                        <div class="content">
+                            ${renderMessageContent(message, sample.images)}
+                        </div>
+                    </div>
+                    <div class="divider"></div>
+                `).join('')}
+            `;
+        }
+
+        function renderMessageContent(message, images) {
+            if (typeof message.content === 'string') {
+                return message.content;
+            }
+            
+            return message.content.map(content => {
+                if (content.type === 'text') {
+                    return content.text;
+                } else if (content.type === 'image') {
+                    return `<img src="data:image/png;base64,${images[content.image]}"
+                                alt="图片"
+                                class="image"
+                                onerror="this.onerror=null; this.src='data:image/jpeg;base64,${images[content.image]}'"
+                                onclick="showImage(this.src)">`;
+                }
+            }).join('');
+        }
+
+        function renderSegments(sample) {
+            if (!sample.segments) return '';
+            
+            return `
+                <h3>Segments:</h3>
+                ${sample.segments.map(segment => `
+                    <div class="segment">
+                        ${segment.type === 'text' ? 
+                            segment.text : 
+                            `<img src="data:image/png;base64,${sample.images[segment.image]}"
+                                  alt="图片"
+                                  class="image"
+                                  onerror="this.onerror=null; this.src='data:image/jpeg;base64,${sample.images[segment.image]}'"
+                                  onclick="showImage(this.src)">`}
+                    </div>
+                `).join('')}
+            `;
         }
     </script>
 </body>
