@@ -226,10 +226,10 @@
                 {% if segment.type == 'text' %}
                     {{ segment.text }}
                 {% elif segment.type == 'image' %}
-                    <img src="data:image/png;base64,{{ segment.image }}"
+                    <img src="data:image/png;base64,{{ sample.images[segment.image] }}"
                          alt="图片"
                          class="image"
-                         onerror="this.onerror=null; this.src='data:image/jpeg;base64,{{ segment.image }}'"
+                         onerror="this.onerror=null; this.src='data:image/jpeg;base64,{{ sample.images[segment.image] }}'"
                          onclick="showImage(this.src)">
                 {% endif %}
             </div>
