@@ -146,22 +146,42 @@
                         <td>
                             {% if row.image %}
                             <div class="image-container" style="text-align: center;">
-                                <img src="data:image/{{ row.image_type }};base64,{{ row.image }}" 
-                                     style="cursor: pointer;"
-                                     onclick="showImage(this.src)"
-                                     class="preview-image">
-                                <div class="resolution" style="font-size: 12px; color: #666;"></div>
+                                {% if row.image is string %}
+                                    <img src="data:image/{{ row.image_type }};base64,{{ row.image }}" 
+                                         style="cursor: pointer;"
+                                         onclick="showImage(this.src)"
+                                         class="preview-image">
+                                    <div class="resolution" style="font-size: 12px; color: #666;"></div>
+                                {% else %}
+                                    {% for img in row.image %}
+                                    <img src="data:image/{{ row.image_type }};base64,{{ img }}" 
+                                         style="cursor: pointer;"
+                                         onclick="showImage(this.src)"
+                                         class="preview-image">
+                                    <div class="resolution" style="font-size: 12px; color: #666;"></div>
+                                    {% endfor %}
+                                {% endif %}
                             </div>
                             {% endif %}
                         </td>
                         <td>
                             {% if row.resized_image %}
                             <div class="image-container" style="text-align: center;">
-                                <img src="data:image/{{ row.image_type }};base64,{{ row.resized_image }}" 
-                                     style="cursor: pointer;"
-                                     onclick="showImage(this.src)"
-                                     class="preview-image">
-                                <div class="resolution" style="font-size: 12px; color: #666;"></div>
+                                {% if row.resized_image is string %}
+                                    <img src="data:image/{{ row.image_type }};base64,{{ row.resized_image }}" 
+                                         style="cursor: pointer;"
+                                         onclick="showImage(this.src)"
+                                         class="preview-image">
+                                    <div class="resolution" style="font-size: 12px; color: #666;"></div>
+                                {% else %}
+                                    {% for img in row.resized_image %}
+                                    <img src="data:image/{{ row.image_type }};base64,{{ img }}" 
+                                         style="cursor: pointer;"
+                                         onclick="showImage(this.src)"
+                                         class="preview-image">
+                                    <div class="resolution" style="font-size: 12px; color: #666;"></div>
+                                    {% endfor %}
+                                {% endif %}
                             </div>
                             {% endif %}
                         </td>

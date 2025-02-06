@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>数据可视化</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 10px;
+            background-color: #f5f5f5;
+        }
+
+        .input-form {
+            background-color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 10px;
+        }
+
+        .input-form input[type="text"] {
+            width: 70%;
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .input-form button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .input-form button:hover {
+            background-color: #45a049;
+        }
+
+        .error {
+            color: red;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #ffe6e6;
+            border-radius: 4px;
+        }
+
+        .sample {
+            background-color: white;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .source {
+            font-weight: bold;
+            color: #2196F3;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .sample-number {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .message {
+            margin-bottom: 3px;
+            padding: 4px 6px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .role {
+            font-weight: bold;
+            color: #666;
+        }
+
+        .content {
+            margin-top: 3px;
+            white-space: pre-wrap;
+        }
+
+        .segment {
+            margin-bottom: 5px;
+            padding: 5px 8px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .image {
+            max-width: 100%;
+            height: auto;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+
+        .divider {
+            border-top: 1px solid #ddd;
+            margin: 6px 0;
+        }
+
+        /* 模态框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+        }
+
+        .modal-content {
+            margin: auto;
+            display: block;
+            max-width: 90%;
+            max-height: 90%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .close {
+            position: absolute;
+            right: 35px;
+            top: 15px;
+            color: #f1f1f1;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .form-row {
+            margin-bottom: 10px;
+        }
+        
+        .form-row label {
+            display: inline-block;
+            width: 120px;
+        }
+        
+        .form-row input {
+            width: 70%;
+            padding: 8px;
+            margin-right: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .loading {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+
+        .loading-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: white;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <h1>数据可视化</h1>
+    
+    <!-- 添加加载提示 -->
+    <div id="loading" class="loading">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <div>正在加载数据，请稍候...</div>
+        </div>
+    </div>
+
+    <div class="input-form">
+        <form id="dataForm" method="post">
+            <div class="form-row">
+                <label for="data_path">数据文件路径：</label>
+                <input type="text" id="data_path" name="data_path" 
+                       value="{{ current_data_path if current_data_path else '' }}"
+                       placeholder="请输入parquet文件路径">
+            </div>
+            <div class="form-row">
+                <label for="nrows">最大展示行数：</label>
+                <input type="number" id="nrows" name="nrows" 
+                       value="{{ current_nrows if current_nrows else '' }}"
+                       placeholder="留空显示全部数据">
+            </div>
+            <button type="submit">加载数据</button>
+        </form>
+    </div>
+
+    <div id="samples-container">
+        <!-- 样本数据将在这里动态加载 -->
+    </div>
+
+    {% if error %}
+    <div class="error">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    {% if samples %}
+        {% for sample in samples %}
+        <div class="sample">
+            <div class="source">
+                <span>来源: {{ sample.source }}</span>
+                <span class="sample-number">样本 #{{ loop.index }}</span>
+            </div>
+            
+            {% if sample.messages %}
+            <h3>Messages:</h3>
+            {% for message in sample.messages %}
+            <div class="message">
+                <div class="role">[{{ message.role }}]:</div>
+                <div class="content">
+                    {% if message.content is string %}
+                        {{ message.content }}
+                    {% else %}
+                        {% for content in message.content %}
+                            {% if content.type == 'text' %}
+                                {{ content.text }}
+                            {% elif content.type == 'image' %}
+                                <img src="data:image/png;base64,{{ sample.images[content.image] }}"
+                                     alt="图片"
+                                     class="image"
+                                     onerror="this.onerror=null; this.src='data:image/jpeg;base64,{{ sample.images[content.image] }}'"
+                                     onclick="showImage(this.src)">
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+            <div class="divider"></div>
+            {% endfor %}
+            {% endif %}
+
+            {% if sample.segments %}
+            <h3>Segments:</h3>
+            {% for segment in sample.segments %}
+            <div class="segment">
+                {% if segment.type == 'text' %}
+                    {{ segment.text }}
+                {% elif segment.type == 'image' %}
+                    <img src="data:image/png;base64,{{ sample.images[segment.image] }}"
+                         alt="图片"
+                         class="image"
+                         onerror="this.onerror=null; this.src='data:image/jpeg;base64,{{ sample.images[segment.image] }}'"
+                         onclick="showImage(this.src)">
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    <!-- 模态框 -->
+    <div id="imageModal" class="modal">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <img class="modal-content" id="modalImage">
+    </div>
+
+    <script>
+        const modal = document.getElementById('imageModal');
+        const modalImg = document.getElementById('modalImage');
+
+        function showImage(src) {
+            modal.style.display = "block";
+            modalImg.src = src;
+        }
+
+        function closeModal() {
+            modal.style.display = "none";
+        }
+
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
+        document.getElementById('dataForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const loading = document.getElementById('loading');
+            const samplesContainer = document.getElementById('samples-container');
+            loading.style.display = 'block';
+
+            const formData = new FormData(this);
+            
+            fetch(window.location.href, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                loading.style.display = 'none';
+                if (data.success) {
+                    // 渲染样本数据
+                    samplesContainer.innerHTML = renderSamples(data.samples);
+                } else {
+                    samplesContainer.innerHTML = `<div class="error">${data.error}</div>`;
+                }
+            })
+            .catch(error => {
+                loading.style.display = 'none';
+                samplesContainer.innerHTML = `<div class="error">加载失败: ${error}</div>`;
+            });
+        });
+
+        function renderSamples(samples) {
+            return samples.map((sample, index) => `
+                <div class="sample">
+                    <div class="source">
+                        <span>来源: ${sample.source}</span>
+                        <span class="sample-number">样本 #${index + 1}</span>
+                    </div>
+                    ${renderMessages(sample)}
+                    ${renderSegments(sample)}
+                </div>
+            `).join('');
+        }
+
+        function renderMessages(sample) {
+            if (!sample.messages) return '';
+            
+            return `
+                <h3>Messages:</h3>
+                ${sample.messages.map(message => `
+                    <div class="message">
+                        <div class="role">[${message.role}]:</div>
+                        <div class="content">
+                            ${renderMessageContent(message, sample.images)}
+                        </div>
+                    </div>
+                    <div class="divider"></div>
+                `).join('')}
+            `;
+        }
+
+        function renderMessageContent(message, images) {
+            if (typeof message.content === 'string') {
+                return message.content;
+            }
+            
+            return message.content.map(content => {
+                if (content.type === 'text') {
+                    return content.text;
+                } else if (content.type === 'image') {
+                    return `<img src="data:image/png;base64,${images[content.image]}"
+                                alt="图片"
+                                class="image"
+                                onerror="this.onerror=null; this.src='data:image/jpeg;base64,${images[content.image]}'"
+                                onclick="showImage(this.src)">`;
+                }
+            }).join('');
+        }
+
+        function renderSegments(sample) {
+            if (!sample.segments) return '';
+            
+            return `
+                <h3>Segments:</h3>
+                ${sample.segments.map(segment => `
+                    <div class="segment">
+                        ${segment.type === 'text' ? 
+                            segment.text : 
+                            `<img src="data:image/png;base64,${sample.images[segment.image]}"
+                                  alt="图片"
+                                  class="image"
+                                  onerror="this.onerror=null; this.src='data:image/jpeg;base64,${sample.images[segment.image]}'"
+                                  onclick="showImage(this.src)">`}
+                    </div>
+                `).join('')}
+            `;
+        }
+    </script>
+</body>
+</html>
