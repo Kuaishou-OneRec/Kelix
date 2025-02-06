@@ -239,30 +239,30 @@ def infer_and_eval(dataset_response, output_folder, model_step, text2index=None,
             output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
         
             # todo:
-        elif dataset_name in ["AI2D"]:
+        elif dataset_name in ["AI2D", "AI2D_no_mask", "InfoVQA", "RealWorldQA"]:
             rsp[key] = remove_prefix(output)
             anw[key] = response["answers"]
 
             output_original_resp.write(json.dumps({key:output}) + "\n")
             output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
         
-        elif dataset_name in ["AI2D_no_mask"]:
-            rsp[key] = remove_prefix(output)
-            anw[key] = response["answers"]
-            output_original_resp.write(json.dumps({key:output}) + "\n")
-            output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
+        # elif dataset_name in ["AI2D_no_mask"]:
+        #     rsp[key] = remove_prefix(output)
+        #     anw[key] = response["answers"]
+        #     output_original_resp.write(json.dumps({key:output}) + "\n")
+        #     output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
 
-        elif dataset_name in ["InfoVQA"]:
-            rsp[key] = remove_prefix(output)
-            anw[key] = response["answers"]
-            output_original_resp.write(json.dumps({key:output}) + "\n")
-            output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
+        # elif dataset_name in ["InfoVQA"]:
+        #     rsp[key] = remove_prefix(output)
+        #     anw[key] = response["answers"]
+        #     output_original_resp.write(json.dumps({key:output}) + "\n")
+        #     output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
         
-        elif dataset_name in ["RealWorldQA"]:
-            rsp[key] = remove_prefix(output)
-            anw[key] = response["answers"]
-            output_original_resp.write(json.dumps({key:output}) + "\n")
-            output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
+        # elif dataset_name in ["RealWorldQA"]:
+        #     rsp[key] = remove_prefix(output)
+        #     anw[key] = response["answers"]
+        #     output_original_resp.write(json.dumps({key:output}) + "\n")
+        #     output_answer_resp.write(json.dumps({key:anw[key]}) + "\n")
         
         else:
             raise ValueError("Wrong dataset name {}.".format(dataset_name))

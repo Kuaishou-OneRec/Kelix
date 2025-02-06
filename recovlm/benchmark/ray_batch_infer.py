@@ -385,33 +385,33 @@ def main(_):
         resources_kwarg["num_gpus"] = 0
         resources_kwarg["ray_remote_args_fn"] = scheduling_strategy_fn
 
-    if osp.exists(osp.join(model_folder, "global_step2000", "mp_rank_00_model_states.pt")):
-        fn_constructor_kwargs = {
-            "model_folder": "vllm_model_ray", 
-            "tp": FLAGS.tp, 
-            "limit_mm": FLAGS.limit_mm_per_prompt, 
-            "temperature": FLAGS.temperature, 
-            "top_p": FLAGS.top_p, 
-            "repetition_penalty": FLAGS.repetition_penalty, 
-            "max_tokens": FLAGS.max_tokens
-        }
-    else:
-        step_folder = osp.join(model_folder, "global_step2000")
-        files = [osp.join(step_folder, file) for file in os.listdir(step_folder) if osp.isfile(osp.join(step_folder, file))]
+    # if osp.exists(osp.join(model_folder, "global_step2000", "mp_rank_00_model_states.pt")):
+    fn_constructor_kwargs = {
+        "model_folder": "vllm_model_ray", 
+        "tp": FLAGS.tp, 
+        "limit_mm": FLAGS.limit_mm_per_prompt, 
+        "temperature": FLAGS.temperature, 
+        "top_p": FLAGS.top_p, 
+        "repetition_penalty": FLAGS.repetition_penalty, 
+        "max_tokens": FLAGS.max_tokens
+    }
+    # else:
+    #     step_folder = osp.join(model_folder, "global_step2000")
+    #     files = [osp.join(step_folder, file) for file in os.listdir(step_folder) if osp.isfile(osp.join(step_folder, file))]
 
-        for source_file in files:
-            dir_name = osp.dirname(osp.abspath(__file__))
-            dest_file = osp.join(dir_name, "vllm_model_ray_qwen", osp.basename(source_file))
-            shutil.copy(source_file, dest_file)
-        fn_constructor_kwargs = {
-            "model_folder": "vllm_model_ray_qwen", 
-            "tp": FLAGS.tp, 
-            "limit_mm": FLAGS.limit_mm_per_prompt, 
-            "temperature": FLAGS.temperature, 
-            "top_p": FLAGS.top_p, 
-            "repetition_penalty": FLAGS.repetition_penalty, 
-            "max_tokens": FLAGS.max_tokens
-        }
+    #     for source_file in files:
+    #         dir_name = osp.dirname(osp.abspath(__file__))
+    #         dest_file = osp.join(dir_name, "vllm_model_ray_qwen", osp.basename(source_file))
+    #         shutil.copy(source_file, dest_file)
+    #     fn_constructor_kwargs = {
+    #         "model_folder": "vllm_model_ray_qwen", 
+    #         "tp": FLAGS.tp, 
+    #         "limit_mm": FLAGS.limit_mm_per_prompt, 
+    #         "temperature": FLAGS.temperature, 
+    #         "top_p": FLAGS.top_p, 
+    #         "repetition_penalty": FLAGS.repetition_penalty, 
+    #         "max_tokens": FLAGS.max_tokens
+    #     }
     DataContext.get_current().verbose_stats_logs = True
     DataContext.get_current().log_internal_stack_trace_to_stdout = True
     ctx = ray.data.DataContext.get_current()
@@ -530,12 +530,12 @@ def main(_):
             step_folder = os.path.join(model_folder, model_path)
             print(f"evaluate dataset for {model_path} in {model_folder}")
             # transform model to vllm format
-            if osp.exists(osp.join(step_folder, "mp_rank_00_model_states.pt")):
+            # if osp.exists(osp.join(step_folder, "mp_rank_00_model_states.pt")):
 
-                checkpoint_model = torch.load(osp.join(step_folder, "mp_rank_00_model_states.pt"), map_location="cpu")
-                torch.save(checkpoint_model["module"], os.path.join("vllm_model_ray", "pytorch_model.bin"))
-            else:
-                pass
+            checkpoint_model = torch.load(osp.join(step_folder, "mp_rank_00_model_states.pt"), map_location="cpu")
+            torch.save(checkpoint_model["module"], os.path.join("vllm_model_ray", "pytorch_model.bin"))
+            # else:
+            #     pass
 
             #Input the model name or path. Can be GPTQ or AWQ models.
             # MMMU
