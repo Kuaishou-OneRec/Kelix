@@ -152,7 +152,7 @@ flags.DEFINE_integer(
 )
 
 flags.DEFINE_integer(
-    "batch_size", 40, "The batch size for inference."
+    "batch_size", 10, "The batch size for inference."
 )
 
 flags.DEFINE_float(
@@ -525,6 +525,8 @@ def main(_):
 
     for model_path in model_paths:
         cur_step = int(model_path[11:])
+        if cur_step % 10000 != 0:
+            continue
         if cur_step not in last_steps:
             last_steps.append(cur_step)
             step_folder = os.path.join(model_folder, model_path)

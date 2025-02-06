@@ -10,7 +10,7 @@ do
     then
       :
     else
-      for val in MMMU MMBenchEN MMBenchCN MME MMTBench MMStar MathVista OCRBench Flickr30k Benchmark_v21 AI2D AI2D_no_mask InfoVQA RealWorldQA
+      for val in AI2D AI2D_no_mask RealWorldQA
       do
         python3 -u ray_batch_infer.py \
 		--GPU_num=$(($slots*$machines)) \
@@ -28,14 +28,14 @@ do
                 --AI2D_path="/llm_reco_ssd/luoxinchen/dataset/ai2d/ai2d/data/merge/test-00000-of-00001.parquet" \
                 --AI2D_no_mask_path="/llm_reco_ssd/luoxinchen/dataset/ai2d/ai2d-no-mask/data/merge/test-00000-of-00001.parquet" \
                 --InfoVQA_path="/llm_reco_ssd/luoxinchen/dataset/infoVQA/human_download/infographicsvqa_qas/reconstruct_val.json" \
-                --RealWorldQA_path="/llm_reco/luoxinchen/dataset/RealWorldQA/RealWorldQA/data/merge/test-00000-of-00001.parquet" \
+                --RealWorldQA_path="/llm_reco_ssd/luoxinchen/dataset/RealWorldQA/RealWorldQA/data/merge/test-00000-of-00001.parquet" \
                 --mmbenchEn_benchmark_original_data="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/en/dev-00000-of-00001.parquet" \
                 --mmbenchCn_benchmark_original_data="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/cn/dev-00000-of-00001.parquet" \
                 --model_folder=$model \
-                --logging_folder="${model}/zdj/log/benchmark/" \
-                --output_path="${model}/zdj/benchmark_output/" \
+                --logging_folder="${model}/log/benchmark/" \
+                --output_path="${model}/benchmark_output/" \
                 --infer_${val}=1 \
-                --${val}_infer_chekpoint_file="${model}/zdj/${val}_infer_checkpoint.txt"
+                --${val}_infer_chekpoint_file="${model}/${val}_infer_checkpoint.txt"
         wait
       done
     fi
