@@ -312,3 +312,144 @@ def Benchmark_v21_parse(sample) -> dict:
             "question_type": sample["question_type"], 
             "task_type": sample["task_type"], 
             "question": sample["question"]})}
+
+
+# todo:
+
+def parse_options_and_answer(options, answer):
+    if all([len(option) == 1 and option.isalpha() for option in options]):
+        options = [option.upper() for option in options]
+
+    options_list = list()
+    for idx, option in enumerate(options):
+        ch = chr(ord('A') + idx)
+        options_list.append("{}. {}".format(ch, option))
+    answer = int(answer)
+    assert answer in [0, 1, 2, 3], str(type(answer)) + "   " + str(answer)
+    return "\n".join(options_list), chr(ord('A') + answer)
+
+
+def AI2D_parse(sample) -> dict:
+
+    question = sample["question"]
+    answer = sample["answer"]
+    index = sample["ori_index"]
+    options = sample["options"]
+
+    options_str, answer = parse_options_and_answer(options, answer)
+
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": base64.b64encode(sample["image"]["bytes"]).decode("utf-8")
+                },
+                {"type": "text", "text": "Please answer the question according to the above image.\nQuestion:\n{}\nOptions:\n{}\nAnswer with the letter.".format(question, options_str)},
+            ],
+        },
+    ]
+
+    return {
+        "messages": json.dumps({
+                    "id": index, 
+                    "answer": answer, 
+                    "inputs": messages,
+                    "question": question,
+                    "options": list(options)
+        })
+    }
+
+
+def AI2D_no_mask_parse(sample) -> dict:
+    question = sample["question"]
+    answer = sample["answer"]
+    index = sample["ori_index"]
+    options = sample["options"]
+
+    options_str, answer = parse_options_and_answer(options, answer)
+
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": base64.b64encode(sample["image"]["bytes"]).decode("utf-8")
+                },
+                {"type": "text", "text": "Please answer the question according to the above image.\nQuestion:\n{}\nOptions:\n{}\nAnswer with the letter.".format(question, options_str)},
+            ],
+        },
+    ]
+
+    return {
+        "messages": json.dumps({
+                    "id": index, 
+                    "answer": answer, 
+                    "inputs": messages,
+                    "question": question,
+                    "options": list(options)
+        })
+    }
+
+
+def InfoVQA_parse(sample) -> dict:
+    # /llm_reco_ssd/luoxinchen/dataset/infoVQA/human_download/infographicsvqa_images
+    question = sample["question"]
+    answers = sample["answers"]
+    index = sample["questionId"]
+
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": base64.b64encode(open(sample["image_path"], "rb").read()).decode("utf-8")
+                },
+                {"type": "text", "text": "Please answer the question according to the above image.\nQuestion: {}\nGive a short answer.".format(question)},
+            ],
+        },
+    ]
+
+    return {
+        "messages": json.dumps({
+                    "id": index, 
+                    "answer": answers, 
+                    "inputs": messages,
+                    "question": question
+        })
+    }
+
+
+def RealWorldQA_parse(sample) -> dict:
+    question = sample["question"]
+    answer = sample["answer"]
+    index = sample["ori_index"]
+    messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": base64.b64encode(sample["image"]["bytes"]).decode("utf-8")
+                },
+                {"type": "text", "text": "Please answer the question according to the above image.\nQuestion: {}".format(question)},
+            ],
+        },
+    ]
+
+    return {
+        "messages": json.dumps({
+                    "id": index, 
+                    "answer": answer, 
+                    "inputs": messages,
+                    "question": question
+        })
+    }
+# todo:

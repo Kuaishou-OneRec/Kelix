@@ -254,6 +254,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run the Flask application')
     parser.add_argument('--port', type=int, default=5000, help='Port to run the server on')
     parser.add_argument('--host', type=str, default='127.0.0.1', help='Host to run the server on')
-    
+    parser.add_argument('--debug', type=bool, default=False, help='Debug mode')
     args = parser.parse_args()
-    app.run(debug=True, host=args.host, port=args.port)
+    app.run(debug=args.debug, host=args.host, port=args.port)
