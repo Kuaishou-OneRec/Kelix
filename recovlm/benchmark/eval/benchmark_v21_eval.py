@@ -78,7 +78,7 @@ def calc_acc(total_time, output_dir):
                 if class_2 not in res_dict[class_1]:
                     res_dict[class_1][class_2] = []
                 res_dict[class_1][class_2].append(flag)
-                if flag == 1:
+                if int(flag) == 1:
                     correct_keys.append(key)
         keys = list(res_dict.keys())
         keys.sort()
