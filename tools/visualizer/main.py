@@ -171,7 +171,7 @@ def visualize_eval_result():
                          current_error_types=','.join(ERROR_TYPES),
                          current_data_path=DATA_PATH)
 
-def read_parquet_with_nrows(data_path, nrows=None):
+def read_parquet_with_nrows(data_path, nrows=None, shuffle=False):
     """读取parquet文件，支持行数限制和HDFS路径，并随机打乱数据"""
     # 判断是否为HDFS路径
     is_hdfs = data_path.startswith('viewfs://')
@@ -191,7 +191,8 @@ def read_parquet_with_nrows(data_path, nrows=None):
             files = [data_path]
     
     # 随机打乱文件顺序
-    random.shuffle(files)
+    if shuffle:
+        random.shuffle(files)
     
     # 读取数据
     dfs = []
@@ -206,7 +207,7 @@ def read_parquet_with_nrows(data_path, nrows=None):
         df = table.to_pandas()
         
         # 随机采样数据
-        if len(df) > 0:
+        if len(df) > 0 and shuffle:
             df = df.sample(frac=1.0, random_state=None)
         
         if nrows is not None:
@@ -228,13 +229,14 @@ def visualize_data():
     if request.method == 'POST':
         data_path = request.form.get('data_path')
         nrows = request.form.get('nrows', type=int)  # 获取nrows参数
+        shuffle = request.form.get('shuffle') == 'true'  # 获取shuffle参数
         
         if data_path:
             try:
                 # 添加加载状态返回
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     # 使用新的读取函数
-                    df = read_parquet_with_nrows(data_path, nrows)
+                    df = read_parquet_with_nrows(data_path, nrows, shuffle)  # Pass shuffle parameter
                     
                     # 处理数据
                     samples = []

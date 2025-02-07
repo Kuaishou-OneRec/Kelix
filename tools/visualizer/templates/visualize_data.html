@@ -217,6 +217,10 @@
                        value="{{ current_nrows if current_nrows else '' }}"
                        placeholder="留空显示全部数据">
             </div>
+            <div class="form-row">
+                <label for="shuffle">随机打乱数据：</label>
+                <input type="checkbox" id="shuffle" name="shuffle" value="true">
+            </div>
             <button type="submit">加载数据</button>
         </form>
     </div>
