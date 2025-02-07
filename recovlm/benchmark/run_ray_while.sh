@@ -10,6 +10,7 @@ do
     then
       :
     else
+      echo "done"
       for val in AI2D AI2D_no_mask RealWorldQA
       do
         python3 -u ray_batch_infer.py \
