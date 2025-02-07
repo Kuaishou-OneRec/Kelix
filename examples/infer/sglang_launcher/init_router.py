@@ -85,9 +85,18 @@ def main():
     p = init_router(port=args.router_port, urls=urls)
     p.wait()
   else:
-    assert num_devices % args.tp == 0, \
+    assert args.tp % num_devices == 0, \
       f"tp_size ({args.tp}) must be divisible by num_devices ({num_devices})" \
       f"when tp > num_devices"
+    nnodes = args.tp // num_devices
+    urls = []
+    hosts = get_hosts()
+    for idx, host in enumerate(hosts):
+      if idx % nnodes == 0:
+        urls.append(f"http://{host}:{args.server_port}")
+    print(urls)
+    p = init_router(port=args.router_port, urls=urls)
+    p.wait()
 
 if __name__ == '__main__':
   main()
