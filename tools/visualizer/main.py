@@ -10,6 +10,7 @@ import argparse
 import pyarrow.parquet as pq
 import glob
 from urllib.parse import urlparse
+import random
 
 app = Flask(__name__)
 
@@ -171,7 +172,7 @@ def visualize_eval_result():
                          current_data_path=DATA_PATH)
 
 def read_parquet_with_nrows(data_path, nrows=None):
-    """读取parquet文件，支持行数限制和HDFS路径"""
+    """读取parquet文件，支持行数限制和HDFS路径，并随机打乱数据"""
     # 判断是否为HDFS路径
     is_hdfs = data_path.startswith('viewfs://')
     
@@ -189,6 +190,9 @@ def read_parquet_with_nrows(data_path, nrows=None):
         else:
             files = [data_path]
     
+    # 随机打乱文件顺序
+    random.shuffle(files)
+    
     # 读取数据
     dfs = []
     rows_read = 0
@@ -200,6 +204,10 @@ def read_parquet_with_nrows(data_path, nrows=None):
         # 读取单个文件
         table = pq.read_table(file)
         df = table.to_pandas()
+        
+        # 随机采样数据
+        if len(df) > 0:
+            df = df.sample(frac=1.0, random_state=None)
         
         if nrows is not None:
             remaining_rows = nrows - rows_read
