@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>数据标注工具</title>
+    <style>
+        table {border-collapse: collapse; width: 100%;}
+        th, td {border: 1px solid #ddd; padding: 8px; text-align: left;}
+        th {background-color: #f2f2f2;}
+        tr:nth-child(even) {background-color: #f9f9f9;}
+        select {padding: 3px; width: 120px;}
+
+        /* 添加模态框样式 */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.9);
+        }
+
+        .modal-content {
+            margin: auto;
+            display: block;
+            max-width: 90%;
+            max-height: 90%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .modal-content img {
+            width: 100%;
+            height: auto;
+        }
+
+        .close {
+            position: absolute;
+            right: 35px;
+            top: 15px;
+            color: #f1f1f1;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        /* 添加表格容器样式 */
+        .table-container {
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        /* 固定表头样式 */
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background-color: #f2f2f2;
+        }
+
+        /* 确保表头阴影效果 */
+        thead th {
+            box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 添加图片列宽度控制 */
+        .image-column {
+            width: 80px !important;
+            max-width: 80px !important;
+        }
+
+        .image-container {
+            width: 80px;
+            max-width: 80px;
+            overflow: hidden;
+        }
+
+        .preview-image {
+            max-width: 100%;
+            max-height: 50px;
+            width: auto;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+    <h1>数据标注工具</h1>
+    
+    <!-- 添加数据路径输入表单 -->
+    <form method="post" style="margin-bottom: 20px;">
+        <label for="data_path">数据文件路径：</label>
+        <input type="text" id="data_path" name="data_path" 
+               value="{{ current_data_path }}" style="width: 300px;">
+        <button type="submit">加载数据</button>
+    </form>
+
+    <!-- 添加错误类型配置表单 -->
+    <form method="post" style="margin-bottom: 20px;">
+        <label for="error_types">错误类型（用逗号分隔）：</label>
+        <input type="text" id="error_types" name="error_types" 
+               value="{{ current_error_types }}" style="width: 500px;">
+        <button type="submit" name="update_error_types">更新错误类型</button>
+    </form>
+
+    {% if error %}
+    <div style="color: red; margin-bottom: 20px;">
+        {{ error }}
+    </div>
+    {% endif %}
+    
+    <form method="post">
+        <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
+            <label for="save_path">保存路径：</label>
+            <input type="text" id="save_path" name="save_path" 
+                   value="labeled_data.json" style="width: 300px;">
+            <button type="submit">保存标注结果</button>
+        </div>
+
+        {% if stats_message %}
+        <div style="margin-bottom: 20px; white-space: pre-line; padding: 10px; background-color: #f0f0f0; border-radius: 4px;">
+            {{ stats_message }}
+        </div>
+        {% endif %}
+
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Messages</th>
+                        <th>Dataset</th>
+                        <th class="image-column">Image</th>
+                        <th class="image-column">Resized Image</th>
+                        <th>Answer</th>
+                        <th>Predict</th>
+                        <th>标注</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in data %}
+                    <tr>
+                        <td>{{ row.messages }}</td>
+                        <td>{{ row.dataset_name }}</td>
+                        <td>
+                            {% if row.image %}
+                            <div class="image-container" style="text-align: center;">
+                                {% if row.image is string %}
+                                    <img src="data:image/{{ row.image_type }};base64,{{ row.image }}" 
+                                         style="cursor: pointer;"
+                                         onclick="showImage(this.src)"
+                                         class="preview-image">
+                                    <div class="resolution" style="font-size: 12px; color: #666;"></div>
+                                {% else %}
+                                    {% for img in row.image %}
+                                    <img src="data:image/{{ row.image_type }};base64,{{ img }}" 
+                                         style="cursor: pointer;"
+                                         onclick="showImage(this.src)"
+                                         class="preview-image">
+                                    <div class="resolution" style="font-size: 12px; color: #666;"></div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.resized_image %}
+                            <div class="image-container" style="text-align: center;">
+                                {% if row.resized_image is string %}
+                                    <img src="data:image/{{ row.image_type }};base64,{{ row.resized_image }}" 
+                                         style="cursor: pointer;"
+                                         onclick="showImage(this.src)"
+                                         class="preview-image">
+                                    <div class="resolution" style="font-size: 12px; color: #666;"></div>
+                                {% else %}
+                                    {% for img in row.resized_image %}
+                                    <img src="data:image/{{ row.image_type }};base64,{{ img }}" 
+                                         style="cursor: pointer;"
+                                         onclick="showImage(this.src)"
+                                         class="preview-image">
+                                    <div class="resolution" style="font-size: 12px; color: #666;"></div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td>{{ row.answer }}</td>
+                        <td>{{ row.predict }}</td>
+                        <td>
+                            <select name="label_{{ loop.index0 }}">
+                                {% for option in label_options %}
+                                <option value="{{ option }}" {% if option == row.label %}selected{% endif %}>{{ option }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </form>
+
+    <!-- 添加模态框 -->
+    <div id="imageModal" class="modal">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <div class="modal-content">
+            <img id="modalImage" src="">
+        </div>
+    </div>
+
+    <!-- 添加JavaScript代码 -->
+    <script>
+        const modal = document.getElementById('imageModal');
+        const modalImg = document.getElementById('modalImage');
+
+        function showImage(src) {
+            modal.style.display = "block";
+            modalImg.src = src;
+        }
+
+        function closeModal() {
+            modal.style.display = "none";
+        }
+
+        // 点击模态框外部关闭
+        window.onclick = function(event) {
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
+        // 修改显示分辨率的实现
+        document.addEventListener('DOMContentLoaded', function() {
+            const images = document.querySelectorAll('.preview-image');
+            images.forEach(img => {
+                if (img.complete) {
+                    displayResolution(img);
+                } else {
+                    img.onload = function() {
+                        displayResolution(img);
+                    };
+                }
+            });
+        });
+
+        function displayResolution(img) {
+            const resolution = img.parentElement.querySelector('.resolution');
+            if (resolution) {
+                resolution.textContent = `${img.naturalWidth} × ${img.naturalHeight}`;
+            }
+        }
+    </script>
+</body>
+</html>

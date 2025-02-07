@@ -1,0 +1,11 @@
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/single_image/Captioning/coyo700m
+split_size: 268_435_456
+dataset:
+  class_name: WebDataset
+  kwargs:
+    index_list:
+      - /llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json
+converter:
+  class_name: WebDatasetCaptionConverter
+  kwargs:
+    source: coyo700m

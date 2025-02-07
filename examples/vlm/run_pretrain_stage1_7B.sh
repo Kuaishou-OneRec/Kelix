@@ -29,9 +29,11 @@ git_hash=$(git rev-parse --short HEAD)
 set -x
 
 SCRIPT_FILE=$(readlink -f $0)
-echo "task: kml-task-${KML_TASK_ID}-record-${KML_ID}" > $OUTPUT_DIR/task_info.log
+echo `date '+%Y-%m-%d %H:%M:%S'` >> $OUTPUT_DIR/task_info.log
+echo "task: kml-task-${KML_TASK_ID}-record-${KML_ID}" >> $OUTPUT_DIR/task_info.log
 echo "script: ${SCRIPT_FILE}" >> $OUTPUT_DIR/task_info.log
 echo "commit_id: ${git_hash}" >> $OUTPUT_DIR/task_info.log
+echo "=========================" >> $OUTPUT_DIR/task_info.log
 
 echo "Output: $OUTPUT_DIR"
 

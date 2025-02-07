@@ -42,7 +42,7 @@ if [ -e ${deploy_path}/${model_tag}/pytorch_model.bin ]; then
     export CUDA_VISIBLE_DEVICES=${gpu_id}
     cd ${deploy_path}
     mkdir -p ./logs
-    nohup vllm serve ${model_tag} --dtype auto --port ${port} --api-key 123456 > ./logs/${model_tag}.log 2>&1 &
+    nohup vllm serve ${model_tag} --dtype auto --port ${port} --api-key token-123456 > ./logs/${model_tag}.log 2>&1 &
 else
     echo "error!!!"
     echo "${deploy_path}/${model_tag}/pytorch_model.bin not found"

@@ -30,9 +30,13 @@ class Shuffler(MPIBase):
         self.out_partition = out_partition
         self.tmp_dir = os.path.join(self.output_dir, ".tmp")
         self.fs = pa.hdfs.connect(user="mpi")
+        self.sample_rate_dict = dict()
         if self.rank == 0:
             files = []
             for d in tqdm(input_dir, desc="list directory"):
+                if "@" in d:
+                    d, sample_rate = d.strip().split("@")
+                    self.sample_rate_dict[d] = float(sample_rate)
                 files.extend(self.fs.ls(d))
             files = [
                 x for x in files
@@ -71,7 +75,10 @@ class Shuffler(MPIBase):
         mem_size = 0
         for fn in tqdm(self.files):
             try:
+                dirname = os.path.dirname(fn)
+                sample_rate = self.sample_rate_dict.get(dirname, 1.0)
                 df = pq.read_table(fn).to_pandas()
+                df = df.sample(frac=sample_rate)
             except Exception as e:
                 print(f"read {fn} error {e}")
                 print(traceback.format_exc())

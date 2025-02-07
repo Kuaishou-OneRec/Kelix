@@ -227,6 +227,10 @@ flags.DEFINE_string(
     "RealWorldQA_infer_chekpoint_file", "", "save infer checkpoint file"
 )
 
+flags.DEFINE_string(
+    "VideoMME_infer_chekpoint_file", "", "save infer checkpoint file"
+)
+
 flags.DEFINE_integer(
     "infer_MMMU", 0, "infer MMMU dataset"
 )
@@ -287,6 +291,9 @@ flags.DEFINE_integer(
     "infer_RealWorldQA", 0, "infer RealWorldQA dataset"
 )
 
+flags.DEFINE_integer(
+    "infer_steps", 1, "infer steps"
+)
 
 def scheduling_strategy_fn():
     # One bundle per tensor parallel worker
@@ -372,6 +379,11 @@ def main(_):
         for line in fr.readlines():
             last_steps.append(int(line.strip()))
     
+    if FLAGS.infer_VideoMME == 1 and os.path.exists(FLAGS.VideoMME_infer_chekpoint_file):
+        fr = open(FLAGS.VideoMME_infer_chekpoint_file, "r")
+        for line in fr.readlines():
+            last_steps.append(int(line.strip()))
+
     print(f"last step is {last_steps}")
 
     resources_kwarg: Dict[str, Any] = {}
@@ -525,7 +537,7 @@ def main(_):
 
     for model_path in model_paths:
         cur_step = int(model_path[11:])
-        if cur_step % 10000 != 0:
+        if cur_step % FLAGS.infer_steps != 0:
             continue
         if cur_step not in last_steps:
             last_steps.append(cur_step)
@@ -563,19 +575,25 @@ def main(_):
                 fw.close()
 
             # VideoMME
-            # VideoMME_dataset_response = VideoMME_dataset.map_batches(
-            #                             LLMPredictor,
-            #                             fn_constructor_kwargs=fn_constructor_kwargs,
-            #                             # Set the concurrency to the number of LLM instances.
-            #                             concurrency=concurrency_num,
-            #                             batch_size=FLAGS.batch_size,
-            #                             # Specify the batch size for inference.
-            #                             **resources_kwarg,
-            #                         ).take_all()
-            # rsp, anw = infer_and_eval(VideoMME_dataset_response, FLAGS.output_path, model_path, is_random=False, dataset_name="VideoMME")
-            # acc = get_acc(anw, rsp)
-            # print(f"VideoMME dataset eval result for {model_path} in {model_folder}: {acc}")
-            # writer.add_scalar(f'{model_name}_VideoMME_val_acc', acc, cur_step)
+            if FLAGS.infer_VideoMME == 1:
+                VideoMME_dataset_response = VideoMME_dataset.map_batches(
+                                            LLMPredictor,
+                                            fn_constructor_kwargs=fn_constructor_kwargs,
+                                            # Set the concurrency to the number of LLM instances.
+                                            concurrency=concurrency_num,
+                                            batch_size=FLAGS.batch_size,
+                                            # Specify the batch size for inference.
+                                            **resources_kwarg,
+                                        ).take_all()
+                rsp, anw = infer_and_eval(VideoMME_dataset_response, FLAGS.output_path, model_path, is_random=False, dataset_name="VideoMME")
+                acc, correct_keys = get_acc(anw, rsp)
+                dump_predict_answer(correct_keys, VideoMME_dataset_response, FLAGS.output_path, model_path, "VideoMME", rsp)
+                print(f"VideoMME dataset eval result for {model_path} in {model_folder}: {acc}")
+                writer.add_scalar(f'benchmark/VideoMME_val_acc', acc, cur_step)
+                fw = open(FLAGS.VideoMME_infer_chekpoint_file, "w")
+                for step in last_steps:
+                    fw.write(str(step) + "\n")
+                fw.close()
 
             # ChartQA
             # ChartQA_dataset_response = ChartQA_dataset.map_batches(
@@ -605,10 +623,11 @@ def main(_):
                                         ).take_all()
                 rsp, anw = infer_and_eval(MME_dataset_response, FLAGS.output_path, model_path, is_random=False, dataset_name="MME")
                 MME_eval_obj = MMEEval()
-                score, correct_keys = MME_eval_obj.process_result(rsp, anw)
+                scores, correct_keys = MME_eval_obj.process_result(rsp, anw)
                 dump_predict_answer(correct_keys, MME_dataset_response, FLAGS.output_path, model_path, "MME", rsp)
-                print(f"MME dataset eval result for {model_path} in {model_folder}: {score}")
-                writer.add_scalar(f'benchmark/MME_val_score', score, cur_step)
+                print(f"MME dataset eval result for {model_path} in {model_folder}: {scores}")
+                for key, val in scores.items():
+                    writer.add_scalar(f'benchmark/MME/{key}_val_score', val, cur_step)
                 fw = open(FLAGS.MME_infer_chekpoint_file, "w")
                 for step in last_steps:
                     fw.write(str(step) + "\n")

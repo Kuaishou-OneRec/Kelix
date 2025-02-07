@@ -108,13 +108,44 @@ def test_chat_vision_parquet():
             state_dict2 = dataloader2.state_dict()
             print(f"{json.dumps(state_dict1)}")
             print(f"{json.dumps(state_dict2)}")
+    
+def verify_dataset():
+    init_processes(0, 1)
+    path = "examples/vlm/configs/stage2_parquet_nointerleave.json"
+    with open(path, encoding="utf-8") as f:
+        dataset_config = json.loads(f.read())
+    dataset = dataset_config.pop("name")
+    dataset_config["num_workers"] = 1
+    dataloader = get_dataloader(
+        name=dataset,
+        **dataset_config)
+    
+    result = []
+    iter_data = iter(dataloader)
+    for idx in range(200):
+        batch_data = next(iter_data)
+        result.append(batch_data)
+    
+    import pickle
+    with open("/code/after.pkl", "wb") as fp:
+        pickle.dump(result, fp)
 
-
-# if __name__ == "__main__":
-#     # test_chat_vision_parquet()
-#     from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
-#     hdfs_files = shell_hdfs_ls("viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_no_interleave_shuffle")
-#     import json
-#     hdfs_files = [fn for fn in hdfs_files if fn.endswith(".parquet")]
-#     jstr = json.dumps(hdfs_files)
-#     print(jstr)
+if __name__ == "__main__":
+    # verify_dataset()
+    import pickle
+    import torch
+    with open("/code/before.pkl", "rb") as fp:
+        before = pickle.load(fp)
+    
+    with open("/code/after.pkl", "rb") as fp:
+        after = pickle.load(fp)
+    
+    for i in range(len(after)):
+        a = after[i]
+        b = before[i]
+        for k in a:
+            assert k in b
+            if isinstance(a[k], torch.Tensor):
+                assert a[k].equal(b[k])
+            else:
+                assert a[k] == b[k]
