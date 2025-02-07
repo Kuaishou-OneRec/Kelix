@@ -180,16 +180,23 @@ def read_parquet_with_nrows(data_path, nrows=None, shuffle=False):
         import pyarrow.hdfs as hdfs
         # 使用默认配置连接HDFS
         fs = hdfs.connect()
-        # 获取目录下所有parquet文件
-        files = fs.ls(data_path) if fs.isdir(data_path) else [data_path]
-        files = [f for f in files if f.endswith('.parquet')]
+        
+        # 检查路径是否为文件
+        if data_path.endswith('.parquet'):
+            files = [data_path]  # 直接使用单个parquet文件
+        else:
+            # 获取目录下所有parquet文件
+            files = fs.ls(data_path)
+            files = [f for f in files if f.endswith('.parquet')]
     else:
         # 本地文件系统
-        if os.path.isdir(data_path):
+        if os.path.isfile(data_path) and data_path.endswith('.parquet'):
+            files = [data_path]  # 直接使用单个parquet文件
+        elif os.path.isdir(data_path):
             files = glob.glob(os.path.join(data_path, '*.parquet'))
         else:
-            files = [data_path]
-    
+            files = [data_path]  # 如果是其他类型的路径，假设是文件
+
     # 随机打乱文件顺序
     if shuffle:
         random.shuffle(files)
