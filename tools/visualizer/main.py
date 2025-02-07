@@ -10,6 +10,7 @@ import argparse
 import pyarrow.parquet as pq
 import glob
 from urllib.parse import urlparse
+import random
 
 app = Flask(__name__)
 
@@ -170,8 +171,8 @@ def visualize_eval_result():
                          current_error_types=','.join(ERROR_TYPES),
                          current_data_path=DATA_PATH)
 
-def read_parquet_with_nrows(data_path, nrows=None):
-    """读取parquet文件，支持行数限制和HDFS路径"""
+def read_parquet_with_nrows(data_path, nrows=None, shuffle=False):
+    """读取parquet文件，支持行数限制和HDFS路径，并随机打乱数据"""
     # 判断是否为HDFS路径
     is_hdfs = data_path.startswith('viewfs://')
     
@@ -179,15 +180,26 @@ def read_parquet_with_nrows(data_path, nrows=None):
         import pyarrow.hdfs as hdfs
         # 使用默认配置连接HDFS
         fs = hdfs.connect()
-        # 获取目录下所有parquet文件
-        files = fs.ls(data_path) if fs.isdir(data_path) else [data_path]
-        files = [f for f in files if f.endswith('.parquet')]
+        
+        # 检查路径是否为文件
+        if data_path.endswith('.parquet'):
+            files = [data_path]  # 直接使用单个parquet文件
+        else:
+            # 获取目录下所有parquet文件
+            files = fs.ls(data_path)
+            files = [f for f in files if f.endswith('.parquet')]
     else:
         # 本地文件系统
-        if os.path.isdir(data_path):
+        if os.path.isfile(data_path) and data_path.endswith('.parquet'):
+            files = [data_path]  # 直接使用单个parquet文件
+        elif os.path.isdir(data_path):
             files = glob.glob(os.path.join(data_path, '*.parquet'))
         else:
-            files = [data_path]
+            files = [data_path]  # 如果是其他类型的路径，假设是文件
+
+    # 随机打乱文件顺序
+    if shuffle:
+        random.shuffle(files)
     
     # 读取数据
     dfs = []
@@ -200,6 +212,10 @@ def read_parquet_with_nrows(data_path, nrows=None):
         # 读取单个文件
         table = pq.read_table(file)
         df = table.to_pandas()
+        
+        # 随机采样数据
+        if len(df) > 0 and shuffle:
+            df = df.sample(frac=1.0, random_state=None)
         
         if nrows is not None:
             remaining_rows = nrows - rows_read
@@ -220,13 +236,14 @@ def visualize_data():
     if request.method == 'POST':
         data_path = request.form.get('data_path')
         nrows = request.form.get('nrows', type=int)  # 获取nrows参数
+        shuffle = request.form.get('shuffle') == 'true'  # 获取shuffle参数
         
         if data_path:
             try:
                 # 添加加载状态返回
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                     # 使用新的读取函数
-                    df = read_parquet_with_nrows(data_path, nrows)
+                    df = read_parquet_with_nrows(data_path, nrows, shuffle)  # Pass shuffle parameter
                     
                     # 处理数据
                     samples = []
