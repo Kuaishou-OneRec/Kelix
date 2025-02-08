@@ -3,7 +3,7 @@ split_size: 268_435_456
 dataset:
   class_name: PubTabNetDataset
   kwargs:
-    path: /llm_reco_ssd/luoxinchen/dataset/pubtabnet/
+    path: /llm_reco_ssd/luoxinchen/dataset/pubtabnet/pubtabnet
 converter:
   class_name: EmptyConverter
   kwargs: {}
