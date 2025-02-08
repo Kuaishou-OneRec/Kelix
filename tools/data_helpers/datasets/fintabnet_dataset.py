@@ -121,14 +121,18 @@ class FinTabNetDataset(DistDataset):
                     pdf_height = pdf_shape[3] - pdf_shape[1]
                     pdf_width = pdf_shape[2] - pdf_shape[0]
                     
-                    # 提高转换质量：增加DPI和使用抗锯齿
+                    # 移除size参数，直接使用更高的DPI
                     converted_images = convert_from_path(
                         pdf_path,
-                        size=(pdf_width, pdf_height),
-                        dpi=300,  # 增加DPI到300
-                        antialiasing=True  # 启用抗锯齿
+                        dpi=600,  # 显著提高DPI
+                        antialiasing=True,
+                        thread_count=2  # 添加多线程支持以加快处理速度
                     )
                     img = converted_images[0]
+                    
+                    # 如果需要，可以在这里调整图像大小以匹配原始PDF尺寸
+                    if img.size != (int(pdf_width), int(pdf_height)):
+                        img = img.resize((int(pdf_width), int(pdf_height)), Image.Resampling.LANCZOS)
                     
                     # Format HTML and get annotations
                     html, annotations = self.format_html(sample)
