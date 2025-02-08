@@ -30,7 +30,7 @@ class FinTabNetDataset(DistDataset):
         return len(self.lines)
 
     def markup_annotations(self, image, annotations, pdf_height):
-        """只绘制 table 的边框，使用随机颜色"""
+        """只绘制 table 的边框，使用随机颜色，并让边框比表格稍微宽一点"""
         draw = ImageDraw.Draw(image, 'RGBA')
         for annotation in annotations:
             # 只处理 table (category_id == 1)
@@ -51,6 +51,13 @@ class FinTabNetDataset(DistDataset):
             # Draw bbox with coordinate conversion
             bbox[3] = float(pdf_height) - orig_bbox[1]
             bbox[1] = float(pdf_height) - orig_bbox[3]
+            
+            # 添加边框偏移量，使边框比表格稍微宽一点
+            padding = 5  # 可以根据需要调整这个值
+            bbox[0] = max(0, bbox[0] - padding)  # 左边界向左扩展
+            bbox[1] = max(0, bbox[1] - padding)  # 上边界向上扩展
+            bbox[2] = min(image.width, bbox[2] + padding)  # 右边界向右扩展
+            bbox[3] = min(image.height, bbox[3] + padding)  # 下边界向下扩展
             
             # Draw rectangle with random color
             draw.rectangle(
@@ -118,8 +125,8 @@ class FinTabNetDataset(DistDataset):
                     # Get PDF dimensions and scale them up by 1.5
                     pdf_page = PdfReader(open(pdf_path, 'rb')).pages[0]
                     pdf_shape = pdf_page.mediabox
-                    pdf_height = (pdf_shape[3] - pdf_shape[1]) * 1.5
-                    pdf_width = (pdf_shape[2] - pdf_shape[0]) * 1.5
+                    pdf_height = (float(pdf_shape[3]) - float(pdf_shape[1])) * 1.5
+                    pdf_width = (float(pdf_shape[2]) - float(pdf_shape[0])) * 1.5
                     
                     # Convert with scaled dimensions
                     converted_images = convert_from_path(
