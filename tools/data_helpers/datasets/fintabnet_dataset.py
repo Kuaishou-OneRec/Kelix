@@ -70,21 +70,20 @@ class FinTabNetDataset(DistDataset):
         for token in sample["html"]["cells"]:
             if "bbox" in token:
                 annotations.append({"category_id": 2, "bbox": token["bbox"]})
-        
-        # Build HTML table
-        cnt = 0
-        for token in sample["html"]["structure"]["tokens"]:
-            if token == "<td>":
-                html += token
-                html += "".join(sample["html"]["cells"][cnt]["tokens"])
-                cnt += 1
-            else:
-                html += token
+
+        html_code = sample["html"]["structure"]["tokens"].copy()
+        to_insert = [i for i, tag in enumerate(html_code) if tag in ('<td>', '>')]
+        for i, cell in zip(to_insert[::-1], sample['html']['cells'][::-1]):
+            if cell['tokens']:
+                cell = [escape(token) if len(token) == 1 else token for token in cell['tokens']]
+                cell = ''.join(cell)
+                html_code.insert(i + 1, cell)
             
         # Add table annotation
         annotations.append({"category_id": 1, "bbox": sample["bbox"]})
         
         # Wrap with full HTML structure
+        html = ''.join(html_code)
         html = f'''<html>
                    <head>
                    <meta charset="UTF-8">
