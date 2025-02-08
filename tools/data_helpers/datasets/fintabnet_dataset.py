@@ -121,8 +121,13 @@ class FinTabNetDataset(DistDataset):
                     pdf_height = pdf_shape[3] - pdf_shape[1]
                     pdf_width = pdf_shape[2] - pdf_shape[0]
                     
-                    # Convert PDF to image
-                    converted_images = convert_from_path(pdf_path, size=(pdf_width, pdf_height))
+                    # 提高转换质量：增加DPI和使用抗锯齿
+                    converted_images = convert_from_path(
+                        pdf_path,
+                        size=(pdf_width, pdf_height),
+                        dpi=300,  # 增加DPI到300
+                        antialiasing=True  # 启用抗锯齿
+                    )
                     img = converted_images[0]
                     
                     # Format HTML and get annotations
@@ -131,11 +136,16 @@ class FinTabNetDataset(DistDataset):
                     # Apply annotations markup
                     marked_image = self.markup_annotations(img, annotations, pdf_height)
                     
-                    # Convert image to base64
+                    # 优化图像保存质量
                     img_byte_arr = Image.fromarray(marked_image)
                     img_byte_arr = img_byte_arr.convert('RGB')
                     img_buffer = BytesIO()
-                    img_byte_arr.save(img_buffer, format='JPEG')
+                    img_byte_arr.save(
+                        img_buffer, 
+                        format='JPEG', 
+                        quality=95,  # 提高JPEG质量
+                        optimize=True  # 优化文件大小
+                    )
                     img_base64 = base64.b64encode(img_buffer.getvalue()).decode('ascii')
                     
                     # Prepare output
