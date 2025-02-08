@@ -4,11 +4,12 @@ import base64
 import numpy as np
 from PIL import Image, ImageDraw
 from pdf2image import convert_from_path
-from PyPDF2 import PdfFileReader
+from PyPDF2 import PdfReader
 from bs4 import BeautifulSoup as bs
 from html import escape
 from tools.data_helpers.datasets.dataset import DistDataset
 from io import BytesIO
+import random  # 添加 random 导入
 
 class FinTabNetDataset(DistDataset):
     def __init__(self, path):
@@ -16,8 +17,7 @@ class FinTabNetDataset(DistDataset):
         self.path = path
         self.jsonl_path = os.path.join(path, "FinTabNet_1.0.0_table_train.jsonl")
         
-        # Define color codes for visualization
-        self.colors = [(255, 0, 0), (0, 255, 0)]
+        # 移除固定颜色定义，因为我们将使用随机颜色
         self.categories = ["table", "cell"]
         
         # Read and shard the jsonl file
@@ -30,54 +30,35 @@ class FinTabNetDataset(DistDataset):
         return len(self.lines)
 
     def markup_annotations(self, image, annotations, pdf_height):
-        """Draws the segmentation, bounding box, and label of each annotation"""
+        """只绘制 table 的边框，使用随机颜色"""
         draw = ImageDraw.Draw(image, 'RGBA')
         for annotation in annotations:
+            # 只处理 table (category_id == 1)
+            if annotation['category_id'] != 1:
+                continue
+                
+            # 生成随机颜色
+            random_color = (
+                random.randint(0, 255),
+                random.randint(0, 255),
+                random.randint(0, 255)
+            )
+            
             # Draw bbox with coordinate conversion
             orig_annotation = annotation['bbox'].copy()
             annotation['bbox'][3] = pdf_height - orig_annotation[1]
             annotation['bbox'][1] = pdf_height - orig_annotation[3]
             
-            # Draw rectangle
+            # Draw rectangle with random color
             draw.rectangle(
                 (annotation['bbox'][0],
                  annotation['bbox'][1],
                  annotation['bbox'][2],
                  annotation['bbox'][3]),
-                outline=self.colors[annotation['category_id'] - 1] + (255,),
+                outline=random_color + (255,),
                 width=2
             )
             
-            # Draw label
-            w, h = draw.textsize(text=self.categories[annotation['category_id'] - 1])
-            if annotation['bbox'][3] < h:
-                draw.rectangle(
-                    (annotation['bbox'][2],
-                     annotation['bbox'][1],
-                     annotation['bbox'][2] + w,
-                     annotation['bbox'][1] + h),
-                    fill=(64, 64, 64, 255)
-                )
-                draw.text(
-                    (annotation['bbox'][2],
-                     annotation['bbox'][1]),
-                    text=self.categories[annotation['category_id'] - 1],
-                    fill=(255, 255, 255, 255)
-                )
-            else:
-                draw.rectangle(
-                    (annotation['bbox'][0]-w,
-                     annotation['bbox'][1]-h,
-                     annotation['bbox'][0],
-                     annotation['bbox'][1]),
-                    fill=(64, 64, 64, 255)
-                )
-                draw.text(
-                    (annotation['bbox'][0]-w,
-                     annotation['bbox'][1]-h),
-                    text=self.categories[annotation['category_id'] - 1],
-                    fill=(255, 255, 255, 255)
-                )
         return np.array(image)
 
     def format_html(self, sample):
@@ -133,8 +114,8 @@ class FinTabNetDataset(DistDataset):
                 pdf_path = os.path.join(self.path, "pdf", filename)
                 if os.path.exists(pdf_path):
                     # Get PDF dimensions
-                    pdf_page = PdfFileReader(open(pdf_path, 'rb')).getPage(0)
-                    pdf_shape = pdf_page.mediaBox
+                    pdf_page = PdfReader(open(pdf_path, 'rb')).pages[0]
+                    pdf_shape = pdf_page.mediabox
                     pdf_height = pdf_shape[3] - pdf_shape[1]
                     pdf_width = pdf_shape[2] - pdf_shape[0]
                     
