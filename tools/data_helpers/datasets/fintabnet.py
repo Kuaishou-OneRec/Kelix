@@ -44,17 +44,17 @@ class FinTabNetDataset(DistDataset):
                 random.randint(0, 255)
             )
             
+            # Convert bbox coordinates to float
+            bbox = [float(coord) for coord in annotation['bbox']]
+            orig_bbox = bbox.copy()
+            
             # Draw bbox with coordinate conversion
-            orig_annotation = annotation['bbox'].copy()
-            annotation['bbox'][3] = pdf_height - orig_annotation[1]
-            annotation['bbox'][1] = pdf_height - orig_annotation[3]
+            bbox[3] = pdf_height - orig_bbox[1]
+            bbox[1] = pdf_height - orig_bbox[3]
             
             # Draw rectangle with random color
             draw.rectangle(
-                (annotation['bbox'][0],
-                 annotation['bbox'][1],
-                 annotation['bbox'][2],
-                 annotation['bbox'][3]),
+                (bbox[0], bbox[1], bbox[2], bbox[3]),
                 outline=random_color + (255,),
                 width=2
             )
