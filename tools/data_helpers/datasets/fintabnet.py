@@ -112,6 +112,7 @@ class FinTabNetDataset(DistDataset):
                 
                 # Process PDF file
                 pdf_path = os.path.join(self.path, "pdf", filename)
+                print('pdf_path', pdf_path)
                 if os.path.exists(pdf_path):
                     # Get PDF dimensions
                     pdf_page = PdfReader(open(pdf_path, 'rb')).pages[0]
