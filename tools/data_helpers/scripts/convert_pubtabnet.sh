@@ -31,4 +31,4 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        python3 tools/data_helpers/dataset_converter.py tools/data_helpers/config/converter_pubtabnet.yaml | tee /tmp/stdout.log
+        python3 tools/data_helpers/parquet_writer_worker.py tools/data_helpers/config/converter_pubtabnet.yaml | tee /tmp/stdout.log
