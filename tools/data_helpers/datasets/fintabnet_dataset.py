@@ -74,36 +74,37 @@ class FinTabNetDataset(DistDataset):
         # Build HTML table
         cnt = 0
         for token in sample["html"]["structure"]["tokens"]:
-            html += token
             if token == "<td>":
+                html += token
                 html += "".join(sample["html"]["cells"][cnt]["tokens"])
                 cnt += 1
-                
+            else:
+                html += token
+            
         # Add table annotation
         annotations.append({"category_id": 1, "bbox": sample["bbox"]})
         
-        return html
         # Wrap with full HTML structure
-        # html = f'''<html>
-        #            <head>
-        #            <meta charset="UTF-8">
-        #            <style>
-        #            table, th, td {{
-        #              border: 1px solid black;
-        #              font-size: 10px;
-        #            }}
-        #            </style>
-        #            </head>
-        #            <body>
-        #            <table frame="hsides" rules="groups" width="100%">
-        #              {html}
-        #            </table>
-        #            </body>
-        #            </html>'''
+        html = f'''<html>
+                   <head>
+                   <meta charset="UTF-8">
+                   <style>
+                   table, th, td {{
+                     border: 1px solid black;
+                     font-size: 10px;
+                   }}
+                   </style>
+                   </head>
+                   <body>
+                   <table frame="hsides" rules="groups" width="100%">
+                     {html}
+                   </table>
+                   </body>
+                   </html>'''
                    
-        # # Prettify HTML
-        # soup = bs(html)
-        # return soup.prettify(), annotations
+        # Prettify HTML
+        soup = bs(html)
+        return soup.prettify(), annotations
 
     def __iter__(self):
         for line in self.lines:
