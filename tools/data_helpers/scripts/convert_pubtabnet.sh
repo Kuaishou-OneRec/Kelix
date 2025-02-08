@@ -1,6 +1,6 @@
 hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=64
+np=128
 
 KWS_SERVICE_REGION=HB2
 KWS_SERVICE_DC=WLF2
@@ -31,4 +31,4 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        python3 parquet_sample_counter_mpi.py files.txt
+        python3 tools/data_helpers/parquet_writer_worker.py tools/data_helpers/config/converter_pubtabnet.yaml | tee /tmp/stdout.log

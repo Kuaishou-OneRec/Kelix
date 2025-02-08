@@ -6,8 +6,10 @@ from .dataset import (
     JsonDataset,
     WebDataset,
     TgzImageDataset,
-    VlmTextJsonl
+    VlmTextJsonl,
+    PubTabNetDataset
 )
+from .fintabnet_dataset import FinTabNetDataset
     
 def create_dataset(cfg) -> DistDataset:
     return eval(cfg.class_name)(**cfg.kwargs)

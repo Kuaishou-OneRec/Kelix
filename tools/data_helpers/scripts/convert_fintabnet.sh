@@ -31,4 +31,4 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        python3 parquet_sample_counter_mpi.py files.txt
+        python3 tools/data_helpers/parquet_writer_worker.py tools/data_helpers/config/converter_fintabnet.yaml | tee /tmp/stdout.log
