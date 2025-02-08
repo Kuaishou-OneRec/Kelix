@@ -14,7 +14,7 @@ class FinTabNetDataset(DistDataset):
     def __init__(self, path):
         super().__init__()
         self.path = path
-        self.jsonl_path = os.path.join(path, "FinTabNet_1.0.0_table_example.jsonl")
+        self.jsonl_path = os.path.join(path, "FinTabNet_1.0.0_table_train.jsonl")
         
         # Define color codes for visualization
         self.colors = [(255, 0, 0), (0, 255, 0)]
