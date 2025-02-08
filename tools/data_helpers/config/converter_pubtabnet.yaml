@@ -1,5 +1,5 @@
 output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/pubtabnet
-split_size: 268_435_456
+split_size: 67108864
 dataset:
   class_name: PubTabNetDataset
   kwargs:
