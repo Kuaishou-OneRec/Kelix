@@ -125,8 +125,6 @@ class FinTabNetDataset(DistDataset):
                     converted_images = convert_from_path(
                         pdf_path,
                         size=(pdf_width, pdf_height),
-                        dpi=300,  # 增加DPI到300
-                        antialiasing=True  # 启用抗锯齿
                     )
                     img = converted_images[0]
                     
