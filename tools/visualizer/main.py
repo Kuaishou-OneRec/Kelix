@@ -11,6 +11,8 @@ import pyarrow.parquet as pq
 import glob
 from urllib.parse import urlparse
 import random
+import re
+from PIL import ImageDraw
 
 app = Flask(__name__)
 
@@ -230,31 +232,133 @@ def read_parquet_with_nrows(data_path, nrows=None, shuffle=False):
         
     return pd.concat(dfs, ignore_index=True)
 
+def draw_boxes_on_image(base64_img: str, boxes: list, polygons: list = None) -> str:
+    """Draw boxes and polygons on a base64 encoded image and return the modified base64 string"""
+    try:
+        # Decode base64 image
+        img_data = base64.b64decode(base64_img)
+        img = Image.open(io.BytesIO(img_data))
+        
+        # Create draw object
+        draw = ImageDraw.Draw(img)
+        
+        # Get image dimensions
+        width, height = img.size
+        
+        # Draw each box
+        for box in boxes:
+            # Convert normalized coordinates to actual image coordinates
+            x1, y1 = box[0][0] * width / 1000, box[0][1] * height / 1000
+            x2, y2 = box[1][0] * width / 1000, box[1][1] * height / 1000
+            
+            # Draw rectangle with thicker outline
+            draw.rectangle([(x1, y1), (x2, y2)], outline='red', width=4)
+            
+        # Draw each polygon
+        for points in polygons:
+            # Convert normalized coordinates to actual image coordinates
+            scaled_points = [
+                (p[0] * width / 1000, p[1] * height / 1000)
+                for p in points
+            ]
+            # Draw polygon with thicker outline
+            draw.polygon(scaled_points, outline='blue', width=4)
+        
+        # Convert back to base64
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        return base64.b64encode(buffer.getvalue()).decode()
+    except Exception as e:
+        print(f"Error drawing shapes: {str(e)}")
+        return base64_img
+
+def extract_boxes_from_text(text: str) -> tuple:
+    """Extract box and polygon coordinates from text containing box annotations"""
+    boxes = []
+    polygons = []
+    
+    # Extract regular boxes
+    box_pattern = r'<\|box_start\|>\((\d+),\s*(\d+)\),\s*\((\d+),\s*(\d+)\)<\|box_end\|>'
+    box_matches = re.findall(box_pattern, text)
+    
+    for match in box_matches:
+        x1, y1, x2, y2 = map(int, match)
+        boxes.append(((x1, y1), (x2, y2)))
+    
+    # Extract polygons (quads or any number of points)
+    # First find all content between quad_start and quad_end tags
+    quad_pattern = r'<\|quad_start\|>(.*?)<\|quad_end\|>'
+    quad_matches = re.findall(quad_pattern, text)
+    
+    for match in quad_matches:
+        # Extract all coordinate pairs from the matched content
+        point_pattern = r'\((\d+),\s*(\d+)\)'
+        points = re.findall(point_pattern, match)
+        
+        if points:
+            # Convert all points to integer coordinates
+            polygon_points = [(int(x), int(y)) for x, y in points]
+            polygons.append(polygon_points)
+    
+    return boxes, polygons
+
 @app.route('/visualize_data', methods=['GET', 'POST'])
 def visualize_data():
     """数据可视化页面"""
     if request.method == 'POST':
         data_path = request.form.get('data_path')
-        nrows = request.form.get('nrows', type=int)  # 获取nrows参数
-        shuffle = request.form.get('shuffle') == 'true'  # 获取shuffle参数
+        nrows = request.form.get('nrows', type=int)
+        shuffle = request.form.get('shuffle') == 'true'
         
         if data_path:
             try:
-                # 添加加载状态返回
                 if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                    # 使用新的读取函数
-                    df = read_parquet_with_nrows(data_path, nrows, shuffle)  # Pass shuffle parameter
+                    df = read_parquet_with_nrows(data_path, nrows, shuffle)
                     
-                    # 处理数据
                     samples = []
                     for _, row in df.iterrows():
+                        # Parse the basic sample data
                         sample = {
                             'source': row['source'],
                             'images': json.loads(row['images']) if row['images'] else None,
                             'messages': json.loads(row['messages']) if row['messages'] else None,
                             'segments': json.loads(row['segments']) if row['segments'] else None
                         }
+                        
+                        # Process messages and segments to find boxes
+                        if sample['images'] and (sample['messages'] or sample['segments']):
+                            boxes = []
+                            polygons = []
+                            
+                            # Extract boxes from messages
+                            if sample['messages']:
+                                for msg in sample['messages']:
+                                    if isinstance(msg.get('content'), list):
+                                        for content in msg['content']:
+                                            if content.get('type') == 'text':
+                                                b, p = extract_boxes_from_text(content['text'])
+                                                boxes.extend(b)
+                                                polygons.extend(p)
+                            
+                            # Extract boxes from segments
+                            if sample['segments']:
+                                for segment in sample['segments']:
+                                    if segment.get('type') == 'text':
+                                        b, p = extract_boxes_from_text(segment['text'])
+                                        boxes.extend(b)
+                                        polygons.extend(p)
+                            
+                            # Draw boxes and polygons on images if any were found
+                            if boxes or polygons:
+                                for img_key in sample['images']:
+                                    sample['images'][img_key] = draw_boxes_on_image(
+                                        sample['images'][img_key], 
+                                        boxes,
+                                        polygons
+                                    )
+                        
                         samples.append(sample)
+                    
                     return jsonify({'success': True, 'samples': samples})
                 return render_template('visualize_data.html')
             except Exception as e:
@@ -262,8 +366,7 @@ def visualize_data():
                     return jsonify({'success': False, 'error': str(e)})
                 return render_template('visualize_data.html', error=f"加载数据失败: {str(e)}")
         else:
-            return render_template('visualize_data.html', 
-                                error="请提供文件路径")
+            return render_template('visualize_data.html', error="请提供文件路径")
     
     return render_template('visualize_data.html')
 
