@@ -1,5 +1,5 @@
 output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/fintabnet
-split_size: 1000_000
+split_size: 32_000_000
 dataset:
   class_name: FinTabNetDataset
   kwargs:
