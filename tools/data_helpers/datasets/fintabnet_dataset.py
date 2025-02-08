@@ -115,18 +115,25 @@ class FinTabNetDataset(DistDataset):
                 pdf_path = os.path.join(self.path, "pdf", filename)
                 print('pdf_path', pdf_path)
                 if os.path.exists(pdf_path):
-                    # Get PDF dimensions
+                    # Get PDF dimensions and scale them up by 1.5
                     pdf_page = PdfReader(open(pdf_path, 'rb')).pages[0]
                     pdf_shape = pdf_page.mediabox
-                    pdf_height = pdf_shape[3] - pdf_shape[1]
-                    pdf_width = pdf_shape[2] - pdf_shape[0]
+                    pdf_height = (pdf_shape[3] - pdf_shape[1]) * 1.5
+                    pdf_width = (pdf_shape[2] - pdf_shape[0]) * 1.5
                     
-                    # 提高转换质量：增加DPI和使用抗锯齿
+                    # Convert with scaled dimensions
                     converted_images = convert_from_path(
                         pdf_path,
-                        size=(pdf_width, pdf_height),
+                        size=(int(pdf_width), int(pdf_height)),
                     )
                     img = converted_images[0]
+                    
+                    # Scale up annotations before formatting HTML
+                    for annotation in sample.get('html', {}).get('cells', []):
+                        if 'bbox' in annotation:
+                            annotation['bbox'] = [coord * 1.5 for coord in annotation['bbox']]
+                    if 'bbox' in sample:
+                        sample['bbox'] = [coord * 1.5 for coord in sample['bbox']]
                     
                     # Format HTML and get annotations
                     html, annotations = self.format_html(sample)
