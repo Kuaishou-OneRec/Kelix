@@ -16,6 +16,7 @@ from .webdataset_caption_converter import WebDatasetCaptionConverter
 from .clean_html_converter import CleanHtmlConverter
 from .clean_links_converter import CleanLinksConverter
 from .infinity_instruct_converter import InfinityInstructConverter
+from .pubtabnet_converter import PubTabNetConverter
 
 
 def create_converter(cfg) -> ConverterBase:
