@@ -49,8 +49,8 @@ class FinTabNetDataset(DistDataset):
             orig_bbox = bbox.copy()
             
             # Draw bbox with coordinate conversion
-            bbox[3] = pdf_height - orig_bbox[1]
-            bbox[1] = pdf_height - orig_bbox[3]
+            bbox[3] = float(pdf_height) - orig_bbox[1]
+            bbox[1] = float(pdf_height) - orig_bbox[3]
             
             # Draw rectangle with random color
             draw.rectangle(
