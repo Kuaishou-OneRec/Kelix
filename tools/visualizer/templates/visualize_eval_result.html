@@ -121,29 +121,6 @@
 <body>
     <h1>数据标注工具</h1>
     
-    <!-- 添加错误统计区域 -->
-    <div class="error-stats">
-        <h3 style="margin-top: 0;">数据集错误统计</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>数据集</th>
-                    <th>错误数</th>
-                    <th>错误率</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for dataset, stats in dataset_stats.items() %}
-                <tr>
-                    <td>{{ dataset }}</td>
-                    <td>{{ stats.count }}</td>
-                    <td>{{ stats.ratio }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
     <!-- 添加数据路径输入表单 -->
     <form method="post" style="margin-bottom: 20px;">
         <label for="data_path">数据文件路径：</label>
@@ -160,12 +137,6 @@
         <button type="submit" name="update_error_types">更新错误类型</button>
     </form>
 
-    {% if error %}
-    <div style="color: red; margin-bottom: 20px;">
-        {{ error }}
-    </div>
-    {% endif %}
-    
     <form method="post">
         <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px;">
             <label for="save_path">保存路径：</label>
@@ -174,6 +145,35 @@
             <button type="submit">保存标注结果</button>
         </div>
 
+        <!-- 移动错误统计区域到这里 -->
+        <div class="error-stats">
+            <h3 style="margin-top: 0;">数据集错误统计</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>数据集</th>
+                        <th>错误数</th>
+                        <th>错误率</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for dataset, stats in dataset_stats|dictsort(by='value.count')|reverse %}
+                    <tr>
+                        <td>{{ dataset }}</td>
+                        <td>{{ stats.count }}</td>
+                        <td>{{ stats.ratio }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if error %}
+        <div style="color: red; margin-bottom: 20px;">
+            {{ error }}
+        </div>
+        {% endif %}
+        
         {% if stats_message %}
         <div style="margin-bottom: 20px; white-space: pre-line; padding: 10px; background-color: #f0f0f0; border-radius: 4px;">
             {{ stats_message }}
