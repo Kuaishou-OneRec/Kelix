@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+option java_package = "com.kuaishou.mmu.common";
+option java_outer_classname = "Result";
+
+package mmu.common;
+
+//如果有新的错误码再继续添加
+enum ResultCode {
+    UNKOWN = 0;
+    SUCESS = 1; //表示成功
+    INPUT_EMPTY = 2; //输入参数为空
+    ERROR = 3; //服务端异常
+    BAIDU_AUDIO_SERVICE_ERROR = 4; //百度语音服务端异常
+    OUTPUT_EMPTY = 5; // 输出为空
+    PARTAL_SUCCESS = 6; //部分成功
+    NO_FACE_DETECTED = 7; // 没有检测到人脸
+    NO_FACE_MATCHED = 8; // 没有匹配到的人脸
+    ILLEGAL_FACE_DETECTED = 9; // 检测到违禁人脸
+    FAILED = 10; // 失败
+    BLOB_STORE_ERROR = 11; // blobstore获取失败
+    ILLEGAL = 12; // 违规
+    OVER_RATE_LIMIT = 13; // 超过限流配置
+    REJECT = 14; // 拒绝
+    EXCEED_MAXIMUM_SIZE = 15; // 超过grpc数据最大size
+    BAD_ANGLE = 16; // 角度不好
+    BAD_CLARITY = 17; // 清晰度不好
+    TIMEOUT = 18; // 超时
+    PARAM_ERROR = 19; // 参数错误
+    PROCESSING = 20; // 处理中
+    TRANSCODING_FAILED = 21; // 转码失败
+    SPEECH_RECOGNITION_FAILED =22; //语音识别失败
+    VAD_EMPTY = 23; //vad 结果为空
+    VAD_TIMEOUT = 24; //vad 超时
+    SPEECH_RECOGNITION_TIMEOUT = 25; //语音识别超时
+    GET_DATA_FAILED = 26; //获取数据失败
+    KEY_FRAME_FAILED = 27; //抽帧失败
+    AUIDO_CLIP_INPUT_ERROR  = 28;//原BGM的blobkey获取不到数据
+    AUDIO_CLIP_OUT_BOUNDS_OF_START = 29; //裁剪后的开始点越界
+    AUDIO_CLIP_OUT_BOUNDS_OF_END = 30 ; //裁剪后的结束点越界
+    AUDIO_CLIP_OTHER_ERROR = 31; //其他错
+    AUDIO_NOVOCAL = 32;// 音频无人声
+}
+
+message ResultStatus {
+    ResultCode code = 1;
+    string msg = 2; //具体的错误信息
+}
+
+message StringResponse {
+    ResultStatus status = 1;
+    string resullt = 2;
+}
+
+message RaiseSystemSignalRequest {
+    uint32 signal = 1;
+}

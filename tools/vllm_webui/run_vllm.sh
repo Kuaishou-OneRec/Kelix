@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -x
+
 ckpt_path=$1
 deploy_path=$2
 model_tag=$3

@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+option java_package = "com.kuaishou.mmu.common";
+option java_outer_classname = "Unit";
+
+package mmu.common;
+
+
+// The image message.
+message ImgUnit {
+    string id = 1;
+    bytes image = 2;
+    enum Type {
+        HEAD = 0;
+        BACKGROUND = 1;
+        FRAME = 2;
+    }
+    Type type = 3;
+    string txt = 4;
+    uint32 width = 5;
+    uint32 height = 6;
+    map<string, string> input_text = 7;
+}

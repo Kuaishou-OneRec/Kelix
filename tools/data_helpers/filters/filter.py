@@ -35,7 +35,6 @@ class FilterBase(object):
                     else:
                         raise ValueError(f"seg {seg} is not valid")
         return text
-
     def get_metadata(self, src):
         if "metadata" in src and isinstance(src['metadata'], str):
             return json.loads(src['metadata'])
