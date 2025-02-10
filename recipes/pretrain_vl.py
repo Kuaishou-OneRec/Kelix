@@ -374,7 +374,8 @@ def train():
   acc_valid_num_tokens = 0
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
-  
+  valid_data_source_tokens = collections.defaultdict(int)
+
   # get_sequence_parallel_group("gloo")
   for batch in gather_by_group(dataloader, get_sequence_parallel_group()):
     if show_cnt > 0 and dist.get_rank() == 0:
@@ -438,9 +439,9 @@ def train():
       local_labels = get_local_sequence(labels, seq_idx=1)
       loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
 
-      del logits
-      del labels
-      del local_labels
+      # del logits
+      # del labels
+      # del local_labels
 
     with Timer("bwd"):
       model.backward(loss)
@@ -462,6 +463,7 @@ def train():
         key = data_source[int(s_idx.item())]
         batch_data_source_loss[key] += sum_loss.item()
         batch_data_source_tokens[key] += mask.sum().item()
+        valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
 
     if args.monitor_datasource_cnt:
       for data_source_name in data_source:
@@ -480,6 +482,7 @@ def train():
       with Timer("reduce data source metrics"):
         batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
         batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
+        valid_data_source_tokens = dist_reduce_dict(valid_data_source_tokens)
         total_data_source_samples = dist_reduce_dict(
           local_acc_data_source_samples, group=get_data_parallel_group())
         for ds_key, ds_num_tokens in batch_data_source_tokens.items():
@@ -533,7 +536,7 @@ def train():
           for key, loss_sum in batch_data_source_loss.items():
             tb_writer.add_scalar(
                   f"data_source_loss/{key}",
-                  loss_sum / batch_data_source_tokens[key],
+                  loss_sum / valid_data_source_tokens[key],
                   global_step=iteration,
                   new_style=True)
 
@@ -579,6 +582,7 @@ def train():
       acc_valid_num_tokens = 0
       batch_data_source_loss = collections.defaultdict(float)
       batch_data_source_tokens = collections.defaultdict(int)
+      valid_data_source_tokens = collections.defaultdict(int)
 
     if iteration % args.save_checkpoint_per_step == 0 and \
         iteration > 0 and model.is_gradient_accumulation_boundary():
