@@ -61,10 +61,10 @@ def register_eval_routes(app):
             data = load_data(DATA_PATH) if DATA_PATH else []
             df = pd.DataFrame(data)
 
-            if 'image' not in df.columns:
-                df['image'] = df['messages'].apply(lambda x: extract_image(x))
-            
             if not df.empty:
+                if 'image' not in df.columns:
+                    df['image'] = df['messages'].apply(lambda x: extract_image(x))
+            
                 df['resized_image'] = df['image'].apply(lambda x: resize_base64_image(x, MAX_PIXELS))
                 df['messages'] = df['messages'].apply(lambda x: extract_messages(x))
                 
