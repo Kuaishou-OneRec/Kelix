@@ -68,15 +68,18 @@ def register_eval_routes(app):
                 df['resized_image'] = df['image'].apply(lambda x: resize_base64_image(x, MAX_PIXELS))
                 df['messages'] = df['messages'].apply(lambda x: extract_messages(x))
                 
-                # 按source分组计算统计信息
+                # 按source分组计算统计信息并排序
                 dataset_stats = {}
                 if 'dataset_name' in df.columns:
-                    # 如果数据还未标注，只显示各source的总数
                     for dataset_name, group in df.groupby('dataset_name'):
                         dataset_stats[dataset_name] = {
                             "count": len(group),
-                            "ratio": len(group) / len(df)
+                            "ratio": f"{(len(group) / len(df) * 100):.1f}%"
                         }
+                    # 按照count值从大到小排序
+                    dataset_stats = dict(sorted(dataset_stats.items(), 
+                                         key=lambda x: x[1]['count'], 
+                                         reverse=True))
                 
         except Exception as e:
             return render_template('visualize_eval_result.html', 
