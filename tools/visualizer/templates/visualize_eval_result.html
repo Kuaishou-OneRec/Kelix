@@ -85,16 +85,13 @@
             object-fit: contain;
         }
 
-        /* 添加错误统计样式 */
+        /* 修改错误统计样式，移除固定定位 */
         .error-stats {
-            position: fixed;
-            top: 20px;
-            right: 20px;
+            margin: 20px 0;  /* 替换固定定位为普通边距 */
             background-color: #fff;
             padding: 15px;
             border-radius: 5px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            z-index: 100;
         }
 
         .error-stats table {
@@ -105,6 +102,19 @@
         .error-stats th, .error-stats td {
             padding: 4px 8px;
             font-size: 14px;
+        }
+
+        /* 添加 Predict 列宽度限制 */
+        .predict-column {
+            max-width: 300px;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+        }
+
+        /* 确保标注列宽度固定 */
+        .label-column {
+            width: 120px;
+            min-width: 120px;
         }
     </style>
 </head>
@@ -119,7 +129,6 @@
                 <tr>
                     <th>数据集</th>
                     <th>错误数</th>
-                    <th>总数</th>
                     <th>错误率</th>
                 </tr>
             </thead>
@@ -232,8 +241,8 @@
                             {% endif %}
                         </td>
                         <td>{{ row.answer }}</td>
-                        <td>{{ row.predict }}</td>
-                        <td>
+                        <td class="predict-column">{{ row.predict }}</td>
+                        <td class="label-column">
                             <select name="label_{{ loop.index0 }}">
                                 {% for option in label_options %}
                                 <option value="{{ option }}" {% if option == row.label %}selected{% endif %}>{{ option }}</option>
