@@ -60,13 +60,27 @@ def register_eval_routes(app):
         try:
             data = load_data(DATA_PATH) if DATA_PATH else []
             df = pd.DataFrame(data)
+            dataset_stats = {}
 
-            if 'image' not in df.columns:
-                df['image'] = df['messages'].apply(lambda x: extract_image(x))
-            
             if not df.empty:
+                if 'image' not in df.columns:
+                    df['image'] = df['messages'].apply(lambda x: extract_image(x))
+            
                 df['resized_image'] = df['image'].apply(lambda x: resize_base64_image(x, MAX_PIXELS))
                 df['messages'] = df['messages'].apply(lambda x: extract_messages(x))
+                
+                # 按source分组计算统计信息并排序
+                if 'dataset_name' in df.columns:
+                    for dataset_name, group in df.groupby('dataset_name'):
+                        dataset_stats[dataset_name] = {
+                            "count": len(group),
+                            "ratio": f"{(len(group) / len(df) * 100):.1f}%"
+                        }
+                    # 按照count值从大到小排序
+                    dataset_stats = dict(sorted(dataset_stats.items(), 
+                                         key=lambda x: x[1]['count'], 
+                                         reverse=True))
+                
         except Exception as e:
             return render_template('visualize_eval_result.html', 
                                  error=f"加载数据失败: {str(e)}",
@@ -76,4 +90,5 @@ def register_eval_routes(app):
                              data=df.to_dict('records') if not df.empty else [],
                              label_options=ERROR_TYPES,
                              current_error_types=','.join(ERROR_TYPES),
-                             current_data_path=DATA_PATH) 
+                             current_data_path=DATA_PATH,
+                             dataset_stats=dataset_stats) 
