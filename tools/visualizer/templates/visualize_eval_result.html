@@ -84,11 +84,57 @@
             width: auto;
             object-fit: contain;
         }
+
+        /* 添加错误统计样式 */
+        .error-stats {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 100;
+        }
+
+        .error-stats table {
+            width: auto;
+            margin-bottom: 0;
+        }
+
+        .error-stats th, .error-stats td {
+            padding: 4px 8px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
     <h1>数据标注工具</h1>
     
+    <!-- 添加错误统计区域 -->
+    <div class="error-stats">
+        <h3 style="margin-top: 0;">数据集错误统计</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>数据集</th>
+                    <th>错误数</th>
+                    <th>总数</th>
+                    <th>错误率</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for dataset, stats in dataset_stats.items() %}
+                <tr>
+                    <td>{{ dataset }}</td>
+                    <td>{{ stats.count }}</td>
+                    <td>{{ stats.ratio }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
     <!-- 添加数据路径输入表单 -->
     <form method="post" style="margin-bottom: 20px;">
         <label for="data_path">数据文件路径：</label>

@@ -67,6 +67,17 @@ def register_eval_routes(app):
             if not df.empty:
                 df['resized_image'] = df['image'].apply(lambda x: resize_base64_image(x, MAX_PIXELS))
                 df['messages'] = df['messages'].apply(lambda x: extract_messages(x))
+                
+                # 按source分组计算统计信息
+                dataset_stats = {}
+                if 'dataset_name' in df.columns:
+                    # 如果数据还未标注，只显示各source的总数
+                    for dataset_name, group in df.groupby('dataset_name'):
+                        dataset_stats[dataset_name] = {
+                            "count": len(group),
+                            "ratio": len(group) / len(df)
+                        }
+                
         except Exception as e:
             return render_template('visualize_eval_result.html', 
                                  error=f"加载数据失败: {str(e)}",
@@ -76,4 +87,5 @@ def register_eval_routes(app):
                              data=df.to_dict('records') if not df.empty else [],
                              label_options=ERROR_TYPES,
                              current_error_types=','.join(ERROR_TYPES),
-                             current_data_path=DATA_PATH) 
+                             current_data_path=DATA_PATH,
+                             dataset_stats=dataset_stats) 
