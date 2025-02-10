@@ -7,6 +7,7 @@ from .dataset import (
     WebDataset,
     TgzImageDataset,
     VlmTextJsonl,
+    ImagesDataset,
     PubTabNetDataset
 )
 from .fintabnet_dataset import FinTabNetDataset

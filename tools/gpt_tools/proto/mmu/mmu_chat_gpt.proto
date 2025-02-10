@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+option java_package = "com.kuaishou.protobuf.mmu.nlp";
+option java_outer_classname = "MmuChatGptServiceProto";
+option java_multiple_files = true;
+
+package mmu.nlp;
+
+import "mmu/media_common_result_status.proto";
+import "mmu/media_common.proto";
+
+message MmuChatGptRequest {
+    string biz = 1; //业务标识,新业务接入需要申请
+    string session_id = 2; //会话ID
+    string req_id = 3; //请求Id
+    map<string, string> config = 4; //配置信息
+    string query = 5; //用户query
+    repeated string query_history = 6; //对话历史
+    repeated mmu.common.ImgUnit img = 7;
+}
+
+message MmuChatGptResponse {
+    mmu.common.ResultStatus status = 1; //状态,成功为SUCCESS
+    string answer = 2; //结果
+    repeated string query_history = 3; //对话历史
+}
+
+message MmuChatGptEmbResponse {
+    mmu.common.ResultStatus status = 1; //状态,成功为SUCCESS
+    repeated float emb = 2;
+}
+
+service MmuChatGptService {
+    rpc Chat(MmuChatGptRequest) returns (MmuChatGptResponse);
+    rpc Emb(MmuChatGptRequest) returns (MmuChatGptEmbResponse);
+    rpc StreamChat(MmuChatGptRequest) returns (stream MmuChatGptResponse);
+}

@@ -10,6 +10,8 @@ from torch.utils.data import IterableDataset
 import webdataset as wds
 import tarfile
 import base64
+from PIL import Image
+import io
 import bs4
 from bs4 import BeautifulSoup as bs
 from html import escape
@@ -30,8 +32,13 @@ class ParquetDataset(DistDataset):
             columns = list(columns)
         self.columns = columns
         self.user = user
-        self.shard_files = self.get_shard_files(path)
-    
+        if isinstance(path, str):
+            self.shard_files = self.get_shard_files(path)
+        else:
+            self.shard_files = []
+            for p in path:
+                self.shard_files += self.get_shard_files(p)
+                
     def get_shard_files(self, path: str):
         if self.rank == 0:
             if path.startswith("viewfs"):
@@ -178,6 +185,53 @@ class VlmTextJsonl(DistDataset):
                 else:
                     yield src
 
+class ImagesDataset(DistDataset):
+    def __init__(self, path, img_max_size=0):
+        super().__init__()
+        self.img_path = []
+        self.img_max_size = img_max_size
+
+        for filename in os.listdir(path):
+            file_path = os.path.join(path, filename)
+            if os.path.isfile(file_path) and "(" not in filename and ")" not in filename and filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                self.img_path.append((file_path, filename))
+        
+        shard_size = len(self.img_path) // self.world_size
+        self.img_path = self.img_path[self.rank * shard_size: (self.rank + 1) * shard_size]
+    
+    def __len__(self):
+        return len(self.img_path)
+    
+    def resize_image(self, img):
+        width, height = img.size
+        if width > height:
+            ratio = self.img_max_size / width
+        else:
+            ratio = self.img_max_size / height
+        new_width = int(width * ratio)
+        new_height = int(height * ratio)
+        img = img.resize((new_width, new_height))
+        return img
+
+    def read_image(self, img_path):
+        try:
+            with Image.open(img_path) as img:
+                img = img.convert('RGB')
+                if self.img_max_size > 0 and max(img.size) > self.img_max_size:
+                    img = self.resize_image(img)
+                img_byte_arr = io.BytesIO()
+                img.save(img_byte_arr, format='JPEG')
+                img_bytes = img_byte_arr.getvalue()
+                return img_bytes
+        except Exception as e:
+            print(f"Skipped {img_path}, err_msg={e}")
+            return None
+
+    def __iter__(self):
+        for img_path, img_name in self.img_path:
+            img_bytes = self.read_image(img_path)
+            yield img_path, img_name, img_bytes
+
 class PubTabNetDataset(DistDataset):
     def __init__(self, path):
         super().__init__()
@@ -238,3 +292,9 @@ class PubTabNetDataset(DistDataset):
                         data['image'] = base64.b64encode(img_bytes).decode('ascii')
                         data['html'] = self.format_html(data)
                         yield data
+                        
+if __name__ == "__main__":
+    dataset = ImagesDataset('/llm_reco_ssd/zhangzixing/XFUND_img', 1080)
+    for img_data in dataset:
+        img_path, img_name, img_bytes = img_data
+        print(img_path, len(img_bytes))
