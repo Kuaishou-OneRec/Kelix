@@ -60,6 +60,7 @@ def register_eval_routes(app):
         try:
             data = load_data(DATA_PATH) if DATA_PATH else []
             df = pd.DataFrame(data)
+            dataset_stats = {}
 
             if not df.empty:
                 if 'image' not in df.columns:
@@ -69,7 +70,6 @@ def register_eval_routes(app):
                 df['messages'] = df['messages'].apply(lambda x: extract_messages(x))
                 
                 # 按source分组计算统计信息并排序
-                dataset_stats = {}
                 if 'dataset_name' in df.columns:
                     for dataset_name, group in df.groupby('dataset_name'):
                         dataset_stats[dataset_name] = {
