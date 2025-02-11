@@ -49,6 +49,7 @@ class Shuffler(MPIBase):
             files = None
         files = self.comm.bcast(files, root=0)
         self.files = files[self.rank::self.world_size]
+        self.sample_rate_dict = self.comm.bcast(self.sample_rate_dict, root=0)
     
     def write_df(self, df):
         basename = f"rank-{self.rank}-{str(uuid.uuid1())}.parquet"

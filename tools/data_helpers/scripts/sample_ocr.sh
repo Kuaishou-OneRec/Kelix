@@ -31,4 +31,12 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        python3 parquet_sample_counter_mpi.py files.txt
+        python3 tools/data_helpers/all_shuffle.py \
+        --buffer_mem_size 21474836480 \
+        --output_dir viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2_shuffle/ocr_overfit \
+        --input_dir \
+viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/SyntheticOCR_EN_HW@0.0009 \
+viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/SyntheticOCR_CN_HW@0.0009
+
+
+# total 39M samples
