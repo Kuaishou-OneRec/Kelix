@@ -13,7 +13,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage2/0.0.29
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage2/0.0.33
 
 mkdir -p $OUTPUT_DIR
 
@@ -22,7 +22,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="stage2，春节前全部stg2数据，修复content: str类型样本，以及message=‘null’样本"
+comment="stage2，直接从stg1初始化，全部ocr数据，增大学习率, vit 使用layer decay， 修复weight decay"
 
 
 git add --all
@@ -47,20 +47,22 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --output_dir $OUTPUT_DIR \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
-    --dataset_config examples/vlm/configs/stage2_parquet_0125.json \
+    --dataset_config examples/vlm/configs/stage2_parquet_ocrall_0207.json \
     --resume_from /llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36 \
     --resume_from_tag global_step90000 \
     --load_weights_only \
     --max_length 8192 \
     --auto_resume_local_latest \
     --load_weights_only \
-    --learning_rate 1e-5 \
+    --learning_rate 5e-5 \
+    --vision_learning_rate 5e-5 \
+    --vision_lr_layer_decay 0.95 \
     --min_lr 1e-6 \
     --weight_decay 0.1 \
     --lr_scheduler_type cosine \
     --num_warmup_steps 500 \
-    --num_training_steps 120000 \
-    --save_checkpoint_per_step 3000 \
+    --num_training_steps 60000 \
+    --save_checkpoint_per_step 2000 \
     --enable_gradient_checkpointing \
     --sequence_parallel_size 1 \
     --use_flash_attention_2 \

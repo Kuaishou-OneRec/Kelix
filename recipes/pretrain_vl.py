@@ -124,6 +124,13 @@ def get_argument_parser():
   parser.add_argument("--learning_rate", type=float, default=2e-4,
                       help="The peak learning rate for optimizer.")
   
+  parser.add_argument("--vision_learning_rate", type=float, default=-1.0,
+                      help="The peak vit learning rate for optimizer." \
+                           "Note: vision_learning_rate will be set to learning_rate if vision_learning_rate < 0.0")
+  
+  parser.add_argument("--vision_lr_layer_decay", type=float, default=1.0,
+                      help="Decay vit learning rate by layers.")
+
   parser.add_argument("--weight_decay", type=float, default=0.1,
                       help="The weight decay for Adam Optimizer")
   
@@ -206,6 +213,11 @@ def train():
   arg_parser = deepspeed.add_config_arguments(arg_parser)
   args = arg_parser.parse_args()
 
+  # check vision_lr
+  assert args.learning_rate > 0.0
+  if args.vision_learning_rate < 0.0:
+    args.vision_learning_rate = args.learning_rate
+
   assert all([args.commit_id, args.seed, args.comment]), \
     "Git commit, seed, and comment is required for reproducibility"
 
@@ -243,6 +255,10 @@ def train():
   if dist.get_rank() == 0:
     os.makedirs(args.output_dir, exist_ok=True)
     tb_writer = SummaryWriter(log_dir=os.path.join(args.output_dir, "log"))
+    tb_writer.add_text("comment", args.comment, 0)
+    tb_writer.add_text("comment_id", args.commit_id, 0)
+    tb_writer.add_text("kml_id", args.kml_id, 0)
+    tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
   # enabled=False when zero stage < 3
   with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config,
@@ -272,7 +288,13 @@ def train():
 
   # Split weights in two groups, one with weight decay and the other not.
   optimizer_grouped_parameters = get_optimizer_grouped_parameters(
-      model, args.weight_decay)
+      model,
+      learning_rate=args.learning_rate,
+      vision_learning_rate=args.vision_learning_rate,
+      weight_decay=args.weight_decay,
+      no_decay_name_list=["bias", "norm1", "norm2", "visual.merger.ln_q", "input_layernorm", "post_attention_layernorm", "model.norm"],
+      vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
+    )
 
   # prepare optimizer
   optimizer = FusedAdam(optimizer_grouped_parameters,
@@ -491,6 +513,7 @@ def train():
 
       if dist.get_rank() == 0:
         learning_rate = model.lr_scheduler.get_lr()[0]
+        vision_learning_rate = model.lr_scheduler.get_lr()[2]
         end_time = time.time()
         sec_per_step = (end_time - start_time) / acc_step
         tokens_per_sec_per_gpu = \
@@ -505,6 +528,7 @@ def train():
           "training/loss": avg_loss,
           "training/grad_norm": model.get_global_grad_norm(),
           "training/learning_rate": learning_rate,
+          "training/vision_learning_rate": vision_learning_rate,
           "perf/sec_per_step": sec_per_step,
           "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
           "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
