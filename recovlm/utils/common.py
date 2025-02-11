@@ -12,39 +12,120 @@ import subprocess
 import os
 from infra.perflog import create_perf_context
 
-def get_optimizer_grouped_parameters(model,
-                                     weight_decay,
-                                     no_decay_name_list=[
-                                         "bias", "LayerNorm.weight"
-                                     ]):
-  optimizer_grouped_parameters = [
-    {
-      "params": [
-        p for n, p in model.named_parameters()
-        if (not any(nd in n
-                    for nd in no_decay_name_list) and p.requires_grad)
-      ],
-      "weight_decay":
-      weight_decay,
-    },
-    {
-      "params": [
-        p for n, p in model.named_parameters()
-        if (any(nd in n
-                for nd in no_decay_name_list) and p.requires_grad)
-      ],
-      "weight_decay":
-      0.0,
-    },
-  ]
-  return optimizer_grouped_parameters
-
 def print_rank_n(*msg, rank=0):
   if dist.get_rank() == rank:
     print(*msg)
 
 def print_rank_0(*msg):
   print_rank_n(*msg, rank=0)
+
+def get_optimizer_grouped_parameters(model,
+                                     learning_rate: float,
+                                     vision_learning_rate: float,
+                                     weight_decay,
+                                     no_decay_name_list=[
+                                         "bias", "LayerNorm.weight"
+                                     ],
+                                     vision_learning_rate_layer_dacay=1.0):
+  optimizer_grouped_parameters = []
+
+  llm_wd_params_group = []
+  llm_nowd_params_group = []
+  vit_wd_params_group = []
+  vit_nowd_params_group = []
+
+  for n, p in model.named_parameters():
+    if any(nd in n for nd in no_decay_name_list) and p.requires_grad:
+      # no weight decay params
+      if n.startswith("visual"):
+        vit_nowd_params_group.append((n, p))
+      else:
+        llm_nowd_params_group.append((n, p))
+    else:
+      # weight decay params
+      if n.startswith("visual"):
+        vit_wd_params_group.append((n, p))
+      else:
+        llm_wd_params_group.append((n, p))
+  
+  # for LLM
+  optimizer_grouped_parameters.append({
+    "params": [p for n, p in llm_wd_params_group],
+    "weight_decay": 0.0,
+    "lr": learning_rate,
+  })
+  optimizer_grouped_parameters.append({
+    "params": [p for n, p in llm_nowd_params_group],
+    "weight_decay": weight_decay,
+    "lr": learning_rate,
+  })
+
+  # for vit
+  if vision_learning_rate_layer_dacay == 1.0:
+    optimizer_grouped_parameters.append({
+      "params": [p for n, p in vit_wd_params_group],
+      "weight_decay": weight_decay,
+      "lr": vision_learning_rate,
+    })
+    optimizer_grouped_parameters.append({
+      "params": [p for n, p in vit_nowd_params_group],
+      "weight_decay": 0.0,
+      "lr": vision_learning_rate,
+    })
+  else:
+    # decay by layer
+    vit_opt_groups = []
+
+    # get all vit layers
+    layer_ids = set()
+    for n, _ in vit_wd_params_group + vit_nowd_params_group:
+      if n.startswith("visual.blocks."):
+        layer_ids.add(int(n.split(".")[2]))
+    layer_ids = list(layer_ids)
+    layer_ids.sort()
+    layer_ids.reverse()
+    # cal layer lr
+    layers_params = []
+    for idx, lid in enumerate(layer_ids):
+      layer_lr = vision_learning_rate * (vision_learning_rate_layer_dacay ** idx)
+      print_rank_0(f"visual.blocks.{lid}. {layer_lr=}")
+
+      layers_params.extend([n for n, p in vit_wd_params_group if n.startswith(f"visual.blocks.{lid}.")])
+      layers_params.extend([n for n, p in vit_nowd_params_group if n.startswith(f"visual.blocks.{lid}.")])
+      
+      vit_opt_groups.append({
+        "params": [p for n, p in vit_wd_params_group if n.startswith(f"visual.blocks.{lid}.")],
+        "weight_decay": weight_decay,
+        "lr": layer_lr,
+      })
+      vit_opt_groups.append({
+        "params": [p for n, p in vit_nowd_params_group if n.startswith(f"visual.blocks.{lid}.")],
+        "weight_decay": 0.0,
+        "lr": layer_lr,
+      })
+
+    optimizer_grouped_parameters.append({
+        "params": [p for n, p in vit_wd_params_group if n not in layers_params],
+        "weight_decay": weight_decay,
+        "lr": vision_learning_rate,
+    })
+    optimizer_grouped_parameters.append({
+        "params": [p for n, p in vit_nowd_params_group if n not in layers_params],
+        "weight_decay": 0.0,
+        "lr": vision_learning_rate,
+    })
+    optimizer_grouped_parameters.extend(vit_opt_groups)
+    
+  for n, _ in llm_wd_params_group:
+    print_rank_0(f"llm_weight_decay_params: {n}")
+  for n, _ in llm_nowd_params_group:
+    print_rank_0(f"llm_no_weight_decay_params: {n}")
+  for n, _ in vit_wd_params_group:
+    print_rank_0(f"vit_weight_decay_params: {n}")
+  for n, _ in vit_nowd_params_group:
+    print_rank_0(f"vit_no_weight_decay_params: {n}")
+
+  return optimizer_grouped_parameters
 
 def to_device(batch, device):
   for key in list(batch.keys()):
