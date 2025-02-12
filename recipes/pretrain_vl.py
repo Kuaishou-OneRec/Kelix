@@ -147,6 +147,9 @@ def get_argument_parser():
 
   parser.add_argument("--freeze_visual", action="store_true",
                       help="Freeze visual encoder parameters.")
+  
+  parser.add_argument("--freeze_visual_without_adapter", action="store_true",
+                      help="Only freeze visual encoder parameters, train adapter parameters.")
 
   parser.add_argument("--local_rank", type=int, default=-1,
                       help="Reserved for deepspeed framework")
@@ -273,6 +276,7 @@ def train():
       if not name.startswith("visual"):
         print_rank_0(f"Disable LLM grad: {name}")
         param.requires_grad = False
+    print_rank_0("=" * 50)
 
   if args.freeze_visual:
     print_rank_0("Freeze visual encoder parameters.")
@@ -280,6 +284,21 @@ def train():
       if name.startswith("visual"):
         print_rank_0(f"Disable visual encoder grad: {name}")
         param.requires_grad = False
+    print_rank_0("=" * 50)
+    
+  if args.freeze_visual_without_adapter:
+    print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
+    for name, param in model.named_parameters():
+      if name.startswith("visual") and not name.startswith("visual.merger."):
+        print_rank_0(f"Disable visual encoder grad: {name}")
+        param.requires_grad = False
+    print_rank_0("=" * 50)
+  
+  # print train params log
+  for name, param in model.named_parameters():
+    if param.requires_grad:
+      print_rank_0(f"params not freeze: {name}")
+  print_rank_0("=" * 50)
 
   if args.enable_gradient_checkpointing:
     print_rank_0("Enable gradient checkpointing")
@@ -512,8 +531,13 @@ def train():
         
 
       if dist.get_rank() == 0:
-        learning_rate = model.lr_scheduler.get_lr()[0]
-        vision_learning_rate = model.lr_scheduler.get_lr()[2]
+        model_lrs = model.lr_scheduler.get_lr()
+        learning_rate = model_lrs[0]
+        if len(model_lrs) > 2:
+          vision_learning_rate = model.lr_scheduler.get_lr()[2]
+        else:
+          vision_learning_rate = model.lr_scheduler.get_lr()[1]
+          
         end_time = time.time()
         sec_per_step = (end_time - start_time) / acc_step
         tokens_per_sec_per_gpu = \

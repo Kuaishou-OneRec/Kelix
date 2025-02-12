@@ -35,18 +35,19 @@ def get_optimizer_grouped_parameters(model,
   vit_nowd_params_group = []
 
   for n, p in model.named_parameters():
-    if any(nd in n for nd in no_decay_name_list) and p.requires_grad:
-      # no weight decay params
-      if n.startswith("visual"):
-        vit_nowd_params_group.append((n, p))
+    if p.requires_grad:
+      if any(nd in n for nd in no_decay_name_list):
+        # no weight decay params
+        if n.startswith("visual"):
+          vit_nowd_params_group.append((n, p))
+        else:
+          llm_nowd_params_group.append((n, p))
       else:
-        llm_nowd_params_group.append((n, p))
-    else:
-      # weight decay params
-      if n.startswith("visual"):
-        vit_wd_params_group.append((n, p))
-      else:
-        llm_wd_params_group.append((n, p))
+        # weight decay params
+        if n.startswith("visual"):
+          vit_wd_params_group.append((n, p))
+        else:
+          llm_wd_params_group.append((n, p))
   
   # for LLM
   optimizer_grouped_parameters.append({
@@ -116,16 +117,21 @@ def get_optimizer_grouped_parameters(model,
     })
     optimizer_grouped_parameters.extend(vit_opt_groups)
     
-  for n, _ in llm_wd_params_group:
-    print_rank_0(f"llm_weight_decay_params: {n}")
-  for n, _ in llm_nowd_params_group:
-    print_rank_0(f"llm_no_weight_decay_params: {n}")
-  for n, _ in vit_wd_params_group:
-    print_rank_0(f"vit_weight_decay_params: {n}")
-  for n, _ in vit_nowd_params_group:
-    print_rank_0(f"vit_no_weight_decay_params: {n}")
-
-  return optimizer_grouped_parameters
+  # for n, _ in llm_wd_params_group:
+  #   print_rank_0(f"llm_weight_decay_params: {n}")
+  # for n, _ in llm_nowd_params_group:
+  #   print_rank_0(f"llm_no_weight_decay_params: {n}")
+  # for n, _ in vit_wd_params_group:
+  #   print_rank_0(f"vit_weight_decay_params: {n}")
+  # for n, _ in vit_nowd_params_group:
+  #   print_rank_0(f"vit_no_weight_decay_params: {n}")
+  
+  # remove empty params group
+  final_optimizer_grouped_parameters = []
+  for group in optimizer_grouped_parameters:
+    if len(group['params']) > 0:
+      final_optimizer_grouped_parameters.append(group)
+  return final_optimizer_grouped_parameters
 
 def to_device(batch, device):
   for key in list(batch.keys()):
