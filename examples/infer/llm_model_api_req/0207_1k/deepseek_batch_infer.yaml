@@ -1,0 +1,5 @@
+image_folder: /llm_reco_ssd/huqigen/photo_0207_1k/4fd811bcd31248778b219127ce4639da
+excel_file_path: /llm_reco_ssd/huqigen/0207_1k.xlsx
+parquet_path: /llm_reco_ssd/huqigen/dataset/wenjuan_sft/photo_0207_1k.parquet
+result_path: /llm_reco_ssd/huqigen/infer_result/deepseek_batch_result.jsonl
+infer_num_limit: 1000

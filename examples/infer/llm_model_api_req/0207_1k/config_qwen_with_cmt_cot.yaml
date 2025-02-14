@@ -1,0 +1,10 @@
+client_type: "qwen"  # 或 "qwen"
+folder_path: "/Users/huqigen/code/llm_model_req"
+image_folder: "photo_0207_1k/4fd811bcd31248778b219127ce4639da/"
+excel_file_path: "0207_1k.xlsx"
+model_name: "qwen-vl-max"
+result_file: "qwen_0207_result_with_cmt_cot.txt"
+prompt_pre: f"你是一个短视频平台的内容理解专家，请结合短视频的视频抽帧结果、ocr内容、asr内容以及这个视频在短视频平台的热门评论信息，判断用户是否会对这个视频满意。请充分考虑评论信息，结合这些信息提炼出该视频所有的看点。请深呼吸并一步步仔细思考，并输出思考过程和结果。"
+prompt_end: f"请在回答的最后给出最终的满意度判断结果，只包含满意/不满意两种类型，格式为：【结果：满意/不满意】"
+enable_cmt: true
+is_debug: true  # 或 false

@@ -1,0 +1,12 @@
+image_folder: "/llm_reco_ssd/huqigen/photo_0207_1k/4fd811bcd31248778b219127ce4639da"
+excel_file_path: "/llm_reco_ssd/huqigen/0207_1k.xlsx"
+data_source: "excel"
+hdfs_path: "viewfs://hadoop-lt-cluster/path/to/data"
+parquet_path: "/llm_reco_ssd/huqigen/dataset/wenjuan_sft/photo_0207_1k/photo_0207_1k_sft_data.parquet"
+txt_file_path: "/llm_reco_ssd/huqigen/recovlm/examples/infer/llm_model_api_req/0207_1k/deepseek_0207_1k_response_with_cmt_cot.txt"
+hdfs_output_path: "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/huqigen/recovlm_dataset/wenjuan_sft/0207_1k"
+num_shards: 64
+resize_image: false
+index_file: "/llm_reco_ssd/huqigen/dataset/wenjuan_sft/0207_1k_hdfs_index.json"  # 可选，默认为 dataset_index.json
+num_workers: 10
+source_name: "wenjuan_photo_0207_1k"

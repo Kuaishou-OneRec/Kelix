@@ -44,7 +44,7 @@ class ParquetDataset(DistDataset):
             if path.startswith("viewfs"):
                 self.fs = pa.hdfs.connect(user=self.user)
                 files = self.fs.ls(path)
-                files = sorted([x for x in files if x.endswith("parquet")])
+                files = sorted([x for x in files if x.endswith("parquet")  or "part-" in x])
             elif path.startswith("/"):
                 files = sorted(glob(os.path.join(path, "*.parquet")))
             num_files = len(files)

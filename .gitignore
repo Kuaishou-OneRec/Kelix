@@ -21,6 +21,8 @@ hostfile
 *.out
 *checkpoint.ipynb
 *.parquet
+*.swp
+*.xlsx
 
 recovlm/benchmark/eval/tmp*
 recovlm/benchmark/tmp*

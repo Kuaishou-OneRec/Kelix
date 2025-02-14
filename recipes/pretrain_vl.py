@@ -35,6 +35,10 @@ from recovlm.training.parallel import get_sequence_parallel_group, \
   get_local_sequence, get_data_parallel_group, get_data_parallel_world_size, \
   get_data_parallel_rank
 
+# Logger 初始化
+logging.basicConfig(level=logging.INFO)  # 设置日志级别
+logger = logging.getLogger(__name__)  # 创建 logger 实例
+
 def get_argument_parser():
   parser = argparse.ArgumentParser()
 
@@ -198,13 +202,28 @@ def get_argument_parser():
 def get_resume_info(args):
   # return: ckpt_folder, ckpt_tag, rewrite_flag
   if not args.auto_resume_local_latest:
+    # Add validation for manual resume path
+    if args.resume_from and not os.path.exists(args.resume_from):
+      raise ValueError(f"Resume checkpoint directory {args.resume_from} does not exist")
+    
+    if args.resume_from and args.resume_from_tag:
+      ckpt_path = os.path.join(args.resume_from, args.resume_from_tag)
+      if not os.path.exists(ckpt_path):
+        raise ValueError(f"Resume checkpoint path {ckpt_path} does not exist")
+      
     return args.resume_from, args.resume_from_tag, False
   else:
     # check local ckpt
     latest_file = os.path.join(args.output_dir, "latest")
     if os.path.exists(latest_file):
       with open(latest_file, encoding="utf-8") as f:
-        ckpt_id = f.read()
+        ckpt_id = f.read().strip()  # Add strip() to remove whitespace
+      
+      # Validate checkpoint exists
+      ckpt_path = os.path.join(args.output_dir, ckpt_id)
+      if not os.path.exists(ckpt_path):
+        raise ValueError(f"Latest checkpoint path {ckpt_path} does not exist")
+        
       print_rank_0(f"Check output_ckpt exists, auto resume from output_folder." \
                    f"checkpoint: resume_from={args.output_dir}, resume_tag={ckpt_id}")
       return args.output_dir, ckpt_id, True
@@ -352,15 +371,32 @@ def train():
                  f"WARN: --load_weights_only is rewrited to False \n")
     
   if ckpt_id:
+    ckpt_path = os.path.join(resume_from, ckpt_id)
     print_rank_0(
-      f"Resume from checkpoint: {os.path.join(resume_from, ckpt_id)}, "
+      f"Resume from checkpoint: {ckpt_path}, "
       f"load_weights_only={args.load_weights_only}")
+    
+    if not os.path.exists(ckpt_path):
+      raise ValueError(f"Checkpoint path {ckpt_path} does not exist")
+      
     _, client_state = model.load_checkpoint(
       resume_from, ckpt_id, load_module_only=args.load_weights_only)
 
     if args.resume_dataloader:
       dataloader_resume_path = os.path.join(resume_from, "dataloader_ckpt", f"rank{dist.get_rank()}_{ckpt_id}.pth")
-      dataloader_state_dict = torch.load(dataloader_resume_path)["dataloader_state_dict"]
+      # Add validation for dataloader checkpoint
+      if not os.path.exists(dataloader_resume_path):
+        print_rank_0(f"Warning: Dataloader checkpoint {dataloader_resume_path} does not exist")
+        print_rank_0("Will start training without resuming dataloader state")
+        dataloader_state_dict = None
+      else:
+        try:
+          dataloader_state_dict = torch.load(dataloader_resume_path)["dataloader_state_dict"]
+          print_rank_0(f"Successfully loaded dataloader state from {dataloader_resume_path}")
+        except Exception as e:
+          print_rank_0(f"Error loading dataloader checkpoint: {str(e)}")
+          print_rank_0("Will start training without resuming dataloader state")
+          dataloader_state_dict = None
 
     if not args.load_weights_only:
       total_num_tokens = client_state.get("total_num_tokens", 0)
@@ -428,6 +464,7 @@ def train():
         show_cnt -= 1
 
     data_source = batch.pop("data_source", None) # dataset source list cur batch
+    iteration = model.global_steps
     to_cuda(batch)
     input_ids = batch["input_ids"]
     loss_mask = batch["loss_mask"]
@@ -438,6 +475,13 @@ def train():
     video_grid_thw = batch.get("video_grid_thw", None)
     cu_seqlens = batch.get("cu_seqlens", None)
     sample_idx = batch["sample_idx"]
+
+    # 打印 token 数量
+    token_count = input_ids.numel()  # 计算 token 数量
+    print_rank_0(f"Iteration {acc_step}: Token count = {token_count}")
+
+    # 前向过程日志
+    logger.debug(f"Forward pass: Iteration {acc_step}, Input IDs shape: {input_ids.shape}")
 
     num_tokens = input_ids.numel()
     num_samples = (sample_idx.max() + 1).sum()
@@ -462,6 +506,9 @@ def train():
 
     input_ids = input_ids * (input_ids > 0).to(torch.int64)
     labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
+
+    # 后向过程日志
+    logger.debug(f"Backward pass: Iteration {acc_step}, Labels shape: {labels.shape}")
 
     with Timer("Fwd"):
       output = model(
@@ -488,7 +535,6 @@ def train():
       model.backward(loss)
       model.step()
 
-    iteration = model.global_steps
     ########## dataset source monitor ###############
     if args.monitor_datasource_loss:
       # WARN: assume batch_size = 1

@@ -1,0 +1,9 @@
+folder_path: "/llm_reco_ssd/huqigen"
+image_folder: "dataset/wenjuan_sft/photo_0210_1w/e0ee4205a9434fef9d888823a03b791b"
+excel_file_path: "dataset/wenjuan_sft/photo_0210_1w/photo_0210_1w.xlsx"
+sid_prefix: "0210_1w_with_cmt_cot_"
+output_filename : "gpt4o_0210_1w_response_with_cmt_cot.txt"
+prompt_pre: "你是一个短视频平台内容理解专家，为了将该视频推荐给潜在感兴趣的用户，请结合短视频的视频抽帧结果、ocr 结果、asr 结果以及平台内所有用户对这个视频评论信息判断用户是否会对这个视频满意。请充分考虑评论信息，结合这些信息提炼出该视频所有的看点。用中文进行回答。"
+prompt_end: "。请深呼吸并一步步仔细思考，请输出思考过程和结果。请在回答的最后给出最终的满意度判断结果，只包含满意/不满意两种类型，格式为：【结果：满意/不满意】"
+enable_cmt: true
+is_debug: false
