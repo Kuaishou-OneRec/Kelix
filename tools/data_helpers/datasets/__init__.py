@@ -10,7 +10,7 @@ from .dataset import (
     ImagesDataset,
     PubTabNetDataset
 )
-from .fintabnet_dataset import FinTabNetDataset
+# from .fintabnet_dataset import FinTabNetDataset
     
 def create_dataset(cfg) -> DistDataset:
     return eval(cfg.class_name)(**cfg.kwargs)

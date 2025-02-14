@@ -1401,6 +1401,7 @@ class ParquetDataset(IterableDataset):
       
       # process file content
       if parquet_file is not None:
+        logger.warning(f"[Rank{rank}-{worker}] {fn} total row_groups: {parquet_file.num_row_groups}")
         for group_idx in range(parquet_file.num_row_groups):
           try:
             offset = 0
@@ -1415,7 +1416,7 @@ class ParquetDataset(IterableDataset):
             row_group = parquet_file.read_row_group(group_idx)
             if offset >= row_group.num_rows:
               continue
-            logger.warning(f"[Rank{rank}-{worker}] start {fn}-epoch{epoch_idx}-group{group_idx}-{offset=}")
+            logger.warning(f"[Rank{rank}-{worker}] start {fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
             row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
 
             for row_idx, row in row_pandas.iterrows():
@@ -1427,6 +1428,7 @@ class ParquetDataset(IterableDataset):
               if sample != None:
                 yield sample
               offset_dict[fn_group_key] = row_idx
+              logger.warning(f"get row_index succ, [Rank{rank}-{worker}] {fn}-epoch{epoch_idx}-group{group_idx}-row_idx{row_idx}")
           except:
             logger.error(f"ParquetDataset loop file_content error!!! error_msg={traceback.format_exc()}")
 
