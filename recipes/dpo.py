@@ -304,6 +304,36 @@ def train():
   for p in ref_model.parameters():
     p.requires_grad = False
 
+  # 使用 deepspeed 初始化模型
+  print_rank_0("====dpo==== Initializing deepspeed...")
+  with Timer("Initialize deepspeed model."):
+    model.train()
+    model, optimizer, _, lr_scheduler = deepspeed.initialize(
+        args=args,
+        model=model,
+        optimizer=optimizer,
+        lr_scheduler=lr_scheduler
+    )
+
+    # 为参考模型创建一个虚拟优化器（参数不会被更新）
+    ref_model.eval()  # 确保在评估模式
+    dummy_optimizer = FusedAdam(
+        [{'params': [p for p in ref_model.parameters()]}],
+        lr=0.0,  # 学习率设为0
+        betas=(0.9, 0.999)
+    )
+    
+    # 同样初始化参考模型
+    ref_model, _, _, _ = deepspeed.initialize(
+        args=args,
+        model=ref_model,
+        optimizer=dummy_optimizer
+    )
+
+    # 确保参考模型参数被冻结
+    for param in ref_model.parameters():
+        param.requires_grad = False
+
   model_engine, _, _, _ = deepspeed.initialize(args=args,
                                                model=model)
 

@@ -94,6 +94,7 @@ import traceback
 import subprocess  # 确保导入 subprocess 模块
 import gc
 import time
+import glob
 
 # Third-party libraries
 import cv2
@@ -167,6 +168,12 @@ class DataParser:
         self.image_folders = [folder.strip() for folder in config['image_folder'].split(';')]
         self.output_path = config['parquet_path']
         self.txt_file_path = config['txt_file_path']
+        
+        # 新增：支持读取txt目录
+        self.txt_dir_path = config.get('txt_dir_path', '')
+        
+        # 新增：数据集分割结果保存路径
+        self.split_output_dir = config.get('split_output_dir', '')
         
         # 数据源配置
         self.excel_file_path = config.get('excel_file_path', '')
@@ -264,7 +271,9 @@ class DataParser:
         description = self.photo_texts[photo_id]
         user_text = self._build_user_text(description)
         satisfaction = "满意" if description['wenjuan_type'] == '问卷优质' else "不满意"
-        result_text = f"用户对视频的满意度结果是：{satisfaction}"
+        
+        # 检查是否有CoT结果
+        assistant_content = self.photo_cot_results.get(photo_id, f"用户对视频的满意度结果是：{satisfaction}")
         
         return [
             {
@@ -282,7 +291,7 @@ class DataParser:
             },
             {
                 "role": "assistant",
-                "content": result_text
+                "content": assistant_content
             }
         ]
 
@@ -663,7 +672,47 @@ class DataParser:
         print(f"Train set size: {len(train_ids)}")
         print(f"Test set size: {len(test_ids)}")
         
+        # 如果配置了分割结果输出目录，保存分割结果
+        if self.split_output_dir:
+            self._save_split_results(train_ids, test_ids)
+        
         return train_ids, test_ids
+
+    def _save_split_results(self, train_ids, test_ids):
+        """
+        保存数据集分割结果
+        
+        Args:
+            train_ids: 训练集ID列表
+            test_ids: 测试集ID列表
+        """
+        try:
+            # 确保输出目录存在
+            os.makedirs(self.split_output_dir, exist_ok=True)
+            
+            # 构建输出文件路径
+            train_file = os.path.join(self.split_output_dir, "train_ids.txt")
+            test_file = os.path.join(self.split_output_dir, "test_ids.txt")
+            
+            # 保存训练集ID
+            with open(train_file, 'w', encoding='utf-8') as f:
+                f.write("photo_id\n")  # 写入表头
+                for photo_id in sorted(train_ids):  # 排序以保持稳定性
+                    f.write(f"{photo_id}\n")
+            
+            # 保存测试集ID
+            with open(test_file, 'w', encoding='utf-8') as f:
+                f.write("photo_id\n")  # 写入表头
+                for photo_id in sorted(test_ids):  # 排序以保持稳定性
+                    f.write(f"{photo_id}\n")
+            
+            print(f"\nSplit results saved:")
+            print(f"Train IDs: {train_file}")
+            print(f"Test IDs: {test_file}")
+            
+        except Exception as e:
+            print(f"Error saving split results: {str(e)}")
+            print(traceback.format_exc())
 
     def _get_photo_id_to_images(self):
         """获取图片ID到图片文件的映射，递归搜索所有子文件夹"""
@@ -797,31 +846,58 @@ class DataParser:
 
     def _get_photo_cot_results(self):
         """获取CoT结果"""
-        try:
-            photo_cot_results = {}
-            if not os.path.exists(self.txt_file_path):
-                print(f"Warning: CoT results file not found: {self.txt_file_path}")
-                return photo_cot_results
+        responses = {}
+        
+        # 如果配置了txt目录，优先从目录读取
+        if self.txt_dir_path and os.path.isdir(self.txt_dir_path):
+            print(f"\nReading CoT results from directory: {self.txt_dir_path}")
+            import re
+            content_pattern = re.compile(r"'content': '(.*?)'(?=, 'tool_calls')")
+            processed_file_num = 0
             
-            with open(self.txt_file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-                records = content.split('photo_id is')[1:]  # 跳过第一个空字符串
-                for record in records:
-                    try:
-                        response_split = record.split('response is', 1)
-                        if len(response_split) == 2:
-                            photo_id = response_split[0].strip()
-                            response = response_split[1].strip()
-                            photo_cot_results[photo_id] = response
-                    except Exception as e:
-                        print(f"Error parsing CoT record: {str(e)}")
-                        continue
-                    
-            print(f"Loaded {len(photo_cot_results)} CoT results")
-            return photo_cot_results
-        except Exception as e:
-            print(f"Error reading CoT results file: {str(e)}")
-            return {}
+            for txt_file in glob.glob(os.path.join(self.txt_dir_path, "*.txt")):
+                try:
+                    with open(txt_file, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            if "photo_id is" in line and "response is" in line:
+                                try:
+                                    photo_id = line.split("photo_id is")[1].split(",")[0].strip()
+                                    # 使用正则表达式直接提取content
+                                    match = content_pattern.search(line)
+                                    if match:
+                                        content = match.group(1)
+                                        responses[photo_id] = content
+                                except Exception as e:
+                                    print(f"处理行时出错: {e}")
+                                    continue
+                except Exception as e:
+                    print(f"处理文件 {txt_file} 时出错: {e}")
+                    continue
+                processed_file_num += 1
+                if processed_file_num % 1000 == 0:
+                    print(f"已处理 {processed_file_num} 个 cot 文件")
+            
+            print(f"Loaded {len(responses)} CoT results from directory")
+            
+        # 如果还配置了单个txt文件，也读取它
+        elif os.path.exists(self.txt_file_path):
+            try:
+                with open(self.txt_file_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if "photo_id is" in line and "response is" in line:
+                            try:
+                                photo_id = line.split("photo_id is")[1].split(",")[0].strip()
+                                match = content_pattern.search(line)
+                                if match:
+                                    content = match.group(1)
+                                    responses[photo_id] = content
+                            except Exception as e:
+                                print(f"处理行时出错: {e}")
+                                continue
+            except Exception as e:
+                print(f"处理文件 {self.txt_file_path} 时出错: {e}")
+        
+        return responses
 
     def _read_from_hdfs(self):
         """从HDFS读取数据"""

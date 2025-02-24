@@ -69,6 +69,7 @@ class MPIParquetWriterWorker(MPIBase):
         
         self._filtered_cnt = 0
         self._success_cnt = 0
+        self._none_cnt = 0
         self._filter_reason = dict()
     
     def create_filter(self, cfg):
@@ -116,7 +117,9 @@ class MPIParquetWriterWorker(MPIBase):
 
 
     def run(self):
+        # 获取并打印数据集总数
         total_rows = None if not hasattr(self.dataset, "__len__") else len(self.dataset)
+        
         for s in tqdm(self.dataset, total=total_rows):
             try:
                 if not all([f(s) for f in self._pre_filters]):
@@ -134,10 +137,15 @@ class MPIParquetWriterWorker(MPIBase):
                     elif isinstance(out, Sequence):
                         for s in out:
                             self.write_sample(s)
+                else:
+                    self._none_cnt += 1
             except Exception as e:
                 print(traceback.format_exc())
         self.flush()
         self.comm.barrier()
+        
+        # 打印处理成功的数据条数
+        self.mpi_print(f"Total processed success count: {self._success_cnt}, total rows {total_rows}, filtered_cnt {self._filtered_cnt}, none_cnt {self._none_cnt}")
 
 def main():
     parser = argparse.ArgumentParser(
