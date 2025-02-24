@@ -214,10 +214,8 @@ def load_from_full_model_state_dict(
     if is_rank_zero:
         assert len(meta_sharded_sd) == len(full_sd), \
             "Sharded State Dict doesn't equal to Full State Dict"
-        print(" - ", set(meta_sharded_sd.keys()) - set(full_sd.keys()))
-        print(" + ", set(full_sd.keys()) - set(meta_sharded_sd.keys()))
         print(meta_sharded_sd.keys(), full_sd.keys())
-        assert list(meta_sharded_sd.keys()) == list(full_sd.keys()), \
+        assert sorted(list(meta_sharded_sd.keys())) == sorted(list(full_sd.keys())), \
             "Keys of Sharded State Dict doesn't equal to Full State Dict"
         for (param_name, full_param), sharded_meta_param in zip(
             full_sd.items(), meta_sharded_sd.values()
