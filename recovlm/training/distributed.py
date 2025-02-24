@@ -226,7 +226,6 @@ def load_from_full_model_state_dict(
         #     )
         #     print(f"Load: {param_name}, {full_param.shape}, {type(full_param)}, {sharded_meta_param.shape},  {type(sharded_meta_param)}")
         #     sharded_sd[param_name] = nn.Parameter(sharded_tensor)
-    print("llllll")
     for param_name, sharded_meta_param in meta_sharded_sd.items():
         if is_rank_zero:
             full_tensor = full_sd[param_name].detach().cuda()
