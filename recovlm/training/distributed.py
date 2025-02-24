@@ -208,7 +208,7 @@ def shard_model(
 def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]):
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
-    if is_rank_zero:
+    if dist.get_rank() == 0:
         assert len(meta_sharded_sd) == len(full_sd), \
             "Sharded State Dict doesn't equal to Full State Dict"
         assert sorted(list(meta_sharded_sd.keys())) == sorted(list(full_sd.keys())), \
