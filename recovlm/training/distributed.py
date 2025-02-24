@@ -205,3 +205,44 @@ def shard_model(
     # Finally shard the entire model to account for any stragglers
     fully_shard(model, **fsdp_kwargs)
 
+def load_from_full_model_state_dict(
+    model: "FSDPModule",  # noqa
+    full_sd: Dict[str, Any],
+    device: torch.device,
+    is_rank_zero: bool,
+    strict: bool = False,
+    cpu_offload: bool = False):
+    # Construct a sharded state dict from the rank 0 full state dict by
+    # broadcasting and sharding
+    meta_sharded_sd = model.state_dict()
+    sharded_sd = {}
+    if is_rank_zero:
+        assert len(meta_sharded_sd) == len(full_sd), \
+            "Sharded State Dict doesn't equal to Full State Dict"
+        assert list(meta_sharded_sd.keys()), list(full_sd.keys()), \
+            "Keys of Sharded State Dict doesn't equal to Full State Dict"
+        for (param_name, full_param), sharded_meta_param in zip(
+            full_sd.items(), meta_sharded_sd.values()
+        ):
+            full_param = full_param.detach().cuda()
+            mesh = sharded_meta_param.device_mesh
+            dist.broadcast(full_param, src=0, group=mesh.get_group(0))
+            sharded_tensor = distribute_tensor(
+                full_param, mesh, sharded_meta_param.placements
+            )
+            sharded_sd[param_name] = nn.Parameter(sharded_tensor)
+    else:
+        for param_name, sharded_meta_param in meta_sharded_sd.items():
+            full_tensor = torch.empty(
+                sharded_meta_param.size(),
+                device="cuda",
+                dtype=sharded_meta_param.dtype,
+            )
+            mesh = sharded_meta_param.device_mesh
+            dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
+            sharded_tensor = distribute_tensor(
+                full_tensor, mesh, sharded_meta_param.placements
+            )
+            sharded_sd[param_name] = nn.Parameter(sharded_tensor)
+
+    model.load_state_dict(sharded_sd, assign=True)
