@@ -1,3 +1,6 @@
+from typing import Dict, Any, Union, Optional
+from pathlib import Path
+import gc
 import argparse
 import time
 import datetime
@@ -34,6 +37,8 @@ from recovlm.training.parallel import get_sequence_parallel_group, \
   get_local_sequence_boundary, initialize_model_parallel, gather_by_group, \
   get_local_sequence, get_data_parallel_group, get_data_parallel_world_size, \
   get_data_parallel_rank
+
+from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
 
 # Logger 初始化
 logging.basicConfig(level=logging.INFO)  # 设置日志级别
@@ -230,6 +235,82 @@ def get_resume_info(args):
     else:
       return args.resume_from, args.resume_from_tag, False
 
+#### Checkpoint utils ####
+
+def safe_torch_load(
+    checkpoint_path: Union[Path, str], weights_only: bool = True, mmap: bool = True
+) -> Dict[str, Any]:
+    """
+    Utility to load a checkpoint file onto CPU in a safe manner. Provides separate handling for
+    safetensors files.
+
+    Args:
+        checkpoint_path (Union[Path, str]): Path to the checkpoint file.
+        weights_only (bool): Whether to load only tensors, primitive types, and dictionaries
+            (passthrough to torch.load). Default: True
+        mmap (bool): Whether to mmap from disk into CPU memory. Default: True
+
+    Returns:
+        Dict[str, Any]: State dict from the checkpoint file.
+
+    Raises:
+        ValueError: If the checkpoint file is not found or cannot be loaded.
+    """
+    try:
+        # convert the path into a string since pathlib Path and mmap don't work
+        # well together
+        is_safetensors_file = (
+            True if str(checkpoint_path).endswith(".safetensors") else False
+        )
+        if is_safetensors_file:
+            result = {}
+            from safetensors import safe_open
+            with safe_open(checkpoint_path, framework="pt", device="cpu") as f:
+                for k in f.keys():
+                    result[k] = f.get_tensor(k)
+            state_dict = result
+        else:
+            state_dict = torch.load(
+                str(checkpoint_path),
+                map_location="cpu",
+                mmap=mmap,
+                weights_only=weights_only,
+            )
+    except Exception as e:
+        raise ValueError(f"Unable to load checkpoint from {checkpoint_path}. ") from e
+    return state_dict
+
+def load_hf_state_dict(model, model_dir):
+  # merged state_dict contains keys and weights from all the checkpoint files
+  merged_state_dict: Dict[str, torch.Tensor] = {}
+
+  # converted_state_dict is the final state_dict passed to the recipe after the
+  # keys are converted into the torchtune format. This optionally also contains
+  # the recipe state and adapter weights
+  converted_state_dict: Dict[str, Dict[str, torch.Tensor]] = {}
+  ckpt_paths = sorted(glob.glob(os.path.join(model_dir, "*.safetensors")))
+  if not ckpt_paths:
+    ckpt_paths = sorted(glob.glob(os.path.join(model_dir, "*.bin")))
+  # _checkpoint_paths are already sorted so simply enumerate to generate the right id
+  for cpt_idx, cpt_path in enumerate(ckpt_paths):
+      state_dict = safe_torch_load(cpt_path)
+      for key, value in state_dict.items():
+          # Ensure that the state dict is a flat dict of keys and tensors. Breaking this assumption
+          # will break recipe code
+          if not isinstance(value, torch.Tensor):
+              raise ValueError(
+                  f"Expected all values in the state dict to be torch.Tensor. "
+                  f"Found {type(value)} instead."
+              )
+      merged_state_dict.update(state_dict)
+
+      # delete the state_dict to free up memory; TODO check if this del is needed
+      del state_dict
+      gc.collect()
+  return merged_state_dict
+
+#### Checkpoint utils ####
+
 def train():
   arg_parser = get_argument_parser()
   arg_parser = deepspeed.add_config_arguments(arg_parser)
@@ -254,7 +335,19 @@ def train():
   os.environ["KML_ID"] = args.kml_id
   os.environ["KML_TASK_ID"] = args.kml_task_id
   
-  deepspeed.init_distributed()
+  # torch init
+  torch.distributed.init_process_group(backend="nccl")
+  device_mesh = init_device_mesh(
+    "cuda",
+    mesh_shape=(dist.get_world_size(),),
+    mesh_dim_names=("dp",),
+  )
+
+  state_dict = None
+  if dist.get_rank() == 0:
+    state_dict = load_hf_state_dict(model, args.model_dir)
+  
+  print_rank_0(f"state_dict keys: {state_dict.keys()}")
 
   ### initialize model parallel group
   initialize_model_parallel(args.sequence_parallel_size)
@@ -283,11 +376,11 @@ def train():
     tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
   # enabled=False when zero stage < 3
-  with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config,
-                           enabled=False):
-    model = Qwen2VLForConditionalGeneration.from_pretrained(
-      args.model_dir, _attn_implementation="flash_attention_2",
-      use_cache=False)
+  # with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config,
+  #                          enabled=False):
+  #   model = Qwen2VLForConditionalGeneration.from_pretrained(
+  #     args.model_dir, _attn_implementation="flash_attention_2",
+  #     use_cache=False)
 
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
