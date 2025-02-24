@@ -214,7 +214,6 @@ def load_from_full_model_state_dict(
     if is_rank_zero:
         assert len(meta_sharded_sd) == len(full_sd), \
             "Sharded State Dict doesn't equal to Full State Dict"
-        print(meta_sharded_sd.keys(), full_sd.keys())
         assert sorted(list(meta_sharded_sd.keys())) == sorted(list(full_sd.keys())), \
             "Keys of Sharded State Dict doesn't equal to Full State Dict"
         # for param_name, full_param in full_sd.items():
@@ -227,7 +226,7 @@ def load_from_full_model_state_dict(
         #     )
         #     print(f"Load: {param_name}, {full_param.shape}, {type(full_param)}, {sharded_meta_param.shape},  {type(sharded_meta_param)}")
         #     sharded_sd[param_name] = nn.Parameter(sharded_tensor)
-
+    print("llllll")
     for param_name, sharded_meta_param in meta_sharded_sd.items():
         if is_rank_zero:
             full_tensor = full_sd[param_name].detach().cuda() 
