@@ -40,7 +40,7 @@ from recovlm.training.parallel import get_sequence_parallel_group, \
 
 from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
 
-from recovlm.training.distributed import fully_shard, get_shard_conditions
+from recovlm.training.distributed import shard_model, get_shard_conditions
 
 from torch.distributed.checkpoint.state_dict import (
     _init_optim_state,
