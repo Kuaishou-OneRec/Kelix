@@ -213,16 +213,7 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
             "Sharded State Dict doesn't equal to Full State Dict"
         assert sorted(list(meta_sharded_sd.keys())) == sorted(list(full_sd.keys())), \
             "Keys of Sharded State Dict doesn't equal to Full State Dict"
-        # for param_name, full_param in full_sd.items():
-        #     sharded_meta_param = meta_sharded_sd[param_name]
-        #     full_param = full_param.detach().cuda()
-        #     mesh = sharded_meta_param.device_mesh
-        #     dist.broadcast(full_param, src=0, group=mesh.get_group(0))
-        #     sharded_tensor = distribute_tensor(
-        #         full_param, mesh, sharded_meta_param.placements
-        #     )
-        #     print(f"Load: {param_name}, {full_param.shape}, {type(full_param)}, {sharded_meta_param.shape},  {type(sharded_meta_param)}")
-        #     sharded_sd[param_name] = nn.Parameter(sharded_tensor)
+
     for param_name, sharded_meta_param in meta_sharded_sd.items():
         if dist.get_rank() == 0:
             full_tensor = full_sd[param_name].detach().cuda()
@@ -232,27 +223,14 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
                 device="cuda",
                 dtype=sharded_meta_param.dtype,
             )
-        # if dist.get_rank() == 0:
-        #   full_tensor = torch.zeros(
-        #     (128, 32),
-        #     device="cuda",
-        #     dtype=torch.bfloat16
-        #   )
-        # else:
-        #   full_tensor = torch.empty(
-        #     (128, 32),
-        #     device="cuda",
-        #     dtype=torch.bfloat16
-        #   )
-        print(f"before {dist.get_rank()} {param_name}, {full_tensor.shape}, {type(full_tensor)}, {full_tensor.device}")
         mesh = sharded_meta_param.device_mesh
         dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
         dist.barrier()
-        # sharded_tensor = distribute_tensor(
-        #     full_tensor, mesh, sharded_meta_param.placements
-        # )
-        # sharded_sd[param_name] = nn.Parameter(sharded_tensor)
+        sharded_tensor = distribute_tensor(
+            full_tensor, mesh, sharded_meta_param.placements
+        )
+        sharded_sd[param_name] = nn.Parameter(sharded_tensor)
         if dist.get_rank() == 0:
             print(f"Load & redistribute: {param_name}")
-        
-    # model.load_state_dict(sharded_sd, assign=True)
+
+    model.load_state_dict(sharded_sd, assign=True)
