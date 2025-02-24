@@ -12,14 +12,12 @@ import collections
 import pickle
 
 import torch
-import deepspeed
 import torch.distributed as dist
 import torch.nn.functional as F
 import numpy as np
 
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from deepspeed.ops.adam import FusedAdam
 
 # from transformers import AutoTokenizer, AutoProcessor
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
@@ -170,9 +168,6 @@ def get_argument_parser():
   
   parser.add_argument("--freeze_visual_without_adapter", action="store_true",
                       help="Only freeze visual encoder parameters, train adapter parameters.")
-
-  parser.add_argument("--local_rank", type=int, default=-1,
-                      help="Reserved for deepspeed framework")
 
   parser.add_argument("--use_flash_attention_2", action="store_true",
                       help="Whether to use flash attention 2")
@@ -325,7 +320,6 @@ def load_hf_state_dict(model_dir):
 
 def train():
   arg_parser = get_argument_parser()
-  arg_parser = deepspeed.add_config_arguments(arg_parser)
   args = arg_parser.parse_args()
 
   # check vision_lr
@@ -394,6 +388,7 @@ def train():
     model = Qwen2VLForConditionalGeneration.from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",
       use_cache=False)
+  model.train()
   
   for param in model.parameters():
     assert param.device == torch.device("meta")
@@ -456,7 +451,7 @@ def train():
     )
 
   # prepare optimizer
-  optimizer = FusedAdam(optimizer_grouped_parameters,
+  optimizer = torch.optim.AdamW(optimizer_grouped_parameters,
                         lr=args.learning_rate,
                         betas=(args.beta1, args.beta2),
                         eps=1.0e-8)
@@ -469,13 +464,14 @@ def train():
     min_lr=args.min_lr,
     num_stop_steps=20
   )
-  with Timer("Initialize deepspeed model."):
-    model.train()
-    model, optimizer, _, lr_scheduler = \
-      deepspeed.initialize(args=args,
-                           model=model,
-                           optimizer=optimizer,
-                           lr_scheduler=lr_scheduler)
+
+  # with Timer("Initialize deepspeed model."):
+  #   model.train()
+  #   model, optimizer, _, lr_scheduler = \
+  #     deepspeed.initialize(args=args,
+  #                          model=model,
+  #                          optimizer=optimizer,
+  #                          lr_scheduler=lr_scheduler)
 
   total_num_tokens = 0
   total_num_samples = 0
