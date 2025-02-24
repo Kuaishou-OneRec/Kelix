@@ -415,7 +415,9 @@ def train():
   with Timer("Load state dict"):
     load_from_full_model_state_dict(model=model, full_sd=state_dict)
   
-
+  for name, param in model.named_parameters():
+    assert not param.device == torch.device("meta"), f"{name} not initialized, device={param.device}"
+  
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
     for name, param in model.named_parameters():
