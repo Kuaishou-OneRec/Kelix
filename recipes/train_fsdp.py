@@ -293,20 +293,21 @@ def load_hf_state_dict(model_dir):
     ckpt_paths = sorted(glob.glob(os.path.join(model_dir, "*.bin")))
   # _checkpoint_paths are already sorted so simply enumerate to generate the right id
   for cpt_idx, cpt_path in enumerate(ckpt_paths):
-      state_dict = safe_torch_load(cpt_path)
-      for key, value in state_dict.items():
-          # Ensure that the state dict is a flat dict of keys and tensors. Breaking this assumption
-          # will break recipe code
-          if not isinstance(value, torch.Tensor):
-              raise ValueError(
-                  f"Expected all values in the state dict to be torch.Tensor. "
-                  f"Found {type(value)} instead."
-              )
-      merged_state_dict.update(state_dict)
+    print_rank_0(f"Load checkpoint: {cpt_idx}/{len(ckpt_paths)}")
+    state_dict = safe_torch_load(cpt_path)
+    for key, value in state_dict.items():
+        # Ensure that the state dict is a flat dict of keys and tensors. Breaking this assumption
+        # will break recipe code
+        if not isinstance(value, torch.Tensor):
+            raise ValueError(
+                f"Expected all values in the state dict to be torch.Tensor. "
+                f"Found {type(value)} instead."
+            )
+    merged_state_dict.update(state_dict)
 
-      # delete the state_dict to free up memory; TODO check if this del is needed
-      del state_dict
-      gc.collect()
+    # delete the state_dict to free up memory; TODO check if this del is needed
+    del state_dict
+    gc.collect()
   return merged_state_dict
 
 #### Checkpoint utils ####
@@ -345,18 +346,16 @@ def train():
     mesh_dim_names=("dp",),
   )
 
-  state_dict = None
-  if dist.get_rank() == 0:
-    state_dict = load_hf_state_dict(args.model_dir)
-  dist.barrier()
-  
-  print_rank_0(f"state_dict keys: {state_dict.keys()}")
-
   ### initialize model parallel group
   initialize_model_parallel(args.sequence_parallel_size)
   print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
 
   set_random_seed(args.seed)
+
+  state_dict = None
+  if dist.get_rank() == 0:
+    state_dict = load_hf_state_dict(args.model_dir)
+  dist.barrier()
 
   if dist.get_rank() == 0:
     args_dict = vars(args)
