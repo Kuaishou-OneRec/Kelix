@@ -280,7 +280,7 @@ def safe_torch_load(
         raise ValueError(f"Unable to load checkpoint from {checkpoint_path}. ") from e
     return state_dict
 
-def load_hf_state_dict(model, model_dir):
+def load_hf_state_dict(model_dir):
   # merged state_dict contains keys and weights from all the checkpoint files
   merged_state_dict: Dict[str, torch.Tensor] = {}
 
@@ -347,7 +347,8 @@ def train():
 
   state_dict = None
   if dist.get_rank() == 0:
-    state_dict = load_hf_state_dict(model, args.model_dir)
+    state_dict = load_hf_state_dict(args.model_dir)
+  dist.barrier()
   
   print_rank_0(f"state_dict keys: {state_dict.keys()}")
 
@@ -356,7 +357,6 @@ def train():
   print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
 
   set_random_seed(args.seed)
-  dist.barrier()
 
   if dist.get_rank() == 0:
     args_dict = vars(args)
