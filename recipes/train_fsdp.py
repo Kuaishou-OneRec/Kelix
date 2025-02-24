@@ -384,6 +384,20 @@ def train():
     model = Qwen2VLForConditionalGeneration.from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",
       use_cache=False)
+  if dist.get_rank() == 0:
+    tensor = torch.zeros(
+      (128, 32),
+      device="cuda",
+      dtype=torch.bfloat16
+    )
+  else:
+    tensor = torch.empty(
+      (128, 32),
+      device="cuda",
+      dtype=torch.bfloat16
+    )
+  dist.broadcast(tensor, src=0)
+  print(f"{tensor.shape}, {tensor.dtype}")
   #model.train()
   
   for param in model.parameters():
