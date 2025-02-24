@@ -208,12 +208,7 @@ def shard_model(
 def load_from_full_model_state_dict(
     model: "FSDPModule",  # noqa
     full_sd: Dict[str, Any],
-    device: torch.device,
-    is_rank_zero: bool,
-    strict: bool = False,
-    cpu_offload: bool = False):
-    # Construct a sharded state dict from the rank 0 full state dict by
-    # broadcasting and sharding
+    is_rank_zero: bool):
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
     if is_rank_zero:

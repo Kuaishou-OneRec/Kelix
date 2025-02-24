@@ -408,8 +408,7 @@ def train():
   load_from_full_model_state_dict(
     model=model,
     full_sd=state_dict,
-    is_rank_zero=(dist.get_rank() == 0),
-    strict=True
+    is_rank_zero=(dist.get_rank() == 0)
   )
 
   import time
