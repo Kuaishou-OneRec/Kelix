@@ -343,8 +343,6 @@ def train():
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
-  # TODO:
-  print(rank, world_size, local_rank)
   # torch init
   torch.cuda.set_device(local_rank)
   torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
@@ -386,7 +384,7 @@ def train():
     model = Qwen2VLForConditionalGeneration.from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",
       use_cache=False)
-  model.train()
+  #model.train()
   
   for param in model.parameters():
     assert param.device == torch.device("meta")
