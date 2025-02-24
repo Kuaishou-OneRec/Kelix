@@ -406,7 +406,9 @@ def train():
     dp_mesh=device_mesh,
   )
 
-  load_from_full_model_state_dict(model=model, full_sd=state_dict)
+  with Timer("Load state dict"):
+    load_from_full_model_state_dict(model=model, full_sd=state_dict)
+
 
   import time
   time.sleep(100)

@@ -233,13 +233,12 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
                 dtype=sharded_meta_param.dtype,
             )
         mesh = sharded_meta_param.device_mesh
-        print(f"Load: {dist.get_rank()} before {param_name}, {full_tensor.shape}, {full_tensor.device}")
-        dist.broadcast(full_tensor, src=0)
-        dist.barrier()
-        print(f"Load: end {param_name}")
+        dist.broadcast(full_tensor, src=0, mesh.get_group(0))
         sharded_tensor = distribute_tensor(
             full_tensor, mesh, sharded_meta_param.placements
         )
         sharded_sd[param_name] = nn.Parameter(sharded_tensor)
+        if dist.get_rank() == 0:
+            print(f"Load & redistribute: {param_name}")
         
     model.load_state_dict(sharded_sd, assign=True)
