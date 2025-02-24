@@ -404,11 +404,7 @@ def train():
     dp_mesh=device_mesh,
   )
 
-  load_from_full_model_state_dict(
-    model=model,
-    full_sd=state_dict,
-    is_rank_zero=(dist.get_rank() == 0)
-  )
+  load_from_full_model_state_dict(model=model, full_sd=state_dict)
 
   import time
   time.sleep(100)

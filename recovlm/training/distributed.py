@@ -205,10 +205,7 @@ def shard_model(
     # Finally shard the entire model to account for any stragglers
     fully_shard(model, **fsdp_kwargs)
 
-def load_from_full_model_state_dict(
-    model: "FSDPModule",  # noqa
-    full_sd: Dict[str, Any],
-    is_rank_zero: bool):
+def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]):
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
     if is_rank_zero:
@@ -227,7 +224,7 @@ def load_from_full_model_state_dict(
         #     print(f"Load: {param_name}, {full_param.shape}, {type(full_param)}, {sharded_meta_param.shape},  {type(sharded_meta_param)}")
         #     sharded_sd[param_name] = nn.Parameter(sharded_tensor)
     for param_name, sharded_meta_param in meta_sharded_sd.items():
-        if is_rank_zero:
+        if dist.get_rank() == 0:
             full_tensor = full_sd[param_name].detach().cuda()
         else:
             full_tensor = torch.empty(
@@ -238,6 +235,7 @@ def load_from_full_model_state_dict(
         mesh = sharded_meta_param.device_mesh
         print(f"Load: {is_rank_zero=} before {param_name}, {full_tensor.shape}")
         dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
+        dist.barrier()
         print(f"Load: end {param_name}")
         sharded_tensor = distribute_tensor(
             full_tensor, mesh, sharded_meta_param.placements
