@@ -334,9 +334,11 @@ def train():
   # init model params
   os.environ["KML_ID"] = args.kml_id
   os.environ["KML_TASK_ID"] = args.kml_task_id
-  
+  rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+  world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+  print(rank, world_size)
   # torch init
-  torch.distributed.init_process_group(backend="nccl")
+  torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
   device_mesh = init_device_mesh(
     "cuda",
     mesh_shape=(dist.get_world_size(),),

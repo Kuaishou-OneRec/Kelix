@@ -48,7 +48,8 @@ hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 
-MASTER_ADDR="${MY_NODE_IP}:8499"
+MASTER_ADDR=$MY_NODE_IP
+MASTER_ADDR=8499
 
 mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
@@ -89,6 +90,7 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
         -x MASTER_ADDR=$MASTER_ADDR \
+        -x MASTER_PORT=$MASTER_PORT \
         -x LD_PRELOAD=$LD_PRELOAD \
         -x KAI_FLAG_FILE \
         -x KML_ID \
