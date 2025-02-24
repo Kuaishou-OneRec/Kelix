@@ -415,6 +415,15 @@ def train():
   with Timer("Load state dict"):
     load_from_full_model_state_dict(model=model, full_sd=state_dict)
   
+  print(f"{model.model.rotary_emb.inv_freq.device}")
+  import time
+  time.sleep(30)
+  # with training.set_default_dtype(self._dtype), self._device:
+  #   for m in model.modules():
+  #     # RoPE is not covered in state dict
+  #     if hasattr(m, "rope_init"):
+  #       m.rope_init()
+
   for name, param in model.named_parameters():
     assert not param.device == torch.device("meta"), f"{name} not initialized, device={param.device}"
   
