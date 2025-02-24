@@ -49,7 +49,7 @@ Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 
 MASTER_ADDR=$MY_NODE_IP
-MASTER_ADDR=8499
+MASTER_PORT=8499
 
 mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
