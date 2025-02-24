@@ -395,8 +395,8 @@ def train():
   
   shard_model(
     model=model,
-    shard_conditions=shard_conditions,
-    cpu_offload=True,
+    shard_conditions=get_shard_conditions,
+    cpu_offload=False,
     reshard_after_forward=True,
     dp_mesh=device_mesh,
   )
