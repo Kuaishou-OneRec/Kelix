@@ -236,7 +236,7 @@ def load_from_full_model_state_dict(
                 dtype=sharded_meta_param.dtype,
             )
         mesh = sharded_meta_param.device_mesh
-        print(f"Load: before {param_name}")
+        print(f"Load: before {param_name}, {mesh.get_group(0)}")
         dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
         print(f"Load: end {param_name}")
         sharded_tensor = distribute_tensor(
