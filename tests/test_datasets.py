@@ -9,9 +9,12 @@ import time
 from recovlm.utils.common import shell_hdfs_ls
 
 from torch.utils.data import DataLoader
-from recovlm.data.datasets import ChatCompletionDataset, ImageTextPairDatasetWithPacking, ChatCompletionVisionDataset, ParquetDataset, ChatCompletionVisionParquetDataset
+from recovlm.data.datasets import ChatCompletionDataset, ImageTextPairDatasetWithPacking, ChatCompletionVisionDataset, ParquetDataset, ChatCompletionVisionParquetDataset, ChatCompletionVisionDpoParquetDataset
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
+    get_optimizer_grouped_parameters, dist_reduce_dict, Timer, heart_beat
 from tests.utils import init_processes
+import torch.distributed as dist
 """
     # dataset = LLaVA_CC3M_Dataset(
     #     source="/llm_reco_ssd/luoxinchen/dataset/LLaVA-CC3M-Pretrain-595K/",
@@ -236,40 +239,76 @@ def test_parquet_dataset():
 
 def test_ChatCompletionVisionParquetDataset():
     init_processes(0, 1)
-    processor = Qwen2VLProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14")
-    path = "./examples/vlm/configs/stage2_parquet_l2.json"
+    processor = Qwen2VLProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct")
+    path = "./examples/vlm/configs/dpo_wenjuan_0210_10w_test.json"
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
     dataset_config.pop("name")
-    dataset_config["num_workers"] = 1
+    dataset_config["num_workers"] = 8
     dataset_config["shuffle_seed"] = int(time.time())
 
-    dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2_shuffle/stage2_20250125/rank-189-735b8bd2-dacf-11ef-b317-946daee911dc.parquet"]
+    dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/huqigen/recovlm_dataset/wenjuan_sft/0210_11w_cot_v2/photo_0210_11w_sft_data-train-00000-of-02048.parquet"]
 
-    dataset = ChatCompletionVisionParquetDataset(**dataset_config)
+    dataset = ChatCompletionVisionDpoParquetDataset(**dataset_config)
     ans = 0
-    for s in dataset:
-        pass
-        
-        # input_ids = s["input_ids"].squeeze()
-        # loss_mask = s["loss_mask"].squeeze()
-        # decode_char = processor.tokenizer.convert_ids_to_tokens(input_ids)
+    def collate_fn(samples):
+        return samples[0]
 
-        # decode_char = [f"\"{word}\"" for word in decode_char]
+    dataloader = DataLoader(
+        dataset=dataset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=8,
+        collate_fn=collate_fn
+    )
+    for iteration, batch in enumerate(dataloader):
+        # pass
+        chosen_inputs, rejected_inputs = batch
+        input_ids = chosen_inputs["input_ids"].squeeze()
+        loss_mask = chosen_inputs["loss_mask"].squeeze()
+        decode_char = processor.tokenizer.convert_ids_to_tokens(input_ids)
 
-        # assert len(decode_char) == len(loss_mask)
-        # output = ""
-        # for i in range(len(decode_char)):
-        #     output+= f"{decode_char[i]}:{loss_mask[i].item()}"
-        #     if i % 8 == 0:
-        #         output += "\n"
-        #     else:
-        #         output += "\t"
+        decode_char = [f"\"{word}\"" for word in decode_char]
+
+        assert len(decode_char) == len(loss_mask)
+        output = "=======start======="
+        for i in range(len(decode_char)):
+            output+= f"{decode_char[i]}:{loss_mask[i].item()}"
+            if i % 8 == 0:
+                output += "\n"
+            else:
+                output += "\t"
         
-        # print(output)
-        # print(s["data_source"])
-        # print("==========================")
-        # break
+        print(output)
+        print(chosen_inputs["data_source"])
+        print("==========================")
+        break
+
+def gather_by_group(dataloader, group, buffer_size=1):
+    buffer = []
+    for batch in dataloader:
+        buffer.append(batch)
+        if len(buffer) >= buffer_size:
+            yield from gather_batches(buffer, group)
+            buffer = []
+    if len(buffer) > 0:
+        yield from gather_batches(buffer, group)
+
+def gather_batches(buffer, group):
+    world_size = dist.get_world_size(group)
+    if world_size > 1:
+      with Timer("Gather batches"):
+        gathered_batches = [None for _ in range(world_size)]
+        dist.all_gather_object(
+            object_list=gathered_batches, obj=buffer,
+            group=group
+        )
+
+      gathered_batches = sum(gathered_batches, [])
+    else:
+      gathered_batches = buffer
+    print_rank_0(f"Num batches: {len(gathered_batches)}")
+    return gathered_batches
 
 if __name__ == "__main__":
     test_ChatCompletionVisionParquetDataset()

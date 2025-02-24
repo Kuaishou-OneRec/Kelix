@@ -1,4 +1,5 @@
 """I2I Pairwise Dataset"""
+import re
 import numpy as np
 import collections
 import json
@@ -9,6 +10,9 @@ import base64
 from io import BytesIO
 from PIL import Image
 import uuid
+import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 from torch.utils.data import DataLoader
 from transformers import AutoProcessor
@@ -44,7 +48,14 @@ class WenJuanInferDataset(ParquetDataset):
                model_name_or_path=None,
                max_text_len=512,
                max_frames=32,
+               columns=None,
+               user="mpi",
+               limit=None,
+               enable_remove_comment=False,
                **kwargs):
+    # 初始化父类
+    super().__init__(path=parquet_path, columns=columns, user=user, limit=limit)
+    
     # 初始化 processor
     if model_name_or_path:
       try:
@@ -61,8 +72,75 @@ class WenJuanInferDataset(ParquetDataset):
     self.max_text_len = max_text_len
     self.max_frames = max_frames
     
-    # 调用父类的__init__，使用path而不是parquet_path
-    super().__init__(path=parquet_path, **kwargs)
+    # 读取数据以获取长度
+    if parquet_path.startswith("viewfs") or parquet_path.startswith("hdfs://"):
+      self.fs = pa.hdfs.connect(user=user)
+      with self.fs.open(parquet_path, 'rb') as f:
+        self.total_rows = pq.read_metadata(f).num_rows
+    else:
+      self.total_rows = pq.read_metadata(parquet_path).num_rows
+    if limit is not None:
+      self.total_rows = min(self.total_rows, limit)
+    self.enable_remove_comment = enable_remove_comment
+
+  def __iter__(self):
+    """重写父类的__iter__方法，处理每个样本"""
+    for item in super().__iter__():
+      try:
+        # 获取messages
+        messages = item.get("messages", [])
+        if isinstance(messages, str):
+          try:
+            messages = json.loads(messages)
+          except Exception as e:
+            print(f"Error parsing messages JSON: {e}")
+            messages = [{"role": "user", "content": messages}]
+        
+        # 获取photo_id
+        photo_id = self._extract_photo_id(item.get("images", {}))
+        if not photo_id:
+          photo_id = str(uuid.uuid1())
+        
+        # 处理消息内容，传入当前item
+        filtered_messages = self._process_messages(messages, photo_id, item)
+        
+        # 格式化prompt
+        infer_prompt = self._format_prompt(filtered_messages)
+        
+        # 处理多模态数据
+        image_inputs, video_inputs = process_vision_info(filtered_messages)
+        mm_data = {}
+        if image_inputs is not None:
+          mm_data["images"] = image_inputs
+        if video_inputs is not None:
+          mm_data["videos"] = video_inputs
+        
+        yield {
+          "req_id": str(uuid.uuid1()),
+          "photo_id": photo_id,
+          "inputs": {
+            "prompt": infer_prompt,
+            **mm_data
+          },
+          "messages": messages
+        }
+        
+      except Exception as e:
+        print(f"Error processing item: {e}")
+        yield {
+          "req_id": str(uuid.uuid1()),
+          "photo_id": "",
+          "inputs": {
+            "prompt": "",
+            "images": [],
+            "videos": []
+          },
+          "messages": []
+        }
+
+  def __len__(self):
+    """返回数据集的总行数"""
+    return self.total_rows
 
   def _format_prompt(self, messages):
     """格式化对话内容为prompt"""
@@ -88,101 +166,6 @@ class WenJuanInferDataset(ParquetDataset):
       # 返回一个基本的格式化结果
       return "\n".join([f"{msg.get('role', '')}: {msg.get('content', '')}" for msg in messages])
 
-  def __getitem__(self, index):
-    item = super().__getitem__(index)
-    
-    try:
-        print("\n=== Debug: Raw item from parquet ===")
-        print(f"Item keys: {item.keys()}")
-        print(f"Item content: {item}")
-        
-        # 获取原始消息内容
-        messages = item.get("messages", [])
-        print(f"\n=== Debug: Messages from item ===")
-        print(f"Messages type: {type(messages)}")
-        print(f"Messages content: {messages}")
-        
-        # 尝试从其他可能的字段获取对话历史
-        dialog_history = item.get("dialog_history", [])
-        print(f"\n=== Debug: Dialog history ===")
-        print(f"Dialog history type: {type(dialog_history)}")
-        print(f"Dialog history content: {dialog_history}")
-        
-        # 如果有其他可能包含对话的字段，也打印出来
-        conversation = item.get("conversation", [])
-        print(f"\n=== Debug: Conversation ===")
-        print(f"Conversation type: {type(conversation)}")
-        print(f"Conversation content: {conversation}")
-        
-        # 处理消息内容
-        if isinstance(messages, str):
-            try:
-                messages = json.loads(messages)
-                print(f"Parsed messages: {messages}")
-            except Exception as e:
-                print(f"JSON parse error: {e}")
-                messages = [{"role": "user", "content": messages}]
-        
-        # 合并所有可能的对话来源
-        all_messages = []
-        if messages:
-            all_messages.extend(messages if isinstance(messages, list) else [messages])
-        if dialog_history:
-            all_messages.extend(dialog_history if isinstance(dialog_history, list) else [dialog_history])
-        if conversation:
-            all_messages.extend(conversation if isinstance(conversation, list) else [conversation])
-        
-        print(f"\n=== Debug: Combined messages ===")
-        print(f"Combined messages: {all_messages}")
-        
-        # 保存完整的对话内容
-        full_messages = all_messages.copy() if all_messages else []
-        
-        # 处理用于推理的消息（移除 assistant 回复）
-        filtered_messages = [msg for msg in full_messages if msg.get("role") != "assistant"]
-        if self.system_prompt and not any(msg.get("role") == "system" for msg in filtered_messages):
-            filtered_messages.insert(0, {"role": "system", "content": self.system_prompt})
-        
-        # 格式化 prompt
-        full_prompt = self._format_prompt(full_messages) if full_messages else None
-        infer_prompt = self._format_prompt(filtered_messages)
-        
-        result = {
-            "req_id": str(uuid.uuid1()),
-            "photo_id": item.get("photo_id", ""),
-            "inputs": {
-                "prompt": infer_prompt,
-                "images": item.get("images", []),
-                "videos": item.get("videos", [])
-            },
-            "full_prompt": full_prompt,  # 可能为 None
-            "messages": full_messages,    # 原始消息列表
-            "has_assistant_reply": any(msg.get("role") == "assistant" for msg in full_messages)  # 新增标志
-        }
-        
-        print(f"\n=== Debug: Return value ===")
-        print(f"full_prompt: {result['full_prompt']}")
-        print(f"has_assistant_reply: {result['has_assistant_reply']}")
-        
-        return result
-        
-    except Exception as e:
-        print(f"Error in __getitem__: {e}")
-        print(f"Item content: {item}")
-        # 返回基本结构
-        return {
-            "req_id": str(uuid.uuid1()),
-            "photo_id": item.get("photo_id", ""),
-            "inputs": {
-                "prompt": "",
-                "images": [],
-                "videos": []
-            },
-            "full_prompt": None,
-            "messages": [],
-            "has_assistant_reply": False
-        }
-
   def _remove_assistant_content(self, prompt):
     """移除 prompt 中的 assistant 内容"""
     try:
@@ -203,11 +186,16 @@ class WenJuanInferDataset(ParquetDataset):
     except Exception as e:
       print(f"Error removing assistant content: {e}")
       return prompt
+  def _remove_comment(self, text):
+    """移除文本中的评论相关内容"""
+    # 移除整行评论内容
+    text = re.sub(r"对应的短视频平台内用户评论内容是：.*?\n", "", text)
+    return text
 
-  def _get_image_data(self, photo_id, image_id):
+  def _get_image_data(self, photo_id, image_id, current_item):
     """从images字段获取实际的图片数据，并转换为PIL Image对象"""
     try:
-      images = self.current_row.get('images', {})
+      images = current_item.get('images', {})
       if isinstance(images, str):
         images = json.loads(images)
       
@@ -235,7 +223,7 @@ class WenJuanInferDataset(ParquetDataset):
       print(f"Error getting image data for {photo_id}_{image_id}: {e}")
     return None
 
-  def _process_messages(self, messages, photo_id):
+  def _process_messages(self, messages, photo_id, current_item):
     """处理messages，移除assistant回复并添加新的提示"""
     filtered_messages = [
       msg for msg in messages 
@@ -250,6 +238,8 @@ class WenJuanInferDataset(ParquetDataset):
         for item in msg["content"]:
           if isinstance(item, dict) and item.get("type") == "text":
             item["text"] = item["text"][:self.max_text_len]
+            if self.enable_remove_comment:
+              item["text"] = self._remove_comment(item["text"])
     
     for msg in reversed(filtered_messages):
       if msg.get("role") == "user":
@@ -262,7 +252,7 @@ class WenJuanInferDataset(ParquetDataset):
               for frame in list(content.get("video", []))[:self.max_frames]:
                 if isinstance(frame, dict) and frame.get("type") == "image":
                   image_id = frame["image"].split("_")[-1]
-                  image = self._get_image_data(photo_id, image_id)
+                  image = self._get_image_data(photo_id, image_id, current_item)
                   if image:
                     # 调整图片大小
                     image = self._resize_image(image)
@@ -313,56 +303,6 @@ class WenJuanInferDataset(ParquetDataset):
     except Exception as e:
       print(f"Error extracting photo_id from images: {str(e)}")
     return None
-
-  def __iter__(self):
-    """重写 __iter__ 方法，处理从 parquet 读取的数据"""
-    for row in super().__iter__():
-      try:
-        self.current_row = row  # 保存当前行以供_get_image_data使用
-        req_id = row['uuid']
-        messages = row['messages']
-        
-        photo_id = self._extract_photo_id(row['images'])
-        if not photo_id:
-          print(f"Warning: Could not extract photo_id for req_id {req_id}")
-          continue
-        
-        try:
-          # 处理messages，包括图片数据的转换
-          messages = self._process_messages(messages, photo_id)
-          
-          # 处理文本
-          text = self._format_prompt(messages)
-          
-          # 处理多模态数据
-          image_inputs, video_inputs = process_vision_info(messages)
-          mm_data = {}
-          if image_inputs is not None:
-            mm_data["image"] = image_inputs
-          if video_inputs is not None:
-            mm_data["video"] = video_inputs
-          
-          yield {
-            "req_id": req_id,
-            "photo_id": photo_id,
-            "inputs": {
-              "prompt": text,
-              "multi_modal_data": mm_data
-            }
-          }
-          
-        except Exception as e:
-          print("Full traceback:")
-          print(traceback.format_exc())
-          print(f"Error processing messages for req_id {req_id}: {str(e)}")
-          continue
-        
-      except Exception as e:
-        print("Full traceback:")
-        print(traceback.format_exc())
-        print(f"Error processing row: {str(e)}")
-        print(f"Row content: {row}")
-        continue
 
 if __name__ == "__main__":
   dataset = WenJuanInferDataset(

@@ -4,9 +4,16 @@ import argparse
 import subprocess
 import tempfile
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from .converter import ConverterBase
 from recovlm.utils.blobstore_client import BlobStoreClient
+import glob
+import uuid
+import cv2
+import base64
+from PIL import Image
+import traceback
+import re
 
 class KwaiVideoDownloader(object):
 
@@ -38,20 +45,28 @@ class KwaiVideoDownloader(object):
             else:
                 return True
     
-    def prepare_video(self, photo_id) -> bool:
-        video_bytes = self.client.get_video(photo_id)
-        if video_bytes is None:
-            return None
+    def prepare_video(self, photo_id) -> Optional[str]:
+        # try:
+        #     video_bytes = self.client.get_video(photo_id)
+        # except Exception as e:
+        #     print(f"Error retrieving video for {photo_id}: {e}")
+        #     return None
+
+        # if video_bytes is None:
+        #     print(f"No video found for {photo_id}.")
+        #     return None
+
         output_file = os.path.join(self.video_dir, f"{photo_id}.mp4")
-        valid = False
-        if not os.path.exists(output_file):
-            valid = self.process_video(video_bytes, output_file)
-        else:
-            valid = True
-        if valid:
-            return output_file
-        else:
-            return None
+        
+        # Check if file already exists and is valid
+        # if os.path.exists(output_file):
+        return output_file
+        
+        # Process video if it doesn't exist
+        # if self.process_video(video_bytes, output_file):
+        #     return output_file
+        
+        # return None
 
 class KwaiVideoCaptionConverter(ConverterBase, KwaiVideoDownloader):
 
@@ -105,24 +120,21 @@ class KwaiVideoCaptionConverter(ConverterBase, KwaiVideoDownloader):
         else:
             return None
 
-class KwaiWenJuanCaptionConverter(ConverterBase, KwaiVideoDownloader):
+class KwaiWenJuanCaptionVideoConverter(ConverterBase, KwaiVideoDownloader):
 
-    def __init__(self, prompts, source, output_file_path: Optional[str] = None, **kwargs):
+    def __init__(self, prompts, source: Optional[str] = None, **kwargs):
         """
-        初始化 KwaiWenJuanCaptionConverter 类
+        初始化 KwaiWenJuanCaptionVideoConverter 类
 
         参数:
             prompts: 提示信息列表
             source: 数据来源标识
-            output_file_path: 输出 meta 数据文件的路径，如果提供则将 meta 内容追加写入该文件
             kwargs: 传递给父类 KwaiVideoDownloader 的其他参数
         """
         # 调用父类 KwaiVideoDownloader 的初始化方法
         KwaiVideoDownloader.__init__(self, **kwargs)
         self.prompts = prompts
         self.source = source
-        # 保存 output_file_path 配置
-        self.output_file_path = output_file_path
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
         """
@@ -134,67 +146,470 @@ class KwaiWenJuanCaptionConverter(ConverterBase, KwaiVideoDownloader):
         返回:
             如果视频处理成功则返回包含 meta JSON 数据的字典，否则返回 None
         """
-        photo_id = src['photo_id']
-        filename = self.prepare_video(photo_id)
-        if filename is not None:
-            prompt = np.random.choice(self.prompts)
+        try:
+            # 获取基础字段，使用空字符串替代None值
+            photo_id = str(src.get('photo_id', ''))  # 确保photo_id是字符串
+            caption = src.get('caption', '')
+            ocr = src.get('ocr', '')
+            asr = src.get('asr', '')
+            user_comment = src.get('user_comment', [])
+            
+            # 确保user_comment是列表类型
+            if isinstance(user_comment, str):
+                user_comment = [user_comment]
+            elif user_comment is None:
+                user_comment = []
+
+            filename = self.prepare_video(photo_id)
+            if filename is not None:
+                prompt = np.random.choice(self.prompts)
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "video",
+                                "video": filename
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            },
+                            {
+                                "type": "text",
+                                "text": "视频的标题是：" + str(caption)
+                            },
+                            {
+                                "type": "text",
+                                "text": "视频的ocr 内容是：" + str(ocr)
+                            },
+                            {
+                                "type": "text",
+                                "text": "视频的asr 内容是：" + str(asr)
+                            },
+                            {
+                                "type": "text",
+                                "text": "站内用户的评论内容是：" + " ".join(str(c) for c in user_comment)
+                            }
+                        ]
+                    },
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": ("用户的满意度结果是：满意") if src.get('wenjuan_type') == '问卷优质' else ("用户的满意度结果是：不满意")
+                            }
+                        ]
+                    }
+                ]
+                meta = {
+                    "source": self.source,
+                    "messages": messages,
+                }
+                return {
+                    "json": json.dumps(meta, ensure_ascii=False)  # 确保UTF-8编码
+                }
+            else:
+                return None
+                
+        except Exception as e:
+            print(f"Error in converter for photo_id {src.get('photo_id', 'unknown')}: {str(e)}")
+            print(traceback.format_exc())
+            return None
+
+class KwaiWenJuanCaptionFrameConverter(ConverterBase):
+
+    def __init__(self, prompts, source, frame_dir: Optional[str] = None, 
+                 cot_txt_file_path: Optional[str] = None, test_id_file_path: Optional[str] = None,
+                 max_frames_per_video: int = None, enable_debug: bool = False, 
+                 enable_cmt_to_cot: bool = False, enable_llm_response: bool = False, **kwargs):
+        """
+        初始化 KwaiWenJuanCaptionFrameConverter 类
+
+        参数:
+            prompts: 提示信息列表
+            source: 数据来源标识
+            frame_dir: 视频抽帧结果存储目录
+            cot_txt_file_path: 包含LLM响应的txt文件目录
+            test_id_file_path: 测试集photo_id文件路径
+            max_frames_per_video: 每个视频最多获取的帧数，None表示获取全部
+            enable_debug: 是否启用调试日志
+            enable_llm_response: 是否启用LLM响应
+            enable_cmt_to_cot: 是否将站内用户评论转换为cot格式
+            kwargs: 传递给父类的其他参数
+        """
+        self.prompts = prompts
+        self.source = source
+        self.frame_dir = frame_dir
+        self.cot_txt_file_path = cot_txt_file_path
+        self.max_frames_per_video = max_frames_per_video
+        self.enable_debug = enable_debug
+        self.enable_cmt_to_cot = enable_cmt_to_cot
+        # 缓存LLM响应
+        self.enable_llm_response = enable_llm_response
+        if self.enable_llm_response:
+            self.llm_responses = self._load_llm_responses() if cot_txt_file_path else {}
+        else:
+            self.llm_responses = {}
+        # 加载测试集ID
+        self.test_ids = self._load_test_ids(test_id_file_path) if test_id_file_path else set()
+        # 建立图片索引
+        self.frame_index = self._build_frame_index() if frame_dir else {}
+        
+        if self.enable_debug:
+            print(f"Initialized with {len(self.frame_index)} frame entries")
+
+    def _build_frame_index(self) -> Dict[str, List[str]]:
+        """
+        建立图片索引，将所有jpg文件按photo_id分组
+        
+        Returns:
+            Dict[str, List[str]]: photo_id到图片路径列表的映射
+        """
+        frame_index = {}
+        if not self.frame_dir:
+            return frame_index
+
+        try:
+            # 遍历frame_dir下所有子目录
+            for root, _, files in os.walk(self.frame_dir):
+                for file in files:
+                    if file.endswith('.jpg'):
+                        try:
+                            # 从文件名提取photo_id，保持为字符串类型
+                            photo_id = file.split('_')[0]
+                            full_path = os.path.join(root, file)
+                            
+                            # 将路径添加到对应photo_id的列表中
+                            if photo_id not in frame_index:
+                                frame_index[photo_id] = []
+                            frame_index[photo_id].append(full_path)
+                        except Exception as e:
+                            if self.enable_debug:
+                                print(f"Error processing file {file}: {e}")
+                            continue
+
+            # 对每个photo_id的图片列表进行排序
+            for photo_id in frame_index:
+                frame_index[photo_id].sort(key=self._safe_frame_number)
+
+            if self.enable_debug:
+                print(f"Built frame index with {len(frame_index)} photo_ids")
+                
+        except Exception as e:
+            print(f"Error building frame index: {e}")
+            
+        return frame_index
+
+    def _safe_frame_number(self, filename: str) -> int:
+        """
+        安全地从文件名中提取帧号
+        """
+        try:
+            frame_str = os.path.basename(filename).split('_')[-1].split('.')[0]
+            return int(frame_str)
+        except (ValueError, IndexError):
+            if frame_str == 'single':
+                return 0
+            return float('inf')
+
+    def _get_frame_images(self, photo_id: str) -> List[str]:
+        """
+        从索引中获取指定photo_id的抽帧图片路径
+        
+        Args:
+            photo_id: 视频ID（可能是int或str类型）
+            
+        Returns:
+            图片路径列表,按帧顺序排序
+        """
+        # 确保photo_id是字符串类型
+        photo_id_str = str(photo_id)
+        
+        # 直接从索引中获取图片路径
+        frame_files = self.frame_index.get(photo_id_str, [])
+        
+        if self.enable_debug and not frame_files:
+            print(f"No frames found for photo_id {photo_id} (str: {photo_id_str})")
+            print(f"Available photo_ids in index: {list(self.frame_index.keys())[:5]}...")
+        
+        # 如果设置了最大帧数限制，则只返回指定数量的帧
+        if self.max_frames_per_video is not None and len(frame_files) > self.max_frames_per_video:
+            frame_files = frame_files[:self.max_frames_per_video]
+        
+        return frame_files
+
+    def _load_test_ids(self, file_path: str) -> set:
+        """
+        从文件加载测试集photo_id
+        
+        Args:
+            file_path: 测试集ID文件路径
+            
+        Returns:
+            set: 测试集photo_id集合
+        """
+        test_ids = set()
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                # 跳过第一行（字段名）
+                next(f)
+                # 读取所有ID
+                for line in f:
+                    photo_id = line.strip()
+                    if photo_id:
+                        test_ids.add(photo_id)
+            if self.enable_debug:
+                print(f"====KwaiWenJuanCaptionFrameConverter====\nLoaded {len(test_ids)} test IDs from {file_path}")
+        except Exception as e:
+            print(f"Error loading test IDs from {file_path}: {e}")
+        return test_ids
+
+    def _extract_satisfaction_label(self, content: str) -> Optional[str]:
+        """
+        从LLM响应中提取满意度标签
+        """
+        # 如果内容为空，返回None
+        if not content:
+            return None
+        
+        # 定义可能的满意度标签模式
+        satisfaction_patterns = [
+            r"【结果[:：]满意】",
+            r"【结果[:：]不满意】",
+            r"【結果：满意】",
+            r"【結果：不满意】",
+            r"【满意】",
+            r"【不满意】",
+            r"\*\*结果\*\*[:：]满意",
+            r"\*\*结果\*\*[:：]不满意",
+            r"结果[:：]\s*满意",
+            r"结果[:：]\s*不满意"
+        ]
+        
+        # 遍历所有可能的模式
+        for pattern in satisfaction_patterns:
+            match = re.search(pattern, content)
+            if match:
+                return "不满意" if "不满意" in match.group() else "满意"
+            
+        # 如果仍然没有找到，返回None
+        return None
+
+    def _load_llm_responses(self) -> Dict[str, str]:
+        """
+        从txt文件加载LLM响应
+        """
+        responses = {}
+        if not os.path.exists(self.cot_txt_file_path):
+            return responses
+
+        # 修改正则表达式以同时匹配单引号和双引号的情况
+        content_pattern = re.compile(r"['\"]content['\"]: ['\"](.+?)['\"](,\s*['\"]tool_calls['\"]|,\s*['\"]logprobs['\"])")
+        total_line = 0
+
+        for txt_file in glob.glob(os.path.join(self.cot_txt_file_path, "*.txt")):
+            try:
+                with open(txt_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        total_line += 1
+                        if "photo_id is" in line and "response is" in line:
+                            try:
+                                # 提取 photo_id
+                                photo_id = line.split("photo_id is")[1].split(",")[0].strip()
+                                
+                                # 尝试解析完整的响应 JSON
+                                response_str = line.split("response is")[1].strip()
+                                try:
+                                    response_data = json.loads(response_str.replace("'", '"'))
+                                    if 'choices' in response_data and len(response_data['choices']) > 0:
+                                        content = response_data['choices'][0]['message']['content']
+                                        # 提取满意度标签
+                                        label = self._extract_satisfaction_label(content)
+                                        if label:
+                                            responses[photo_id] = {
+                                                'content': content,
+                                                'label': label
+                                            }
+                                        else:
+                                            print(f"json 解析方式 没有找到photo_id: {photo_id} 的LLM label, response is {content}")
+                                except json.JSONDecodeError:
+                                    # 如果JSON解析失败，尝试使用正则表达式
+                                    match = content_pattern.search(line)
+                                    if match:
+                                        content = match.group(1)
+                                        label = self._extract_satisfaction_label(content)
+                                        if label:
+                                            responses[photo_id] = {
+                                                'content': content,
+                                                'label': label
+                                            }
+                                        else:
+                                            print(f"没有找到photo_id: {photo_id} 的LLM label, response is {content}")
+                                    else:
+                                        print(f"正则表达式 没有找到photo_id: {photo_id} 的LLM响应, response is {line}")
+                            except Exception as e:
+                                print(f"处理行时出错: {e}")
+                                continue
+            except Exception as e:
+                print(f"处理文件 {txt_file} 时出错: {e}")
+                continue
+        
+        if self.enable_debug:
+            print(f"====KwaiWenJuanCaptionFrameConverter====\nLoad LLM cot succ, total line {total_line}, total result {len(responses)}")
+
+        return responses
+
+    def _encode_image(self, image_path: str) -> str:
+        """
+        将图片编码为base64字符串
+        
+        Args:
+            image_path: 图片路径
+            
+        Returns:
+            base64编码的图片字符串
+        """
+        try:
+            # 读取图片
+            image = cv2.imread(image_path)
+            if image is None:
+                print(f"Warning: Could not read image: {image_path}")
+                return None
+                
+            # 调整图片大小
+            image_resized = cv2.resize(image, (224, 224))
+            
+            # 编码为JPEG
+            _, encoded_image = cv2.imencode(".jpg", image_resized)
+            
+            # 转换为base64
+            return base64.b64encode(encoded_image).decode("utf-8")
+        except Exception as e:
+            print(f"Error encoding image {image_path}: {e}")
+            return None
+
+    def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
+        """
+        处理输入数据并生成数据项
+        
+        Args:
+            src: 包含视频信息的字典,包括photo_id、caption、ocr、asr、user_comment等字段
+            
+        Returns:
+            处理后的数据项,包含images、messages等信息，如果是测试集ID则返回None
+        """
+        try:
+            photo_id = src['photo_id']
+            is_correct_response = True
+            
+            # 如果启用了标签过滤
+            if self.enable_llm_response:
+                wenjuan_label = "满意" if src['wenjuan_type'] == '问卷优质' else "不满意"
+                llm_response = self.llm_responses.get(str(photo_id))
+                
+                # 如果找到了LLM响应但标签不匹配，跳过该样本
+                if llm_response and llm_response['label'] != wenjuan_label:
+                    is_correct_response = False
+                    
+
+            # 如果是测试集ID，直接返回None
+            if str(photo_id) in self.test_ids:
+                if self.enable_debug:
+                    print(f"Skipping test ID: {photo_id}")
+                return None
+                
+            # 获取抽帧图片
+            frame_files = self._get_frame_images(photo_id)
+            encoded_images = {}
+            # 编码图片，改为字典格式
+            if not frame_files:
+                if self.enable_debug:
+                    print(f"No frame files found for photo_id: {photo_id}")
+            else:
+                for i, frame_file in enumerate(frame_files):
+                    image_key = f"{photo_id}_{i}"
+                    encoded_image = self._encode_image(frame_file)
+                    if encoded_image:
+                        encoded_images[image_key] = encoded_image
+                
+            # 安全地获取字段值，确保是字符串类型
+            caption = str(src.get('caption', ''))
+            ocr = str(src.get('ocr', ''))
+            asr = str(src.get('asr', ''))
+            # 确保user_comment是列表，且所有元素都是字符串
+            user_comment = src.get('user_comment', [])
+            if isinstance(user_comment, (list, tuple)):
+                user_comment = [str(x) for x in user_comment]
+            elif isinstance(user_comment, np.ndarray):
+                user_comment = [str(x) for x in user_comment.tolist()]
+            else:
+                user_comment = [str(user_comment)] if user_comment is not None else []
+            
+            # 构建消息数据
+            prompt = str(np.random.choice(self.prompts))
+            content_list = [
+                {
+                    "type": "video",
+                    "video": [
+                        {"type": "image", "image": f"{photo_id}_{i}"}
+                        for i in range(len(frame_files))
+                    ]
+                },
+                {"type": "text", "text": prompt},
+                {"type": "text", "text": f"视频的标题是：{caption}"},
+                {"type": "text", "text": f"视频的ocr 内容是：{ocr}"},
+                {"type": "text", "text": f"视频的asr 内容是：{asr}"}
+            ]
+            if not self.enable_cmt_to_cot:
+                content_list.append({"type": "text", "text": f"站内用户的评论内容是：{'<comment>'.join(user_comment)}"})
+
             messages = [
                 {
                     "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "video": filename
-                        },
-                        {
-                            "type": "text",
-                            "text": "视频的标题是：" + src["caption"]
-                        },
-                        {
-                            "type": "text",
-                            "text": "视频的ocr 内容是：" + src["ocr"]
-                        },
-                        {
-                            "type": "text",
-                            "text": "视频的asr 内容是：" + src["asr"]
-                        },
-                        {
-                            "type": "text",
-                            "text": "站内用户的评论内容是：" + " ".join(src["user_comment"])
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ]
-                },
-                {
-                    "role": "assistant",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": ("用户的满意度结果是：满意") if src['wenjuan_type'] == '问卷优质' else ("用户的满意度结果是：不满意")
-                        }
-                    ]
+                    "content": content_list
                 }
             ]
+
+            assistnat_content = []
+            if self.enable_cmt_to_cot:
+                assistnat_content.append({"type": "text", "text": f"站内用户的评论内容是：{'<comment>'.join(user_comment)}"})
+            # 添加 cot 结果
+            if self.enable_llm_response:
+                if str(photo_id) in self.llm_responses and is_correct_response:
+                    assistnat_content.append({
+                        "type": "text",
+                        "text": str(self.llm_responses[str(photo_id)]['content'])
+                    })
+                else:
+                    # 如果打开了 cot 并且没有找到正确结果，则返回 None
+                    return None
+            else:
+                assistnat_content.append({
+                    "type": "text",
+                    "text": "用户的满意度结果是：满意" if src['wenjuan_type'] == '问卷优质' else "用户的满意度结果是：不满意"
+                })
+
+            messages.append({
+                "role": "assistant",
+                "content": assistnat_content
+            })
+
+            # 构建返回数据，确保所有JSON序列化使用UTF-8
             meta = {
-                "source": self.source,
-                "messages": messages,
+                "images": json.dumps(encoded_images, ensure_ascii=False),
+                'videos': json.dumps([], ensure_ascii=False),
+                "messages": json.dumps(messages, ensure_ascii=False),
+                'segments': json.dumps(None, ensure_ascii=False),
+                "source": str(self.source),
+                "metadata": None,
+                "uuid": str(uuid.uuid1())
             }
-            print("meta", meta)
 
-            # 如果设置了 output_file_path，则将 meta 数据追加写入文件，避免MPI模式下覆盖数据
-            if self.output_file_path:
-                try:
-                    with open(self.output_file_path, "a", encoding="utf-8") as f:
-                        # 追加 JSON 数据并换行，方便后续处理
-                        f.write(json.dumps(meta, ensure_ascii=False, indent=2) + "\n")
-                except Exception as e:
-                    print(f"写入文件 {self.output_file_path} 时出错: {e}")
+            return meta
 
-            return {
-                "json": json.dumps(meta)
-            }
-        else:
+        except Exception as e:
+            print(f"Error processing photo_id {src.get('photo_id', 'unknown')}: {str(e)}")
+            print(traceback.format_exc())
             return None
