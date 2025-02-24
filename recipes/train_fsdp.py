@@ -343,6 +343,8 @@ def train():
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+  # TODO:
+  local_rank = rank % 8
   print(rank, world_size, local_rank)
   # torch init
   torch.cuda.set_device(local_rank)
