@@ -40,6 +40,8 @@ from recovlm.training.parallel import get_sequence_parallel_group, \
 
 from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
 
+from recovlm.training.distributed import fully_shard, get_shard_conditions
+
 from torch.distributed.checkpoint.state_dict import (
     _init_optim_state,
     get_optimizer_state_dict,
@@ -391,6 +393,15 @@ def train():
       args.model_dir, _attn_implementation="flash_attention_2",
       use_cache=False)
   
+  shard_model(
+    model=model,
+    shard_conditions=shard_conditions,
+    cpu_offload=True,
+    reshard_after_forward=True,
+    dp_mesh=device_mesh,
+  )
+
+
   with Timer("Load checkpoint"):
     options = StateDictOptions(
         full_state_dict=True,
@@ -398,6 +409,7 @@ def train():
         strict=True,
         cpu_offload=False,
     )
+    print(options)
     set_model_state_dict(
         model=model, model_state_dict=state_dict, options=options
     )
