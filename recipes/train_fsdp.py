@@ -408,21 +408,6 @@ def train():
 
   with Timer("Load state dict"):
     load_from_full_model_state_dict(model=model, full_sd=state_dict)
-
-
-  import time
-  time.sleep(100)
-  # with Timer("Load checkpoint"):
-  #   options = StateDictOptions(
-  #       full_state_dict=True,
-  #       broadcast_from_rank0=True,
-  #       strict=True,
-  #       cpu_offload=False,
-  #   )
-  #   print(options)
-  #   set_model_state_dict(
-  #       model=model, model_state_dict=state_dict, options=options
-  #   )
   
 
   if args.freeze_llm:
@@ -440,7 +425,7 @@ def train():
         print_rank_0(f"Disable visual encoder grad: {name}")
         param.requires_grad = False
     print_rank_0("=" * 50)
-    
+
   if args.freeze_visual_without_adapter:
     print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
     for name, param in model.named_parameters():
@@ -475,6 +460,7 @@ def train():
                         lr=args.learning_rate,
                         betas=(args.beta1, args.beta2),
                         eps=1.0e-8)
+
   lr_scheduler = get_scheduler(
     name=args.lr_scheduler_type,
     optimizer=optimizer,
