@@ -229,7 +229,7 @@ def load_from_full_model_state_dict(
     print("llllll")
     for param_name, sharded_meta_param in meta_sharded_sd.items():
         if is_rank_zero:
-            full_tensor = full_sd[param_name].detach().cuda() 
+            full_tensor = full_sd[param_name].detach().cuda()
         else:
             full_tensor = torch.empty(
                 sharded_meta_param.size(),
@@ -237,6 +237,7 @@ def load_from_full_model_state_dict(
                 dtype=sharded_meta_param.dtype,
             )
         mesh = sharded_meta_param.device_mesh
+        print(full_tensor)
         dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
         sharded_tensor = distribute_tensor(
             full_tensor, mesh, sharded_meta_param.placements
