@@ -583,7 +583,7 @@ def train():
   valid_data_source_tokens = collections.defaultdict(int)
 
   # get_sequence_parallel_group("gloo")
-  for batch in gather_by_group(dataloader, get_sequence_parallel_group()):
+  for step, batch in enumerate(gather_by_group(dataloader, get_sequence_parallel_group())):
     if show_cnt > 0 and dist.get_rank() == 0:
       with Timer("Show data"):
         input_text = processor.tokenizer.decode(batch['input_ids'][0])
@@ -593,7 +593,7 @@ def train():
         show_cnt -= 1
 
     data_source = batch.pop("data_source", None) # dataset source list cur batch
-    iteration = model.global_steps
+    iteration = step
     to_cuda(batch)
     input_ids = batch["input_ids"]
     loss_mask = batch["loss_mask"]
@@ -661,8 +661,8 @@ def train():
       # del local_labels
 
     with Timer("bwd"):
-      model.backward(loss)
-      model.step()
+      optimizer.backward(loss)
+      optimizer.step()
 
     ########## dataset source monitor ###############
     if args.monitor_datasource_loss:
