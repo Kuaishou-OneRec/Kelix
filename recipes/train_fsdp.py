@@ -40,6 +40,14 @@ from recovlm.training.parallel import get_sequence_parallel_group, \
 
 from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
 
+from torch.distributed.checkpoint.state_dict import (
+    _init_optim_state,
+    get_optimizer_state_dict,
+    set_model_state_dict,
+    set_optimizer_state_dict,
+    StateDictOptions,
+)
+
 # Logger 初始化
 logging.basicConfig(level=logging.INFO)  # 设置日志级别
 logger = logging.getLogger(__name__)  # 创建 logger 实例
@@ -377,11 +385,22 @@ def train():
     tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
   # enabled=False when zero stage < 3
-  # with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config,
-  #                          enabled=False):
-  #   model = Qwen2VLForConditionalGeneration.from_pretrained(
-  #     args.model_dir, _attn_implementation="flash_attention_2",
-  #     use_cache=False)
+  # initialize in meta device
+  with torch.device("meta"):
+    model = Qwen2VLForConditionalGeneration.from_pretrained(
+      args.model_dir, _attn_implementation="flash_attention_2",
+      use_cache=False)
+  
+  options = StateDictOptions(
+    full_state_dict=True,
+    broadcast_from_rank0=True,
+    strict=True,
+    cpu_offload=False,
+  )
+  set_model_state_dict(
+    model=model, model_state_dict=state_dict, options=options
+  )
+  
 
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
