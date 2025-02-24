@@ -48,6 +48,8 @@ hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 
+MASTER_ADDR="${MY_NODE_IP}:8499"
+
 mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
         -hostfile $hostfile \
@@ -86,7 +88,7 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        -x MASTER_ADDR=$meta_server_addr\
+        -x MASTER_ADDR=$MASTER_ADDR \
         -x LD_PRELOAD=$LD_PRELOAD \
         -x KAI_FLAG_FILE \
         -x KML_ID \
@@ -123,4 +125,4 @@ mpirun --allow-run-as-root -np $np \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+                --heartbeat_monitor
