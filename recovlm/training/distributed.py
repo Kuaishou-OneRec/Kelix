@@ -247,6 +247,7 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
         print(f"before {dist.get_rank()} {param_name}, {full_tensor.shape}, {type(full_tensor)}, {full_tensor.device}")
         mesh = sharded_meta_param.device_mesh
         dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
+        dist.barrier()
         # sharded_tensor = distribute_tensor(
         #     full_tensor, mesh, sharded_meta_param.placements
         # )
