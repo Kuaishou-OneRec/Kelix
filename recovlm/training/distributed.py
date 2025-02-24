@@ -224,17 +224,29 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
         #     print(f"Load: {param_name}, {full_param.shape}, {type(full_param)}, {sharded_meta_param.shape},  {type(sharded_meta_param)}")
         #     sharded_sd[param_name] = nn.Parameter(sharded_tensor)
     for param_name, sharded_meta_param in meta_sharded_sd.items():
+        # if dist.get_rank() == 0:
+        #     full_tensor = full_sd[param_name].detach().cuda()
+        # else:
+        #     full_tensor = torch.empty(
+        #         sharded_meta_param.size(),
+        #         device="cuda",
+        #         dtype=sharded_meta_param.dtype,
+        #     )
         if dist.get_rank() == 0:
-            full_tensor = full_sd[param_name].detach().cuda()
+          full_tensor = torch.zeros(
+            (128, 32),
+            device="cuda",
+            dtype=torch.bfloat16
+          )
         else:
-            full_tensor = torch.empty(
-                sharded_meta_param.size(),
-                device="cuda",
-                dtype=sharded_meta_param.dtype,
-            )
+          full_tensor = torch.empty(
+            (128, 32),
+            device="cuda",
+            dtype=torch.bfloat16
+          )
         print(f"before {dist.get_rank()} {param_name}, {full_tensor.shape}, {type(full_tensor)}, {full_tensor.device}")
         mesh = sharded_meta_param.device_mesh
-        #dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
+        dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
         # sharded_tensor = distribute_tensor(
         #     full_tensor, mesh, sharded_meta_param.placements
         # )
