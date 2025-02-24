@@ -236,12 +236,11 @@ def load_from_full_model_state_dict(
                 dtype=sharded_meta_param.dtype,
             )
         mesh = sharded_meta_param.device_mesh
-        print(full_tensor)
+        print(f"Load: {is_rank_zero=}, {param_name}, {full_tensor.shape}, {type(full_tensor)}, {sharded_meta_param.shape},  {type(sharded_meta_param)}")
         dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
         sharded_tensor = distribute_tensor(
             full_tensor, mesh, sharded_meta_param.placements
         )
         sharded_sd[param_name] = nn.Parameter(sharded_tensor)
-        print(f"Load: {is_rank_zero=}, {param_name}, {full_tensor.shape}, {type(full_tensor)}, {sharded_meta_param.shape},  {type(sharded_meta_param)}")
-
+        
     model.load_state_dict(sharded_sd, assign=True)
