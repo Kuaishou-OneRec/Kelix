@@ -353,8 +353,7 @@ def train():
   torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
   device_mesh = init_device_mesh(
     "cuda",
-    mesh_shape=(dist.get_world_size(),),
-    mesh_dim_names=("dp",),
+    mesh_shape=(dist.get_world_size(),)
   )
 
   ### initialize model parallel group
