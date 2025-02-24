@@ -391,15 +391,16 @@ def train():
       args.model_dir, _attn_implementation="flash_attention_2",
       use_cache=False)
   
-  options = StateDictOptions(
-    full_state_dict=True,
-    broadcast_from_rank0=True,
-    strict=True,
-    cpu_offload=False,
-  )
-  set_model_state_dict(
-    model=model, model_state_dict=state_dict, options=options
-  )
+  with Timer("Load checkpoint"):
+    options = StateDictOptions(
+        full_state_dict=True,
+        broadcast_from_rank0=True,
+        strict=True,
+        cpu_offload=False,
+    )
+    set_model_state_dict(
+        model=model, model_state_dict=state_dict, options=options
+    )
   
 
   if args.freeze_llm:
