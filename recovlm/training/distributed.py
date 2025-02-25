@@ -216,7 +216,7 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
 
     for param_name, sharded_meta_param in meta_sharded_sd.items():
         if dist.get_rank() == 0:
-            full_tensor = full_sd[param_name].detach().cuda()
+            full_tensor = full_sd[param_name].detach().cuda().type(sharded_meta_param.dtype)
         else:
             full_tensor = torch.empty(
                 sharded_meta_param.size(),
