@@ -716,7 +716,6 @@ def train():
         optimizer.step()
         optimizer.zero_grad()
         global_step += 1
-      
 
     ########## dataset source monitor ###############
     if args.monitor_datasource_loss:
@@ -760,13 +759,13 @@ def train():
         
 
       if dist.get_rank() == 0:
-        model_lrs = model.lr_scheduler.get_lr()
+        model_lrs = lr_scheduler.get_lr()
         learning_rate = model_lrs[0]
         if len(model_lrs) > 2:
-          vision_learning_rate = model.lr_scheduler.get_lr()[2]
+          vision_learning_rate = lr_scheduler.get_lr()[2]
         else:
-          vision_learning_rate = model.lr_scheduler.get_lr()[1]
-          
+          vision_learning_rate = lr_scheduler.get_lr()[1]
+
         end_time = time.time()
         sec_per_step = (end_time - start_time) / acc_step
         tokens_per_sec_per_gpu = \
