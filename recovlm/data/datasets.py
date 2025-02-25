@@ -740,7 +740,6 @@ class ChatCompletionVisionDataset(IterableDataset):
     assert self.max_length > 0
 
     self.datasource_config = datasource_config
-    print(f"datasource_config: {self.datasource_config}")
   
   def _build_source_dataset(self, sources):
     total_samples = 0
