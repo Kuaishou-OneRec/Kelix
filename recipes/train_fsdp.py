@@ -442,7 +442,7 @@ def train():
     model=model,
     shard_conditions=[get_shard_conditions],
     cpu_offload=False,
-    reshard_after_forward=False,
+    reshard_after_forward=True,
     dp_mesh=device_mesh,
   )
   dist.barrier()
@@ -500,7 +500,11 @@ def train():
     learning_rate=args.learning_rate,
     vision_learning_rate=args.vision_learning_rate,
     weight_decay=args.weight_decay,
-    no_decay_name_list=["bias", "norm1", "norm2", "visual.merger.ln_q", "input_layernorm", "post_attention_layernorm", "model.norm"],
+    no_decay_name_list=[
+      "bias", "norm1", "norm2", "visual.merger.ln_q",
+      "input_layernorm",
+      "post_attention_layernorm",
+      "model.norm"],
     vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
   )
 
