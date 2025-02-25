@@ -50,7 +50,7 @@ from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
 )
 from torch.distributed.fsdp.wrap import ModuleWrapPolicy
 
-from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer
+from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
 
 # Logger 初始化
 logging.basicConfig(level=logging.INFO)  # 设置日志级别
@@ -460,7 +460,7 @@ def train():
     # model.gradient_checkpointing_enable(
     #     gradient_checkpointing_kwargs={"use_reentrant": False})
     set_activation_checkpointing(
-      model, auto_wrap_policy={Qwen2VLDecoderLayer}
+      model, auto_wrap_policy={Qwen2VLDecoderLayer, Qwen2VLVisionBlock}
     )
 
   shard_model(
