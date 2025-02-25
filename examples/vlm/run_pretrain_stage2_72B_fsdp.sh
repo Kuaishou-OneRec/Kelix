@@ -68,7 +68,6 @@ mpirun --allow-run-as-root -np $np \
         -x NCCL_IB_DISABLE=0 \
         -x NCCL_IB_GID_INDEX=3 \
         -x NCCL_IB_HCA=mlx5 \
-        -x NCCL_DEBUG=INFO\
         -x NCCL_NET_OVERHEAD=1000 \
         -x NCCL_PROTO=^LL128 \
         -x NCCL_MIN_NCHANNELS=4 \
@@ -102,7 +101,7 @@ mpirun --allow-run-as-root -np $np \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --dataset_config examples/vlm/configs/stage2_parquet_ocrall_0207_1epoch.json \
-                --max_length 8192 \
+                --max_length 4096 \
                 --learning_rate 5e-5 \
                 --vision_learning_rate 5e-5 \
                 --vision_lr_layer_decay 0.95 \

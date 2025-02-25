@@ -462,7 +462,7 @@ def train():
 
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
     assert not tensor.device == torch.device("meta"), \
-      f"{name} not initialized, device={param.device}"
+      f"{name} not initialized, device={tensor.device}"
 
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
@@ -504,7 +504,9 @@ def train():
     vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
   )
 
-  print(optimizer_grouped_parameters)
+  print(optimizer_grouped_parameters[0])
+  import time
+  time.sleep(30)
   # prepare optimizer
   optimizer = torch.optim.AdamW(optimizer_grouped_parameters,
                         lr=args.learning_rate,
