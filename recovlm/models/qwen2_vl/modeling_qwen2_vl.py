@@ -178,6 +178,13 @@ class Qwen2VLRotaryEmbedding(nn.Module):
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
 
+    def rope_init(self):
+        inv_freq, self.attention_scaling = self.rope_init_fn(
+            self.config, device=None, **self.rope_kwargs
+        )
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
     @torch.no_grad()
     def forward(self, x, position_ids):
         if "dynamic" in self.rope_type:
@@ -271,7 +278,12 @@ def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor) -> to
 class VisionRotaryEmbedding(nn.Module):
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        self.dim = dim
+        self.theta = theta
+        self.rope_init()
+
+    def rope_init(self):
+        inv_freq = 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
     def forward(self, seqlen: int) -> torch.Tensor:

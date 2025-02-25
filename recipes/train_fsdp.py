@@ -418,14 +418,20 @@ def train():
   print(f"{model.model.rotary_emb.inv_freq.device}")
   import time
   time.sleep(30)
-  # with training.set_default_dtype(self._dtype), self._device:
-  #   for m in model.modules():
-  #     # RoPE is not covered in state dict
-  #     if hasattr(m, "rope_init"):
-  #       m.rope_init()
+  with torch.cuda.current_device():
+    for m in model.modules():
+      # RoPE is not covered in state dict
+      if hasattr(m, "rope_init"):
+        m.rope_init()
 
   for name, param in model.named_parameters():
     assert not param.device == torch.device("meta"), f"{name} not initialized, device={param.device}"
+
+  for name, buffer in model.named_buffers():
+    assert not buffer.device == torch.device("meta"), f"{name} not initialized, device={buffer.device}"
+
+  import time
+  time.sleep(30)
   
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
