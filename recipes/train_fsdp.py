@@ -44,14 +44,6 @@ from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
 from recovlm.training.distributed import shard_model, get_shard_conditions, \
   load_from_full_model_state_dict
 
-from torch.distributed.checkpoint.state_dict import (
-    _init_optim_state,
-    get_optimizer_state_dict,
-    set_model_state_dict,
-    set_optimizer_state_dict,
-    StateDictOptions,
-)
-
 # Logger 初始化
 logging.basicConfig(level=logging.INFO)  # 设置日志级别
 logger = logging.getLogger(__name__)  # 创建 logger 实例
@@ -177,6 +169,9 @@ def get_argument_parser():
 
   parser.add_argument("--enable_gradient_checkpointing", action="store_true",
                       help="Enable gradient checkpointing during training")
+  
+  parser.add_argument("--gradient_accumulation_steps", type=int, default=4,
+                      help="Gradient accumulation steps")
   
   parser.add_argument("--sequence_parallel_size", type=int, default=1,
                       help="Enable gradient checkpointing during training")
@@ -508,31 +503,20 @@ def train():
     vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
   )
 
-  print(optimizer_grouped_parameters[0])
-  import time
-  time.sleep(30)
   # prepare optimizer
-  optimizer = torch.optim.AdamW(optimizer_grouped_parameters,
-                        lr=args.learning_rate,
-                        betas=(args.beta1, args.beta2),
-                        eps=1.0e-8)
+  optimizer = torch.optim.AdamW(
+    optimizer_grouped_parameters,
+    lr=args.learning_rate,
+    betas=(args.beta1, args.beta2),
+    eps=1.0e-8)
 
   lr_scheduler = get_scheduler(
     name=args.lr_scheduler_type,
     optimizer=optimizer,
     num_warmup_steps=args.num_warmup_steps,
     num_training_steps=args.num_training_steps,
-    min_lr=args.min_lr,
-    num_stop_steps=20
+    min_lr=args.min_lr
   )
-
-  # with Timer("Initialize deepspeed model."):
-  #   model.train()
-  #   model, optimizer, _, lr_scheduler = \
-  #     deepspeed.initialize(args=args,
-  #                          model=model,
-  #                          optimizer=optimizer,
-  #                          lr_scheduler=lr_scheduler)
 
   total_num_tokens = 0
   total_num_samples = 0
@@ -641,7 +625,6 @@ def train():
             f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
         print_rank_0(batch)
         show_cnt -= 1
-
     data_source = batch.pop("data_source", None) # dataset source list cur batch
     iteration = step
     to_cuda(batch)
@@ -712,7 +695,10 @@ def train():
 
     with Timer("bwd"):
       loss.backward(loss)
-      optimizer.step()
+      if (iteration + 1) % args.gradient_accumulation_steps == 0:
+        optimizer.step()
+        optimizer.zero_grad()
+      
 
     ########## dataset source monitor ###############
     if args.monitor_datasource_loss:
@@ -743,7 +729,7 @@ def train():
     acc_step += 1
 
     if iteration % args.logging_per_step == 0 and \
-            model.is_gradient_accumulation_boundary():
+            (iteration + 1) % args.gradient_accumulation_steps == 0:
 
       with Timer("reduce data source metrics"):
         batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
