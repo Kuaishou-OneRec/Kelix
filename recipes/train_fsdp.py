@@ -366,6 +366,15 @@ def set_activation_checkpointing(
         auto_wrap_policy = ModuleWrapPolicy(auto_wrap_policy)
     apply_activation_checkpointing(model, auto_wrap_policy=auto_wrap_policy, **kwargs)
 
+def get_global_grad_norm(model):
+  total_norm = 0.0
+  for param in model.parameters():
+    if param.grad is not None:
+      grad = param.grad.data
+      total_norm += grad.pow(2).sum().item()  # 累加所有元素的平方和
+  total_norm = total_norm ** 0.5  # 开平方
+  return total_norm
+
 def train():
   arg_parser = get_argument_parser()
   args = arg_parser.parse_args()
