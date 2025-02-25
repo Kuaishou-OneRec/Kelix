@@ -51,7 +51,7 @@ np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
-mpirun --allow-run-as-root -np $np \
+nohup mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
         -hostfile $hostfile \
         -x HOROVOD_MPI_THREADS_DISABLE=1 \
@@ -123,4 +123,4 @@ mpirun --allow-run-as-root -np $np \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --heartbeat_monitor
+                --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
