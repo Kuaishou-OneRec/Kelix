@@ -515,7 +515,7 @@ def train():
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
-
+  grad_norm = 0.0
   global_step = 0
   # get_sequence_parallel_group("gloo")
   for micro_step, batch in enumerate(gather_by_group(dataloader, get_sequence_parallel_group())):
@@ -591,8 +591,9 @@ def train():
       loss.backward(loss)
       clip_grad_by_value(model, args.clip_range)
       if (micro_step + 1) % args.gradient_accumulation_steps == 0:
-        lr_scheduler.step()
         optimizer.step()
+        lr_scheduler.step()
+        grad_norm = get_global_grad_norm(model)
         optimizer.zero_grad()
         global_step += 1
 
@@ -637,13 +638,12 @@ def train():
         
 
       if dist.get_rank() == 0:
-        model_lrs = lr_scheduler.get_lr()
+        model_lrs = lr_scheduler.get_last_lr()
         learning_rate = model_lrs[0]
         if len(model_lrs) > 2:
           vision_learning_rate = lr_scheduler.get_lr()[2]
         else:
           vision_learning_rate = lr_scheduler.get_lr()[1]
-        grad_norm = get_global_grad_norm(model) 
         end_time = time.time()
         sec_per_step = (end_time - start_time) / args.gradient_accumulation_steps
         tokens_per_sec_per_gpu = \
