@@ -121,7 +121,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --save_checkpoint_per_step 1000 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
-                --logging_per_step 10 \
+                --logging_per_step 1 \
                 --seed 19260817 \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
