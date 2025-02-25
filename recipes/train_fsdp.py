@@ -429,28 +429,11 @@ def train():
     tb_writer.add_text("kml_id", args.kml_id, 0)
     tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
-  # enabled=False when zero stage < 3
-  # initialize in meta device
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
     model = Qwen2VLForConditionalGeneration.from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",
       use_cache=False
     )
-  # if dist.get_rank() == 0:
-  #   tensor = torch.zeros(
-  #     (128, 32),
-  #     device="cuda",
-  #     dtype=torch.bfloat16
-  #   )
-  # else:
-  #   tensor = torch.empty(
-  #     (128, 32),
-  #     device="cuda",
-  #     dtype=torch.bfloat16
-  #   )
-  # dist.broadcast(tensor, src=0)
-  # print(f"{tensor.shape}, {tensor.dtype}")
-  #model.train()
   
   for tensor in itertools.chain(model.parameters(), model.buffers()):
     assert tensor.device == torch.device("meta")
@@ -646,8 +629,9 @@ def train():
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
 
+  global_step = 0
   # get_sequence_parallel_group("gloo")
-  for step, batch in enumerate(gather_by_group(dataloader, get_sequence_parallel_group())):
+  for micro_step, batch in enumerate(gather_by_group(dataloader, get_sequence_parallel_group())):
     if show_cnt > 0 and dist.get_rank() == 0:
       with Timer("Show data"):
         input_text = processor.tokenizer.decode(batch['input_ids'][0])
@@ -656,7 +640,6 @@ def train():
         print_rank_0(batch)
         show_cnt -= 1
     data_source = batch.pop("data_source", None) # dataset source list cur batch
-    iteration = step
     to_cuda(batch)
     input_ids = batch["input_ids"]
     loss_mask = batch["loss_mask"]
@@ -725,9 +708,10 @@ def train():
 
     with Timer("bwd"):
       loss.backward(loss)
-      if (iteration + 1) % args.gradient_accumulation_steps == 0:
+      if (micro_step + 1) % args.gradient_accumulation_steps == 0:
         optimizer.step()
         optimizer.zero_grad()
+        global_step += 1
       
 
     ########## dataset source monitor ###############
@@ -758,8 +742,8 @@ def train():
     acc_avg_loss += avg_loss
     acc_step += 1
 
-    if iteration % args.logging_per_step == 0 and \
-            (iteration + 1) % args.gradient_accumulation_steps == 0:
+    if global_step % args.logging_per_step == 0 and \
+            (micro_step + 1) % args.gradient_accumulation_steps == 0:
 
       with Timer("reduce data source metrics"):
         batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
@@ -809,7 +793,7 @@ def train():
             tb_writer.add_scalar(
                 name,
                 data,
-                global_step=iteration,
+                global_step=global_step,
                 new_style=True)
 
             # log metric by valid tokens
@@ -826,7 +810,7 @@ def train():
             tb_writer.add_scalar(
                   f"data_source_loss/{key}",
                   loss_sum / valid_data_source_tokens[key],
-                  global_step=iteration,
+                  global_step=global_step,
                   new_style=True)
 
         if args.monitor_datasource_cnt and tb_writer:
@@ -834,18 +818,18 @@ def train():
             tb_writer.add_scalar(
                 f"data_source_sample_ratio/{key}",
                 1.0 * samples / total_num_samples,
-                global_step=iteration,
+                global_step=global_step,
                 new_style=True)
 
           for key, num_tokens in total_data_source_tokens.items():
             tb_writer.add_scalar(
                 f"data_source_token_ratio/{key}",
                 1.0 * num_tokens / total_num_valid_tokens,
-                global_step=iteration,
+                global_step=global_step,
                 new_style=True)
 
         print_rank_0(
-          f"Step: {iteration}, Loss: {avg_loss}, "
+          f"Step: {global_step}, Loss: {avg_loss}, "
           f"Learning Rate: {learning_rate}, "
           f"Grad Norm: {model.get_global_grad_norm()}, "
           f"Sec per Step: {sec_per_step}",
@@ -873,8 +857,8 @@ def train():
       batch_data_source_tokens = collections.defaultdict(int)
       valid_data_source_tokens = collections.defaultdict(int)
 
-    if iteration % args.save_checkpoint_per_step == 0 and \
-        iteration > 0 and model.is_gradient_accumulation_boundary():
+    if global_step % args.save_checkpoint_per_step == 0 and \
+        global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
       
       torch.cuda.empty_cache()
 
@@ -905,7 +889,7 @@ def train():
             dataloader_state_dict,
             os.path.join(
               dataloader_path,
-              f"rank{dist.get_rank()}_global_step{iteration}.pth")
+              f"rank{dist.get_rank()}_global_step{global_step}.pth")
             )
 
   print_rank_0("Save checkpoint..")
@@ -930,7 +914,10 @@ def train():
     if dist.get_rank() == 0:
       os.makedirs(dataloader_path, exist_ok=True)
     dist.barrier()
-    torch.save(dataloader_state_dict, os.path.join(dataloader_path, f"rank{dist.get_rank()}_global_step{iteration}.pth"))
+    torch.save(
+      dataloader_state_dict, os.path.join(dataloader_path,
+      f"rank{dist.get_rank()}_global_step{global_step}.pth")
+    )
 
   if args.merge_checkpoint and dist.get_rank() == 0:
     convert_zero_checkpoint_to_state_dict(
