@@ -430,7 +430,7 @@ def train():
   # print(f"{tensor.shape}, {tensor.dtype}")
   #model.train()
   
-  for tensor in itertools.chain(model.parameters(), model.buffers):
+  for tensor in itertools.chain(model.parameters(), model.buffers()):
     assert tensor.device == torch.device("meta")
 
   if args.enable_gradient_checkpointing:
@@ -460,11 +460,9 @@ def train():
         print_rank_0("Initialize RoPE")
         m.rope_init()
 
-  for name, param in model.named_parameters():
-    assert not param.device == torch.device("meta"), f"{name} not initialized, device={param.device}"
-
-  for name, buffer in model.named_buffers():
-    assert not buffer.device == torch.device("meta"), f"{name} not initialized, device={buffer.device}"
+  for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
+    assert not tensor.device == torch.device("meta"), \
+      f"{name} not initialized, device={param.device}"
 
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
