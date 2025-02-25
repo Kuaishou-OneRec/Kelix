@@ -8,6 +8,7 @@ import logging
 import torch
 import pandas as pd
 from typing import Dict, List
+import math
 
 # 设置日志格式
 logging.basicConfig(
@@ -15,6 +16,39 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
+
+# 全局变量用于存储 MPI 模块
+MPI = None
+
+def init_mpi():
+    """初始化 MPI 环境"""
+    global MPI
+    try:
+        from mpi4py import MPI as mpi_module
+        MPI = mpi_module
+        
+        # 设置NCCL环境变量以提高容错性
+        os.environ["NCCL_ASYNC_ERROR_HANDLING"] = "1"
+        os.environ["NCCL_BLOCKING_WAIT"] = "1"
+        os.environ["NCCL_TIMEOUT"] = "1800"  # 30分钟超时
+        os.environ["NCCL_DEBUG"] = "INFO"
+        
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+        hostname = MPI.Get_processor_name()
+        return comm, rank, size, hostname
+    except ImportError:
+        raise ImportError(
+            "mpi4py is required for distributed inference. "
+            "Please install it with: pip install mpi4py"
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f"Failed to initialize MPI environment: {str(e)}. "
+            "Please make sure mpi4py is properly installed and "
+            "the script is launched with mpirun."
+        )
 
 # 添加项目根目录到 Python 路径
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
@@ -33,7 +67,7 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_string(
-  "parquet_path", "/llm_reco_ssd/huqigen/dataset/wenjuan_sft/photo_0210_11w/photo_0210_11w_sft_data-test.parquet", "The path or name of model."
+  "parquet_path", "/llm_reco_ssd/huqigen/dataset/wenjuan_sft/photo_0210_11w_cot_v2/photo_0210_11w_sft_data-test.parquet", "The path or name of model."
 )
 
 # flags.DEFINE_string(
@@ -49,7 +83,7 @@ flags.DEFINE_float(
 )
 
 flags.DEFINE_integer(
-  "max_tokens", 512, "The max tokens to generate."
+  "max_tokens", 4096, "The max tokens to generate."
 )
 
 flags.DEFINE_integer(
@@ -73,7 +107,7 @@ flags.DEFINE_integer(
 )
 
 flags.DEFINE_string(
-  "output_path", "wenjuan_response.jsonl", "The path of file to write results." 
+  "output_path", "wenjuan_response_sft_with_cot_large_token.jsonl", "The path of file to write results." 
 )
 
 flags.DEFINE_integer(
@@ -85,7 +119,7 @@ flags.DEFINE_integer(
 )
 
 flags.DEFINE_integer(
-  "max_text_len", 1000, "The max text length per field."
+  "max_text_len", 3000, "The max text length per field."
 )
 
 flags.DEFINE_integer(
@@ -122,6 +156,30 @@ flags.DEFINE_integer(
 
 flags.DEFINE_string("metrics_output_file", "infer_metric.txt", "Path to the file to output final metrics (accuracy etc.)")
 
+flags.DEFINE_integer(
+  "num_generations", 10, "Number of times to generate response for each sample."
+)
+
+flags.DEFINE_float(
+    "gpu_memory_utilization", 0.9, 
+    "Maximum GPU memory utilization (0.0 to 1.0)"
+)
+
+flags.DEFINE_integer(
+    "procs_per_node", None,
+    "Number of processes per node. If None, will be calculated based on GPU count and tp size."
+)
+
+flags.DEFINE_integer(
+    "global_rank", 0,
+    "Global rank for multiple MPI jobs running in parallel"
+)
+
+flags.DEFINE_boolean(
+    "enable_remove_comment", False,
+    "Whether to remove comment content from the prompt"
+)
+
 def collate_fn(samples):
   batch = collections.defaultdict(list)
   for sample in samples:
@@ -130,25 +188,28 @@ def collate_fn(samples):
   return batch
 
 def extract_satisfaction(response: str) -> str:
-    """从响应中提取满意度结果"""
+    """从响应中提取满意度结果。支持以下两种格式：
+       1. "用户对视频的满意度结果是：满意" 或 "用户对视频的满意度结果是：不满意"，例如：['用户对视频的满意度结果是：满意']
+       2. 包含 "【结果：不满意】" 这样的格式
+    """
+    import re
     try:
-        # 尝试从标准格式中提取
-        if "用户对视频的满意度结果是：" in response:
-            result = response.split("用户对视频的满意度结果是：")[-1].strip()
-            if result in ["满意", "不满意"]:
-                return result
-        
-        # 尝试从 ### 分隔符格式中提取
-        if "###" in response:
-            conclusion = response.split("###")[-1].strip()
-            if conclusion in ["满意", "不满意"]:
-                return conclusion
-            
-        if "不满意" in response:
-            return "不满意"
-        elif "满意" in response:
-            return "满意"
-                
+        patterns = [
+            r"【结果[:：]满意】",
+            r"【结果[:：]不满意】",
+            r"【結果：满意】",
+            r"【結果：不满意】",
+            r"【满意】",
+            r"【不满意】",
+            r"\*\*结果\*\*[:：]满意",
+            r"\*\*结果\*\*[:：]不满意",
+            r"结果[:：]\s*满意",
+            r"结果[:：]\s*不满意"
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, response)
+            if match:
+                return match.group(0)
         return None
     except Exception as e:
         print(f"Error extracting satisfaction: {e}")
@@ -248,7 +309,8 @@ def load_true_labels(parquet_path: str) -> Dict[str, str]:
                         label = extract_satisfaction(content)
                         if label:
                             true_labels[photo_id] = label
-                            break
+                        else:
+                            print(f"===debug=== extrace true label fail, content is {content}")                        
                 
             except Exception as e:
                 error_count += 1
@@ -264,109 +326,316 @@ def load_true_labels(parquet_path: str) -> Dict[str, str]:
         print(f"Error loading parquet file: {e}")
         return {}
 
-def main(_):
-  # Pass the default decoding hyperparameters of Qwen2.5-7B-Instruct
-  # max_tokens is for the maximum length for generation.
-  sampling_params = SamplingParams(
-    temperature=FLAGS.temperature, top_p=FLAGS.top_p,
-    repetition_penalty=FLAGS.repetition_penalty, max_tokens=FLAGS.max_tokens)
-  # Input the model name or path. Can be GPTQ or AWQ models.
-  llm = LLM(
-    model=FLAGS.model_name_or_path,
-    tensor_parallel_size=FLAGS.tp,
-    limit_mm_per_prompt={
-      "image": FLAGS.limit_mm_per_prompt,
-      "video": FLAGS.limit_mm_per_prompt
-    }
-  )
+def split_dataset(dataset, comm_size, rank):
+    """Split dataset for MPI processes using IterableDataset approach"""
+    class RankedIterableDataset(torch.utils.data.IterableDataset):
+        def __init__(self, dataset, rank, world_size):
+            super().__init__()
+            self.dataset = dataset
+            self.rank = rank
+            self.world_size = world_size
 
-  dataset = WenJuanInferDataset(
-    parquet_path=FLAGS.parquet_path,
-    system_prompt=FLAGS.system_prompt,
-    model_name_or_path=FLAGS.model_name_or_path,
-    max_text_len=FLAGS.max_text_len,
-    max_frames=FLAGS.max_frames,
-    columns=FLAGS.columns,
-    user=FLAGS.user,
-    limit=FLAGS.limit
-  )
+        def __iter__(self):
+            count = 0
+            for item in self.dataset:
+                if count % self.world_size == self.rank:
+                    yield item
+                count += 1
 
-  processed_samples = 0
-  true_labels = {}
-  
-  # 加载真实标签
-  true_labels = load_true_labels(FLAGS.parquet_path)
-  
-  # 初始化列表用于存储标签
-  true_labels_list = []
-  pred_labels_list = []
-  
-  with open(FLAGS.output_path, "w", encoding="utf-8") as f:
-    for batch in tqdm(DataLoader(dataset,
-                               batch_size=FLAGS.batch_size,
-                               collate_fn=collate_fn)):
-      print("\n=== Debug: Batch structure ===")
-      print(f"Batch keys: {batch.keys()}")
-      print(f"Batch size: {len(batch['inputs'])}")
-      
-      batch_rsp = [[] for _ in range(len(batch["inputs"]))]
-      for _ in range(FLAGS.votes):
-        outputs = llm.generate(batch["inputs"], sampling_params)
-        for idx, output in enumerate(outputs):
-          batch_rsp[idx].append(output.outputs[0].text)
-      
-      for idx, rsp in enumerate(batch_rsp):
-        photo_id = batch["photo_id"][idx]
-        
-        # 获取真实标签
-        true_label = true_labels.get(photo_id)
-        
-        # 获取预测标签
-        pred_label = None
-        for response in rsp:
-            pred_label = extract_satisfaction(response)
-            if pred_label:
-                break
-        
-        if true_label and pred_label:
-            true_labels_list.append(true_label)
-            pred_labels_list.append(pred_label)
+        def __len__(self):
+            return len(self.dataset) // self.world_size + (1 if len(self.dataset) % self.world_size > self.rank else 0)
+
+    return RankedIterableDataset(dataset, rank, comm_size)
+
+def merge_results(local_results_path, comm, rank, output_path, global_rank):
+    """Merge results from all MPI processes with error handling"""
+    try:
+        if rank == 0:
+            all_results = []
+            # 读取主进程的结果
+            with open(local_results_path, 'r', encoding='utf-8') as f:
+                all_results.extend([line.strip() for line in f])
+            
+            # 从其他进程收集结果
+            for i in range(1, comm.Get_size()):
+                try:
+                    worker_results = comm.recv(source=i, tag=11, status=MPI.Status())
+                    if worker_results:
+                        all_results.extend(worker_results)
+                except Exception as e:
+                    logging.error(f"Error receiving results from rank {i}: {e}")
+                    continue
+            
+            # 写入合并后的结果
+            final_output_path = f"{output_path}.global{global_rank}"
+            with open(final_output_path, 'w', encoding='utf-8') as f:
+                for result in all_results:
+                    f.write(result + '\n')
         else:
-            logging.warning(f"Sample {processed_samples + 1}: Failed to extract labels. true={true_label}, pred={pred_label}")
+            try:
+                # 工作进程发送结果
+                with open(local_results_path, 'r', encoding='utf-8') as f:
+                    results = [line.strip() for line in f]
+                comm.send(results, dest=0, tag=11)
+            except Exception as e:
+                logging.error(f"Error sending results from rank {rank}: {e}")
+                comm.send(None, dest=0, tag=11)  # 发送空结果表示错误
+    except Exception as e:
+        logging.error(f"Error in merge_results on rank {rank}: {e}")
+        if rank == 0:
+            # 如果合并失败，至少保存本地结果
+            logging.warning("Merge failed, saving local results only")
+            final_output_path = f"{output_path}.rank{rank}.global{global_rank}"
+            if os.path.exists(local_results_path):
+                import shutil
+                shutil.copy2(local_results_path, final_output_path)
+
+def parse_hostfile(hostfile_path):
+    """解析 hostfile 获取机器数量和每台机器的 slots"""
+    try:
+        with open(hostfile_path, 'r') as f:
+            hosts = [line.strip() for line in f if line.strip() and not line.startswith('#')]
         
-        # 保存结果
-        f.write(json.dumps({
-            "req_id": batch["req_id"][idx],
-            "photo_id": photo_id,
-            "prompt": batch["inputs"][idx]["prompt"],
-            "rsp": rsp,
-            "true_label": true_label,
-            "pred_label": pred_label
-        }, ensure_ascii=False) + "\n")
+        total_machines = len(hosts)
+        # 解析每行获取 slots 信息，格式可能是 "hostname slots=N" 或纯 "hostname"
+        slots_per_machine = []
+        machines = []
+        for host in hosts:
+            parts = host.split()
+            if len(parts) > 1 and 'slots=' in parts[1]:
+                slots = int(parts[1].split('=')[1])
+            else:
+                slots = 1  # 默认值
+            slots_per_machine.append(slots)
+            machines.append(host)
+            
+        return total_machines, slots_per_machine, machines
+    except Exception as e:
+        raise RuntimeError(f"Failed to parse hostfile {hostfile_path}: {str(e)}")
+
+def main(_):
+    # 初始化 MPI
+    comm, rank, size, hostname = init_mpi()
+    
+    # 从环境变量获取 hostfile 路径，如果没有则使用命令行参数
+    hostfile = os.getenv('HOSTFILE')
+    if not hostfile:
+        # 尝试从 MPI 获取 hostfile 路径
+        try:
+            info = MPI.Info.Create()
+            hostfile = info.Get('hostfile')
+        except:
+            # 如果都获取不到，使用默认值或报错
+            if rank == 0:
+                logging.warning("Could not get hostfile path from environment or MPI info. "
+                              "Proceeding without hostfile validation...")
+            hostfile = None
+    
+    # 只在有 hostfile 时进行验证
+    if hostfile and os.path.exists(hostfile):
+        total_machines, slots_per_machine, machines = parse_hostfile(hostfile)
+        total_slots = sum(slots_per_machine)
         
-        processed_samples += 1
-        if FLAGS.num_samples is not None and processed_samples >= FLAGS.num_samples:
-            logging.info(f"\nReached sample limit ({FLAGS.num_samples}), stopping...")
-            break
-  
-    # 计算并打印指标
-    if true_labels_list and pred_labels_list:
-        accuracy = calculate_accuracy(true_labels_list, pred_labels_list)
-        metrics_info = {
-            "accuracy": accuracy,
-            "total_samples": len(true_labels_list),
-            "correct_predictions": int(accuracy * len(true_labels_list))
-        }
-        print(f"\nAccuracy: {accuracy:.4f}")
-        print(f"Total samples evaluated: {len(true_labels_list)}")
-        print(f"Correct predictions: {metrics_info['correct_predictions']}")
+        # 详细的配置验证
+        if rank == 0:
+            logging.info("=== Cluster Configuration ===")
+            logging.info(f"Hostfile: {hostfile}")
+            logging.info(f"Total machines: {total_machines}")
+            logging.info(f"Machines and slots:")
+            for i, (machine, slots) in enumerate(zip(machines, slots_per_machine)):
+                logging.info(f"  {i+1}. {machine}: {slots} slots")
+            logging.info(f"Total slots: {total_slots}")
+            logging.info(f"Required processes: {size}")
+            logging.info(f"Tensor parallel size: {FLAGS.tp}")
+            logging.info("=" * 30)
         
-        # 如果配置了输出指标文件，则写入该文件
-        if FLAGS.metrics_output_file:
-            with open(FLAGS.metrics_output_file, "w", encoding="utf-8") as mf:
-                mf.write(json.dumps(metrics_info, ensure_ascii=False, indent=2))
+        # 验证配置
+        if size > total_slots:
+            raise ValueError(
+                f"MPI process count ({size}) exceeds available slots in hostfile ({total_slots})"
+            )
     else:
-        logging.warning("No valid labels extracted, skipping metrics calculation")
+        if rank == 0:
+            logging.warning("Running without hostfile validation. "
+                          "Make sure your MPI configuration is correct!")
+    
+    # 确保所有进程都正确初始化
+    comm.Barrier()
+    
+    # 初始化采样参数
+    sampling_params = SamplingParams(
+        temperature=FLAGS.temperature,
+        top_p=FLAGS.top_p,
+        max_tokens=FLAGS.max_tokens,
+        repetition_penalty=FLAGS.repetition_penalty
+    )
+    
+    try:
+        llm = LLM(
+            model=FLAGS.model_name_or_path,
+            tensor_parallel_size=FLAGS.tp,
+            gpu_memory_utilization=FLAGS.gpu_memory_utilization,
+            limit_mm_per_prompt={
+                "image": FLAGS.limit_mm_per_prompt,
+                "video": FLAGS.limit_mm_per_prompt
+            }
+        )
+    except Exception as e:
+        logging.error(f"Failed to initialize LLM on rank {rank} ({hostname}): {str(e)}")
+        comm.Abort()
+    
+    # Load dataset
+    dataset = WenJuanInferDataset(
+        parquet_path=FLAGS.parquet_path,
+        system_prompt=FLAGS.system_prompt,
+        model_name_or_path=FLAGS.model_name_or_path,
+        max_text_len=FLAGS.max_text_len,
+        max_frames=FLAGS.max_frames,
+        columns=FLAGS.columns,
+        user=FLAGS.user,
+        limit=FLAGS.limit,
+        enable_remove_comment=FLAGS.enable_remove_comment
+    )
+    
+    # Split dataset for this MPI rank
+    local_dataset = split_dataset(dataset, size, rank)
+    
+    # Load true labels only on rank 0 and broadcast to all processes
+    if rank == 0:
+        true_labels = load_true_labels(FLAGS.parquet_path)
+    else:
+        true_labels = None
+    
+    # Broadcast true_labels from rank 0 to all processes
+    true_labels = comm.bcast(true_labels, root=0)
+    
+    # Create local results file for this rank using both local and global rank
+    local_output_path = f"{FLAGS.output_path}.rank{rank}.global{FLAGS.global_rank}"
+    results_stats = {
+        "true_sat_pred_sat": 0,
+        "true_unsat_pred_unsat": 0,
+        "true_sat_pred_unsat": 0,
+        "true_unsat_pred_sat": 0,
+        "pred_unknown": 0,
+        "total_processed": 0
+    }
+
+    # Process local chunk of data
+    with open(local_output_path, "w", encoding="utf-8") as f:
+        total_samples = 0
+        has_response_samples = 0
+        has_response_text_samples = 0
+        for batch in tqdm(DataLoader(local_dataset,batch_size=FLAGS.batch_size,
+                                   collate_fn=collate_fn),disable=rank != 0):  # Only rank 0 shows progress bar
+            total_samples += len(batch["inputs"])
+            # 存储该批次所有样本的所有生成结果
+            batch_generations = [[] for _ in range(len(batch["inputs"]))]
+            
+            # 对当前批次进行多次生成
+            for gen_idx in range(FLAGS.num_generations):
+                outputs = llm.generate(batch["inputs"], sampling_params)
+                has_response_samples += len(outputs)
+                
+                # 保存本次生成结果
+                for idx, output in enumerate(outputs):
+                    response = output.outputs[0].text
+                    if response:
+                        has_response_text_samples += 1
+                    pred_label = extract_satisfaction(response)
+                    
+                    batch_generations[idx].append({
+                        "generation_id": gen_idx,
+                        "pred_label": pred_label,
+                        "response": response
+                    })
+            
+            # 处理并保存该批次的所有结果
+            for idx in range(len(batch["inputs"])):
+                photo_id = batch["photo_id"][idx]
+                true_label = true_labels.get(photo_id)
+                
+                # 更新统计信息
+                for generation in batch_generations[idx]:
+                    pred_label = generation["pred_label"]
+                    if true_label and pred_label:
+                        if true_label == pred_label:
+                            if true_label == "满意":
+                                results_stats["true_sat_pred_sat"] += 1
+                            else:
+                                results_stats["true_unsat_pred_unsat"] += 1
+                        else:
+                            if true_label == "满意":
+                                results_stats["true_sat_pred_unsat"] += 1
+                            else:
+                                results_stats["true_unsat_pred_sat"] += 1
+                    else:
+                        results_stats["pred_unknown"] += 1
+                    results_stats["total_processed"] += 1
+                
+                # 保存结果
+                result = {
+                    "photo_id": photo_id,
+                    "true_label": true_label,
+                    "prompt": batch["inputs"][idx]["prompt"],
+                    "rsp": batch_generations[idx]
+                }
+                f.write(json.dumps(result, ensure_ascii=False) + "\n")
+                f.flush()
+
+            if total_samples % 100 == 0:
+                logging.info(f"===debug=== rank {rank} Processed {results_stats['total_processed']} samples...")
+
+            if FLAGS.num_samples is not None and results_stats["total_processed"] >= FLAGS.num_samples:
+                logging.info(f"\nReached sample limit ({FLAGS.num_samples}), stopping...")
+                break
+
+    # 确保文件写入完成
+    comm.Barrier()
+    
+    if rank == 0:
+        logging.info(f"Results being written to: {FLAGS.output_path}")
+    
+    # Merge results from all processes
+    merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank)
+    
+    # Gather statistics from all processes
+    all_stats = comm.gather(results_stats, root=0)
+    
+    # Only rank 0 computes and prints final metrics
+    if rank == 0:
+        combined_stats = {
+            "true_sat_pred_sat": sum(stats["true_sat_pred_sat"] for stats in all_stats),
+            "true_unsat_pred_unsat": sum(stats["true_unsat_pred_unsat"] for stats in all_stats),
+            "true_sat_pred_unsat": sum(stats["true_sat_pred_unsat"] for stats in all_stats),
+            "true_unsat_pred_sat": sum(stats["true_unsat_pred_sat"] for stats in all_stats),
+            "pred_unknown": sum(stats["pred_unknown"] for stats in all_stats),
+            "total_processed": sum(stats["total_processed"] for stats in all_stats)
+        }
+        
+        # Print final combined statistics
+        logging.info("\n=== Final Combined Statistics ===")
+        total_valid = (combined_stats["true_sat_pred_sat"] + 
+                      combined_stats["true_unsat_pred_unsat"] + 
+                      combined_stats["true_sat_pred_unsat"] + 
+                      combined_stats["true_unsat_pred_sat"])
+        
+        accuracy = ((combined_stats["true_sat_pred_sat"] + 
+                    combined_stats["true_unsat_pred_unsat"]) / total_valid) if total_valid > 0 else 0.0
+        
+        # Save final metrics
+        if FLAGS.metrics_output_file:
+            final_stats = {
+                "results_stats": combined_stats,
+                "final_accuracy": accuracy
+            }
+            with open(FLAGS.metrics_output_file, "w", encoding="utf-8") as mf:
+                json.dump(final_stats, mf, ensure_ascii=False, indent=2)
+        
+        # Clean up temporary files
+        for r in range(size):
+            temp_file = f"{FLAGS.output_path}.rank{r}.global{FLAGS.global_rank}"
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
 
 if __name__ == "__main__":
-  app.run(main)
+    app.run(main)
