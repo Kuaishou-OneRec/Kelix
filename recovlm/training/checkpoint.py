@@ -80,3 +80,74 @@ def load_dist_attn_state_dict(src, dst):
       k = new_k
     new_state_dict[k] = v
   dst.load_state_dict(new_state_dict, strict=True)
+
+def safe_torch_load(
+    checkpoint_path: Union[Path, str], weights_only: bool = True, mmap: bool = True) -> Dict[str, Any]:
+    """
+    Utility to load a checkpoint file onto CPU in a safe manner. Provides separate handling for
+    safetensors files.
+
+    Args:
+        checkpoint_path (Union[Path, str]): Path to the checkpoint file.
+        weights_only (bool): Whether to load only tensors, primitive types, and dictionaries
+            (passthrough to torch.load). Default: True
+        mmap (bool): Whether to mmap from disk into CPU memory. Default: True
+
+    Returns:
+        Dict[str, Any]: State dict from the checkpoint file.
+
+    Raises:
+        ValueError: If the checkpoint file is not found or cannot be loaded.
+    """
+    try:
+        # convert the path into a string since pathlib Path and mmap don't work
+        # well together
+        is_safetensors_file = (
+            True if str(checkpoint_path).endswith(".safetensors") else False
+        )
+        if is_safetensors_file:
+            result = {}
+            from safetensors import safe_open
+            with safe_open(checkpoint_path, framework="pt", device="cpu") as f:
+                for k in f.keys():
+                    result[k] = f.get_tensor(k)
+            state_dict = result
+        else:
+            state_dict = torch.load(
+                str(checkpoint_path),
+                map_location="cpu",
+                mmap=mmap,
+                weights_only=weights_only,
+            )
+    except Exception as e:
+        raise ValueError(f"Unable to load checkpoint from {checkpoint_path}. ") from e
+    return state_dict
+
+def load_hf_checkpoint(model_dir):
+  # merged state_dict contains keys and weights from all the checkpoint files
+  merged_state_dict: Dict[str, torch.Tensor] = {}
+
+  # converted_state_dict is the final state_dict passed to the recipe after the
+  # keys are converted into the torchtune format. This optionally also contains
+  # the recipe state and adapter weights
+  ckpt_paths = sorted(glob.glob(os.path.join(model_dir, "*.safetensors")))
+  if not ckpt_paths:
+    ckpt_paths = sorted(glob.glob(os.path.join(model_dir, "*.bin")))
+  # _checkpoint_paths are already sorted so simply enumerate to generate the right id
+  for cpt_idx, cpt_path in enumerate(ckpt_paths):
+    print_rank_0(f"Load checkpoints: {cpt_idx}/{len(ckpt_paths)}")
+    state_dict = safe_torch_load(cpt_path)
+    for key, value in state_dict.items():
+        # Ensure that the state dict is a flat dict of keys and tensors. Breaking this assumption
+        # will break recipe code
+        if not isinstance(value, torch.Tensor):
+            raise ValueError(
+                f"Expected all values in the state dict to be torch.Tensor. "
+                f"Found {key}={type(value)} instead."
+            )
+    merged_state_dict.update(state_dict)
+
+    # delete the state_dict to free up memory; TODO check if this del is needed
+    del state_dict
+    gc.collect()
+  return merged_state_dict

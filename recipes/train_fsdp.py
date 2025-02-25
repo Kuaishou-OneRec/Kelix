@@ -1,7 +1,6 @@
-from typing import Dict, Any, Union, Optional, Generator
+from typing import Dict, Any, Union, Optional
 
 import contextlib
-from pathlib import Path
 import gc
 import argparse
 import time
@@ -20,6 +19,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 import numpy as np
 
+from pathlib import Path
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -44,11 +44,11 @@ from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
 
 from recovlm.training.distributed import shard_model, get_shard_conditions, \
   load_from_full_model_state_dict
+from recovlm.training.checkpoint import load_hf_checkpoint
 
-from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
-    apply_activation_checkpointing,
-)
-from torch.distributed.fsdp.wrap import ModuleWrapPolicy
+from recovlm.training.activations import set_activation_checkpointing
+
+from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
 
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
 
@@ -163,6 +163,9 @@ def get_argument_parser():
 
   ############ Training Args ############
 
+  parser.add_argument("--clip_range", type=float, default=None,
+                      help="The gradient clip range.")
+
   parser.add_argument("--freeze_llm", action="store_true",
                       help="Freeze LLM parameters.")
 
@@ -247,134 +250,6 @@ def get_resume_info(args):
     else:
       return args.resume_from, args.resume_from_tag, False
 
-#### Checkpoint utils ####
-
-def safe_torch_load(
-    checkpoint_path: Union[Path, str], weights_only: bool = True, mmap: bool = True
-) -> Dict[str, Any]:
-    """
-    Utility to load a checkpoint file onto CPU in a safe manner. Provides separate handling for
-    safetensors files.
-
-    Args:
-        checkpoint_path (Union[Path, str]): Path to the checkpoint file.
-        weights_only (bool): Whether to load only tensors, primitive types, and dictionaries
-            (passthrough to torch.load). Default: True
-        mmap (bool): Whether to mmap from disk into CPU memory. Default: True
-
-    Returns:
-        Dict[str, Any]: State dict from the checkpoint file.
-
-    Raises:
-        ValueError: If the checkpoint file is not found or cannot be loaded.
-    """
-    try:
-        # convert the path into a string since pathlib Path and mmap don't work
-        # well together
-        is_safetensors_file = (
-            True if str(checkpoint_path).endswith(".safetensors") else False
-        )
-        if is_safetensors_file:
-            result = {}
-            from safetensors import safe_open
-            with safe_open(checkpoint_path, framework="pt", device="cpu") as f:
-                for k in f.keys():
-                    result[k] = f.get_tensor(k)
-            state_dict = result
-        else:
-            state_dict = torch.load(
-                str(checkpoint_path),
-                map_location="cpu",
-                mmap=mmap,
-                weights_only=weights_only,
-            )
-    except Exception as e:
-        raise ValueError(f"Unable to load checkpoint from {checkpoint_path}. ") from e
-    return state_dict
-
-def load_hf_state_dict(model_dir):
-  # merged state_dict contains keys and weights from all the checkpoint files
-  merged_state_dict: Dict[str, torch.Tensor] = {}
-
-  # converted_state_dict is the final state_dict passed to the recipe after the
-  # keys are converted into the torchtune format. This optionally also contains
-  # the recipe state and adapter weights
-  ckpt_paths = sorted(glob.glob(os.path.join(model_dir, "*.safetensors")))
-  if not ckpt_paths:
-    ckpt_paths = sorted(glob.glob(os.path.join(model_dir, "*.bin")))
-  # _checkpoint_paths are already sorted so simply enumerate to generate the right id
-  for cpt_idx, cpt_path in enumerate(ckpt_paths):
-    print_rank_0(f"Load checkpoints: {cpt_idx}/{len(ckpt_paths)}")
-    state_dict = safe_torch_load(cpt_path)
-    for key, value in state_dict.items():
-        # Ensure that the state dict is a flat dict of keys and tensors. Breaking this assumption
-        # will break recipe code
-        if not isinstance(value, torch.Tensor):
-            raise ValueError(
-                f"Expected all values in the state dict to be torch.Tensor. "
-                f"Found {key}={type(value)} instead."
-            )
-    merged_state_dict.update(state_dict)
-
-    # delete the state_dict to free up memory; TODO check if this del is needed
-    del state_dict
-    gc.collect()
-  return merged_state_dict
-
-#### Checkpoint utils ####
-@contextlib.contextmanager
-def set_default_dtype(dtype: torch.dtype) -> Generator[None, None, None]:
-    """
-    Context manager to set torch's default dtype.
-
-    Args:
-        dtype (torch.dtype): The desired default dtype inside the context manager.
-
-    Returns:
-        ContextManager: context manager for setting default dtype.
-
-    Example:
-        >>> with set_default_dtype(torch.bfloat16):
-        >>>     x = torch.tensor([1, 2, 3])
-        >>>     x.dtype
-        torch.bfloat16
-
-    """
-    old_dtype = torch.get_default_dtype()
-    torch.set_default_dtype(dtype)
-    try:
-        yield
-    finally:
-        torch.set_default_dtype(old_dtype)
-
-def set_activation_checkpointing(
-    model: nn.Module, auto_wrap_policy, **kwargs
-) -> None:
-    """Utility to apply activation checkpointing to the passed-in model.
-
-    Args:
-        model (nn.Module): Model to apply activation checkpointing to.
-        auto_wrap_policy (ACWrapPolicyType): Policy to wrap module.
-            This can either be a set of ``nn.Module`` types, in which case, modules of the specified type(s)
-            will be wrapped individually with activation checkpointing, or a ``callable`` policy describing
-            how to wrap the model with activation checkpointing. For more information on authoring custom
-            policies, please see this tutorial:
-            https://pytorch.org/tutorials/intermediate/FSDP_adavnced_tutorial.html#transformer-wrapping-policy.
-        **kwargs: additional arguments to pass to ``torch.distributed`` activation checkpointing.
-    """
-    if isinstance(auto_wrap_policy, set):
-        auto_wrap_policy = ModuleWrapPolicy(auto_wrap_policy)
-    apply_activation_checkpointing(model, auto_wrap_policy=auto_wrap_policy, **kwargs)
-
-def get_global_grad_norm(model):
-  total_norm = 0.0
-  for param in model.parameters():
-    if param.grad is not None:
-      grad = param.grad.data
-      total_norm += grad.pow(2).sum().item()  # 累加所有元素的平方和
-  total_norm = total_norm ** 0.5  # 开平方
-  return total_norm
-
 def train():
   arg_parser = get_argument_parser()
   args = arg_parser.parse_args()
@@ -414,7 +289,8 @@ def train():
   state_dict = None
   if dist.get_rank() == 0:
     with set_default_dtype(torch.bfloat16):
-      state_dict = load_hf_state_dict(args.model_dir)
+      state_dict = load_hf_checkpoint(args.model_dir)
+
   dist.barrier()
 
   if dist.get_rank() == 0:
@@ -448,7 +324,7 @@ def train():
 
   if args.enable_gradient_checkpointing:
     print_rank_0("Enable gradient checkpointing")
-    # 使用FSDP，hf的gradient_checkpointing_enable()不work，需要用torch的api
+    # 使用FSDP时，hf的gradient_checkpointing_enable()不会生效
     # model.gradient_checkpointing_enable(
     #     gradient_checkpointing_kwargs={"use_reentrant": False})
     set_activation_checkpointing(
@@ -632,7 +508,6 @@ def train():
 
   # Metrics, acc_ account for gradient accumulation
   # TODO: use mestrics manager
-  acc_step = 0
   acc_avg_loss = 0.0
   acc_num_tokens = 0
   acc_num_samples = 0
@@ -665,10 +540,7 @@ def train():
 
     # 打印 token 数量
     token_count = input_ids.numel()  # 计算 token 数量
-    print_rank_0(f"Iteration {acc_step}: Token count = {token_count}")
-
-    # 前向过程日志
-    logger.debug(f"Forward pass: Iteration {acc_step}, Input IDs shape: {input_ids.shape}")
+    print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
 
     num_tokens = input_ids.numel()
     num_samples = (sample_idx.max() + 1).sum()
@@ -694,9 +566,6 @@ def train():
     input_ids = input_ids * (input_ids > 0).to(torch.int64)
     labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
-    # 后向过程日志
-    logger.debug(f"Backward pass: Iteration {acc_step}, Labels shape: {labels.shape}")
-
     with Timer("Fwd"):
       output = model(
         input_ids, attention_mask=attention_mask,
@@ -720,6 +589,7 @@ def train():
 
     with Timer("bwd"):
       loss.backward(loss)
+      clip_grad_by_value(model, args.clip_range)
       if (micro_step + 1) % args.gradient_accumulation_steps == 0:
         lr_scheduler.step()
         optimizer.step()
@@ -752,7 +622,6 @@ def train():
     dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
     avg_loss = avg_loss.item() / dist.get_world_size()
     acc_avg_loss += avg_loss
-    acc_step += 1
 
     if global_step % args.logging_per_step == 0 and \
             (micro_step + 1) % args.gradient_accumulation_steps == 0:
@@ -776,14 +645,14 @@ def train():
           vision_learning_rate = lr_scheduler.get_lr()[1]
 
         end_time = time.time()
-        sec_per_step = (end_time - start_time) / acc_step
+        sec_per_step = (end_time - start_time) / args.gradient_accumulation_steps
         tokens_per_sec_per_gpu = \
           acc_num_tokens / dist.get_world_size() / (end_time - start_time)
         samples_per_sec_per_gpu = \
           acc_num_samples / dist.get_world_size() / (end_time - start_time)
         valid_tokens_per_sec_per_gpu = \
           acc_valid_num_tokens / dist.get_world_size() / (end_time - start_time)
-        avg_loss = acc_avg_loss / acc_step
+        avg_loss = acc_avg_loss / args.gradient_accumulation_steps
         start_time = end_time
         log_dict = {
           "training/loss": avg_loss,
@@ -858,7 +727,6 @@ def train():
         if args.heartbeat_monitor:
           heart_beat(int(acc_num_tokens))
 
-      acc_step = 0
       acc_avg_loss = 0.0
       acc_num_samples = 0
       acc_num_tokens = 0
