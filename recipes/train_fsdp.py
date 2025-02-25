@@ -1,4 +1,6 @@
-from typing import Dict, Any, Union, Optional
+from typing import Dict, Any, Union, Optional, Generator
+
+import contextlib
 from pathlib import Path
 import gc
 import argparse
@@ -318,6 +320,31 @@ def load_hf_state_dict(model_dir):
   return merged_state_dict
 
 #### Checkpoint utils ####
+@contextlib.contextmanager
+def set_default_dtype(dtype: torch.dtype) -> Generator[None, None, None]:
+    """
+    Context manager to set torch's default dtype.
+
+    Args:
+        dtype (torch.dtype): The desired default dtype inside the context manager.
+
+    Returns:
+        ContextManager: context manager for setting default dtype.
+
+    Example:
+        >>> with set_default_dtype(torch.bfloat16):
+        >>>     x = torch.tensor([1, 2, 3])
+        >>>     x.dtype
+        torch.bfloat16
+
+
+    """
+    old_dtype = torch.get_default_dtype()
+    torch.set_default_dtype(dtype)
+    try:
+        yield
+    finally:
+        torch.set_default_dtype(old_dtype)
 
 def train():
   arg_parser = get_argument_parser()
@@ -357,7 +384,8 @@ def train():
 
   state_dict = None
   if dist.get_rank() == 0:
-    state_dict = load_hf_state_dict(args.model_dir)
+    with set_default_dtype(torch.bfloat16):
+      state_dict = load_hf_state_dict(args.model_dir)
   dist.barrier()
 
   if dist.get_rank() == 0:
@@ -381,10 +409,10 @@ def train():
 
   # enabled=False when zero stage < 3
   # initialize in meta device
-  with torch.device("meta"):
+  with set_default_dtype(torch.bfloat16), torch.device("meta"):
     model = Qwen2VLForConditionalGeneration.from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",
-      torch_dtype=torch.bfloat16, use_cache=False
+      use_cache=False
     )
   # if dist.get_rank() == 0:
   #   tensor = torch.zeros(
@@ -402,8 +430,13 @@ def train():
   # print(f"{tensor.shape}, {tensor.dtype}")
   #model.train()
   
-  for param in model.parameters():
-    assert param.device == torch.device("meta")
+  for tensor in itertools.chain(model.parameters(), model.buffers):
+    assert tensor.device == torch.device("meta")
+
+  if args.enable_gradient_checkpointing:
+    print_rank_0("Enable gradient checkpointing")
+    model.gradient_checkpointing_enable(
+        gradient_checkpointing_kwargs={"use_reentrant": False})
 
   shard_model(
     model=model,
@@ -412,15 +445,15 @@ def train():
     reshard_after_forward=False,
     dp_mesh=device_mesh,
   )
-  print_rank_0(model)
-  import time
-  time.sleep(30)
   dist.barrier()
 
   with Timer("Load state dict"):
     load_from_full_model_state_dict(model=model, full_sd=state_dict)
   
-  with torch.device(local_rank):
+  if state_dict:
+    del state_dict
+
+  with torch.device(torch.cuda.current_device()):
     for m in model.modules():
       # RoPE is not covered in state dict
       if hasattr(m, "rope_init"):
@@ -463,21 +496,17 @@ def train():
       print_rank_0(f"params not freeze: {name}")
   print_rank_0("=" * 50)
 
-  if args.enable_gradient_checkpointing:
-    print_rank_0("Enable gradient checkpointing")
-    model.gradient_checkpointing_enable(
-        gradient_checkpointing_kwargs={"use_reentrant": False})
-
   # Split weights in two groups, one with weight decay and the other not.
   optimizer_grouped_parameters = get_optimizer_grouped_parameters(
-      model,
-      learning_rate=args.learning_rate,
-      vision_learning_rate=args.vision_learning_rate,
-      weight_decay=args.weight_decay,
-      no_decay_name_list=["bias", "norm1", "norm2", "visual.merger.ln_q", "input_layernorm", "post_attention_layernorm", "model.norm"],
-      vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
-    )
+    model,
+    learning_rate=args.learning_rate,
+    vision_learning_rate=args.vision_learning_rate,
+    weight_decay=args.weight_decay,
+    no_decay_name_list=["bias", "norm1", "norm2", "visual.merger.ln_q", "input_layernorm", "post_attention_layernorm", "model.norm"],
+    vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
+  )
 
+  print(optimizer_grouped_parameters)
   # prepare optimizer
   optimizer = torch.optim.AdamW(optimizer_grouped_parameters,
                         lr=args.learning_rate,
