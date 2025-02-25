@@ -10,6 +10,7 @@ import json
 import logging
 import collections
 import pickle
+import itertools
 
 import torch
 import torch.distributed as dist
@@ -383,7 +384,8 @@ def train():
   with torch.device("meta"):
     model = Qwen2VLForConditionalGeneration.from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",
-      use_cache=False)
+      torch_dtype=torch.bfloat16, use_cache=False
+    )
   # if dist.get_rank() == 0:
   #   tensor = torch.zeros(
   #     (128, 32),
@@ -415,9 +417,6 @@ def train():
   with Timer("Load state dict"):
     load_from_full_model_state_dict(model=model, full_sd=state_dict)
   
-  print(f"{model.model.rotary_emb.inv_freq.device}")
-  import time
-  time.sleep(30)
   with torch.device(local_rank):
     for m in model.modules():
       # RoPE is not covered in state dict
@@ -431,9 +430,6 @@ def train():
   for name, buffer in model.named_buffers():
     assert not buffer.device == torch.device("meta"), f"{name} not initialized, device={buffer.device}"
 
-  import time
-  time.sleep(30)
-  
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
     for name, param in model.named_parameters():
@@ -679,7 +675,7 @@ def train():
       # del local_labels
 
     with Timer("bwd"):
-      optimizer.backward(loss)
+      loss.backward(loss)
       optimizer.step()
 
     ########## dataset source monitor ###############
