@@ -51,6 +51,8 @@ np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
+#                 --enable_gradient_checkpointing \
+
 nohup mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
         -hostfile $hostfile \
@@ -111,7 +113,6 @@ nohup mpirun --allow-run-as-root -np $np \
                 --num_warmup_steps 500 \
                 --num_training_steps 26000 \
                 --save_checkpoint_per_step 1000 \
-                --enable_gradient_checkpointing \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
