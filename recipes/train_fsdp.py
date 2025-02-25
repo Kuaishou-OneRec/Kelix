@@ -15,6 +15,7 @@ import pickle
 import itertools
 
 import torch
+import torch.nn as nn
 import torch.distributed as dist
 import torch.nn.functional as F
 import numpy as np
@@ -43,6 +44,13 @@ from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
 
 from recovlm.training.distributed import shard_model, get_shard_conditions, \
   load_from_full_model_state_dict
+
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    apply_activation_checkpointing,
+)
+from torch.distributed.fsdp.wrap import ModuleWrapPolicy
+
+from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer
 
 # Logger 初始化
 logging.basicConfig(level=logging.INFO)  # 设置日志级别
@@ -341,6 +349,25 @@ def set_default_dtype(dtype: torch.dtype) -> Generator[None, None, None]:
     finally:
         torch.set_default_dtype(old_dtype)
 
+def set_activation_checkpointing(
+    model: nn.Module, auto_wrap_policy, **kwargs
+) -> None:
+    """Utility to apply activation checkpointing to the passed-in model.
+
+    Args:
+        model (nn.Module): Model to apply activation checkpointing to.
+        auto_wrap_policy (ACWrapPolicyType): Policy to wrap module.
+            This can either be a set of ``nn.Module`` types, in which case, modules of the specified type(s)
+            will be wrapped individually with activation checkpointing, or a ``callable`` policy describing
+            how to wrap the model with activation checkpointing. For more information on authoring custom
+            policies, please see this tutorial:
+            https://pytorch.org/tutorials/intermediate/FSDP_adavnced_tutorial.html#transformer-wrapping-policy.
+        **kwargs: additional arguments to pass to ``torch.distributed`` activation checkpointing.
+    """
+    if isinstance(auto_wrap_policy, set):
+        auto_wrap_policy = ModuleWrapPolicy(auto_wrap_policy)
+    apply_activation_checkpointing(model, auto_wrap_policy=auto_wrap_policy, **kwargs)
+
 def train():
   arg_parser = get_argument_parser()
   args = arg_parser.parse_args()
@@ -430,8 +457,11 @@ def train():
 
   if args.enable_gradient_checkpointing:
     print_rank_0("Enable gradient checkpointing")
-    model.gradient_checkpointing_enable(
-        gradient_checkpointing_kwargs={"use_reentrant": False})
+    # model.gradient_checkpointing_enable(
+    #     gradient_checkpointing_kwargs={"use_reentrant": False})
+    set_activation_checkpointing(
+      model, auto_wrap_policy={Qwen2VLDecoderLayer}
+    )
 
   shard_model(
     model=model,
