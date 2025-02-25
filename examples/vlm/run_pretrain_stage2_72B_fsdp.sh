@@ -22,7 +22,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="stage2，stg1 vit load qwen，使用ocr 进行stg2"
+comment="72B FSDP"
 
 
 git add --all
@@ -107,7 +107,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --dataset_config examples/vlm/configs/stage2_parquet_ocrall_0207_1epoch.json \
-                --max_length 8192 \
+                --max_length 10000 \
                 --learning_rate 5e-5 \
                 --vision_learning_rate 5e-5 \
                 --vision_lr_layer_decay 0.95 \

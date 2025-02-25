@@ -643,7 +643,7 @@ def train():
           vision_learning_rate = lr_scheduler.get_lr()[2]
         else:
           vision_learning_rate = lr_scheduler.get_lr()[1]
-
+        grad_norm = get_global_grad_norm(model) 
         end_time = time.time()
         sec_per_step = (end_time - start_time) / args.gradient_accumulation_steps
         tokens_per_sec_per_gpu = \
@@ -656,6 +656,7 @@ def train():
         start_time = end_time
         log_dict = {
           "training/loss": avg_loss,
+          "training/grad_norm": grad_norm,
           "training/learning_rate": learning_rate,
           "training/vision_learning_rate": vision_learning_rate,
           "perf/sec_per_step": sec_per_step,
@@ -710,6 +711,7 @@ def train():
 
         print_rank_0(
           f"Step: {global_step}, Loss: {avg_loss}, "
+          f"Grad Nrom: {grad_norm}",
           f"Learning Rate: {learning_rate}, "
           f"Sec per Step: {sec_per_step}",
           f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
