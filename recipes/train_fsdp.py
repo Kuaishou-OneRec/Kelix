@@ -418,10 +418,11 @@ def train():
   print(f"{model.model.rotary_emb.inv_freq.device}")
   import time
   time.sleep(30)
-  with torch.cuda.current_device():
+  with torch.device(local_rank):
     for m in model.modules():
       # RoPE is not covered in state dict
       if hasattr(m, "rope_init"):
+        print_rank_0("Initialize RoPE")
         m.rope_init()
 
   for name, param in model.named_parameters():
