@@ -305,7 +305,7 @@ def load_hf_state_dict(model_dir):
     ckpt_paths = sorted(glob.glob(os.path.join(model_dir, "*.bin")))
   # _checkpoint_paths are already sorted so simply enumerate to generate the right id
   for cpt_idx, cpt_path in enumerate(ckpt_paths):
-    print_rank_0(f"Load checkpoint: {cpt_idx}/{len(ckpt_paths)}")
+    print_rank_0(f"Load checkpoints: {cpt_idx}/{len(ckpt_paths)}")
     state_dict = safe_torch_load(cpt_path)
     for key, value in state_dict.items():
         # Ensure that the state dict is a flat dict of keys and tensors. Breaking this assumption
