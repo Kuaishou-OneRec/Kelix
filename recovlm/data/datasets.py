@@ -1427,7 +1427,7 @@ class ParquetDataset(IterableDataset):
               if sample != None:
                 yield sample
               offset_dict[fn_group_key] = row_idx
-              logger.warning(f"get row_index succ, [Rank{rank}-{worker}] {fn}-epoch{epoch_idx}-group{group_idx}-row_idx{row_idx}")
+              #logger.warning(f"get row_index succ, [Rank{rank}-{worker}] {fn}-epoch{epoch_idx}-group{group_idx}-row_idx{row_idx}")
           except:
             logger.error(f"ParquetDataset loop file_content error!!! error_msg={traceback.format_exc()}")
 
