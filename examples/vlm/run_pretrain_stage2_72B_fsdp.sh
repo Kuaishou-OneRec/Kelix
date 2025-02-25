@@ -66,6 +66,10 @@ nohup mpirun --allow-run-as-root -np $np \
         -mca btl_tcp_if_include eth04 \
         -mca btl_openib_allow_ib true \
         --mca btl tcp,self \
+        -x NO_COLOR=1 \
+        -x TERM=dumb \
+        -x COLORTERM=0 \
+        -x PYTHONIOENCODING=utf-8 \
         -x NCCL_IB_QPS_PER_CONNECTION=4 \
         -x NCCL_IB_DISABLE=0 \
         -x NCCL_IB_GID_INDEX=3 \
