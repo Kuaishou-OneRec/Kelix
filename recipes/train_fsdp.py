@@ -778,7 +778,7 @@ def train():
         start_time = end_time
         log_dict = {
           "training/loss": avg_loss,
-          "training/grad_norm": model.get_global_grad_norm(),
+          "training/grad_norm": optimizer._global_grad_norm,
           "training/learning_rate": learning_rate,
           "training/vision_learning_rate": vision_learning_rate,
           "perf/sec_per_step": sec_per_step,
@@ -834,7 +834,7 @@ def train():
         print_rank_0(
           f"Step: {global_step}, Loss: {avg_loss}, "
           f"Learning Rate: {learning_rate}, "
-          f"Grad Norm: {model.get_global_grad_norm()}, "
+          f"Grad Norm: {optimizer._global_grad_norm}, "
           f"Sec per Step: {sec_per_step}",
           f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
           f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
