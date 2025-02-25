@@ -299,7 +299,6 @@ def load_hf_state_dict(model_dir):
   # converted_state_dict is the final state_dict passed to the recipe after the
   # keys are converted into the torchtune format. This optionally also contains
   # the recipe state and adapter weights
-  converted_state_dict: Dict[str, Dict[str, torch.Tensor]] = {}
   ckpt_paths = sorted(glob.glob(os.path.join(model_dir, "*.safetensors")))
   if not ckpt_paths:
     ckpt_paths = sorted(glob.glob(os.path.join(model_dir, "*.bin")))
@@ -313,7 +312,7 @@ def load_hf_state_dict(model_dir):
         if not isinstance(value, torch.Tensor):
             raise ValueError(
                 f"Expected all values in the state dict to be torch.Tensor. "
-                f"Found {type(value)} instead."
+                f"Found {key}={type(value)} instead."
             )
     merged_state_dict.update(state_dict)
 
@@ -339,7 +338,6 @@ def set_default_dtype(dtype: torch.dtype) -> Generator[None, None, None]:
         >>>     x = torch.tensor([1, 2, 3])
         >>>     x.dtype
         torch.bfloat16
-
 
     """
     old_dtype = torch.get_default_dtype()
@@ -435,11 +433,13 @@ def train():
       use_cache=False
     )
   
+  # check all param & buffer on meta device 
   for tensor in itertools.chain(model.parameters(), model.buffers()):
     assert tensor.device == torch.device("meta")
 
   if args.enable_gradient_checkpointing:
     print_rank_0("Enable gradient checkpointing")
+    # 使用FSDP，hf的gradient_checkpointing_enable()不work，需要用torch的api
     # model.gradient_checkpointing_enable(
     #     gradient_checkpointing_kwargs={"use_reentrant": False})
     set_activation_checkpointing(
@@ -458,7 +458,7 @@ def train():
   with Timer("Load state dict"):
     load_from_full_model_state_dict(model=model, full_sd=state_dict)
   
-  if state_dict:
+  if state_dict is not None:
     del state_dict
 
   with torch.device(torch.cuda.current_device()):
@@ -467,7 +467,8 @@ def train():
       if hasattr(m, "rope_init"):
         print_rank_0("Initialize RoPE")
         m.rope_init()
-
+  
+  # 确保任何参数都被正确初始化
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
     assert not tensor.device == torch.device("meta"), \
       f"{name} not initialized, device={tensor.device}"
@@ -512,7 +513,8 @@ def train():
       "bias", "norm1", "norm2", "visual.merger.ln_q",
       "input_layernorm",
       "post_attention_layernorm",
-      "model.norm"],
+      "model.norm"
+    ],
     vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
   )
 
@@ -521,7 +523,8 @@ def train():
     optimizer_grouped_parameters,
     lr=args.learning_rate,
     betas=(args.beta1, args.beta2),
-    eps=1.0e-8)
+    eps=1.0e-8
+  )
 
   lr_scheduler = get_scheduler(
     name=args.lr_scheduler_type,
@@ -709,6 +712,7 @@ def train():
     with Timer("bwd"):
       loss.backward(loss)
       if (micro_step + 1) % args.gradient_accumulation_steps == 0:
+        lr_scheduler.step()
         optimizer.step()
         optimizer.zero_grad()
         global_step += 1
