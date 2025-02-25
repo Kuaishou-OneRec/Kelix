@@ -594,6 +594,7 @@ def train():
         optimizer.step()
         lr_scheduler.step()
         grad_norm = get_global_grad_norm(model)
+        print_rank_0(grad_norm, [grad_norm])
         optimizer.zero_grad()
         global_step += 1
 
