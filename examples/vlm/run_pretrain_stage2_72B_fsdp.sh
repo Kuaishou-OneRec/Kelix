@@ -103,7 +103,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --dataset_config examples/vlm/configs/stage2_parquet_ocrall_0207_1epoch.json \
-                --max_length 2048 \
+                --max_length 4096 \
                 --learning_rate 5e-5 \
                 --vision_learning_rate 5e-5 \
                 --vision_lr_layer_decay 0.95 \
