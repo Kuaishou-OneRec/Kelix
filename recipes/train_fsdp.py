@@ -467,7 +467,7 @@ def train():
     model=model,
     shard_conditions=[get_shard_conditions],
     cpu_offload=False,
-    reshard_after_forward=True,
+    reshard_after_forward=False,
     dp_mesh=device_mesh,
   )
   dist.barrier()
