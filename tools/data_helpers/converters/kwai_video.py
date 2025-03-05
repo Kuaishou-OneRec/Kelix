@@ -588,7 +588,7 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase):
             else:
                 assistnat_content.append({
                     "type": "text",
-                    "text": "用户的满意度结果是：满意" if src['wenjuan_type'] == '问卷优质' else "用户的满意度结果是：不满意"
+                    "text": "【结果：满意】" if src['wenjuan_type'] == '问卷优质' else "【结果：不满意】"
                 })
 
             messages.append({

@@ -1,9 +1,9 @@
-output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/huqigen/recovlm_dataset/wenjuan_sft/0210_11w_with_cot_dataset_only_match_llm_label_full_cmt_v2
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/huqigen/recovlm_dataset/wenjuan_sft/20250304wenjuan_benchmark_dataset
 split_size: 536870912
 dataset:
   class_name: ParquetDataset
   kwargs:
-    path: viewfs://hadoop-lt-cluster/home/reco_kaiworks/dw/reco_kaiworks.db/reco_llm_wenjuan_comment_sample_0210_tmp_shuffle
+    path: viewfs://hadoop-lt-cluster/home/reco_kaiworks/dw/reco_kaiworks.db/reco_llm_wenjuan_comment_sample_20250304_tmp_shuffle
     columns:
       - photo_id
       - wenjuan_type
@@ -20,7 +20,7 @@ converter:
     test_id_file_path: /llm_reco_ssd/huqigen/dataset/wenjuan_sft/photo_0210_11w/test_photo_id.csv
     ffmpeg_args: -vf scale='if(gt(iw,ih),min(480,iw),-2)':'if(gt(ih,iw),min(480,ih),-2)' -r 4 -t 60 -c:a aac -c:v libx264 -b:a 55k -pix_fmt yuv420p -probesize 200M -analyzeduration 200M
     prompts:
-      - "你是一个短视频平台的内容理解专家，请结合短视频的视频抽帧结果、ocr内容、asr内容以及这个视频在短视频平台的热门评论信息，判断用户是否会对这个视频满意。请充分考虑评论信息，结合这些信息提炼出该视频所有的看点。请在回答的最后给出最终的满意度判断结果，只包含满意/不满意两种类型，格式为：【结果：满意/不满意】"
+      - "你是一个短视频内容分析专家，现在需要你判断一下平台内用户对短视频的满意度，我们会提供原始视频内容。请在回答的最后给出最终的满意度判断结果，只包含满意/不满意两种类型，格式为：【结果：满意/不满意】"
     cot_txt_file_path: /mmu_mllm_hdd/dengjiaxin03/11w_data_infer_result_with_all_cmt
     max_frames_per_video: 20
     enable_debug: true
