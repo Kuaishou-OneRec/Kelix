@@ -260,6 +260,31 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase):
         if self.enable_debug:
             print(f"Initialized with {len(self.frame_index)} frame entries")
 
+
+    def prepare_video(self, photo_id) -> Optional[str]:
+        try:
+            video_bytes = self.client.get_video(photo_id)
+        except Exception as e:
+            print(f"Error retrieving video for {photo_id}: {e}")
+            return None
+
+        if video_bytes is None:
+            print(f"No video found for {photo_id}.")
+            return None
+
+        output_file = os.path.join(self.video_dir, f"{photo_id}.mp4")
+        
+        # Check if file already exists and is valid
+        if os.path.exists(output_file):
+            return output_file
+        
+        # Process video if it doesn't exist
+        if self.process_video(video_bytes, output_file):
+            return output_file
+        
+        return None
+
+        
     def _build_frame_index(self) -> Dict[str, List[str]]:
         """
         建立图片索引，将所有jpg文件按photo_id分组
@@ -520,42 +545,18 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase):
                     print(f"Skipping test ID: {photo_id}")
                 return None
                 
-            # 获取抽帧图片
-            frame_files = self._get_frame_images(photo_id)
-            encoded_images = {}
-            # 编码图片，改为字典格式
-            if not frame_files:
+            # Use the video file returned by prepare_video
+            filename = self.prepare_video(photo_id)
+            if filename is None:
                 if self.enable_debug:
-                    print(f"No frame files found for photo_id: {photo_id}")
-            else:
-                for i, frame_file in enumerate(frame_files):
-                    image_key = f"{photo_id}_{i}"
-                    encoded_image = self._encode_image(frame_file)
-                    if encoded_image:
-                        encoded_images[image_key] = encoded_image
-                
-            # 安全地获取字段值，确保是字符串类型
-            caption = str(src.get('caption', ''))
-            ocr = str(src.get('ocr', ''))
-            asr = str(src.get('asr', ''))
-            # 确保user_comment是列表，且所有元素都是字符串
-            user_comment = src.get('user_comment', [])
-            if isinstance(user_comment, (list, tuple)):
-                user_comment = [str(x) for x in user_comment]
-            elif isinstance(user_comment, np.ndarray):
-                user_comment = [str(x) for x in user_comment.tolist()]
-            else:
-                user_comment = [str(user_comment)] if user_comment is not None else []
-            
-            # 构建消息数据
-            prompt = str(np.random.choice(self.prompts))
+                    print(f"No video file found for photo_id: {photo_id}")
+                return None
+
+            # Construct the content list with the video file
             content_list = [
                 {
                     "type": "video",
-                    "video": [
-                        {"type": "image", "image": f"{photo_id}_{i}"}
-                        for i in range(len(frame_files))
-                    ]
+                    "video": filename
                 },
                 {"type": "text", "text": prompt},
                 {"type": "text", "text": f"视频的标题是：{caption}"},
@@ -598,8 +599,8 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase):
 
             # 构建返回数据，确保所有JSON序列化使用UTF-8
             meta = {
-                "images": json.dumps(encoded_images, ensure_ascii=False),
-                'videos': json.dumps([], ensure_ascii=False),
+                "images": json.dumps(None, ensure_ascii=False),
+                'videos': json.dumps([filename], ensure_ascii=False),
                 "messages": json.dumps(messages, ensure_ascii=False),
                 'segments': json.dumps(None, ensure_ascii=False),
                 "source": str(self.source),
