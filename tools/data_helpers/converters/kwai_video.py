@@ -62,6 +62,16 @@ class KwaiVideoDownloader(object):
         else:
             return None
 
+
+class i2i_converter(KwaiVideoDownloader):
+    def __init__(self, video_dir: str, ffmpeg_args: str):
+        super().__init__(video_dir, ffmpeg_args)
+
+        
+
+    def read_textfile(self) -> List[Tuple[str, str, float]]:
+        
+
 class KwaiVideoCaptionConverter(ConverterBase, KwaiVideoDownloader):
 
     def __init__(
@@ -595,5 +605,64 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase, KwaiVideoDownloader):
 
         except Exception as e:
             print(f"Error processing photo_id {src.get('photo_id', 'unknown')}: {str(e)}")
+            print(traceback.format_exc())
+            return None
+
+class i2iConverter(ConverterBase, KwaiVideoDownloader):
+    def __init__(self, video_dir: str, ffmpeg_args: str, source: Optional[str] = None, **kwargs):
+        """
+        Initialize the i2iConverter class
+
+        Parameters:
+            video_dir: Directory to store videos
+            ffmpeg_args: Arguments for ffmpeg processing
+            source: Data source identifier
+            kwargs: Additional arguments for the parent class KwaiVideoDownloader
+        """
+        KwaiVideoDownloader.__init__(self, video_dir, ffmpeg_args)
+        self.source = source
+
+    def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
+        """
+        Process input data and generate meta data
+
+        Parameters:
+            src: Dictionary containing video and text data including photoId, caption, title, text, ocr, and asr
+
+        Returns:
+            A dictionary containing meta JSON data if video processing is successful, otherwise None
+        """
+        try:
+            photo_id = str(src.get('photoId', ''))
+            caption = src.get('caption', '')
+            title = src.get('title', '')
+            text = src.get('text', '')
+            ocr = src.get('ocr', '')
+            asr = src.get('asr', '')
+
+            filename = self.prepare_video(photo_id)
+            if filename is not None:
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "video", "video": filename},
+                            {"type": "text", "text": f"Caption: {caption}"},
+                            {"type": "text", "text": f"Title: {title}"},
+                            {"type": "text", "text": f"Text: {text}"},
+                            {"type": "text", "text": f"OCR: {ocr}"},
+                            {"type": "text", "text": f"ASR: {asr}"}
+                        ]
+                    }
+                ]
+                meta = {
+                    "source": self.source,
+                    "messages": messages,
+                }
+                return {"json": json.dumps(meta, ensure_ascii=False)}
+            else:
+                return None
+        except Exception as e:
+            print(f"Error processing photoId {src.get('photoId', 'unknown')}: {str(e)}")
             print(traceback.format_exc())
             return None
