@@ -515,11 +515,11 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase, KwaiVideoDownloader):
                     is_correct_response = False
                     
 
-            # 如果是测试集ID，直接返回None
-            if str(photo_id) in self.test_ids:
-                if self.enable_debug:
-                    print(f"Skipping test ID: {photo_id}")
-                return None
+            # # 如果是测试集ID，直接返回None
+            # if str(photo_id) in self.test_ids:
+            #     if self.enable_debug:
+            #         print(f"Skipping test ID: {photo_id}")
+            #     return None
                 
             # Use the video file returned by prepare_video
             filename = self.prepare_video(photo_id)
@@ -534,7 +534,7 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase, KwaiVideoDownloader):
                     "type": "video",
                     "video": filename
                 },
-                {"type": "text", "text": prompt},
+                {"type": "text", "text": self.prompts[0]},
                 {"type": "text", "text": f"视频的标题是：{caption}"},
                 {"type": "text", "text": f"视频的ocr 内容是：{ocr}"},
                 {"type": "text", "text": f"视频的asr 内容是：{asr}"}
