@@ -5,7 +5,7 @@ dataset:
   path: /llm_reco/maosiyang/dataset/i2i/triplets_imf.csv
 
 converter:
-  class_name: KwaiWenJuanCaptionFrameConverter
+  class_name: i2iConverter
   kwargs:
     source: kwai_wenjuan_photo_comment_with_cot
     video_dir: /llm_reco/luoxinchen/dataset/InHouse/Photo/20250215/480p_60s_4fps_v2/
