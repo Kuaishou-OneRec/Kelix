@@ -233,7 +233,10 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase, KwaiVideoDownloader):
             enable_cmt_to_cot: 是否将站内用户评论转换为cot格式
             kwargs: 传递给父类的其他参数
         """
-        KwaiVideoDownloader.__init__(self, **kwargs)
+        video_dir = kwargs.pop('video_dir')
+        ffmpeg_args = kwargs.pop('ffmpeg_args')
+        caller = kwargs.pop('caller')
+        KwaiVideoDownloader.__init__(self, video_dir, ffmpeg_args, caller)
         self.prompts = prompts
         self.source = source
         self.frame_dir = frame_dir
