@@ -545,8 +545,8 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase, KwaiVideoDownloader):
                 {"type": "text", "text": f"视频的ocr 内容是：{ocr}"},
                 {"type": "text", "text": f"视频的asr 内容是：{asr}"}
             ]
-            if not self.enable_cmt_to_cot:
-                content_list.append({"type": "text", "text": f"站内用户的评论内容是：{'<comment>'.join(user_comment)}"})
+            # if not self.enable_cmt_to_cot:
+            #     content_list.append({"type": "text", "text": f"站内用户的评论内容是：{'<comment>'.join(user_comment)}"})
 
             messages = [
                 {
@@ -556,8 +556,8 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase, KwaiVideoDownloader):
             ]
 
             assistnat_content = []
-            if self.enable_cmt_to_cot:
-                assistnat_content.append({"type": "text", "text": f"站内用户的评论内容是：{'<comment>'.join(user_comment)}"})
+            # if self.enable_cmt_to_cot:
+            #     assistnat_content.append({"type": "text", "text": f"站内用户的评论内容是：{'<comment>'.join(user_comment)}"})
             # 添加 cot 结果
             if self.enable_llm_response:
                 if str(photo_id) in self.llm_responses and is_correct_response:
