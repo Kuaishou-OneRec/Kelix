@@ -504,6 +504,10 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase, KwaiVideoDownloader):
         """
         try:
             photo_id = src['photo_id']
+            caption = src.get('caption', '')
+            ocr = src.get('ocr', '')
+            asr = src.get('asr', '')
+            user_comment = src.get('user_comment', [])
             is_correct_response = True
             
             # 如果启用了标签过滤
@@ -530,6 +534,7 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase, KwaiVideoDownloader):
                 return None
 
             # Construct the content list with the video file
+
             content_list = [
                 {
                     "type": "video",
