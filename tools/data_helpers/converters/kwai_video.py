@@ -40,33 +40,25 @@ class KwaiVideoDownloader(object):
             stdout, stderr = process.communicate()
 
             if process.returncode != 0:
-                print(f"ffmpeg error: {stderr.decode('utf-8')}")
+                # print(f"ffmpeg error: {stderr.decode('utf-8')}")
                 return False
             else:
                 return True
     
-    def prepare_video(self, photo_id) -> Optional[str]:
-        # try:
-        #     video_bytes = self.client.get_video(photo_id)
-        # except Exception as e:
-        #     print(f"Error retrieving video for {photo_id}: {e}")
-        #     return None
-
-        # if video_bytes is None:
-        #     print(f"No video found for {photo_id}.")
-        #     return None
-
+    def prepare_video(self, photo_id) -> bool:
+        video_bytes = self.client.get_video(photo_id)
+        if video_bytes is None:
+            return None
         output_file = os.path.join(self.video_dir, f"{photo_id}.mp4")
-        
-        # Check if file already exists and is valid
-        # if os.path.exists(output_file):
-        return output_file
-        
-        # Process video if it doesn't exist
-        # if self.process_video(video_bytes, output_file):
-        #     return output_file
-        
-        # return None
+        valid = False
+        if (not os.path.exists(output_file)) or (osp.getsize(output_file) == 0):
+            valid = self.process_video(video_bytes, output_file)
+        else:
+            valid = True
+        if valid:
+            return output_file
+        else:
+            return None
 
 class KwaiVideoCaptionConverter(ConverterBase, KwaiVideoDownloader):
 
@@ -218,7 +210,9 @@ class KwaiWenJuanCaptionVideoConverter(ConverterBase, KwaiVideoDownloader):
             print(traceback.format_exc())
             return None
 
-class KwaiWenJuanCaptionFrameConverter(ConverterBase):
+
+
+class KwaiWenJuanCaptionFrameConverter(ConverterBase, KwaiVideoDownloader):
 
     def __init__(self, prompts, source, frame_dir: Optional[str] = None, 
                  cot_txt_file_path: Optional[str] = None, test_id_file_path: Optional[str] = None,
@@ -239,6 +233,7 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase):
             enable_cmt_to_cot: 是否将站内用户评论转换为cot格式
             kwargs: 传递给父类的其他参数
         """
+        KwaiVideoDownloader.__init__(self, **kwargs)
         self.prompts = prompts
         self.source = source
         self.frame_dir = frame_dir
@@ -261,28 +256,7 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase):
             print(f"Initialized with {len(self.frame_index)} frame entries")
 
 
-    def prepare_video(self, photo_id) -> Optional[str]:
-        try:
-            video_bytes = self.client.get_video(photo_id)
-        except Exception as e:
-            print(f"Error retrieving video for {photo_id}: {e}")
-            return None
 
-        if video_bytes is None:
-            print(f"No video found for {photo_id}.")
-            return None
-
-        output_file = os.path.join(self.video_dir, f"{photo_id}.mp4")
-        
-        # Check if file already exists and is valid
-        if os.path.exists(output_file):
-            return output_file
-        
-        # Process video if it doesn't exist
-        if self.process_video(video_bytes, output_file):
-            return output_file
-        
-        return None
 
         
     def _build_frame_index(self) -> Dict[str, List[str]]:
