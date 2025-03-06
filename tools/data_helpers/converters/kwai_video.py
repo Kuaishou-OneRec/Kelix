@@ -235,7 +235,6 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase, KwaiVideoDownloader):
         """
         video_dir = kwargs.pop('video_dir')
         ffmpeg_args = kwargs.pop('ffmpeg_args')
-        caller = kwargs.pop('caller')
         KwaiVideoDownloader.__init__(self, video_dir, ffmpeg_args, caller)
         self.prompts = prompts
         self.source = source
