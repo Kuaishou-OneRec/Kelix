@@ -28,19 +28,29 @@ class i2iconverter:
                 break
         return unique_src_data
 
-    def sample_neg_pid(self, src_pid: str, sim_pids: List[str]) -> str:
-        sim_pids = [pid for pid in sim_pids if pid != src_pid]
-        return random.choice(sim_pids) if sim_pids else None
+    def build_similarity_map(self, data: List[Tuple[str, str, float]]) -> Dict[str, Set[str]]:
+        similarity_map = {}
+        for src_pid, sim_pid, _ in data:
+            if src_pid not in similarity_map:
+                similarity_map[src_pid] = set()
+            similarity_map[src_pid].add(sim_pid)
+        return similarity_map
+
+    def sample_neg_pid(self, src_pid: str, sim_pids: List[str], similarity_map: Dict[str, Set[str]]) -> str:
+        similar_pids = similarity_map.get(src_pid, set())
+        valid_neg_pids = [pid for pid in sim_pids if pid != src_pid and pid not in similar_pids]
+        return random.choice(valid_neg_pids) if valid_neg_pids else None
 
     def process(self) -> Tuple[List[Tuple[str, str, str]], Set[str]]:
         data = self.read_textfile()
+        similarity_map = self.build_similarity_map(data)
         video_pool = set()
         triplets = []
         for src_pid, sim_pid, _ in data:
             video_pool.add(src_pid)
             video_pool.add(sim_pid)
         for src_pid, sim_pid, _ in data:
-            neg_pid = self.sample_neg_pid(src_pid, list(video_pool))
+            neg_pid = self.sample_neg_pid(src_pid, list(video_pool), similarity_map)
             if neg_pid:
                 triplets.append((src_pid, sim_pid, neg_pid))
 
