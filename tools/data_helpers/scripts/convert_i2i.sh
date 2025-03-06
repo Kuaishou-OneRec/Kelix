@@ -31,4 +31,4 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        python3 tools/data_helpers/csv_writer_worker.py tools/data_helpers/config/kuai_i2i.yaml
+        python3 tools/data_helpers/csv_writer_worker.py tools/data_helpers/config/kwai_i2i.yaml
