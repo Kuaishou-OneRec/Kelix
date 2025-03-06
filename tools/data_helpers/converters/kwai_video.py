@@ -62,16 +62,6 @@ class KwaiVideoDownloader(object):
         else:
             return None
 
-
-class i2i_converter(KwaiVideoDownloader):
-    def __init__(self, video_dir: str, ffmpeg_args: str):
-        super().__init__(video_dir, ffmpeg_args)
-
-        
-
-    def read_textfile(self) -> List[Tuple[str, str, float]]:
-        
-
 class KwaiVideoCaptionConverter(ConverterBase, KwaiVideoDownloader):
 
     def __init__(
@@ -609,18 +599,42 @@ class KwaiWenJuanCaptionFrameConverter(ConverterBase, KwaiVideoDownloader):
             return None
 
 class i2iConverter(ConverterBase, KwaiVideoDownloader):
-    def __init__(self, video_dir: str, ffmpeg_args: str, source: Optional[str] = None, **kwargs):
+    def __init__(self, prompts, source, 
+                 cot_txt_file_path: Optional[str] = None, 
+                 max_frames_per_video: int = None, enable_debug: bool = False, 
+                 enable_cmt_to_cot: bool = False, enable_llm_response: bool = False, **kwargs):
         """
-        Initialize the i2iConverter class
+        初始化 KwaiWenJuanCaptionFrameConverter 类
 
-        Parameters:
-            video_dir: Directory to store videos
-            ffmpeg_args: Arguments for ffmpeg processing
-            source: Data source identifier
-            kwargs: Additional arguments for the parent class KwaiVideoDownloader
+        参数:
+            prompts: 提示信息列表
+            source: 数据来源标识
+            frame_dir: 视频抽帧结果存储目录
+            cot_txt_file_path: 包含LLM响应的txt文件目录
+            test_id_file_path: 测试集photo_id文件路径
+            max_frames_per_video: 每个视频最多获取的帧数，None表示获取全部
+            enable_debug: 是否启用调试日志
+            enable_llm_response: 是否启用LLM响应
+            enable_cmt_to_cot: 是否将站内用户评论转换为cot格式
+            kwargs: 传递给父类的其他参数
         """
+        video_dir = kwargs.pop('video_dir')
+        ffmpeg_args = kwargs.pop('ffmpeg_args')
         KwaiVideoDownloader.__init__(self, video_dir, ffmpeg_args)
+        self.prompts = prompts
         self.source = source
+        self.cot_txt_file_path = cot_txt_file_path
+        self.max_frames_per_video = max_frames_per_video
+        self.enable_debug = enable_debug
+        self.enable_cmt_to_cot = enable_cmt_to_cot
+        # 缓存LLM响应
+
+        if self.enable_debug:
+            print(f"Initialized with {len(self.frame_index)} frame entries")
+        
+
+
+
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
         """
@@ -633,35 +647,131 @@ class i2iConverter(ConverterBase, KwaiVideoDownloader):
             A dictionary containing meta JSON data if video processing is successful, otherwise None
         """
         try:
-            photo_id = str(src.get('photoId', ''))
-            caption = src.get('caption', '')
-            title = src.get('title', '')
-            text = src.get('text', '')
-            ocr = src.get('ocr', '')
-            asr = src.get('asr', '')
+            enable_reverse = random.random() < 0.5
+            src_pid = src.get('src_pid','')
+            src_caption = src.get('src_caption','')
+            src_title = src.get('src_title','')
+            src_text = src.get('src_text','')
+            src_ocr = src.get('src_ocr','')
+            src_asr = src.get('src_asr','')
+            sim_pid = src.get('sim_pid','')
+            sim_caption = src.get('sim_caption','')
+            sim_title = src.get('sim_title','')
+            sim_text = src.get('sim_text','')
+            sim_ocr = src.get('sim_ocr','')
+            sim_asr = src.get('sim_asr','')
+            neg_pid = src.get('neg_pid','')
+            neg_caption = src.get('neg_caption','')
+            neg_title = src.get('neg_title','')
+            neg_text = src.get('neg_text','')
+            neg_ocr = src.get('neg_ocr','')
+            neg_asr = src.get('neg_asr','')
+            if enable_reverse:
+                sim_pid, neg_pid = neg_pid, sim_pid
+                sim_caption, neg_caption = neg_caption, sim_caption
+                sim_title, neg_title = neg_title, sim_title
+                sim_text, neg_text = neg_text, sim_text
+                sim_ocr, neg_ocr = neg_ocr, sim_ocr
+                sim_asr, neg_asr = neg_asr, sim_asr
 
-            filename = self.prepare_video(photo_id)
-            if filename is not None:
-                messages = [
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "video", "video": filename},
-                            {"type": "text", "text": f"Caption: {caption}"},
-                            {"type": "text", "text": f"Title: {title}"},
-                            {"type": "text", "text": f"Text: {text}"},
-                            {"type": "text", "text": f"OCR: {ocr}"},
-                            {"type": "text", "text": f"ASR: {asr}"}
-                        ]
-                    }
-                ]
-                meta = {
-                    "source": self.source,
-                    "messages": messages,
+            src_video_filename = self.prepare_video(src_pid)
+            sim_video_filename = self.prepare_video(sim_pid)
+            neg_video_filename = self.prepare_video(neg_pid)
+            content_list = [
+                {
+                    "type": "text", 
+                    "text": self.prompts[0]
+                },
+                {
+                    "type": "text",
+                    "text": "源视频的图像内容是："
+                },
+                {
+                    "type": "video", 
+                    "video": src_video_filename
+                },
+                {
+                    "type": "text",
+                    "text": "源视频的OCR内容是：" + src_ocr
+                },
+                {
+                    "type": "text",
+                    "text": "源视频的ASR内容是：" + src_asr
+                },
+                {
+                    "type": "text",
+                    "text": "源视频的标题是：" + src_title
+                },
+                {
+                    "type": "text",
+                    "text": "视频1的图像内容是："
+                },
+                {
+                    "type": "video", 
+                    "video": sim_video_filename
+                },
+                {
+                    "type": "text",
+                    "text": "视频1的OCR内容是：" + sim_ocr
+                },
+                {
+                    "type": "text",
+                    "text": "视频1的ASR内容是：" + sim_asr
+                },
+                {
+                    "type": "text",
+                    "text": "视频1的标题是：" + sim_title
+                },
+                {
+                    "type": "text",
+                    "text": "视频2的图像内容是："
+                },
+                {
+                    "type": "video", 
+                    "video": neg_video_filename
+                },
+                {
+                    "type": "text",
+                    "text": "视频2的OCR内容是：" + neg_ocr
+                },
+                {
+                    "type": "text",
+                    "text": "视频2的ASR内容是：" + neg_asr
+                },
+                {
+                    "type": "text",
+                    "text": "视频2的标题是：" + neg_title
                 }
-                return {"json": json.dumps(meta, ensure_ascii=False)}
-            else:
-                return None
+            ]
+
+            messages = [
+                {
+                    "role": "user",
+                    "content": content_list
+                }
+            ]
+
+            assistnat_content = []
+            assistnat_content.append({
+                "type": "text",
+                "text": "和源视频最相似的视频是【视频2】" if enable_reverse else "和源视频最相似的视频是【视频1】"
+            })
+
+            messages.append({
+                "role": "assistant",
+                "content": assistnat_content
+            })
+
+            meta = {
+                "images": json.dumps([], ensure_ascii=False),
+                'videos': json.dumps([], ensure_ascii=False),
+                "messages": json.dumps(messages, ensure_ascii=False),
+                'segments': json.dumps(None, ensure_ascii=False),
+                "source": str(self.source),
+                "metadata": None,
+                "uuid": str(uuid.uuid1())
+            }
+            return meta
         except Exception as e:
             print(f"Error processing photoId {src.get('photoId', 'unknown')}: {str(e)}")
             print(traceback.format_exc())
