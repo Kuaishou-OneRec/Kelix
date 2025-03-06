@@ -769,6 +769,7 @@ class i2iConverter(ConverterBase, KwaiVideoDownloader):
                 "metadata": None,
                 "uuid": str(uuid.uuid1())
             }
+            print("debug_log::: meta is ", meta)
             return meta
         except Exception as e:
             print(f"Error processing photoId {src.get('photoId', 'unknown')}: {str(e)}")
