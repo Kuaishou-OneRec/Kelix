@@ -133,7 +133,7 @@ class MPIParquetWriterWorker(MPIBase):
             for _, row in tqdm(chunk.iterrows(), total=len(chunk)):
                 try:
                     # !!! 将行数据转换为字典格式
-                    sample = {col: row[col] for col in self.header}
+                    sample = {col: row[col] for col in ['src_pid', 'src_caption', 'src_title', 'src_text', 'src_ocr', 'src_asr', 'sim_pid', 'sim_caption', 'sim_title', 'sim_text', 'sim_ocr', 'sim_asr', 'neg_pid', 'neg_caption', 'neg_title', 'neg_text', 'neg_ocr', 'neg_asr']}
                     out = sample
                     for cvt in self._converters:
                         out = cvt(out)
