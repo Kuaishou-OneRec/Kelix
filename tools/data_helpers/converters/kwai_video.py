@@ -629,8 +629,6 @@ class i2iConverter(ConverterBase, KwaiVideoDownloader):
         self.enable_cmt_to_cot = enable_cmt_to_cot
         # 缓存LLM响应
 
-        if self.enable_debug:
-            print(f"Initialized with {len(self.frame_index)} frame entries")
         
 
 
