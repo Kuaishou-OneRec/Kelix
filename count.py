@@ -2,7 +2,7 @@ import pandas as pd
 import json
 
 # 读取Parquet文件
-file_path = 'viewfs://hadoop-lt-cluster/home/reco_wl/mpi/huqigen/recovlm_dataset/wenjuan_sft/i2i_benchmark_dataset_v1/rank-0-c089702c-faa0-11ef-a168-a400e2727258.parquet'
+file_path = '/llm_reco_ssd/maosiyang/wenjuan_benchmark_dataset/rank-0-c089702c-faa0-11ef-a168-a400e2727258.parquet'
 df = pd.read_parquet(file_path)
 
 # 统计assistant的回答中包含“和源视频最相似的视频是【视频2】”的数量
