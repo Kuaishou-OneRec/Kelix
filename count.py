@@ -9,11 +9,12 @@ df = pd.read_parquet(file_path)
 count = 0
 for index, row in df.iterrows():
     meta = json.loads(row)
-    messages = json.loads(meta['messages'])
-    for message in messages:
-        if message['role'] == 'assistant':
-            for content in message['content']:
-                if content['type'] == 'text' and "和源视频最相似的视频是【视频2】" in content['text']:
-                    count += 1
+    print(meta)
+    # messages = json.loads(meta['messages'])
+    # for message in messages:
+    #     if message['role'] == 'assistant':
+    #         for content in message['content']:
+    #             if content['type'] == 'text' and "和源视频最相似的视频是【视频2】" in content['text']:
+    #                 count += 1
 
 print(f"和源视频最相似的视频是【视频2】的回答数量: {count}")
