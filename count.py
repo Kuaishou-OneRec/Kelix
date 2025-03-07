@@ -8,7 +8,7 @@ df = pd.read_parquet(file_path)
 # 统计assistant的回答中包含“和源视频最相似的视频是【视频2】”的数量
 count = 0
 for index, row in df.iterrows():
-    meta = json.loads(row['meta'])
+    meta = json.loads(row)
     messages = json.loads(meta['messages'])
     for message in messages:
         if message['role'] == 'assistant':
