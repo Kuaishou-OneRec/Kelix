@@ -675,6 +675,8 @@ class i2iConverter(ConverterBase, KwaiVideoDownloader):
             src_video_filename = self.prepare_video(src_pid)
             sim_video_filename = self.prepare_video(sim_pid)
             neg_video_filename = self.prepare_video(neg_pid)
+            if src_video_filename is None or sim_video_filename is None or neg_video_filename is None:
+                return None
             content_list = [
                 {
                     "type": "text", 

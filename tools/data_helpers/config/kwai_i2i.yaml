@@ -7,7 +7,7 @@ dataset:
 converter:
   class_name: i2iConverter
   kwargs:
-    source: kwai_wenjuan_photo_comment_with_cot
+    source: kwai_cf_i2i_pair
     video_dir: /llm_reco/luoxinchen/dataset/InHouse/Photo/20250215/480p_60s_4fps_v2/
     ffmpeg_args: -vf scale='if(gt(iw,ih),min(480,iw),-2)':'if(gt(ih,iw),min(480,ih),-2)' -r 4 -t 60 -c:a aac -c:v libx264 -b:a 55k -pix_fmt yuv420p -probesize 200M -analyzeduration 200M
     prompts:
