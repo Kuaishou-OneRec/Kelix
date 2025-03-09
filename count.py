@@ -13,9 +13,9 @@ for row in df['messages']:
     for message in messages:
         if message['role'] == 'assistant':
             for content in message['content']:
-                if content['type'] == 'text' and "【结果：不满意】" in content['text']:
+                if content['type'] == 'text' and "和源视频最相似的视频是【视频2】" in content['text']:
                     count += 1
                 allcount += 1
-print(f"【结果：不满意】的回答数量: {count}") 
+print(f"和源视频最相似的视频是【视频2】的回答数量: {count}") 
 print(f"总回答数量: {allcount}")
-print(f"【结果：满意】的回答数量: {allcount - count}")
+print(f"和源视频最相似的视频是【视频1】的回答数量: {allcount - count}")
