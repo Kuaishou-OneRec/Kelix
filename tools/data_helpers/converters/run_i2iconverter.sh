@@ -10,4 +10,4 @@ fi
 textfile_path="/llm_reco/maosiyang/dataset/i2i/part-00001"
 
 # Run the i2iconverter Python script with the provided textfile_path
-python3 i2iconverter.py "$textfile_path" 
+python3 i2isampler.py "$textfile_path" 
