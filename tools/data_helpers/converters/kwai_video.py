@@ -408,6 +408,161 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
             ##======image
 
 
+class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
+
+    def __init__(
+        self,
+        prompts,
+        source,
+        **kwargs
+    ):
+        KwaiVideoDownloader.__init__(self, **kwargs)
+        self.prompts = prompts
+        self.source = source
+    def catgen(firstn,firstp,secondn,secondp,thridn,thridp,fourthn,fourthp):
+        text = ''
+        prob = 1
+        if firstn=='UNKNOWN':
+            return text
+        prob*=firstp
+        if prob<0.5:
+            return text
+        text+=firstn
+        text+=','
+
+        if secondn=='UNKNOWN':
+            return text[:-1]
+        prob*=secondp
+        if prob<0.5:
+            return text[:-1]
+        text+=secondn
+        text+=','
+
+        if thridn=='UNKNOWN':
+            return text[:-1]
+        prob*=thridp
+        if prob<0.5:
+            return text[:-1]
+        text+=thridn
+        text+=','
+
+        if fourthn=='UNKNOWN':
+            return text[:-1]
+        prob*=fourthp
+        if prob<0.5:
+            return text[:-1]
+        text+=fourthn
+        return text
+
+    def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
+        photo_id = src['photo_id']
+        photo_id = str(photo_id)
+        first_level_category_name = src['first_level_category_name']
+        first_level_category_prob = src['first_level_category_prob']
+        second_level_category_name = src['second_level_category_name']
+        second_level_category_prob = src['second_level_category_prob']
+        thrid_level_category_name = src['thrid_level_category_name']
+        third_level_category_prob = src['third_level_category_prob']
+        fourth_level_category_name = src['fourth_level_category_name']
+        fourth_level_category_prob = src['fourth_level_category_prob']
+        text = catgen(first_level_category_name,
+        first_level_category_prob,
+        second_level_category_name,
+        second_level_category_prob,
+        thrid_level_category_name,
+        third_level_category_prob,
+        fourth_level_category_name,
+        fourth_level_category_prob)
+        print(text)
+        if text == '':
+            return
+        filename = self.prepare_video(photo_id)
+        ##=====video
+        if filename is not None:
+            prompt = np.random.choice(self.prompts)
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "video": filename
+                        },
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": text
+                        }
+                    ]
+                }
+            ]
+            meta = {
+                "source": self.source,
+                "messages": messages,
+            }
+            #print("meta", meta)
+            return {
+                "json": json.dumps(meta)
+            }
+        ##======video
+
+        ##======image
+        else:
+            filename = self.prepare_image(photo_id)
+            if filename is not None:
+                print('found in image~~~!!!!')
+                images={}
+                images[photo_id] = self._encode_image(filename) 
+                prompt = np.random.choice(self.prompts)
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "video",
+                                "video": [
+                                    {"type":"image",
+                                    "image":photo_id}
+                                ]
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    },
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": text
+                            }
+                        ]
+                    }
+                ]
+                meta = {
+                "images": json.dumps(images, ensure_ascii=False),
+                "source": self.source,
+                "messages": json.dumps(messages, ensure_ascii=False)
+                }
+                #print("meta", meta)
+                return {
+                    "json": json.dumps(meta)
+                }
+            else:
+                return None
+            ##======image
+
+
 
 class KwaiVideoCaptionConverter(ConverterBase, KwaiVideoDownloader):
     def __init__(
