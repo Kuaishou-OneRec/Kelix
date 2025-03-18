@@ -15,7 +15,7 @@ dataset:
       - fourth_level_category_name
       - fourth_level_category_prob
 converter:
-  class_name: KwaiVideoTitleCaptionConverter
+  class_name: KwaiVideoCategoryConverter
   kwargs:
     source: kwai_video_title_caption
     video_dir: /llm_reco/luoxinchen/dataset/InHouse/Photo/20250215/480p_60s_4fps_v2/
