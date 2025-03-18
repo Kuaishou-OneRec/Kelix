@@ -344,7 +344,7 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
                     "content": [
                         {
                             "type": "text",
-                            "text": src['Keyword']
+                            "text": src['keyword']
                         }
                     ]
                 }
@@ -389,7 +389,7 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
                         "content": [
                             {
                                 "type": "text",
-                                "text": src['Keyword']
+                                "text": src['keyword']
                             }
                         ]
                     }
