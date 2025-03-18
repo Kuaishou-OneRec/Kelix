@@ -474,7 +474,6 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
         third_level_category_prob,
         fourth_level_category_name,
         fourth_level_category_prob)
-        print(text)
         if text == '':
             return
         filename = self.prepare_video(photo_id)
