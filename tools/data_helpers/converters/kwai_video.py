@@ -61,34 +61,34 @@ class KwaiVideoDownloader(object):
             # print(type(input_bytes), output_file); exit()
             f.write(input_bytes)
             return True
-    # def _encode_image(self, image_path: str) -> str:
-    #     """
-    #     将图片编码为base64字符串
+    def _encode_image(self, image_path: str) -> str:
+        """
+        将图片编码为base64字符串
         
-    #     Args:
-    #         image_path: 图片路径
+        Args:
+            image_path: 图片路径
             
-    #     Returns:
-    #         base64编码的图片字符串
-    #     """
-    #     try:
-    #         # 读取图片
-    #         image = cv2.imread(image_path)
-    #         if image is None:
-    #             print(f"Warning: Could not read image: {image_path}")
-    #             return None
+        Returns:
+            base64编码的图片字符串
+        """
+        try:
+            # 读取图片
+            image = cv2.imread(image_path)
+            if image is None:
+                print(f"Warning: Could not read image: {image_path}")
+                return None
 
-    #         # 调整图片大小
-    #         image_resized = cv2.resize(image, (224, 224))
+            # 调整图片大小
+            image_resized = cv2.resize(image, (224, 224))
 
-    #         # 编码为JPEG
-    #         _, encoded_image = cv2.imencode(".jpg", image_resized)
+            # 编码为JPEG
+            _, encoded_image = cv2.imencode(".jpg", image_resized)
 
-    #         # 转换为base64
-    #         return base64.b64encode(encoded_image).decode("utf-8")
-    #     except Exception as e:
-    #         print(f"Error encoding image {image_path}: {e}")
-    #         return None
+            # 转换为base64
+            return base64.b64encode(encoded_image).decode("utf-8")
+        except Exception as e:
+            print(f"Error encoding image {image_path}: {e}")
+            return None
 
     def prepare_video(self, photo_id) -> Optional[str]:
         self.data["total"] += 1
@@ -214,6 +214,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
         if src['title'] is None and src['caption_clean'] is None:
             return None
         filename = self.prepare_video(photo_id)
+        ##=====video
         if filename is not None:
             prompt = np.random.choice(self.prompts)
             messages = [
@@ -240,9 +241,22 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                     ]
                 }
             ]
+            meta = {
+                "source": self.source,
+                "messages": messages,
+            }
+            print("meta", meta)
+            return {
+                "json": json.dumps(meta)
+            }
+        ##======video
+
+        ##======image
         else:
             filename = self.prepare_image(photo_id)
             if filename is not None:
+                images={}
+                images[photo_id] = self._encode_image(filename) 
                 prompt = np.random.choice(self.prompts)
                 messages = [
                     {
@@ -250,7 +264,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                         "content": [
                             {
                                 "type": "image",
-                                "image": filename
+                                "image": photo_id
                             },
                             {
                                 "type": "text",
@@ -268,16 +282,19 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                         ]
                     }
                 ]
-            else: 
-                return None 
-        meta = {
-            "source": self.source,
-            "messages": messages,
-        }
-        print("meta", meta)
-        return {
-            "json": json.dumps(meta)
-        }
+                meta = {
+                "images": json.dumps(images, ensure_ascii=False),
+                "source": self.source,
+                "messages": json.dumps(messages, ensure_ascii=False)
+                }
+                print("meta", meta)
+                return {
+                    "json": json.dumps(meta)
+                }
+            else:
+                return None
+            ##======image
+
 
 
 class KwaiVideoCaptionConverter(ConverterBase, KwaiVideoDownloader):
