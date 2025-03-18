@@ -213,6 +213,9 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
         photo_id = src['photo_id']
         if src['title'] is None and src['caption_clean'] is None:
             return None
+        title = src['title'] if src['title'] is not None else ''
+        caption_clean = src['caption_clean'] if src['caption_clean'] is not None else ''
+        text = title + caption_clean
         filename = self.prepare_video(photo_id)
         ##=====video
         if filename is not None:
@@ -238,7 +241,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                     "content": [
                         {
                             "type": "text",
-                            "text": src['title']+src['caption_clean']
+                            "text": text
                         }
                     ]
                 }
@@ -282,7 +285,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                         "content": [
                             {
                                 "type": "text",
-                                "text": src['title']+src['caption_clean']
+                                "text": text
                             }
                         ]
                     }
