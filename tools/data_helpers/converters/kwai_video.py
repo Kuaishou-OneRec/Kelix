@@ -319,7 +319,7 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
         photo_id = src['photo_id']
         photo_id = str(photo_id)
-        if src['Keyword'] is None:
+        if src['keyword'] is None:
             return None
         filename = self.prepare_video(photo_id)
         ##=====video
