@@ -248,7 +248,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                 "source": self.source,
                 "messages": messages,
             }
-            print("meta", meta)
+            #print("meta", meta)
             return {
                 "json": json.dumps(meta)
             }
@@ -294,7 +294,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                 "source": self.source,
                 "messages": json.dumps(messages, ensure_ascii=False)
                 }
-                print("meta", meta)
+                #print("meta", meta)
                 return {
                     "json": json.dumps(meta)
                 }
