@@ -25,6 +25,7 @@ from .grounding_converter import GroundingConverter
 from .pubtabnet_converter import PubTabNetConverter
 from .fintabnet_converter import FinTabNetConverter
 from .kwai_video import KwaiVideoTitleCaptionConverter
+from .kwai_video import KuaiVideoClickAfterShowConverter
 
 def create_converter(cfg) -> ConverterBase:
     return eval(cfg.class_name)(**cfg.kwargs)

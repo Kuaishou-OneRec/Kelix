@@ -304,6 +304,111 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
 
 
 
+class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
+
+    def __init__(
+        self,
+        prompts,
+        source,
+        **kwargs
+    ):
+        KwaiVideoDownloader.__init__(self, **kwargs)
+        self.prompts = prompts
+        self.source = source
+
+    def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
+        photo_id = src['photo_id']
+        photo_id = str(photo_id)
+        if src['Keyword'] is None:
+            return None
+        filename = self.prepare_video(photo_id)
+        ##=====video
+        if filename is not None:
+            prompt = np.random.choice(self.prompts)
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "video": filename
+                        },
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": src['Keyword']
+                        }
+                    ]
+                }
+            ]
+            meta = {
+                "source": self.source,
+                "messages": messages,
+            }
+            print("meta", meta)
+            return {
+                "json": json.dumps(meta)
+            }
+        ##======video
+
+        ##======image
+        else:
+            filename = self.prepare_image(photo_id)
+            if filename is not None:
+                print('found in image~~~!!!!')
+                images={}
+                images[photo_id] = self._encode_image(filename) 
+                prompt = np.random.choice(self.prompts)
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "video",
+                                "video": [
+                                    {"type":"image",
+                                    "image":photo_id}
+                                ]
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    },
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": src['Keyword']
+                            }
+                        ]
+                    }
+                ]
+                meta = {
+                "images": json.dumps(images, ensure_ascii=False),
+                "source": self.source,
+                "messages": json.dumps(messages, ensure_ascii=False)
+                }
+                print("meta", meta)
+                return {
+                    "json": json.dumps(meta)
+                }
+            else:
+                return None
+            ##======image
+
+
+
 class KwaiVideoCaptionConverter(ConverterBase, KwaiVideoDownloader):
     def __init__(
         self,
