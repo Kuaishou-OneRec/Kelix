@@ -255,6 +255,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
         else:
             filename = self.prepare_image(photo_id)
             if filename is not None:
+                print('found in image~~~!!!!')
                 images={}
                 images[photo_id] = self._encode_image(filename) 
                 prompt = np.random.choice(self.prompts)
