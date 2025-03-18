@@ -419,6 +419,7 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
         KwaiVideoDownloader.__init__(self, **kwargs)
         self.prompts = prompts
         self.source = source
+        os.system("pip install selectolax")
     def catgen(firstn,firstp,secondn,secondp,thridn,thridp,fourthn,fourthp):
         text = ''
         prob = 1
