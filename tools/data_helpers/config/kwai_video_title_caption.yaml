@@ -16,3 +16,5 @@ converter:
     ffmpeg_args: -vf scale='if(gt(iw,ih),min(480,iw),-2)':'if(gt(ih,iw),min(480,ih),-2)' -r 4 -t 60 -c:a aac -c:v libx264 -b:a 55k -pix_fmt yuv420p -probesize 200M -analyzeduration 200M
     prompts:
       - "请写出这个视频的标题和描述。"
+      - "请提供这个视频的标题和描述。"
+      - "请写下这个视频的标题和描述"
