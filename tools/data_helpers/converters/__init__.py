@@ -24,7 +24,7 @@ from .gpt4o_qa_converter import GPT4oQAConverter
 from .grounding_converter import GroundingConverter
 from .pubtabnet_converter import PubTabNetConverter
 from .fintabnet_converter import FinTabNetConverter
-
+from .kwai_video import KwaiVideoTitleCaptionConverter
 
 def create_converter(cfg) -> ConverterBase:
     return eval(cfg.class_name)(**cfg.kwargs)

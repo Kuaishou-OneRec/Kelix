@@ -19,10 +19,19 @@ import re
 
 class KwaiVideoDownloader(object):
 
-    def __init__(self, video_dir: str, ffmpeg_args: str, caller: str = "recovlm_kwai_video_downloader"):
+    def __init__(self, ffmpeg_args: str,
+        video_dir: str = "/llm_reco/luoxinchen/dataset/InHouse/Photo/20250215/480p_60s_4fps_v2",  
+        image_dir: str = './tmp',
+        caller: str = "recovlm_kwai_video_downloader", 
+        **kargs):
         self.video_dir = video_dir
+        self.image_dir = image_dir
+        os.makedirs(video_dir, exist_ok=True)
+        os.makedirs(image_dir, exist_ok=True)
+
         self.ffmpeg_args = list(ffmpeg_args.split(" "))
         self.client = BlobStoreClient(caller=caller)
+        self.data = {"total": 0, "failed": 0}
     
     def process_video(self, input_bytes, output_file):
         with tempfile.NamedTemporaryFile(delete=True, suffix='.mp4') as temp_input_file:
@@ -42,28 +51,236 @@ class KwaiVideoDownloader(object):
             stdout, stderr = process.communicate()
 
             if process.returncode != 0:
-                # print(f"ffmpeg error: {stderr.decode('utf-8')}")
+                print(f"ffmpeg error: {stderr.decode('utf-8')}")
                 return False
             else:
                 return True
     
-    def prepare_video(self, photo_id) -> bool:
-        video_bytes = self.client.get_video(photo_id)
-        if video_bytes is None:
-            return None
+    def process_image(self, input_bytes, output_file):
+        with open(output_file, 'wb') as f:
+            # print(type(input_bytes), output_file); exit()
+            f.write(input_bytes)
+            return True
+    # def _encode_image(self, image_path: str) -> str:
+    #     """
+    #     将图片编码为base64字符串
+        
+    #     Args:
+    #         image_path: 图片路径
+            
+    #     Returns:
+    #         base64编码的图片字符串
+    #     """
+    #     try:
+    #         # 读取图片
+    #         image = cv2.imread(image_path)
+    #         if image is None:
+    #             print(f"Warning: Could not read image: {image_path}")
+    #             return None
+
+    #         # 调整图片大小
+    #         image_resized = cv2.resize(image, (224, 224))
+
+    #         # 编码为JPEG
+    #         _, encoded_image = cv2.imencode(".jpg", image_resized)
+
+    #         # 转换为base64
+    #         return base64.b64encode(encoded_image).decode("utf-8")
+    #     except Exception as e:
+    #         print(f"Error encoding image {image_path}: {e}")
+    #         return None
+
+    def prepare_video(self, photo_id) -> Optional[str]:
+        self.data["total"] += 1
         output_file = os.path.join(self.video_dir, f"{photo_id}.mp4")
-        valid = False
-        if (not os.path.exists(output_file)) or (osp.getsize(output_file) == 0):
-            valid = self.process_video(video_bytes, output_file)
-        else:
-            valid = True
-        if valid:
-            return output_file
-        else:
+        
+        res_video = None
+
+        # Check if file already exists and is valid
+        if os.path.exists(output_file):
+            print(f"find {output_file}, abort")
+            res_video = output_file
+            return res_video
+
+        try:
+            video_bytes = self.client.get_video(photo_id)
+        except Exception as e:
+            print(f"Error retrieving video for {photo_id}: {e}")
+            res_video = None
+
+        if video_bytes is None:
+            self.data["failed"] += 1
+            print(f"No video found for {photo_id}.")
+            res_video = None
+        
+        # Process video if it doesn't exist
+        if video_bytes is not None and self.process_video(video_bytes, output_file):
+            res_video = output_file
+        
+        if res_video is not None:
+            return res_video
+
+        return None
+
+    def prepare_image(self, photo_id) -> Optional[str]:
+        # 下载图片
+        res_image = None
+        output_file = os.path.join(self.image_dir, f"{photo_id}.jpg")
+
+        # Check if file already exists and is valid
+        if os.path.exists(output_file):
+            print(f"find {output_file}, abort")
+            res_image = output_file
+            return res_image
+
+        try:
+            image_bytes = self.client._get_one_image(photo_id)
+        except Exception as e:
+            print(f"Error retrieving image for {photo_id}: {e}")
+            res_image = None
+
+        if image_bytes is None:
+            self.data["failed"] += 1
+            print(f"No image found for {photo_id}.")
+            res_image = None
+
+        if self.process_image(image_bytes, output_file):
+            res_image = output_file
+
+        return res_image
+
+
+KwaiVideoDownloader('./tmp_video', './tmp_image', ).prepare_video(157659349065)
+
+# class KwaiVideoDownloader(object):
+
+#     def __init__(self, video_dir: str, ffmpeg_args: str, caller: str = "recovlm_kwai_video_downloader"):
+#         self.video_dir = video_dir
+#         self.ffmpeg_args = list(ffmpeg_args.split(" "))
+#         self.client = BlobStoreClient(caller=caller)
+    
+#     def process_video(self, input_bytes, output_file):
+#         with tempfile.NamedTemporaryFile(delete=True, suffix='.mp4') as temp_input_file:
+#             temp_input_file.write(input_bytes)
+#             temp_input_file_path = temp_input_file.name
+#             process = subprocess.Popen(
+#                 [
+#                     'ffmpeg',
+#                     '-i', temp_input_file_path,
+#                     *self.ffmpeg_args,
+#                     output_file
+#                 ],
+#                 stdin=subprocess.PIPE,
+#                 stdout=subprocess.PIPE,
+#                 stderr=subprocess.PIPE
+#             )
+#             stdout, stderr = process.communicate()
+
+#             if process.returncode != 0:
+#                 # print(f"ffmpeg error: {stderr.decode('utf-8')}")
+#                 return False
+#             else:
+#                 return True
+    
+#     def prepare_video(self, photo_id) -> bool:
+#         video_bytes = self.client.get_video(photo_id)
+#         if video_bytes is None:
+#             return None
+#         output_file = os.path.join(self.video_dir, f"{photo_id}.mp4")
+#         valid = False
+#         if (not os.path.exists(output_file)) or (osp.getsize(output_file) == 0):
+#             valid = self.process_video(video_bytes, output_file)
+#         else:
+#             valid = True
+#         if valid:
+#             return output_file
+#         else:
+#             return None
+
+class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
+
+    def __init__(
+        self,
+        prompts,
+        source,
+        **kwargs
+    ):
+        KwaiVideoDownloader.__init__(self, **kwargs)
+        self.prompts = prompts
+        self.source = source
+
+    def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
+        photo_id = src['photo_id']
+        if src['title'] is None and src['caption_clean'] is None:
             return None
+        filename = self.prepare_video(photo_id)
+        if filename is not None:
+            prompt = np.random.choice(self.prompts)
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "video": filename
+                        },
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": src['title']+src['caption_clean']
+                        }
+                    ]
+                }
+            ]
+        else:
+            filename = self.prepare_image(photo_id)
+            if filename is not None:
+                prompt = np.random.choice(self.prompts)
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "image": filename
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    },
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": src['title']+src['caption_clean']
+                            }
+                        ]
+                    }
+                ]
+            else: 
+                return None 
+        meta = {
+            "source": self.source,
+            "messages": messages,
+        }
+        print("meta", meta)
+        return {
+            "json": json.dumps(meta)
+        }
+
 
 class KwaiVideoCaptionConverter(ConverterBase, KwaiVideoDownloader):
-
     def __init__(
         self,
         prompts,
@@ -98,7 +315,7 @@ class KwaiVideoCaptionConverter(ConverterBase, KwaiVideoDownloader):
                     "content": [
                         {
                             "type": "text",
-                            "text": src['caption']
+                            "text": ['caption']
                         }
                     ]
                 }
