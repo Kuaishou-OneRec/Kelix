@@ -462,7 +462,7 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
         first_level_category_prob = src['first_level_category_prob']
         second_level_category_name = src['second_level_category_name']
         second_level_category_prob = src['second_level_category_prob']
-        thrid_level_category_name = src['thrid_level_category_name']
+        third_level_category_name = src['third_level_category_name']
         third_level_category_prob = src['third_level_category_prob']
         fourth_level_category_name = src['fourth_level_category_name']
         fourth_level_category_prob = src['fourth_level_category_prob']
@@ -470,7 +470,7 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
         first_level_category_prob,
         second_level_category_name,
         second_level_category_prob,
-        thrid_level_category_name,
+        third_level_category_name,
         third_level_category_prob,
         fourth_level_category_name,
         fourth_level_category_prob)
