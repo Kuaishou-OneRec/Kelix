@@ -125,6 +125,7 @@ class KwaiVideoDownloader(object):
     def prepare_image(self, photo_id) -> Optional[str]:
         # 下载图片
         res_image = None
+        photo_id=str(photo_id)
         output_file = os.path.join(self.image_dir, f"{photo_id}.jpg")
 
         # Check if file already exists and is valid
