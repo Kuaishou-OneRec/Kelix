@@ -150,7 +150,6 @@ class KwaiVideoDownloader(object):
         return res_image
 
 
-KwaiVideoDownloader('./tmp_video', './tmp_image', ).prepare_video(157659349065)
 
 # class KwaiVideoDownloader(object):
 
@@ -216,6 +215,8 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
         filename = self.prepare_video(photo_id)
         ##=====video
         if filename is not None:
+            print(111111111111)
+            print(filename)
             prompt = np.random.choice(self.prompts)
             messages = [
                 {
@@ -254,6 +255,8 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
         ##======image
         else:
             filename = self.prepare_image(photo_id)
+            print(222222222222222)
+            print(filename)
             if filename is not None:
                 print('found in image~~~!!!!')
                 images={}
