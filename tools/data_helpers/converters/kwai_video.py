@@ -353,7 +353,7 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
                 "source": self.source,
                 "messages": messages,
             }
-            print("meta", meta)
+            #print("meta", meta)
             return {
                 "json": json.dumps(meta)
             }
@@ -399,7 +399,7 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
                 "source": self.source,
                 "messages": json.dumps(messages, ensure_ascii=False)
                 }
-                print("meta", meta)
+                #print("meta", meta)
                 return {
                     "json": json.dumps(meta)
                 }
