@@ -125,7 +125,6 @@ class KwaiVideoDownloader(object):
     def prepare_image(self, photo_id) -> Optional[str]:
         # 下载图片
         res_image = None
-        photo_id=str(photo_id)
         output_file = os.path.join(self.image_dir, f"{photo_id}.jpg")
 
         # Check if file already exists and is valid
@@ -211,6 +210,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
         photo_id = src['photo_id']
+        photo_id = str(photo_id)
         if src['title'] is None and src['caption_clean'] is None:
             return None
         title = src['title'] if src['title'] is not None else ''
@@ -219,8 +219,6 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
         filename = self.prepare_video(photo_id)
         ##=====video
         if filename is not None:
-            print(111111111111)
-            print(filename)
             prompt = np.random.choice(self.prompts)
             messages = [
                 {
@@ -259,8 +257,6 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
         ##======image
         else:
             filename = self.prepare_image(photo_id)
-            print(222222222222222)
-            print(filename)
             if filename is not None:
                 print('found in image~~~!!!!')
                 images={}
@@ -271,8 +267,11 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                         "role": "user",
                         "content": [
                             {
-                                "type": "image",
-                                "image": photo_id
+                                "type": "video",
+                                "video": [
+                                    {"type":"image",
+                                    "image":photo_id}
+                                ]
                             },
                             {
                                 "type": "text",
