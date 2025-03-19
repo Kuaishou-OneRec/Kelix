@@ -21,7 +21,7 @@ class KwaiVideoDownloader(object):
 
     def __init__(self, ffmpeg_args: str,
         video_dir: str = "/llm_reco/luoxinchen/dataset/InHouse/Photo/20250215/480p_60s_4fps_v2",  
-        image_dir: str = './tmp',
+        image_dir: str = '/llm_reco/luoxinchen/dataset/InHouse/Image/pretrain',
         caller: str = "recovlm_kwai_video_downloader", 
         **kargs):
         self.video_dir = video_dir
