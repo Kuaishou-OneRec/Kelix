@@ -122,32 +122,46 @@ class KwaiVideoDownloader(object):
 
         return None
 
-    def prepare_image(self, photo_id) -> Optional[str]:
-        # 下载图片
-        res_image = None
-        output_file = os.path.join(self.image_dir, f"{photo_id}.jpg")
+    def prepare_image(self, photo_id) -> Optional[List[str]]:
+        images = []
+        checkfile = os.path.join(self.image_dir, f"{photo_id}")
+        #output_file = os.path.join(self.image_dir, f"{photo_id}.jpg")
 
         # Check if file already exists and is valid
-        if os.path.exists(output_file):
-            print(f"find {output_file}, abort")
-            res_image = output_file
-            return res_image
+        if os.path.exists(checkfile):
+            print(f"find {checkfile}, abort")
+            jpg_files = glob.glob(os.path.join(checkfile, '**', '*.jpg'), recursive=True)
+            print(f"Found {len(jpg_files)} .jpg files in {checkfile}")
+            try:
+                images = [os.path.abspath(file_path) for file_path in jpg_files]
+            except Exception as e:
+                print(f"Error retrieving image for {photo_id}: {e}")
+                images = []
+            return images
+        else:
+            print(f"Directory {checkfile} does not exist.")
+            return None
 
-        try:
-            image_bytes = self.client._get_one_image(photo_id)
-        except Exception as e:
-            print(f"Error retrieving image for {photo_id}: {e}")
-            res_image = None
 
-        if image_bytes is None:
-            self.data["failed"] += 1
-            print(f"No image found for {photo_id}.")
-            res_image = None
 
-        if self.process_image(image_bytes, output_file):
-            res_image = output_file
+        #     # res_image = output_file
+        #     # return res_image
 
-        return res_image
+        # try:
+        #     image_bytes = self.client._get_one_image(photo_id)
+        # except Exception as e:
+        #     print(f"Error retrieving image for {photo_id}: {e}")
+        #     res_image = None
+
+        # if image_bytes is None:
+        #     self.data["failed"] += 1
+        #     print(f"No image found for {photo_id}.")
+        #     res_image = None
+
+        # if self.process_image(image_bytes, output_file):
+        #     res_image = output_file
+
+        # return res_image
 
 
 
