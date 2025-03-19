@@ -30,7 +30,7 @@ class KwaiVideoDownloader(object):
         os.makedirs(image_dir, exist_ok=True)
 
         self.ffmpeg_args = list(ffmpeg_args.split(" "))
-        self.client = BlobStoreClient(caller=caller)
+        self.clipent = BlobStoreClient(caller=caller)
         self.data = {"total": 0, "failed": 0}
     
     def process_video(self, input_bytes, output_file):
@@ -246,12 +246,15 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
             ]
             meta = {
                 "source": self.source,
-                "messages": messages,
+                "images": json.dumps(list()),
+                "videos": json.dumps([filename]),
+                "segments": None,
+                "metadata": None,
+                "messages": json.dumps(messages),
+                "uuid": str(uuid.uuid1())
             }
             #print("meta", meta)
-            return {
-                "json": json.dumps(meta)
-            }
+            return meta
         ##======video
 
         ##======image
@@ -289,15 +292,17 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                         ]
                     }
                 ]
-                meta = {
-                "images": json.dumps(images, ensure_ascii=False),
-                "source": self.source,
-                "messages": json.dumps(messages, ensure_ascii=False)
-                }
                 #print("meta", meta)
-                return {
-                    "json": json.dumps(meta)
+                meta = {
+                "source": self.source,
+                "images": json.dumps(images, ensure_ascii=False),
+                "videos": json.dumps([]),
+                "segments": None,
+                "metadata": None,
+                "messages": json.dumps(messages),
+                "uuid": str(uuid.uuid1())
                 }
+                return meta
             else:
                 return None
             ##======image
@@ -351,12 +356,16 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
             ]
             meta = {
                 "source": self.source,
-                "messages": messages,
+                "images": json.dumps(list()),
+                "videos": json.dumps([filename]),
+                "segments": None,
+                "metadata": None,
+                "messages": json.dumps(messages),
+                "uuid": str(uuid.uuid1())
             }
             #print("meta", meta)
-            return {
-                "json": json.dumps(meta)
-            }
+            return meta
+            
         ##======video
 
         ##======image
@@ -395,14 +404,15 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
                     }
                 ]
                 meta = {
-                "images": json.dumps(images, ensure_ascii=False),
                 "source": self.source,
-                "messages": json.dumps(messages, ensure_ascii=False)
+                "images": json.dumps(images, ensure_ascii=False),
+                "videos": json.dumps([]),
+                "segments": None,
+                "metadata": None,
+                "messages": json.dumps(messages),
+                "uuid": str(uuid.uuid1())
                 }
-                #print("meta", meta)
-                return {
-                    "json": json.dumps(meta)
-                }
+                return meta
             else:
                 return None
             ##======image
@@ -506,12 +516,15 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
             ]
             meta = {
                 "source": self.source,
-                "messages": messages,
+                "images": json.dumps(list()),
+                "videos": json.dumps([filename]),
+                "segments": None,
+                "metadata": None,
+                "messages": json.dumps(messages),
+                "uuid": str(uuid.uuid1())
             }
             #print("meta", meta)
-            return {
-                "json": json.dumps(meta)
-            }
+            return meta
         ##======video
 
         ##======image
@@ -550,14 +563,15 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
                     }
                 ]
                 meta = {
-                "images": json.dumps(images, ensure_ascii=False),
                 "source": self.source,
-                "messages": json.dumps(messages, ensure_ascii=False)
+                "images": json.dumps(images, ensure_ascii=False),
+                "videos": json.dumps([]),
+                "segments": None,
+                "metadata": None,
+                "messages": json.dumps(messages),
+                "uuid": str(uuid.uuid1())
                 }
-                #print("meta", meta)
-                return {
-                    "json": json.dumps(meta)
-                }
+                return meta
             else:
                 return None
             ##======image

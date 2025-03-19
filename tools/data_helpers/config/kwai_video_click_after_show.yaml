@@ -1,5 +1,5 @@
 output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/maosiyang/kwai_video/click_after_show/train/v2/
-split_size: 32_000_000
+split_size: 42_000_000
 dataset:
   class_name: ParquetDataset
   kwargs:
