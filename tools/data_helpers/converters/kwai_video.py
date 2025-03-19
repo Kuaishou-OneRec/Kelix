@@ -122,21 +122,22 @@ class KwaiVideoDownloader(object):
 
         return None
 
-    def prepare_image(self, photo_id) -> Optional[List[str]]:
-        images = []
-        checkfile = os.path.join(self.image_dir, f"{photo_id}")
-        #output_file = os.path.join(self.image_dir, f"{photo_id}.jpg")
+    def prepare_image(self, photo_id):
+        images = list()
+        checkfile = os.path.join(self.image_dir, str(photo_id)[-4:], f"{photo_id}")
+        # output_file = os.path.join(self.image_dir, f"{photo_id}.jpg")
 
         # Check if file already exists and is valid
         if os.path.exists(checkfile):
             print(f"find {checkfile}, abort")
-            jpg_files = glob.glob(os.path.join(checkfile, '**', '*.jpg'), recursive=True)
-            print(f"Found {len(jpg_files)} .jpg files in {checkfile}")
-            try:
-                images = [os.path.abspath(file_path) for file_path in jpg_files]
-            except Exception as e:
-                print(f"Error retrieving image for {photo_id}: {e}")
-                images = []
+            images = glob.glob(os.path.join(checkfile, '*.jpg'))
+            images.sort()
+            print(f"Found {len(images)} .jpg files in {checkfile}")
+            # try:
+            #     images = [os.path.abspath(file_path) for file_path in jpg_files]
+            # except Exception as e:
+            #     print(f"Error retrieving image for {photo_id}: {e}")
+            #     images = []
             return images
         else:
             print(f"Directory {checkfile} does not exist.")
@@ -274,10 +275,8 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
         ##======image
         else:
             filename = self.prepare_image(photo_id)
-            if filename is not None:
+            if filename is not None and len(filename)!=0:
                 print('found in image~~~!!!!')
-                images={}
-                images[photo_id] = self._encode_image(filename) 
                 prompt = np.random.choice(self.prompts)
                 messages = [
                     {
@@ -285,10 +284,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                         "content": [
                             {
                                 "type": "video",
-                                "video": [
-                                    {"type":"image",
-                                    "image":photo_id}
-                                ]
+                                "video": filename
                             },
                             {
                                 "type": "text",
@@ -309,7 +305,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                 #print("meta", meta)
                 meta = {
                 "source": self.source,
-                "images": json.dumps(images, ensure_ascii=False),
+                "images": filename,
                 "videos": json.dumps([]),
                 "segments": None,
                 "metadata": None,
@@ -385,10 +381,8 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
         ##======image
         else:
             filename = self.prepare_image(photo_id)
-            if filename is not None:
+            if filename is not None and len(filename)!=0:
                 print('found in image~~~!!!!')
-                images={}
-                images[photo_id] = self._encode_image(filename) 
                 prompt = np.random.choice(self.prompts)
                 messages = [
                     {
@@ -396,10 +390,7 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
                         "content": [
                             {
                                 "type": "video",
-                                "video": [
-                                    {"type":"image",
-                                    "image":photo_id}
-                                ]
+                                "video": filename
                             },
                             {
                                 "type": "text",
@@ -419,7 +410,7 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
                 ]
                 meta = {
                 "source": self.source,
-                "images": json.dumps(images, ensure_ascii=False),
+                "images": filename,
                 "videos": json.dumps([]),
                 "segments": None,
                 "metadata": None,
@@ -544,10 +535,8 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
         ##======image
         else:
             filename = self.prepare_image(photo_id)
-            if filename is not None:
+            if filename is not None and len(filename)!=0:
                 print('found in image~~~!!!!')
-                images={}
-                images[photo_id] = self._encode_image(filename) 
                 prompt = np.random.choice(self.prompts)
                 messages = [
                     {
@@ -555,10 +544,7 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
                         "content": [
                             {
                                 "type": "video",
-                                "video": [
-                                    {"type":"image",
-                                    "image":photo_id}
-                                ]
+                                "video": filename
                             },
                             {
                                 "type": "text",
@@ -576,9 +562,10 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
                         ]
                     }
                 ]
+                #print("meta", meta)
                 meta = {
                 "source": self.source,
-                "images": json.dumps(images, ensure_ascii=False),
+                "images": filename,
                 "videos": json.dumps([]),
                 "segments": None,
                 "metadata": None,
