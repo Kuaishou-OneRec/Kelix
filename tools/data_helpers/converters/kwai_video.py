@@ -305,7 +305,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                 #print("meta", meta)
                 meta = {
                 "source": self.source,
-                "images": filename,
+                "images": json.dumps(filename),
                 "videos": json.dumps([]),
                 "segments": None,
                 "metadata": None,
@@ -410,7 +410,7 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
                 ]
                 meta = {
                 "source": self.source,
-                "images": filename,
+                "images": json.dumps(filename),
                 "videos": json.dumps([]),
                 "segments": None,
                 "metadata": None,
@@ -566,7 +566,7 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
                 #print("meta", meta)
                 meta = {
                 "source": self.source,
-                "images": filename,
+                "images": json.dumps(filename),
                 "videos": json.dumps([]),
                 "segments": None,
                 "metadata": None,
