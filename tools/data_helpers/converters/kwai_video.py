@@ -101,7 +101,7 @@ class KwaiVideoDownloader(object):
             print(f"find {output_file}, abort")
             res_video = output_file
             return res_video
-
+        video_bytes = None
         try:
             video_bytes = self.client.get_video(photo_id)
         except Exception as e:
