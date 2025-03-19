@@ -30,7 +30,7 @@ class KwaiVideoDownloader(object):
         os.makedirs(image_dir, exist_ok=True)
 
         self.ffmpeg_args = list(ffmpeg_args.split(" "))
-        self.clipent = BlobStoreClient(caller=caller)
+        self.client = BlobStoreClient(caller=caller)
         self.data = {"total": 0, "failed": 0}
     
     def process_video(self, input_bytes, output_file):
