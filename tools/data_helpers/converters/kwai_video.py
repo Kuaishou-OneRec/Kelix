@@ -261,7 +261,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
             ]
             meta = {
                 "source": self.source,
-                "images": json.dumps(list()),
+                "images": json.dumps({}),
                 "videos": json.dumps([filename]),
                 "segments": None,
                 "metadata": None,
@@ -305,7 +305,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                 #print("meta", meta)
                 meta = {
                 "source": self.source,
-                "images": json.dumps(filename),
+                "images": json.dumps({}),
                 "videos": json.dumps([]),
                 "segments": None,
                 "metadata": None,
@@ -366,7 +366,7 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
             ]
             meta = {
                 "source": self.source,
-                "images": json.dumps(list()),
+                "images": json.dumps({}),
                 "videos": json.dumps([filename]),
                 "segments": None,
                 "metadata": None,
@@ -410,7 +410,7 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
                 ]
                 meta = {
                 "source": self.source,
-                "images": json.dumps(filename),
+                "images": json.dumps({}),
                 "videos": json.dumps([]),
                 "segments": None,
                 "metadata": None,
@@ -522,7 +522,7 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
             ]
             meta = {
                 "source": self.source,
-                "images": json.dumps(list()),
+                "images": json.dumps({}),
                 "videos": json.dumps([filename]),
                 "segments": None,
                 "metadata": None,
@@ -566,7 +566,7 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
                 #print("meta", meta)
                 meta = {
                 "source": self.source,
-                "images": json.dumps(filename),
+                "images": json.dumps({}),
                 "videos": json.dumps([]),
                 "segments": None,
                 "metadata": None,
