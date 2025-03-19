@@ -14,4 +14,6 @@ converter:
     video_dir: /llm_reco/luoxinchen/dataset/InHouse/Photo/20250215/480p_60s_4fps_v2/
     ffmpeg_args: -vf scale='if(gt(iw,ih),min(480,iw),-2)':'if(gt(ih,iw),min(480,ih),-2)' -r 4 -t 60 -c:a aac -c:v libx264 -b:a 55k -pix_fmt yuv420p -probesize 200M -analyzeduration 200M
     prompts:
-      - "你是一个短视频内容分析专家，现在请你思考用户看完这个视频之后，会搜索什么关键词"
+      - "你是一个短视频内容分析专家，现在请你思考用户看完这个视频之后，会搜索什么关键词。"
+      - "作为短视频内容分析专家，请你预测用户在观看完这个视频后可能会搜索哪些关键词。"
+      - "作为短视频内容分析专家，请你思考用户在观看完这个视频后可能会输入哪些关键词进行搜索。"

@@ -11,6 +11,7 @@ KWS_SERVICE_PAZ=HB2AZ2
 KWS_SERVICE_STAGE=PROD
 PYTHONPATH=.:$PYTHONPATH
 
+
 mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
         -mca opal_set_max_sys_limits 1 \
@@ -31,4 +32,4 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        python3 tools/data_helpers/dataset_converter.py tools/data_helpers/config/kwai_video_category.yaml | tee /tmp/stdout.log
+        python3 tools/data_helpers/parquet_writer_worker.py tools/data_helpers/config/kwai_video_category.yaml | tee /tmp/stdout.log
