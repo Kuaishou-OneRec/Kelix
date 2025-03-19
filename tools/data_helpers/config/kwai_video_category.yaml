@@ -1,5 +1,5 @@
 output_dir: /llm_reco_ssd/maosiyang/dataset/kwai_video_category/20250317
-shard_size: 10000
+split_size: 32_000_000
 dataset:
   class_name: ParquetDataset
   kwargs:
