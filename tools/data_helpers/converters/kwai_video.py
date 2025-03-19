@@ -138,31 +138,29 @@ class KwaiVideoDownloader(object):
             # except Exception as e:
             #     print(f"Error retrieving image for {photo_id}: {e}")
             #     images = []
-            return images
+
         else:
             print(f"Directory {checkfile} does not exist.")
             return None
 
+            # res_image = output_file
+            # return res_image
+        videolist=[]
+        imagedic = {}
+        for image in images:
+            imagebyte = self._encode_image(image)
+            if imagebyte == None:
+                continue 
+            temp = {
+                                "type": "image",
+                                "image": image
+                            }
+            videolist.append(temp)
+            imagedic[image]=imagebyte
 
-
-        #     # res_image = output_file
-        #     # return res_image
-
-        # try:
-        #     image_bytes = self.client._get_one_image(photo_id)
-        # except Exception as e:
-        #     print(f"Error retrieving image for {photo_id}: {e}")
-        #     res_image = None
-
-        # if image_bytes is None:
-        #     self.data["failed"] += 1
-        #     print(f"No image found for {photo_id}.")
-        #     res_image = None
-
-        # if self.process_image(image_bytes, output_file):
-        #     res_image = output_file
-
-        # return res_image
+        if videolist==[]:
+            return None,None
+        return videolist,imagedic
 
 
 
@@ -274,7 +272,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
 
         ##======image
         else:
-            filename = self.prepare_image(photo_id)
+            filename,images = self.prepare_image(photo_id)
             if filename is not None and len(filename)!=0:
                 print('found in image~~~!!!!')
                 prompt = np.random.choice(self.prompts)
@@ -305,7 +303,7 @@ class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
                 #print("meta", meta)
                 meta = {
                 "source": self.source,
-                "images": json.dumps({}),
+                "images": json.dumps(images),
                 "videos": json.dumps([]),
                 "segments": None,
                 "metadata": None,
@@ -380,7 +378,7 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
 
         ##======image
         else:
-            filename = self.prepare_image(photo_id)
+            filename,images = self.prepare_image(photo_id)
             if filename is not None and len(filename)!=0:
                 print('found in image~~~!!!!')
                 prompt = np.random.choice(self.prompts)
@@ -410,7 +408,7 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
                 ]
                 meta = {
                 "source": self.source,
-                "images": json.dumps({}),
+                "images": json.dumps(images),
                 "videos": json.dumps([]),
                 "segments": None,
                 "metadata": None,
@@ -535,7 +533,7 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
 
         ##======image
         else:
-            filename = self.prepare_image(photo_id)
+            filename,images = self.prepare_image(photo_id)
             if filename is not None and len(filename)!=0:
                 print('found in image~~~!!!!')
                 prompt = np.random.choice(self.prompts)
@@ -566,7 +564,7 @@ class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
                 #print("meta", meta)
                 meta = {
                 "source": self.source,
-                "images": json.dumps({}),
+                "images": json.dumps(images),
                 "videos": json.dumps([]),
                 "segments": None,
                 "metadata": None,
