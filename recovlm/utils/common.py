@@ -4,6 +4,7 @@ import time
 import torch
 import random
 import numpy as np
+from pathlib import Path
 from transformers import set_seed as set_transformers_seed
 import torch.distributed as dist
 import pickle
@@ -265,3 +266,18 @@ def heart_beat(num_tokens):
     log_ctx = create_perf_context('reco_vllm.pretrain', get_task_tag(), biz_def='infra', extra1=current_file)
     log_ctx.logstash_only(count=num_tokens)
     log_ctx.persist_data()
+
+def get_root_dir():
+  current_file_path = Path(__file__).resolve()
+  # recovlm/recovlm/utils/common.py
+  root_dir = current_file_path.parent.parent.parent
+  return root_dir
+
+def load_env():
+  env_path = get_root_dir() / ".deepspeed_env"
+  env = {}
+  with open(env_path, encoding="utf-8") as f:
+    for line in f:
+      key, value = line.strip().split("=")
+      env[key] = str(value)
+  return env

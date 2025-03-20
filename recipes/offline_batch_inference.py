@@ -1,5 +1,7 @@
 import ray
+import os
 import json
+import random
 import argparse
 import torch
 import torch.distributed as dist
@@ -7,12 +9,15 @@ from ray.util.actor_pool import ActorPool
 from ray.util.placement_group import placement_group
 from ray.util.scheduling_strategies import PlacementGroupSchedulingStrategy
 
+from torch.utils.data import IterableDataset, DataLoader
+
 from vllm import LLM, SamplingParams
 from vllm.utils import get_ip, get_open_port
 from vllm.worker.worker import Worker
 
 from recovlm.utils.common import load_env, Timer
 from recovlm.utils.logger import init_logger
+from recovlm.data.dataloaders_v2 import get_dataloader
 
 logger = init_logger(__name__)
 
@@ -26,9 +31,14 @@ def get_arguments():
   parser.add_argument("--model_dir", type=str, default=None,
                       help="The model directory to inference.")
   
+  parser.add_argument("--output_dir", type=str, default=None,
+                      help="The output directory.")
+  
   parser.add_argument("--dataset_config", type=str, default=None)
 
   parser.add_argument("--num_workers", type=int, default=8)
+
+  parser.add_argument("--batch_size", type=int, default=16)
 
   parser.add_argument("--shard_by_files", action="store_true")
 
@@ -43,6 +53,8 @@ def get_arguments():
 
   parser.add_argument("--num_generations", type=int, default=1)
 
+  parser.add_argument("--max_generations_per_req", type=int, default=64)
+
   parser.add_argument("--temperature", type=float, default=0.6)
   
   parser.add_argument("--top_p", type=float, default=0.95)
@@ -52,6 +64,8 @@ def get_arguments():
   parser.add_argument("--repetition_penalty", type=float, default=1.02)
 
   parser.add_argument("--limit_mm_per_prompt", type=int, default=10)
+
+  parser.add_argument("--max_new_tokens", type=int, default=1024)
 
   return parser.parse_args()
 
@@ -66,64 +80,80 @@ class GenerationActor:
     self.world_size = world_size
 
   def initialize(self):
-    # 创建dataset，按照rank，world_size，num_workers分割文件
-    # 1. 如果文件数量很多，按文件数分割，由args.shard_by_files指定
-    # 2. 如果文件数量很少，每个worker
-    # 创建dataloader
-    pass
-  
+    with open(self.args.dataset_config, encoding="utf-8") as f:
+      dataset_config = json.loads(f.read())
+    if self.args.batch_size:
+        dataset_config["batch_size"] = self.args.batch_size
+    dataset = dataset_config.pop("name")
+
+    self.dataloader = get_dataloader(
+      name=dataset, rank=self.rank, world_size=self.world_size,
+      **dataset_config
+    )
+
   def set_engine(self, engine):
     self.engine = engine
 
   def generate(self):
-    with open(f"{self.args.output_dir}/rank_{self.rank}", "w") as out:
+    with open(f"{self.args.output_dir}/rank_{self.rank}", "w", encoding="utf-8") as out:
       for batch in self.dataloader:
         num_generations = self.args.num_generations
         max_generations_per_req = self.args.max_generations_per_req
-        with Timer(f"generate responses"):
-          all_chunks = []
-          while num_generations > 0:
-            if num_generations > max_generations_per_req:
-              num_generations -= self.args.max_generations_per_req
-              n = max_generations_per_req
-            else:
-              n = num_generations
-              num_generations = 0
-            sampling_params = SamplingParams(
-              n=n,
-              temperature=self.args.temperature,
-              top_p=self.args.top_p,
-              repetition_penalty=self.args.repetition_penalty,
-              max_tokens=self.args.max_new_tokens
+        all_chunks = []
+        while num_generations > 0:
+          if num_generations > max_generations_per_req:
+            num_generations -= self.args.max_generations_per_req
+            n = max_generations_per_req
+          else:
+            n = num_generations
+            num_generations = 0
+          sampling_params = SamplingParams(
+            n=n,
+            temperature=self.args.temperature,
+            top_p=self.args.top_p,
+            repetition_penalty=self.args.repetition_penalty,
+            max_tokens=self.args.max_new_tokens
+          )
+          print([e["vllm_inputs"] for e in batch])
+          print(self.engine)
+          results = ray.get(
+            self.engine.generate.remote(
+              [e["vllm_inputs"] for e in batch],
+              sampling_params,
+              use_tqdm=True
             )
-            results = ray.get(
-              self.engine.generate.remote(
-                batch,
-                sampling_params,
-                use_tqdm=False
-              )
-            )
-            all_chunks.append(results)
-            
-          num_prompts = len(batch)
-          i = 0
-          all_response = []
-          for prompt_idx in range(len(batch)):
-            responses = []
-            for chunk in all_chunks:
-              for output in chunk[prompt_idx].outputs:
-                responses.append(output.text)
-            all_response.append(responses)
-            out.write(json.dumps({
-              "prompt": batch["prompt"][prompt_idx],
-              "responses": all_response[prompt_idx]
-            }))
+          )
+          print(all_chunks)
+          all_chunks.append(results)
+
+        all_response = []
+        for prompt_idx in range(len(batch)):
+          responses = []
+          for chunk in all_chunks:
+            for output in chunk[prompt_idx].outputs:
+              responses.append(output.text)
+          all_response.append(responses)
+          out.write(json.dumps({
+            "annotation": batch[prompt_idx]["annotation"],
+            "responses": all_response[prompt_idx],
+            "__key__": batch[prompt_idx]["__key__"],
+            "__url__": batch[prompt_idx]["__url__"]
+          }) + "\n")
+
+class MyLLM(LLM):
+  def __init__(self, *args, **kwargs):
+    # a hack to make the script work.
+    # stop ray from manipulating CUDA_VISIBLE_DEVICES
+    # at the top-level
+    del os.environ["CUDA_VISIBLE_DEVICES"]
+    super().__init__(*args, **kwargs)
+
 
 def main():
   args = get_arguments()
   world_size = args.num_gpus_per_node * args.num_inference_node // \
     args.tp_size
-  
+
   generation_actors = []
   for rank in range(world_size):
     pg = placement_group(
@@ -140,18 +170,19 @@ def main():
         placement_group_capture_child_tasks=True,
         placement_group_bundle_index=0
       )
-    )(LLM).remote(
+    )(MyLLM).remote(
       model=args.model_dir,
       enforce_eager=True,
       tensor_parallel_size=args.tp_size,
       distributed_executor_backend="ray",
+      enable_prefix_caching=True,
       gpu_memory_utilization=0.80,
       limit_mm_per_prompt={
         "image": args.limit_mm_per_prompt,
         "video": args.limit_mm_per_prompt
       }
     )
-    generation_actor = GenerationActor(
+    generation_actor = GenerationActor.remote(
       args=args, rank=rank, world_size=world_size)
     ray.get(generation_actor.set_engine.remote(engine))
     generation_actors.append(generation_actor)
