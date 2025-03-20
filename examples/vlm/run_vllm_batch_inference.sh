@@ -10,8 +10,9 @@ ray job submit --working-dir ./ -- \
     --num_gpus_per_node 8 \
     --num_inference_node 17 \
     --tp_size 8 \
-    --num_generations 8 \
-    --batch_size 8 \
+    --num_generations 1 \
+    --max_new_tokens 1024 \
+    --batch_size 1024 \
     --temperature 0.6 \
     --top_p 0.95 \
     --top_k 50 \
