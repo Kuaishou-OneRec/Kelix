@@ -27,5 +27,6 @@ from .fintabnet_converter import FinTabNetConverter
 from .kwai_video import KwaiVideoTitleCaptionConverter
 from .kwai_video import KwaiVideoClickAfterShowConverter
 from .kwai_video import KwaiVideoCategoryConverter
+from .kwai_video import KwaiVideoClickAfterShow10Converter
 def create_converter(cfg) -> ConverterBase:
     return eval(cfg.class_name)(**cfg.kwargs)

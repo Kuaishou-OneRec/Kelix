@@ -422,6 +422,133 @@ class KwaiVideoClickAfterShowConverter(ConverterBase, KwaiVideoDownloader):
             ##======image
 
 
+class KwaiVideoClickAfterShow10Converter(ConverterBase, KwaiVideoDownloader):
+
+    def __init__(
+        self,
+        prompts,
+        source,
+        **kwargs
+    ):
+        KwaiVideoDownloader.__init__(self, **kwargs)
+        self.prompts = prompts
+        self.source = source
+    def clean(self,keylist):
+        seen = set()
+        cleankeylist = []
+        for key in keylist:
+            if key not in seen:
+                seen.add(key)
+                cleankeylist.add(key)
+        return cleankeylist
+            
+    def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
+        photo_id = src['photo_id']
+        photo_id = str(photo_id)
+        if src['keyword_1'] is None:
+            return None
+        keylist = []
+        for i in range(1,11):
+            if src[f'keyword_{i}'] is None:
+                break 
+            keylist.append(src[f'keyword_{i}'])
+        if keylist == []:
+            return None 
+        print(keylist)
+        keylist = self.clean(keylist)
+        print('clean',keylist)
+        text = ','.join(keylist)
+
+        filename = self.prepare_video(photo_id)
+        ##=====video
+        if filename is not None:
+            prompt = np.random.choice(self.prompts)
+            messages = [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "video",
+                            "video": filename
+                        },
+                        {
+                            "type": "text",
+                            "text": prompt
+                        }
+                    ]
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": text
+                        }
+                    ]
+                }
+            ]
+            meta = {
+                "source": self.source,
+                "images": json.dumps({}),
+                "videos": json.dumps([filename]),
+                "segments": None,
+                "metadata": None,
+                "messages": json.dumps(messages),
+                "uuid": str(uuid.uuid1())
+            }
+            #print("meta", meta)
+            return meta
+            
+        ##======video
+
+        ##======image
+        else:
+            filename,images = self.prepare_image(photo_id)
+            if filename is not None and len(filename)!=0:
+                print('found in image~~~!!!!')
+                prompt = np.random.choice(self.prompts)
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "video",
+                                "video": filename
+                            },
+                            {
+                                "type": "text",
+                                "text": prompt
+                            }
+                        ]
+                    },
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": text
+                            }
+                        ]
+                    }
+                ]
+                meta = {
+                "source": self.source,
+                "images": json.dumps(images),
+                "videos": json.dumps([]),
+                "segments": None,
+                "metadata": None,
+                "messages": json.dumps(messages),
+                "uuid": str(uuid.uuid1())
+                }
+                #print("meta", meta)
+                return meta
+            else:
+                return None
+            ##======image
+
+
+
+
 class KwaiVideoCategoryConverter(ConverterBase, KwaiVideoDownloader):
 
     def __init__(
