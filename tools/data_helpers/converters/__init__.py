@@ -28,5 +28,6 @@ from .kwai_video import KwaiVideoTitleCaptionConverter
 from .kwai_video import KwaiVideoClickAfterShowConverter
 from .kwai_video import KwaiVideoCategoryConverter
 from .kwai_video import KwaiVideoClickAfterShow10Converter
+from .kwai_video import KwaiVideoShuffleConverter
 def create_converter(cfg) -> ConverterBase:
     return eval(cfg.class_name)(**cfg.kwargs)
