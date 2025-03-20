@@ -454,9 +454,9 @@ class KwaiVideoClickAfterShow10Converter(ConverterBase, KwaiVideoDownloader):
             keylist.append(src[f'keyword_{i}'])
         if keylist == []:
             return None 
-        print(keylist)
+        #print(keylist)
         keylist = self.clean(keylist)
-        print('clean',keylist)
+        #print('clean',keylist)
         text = ','.join(keylist)
 
         filename = self.prepare_video(photo_id)
