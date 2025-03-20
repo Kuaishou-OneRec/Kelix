@@ -16,6 +16,7 @@ import base64
 from PIL import Image
 import traceback
 import re
+import random
 
 class KwaiVideoDownloader(object):
 
@@ -208,6 +209,109 @@ class KwaiVideoDownloader(object):
 #             return output_file
 #         else:
 #             return None
+
+
+class KwaiVideoShuffleConverter(ConverterBase, KwaiVideoDownloader):
+
+    def __init__(
+        self,
+        prompts,
+        source,
+        **kwargs
+    ):
+        KwaiVideoDownloader.__init__(self, **kwargs)
+        self.prompts = prompts
+        self.source = source
+        self.image_dir = ''#待完善
+
+
+    def shuffle_with_indices(self,sorted_list):
+        # 创建一个带有索引的列表
+        indexed_list = list(enumerate(sorted_list))
+        # 随机打乱带有索引的列表
+        random.shuffle(indexed_list)
+        # 分离出打乱顺序的字符串列表和它们的真实序号
+        shuffled_list = [item[1] for item in indexed_list]
+        original_indices = [item[0] + 1 for item in indexed_list]  # +1 是为了使索引从1开始
+    
+        return shuffled_list, original_indices
+    
+
+    def fetch_image(self,photo_id):
+        checkfile = os.path.join(self.image_dir, str(photo_id)[-4:], f"{photo_id}")
+        if not os.path.exists(checkfile):
+            return {},[]
+        images = glob.glob(os.path.join(checkfile, '*.jpg'))
+        images.sort()
+        if len(images)==0:
+            return {},[]
+        imagedic = {}
+        
+        for image in images:
+            imagebyte = self._encode_image(image)
+            if imagebyte == None:
+                continue 
+            imagedic[image]=imagebyte
+        return imagedic,images
+
+
+    def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
+        photo_id = src['photo_id']
+        photo_id = str(photo_id)
+        
+        imagedic,images = self.fetch_image(photo_id)
+        if len(images)==0:
+            return None
+        simages,ranklist = self.shuffle_with_indices(images)
+        content = []
+        for image in simages:
+            content.append({
+                "type":"image",
+                "image":image
+            })
+        content.append({
+            "type":"text",
+            "text":prompt
+
+        })
+
+        if len(images)>0:
+            prompt = np.random.choice(self.prompts)
+            messages = [
+                {
+                    "role": "user",
+                    "content": content
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": text
+                        }
+                    ]
+                }
+            ]
+            meta = {
+                "source": self.source,
+                "images": json.dumps(imagedic),
+                "videos": json.dumps([]),
+                "segments": None,
+                "metadata": None,
+                "messages": json.dumps(messages),
+                "uuid": str(uuid.uuid1())
+            }
+            #print("meta", meta)
+            return meta
+        else:
+            return None
+
+
+
+
+
+
+
 
 class KwaiVideoTitleCaptionConverter(ConverterBase, KwaiVideoDownloader):
 
