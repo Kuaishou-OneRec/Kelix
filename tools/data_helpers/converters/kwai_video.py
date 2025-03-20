@@ -439,7 +439,7 @@ class KwaiVideoClickAfterShow10Converter(ConverterBase, KwaiVideoDownloader):
         for key in keylist:
             if key not in seen:
                 seen.add(key)
-                cleankeylist.add(key)
+                cleankeylist.append(key)
         return cleankeylist
             
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
