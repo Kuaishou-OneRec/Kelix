@@ -19,6 +19,9 @@ class MultiOCRConverter(ConverterBase):
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
         frames_info = src['frames']
         images_list = [item['imageUrl'] for item in frames_info.values()]
+        if len(frames_info) > 5:
+            images_list = images_list[:5]
+        
         images = {}
         for item in images_list:
             with open(item, 'rb') as img_file:
@@ -29,8 +32,11 @@ class MultiOCRConverter(ConverterBase):
         
         segments = None
         messages = []
-
-        for value in frames_info.values():
+        values = frames_info.values()
+        if len(values) > 5:
+            values = list(values)[:5]
+        
+        for value in values:
             messages.append({
                 "role": "user",
                 "content":[

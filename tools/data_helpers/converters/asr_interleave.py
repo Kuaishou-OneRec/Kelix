@@ -45,7 +45,7 @@ class ASRInterConverter(ConverterBase):
             segments.append(
                 {
                     "type": "text",
-                    "image": asr_content[i]
+                    "text": asr_content[i]
                 }
             )
 
