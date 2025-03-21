@@ -297,7 +297,6 @@ class KwaiVideoShuffleConverter(ConverterBase, KwaiVideoDownloader):
                     ]
                 }
             ]
-            print(messages)
             meta = {
                 "source": self.source,
                 "images": json.dumps(imagedic),
@@ -307,6 +306,7 @@ class KwaiVideoShuffleConverter(ConverterBase, KwaiVideoDownloader):
                 "messages": json.dumps(messages),
                 "uuid": str(uuid.uuid1())
             }
+            print(meta['images'])
             
             return meta
         else:
