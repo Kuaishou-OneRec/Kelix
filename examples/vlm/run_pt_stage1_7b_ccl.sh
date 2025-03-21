@@ -56,7 +56,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl.py \
      --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config /llm_reco/chuchenglong/R3/recovlm/examples/vlm/configs/ccl_stage1_7b.json \
+     --dataset_config   /llm_reco_ssd/zangdunju/dataset/hdfs_data/sample_general_with_inhouse.json \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
     --load_weights_only \
@@ -82,5 +82,8 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --kml_id $KML_ID \
     --kml_task_id $KML_TASK_ID \
     --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+
+# #     --dataset_config /llm_reco/chuchenglong/R3/recovlm/examples/vlm/configs/ccl_stage1_7b.json \
+
 
 
