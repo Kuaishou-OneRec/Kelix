@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="ccl test pt kwai video comment 7B mix data"
+comment="ccl run pt kwai video comment 7B mix data"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -45,7 +45,7 @@ echo "Output: $OUTPUT_DIR"
 export PYTHONPATH=$PWD:$PYTHONPATH
 
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
-    /llm_reco/chuchenglong/R3/recovlm/recipes/token_cal.py \
+    recipes/pretrain_vl.py \
      --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
     --dataset_config /llm_reco/chuchenglong/R3/recovlm/examples/vlm/configs/ccl_stage1_7b.json \
@@ -75,5 +75,4 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --kml_task_id $KML_TASK_ID \
     --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
-        # recipes/pretrain_vl.py \
 
