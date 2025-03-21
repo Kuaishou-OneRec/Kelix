@@ -265,6 +265,8 @@ class KwaiVideoShuffleConverter(ConverterBase, KwaiVideoDownloader):
         simages,ranklist = self.shuffle_with_indices(images)
         prompt = np.random.choice(self.prompts)
         content = []
+        ranklist = [str(i) for i in ranklist]
+        text = ','.join(ranklist)
         for image in simages:
             content.append({
                 "type":"image",
