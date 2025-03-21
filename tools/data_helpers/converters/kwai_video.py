@@ -222,7 +222,7 @@ class KwaiVideoShuffleConverter(ConverterBase, KwaiVideoDownloader):
         KwaiVideoDownloader.__init__(self, **kwargs)
         self.prompts = prompts
         self.source = source
-        self.image_dir = ''#待完善
+        self.image_dir = '/llm_reco/zangdunju/dataset/reorder/frames'
 
 
     def shuffle_with_indices(self,sorted_list):
@@ -263,6 +263,7 @@ class KwaiVideoShuffleConverter(ConverterBase, KwaiVideoDownloader):
         if len(images)==0:
             return None
         simages,ranklist = self.shuffle_with_indices(images)
+        prompt = np.random.choice(self.prompts)
         content = []
         for image in simages:
             content.append({
@@ -276,7 +277,7 @@ class KwaiVideoShuffleConverter(ConverterBase, KwaiVideoDownloader):
         })
 
         if len(images)>0:
-            prompt = np.random.choice(self.prompts)
+            
             messages = [
                 {
                     "role": "user",
