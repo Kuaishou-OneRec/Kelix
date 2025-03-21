@@ -3,7 +3,7 @@ split_size: 42_000_000
 dataset:
   class_name: ParquetDataset
   kwargs:
-    path: 
+    path: /llm_reco/maosiyang/dataconvert/v2/recovlm/pid.parquet
     columns:
       - photo_id
 converter:
