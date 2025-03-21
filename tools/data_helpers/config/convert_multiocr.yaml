@@ -1,0 +1,10 @@
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/multiocr
+split_size: 536870912
+dataset:
+  class_name: JsonDataset
+  kwargs:
+    path: /llm_reco/chuchenglong/R3/tools/100w_ocr/output_list_with_images.json
+converter:
+  class_name: MultiOCRConverter
+  kwargs:
+    source: MultiOCRConverter

@@ -23,6 +23,10 @@ from .gpt4o_qa_converter import GPT4oQAConverter
 from .grounding_converter import GroundingConverter
 from .pubtabnet_converter import PubTabNetConverter
 from .fintabnet_converter import FinTabNetConverter
+from .asr_convert import ASRTextConverter
+from .multi_ocr import MultiOCRConverter
+from .asr_interleave import ASRInterConverter
+from .video_detailcaption import VideoDetailConverter
 
 
 def create_converter(cfg) -> ConverterBase:
