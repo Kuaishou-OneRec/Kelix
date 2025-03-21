@@ -225,18 +225,18 @@ class KwaiVideoShuffleConverter(ConverterBase, KwaiVideoDownloader):
         self.image_dir = '/llm_reco/zangdunju/dataset/reorder/frames'
 
 
-def shuffle_with_indices(self, sorted_list):
-    # 创建带有原索引的列表
-    indexed_list = list(enumerate(sorted_list))
-    # 随机打乱该列表
-    random.shuffle(indexed_list)
-    # 提取打乱后的元素列表
-    shuffled_list = [item[1] for item in indexed_list]
-    # 创建字典记录每个原索引对应的打乱后的位置（从1开始）
-    position_map = {original_idx: shuffled_pos + 1 for shuffled_pos, (original_idx, _) in enumerate(indexed_list)}
-    # 生成原列表各元素在打乱后的位置列表
-    original_indices = [position_map[i] for i in range(len(sorted_list))]
-    return shuffled_list, original_indices
+    def shuffle_with_indices(self, sorted_list):
+        # 创建带有原索引的列表
+        indexed_list = list(enumerate(sorted_list))
+        # 随机打乱该列表
+        random.shuffle(indexed_list)
+        # 提取打乱后的元素列表
+        shuffled_list = [item[1] for item in indexed_list]
+        # 创建字典记录每个原索引对应的打乱后的位置（从1开始）
+        position_map = {original_idx: shuffled_pos + 1 for shuffled_pos, (original_idx, _) in enumerate(indexed_list)}
+        # 生成原列表各元素在打乱后的位置列表
+        original_indices = [position_map[i] for i in range(len(sorted_list))]
+        return shuffled_list, original_indices
     
 
     def fetch_image(self,photo_id):
