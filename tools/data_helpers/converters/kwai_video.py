@@ -306,7 +306,7 @@ class KwaiVideoShuffleConverter(ConverterBase, KwaiVideoDownloader):
                 "messages": json.dumps(messages),
                 "uuid": str(uuid.uuid1())
             }
-            print(meta['images'])
+            print(len(meta['images']))
             
             return meta
         else:
