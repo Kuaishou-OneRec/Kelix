@@ -33,7 +33,7 @@ export NCCL_ALGO=^NVLS,NVLSTree
 
 
 # 注意修改实验内容备注
-comment="ccl test pt kwai video comment 7B mix data with nccl bug"
+comment="ccl test pt kwai video comment 7B mix data in H800"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
