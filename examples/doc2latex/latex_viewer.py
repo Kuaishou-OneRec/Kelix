@@ -7,6 +7,7 @@ from PIL import Image
 import base64
 from io import BytesIO
 import time
+import random  # 添加在文件顶部的导入部分
 
 app = Flask(__name__)
 app.secret_key = 'latex_viewer_secret_key'
@@ -152,6 +153,29 @@ def view_data(index):
                           source=source,
                           url=url,
                           key=key)
+
+@app.route('/random')
+def random_sample():
+    file_path = session.get('file_path')
+    if not file_path:
+        flash('请先指定JSONL文件路径')
+        return redirect(url_for('index'))
+    
+    # 加载数据
+    data = load_jsonl(file_path)
+    if isinstance(data, tuple):
+        flash(f'加载文件失败: {data[1]}')
+        return redirect(url_for('index'))
+    
+    if not data:
+        flash('数据为空')
+        return redirect(url_for('index'))
+    
+    # 随机选择一个索引
+    random_index = random.randint(0, len(data) - 1)
+    
+    # 重定向到随机选择的样例
+    return redirect(url_for('view_data', index=random_index))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8888, debug=True) 
