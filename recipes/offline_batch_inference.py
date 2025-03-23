@@ -133,6 +133,7 @@ class GenerationActor:
           out.write(json.dumps({
             "annotation": batch[prompt_idx]["annotation"],
             "responses": all_response[prompt_idx],
+            "source": batch[prompt_idx]["source"],
             "__key__": batch[prompt_idx]["__key__"],
             "__url__": batch[prompt_idx]["__url__"]
           }) + "\n")
