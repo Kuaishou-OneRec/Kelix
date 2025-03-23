@@ -1,0 +1,1 @@
+streamlit run latex_viewer.py --server.port=8888
