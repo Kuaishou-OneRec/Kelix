@@ -126,14 +126,11 @@ def process_image_dataset_parallel(folder_path, output_dir, num_processes=None, 
     start_time = time.time()
     pool = multiprocessing.Pool(processes=num_processes)
     
-    # 创建偏函数，固定output_dir和batch_size参数
-    process_func = partial(process_image_chunk, output_dir=output_dir, batch_size=batch_size)
-    
-    # 为每个进程分配一个进程ID
-    process_args = [(chunks[i], i) for i in range(len(chunks))]
+    # 为每个进程准备参数
+    process_args = [(chunks[i], output_dir, i, batch_size) for i in range(len(chunks))]
     
     # 启动多进程处理
-    results = pool.starmap(process_func, process_args)
+    results = pool.starmap(process_image_chunk, process_args)
     
     # 关闭进程池
     pool.close()
