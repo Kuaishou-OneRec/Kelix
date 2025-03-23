@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, session
 import json
 import os
 import subprocess
@@ -6,7 +6,7 @@ import tempfile
 from PIL import Image
 import base64
 from io import BytesIO
-import pickle
+import time
 
 app = Flask(__name__)
 app.secret_key = 'latex_viewer_secret_key'
@@ -89,10 +89,6 @@ def index():
             flash(f'文件不存在: {file_path}')
             return redirect(request.url)
         
-        # if not file_path.endswith('.jsonl'):
-        #     flash('只支持JSONL文件')
-        #     return redirect(request.url)
-        
         # 加载数据
         data = load_jsonl(file_path)
         
@@ -100,19 +96,27 @@ def index():
             flash(f'加载文件失败: {data[1]}')
             return redirect(request.url)
         
-        # 将文件路径存储在会话中
-        save_session_data({"file_path": file_path, "data": data})
+        # 将数据存储在会话中
+        session['file_path'] = file_path
+        # 不直接存储数据到会话中，而是保存文件路径
+        # 这样可以避免会话大小限制问题
         return redirect(url_for('view_data', index=0))
     
     return render_template('index.html')
 
 @app.route('/view/<int:index>')
 def view_data(index):
-    if not load_session_data():
+    file_path = session.get('file_path')
+    if not file_path:
         flash('请先指定JSONL文件路径')
         return redirect(url_for('index'))
     
-    data = load_session_data().get("data")
+    # 每次从文件重新加载数据，避免会话大小问题
+    data = load_jsonl(file_path)
+    if isinstance(data, tuple):
+        flash(f'加载文件失败: {data[1]}')
+        return redirect(url_for('index'))
+    
     if index < 0 or index >= len(data):
         flash('无效的索引')
         return redirect(url_for('index'))
@@ -133,24 +137,21 @@ def view_data(index):
     latex_content = latex_code.replace("```latex\n", "").replace("\n```", "")
     rendered_image, error = render_latex(latex_content)
     
+    # 提取额外字段
+    source = sample.get('source', 'N/A')
+    url = sample.get('__url__', 'N/A')
+    key = sample.get('__key__', 'N/A')
+    
     return render_template('view.html', 
                           index=index, 
                           total=len(data), 
                           original_image=original_image,
                           latex_code=latex_code,
                           rendered_image=rendered_image,
-                          error=error)
-
-def save_session_data(data_dict):
-    with open('temp_session.pkl', 'wb') as f:
-        pickle.dump(data_dict, f)
-
-def load_session_data():
-    try:
-        with open('temp_session.pkl', 'rb') as f:
-            return pickle.load(f)
-    except:
-        return None
+                          error=error,
+                          source=source,
+                          url=url,
+                          key=key)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8888, debug=True) 

@@ -63,6 +63,16 @@
             display: block;
             margin: 10px auto;
         }
+        /* 添加元数据区域的样式 */
+        .metadata {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+        .metadata p {
+            margin: 5px 0;
+        }
     </style>
 </head>
 <body>
@@ -88,6 +98,14 @@
         {% else %}
             <div class="error">图片文件不存在</div>
         {% endif %}
+        
+        <!-- 添加元数据显示区域 -->
+        <div class="metadata">
+            <h3>元数据</h3>
+            <p><strong>Source:</strong> {{ source }}</p>
+            <p><strong>URL:</strong> {{ url }}</p>
+            <p><strong>Key:</strong> {{ key }}</p>
+        </div>
     </div>
     
     <div class="container">
