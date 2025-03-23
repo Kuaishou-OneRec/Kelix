@@ -6,6 +6,7 @@ import traceback
 import pyarrow.parquet as pq
 import numpy as np
 import base64
+from pathlib import Path
 from io import BytesIO
 from PIL import Image
 
@@ -19,6 +20,8 @@ from recovlm.utils.logger import init_logger
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
+
+from transformers import AutoTokenizer, AutoProcessor, AutoConfig
 
 logger = init_logger(__name__)
 
@@ -49,9 +52,9 @@ class Qwen2VLInputBuilder:
                pretrained_model_name_or_path: Optional[str] = None,
                **kwargs):
     self.processor = \
-        Qwen2VLProcessor.from_pretrained(pretrained_model_name_or_path)
+        AutoProcessor.from_pretrained(pretrained_model_name_or_path)
     self.model_config = \
-        Qwen2VLConfig.from_pretrained(pretrained_model_name_or_path)
+        AutoConfig.from_pretrained(pretrained_model_name_or_path)
     self.spatial_merge_size = \
         self.model_config.vision_config.spatial_merge_size
     self.patch_size = self.model_config.vision_config.patch_size
@@ -650,10 +653,15 @@ class DistributedDataset(IterableDataset):
   def _build(self):
     file_list = []
     files = []
-    with open(self.sources, "r") as fp:
-      files = json.loads(fp.read())
-      files = sorted([
-        fn for fn in files if fn.endswith(".parquet")])
+    # TODO: support more file types
+    if self.sources.endswith(".json"):
+      with open(self.sources, "r") as fp:
+        files = json.loads(fp.read())
+        files = sorted([
+          fn for fn in files if fn.endswith(".parquet")])
+    else:
+      folder = Path(self.sources)
+      files = list(map(str, folder.rglob("*.parquet")))
 
     self.rng.shuffle(files)
     num_files_per_rank = round(len(files) / self.world_size)

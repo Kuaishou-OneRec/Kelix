@@ -19,6 +19,8 @@ from recovlm.utils.common import load_env, Timer
 from recovlm.utils.logger import init_logger
 from recovlm.data.dataloaders_v2 import get_dataloader
 
+from tqdm import tqdm
+
 logger = init_logger(__name__)
 
 runtime_env = {
@@ -96,7 +98,7 @@ class GenerationActor:
 
   def generate(self):
     with open(f"{self.args.output_dir}/rank_{self.rank}", "w", encoding="utf-8") as out:
-      for batch in self.dataloader:
+      for batch in tqdm(self.dataloader):
         num_generations = self.args.num_generations
         max_generations_per_req = self.args.max_generations_per_req
         all_chunks = []
@@ -144,6 +146,7 @@ class MyLLM(LLM):
     # stop ray from manipulating CUDA_VISIBLE_DEVICES
     # at the top-level
     del os.environ["CUDA_VISIBLE_DEVICES"]
+    os.environ["VLLM_USE_V1"] = "0"
     super().__init__(*args, **kwargs)
 
 
