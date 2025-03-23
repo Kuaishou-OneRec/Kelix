@@ -96,8 +96,8 @@ def process_image_dataset(folder_path, output_dir, batch_size=1000):
 
 if __name__ == "__main__":
     # 设置输入图片文件夹和输出parquet文件夹
-    input_folder = "path/to/your/images"  # 替换为您的图片文件夹路径
-    output_folder = "path/to/output/parquet"  # 替换为输出parquet文件的文件夹路径
+    input_folder = "/mmu_nlp_hdd/zhouguorui/pdf2png_process/output"  # 替换为您的图片文件夹路径
+    output_folder = "/mmu_nlp_hdd/zhouyang12/data/pdf2png_process/parquet"  # 替换为输出parquet文件的文件夹路径
     
     # 处理图片数据集
-    process_image_dataset(input_folder, output_folder, batch_size=100)
+    process_image_dataset(input_folder, output_folder, batch_size=256)
