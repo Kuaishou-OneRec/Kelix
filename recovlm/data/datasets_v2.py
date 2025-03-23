@@ -1176,10 +1176,12 @@ class VllmInferenceDataset(DistributedDataset):
       if turn["role"] == "assistant":
         break
       prompt_messages.append(turn)
-    
-    annotation = messages[-1]["content"]
-    if isinstance(annotation, list):
-      annotation = annotation[-1]["text"]
+
+    annotation = None
+    if messages[-1]["role"] == "assistant":
+      annotation = messages[-1]["content"]
+      if isinstance(annotation, list):
+        annotation = annotation[-1]["text"]
 
     text = self.input_builder.processor.apply_chat_template(
       prompt_messages, tokenize=False,

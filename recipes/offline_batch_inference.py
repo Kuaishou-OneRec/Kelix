@@ -114,8 +114,6 @@ class GenerationActor:
             repetition_penalty=self.args.repetition_penalty,
             max_tokens=self.args.max_new_tokens
           )
-          print([e["vllm_inputs"] for e in batch])
-          print(self.engine)
           results = ray.get(
             self.engine.generate.remote(
               [e["vllm_inputs"] for e in batch],
@@ -123,7 +121,6 @@ class GenerationActor:
               use_tqdm=True
             )
           )
-          print(all_chunks)
           all_chunks.append(results)
 
         all_response = []
