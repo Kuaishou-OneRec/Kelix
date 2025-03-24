@@ -59,6 +59,8 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --dataset_config /llm_reco/chuchenglong/R3/recovlm/examples/vlm/configs/ccl_stage1_7b.json \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
+    --resume_from /llm_reco_ssd/luoxincheche/output3/chuchenglong/1.0.0.0_mix_general \
+    --resume_from_tag global_step17001 \
     --load_weights_only \
     --auto_resume_local_latest \
     --enable_gradient_checkpointing \
@@ -82,8 +84,4 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --kml_id $KML_ID \
     --kml_task_id $KML_TASK_ID \
     --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
-
-# #     --dataset_config /llm_reco/chuchenglong/R3/recovlm/examples/vlm/configs/ccl_stage1_7b.json \
-
-#  /llm_reco_ssd/zangdunju/dataset/hdfs_data/sample_general_with_inhouse.json
 
