@@ -32,7 +32,7 @@ do
                 --RealWorldQA_path="/llm_reco_ssd/luoxinchen/dataset/RealWorldQA/RealWorldQA/data/merge/test-00000-of-00001.parquet" \
                 --mmbenchEn_benchmark_original_data="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/en/dev-00000-of-00001.parquet" \
                 --mmbenchCn_benchmark_original_data="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/cn/dev-00000-of-00001.parquet" \
-                --infer_steps=17001 \
+                --infer_steps=19001 \
                 --model_folder=$model \
                 --logging_folder="${model}/log/benchmark/" \
                 --output_path="${model}/benchmark_output/" \
