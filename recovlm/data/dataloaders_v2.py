@@ -3,7 +3,8 @@ from typing import List, Dict, Optional
 from torch.utils.data import DataLoader
 from torchdata.stateful_dataloader import StatefulDataLoader
 
-from recovlm.data.datasets_v2 import ExperienceDataset, VisionPromptDataset, VllmInferenceDataset
+from recovlm.data.datasets_v2 import ExperienceDataset, VisionPromptDataset, VllmInferenceDataset, \
+  DEFAULT_SYSTEM_PROMPT
 
 def get_vision_prompt_dataloader(sources: str,
                                  max_length,
@@ -89,7 +90,8 @@ def get_vllm_inference_dataloader(sources: str,
                                   rank=0,
                                   world_size=1,
                                   batch_size=1,
-                                  max_images=10):
+                                  max_images=10,
+                                  system_prompt = DEFAULT_SYSTEM_PROMPT):
   """Create dataloader for vision prompt"""
   dataset = VllmInferenceDataset(
     sources=sources,
@@ -100,7 +102,8 @@ def get_vllm_inference_dataloader(sources: str,
     num_workers=num_workers,
     rank=rank,
     world_size=world_size,
-    max_images=max_images
+    max_images=max_images,
+    system_prompt=system_prompt
   )
   def collate_fn(samples):
     return samples

@@ -15,13 +15,17 @@ import torch.nn.functional as F
 import multiprocessing
 from torch.utils.data import IterableDataset
 
-from recovlm.utils.common import pytorch_worker_info
+from recovlm.utils.common import get_worker_info
 from recovlm.utils.logger import init_logger
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
 
+from recovlm.data.prompts import PromptLoader
+
 from transformers import AutoTokenizer, AutoProcessor, AutoConfig
+
+from tqdm import tqdm
 
 logger = init_logger(__name__)
 
@@ -391,8 +395,7 @@ class ParquetDataset(IterableDataset):
       self.offset_dict_all[i] = manager.dict()
 
   def state_dict(self,):
-    # TODO: 考虑TP
-    rank, world_size, worker, num_workers = pytorch_worker_info()
+    worker, num_workers = get_worker_info()
 
     state_dict = {
       "finish_dict": dict(self.finish_dict_all[worker]),
@@ -401,8 +404,7 @@ class ParquetDataset(IterableDataset):
     return state_dict
   
   def load_state_dict(self, state_dict):
-    # TODO: 考虑TP
-    rank, world_size, worker, num_workers = pytorch_worker_info()
+    worker, num_workers = get_worker_info()
     finish_dict = state_dict["finish_dict"]
     offset_dict = state_dict["offset_dict"]
 
@@ -516,120 +518,73 @@ class ParquetDataset(IterableDataset):
       return None
 
   def __iter__(self,):
-    rank, world_size, worker, num_workers = pytorch_worker_info()
-    assert num_workers == self.num_workers
+    worker, num_workers = get_worker_info()
+    assert num_workers == self.num_workers, "Number of workers mismatch"
 
     finish_dict = self.finish_dict_all[worker]
     offset_dict = self.offset_dict_all[worker]
 
-    # total_num_workers = num_workers * world_size
-    # local_worker_idx = rank * num_workers + worker
-    # fn_list = [
-    #   fn for idx, fn in enumerate(self.files) \
-    #     if idx % total_num_workers == local_worker_idx]
+    worker_files = [
+      fn for idx, fn in enumerate(self.files) \
+        if idx % num_workers == worker]
     logger.warning(
-      f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, "
-      f"{num_workers=}, {len(self.files)=}"
+      f"ParquetDataset Info: {worker=}, {num_workers=}, "
+      f"num_files={len(self.files)}, worker_files={len(worker_files)}"
     )
-    
-    try:
-      for epoch_fn in self.files:
-        fn, epoch_idx = epoch_fn
-        if (fn, epoch_idx) in finish_dict:
-          logger.warning(f"[Rank{rank}-{worker}] skip {fn}")
-          continue
 
-        # open parquet file
+    for epoch_fn in worker_files:
+      fn, epoch_idx = epoch_fn
+      if (fn, epoch_idx) in finish_dict:
+        logger.warning(f"[Worker-{worker}] {fn} has been processed, skip.")
+        continue
+      logger.info(f"[Worker-{worker}] processing {fn}-epoch{epoch_idx}")
+      # open parquet file
+      try:
+        parquet_file = pq.ParquetFile(fn)
+      except Exception as e:
+        logger.error(
+          f"ParquetDataset error, open parquet fail!!! "
+          f"{fn=}, error_msg={traceback.format_exc()}")
+        continue
+
+      for group_idx in range(parquet_file.num_row_groups):
         try:
-          parquet_file = pq.ParquetFile(fn)
-        except Exception as e:
-          logger.error(
-            f"ParquetDataset error, open parquet fail!!! "
-            f"{fn=}, error_msg={traceback.format_exc()}")
-          parquet_file = None
-        
-        # process file content
-        if parquet_file is not None:
+          offset = 0
+          fn_group_key = (fn, epoch_idx, group_idx)
+          if fn_group_key in offset_dict:
+            if offset_dict[fn_group_key] == -1:
+              continue
+            else:
+              offset = offset_dict[fn_group_key] + 1
+          
+          row_group = parquet_file.read_row_group(group_idx)
+          if offset >= row_group.num_rows:
+            continue
           logger.warning(
-            f"[Rank{rank}-{worker}] {fn} total row_groups: "
-            f"{parquet_file.num_row_groups}")
-          for group_idx in range(parquet_file.num_row_groups):
+            f"[Worker-{worker}] start "
+            f"{fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
+          row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
+
+          for row_idx, row in tqdm(row_pandas.iterrows()):
+            if row_idx < offset:
+              continue
             try:
-              offset = 0
-              fn_group_key = (fn, epoch_idx, group_idx)
-              if fn_group_key in offset_dict:
-                if offset_dict[fn_group_key] == -1:
-                  logger.warning(
-                    f"[Rank{rank}-{worker}] skip "
-                    f"{fn}-epoch{epoch_idx}-group{group_idx}")
-                  continue
-                else:
-                  offset = offset_dict[fn_group_key] + 1
-              
-              row_group = parquet_file.read_row_group(group_idx)
-              if offset >= row_group.num_rows:
-                continue
-              logger.warning(
-                f"[Rank{rank}-{worker}] start "
-                f"{fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
-              row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
-
-              for row_idx, row in row_pandas.iterrows():
-                if row_idx < offset:
-                  continue
-
-                try:
-                  sample = self._parser(row, fn)
-                  if sample is not None:
-                    yield sample
-                  offset_dict[fn_group_key] = row_idx
-                except GeneratorExit:
-                  # 正确处理生成器退出
-                  logger.warning(
-                    f"Generator exited at "
-                    f"{fn}-epoch{epoch_idx}-group{group_idx}-row{row_idx}")
-                  return
-                except Exception as e:
-                  logger.error(
-                    f"Error processing row {row_idx}: "
-                    f"{str(e)}")
-                  continue
-
-                if row_idx % 1000 == 0:
-                  logger.warning(
-                    f"Processing row {row_idx} in "
-                    f"{fn}-epoch{epoch_idx}-group{group_idx}")
-
-              # group finish
-              logger.warning(
-                f"[Rank{rank}-{worker}] "
-                f"{fn}-epoch{epoch_idx}-group{group_idx} finish.")
-              offset_dict[fn_group_key] = -1
-              
-            except GeneratorExit:
-              # 正确处理生成器退出
-              logger.warning(
-                f"Generator exited during group processing")
-              return
+              sample = self._parser(row, fn)
+              if sample is not None:
+                yield sample
+              offset_dict[fn_group_key] = row_idx
             except Exception as e:
               logger.error(
-                f"Error processing group {group_idx}: "
+                f"Error processing row {row_idx}: "
                 f"{str(e)}")
               continue
-          
-          # file finish
-          logger.warning(
-            f"[Rank{rank}-{worker}] {fn} finish.")
 
-    except GeneratorExit:
-      # 正确处理生成器退出
-      logger.warning("Generator exited during file processing")
-      return
-    except Exception as e:
-      logger.error(
-        f"Error in dataset iterator: {str(e)}\n"
-        f"{traceback.format_exc()}")
-      raise
+        except Exception as e:
+          logger.error(
+            f"Error processing group {group_idx}: "
+            f"{str(e)}")
+          continue
+
 
 class DistributedDataset(IterableDataset):
   def __init__(self, 
@@ -664,6 +619,7 @@ class DistributedDataset(IterableDataset):
       files = list(map(str, folder.rglob("*.parquet")))
 
     self.rng.shuffle(files)
+    total_files = len(files)
     num_files_per_rank = round(len(files) / self.world_size)
     files = files[
       self.rank * num_files_per_rank: (self.rank + 1) * num_files_per_rank]
@@ -678,7 +634,7 @@ class DistributedDataset(IterableDataset):
 
     logger.info(
       f"DistributedDataset "
-      f"rank{self.rank}: ori_file_num={len(files)} "
+      f"rank={self.rank}, world_size={self.world_size} orig_file_num={total_files} "
       f"file_num={len(file_list)}")
 
     # TODO: support more file format

@@ -253,6 +253,20 @@ def pytorch_worker_info(group=None):  # sourcery skip: use-contextlib-suppress
 
   return rank, world_size, worker, num_workers
 
+def get_worker_info():
+  worker = 0
+  num_workers = 1
+  try:
+    import torch.utils.data
+
+    worker_info = torch.utils.data.get_worker_info()
+    if worker_info is not None:
+      worker = worker_info.id
+      num_workers = worker_info.num_workers
+  except ModuleNotFoundError:
+    pass
+  return worker, num_workers
+
 def get_task_tag():
     kml_id = os.environ.get("KML_ID", "")
     kml_task_id = os.environ.get("KML_TASK_ID", "")

@@ -5,7 +5,7 @@ ray job submit --working-dir ./ -- \
     python3 recipes/offline_batch_inference.py \
     --model_dir /llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-72B-Instruct \
     --dataset_config examples/doc2latex/config.json \
-    --output_dir /mmu_nlp_hdd/zhouyang12/data/pdf2png_process/output \
+    --output_dir /mmu_nlp_hdd/zhouyang12/data/pdf2png_process/output_2 \
     --num_workers 8 \
     --num_gpus_per_node 8 \
     --num_inference_node 4 \

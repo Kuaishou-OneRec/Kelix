@@ -27,6 +27,8 @@ runtime_env = {
   "env_vars": load_env()
 }
 
+ray.init(runtime_env=runtime_env)
+
 def get_arguments():
   parser = argparse.ArgumentParser()
 
@@ -146,7 +148,6 @@ class MyLLM(LLM):
     # stop ray from manipulating CUDA_VISIBLE_DEVICES
     # at the top-level
     del os.environ["CUDA_VISIBLE_DEVICES"]
-    os.environ["VLLM_USE_V1"] = "0"
     super().__init__(*args, **kwargs)
 
 
