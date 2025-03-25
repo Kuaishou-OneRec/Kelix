@@ -14,7 +14,6 @@ fi
 
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
-# MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct # Pretrained/Base model path
 OUTPUT_DIR=/llm_reco_ssd/luoxincheche/output3/chuchenglong/1.0.0.0_mix_general
 
@@ -33,7 +32,7 @@ export NCCL_ALGO=^NVLS,NVLSTree
 
 
 # 注意修改实验内容备注
-comment="ccl test pt kwai video comment 7B mix data in H800"
+comment="ccl test pt kwai video comment 7B mix data in H800 step 22001"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
