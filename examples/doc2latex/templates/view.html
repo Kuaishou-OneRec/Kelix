@@ -85,7 +85,7 @@
             {% if index > 0 %}
                 <a href="{{ url_for('view_data', index=index-1) }}" class="btn">上一个</a>
             {% endif %}
-            <a href="{{ url_for('random_sample') }}" class="btn btn-secondary">随机样例</a>
+            <a href="/random" class="btn btn-secondary">随机样例</a>
             {% if index < total - 1 %}
                 <a href="{{ url_for('view_data', index=index+1) }}" class="btn">下一个</a>
             {% endif %}
