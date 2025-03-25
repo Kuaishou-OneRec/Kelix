@@ -60,7 +60,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
     --resume_from /llm_reco_ssd/luoxincheche/output3/chuchenglong/1.0.0.0_mix_general \
-    --resume_from_tag global_step22001 \
+    --resume_from_tag global_step23001 \
     --load_weights_only \
     --auto_resume_local_latest \
     --enable_gradient_checkpointing \
