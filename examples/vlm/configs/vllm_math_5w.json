@@ -1,0 +1,9 @@
+{
+    "name": "vllm_infer",
+    "sources": "/llm_reco_ssd/wangqianqian/dataset/rl_72B/math_5w.json",
+    "min_visual_tokens_per_image": 4,
+    "max_visual_tokens_per_image": 1024,
+    "pretrained_model_name_or_path": "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
+    "max_images": 10,
+    "num_workers": 4
+}
