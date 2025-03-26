@@ -532,7 +532,8 @@ class ParquetDataset(IterableDataset):
       f"num_files={len(self.files)}, worker_files={len(worker_files)}"
     )
 
-    for epoch_fn in tqdm(worker_files, desc=f"Worker{worker} process"):
+    # Add a progress bar, dd a progress bar
+    for epoch_fn in tqdm(worker_files, desc=f"[Worker-{worker}] processing: "):
       fn, epoch_idx = epoch_fn
       if (fn, epoch_idx) in finish_dict:
         logger.warning(f"[Worker-{worker}] {fn} has been processed, skip.")
