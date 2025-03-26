@@ -532,7 +532,7 @@ class ParquetDataset(IterableDataset):
       f"num_files={len(self.files)}, worker_files={len(worker_files)}"
     )
 
-    for epoch_fn in worker_files:
+    for epoch_fn in tqdm(worker_files, desc=f"Worker{worker} process"):
       fn, epoch_idx = epoch_fn
       if (fn, epoch_idx) in finish_dict:
         logger.warning(f"[Worker-{worker}] {fn} has been processed, skip.")
@@ -548,42 +548,37 @@ class ParquetDataset(IterableDataset):
         continue
 
       for group_idx in range(parquet_file.num_row_groups):
-        try:
-          offset = 0
-          fn_group_key = (fn, epoch_idx, group_idx)
-          if fn_group_key in offset_dict:
-            if offset_dict[fn_group_key] == -1:
-              continue
-            else:
-              offset = offset_dict[fn_group_key] + 1
-          
-          row_group = parquet_file.read_row_group(group_idx)
-          if offset >= row_group.num_rows:
+        offset = 0
+        fn_group_key = (fn, epoch_idx, group_idx)
+        if fn_group_key in offset_dict:
+          if offset_dict[fn_group_key] == -1:
             continue
-          logger.warning(
-            f"[Worker-{worker}] start "
-            f"{fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
-          row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
-
-          for row_idx, row in tqdm(row_pandas.iterrows()):
-            if row_idx < offset:
-              continue
-            try:
-              sample = self._parser(row, fn)
-              if sample is not None:
-                yield sample
-              offset_dict[fn_group_key] = row_idx
-            except Exception as e:
-              logger.error(
-                f"Error processing row {row_idx}: "
-                f"{str(e)}")
-              continue
-
-        except Exception as e:
-          logger.error(
-            f"Error processing group {group_idx}: "
-            f"{str(e)}")
+          else:
+            offset = offset_dict[fn_group_key] + 1
+        
+        row_group = parquet_file.read_row_group(group_idx)
+        if offset >= row_group.num_rows:
           continue
+        logger.warning(
+          f"[Worker-{worker}] start "
+          f"{fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
+        row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
+
+        for row_idx, row in row_pandas.iterrows():
+          if row_idx < offset:
+            continue
+          try:
+            sample = self._parser(row, fn)
+            if sample is not None:
+              yield sample
+            offset_dict[fn_group_key] = row_idx
+          except Exception as e:
+            logger.error(
+              f"Error processing row {row_idx}: "
+              f"{str(e)}")
+            continue
+          except GeneratorExit:
+            raise
 
 
 class DistributedDataset(IterableDataset):
