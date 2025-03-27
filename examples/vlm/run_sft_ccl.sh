@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/luoxincheche/output3/chuchenglong/1.0.0.0_mix_general/merged_27001 # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco_ssd/luoxincheche/output3/chuchenglong/sft_1.0.0.0/sft_v0.2_rush
+OUTPUT_DIR=/llm_reco_ssd/luoxincheche/output3/chuchenglong/sft_1.0.0.0/sft_v0.3_rush
 
 mkdir -p $OUTPUT_DIR
 
@@ -72,6 +72,6 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --kml_id $KML_ID \
     --kml_task_id $KML_TASK_ID \
     --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
-    --resume_from /llm_reco_ssd/luoxincheche/output3/chuchenglong/sft_1.0.0.0/sft_v0.2_rush \  
-    --resume_from_tag global_step201 \
-    --load_weights_only \
+#     --resume_from /llm_reco_ssd/luoxincheche/output3/chuchenglong/sft_1.0.0.0/sft_v0.2_rush \  
+#     --resume_from_tag global_step201 \
+#     --load_weights_only \

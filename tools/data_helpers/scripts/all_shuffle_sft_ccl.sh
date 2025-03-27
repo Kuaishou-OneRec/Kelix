@@ -1,6 +1,6 @@
 hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=100
+np=1000
 
 KWS_SERVICE_REGION=HB2
 KWS_SERVICE_DC=WLF2
@@ -33,7 +33,7 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
         python3 tools/data_helpers/all_shuffle.py \
         --buffer_mem_size 21474836480 \
-        --output_dir viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/shuffle/20250326_sft_rush \
+        --output_dir viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/shuffle/20250326_sft_rush_v.04 \
         --input_dir \
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/sft_caption@1 \
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/sft_summary@1  \
