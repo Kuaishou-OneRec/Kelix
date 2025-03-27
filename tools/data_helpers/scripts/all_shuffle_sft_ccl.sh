@@ -33,17 +33,17 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
         python3 tools/data_helpers/all_shuffle.py \
         --buffer_mem_size 21474836480 \
-        --output_dir viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/shuffle/20250326_sft \
+        --output_dir viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/shuffle/20250326_sft_rush \
         --input_dir \
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/sft_caption@1 \
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/sft_summary@1  \
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/sft_summary_by_section@1 \
-        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/sft_msy_caption@0.1 \
+        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/sft_msy_caption@1 \
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/search_after_watch@1 \
-        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/kwai_video/Continue-SFT/v0.2/Format@0.02 \
-        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/kwai_video/Continue-SFT/v0.2/Quality@0.02	\
-        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/kwai_video/Continue-SFT/v0.2/Reason@0.02 \
-        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/kwai_video/Continue-SFT/v0.2/Session@0.02 \
-        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/kwai_video/Continue-SFT/v0.2/Type@0.02 \
+        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/kwai_video/Continue-SFT/v0.2/Format@1 \
+        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/kwai_video/Continue-SFT/v0.2/Quality@1	\
+        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/kwai_video/Continue-SFT/v0.2/Reason@1 \
+        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/kwai_video/Continue-SFT/v0.2/Session@1 \
+        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/kwai_video/Continue-SFT/v0.2/Type@1 \
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/sharegptvideo-sft-video_240k_caption_15k@0.03
 
