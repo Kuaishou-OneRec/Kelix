@@ -58,7 +58,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --weight_decay 0.1 \
     --lr_scheduler_type cosine \
     --num_warmup_steps 10 \
-    --num_training_steps 1000 \
+    --num_training_steps 500 \
     --save_checkpoint_per_step 50 \
     --sequence_parallel_size 4 \
     --use_flash_attention_2 \
