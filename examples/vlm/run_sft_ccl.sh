@@ -72,6 +72,6 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --kml_id $KML_ID \
     --kml_task_id $KML_TASK_ID \
     --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
-    # --resume_from /llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage2/0.0.25.5 \  
-    # --resume_from_tag global_step32000 \
-    # --load_weights_only \
+    --resume_from /llm_reco_ssd/luoxincheche/output3/chuchenglong/sft_1.0.0.0/sft_v0.2_rush \  
+    --resume_from_tag global_step101 \
+#     --load_weights_only \
