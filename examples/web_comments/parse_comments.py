@@ -175,7 +175,7 @@ def is_valid_comment(node: CommentNode) -> bool:
     
     筛选条件：
     1. 不包含图片
-    2. 不是@xxx格式的评论
+    2. 不包含@xxx（评论中任何位置都不能有@）
     3. 内容不为空
     """
     # 检查是否包含图片
@@ -189,8 +189,8 @@ def is_valid_comment(node: CommentNode) -> bool:
     if not cleaned_content:
         return False
     
-    # 检查是否为@xxx格式
-    if cleaned_content.startswith('@'):
+    # 检查是否包含@（任何位置）
+    if '@' in cleaned_content:
         return False
     
     return True
