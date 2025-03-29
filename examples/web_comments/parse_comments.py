@@ -156,22 +156,139 @@ def print_top_comment_trees(note_comments: Dict[str, List[CommentNode]], top_k: 
         # 使用新的打印函数
         print_sorted_comment_trees(note_id, comment_tree)
 
+def clean_comment_content(content: str) -> str:
+    """清理评论内容
+    
+    1. 去除[搜索高亮]
+    2. 去除首尾空白
+    """
+    if not content:
+        return ""
+    
+    # 去除[搜索高亮]
+    content = content.replace("[搜索高亮]", "")
+    # 去除首尾空白
+    return content.strip()
+
+def is_valid_comment(node: CommentNode) -> bool:
+    """检查评论是否符合筛选条件
+    
+    筛选条件：
+    1. 不包含图片
+    2. 不是@xxx格式的评论
+    3. 内容不为空
+    """
+    # 检查是否包含图片
+    if node.pictures or node.pictures_count:
+        return False
+    
+    # 清理评论内容
+    cleaned_content = clean_comment_content(node.content)
+    
+    # 检查内容是否为空
+    if not cleaned_content:
+        return False
+    
+    # 检查是否为@xxx格式
+    if cleaned_content.startswith('@'):
+        return False
+    
+    return True
+
+def filter_top_comments(comment_trees: List[CommentNode], min_likes: int = 100, top_k: int = 10) -> List[CommentNode]:
+    """筛选点赞数超过阈值的top-k一级评论
+    
+    Args:
+        comment_trees: 评论树列表
+        min_likes: 最小点赞数阈值
+        top_k: 保留的评论数量
+    
+    Returns:
+        筛选后的一级评论列表
+    """
+    # 筛选符合条件的评论
+    filtered_comments = [
+        comment for comment in comment_trees 
+        if (comment.like_count >= min_likes and is_valid_comment(comment))
+    ]
+    
+    # 按点赞数排序并返回top-k
+    sorted_comments = sorted(filtered_comments, key=lambda x: x.like_count, reverse=True)
+    return sorted_comments[:top_k]
+
+def comment_node_to_dict(node: CommentNode) -> dict:
+    """将CommentNode对象转换为可序列化的字典"""
+    return {
+        'comment_id': node.comment_id,
+        'nickname': node.nickname,
+        'content': clean_comment_content(node.content),  # 使用清理后的内容
+        'like_count': node.like_count,
+        'comment_type': node.comment_type,
+        'total_replies': node.get_total_replies(),
+        'total_likes': node.get_total_likes(),
+        # 'children_ids': [
+        #     child.comment_id for child in node.children 
+        #     if is_valid_comment(child)  # 只保留有效的子评论ID
+        # ]
+    }
+
 def process_parquet(input_path: str, output_path: str):
+    """处理parquet文件，筛选并保存符合条件的数据
+    
+    筛选条件：
+    1. 一级评论点赞数 >= 100
+    2. 每个note保留点赞数最高的前10个一级评论
+    3. note的总点赞数 >= 100
+    """
     df = pq.read_table(input_path).to_pandas()
-    result = process_parquet_comments(df)
     
-    # 打印点赞量最高的评论树
-    print_top_comment_trees(result, top_k=30)
+    filtered_results = []
+    for _, row in tqdm(df.iterrows(), total=len(df)):
+        note_id = row['note_id']
+        comments_str = row['comments']
+        
+        if not comments_str:  # 跳过没有评论的note
+            continue
+            
+        # 构建评论树
+        comment_trees = build_comment_tree(comments_str)
+        
+        # 计算note的总点赞数
+        total_likes, _ = get_tree_stats(comment_trees)
+        
+        # 筛选条件：note总点赞数>=100
+        if total_likes < 100:
+            continue
+            
+        # 筛选top评论
+        top_comments = filter_top_comments(comment_trees, min_likes=100, top_k=10)
+        
+        # 如果没有符合条件的评论，跳过该note
+        if not top_comments:
+            continue
+            
+        # 保存note信息和筛选后的评论
+        filtered_note = {
+            'note_id': note_id,
+            'total_likes': total_likes,
+            # 保存row中的其他字段
+            'note_data': {
+                col: row[col] for col in df.columns 
+                if col not in ['note_id', 'comments']  # 排除这两个特殊字段
+            },
+            # 将评论对象转换为可序列化的字典
+            'top_comments': [comment_node_to_dict(comment) for comment in top_comments]
+        }
+        
+        filtered_results.append(filtered_note)
     
-    # 如果想单独查看某个note的评论树
-    # for note_id, comment_trees in result.items():
-    #     print_sorted_comment_trees(note_id, comment_trees)
-    
-    # with open(output_path, 'w') as f:
-    #     json.dump(result, f)
+    # 保存结果
+    print(f"总共筛选出 {len(filtered_results)} 条符合条件的note")
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(filtered_results, f, ensure_ascii=False, indent=2)
 
 if __name__ == '__main__':
     process_parquet(
        input_path = "viewfs://hadoop-lt-cluster/home/reco_kaiworks/users/zhouyang12/data/recovlm/web_comments/p_date=20250328/part-00264-ed5ce4e5-32f5-486d-8e1c-c1fcb1b5d40a.c000",
-       output_path = "results.json" 
+       output_path = "filtered_results.json" 
     )
