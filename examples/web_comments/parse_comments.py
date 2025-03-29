@@ -18,6 +18,20 @@ class CommentNode:
     comment_type: str
     children: List['CommentNode']
 
+    def get_total_replies(self) -> int:
+        """统计当前评论节点下的总回复数（包括所有子孙评论）"""
+        total = len(self.children)  # 直接子评论数量
+        for child in self.children:
+            total += child.get_total_replies()  # 递归统计子评论的回复数
+        return total
+
+    def get_total_likes(self) -> int:
+        """统计当前评论节点下的总点赞数（包括所有子孙评论）"""
+        total = self.like_count  # 当前评论的点赞数
+        for child in self.children:
+            total += child.get_total_likes()  # 递归统计子评论的点赞数
+        return total
+
 def build_comment_tree(comments_str: str) -> List[CommentNode]:
     # 解析JSON字符串
     try:
@@ -82,14 +96,54 @@ def process_parquet_comments(df: pd.DataFrame) -> Dict[str, List[CommentNode]]:
 
 # 打印树结构的辅助函数
 def print_comment_tree(node: CommentNode, level: int = 0):
-    s = '  ' * level + f'- {node.nickname}: {node.content} ({node.like_count})'
+    s = '  ' * level + f'- {node.nickname}: {node.content}'
+    s += f' (点赞: {node.like_count}, 子评论数: {len(node.children)})'
     for child in node.children:
         s += ("\n" + print_comment_tree(child, level + 1))
     return s
 
+def get_tree_stats(comment_tree: List[CommentNode]) -> tuple[int, int]:
+    """获取评论树的总点赞数和总回复数"""
+    total_likes = 0
+    total_replies = 0
+    for root_comment in comment_tree:
+        total_likes += root_comment.get_total_likes()
+        total_replies += root_comment.get_total_replies()
+    return total_likes, total_replies
+
+def print_top_comment_trees(note_comments: Dict[str, List[CommentNode]], top_k: int = 10):
+    """打印点赞量最高的评论树
+    
+    Args:
+        note_comments: note_id到评论树的映射
+        top_k: 打印前k个点赞最多的评论树
+    """
+    # 计算每个评论树的统计信息
+    tree_stats = []
+    for note_id, comment_tree in note_comments.items():
+        total_likes, total_replies = get_tree_stats(comment_tree)
+        tree_stats.append((note_id, comment_tree, total_likes, total_replies))
+    
+    # 按总点赞数排序
+    tree_stats.sort(key=lambda x: x[2], reverse=True)
+    
+    # 打印top-k的评论树
+    print(f"\n=== Top {top_k} Most Liked Comment Trees ===")
+    for i, (note_id, comment_tree, total_likes, total_replies) in enumerate(tree_stats[:top_k], 1):
+        print(f"\n{i}. Note ID: {note_id}")
+        print(f"总点赞数: {total_likes}, 总回复数: {total_replies}")
+        print("评论树结构:")
+        for root_comment in comment_tree:
+            print(print_comment_tree(root_comment))
+        print("-" * 50)
+
 def process_parquet(input_path: str, output_path: str):
     df = pq.read_table(input_path).to_pandas()
     result = process_parquet_comments(df)
+    
+    # 打印点赞量最高的评论树
+    print_top_comment_trees(result, top_k=5)  # 这里设置打印前5个最高点赞的评论树
+    
     with open(output_path, 'w') as f:
         json.dump(result, f)
 
