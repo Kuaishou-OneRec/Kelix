@@ -111,6 +111,27 @@ def get_tree_stats(comment_tree: List[CommentNode]) -> tuple[int, int]:
         total_replies += root_comment.get_total_replies()
     return total_likes, total_replies
 
+def print_sorted_comment_trees(note_id: str, comment_trees: List[CommentNode]):
+    """打印单个note下的评论树，按根节点点赞量排序
+    
+    Args:
+        note_id: 笔记ID
+        comment_trees: 评论树列表
+    """
+    # 按根节点点赞量排序
+    sorted_trees = sorted(comment_trees, key=lambda x: x.like_count, reverse=True)
+    
+    print(f"\n=== Note ID: {note_id} ===")
+    total_likes, total_replies = get_tree_stats(comment_trees)
+    print(f"笔记总点赞数: {total_likes}, 总回复数: {total_replies}")
+    print(f"评论数量: {len(comment_trees)}")
+    print("\n评论树结构(按点赞量排序):")
+    
+    for i, root_comment in enumerate(sorted_trees, 1):
+        print(f"\n[评论 {i}] 点赞数: {root_comment.like_count}, 总回复数: {root_comment.get_total_replies()}")
+        print(print_comment_tree(root_comment))
+    print("-" * 50)
+
 def print_top_comment_trees(note_comments: Dict[str, List[CommentNode]], top_k: int = 10):
     """打印点赞量最高的评论树
     
@@ -128,22 +149,26 @@ def print_top_comment_trees(note_comments: Dict[str, List[CommentNode]], top_k: 
     tree_stats.sort(key=lambda x: x[2], reverse=True)
     
     # 打印top-k的评论树
-    print(f"\n=== Top {top_k} Most Liked Comment Trees ===")
+    print(f"\n=== Top {top_k} Most Liked Notes ===")
     for i, (note_id, comment_tree, total_likes, total_replies) in enumerate(tree_stats[:top_k], 1):
         print(f"\n{i}. Note ID: {note_id}")
         print(f"总点赞数: {total_likes}, 总回复数: {total_replies}")
-        print("评论树结构:")
-        for root_comment in comment_tree:
-            print(print_comment_tree(root_comment))
-        print("-" * 50)
+        # 使用新的打印函数
+        print_sorted_comment_trees(note_id, comment_tree)
 
 def process_parquet(input_path: str, output_path: str):
     df = pq.read_table(input_path).to_pandas()
     result = process_parquet_comments(df)
     
     # 打印点赞量最高的评论树
-    print_top_comment_trees(result, top_k=30)  # 这里设置打印前5个最高点赞的评论树
-    print("=" * 100)
+    print_top_comment_trees(result, top_k=30)
+    
+    # 如果想单独查看某个note的评论树
+    # for note_id, comment_trees in result.items():
+    #     print_sorted_comment_trees(note_id, comment_trees)
+    
+    # with open(output_path, 'w') as f:
+    #     json.dump(result, f)
 
 if __name__ == '__main__':
     process_parquet(
