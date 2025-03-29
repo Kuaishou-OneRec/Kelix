@@ -239,6 +239,10 @@ def process_parquet(input_path: str, output_path: str):
     1. 一级评论点赞数 >= 100
     2. 每个note保留点赞数最高的前10个一级评论
     3. note的总点赞数 >= 100
+    
+    排序规则：
+    1. note按评论总点赞量降序排序
+    2. 每个note内的comments按一级节点点赞量降序排序
     """
     df = pq.read_table(input_path).to_pandas()
     
@@ -260,7 +264,7 @@ def process_parquet(input_path: str, output_path: str):
         if total_likes < 100:
             continue
             
-        # 筛选top评论
+        # 筛选top评论并按点赞量排序
         top_comments = filter_top_comments(comment_trees, min_likes=100, top_k=10)
         
         # 如果没有符合条件的评论，跳过该note
@@ -276,14 +280,20 @@ def process_parquet(input_path: str, output_path: str):
                 col: row[col] for col in df.columns 
                 if col not in ['note_id', 'comments']  # 排除这两个特殊字段
             },
-            # 将评论对象转换为可序列化的字典
+            # 将评论对象转换为可序列化的字典，comments已经在filter_top_comments中排序
             'top_comments': [comment_node_to_dict(comment) for comment in top_comments]
         }
         
         filtered_results.append(filtered_note)
     
+    # 按note的总点赞量排序
+    filtered_results.sort(key=lambda x: x['total_likes'], reverse=True)
+    
     # 保存结果
     print(f"总共筛选出 {len(filtered_results)} 条符合条件的note")
+    print(f"第一条note的总点赞数: {filtered_results[0]['total_likes'] if filtered_results else 0}")
+    print(f"最后一条note的总点赞数: {filtered_results[-1]['total_likes'] if filtered_results else 0}")
+    
     with open(output_path, 'w', encoding='utf-8') as f:
         json.dump(filtered_results, f, ensure_ascii=False, indent=2)
 
