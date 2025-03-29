@@ -142,10 +142,8 @@ def process_parquet(input_path: str, output_path: str):
     result = process_parquet_comments(df)
     
     # 打印点赞量最高的评论树
-    print_top_comment_trees(result, top_k=5)  # 这里设置打印前5个最高点赞的评论树
-    
-    with open(output_path, 'w') as f:
-        json.dump(result, f)
+    print_top_comment_trees(result, top_k=30)  # 这里设置打印前5个最高点赞的评论树
+    print("=" * 100)
 
 if __name__ == '__main__':
     process_parquet(
