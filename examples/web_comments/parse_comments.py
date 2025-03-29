@@ -5,6 +5,8 @@ from typing import List, Dict
 from dataclasses import dataclass
 from collections import defaultdict
 
+from tqdm import tqdm
+
 @dataclass
 class CommentNode:
     comment_id: str
@@ -18,8 +20,11 @@ class CommentNode:
 
 def build_comment_tree(comments_str: str) -> List[CommentNode]:
     # 解析JSON字符串
-    comments = json.loads(comments_str)
-    
+    try:
+        comments = json.loads(comments_str)
+    except json.JSONDecodeError as e:
+        return []
+
     # 创建评论ID到评论节点的映射
     comment_map: Dict[str, CommentNode] = {}
     
@@ -67,20 +72,20 @@ def process_parquet_comments(df: pd.DataFrame) -> Dict[str, List[CommentNode]]:
     处理DataFrame中的评论，返回每个note_id对应的评论树
     """
     result = {}
-    for _, row in df.iterrows():
+    for _, row in tqdm(df.iterrows()):
         note_id = row['note_id']
         comments = row['comments']
         if comments:  # 如果有评论
-            comment_tree = build_comment_tree(comments)
-            result[note_id] = comment_tree
+            result[note_id] = build_comment_tree(comments)
     
     return result
 
 # 打印树结构的辅助函数
 def print_comment_tree(node: CommentNode, level: int = 0):
-    print('  ' * level + f'- {node.nickname}: {node.content}')
+    s = '  ' * level + f'- {node.nickname}: {node.content} ({node.like_count})'
     for child in node.children:
-        print_comment_tree(child, level + 1)
+        s += ("\n" + print_comment_tree(child, level + 1))
+    return s
 
 def process_parquet(input_path: str, output_path: str):
     df = pq.read_table(input_path).to_pandas()
@@ -90,5 +95,6 @@ def process_parquet(input_path: str, output_path: str):
 
 if __name__ == '__main__':
     process_parquet(
-        
+       input_path = "viewfs://hadoop-lt-cluster/home/reco_kaiworks/users/zhouyang12/data/recovlm/web_comments/p_date=20250328/part-00264-ed5ce4e5-32f5-486d-8e1c-c1fcb1b5d40a.c000",
+       output_path = "results.json" 
     )
