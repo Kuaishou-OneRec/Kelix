@@ -239,12 +239,18 @@ def process_parquet(input_path: str, output_path: str):
     1. 一级评论点赞数 >= 100
     2. 每个note保留点赞数最高的前10个一级评论
     3. note的总点赞数 >= 100
-    
-    排序规则：
-    1. note按评论总点赞量降序排序
-    2. 每个note内的comments按一级节点点赞量降序排序
     """
     df = pq.read_table(input_path).to_pandas()
+    
+    # 统计信息
+    stats = {
+        'total_notes': len(df),
+        'empty_comments': 0,  # 没有comments字段的note
+        'parse_failed': 0,    # JSON解析失败的note
+        'low_likes': 0,       # 点赞数不够的note
+        'no_valid_comments': 0,  # 没有有效评论的note
+        'success': 0          # 成功处理的note
+    }
     
     filtered_results = []
     for _, row in tqdm(df.iterrows(), total=len(df)):
@@ -252,16 +258,25 @@ def process_parquet(input_path: str, output_path: str):
         comments_str = row['comments']
         
         if not comments_str:  # 跳过没有评论的note
+            stats['empty_comments'] += 1
             continue
             
         # 构建评论树
-        comment_trees = build_comment_tree(comments_str)
+        try:
+            comment_trees = build_comment_tree(comments_str)
+            if not comment_trees:  # JSON解析失败会返回空列表
+                stats['parse_failed'] += 1
+                continue
+        except Exception as e:
+            stats['parse_failed'] += 1
+            continue
         
         # 计算note的总点赞数
         total_likes, _ = get_tree_stats(comment_trees)
         
         # 筛选条件：note总点赞数>=100
         if total_likes < 100:
+            stats['low_likes'] += 1
             continue
             
         # 筛选top评论并按点赞量排序
@@ -269,33 +284,55 @@ def process_parquet(input_path: str, output_path: str):
         
         # 如果没有符合条件的评论，跳过该note
         if not top_comments:
+            stats['no_valid_comments'] += 1
             continue
             
         # 保存note信息和筛选后的评论
         filtered_note = {
             'note_id': note_id,
             'total_likes': total_likes,
-            # 保存row中的其他字段
             'note_data': {
                 col: row[col] for col in df.columns 
-                if col not in ['note_id', 'comments']  # 排除这两个特殊字段
+                if col not in ['note_id', 'comments']
             },
-            # 将评论对象转换为可序列化的字典，comments已经在filter_top_comments中排序
             'top_comments': [comment_node_to_dict(comment) for comment in top_comments]
         }
         
         filtered_results.append(filtered_note)
+        stats['success'] += 1
     
     # 按note的总点赞量排序
     filtered_results.sort(key=lambda x: x['total_likes'], reverse=True)
     
+    # 打印统计信息
+    print("\n=== 处理统计 ===")
+    print(f"总note数量: {stats['total_notes']}")
+    print(f"成功处理: {stats['success']}")
+    print("\n被过滤原因统计:")
+    print(f"- 空评论数据: {stats['empty_comments']}")
+    print(f"- 解析失败: {stats['parse_failed']}")
+    print(f"- 点赞数不足: {stats['low_likes']}")
+    print(f"- 无有效评论: {stats['no_valid_comments']}")
+    
+    # 计算成功率
+    success_rate = (stats['success'] / stats['total_notes']) * 100
+    print(f"\n处理成功率: {success_rate:.2f}%")
+    
     # 保存结果
-    print(f"总共筛选出 {len(filtered_results)} 条符合条件的note")
-    print(f"第一条note的总点赞数: {filtered_results[0]['total_likes'] if filtered_results else 0}")
-    print(f"最后一条note的总点赞数: {filtered_results[-1]['total_likes'] if filtered_results else 0}")
+    print(f"\n=== 结果统计 ===")
+    print(f"保存的note数量: {len(filtered_results)}")
+    if filtered_results:
+        print(f"第一条note的总点赞数: {filtered_results[0]['total_likes']}")
+        print(f"最后一条note的总点赞数: {filtered_results[-1]['total_likes']}")
+    
+    # 将统计信息也保存到结果文件中
+    output_data = {
+        'stats': stats,
+        'data': filtered_results
+    }
     
     with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(filtered_results, f, ensure_ascii=False, indent=2)
+        json.dump(output_data, f, ensure_ascii=False, indent=2)
 
 if __name__ == '__main__':
     process_parquet(
