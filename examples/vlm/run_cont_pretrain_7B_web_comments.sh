@@ -48,9 +48,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
     --dataset_config examples/vlm/configs/web_comments_l1_20250330.json \
-    --max_length 4096 \
-    --auto_resume_local_latest \
-    --load_weights_only \
+    --max_length 8192 \
     --learning_rate 5e-6 \
     --min_lr 1e-6 \
     --weight_decay 0.1 \
