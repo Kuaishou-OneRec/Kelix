@@ -1,0 +1,9 @@
+{
+    "name": "chat_vision_parquet",
+    "sources": "/llm_reco_ssd/zhouyang12/data/web_comments_l1_20250330/index.json",
+    "min_visual_tokens_per_image": 4,
+    "max_visual_tokens_per_image": 1024,
+    "pretrained_model_name_or_path": "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
+    "max_images": 10,
+    "num_workers": 8
+}

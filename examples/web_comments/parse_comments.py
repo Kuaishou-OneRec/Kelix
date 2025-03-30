@@ -216,6 +216,7 @@ def filter_top_comments(comment_trees: List[CommentNode], min_likes: int = 100, 
     sorted_comments = sorted(filtered_comments, key=lambda x: x.like_count, reverse=True)
     return sorted_comments[:top_k]
 
+
 def comment_node_to_dict(node: CommentNode) -> dict:
     """将CommentNode对象转换为可序列化的字典"""
     return {
