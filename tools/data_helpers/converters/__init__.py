@@ -28,6 +28,7 @@ from .multi_ocr import MultiOCRConverter
 from .asr_interleave import ASRInterConverter
 from .video_detailcaption import VideoDetailConverter
 from .convert_dc_sft import SFTDetailCaptionConverter
+from .convert_detail_2_5 import DetailCaption_2_5_Converter
 
 
 def create_converter(cfg) -> ConverterBase:

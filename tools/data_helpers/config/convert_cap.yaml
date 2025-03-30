@@ -1,0 +1,14 @@
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/video_ocr_Qwen
+split_size: 536870912
+dataset:
+  class_name: ParquetDataset
+  kwargs:
+    path: /llm_reco/chuchenglong/R3/tmp/ocr
+    columns:
+      - images
+      - prompt
+      - response
+converter:
+  class_name: DetailCaption_2_5_Converter
+  kwargs:
+    source: Qwen_ocr
