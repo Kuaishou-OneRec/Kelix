@@ -7,126 +7,6 @@ import torch.distributed as dist
 from recovlm.training.parallel import get_sequence_parallel_world_size, \
   get_sequence_parallel_group
 
-# # TODO need check by other
-# class CrossEntropyLoss(torch.nn.Module):
-#   """
-#   Cross-entropy with chunked outputs that saves memory by only upcasting one chunk at a time.
-#   Now supports multiple reweighting schemes: token, sample, and square.
-
-#   Whenever the model is trained with bf16, before running CE, we have to upcast
-#   it to fp32 for better accuracy and stability. When upcasting happens, the memory usage doubles.
-#   Models like llama3 have large vocabulary size and, therefore, have a large output
-#   tensor of shape ``(bsz, num_tokens, vocab_size)``. 
-  
-#   Args:
-#       ignore_index (int): Token index to ignore in loss calculation (default: -100)
-#       return_token_loss (bool): Whether to return per-token loss alongside the total loss (default: False)
-#       shift_labels (bool): Whether to shift labels for language modeling tasks (default: True)
-#       reduction (str): Reduction method to apply - either "mean" or "sum" (default: "mean")
-#       loss_reduction (str): Reweighting strategy to use - one of "token", "sample", or "square" (default: "token")
-#           - token: Each token contributes equally (standard CE)
-#           - sample: Sample weight is 1/length (inversely proportional to valid token count)
-#           - square: Sample weight is 1/length² (inversely proportional to square of valid token count)
-#   """
-
-#   def __init__(self,
-#                ignore_index: int = -100,
-#                return_token_loss: bool = False,
-#                shift_labels: bool = True,
-#                reduction: str = "mean",
-#                loss_reduction: str = "token"):
-#     super().__init__()
-#     self.ignore_index = ignore_index
-#     self.return_token_loss = return_token_loss
-#     self.shift_labels = shift_labels
-#     self.reduction = reduction
-    
-#     # Validate loss_reduction parameter
-#     valid_loss_reductions = ["token", "sample", "square"]
-#     if loss_reduction not in valid_loss_reductions:
-#       raise ValueError(f"loss_reduction must be one of {valid_loss_reductions}, but got {loss_reduction}")
-#     self.loss_reduction = loss_reduction
-
-#   def compute_weights(self, counts):
-#     """
-#     Vectorized weight computation for each sample based on token counts.
-    
-#     Args:
-#         counts: Tensor of valid token counts per sample.
-        
-#     Returns:
-#         Tensor of weights for each sample.
-#     """
-#     # Create a mask for non-zero counts to avoid division by zero
-#     nonzero_mask = counts > 0
-#     weights = torch.zeros_like(counts, dtype=torch.float)
-    
-#     if self.loss_reduction == 'token':
-#       # For token-level weighting, all samples get equal weight
-#       weights[nonzero_mask] = 1.0
-#     elif self.loss_reduction == 'sample':
-#       # For sample-level weighting, weight is inversely proportional to count
-#       weights[nonzero_mask] = 1.0 / counts[nonzero_mask].float()
-#     elif self.loss_reduction == 'square':
-#       # For square weighting, weight is inversely proportional to count squared
-#       weights[nonzero_mask] = 1.0 / (counts[nonzero_mask].float() ** 2)
-    
-#     # Normalize weights to sum to 1
-#     weight_sum = weights.sum()
-#     if weight_sum > 0:
-#       weights = weights / weight_sum
-      
-#     return weights
-
-#   def forward(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
-#     """
-#     Args:
-#         logits (torch.Tensor): Logits of shape (batch_size, num_tokens, vocab_size).
-#         labels (torch.Tensor): Ground truth labels of shape (batch_size, num_tokens).
-
-#     Returns:
-#         torch.Tensor: Cross entropy loss of shape (1,).
-#     """
-#     batch_size = labels.shape[0]
-#     vocab_size = logits.shape[-1]
-    
-#     # Handle label shifting if needed
-#     if self.shift_labels:
-#       shift_logits = logits[:, :-1, :]
-#       shift_labels = labels[:, 1:]
-#     else:
-#       shift_logits = logits
-#       shift_labels = labels
-    
-#     # Calculate valid tokens per sample (tokens not equal to ignore_index)
-#     not_ignored = shift_labels.ne(self.ignore_index)
-#     x_counts = not_ignored.sum(dim=1)
-    
-#     # Compute sample weights based on token counts
-#     weights = self.compute_weights(x_counts)
-    
-#     # Calculate per-token loss
-#     shift_logits_flat = shift_logits.reshape(-1, vocab_size)
-#     shift_labels_flat = shift_labels.reshape(-1)
-    
-#     per_token_loss = F.cross_entropy(
-#       shift_logits_flat.float(),
-#       shift_labels_flat,
-#       ignore_index=self.ignore_index,
-#       reduction="none"
-#     )
-    
-#     # Reshape loss to (batch_size, seq_len) and apply sample weights
-#     per_token_loss = per_token_loss.view(batch_size, -1)
-#     weighted_loss = per_token_loss * weights.unsqueeze(1)
-    
-#     # Sum the weighted losses
-#     loss = weighted_loss.sum()
-    
-#     if self.return_token_loss:
-#       return loss, per_token_loss
-#     return loss
-
 class CrossEntropyLoss(torch.nn.Module):
   """
   Cross-entropy with chunked outputs that saves memory by only upcasting one chunk at a time.
@@ -194,6 +74,119 @@ class CrossEntropyLoss(torch.nn.Module):
     loss = per_token_loss.sum()
     if self.reduction == "mean" and total_elements > 0:
       loss /= total_elements
+    if self.return_token_loss:
+      return loss, per_token_loss
+    return loss
+  
+  
+
+
+class CrossEntropyLossReweight(torch.nn.Module):
+  """
+  Cross-entropy with chunked outputs that saves memory by only upcasting one chunk at a time.
+  Now supports multiple reweighting schemes: token, sample, and square.
+  
+  This class is fully compatible with CrossEntropyLoss and can be used as a drop-in replacement.
+  """
+
+  def __init__(self,
+               ignore_index: int = -100,
+               return_token_loss: bool = False,
+               shift_labels: bool = True,
+               reduction: str = "mean",
+               loss_reduction: str = "token"):
+    super().__init__()
+    self.ignore_index = ignore_index
+    self.return_token_loss = return_token_loss
+    self.shift_labels = shift_labels
+    self.reduction = reduction
+    
+    valid_loss_reductions = ["token", "sample", "square"]
+    if loss_reduction not in valid_loss_reductions:
+      raise ValueError(f"loss_reduction must be one of {valid_loss_reductions}, but got {loss_reduction}")
+    self.loss_reduction = loss_reduction
+
+  def compute_weights(self, counts):
+    """Vectorized weight computation for each sample based on token counts."""
+    nonzero_mask = counts > 0
+    weights = torch.zeros_like(counts, dtype=torch.float)
+    
+    if self.loss_reduction == 'token':
+      weights[nonzero_mask] = 1.0
+    elif self.loss_reduction == 'sample':
+      weights[nonzero_mask] = 1.0 / counts[nonzero_mask].float()
+    elif self.loss_reduction == 'square':
+      weights[nonzero_mask] = 1.0 / (counts[nonzero_mask].float() ** 2)
+    
+    # 对于token方式，我们不需要归一化，保持与原始CrossEntropyLoss一致
+    if self.loss_reduction != 'token' and weights.sum() > 0:
+      weights = weights / weights.sum()
+      
+    return weights
+
+  def forward(self, logits: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    """
+    与CrossEntropyLoss完全兼容的forward实现。
+    
+    Args:
+        logits (torch.Tensor): Logits of shape (batch_size, num_tokens, vocab_size).
+        labels (torch.Tensor): Ground truth labels of shape (batch_size, num_tokens).
+
+    Returns:
+        torch.Tensor: Cross entropy loss of shape (1,), or a tuple of (loss, per_token_loss)
+    """
+    # 计算有效元素（与原CrossEntropyLoss保持一致）
+    total_elements = (labels != self.ignore_index).sum().cuda()
+    vocab_size = logits.shape[-1]
+
+    # 处理标签移位（如果需要）- 保持与原实现一致
+    if self.shift_labels:
+      shift_logits = logits[:, :-1, :]
+      shift_labels = labels[:, 1:]
+    else:
+      shift_logits = logits
+      shift_labels = labels
+    
+    # 获取批大小和实际序列长度
+    batch_size = shift_labels.shape[0]
+    seq_len = shift_labels.shape[1]
+    
+    # 计算每个样本的有效标记数
+    not_ignored = shift_labels.ne(self.ignore_index)
+    x_counts = not_ignored.sum(dim=1)
+    
+    # 计算每个样本的权重
+    weights = self.compute_weights(x_counts)
+    
+    # 计算每个标记的损失
+    shift_logits_flat = shift_logits.reshape(-1, vocab_size)
+    shift_labels_flat = shift_labels.reshape(-1)
+    
+    per_token_loss = F.cross_entropy(
+      shift_logits_flat.float(),
+      shift_labels_flat,
+      ignore_index=self.ignore_index,
+      reduction="none"
+    )
+    
+    # 如果是token-level加权（即标准交叉熵），直接使用原始实现
+    if self.loss_reduction == 'token':
+      loss = per_token_loss.sum()
+      if self.reduction == "mean" and total_elements > 0:
+        loss /= total_elements
+    else:
+      # 对于其他加权策略，应用权重
+      per_token_loss_reshaped = per_token_loss.view(batch_size, seq_len)
+      # 为每个样本应用权重
+      weighted_loss = torch.zeros_like(per_token_loss_reshaped)
+      for i in range(batch_size):
+        if x_counts[i] > 0:  # 避免除以零
+          weighted_loss[i] = per_token_loss_reshaped[i] * weights[i]
+      
+      # 合计加权损失
+      loss = weighted_loss.sum()
+    
+    # 保持与原实现一致的返回值
     if self.return_token_loss:
       return loss, per_token_loss
     return loss
