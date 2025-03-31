@@ -52,5 +52,5 @@ mpirun --allow-run-as-root -np $np \
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zangdunju/kwai_video/Continue-Pretrain/Outer/Wanzhi@1\
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/sharegptvideo-sft-video_240k_caption_15k@1 \
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/text/General_QA/infinity_instruct_7m@0.5 \
-        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/web_comment/l1\
+        viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/web_comment/l1@1\
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2_shuffle/stage2_20250208_ocr_all@0.20
