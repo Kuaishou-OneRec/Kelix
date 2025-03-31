@@ -53,6 +53,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --auto_resume_local_latest \
     --enable_gradient_checkpointing \
     --max_length 32768 \
+    --loss_type square \
     --learning_rate 1e-6 \
     --min_lr 0.0 \
     --weight_decay 0.1 \
