@@ -106,7 +106,7 @@ class CrossEntropyLossReweight(torch.nn.Module):
   def compute_weights(self, counts):
     """Vectorized weight computation for each sample based on token counts."""
     nonzero_mask = counts > 0
-    weights = torch.zeros_like(counts, dtype=torch.float)
+    weights = torch.zeros_like(counts, dtype=torch.float).to(counts.device)
     
     if self.loss_reduction == 'token':
       weights[nonzero_mask] = 1.0
@@ -144,16 +144,9 @@ class CrossEntropyLossReweight(torch.nn.Module):
       shift_logits = logits
       shift_labels = labels
     
-    # 获取批大小和实际序列长度
-    batch_size = shift_labels.shape[0]
-    seq_len = shift_labels.shape[1]
-    
     # 计算每个样本的有效标记数
     not_ignored = shift_labels.ne(self.ignore_index)
     x_counts = not_ignored.sum(dim=1)
-    
-    # 计算每个样本的权重
-    weights = self.compute_weights(x_counts)
     
     # 计算每个标记的损失
     shift_logits_flat = shift_logits.reshape(-1, vocab_size)
@@ -172,13 +165,20 @@ class CrossEntropyLossReweight(torch.nn.Module):
       if self.reduction == "mean" and total_elements > 0:
         loss /= total_elements
     else:
-      # 对于其他加权策略，应用权重
-      per_token_loss_reshaped = per_token_loss.view(batch_size, seq_len)
-      # 为每个样本应用权重
-      weighted_loss = torch.zeros_like(per_token_loss_reshaped)
-      for i in range(batch_size):
-        if x_counts[i] > 0:  # 避免除以零
-          weighted_loss[i] = per_token_loss_reshaped[i] * weights[i]
+      # 对于其他加权策略，应用权重 - 使用向量化操作代替循环，保留梯度
+      per_token_loss_reshaped = per_token_loss.view(shift_labels.shape)
+      
+      # 计算样本权重
+      weights = self.compute_weights(x_counts)
+      
+      # 创建掩码来处理无效标记
+      mask = not_ignored.float()
+      
+      # 将权重扩展为与每个标记相同的维度 [batch_size, 1] -> [batch_size, seq_len]
+      weights_expanded = weights.unsqueeze(1).expand_as(per_token_loss_reshaped)
+      
+      # 应用权重和掩码 - 这样可以保留梯度
+      weighted_loss = per_token_loss_reshaped * weights_expanded * mask
       
       # 合计加权损失
       loss = weighted_loss.sum()
