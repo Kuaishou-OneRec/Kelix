@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>LaTeX 可视化工具 - 查看数据</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .container {
+            background-color: #f9f9f9;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .navigation {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+        }
+        .btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .btn:hover {
+            background-color: #45a049;
+        }
+        .btn-secondary {
+            background-color: #2196F3;
+        }
+        .btn-secondary:hover {
+            background-color: #0b7dda;
+        }
+        .error {
+            color: #D8000C;
+            background-color: #FFBABA;
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        pre {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 10px auto;
+        }
+        /* 添加元数据区域的样式 */
+        .metadata {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+        }
+        .metadata p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>LaTeX 可视化工具</h1>
+    
+    <div class="navigation">
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">返回首页</a>
+        <div>
+            <span>样本 {{ index + 1 }} / {{ total }}</span>
+            {% if index > 0 %}
+                <a href="{{ url_for('view_data', index=index-1) }}" class="btn">上一个</a>
+            {% endif %}
+            <a href="/random" class="btn btn-secondary">随机样例</a>
+            {% if index < total - 1 %}
+                <a href="{{ url_for('view_data', index=index+1) }}" class="btn">下一个</a>
+            {% endif %}
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>原始图片</h2>
+        {% if original_image %}
+            <img src="data:image/jpeg;base64,{{ original_image }}" alt="原始图片">
+        {% else %}
+            <div class="error">图片文件不存在</div>
+        {% endif %}
+        
+        <!-- 添加元数据显示区域 -->
+        <div class="metadata">
+            <h3>元数据</h3>
+            <p><strong>Source:</strong> {{ source }}</p>
+            <p><strong>URL:</strong> {{ url }}</p>
+            <p><strong>Key:</strong> {{ key }}</p>
+        </div>
+    </div>
+    
+    <div class="container">
+        <h2>LaTeX 代码</h2>
+        <pre>{{ latex_code }}</pre>
+    </div>
+    
+    <div class="container">
+        <h2>渲染结果</h2>
+        {% if rendered_image %}
+            <img src="data:image/png;base64,{{ rendered_image }}" alt="渲染结果">
+        {% elif error %}
+            <div class="error">{{ error }}</div>
+        {% else %}
+            <div class="error">LaTeX 渲染失败</div>
+        {% endif %}
+    </div>
+</body>
+</html> 

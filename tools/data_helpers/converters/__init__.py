@@ -5,6 +5,7 @@ from .converter import (
 from .the_cauldron_converter import TheCaulDronConverter
 from .kwai_video import KwaiVideoCaptionConverter
 from .kwai_video import KwaiWenJuanCaptionVideoConverter
+from .kwai_video import i2iConverter
 from .kwai_video import KwaiWenJuanCaptionFrameConverter
 from .dense_fusion_converter import DenseFusionConverter
 from .llava_cc3m_converter import LlavaCC3MPretrainConverter
@@ -23,13 +24,12 @@ from .gpt4o_qa_converter import GPT4oQAConverter
 from .grounding_converter import GroundingConverter
 from .pubtabnet_converter import PubTabNetConverter
 from .fintabnet_converter import FinTabNetConverter
-from .asr_convert import ASRTextConverter
-from .multi_ocr import MultiOCRConverter
-from .asr_interleave import ASRInterConverter
-from .video_detailcaption import VideoDetailConverter
-from .convert_dc_sft import SFTDetailCaptionConverter
-from .convert_detail_2_5 import DetailCaption_2_5_Converter
-
+from .kwai_video import KwaiVideoTitleCaptionConverter
+from .kwai_video import KwaiVideoClickAfterShowConverter
+from .kwai_video import KwaiVideoCategoryConverter
+from .kwai_video import KwaiVideoClickAfterShow10Converter
+from .kwai_video import KwaiVideoShuffleConverter
+from .web_comment import WebCommentConverter
 
 def create_converter(cfg) -> ConverterBase:
     return eval(cfg.class_name)(**cfg.kwargs)

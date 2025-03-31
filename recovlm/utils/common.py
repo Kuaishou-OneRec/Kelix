@@ -4,6 +4,7 @@ import time
 import torch
 import random
 import numpy as np
+from pathlib import Path
 from transformers import set_seed as set_transformers_seed
 import torch.distributed as dist
 import pickle
@@ -252,6 +253,20 @@ def pytorch_worker_info(group=None):  # sourcery skip: use-contextlib-suppress
 
   return rank, world_size, worker, num_workers
 
+def get_worker_info():
+  worker = 0
+  num_workers = 1
+  try:
+    import torch.utils.data
+
+    worker_info = torch.utils.data.get_worker_info()
+    if worker_info is not None:
+      worker = worker_info.id
+      num_workers = worker_info.num_workers
+  except ModuleNotFoundError:
+    pass
+  return worker, num_workers
+
 def get_task_tag():
     kml_id = os.environ.get("KML_ID", "")
     kml_task_id = os.environ.get("KML_TASK_ID", "")
@@ -265,3 +280,18 @@ def heart_beat(num_tokens):
     log_ctx = create_perf_context('reco_vllm.pretrain', get_task_tag(), biz_def='infra', extra1=current_file)
     log_ctx.logstash_only(count=num_tokens)
     log_ctx.persist_data()
+
+def get_root_dir():
+  current_file_path = Path(__file__).resolve()
+  # recovlm/recovlm/utils/common.py
+  root_dir = current_file_path.parent.parent.parent
+  return root_dir
+
+def load_env():
+  env_path = get_root_dir() / ".deepspeed_env"
+  env = {}
+  with open(env_path, encoding="utf-8") as f:
+    for line in f:
+      key, value = line.strip().split("=")
+      env[key] = str(value)
+  return env

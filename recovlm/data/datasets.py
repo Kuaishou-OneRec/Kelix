@@ -2207,4 +2207,3 @@ class ChatCompletionVisionDpoParquetDataset(ChatCompletionVisionDpoDataset):
   
   def load_state_dict(self, state_dict):
     self.dataset.load_state_dict(state_dict)
-

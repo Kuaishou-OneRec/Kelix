@@ -291,7 +291,6 @@ class VisionRotaryEmbedding(nn.Module):
         freqs = torch.outer(seq, self.inv_freq)
         return freqs
 
-
 class PatchEmbed(nn.Module):
     def __init__(
         self,

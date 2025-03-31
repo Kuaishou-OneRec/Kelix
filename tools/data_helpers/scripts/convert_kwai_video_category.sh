@@ -1,6 +1,6 @@
 hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=1
+np=300
 
 KWS_SERVICE_REGION=HB2
 KWS_SERVICE_DC=WLF2
@@ -10,6 +10,7 @@ KWS_SERVICE_AZ=HB2AZ2
 KWS_SERVICE_PAZ=HB2AZ2
 KWS_SERVICE_STAGE=PROD
 PYTHONPATH=.:$PYTHONPATH
+
 
 mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
@@ -31,4 +32,4 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        python3 tools/data_helpers/parquet_writer_worker.py tools/data_helpers/config/kwai_wenjuan_photo_comment_with_cot.yaml
+        python3 tools/data_helpers/parquet_writer_worker.py tools/data_helpers/config/kwai_video_category.yaml | tee /tmp/stdout.log

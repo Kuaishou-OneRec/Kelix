@@ -1,6 +1,6 @@
 hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=1
+np=512
 
 KWS_SERVICE_REGION=HB2
 KWS_SERVICE_DC=WLF2
@@ -31,4 +31,6 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        python3 tools/data_helpers/parquet_writer_worker.py tools/data_helpers/config/kwai_wenjuan_photo_comment_with_cot.yaml
+        python3 tools/data_helpers/all_shuffle.py \
+        --input_dir viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/web_comment/l1 \
+        --output_dir viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/web_comment/l1_shuffle
