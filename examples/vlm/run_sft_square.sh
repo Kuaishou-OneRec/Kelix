@@ -47,7 +47,7 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl_sq.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config /llm_reco/chuchenglong/R3/recovlm/examples/vlm/configs/ccl_sft.json\
+    --dataset_config /llm_reco/chuchenglong/R3/recovlm/examples/vlm/configs/ccl_stage1_7b.json\
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
     --auto_resume_local_latest \
