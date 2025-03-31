@@ -823,12 +823,13 @@ class ChatCompletionVisionDataset(IterableDataset):
       # video split params
       if conf["video_nframe"] > 0:
         block["nframes"] = conf["video_nframe"]
-      if conf["video_fps"] > 0:
-        block["fps"] = conf["video_fps"]
-      if conf["video_min_frames"] > 0:
-        block["min_frames"] = conf["video_min_frames"]
-      if conf["video_max_frames"] > 0:
-        block["max_frames"] = conf["video_max_frames"]
+      else:
+        if conf["video_fps"] > 0:
+          block["fps"] = conf["video_fps"]
+        if conf["video_min_frames"] > 0:
+          block["min_frames"] = conf["video_min_frames"]
+        if conf["video_max_frames"] > 0:
+          block["max_frames"] = conf["video_max_frames"]
     else:
       raise ValueError(f"Unsupport video type. {type(block['video'])=}")
   
