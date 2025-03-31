@@ -113,7 +113,7 @@ class CrossEntropyLossReweight(torch.nn.Module):
     elif self.loss_reduction == 'sample':
       weights[nonzero_mask] = 1.0 / counts[nonzero_mask].float()
     elif self.loss_reduction == 'square':
-      weights[nonzero_mask] = 1.0 / (counts[nonzero_mask].float() ** 2)
+      weights[nonzero_mask] = 1.0 / (counts[nonzero_mask].float() ** 0.5)
     
     # 对于token方式，我们不需要归一化，保持与原始CrossEntropyLoss一致
     if self.loss_reduction != 'token' and weights.sum() > 0:
