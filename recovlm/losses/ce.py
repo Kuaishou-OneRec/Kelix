@@ -77,9 +77,6 @@ class CrossEntropyLoss(torch.nn.Module):
     if self.return_token_loss:
       return loss, per_token_loss
     return loss
-  
-  
-
 
 class CrossEntropyLossReweight(torch.nn.Module):
   """

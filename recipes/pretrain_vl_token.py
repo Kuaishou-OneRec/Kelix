@@ -436,9 +436,11 @@ def train():
 
   ##############
 
-  loss_fn = CrossEntropyLoss(
-    ignore_index=-100, return_token_loss=True, shift_labels=False)
-
+  # loss_fn = CrossEntropyLoss(
+  #   ignore_index=-100, return_token_loss=True, shift_labels=False)
+  loss_fn = CrossEntropyLossReweight(
+    ignore_index=-100, return_token_loss=True, shift_labels=False, loss_reduction="token"
+  )
 
   start_time = time.time()
   show_cnt = 1

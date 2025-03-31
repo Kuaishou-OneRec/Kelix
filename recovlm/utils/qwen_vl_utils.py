@@ -20,6 +20,7 @@ from torchvision import io, transforms
 from torchvision.transforms import InterpolationMode
 import traceback
 import io as py_io
+import os.path as osp
 
 
 logger = logging.getLogger(__name__)
@@ -360,7 +361,15 @@ def process_vision_info(
         if "image" in vision_info or "image_url" in vision_info:
             image_inputs.append(fetch_image(vision_info))
         elif "video" in vision_info:
+            if isinstance(vision_info["video"], str) and "480p_60s_4fps_v2" in vision_info["video"]:
+                path = vision_info["video"]
+                pid_str = osp.basename(osp.splitext(path)[0])
+                if not osp.exists(path):
+                    post = str(int(pid_str[-4:]))
+                    path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
+                vision_info["video"] = path
             video_inputs.append(fetch_video(vision_info))
+
         else:
             raise ValueError("image, image_url or video should in content.")
     if len(image_inputs) == 0:
