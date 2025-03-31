@@ -33,7 +33,7 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
         python3 tools/data_helpers/all_shuffle.py \
         --buffer_mem_size 21474836480 \
-        --output_dir viewfs://hadoop-lt-cluster/home/reco_wl/mpi/maosiyang/shuffle/20250327_mix_v1 \
+        --output_dir viewfs://hadoop-lt-cluster/home/reco_wl/mpi/maosiyang/shuffle/20250327_mix_v2 \
         --input_dir \
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/asr_text@1 \
         viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/asr_text_v1@1\
