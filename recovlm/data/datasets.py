@@ -807,9 +807,18 @@ class ChatCompletionVisionDataset(IterableDataset):
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
 
     if isinstance(block["video"], list):
-      for image_block in block["video"]:
-        assert image_block["type"] == "image" and "image" in image_block
-        self._fill_image_block(image_block, sample_dict, conf)
+      #TODO:把数据格式统一成，video 的list中的image都是dict格式。
+        if all([isinstance(image_block, str) for image_block in block["video"]]):
+          block["video"] = [
+            {
+              "type": "image",
+              "image": image_str
+            }
+            for image_str in block["video"]
+          ]
+        for image_block in block["video"]:
+          assert image_block["type"] == "image" and "image" in image_block
+          self._fill_image_block(image_block, sample_dict, conf)
 
     elif isinstance(block["video"], str) or isinstance(block["video"], bytes):
       # video in local tar, replace by video bytes
@@ -823,12 +832,13 @@ class ChatCompletionVisionDataset(IterableDataset):
       # video split params
       if conf["video_nframe"] > 0:
         block["nframes"] = conf["video_nframe"]
-      if conf["video_fps"] > 0:
-        block["fps"] = conf["video_fps"]
-      if conf["video_min_frames"] > 0:
-        block["min_frames"] = conf["video_min_frames"]
-      if conf["video_max_frames"] > 0:
-        block["max_frames"] = conf["video_max_frames"]
+      else:
+        if conf["video_fps"] > 0:
+          block["fps"] = conf["video_fps"]
+        if conf["video_min_frames"] > 0:
+          block["min_frames"] = conf["video_min_frames"]
+        if conf["video_max_frames"] > 0:
+          block["max_frames"] = conf["video_max_frames"]
     else:
       raise ValueError(f"Unsupport video type. {type(block['video'])=}")
   
