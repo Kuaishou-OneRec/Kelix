@@ -1,6 +1,6 @@
 hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=100
+np=500
 
 KWS_SERVICE_REGION=HB2
 KWS_SERVICE_DC=WLF2
@@ -31,4 +31,4 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        python3 /llm_reco/chuchenglong/R3/recovlm/tools/parquet_sample_counter_mpi.py /llm_reco/chuchenglong/R3/recovlm/tools/files.txt /llm_reco/chuchenglong/R3/recovlm/tools/counter.txt
+        python3 /llm_reco/chuchenglong/R3/recovlm/tools/data_helpers/parquet_writer_worker.py /llm_reco/chuchenglong/R3/recovlm/tools/data_helpers/config/convert_asr_inter.yaml

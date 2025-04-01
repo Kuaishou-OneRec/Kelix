@@ -1,0 +1,10 @@
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/sft_summary
+split_size: 536870912
+dataset:
+  class_name: JsonDataset
+  kwargs:
+    path: /llm_reco/chuchenglong/R3/sft_data/summary.json
+converter:
+  class_name: SFTDetailCaptionConverter
+  kwargs:
+    source: SFTSummary

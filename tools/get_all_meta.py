@@ -1,13 +1,19 @@
 import sys
 import subprocess
+import json
 from mpi4py import MPI
 import pyarrow.parquet as pq
+import pandas as pd
 
-def count_rows_in_file(fn):
-    parquet_file = pq.ParquetFile(fn)
-    return parquet_file.metadata.num_rows
-    # data = parquet_file.read().to_pandas()
-    # return len(data)
+def get_meta_column_from_file(fn):
+    try:
+        # 读取parquet文件并只选择meta列
+        parquet_file = pq.ParquetFile(fn)
+        data = parquet_file.read(columns=['metadata']).to_pandas()
+        return data['metadata'].tolist()
+    except Exception as e:
+        print(f"读取文件 {fn} 时出错: {e}")
+        return []
 
 def shell_hdfs_ls(source_dir):
   try:
@@ -24,7 +30,7 @@ def shell_hdfs_ls(source_dir):
     # print(f"Error occurred: {traceback.format_exc()}")
     return []
 
-def count_hdfs_folder(data_folder):
+def collect_meta_from_hdfs_folder(data_folder, local_meta_data):
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
@@ -34,7 +40,6 @@ def count_hdfs_folder(data_folder):
         all_files = [fn for fn in fn_list if fn.endswith(".parquet")]
     else:
         all_files = None
-        num_files = 0
 
     all_files = comm.bcast(all_files, root=0)
     num_files = len(all_files)
@@ -45,18 +50,15 @@ def count_hdfs_folder(data_folder):
     end_index = start_index + files_per_process + (1 if rank < remainder else 0)
     local_files = all_files[start_index:end_index]
 
-    local_row_count = 0
     for file_path in local_files:
-        local_row_count += count_rows_in_file(file_path)
-    total_row_count = comm.reduce(local_row_count, op=MPI.SUM, root=0)
-
-    if rank == 0:
-        return data_folder, total_row_count
-    return None, None
+        file_meta = get_meta_column_from_file(file_path)
+        local_meta_data.extend(file_meta)
+    
+    print(f'进程 {rank}: 从 {data_folder} 读取了 {len(local_meta_data)} 条meta数据')
 
 if __name__ == '__main__':
     data_file = sys.argv[1]
-    output_file = sys.argv[2] if len(sys.argv) > 2 else "results.txt"
+    output_file_base =  "/llm_reco/chuchenglong/R3/asr_meta"
     
     hdfs_dirs = []
     with open(data_file) as fp:
@@ -67,13 +69,14 @@ if __name__ == '__main__':
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     
-    results = []
-    for fn in hdfs_dirs:
-        folder, count = count_hdfs_folder(fn)
-        if rank == 0 and folder is not None and count is not None:
-            results.append(f'{folder}\t{count}')
+    # 用于收集当前进程的meta数据的列表
+    local_meta_data = []
     
-    if rank == 0:
-        with open(output_file, 'w') as f:
-            for result in results:
-                f.write(result + '\n')
+    for fn in hdfs_dirs:
+        collect_meta_from_hdfs_folder(fn, local_meta_data)
+    
+    # 每个进程保存自己的数据
+    output_file = f"{output_file_base}_rank{rank}.json"
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(local_meta_data, f, ensure_ascii=False, indent=2)
+    print(f'进程 {rank}: 成功将 {len(local_meta_data)} 条meta数据保存到 {output_file}')

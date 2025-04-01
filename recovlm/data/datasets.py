@@ -807,7 +807,6 @@ class ChatCompletionVisionDataset(IterableDataset):
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
 
     if isinstance(block["video"], list):
-      #TODO:把数据格式统一成，video 的list中的image都是dict格式。
         if all([isinstance(image_block, str) for image_block in block["video"]]):
           block["video"] = [
             {
@@ -2208,4 +2207,3 @@ class ChatCompletionVisionDpoParquetDataset(ChatCompletionVisionDpoDataset):
   
   def load_state_dict(self, state_dict):
     self.dataset.load_state_dict(state_dict)
-

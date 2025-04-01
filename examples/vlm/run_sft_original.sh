@@ -1,3 +1,6 @@
+git config --global user.email 'chuchenglong@kuaishou.com'
+git config --global user.name 'chuchenglong'
+
 email=$(git config --get user.email)
 
 # 检查 email 是否为空
@@ -11,20 +14,21 @@ fi
 
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
-# MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-DFN5B-ViT-H-14 # Pretrained model path
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained model path
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage1/0.0.41 # 
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/all_v02 #
+# MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct # Pretrained/Base model path
+OUTPUT_DIR=/llm_reco_ssd/luoxincheche/output3/chuchenglong/sft_1.0.0.1/sft_original_test
+
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
-comment="一阶段训练,20250208，instruct model, ocr"
+# 注意修改实验内容备注
+comment="sft gobal step 27001 & enhanced comment data"
 
 git add --all
-git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
+git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
 git_hash=$(git rev-parse --short HEAD)
 
 set -x
@@ -43,20 +47,23 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config ./examples/vlm/configs/stage1_parquet_ocr_0207.json  \
+    --dataset_config /llm_reco/chuchenglong/R3/recovlm/examples/vlm/configs/ccl_stage1_7b.json\
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
-    --max_length 4000 \
-    --learning_rate 2e-4 \
-    --min_lr 5e-6 \
     --auto_resume_local_latest \
+    --enable_gradient_checkpointing \
+    --max_length 32768 \
+    --loss_type square \
+    --learning_rate 1e-6 \
+    --min_lr 0.0 \
+    --weight_decay 0.1 \
     --lr_scheduler_type cosine \
-    --num_warmup_steps 1000 \
-    --num_training_steps 125000 \
-    --save_checkpoint_per_step 3000 \
+    --num_warmup_steps 500 \
+    --num_training_steps 5000 \
+    --save_checkpoint_per_step 500 \
+    --sequence_parallel_size 4 \
     --use_flash_attention_2 \
     --logging_per_step 10 \
-    --freeze_llm \
     --seed 19260817 \
     --merge_checkpoint \
     --merge_checkpoint_dtype bf16 \
@@ -65,4 +72,4 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --commit_id $git_hash \
     --kml_id $KML_ID \
     --kml_task_id $KML_TASK_ID \
-    --deepspeed --deepspeed_config examples/vlm/configs/ds_z2_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+    --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &

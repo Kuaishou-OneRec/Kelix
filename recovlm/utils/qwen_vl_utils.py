@@ -369,7 +369,7 @@ def process_vision_info(
                     path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
                 vision_info["video"] = path
             video_inputs.append(fetch_video(vision_info))
-            # video_inputs.append(fetch_video(vision_info))
+
         else:
             raise ValueError("image, image_url or video should in content.")
     if len(image_inputs) == 0:
