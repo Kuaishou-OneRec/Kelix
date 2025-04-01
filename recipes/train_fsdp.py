@@ -233,6 +233,7 @@ def save_model_checkpoint(
     dataloader = None,
     app_state: AppState = None,
     dist_checkpointer: DistributedCheckpointer = None,
+    global_step: int = None,
 ):
     """保存FSDP+TP模型的checkpoint
 
@@ -275,7 +276,7 @@ def save_model_checkpoint(
         dist_checkpointer.save_checkpoint(
                     state_dict={"app": app_state},
                     output_dir=ckpt_path,           
-                    tag=tag
+                    tag=str(global_step)
                 )
 
 
@@ -852,7 +853,8 @@ def train():
         save_model_checkpoint(
                     model=model,
                     save_dir=args.output_dir,
-                    tag=f"_{global_step}",
+                    tag=f"step{global_step}",
+                    global_step=global_step,
                     client_state={
                         "total_num_valid_tokens": total_num_valid_tokens,
                         "total_num_tokens": total_num_tokens,
@@ -887,7 +889,8 @@ def train():
   save_model_checkpoint(
                       model=model,
                       save_dir=args.output_dir,
-                      tag=f"_{global_step}",
+                      tag=f"step{global_step}",
+                      global_step=global_step,
                       client_state={
                           "total_num_valid_tokens": total_num_valid_tokens,
                           "total_num_tokens": total_num_tokens,
