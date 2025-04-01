@@ -1,3 +1,6 @@
+git config --global user.email 'maosiyang@kuaishou.com'
+git config --global user.name 'maosiyang'
+
 email=$(git config --get user.email)
 
 # 检查 email 是否为空
@@ -9,24 +12,31 @@ else
         echo "Git user.emal: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/lingzhixin/output2/RecoVLM-dev/Qwen2-VL-7B-run_sft_7B_sp/0.0.1
-rm -rf $OUTPUT_DIR
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.3.0/all
+
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
-# 注意修改实验内容备注
-comment="7B FSDP"
+export LD_PRELOAD=/llm_reco_ssd/luoxinchen/libs/libnccl.so.2.21.5.noece.cpu
+export NCCL_IB_QPS_PER_CONNECTION=2
+export NCCL_IB_DISABLE=0
+export NCCL_IB_GID_INDEX=3
+export NCCL_IB_HCA=mlx5
+export NCCL_ALGO=^NVLS,NVLSTree
 
+
+# 注意修改实验内容备注
+comment="ccl test pt kwai video comment 7B mix data in H800"
 
 git add --all
-git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
+git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
 git_hash=$(git rev-parse --short HEAD)
 
 set -x
@@ -42,38 +52,28 @@ echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=$PWD:$PYTHONPATH
 
-source set_env.sh
-
-hostfile=/etc/mpi/hostfile_seq
-Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
-
-MASTER_ADDR=$MY_NODE_IP
-MASTER_PORT=8499
-
-
-
-
-
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
-    recipes/pretrain_vl.py --model_dir $MODEL_DIR \
+    recipes/pretrain_vl.py \
+     --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config examples/vlm/configs/debug7b_fsdp_3p_v1_debug.json \
+    --dataset_config /llm_reco/maosiyang/pt/recovlm/examples/vlm/configs/msy_stage1_7b.json \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
-    --max_length 30000 \
+    --load_weights_only \
+    --auto_resume_local_latest \
+    --enable_gradient_checkpointing \
+    --max_length 32768 \
     --learning_rate 1e-6 \
     --min_lr 0.0 \
     --weight_decay 0.1 \
     --lr_scheduler_type cosine \
     --num_warmup_steps 500 \
-    --num_training_steps 20000 \
+    --num_training_steps 50000 \
     --save_checkpoint_per_step 1000 \
     --sequence_parallel_size 4 \
     --use_flash_attention_2 \
     --logging_per_step 10 \
     --seed 19260817 \
-    --enable_gradient_checkpointing \
     --merge_checkpoint \
     --merge_checkpoint_dtype bf16 \
     --merge_checkpoint_output_file pytorch_model.bin \
@@ -83,5 +83,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --kml_task_id $KML_TASK_ID \
     --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
+# #     --dataset_config /llm_reco/chuchenglong/R3/recovlm/examples/vlm/configs/ccl_stage1_7b.json \
 
+#  /llm_reco_ssd/zangdunju/dataset/hdfs_data/sample_general_with_inhouse.json
 

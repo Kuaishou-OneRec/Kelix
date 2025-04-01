@@ -12,6 +12,7 @@ import logging
 import collections
 import pickle
 import itertools
+from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 
 import torch
 import torch.nn as nn
@@ -27,7 +28,7 @@ from torch.utils.tensorboard import SummaryWriter
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
-from recovlm.data.dataloaders import get_dataloader
+from recovlm.data.dataloaders_v2 import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
 from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
@@ -78,6 +79,9 @@ def get_argument_parser():
                             "the --resume_dataloader switch will be turned on, " \
                             "while the --load_weights_only option will be turned off.")
   
+  parser.add_argument("--fp32_weight", type=bool, default=True,
+                      help="Whether use fp32 for model weight updating")
+
   parser.add_argument("--save_checkpoint_per_step", type=int, default=1000,
                       help="The number of steps to save a checkpoint")
 
@@ -219,6 +223,90 @@ def get_argument_parser():
 
   return parser
 
+
+def save_model_checkpoint(
+    model,
+    save_dir: str,
+    tag: str = None,
+    client_state: dict = None,
+    dataloader = None,
+    app_state: AppState = None,
+    dist_checkpointer: DistributedCheckpointer = None,
+):
+    """保存FSDP+TP模型的checkpoint
+
+    Args:
+        model: FSDP wrapped model
+        save_dir: 保存目录
+        tag: checkpoint标签，如果不指定则使用时间戳
+        client_state: 需要保存的额外状态信息
+        dataloader: 可选的dataloader，用于保存数据加载状态
+    """
+    from torch.distributed.fsdp import (
+        FullyShardedDataParallel as FSDP,
+        StateDictType,
+        FullStateDictConfig,
+    )
+    
+    if dist.get_rank() == 0:
+        os.makedirs(save_dir, exist_ok=True)
+    
+    # 生成checkpoint标签
+    if tag is None:
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        tag = f"checkpoint_{timestamp}"
+    
+    ckpt_path = os.path.join(save_dir, tag)
+    if dist.get_rank() == 0:
+        os.makedirs(ckpt_path, exist_ok=True)
+        
+        # 更新latest文件
+        with open(os.path.join(save_dir, "latest"), "w") as f:
+            f.write(tag)
+    
+    # 配置FSDP state_dict
+    full_state_dict_config = FullStateDictConfig(
+        offload_to_cpu=True,
+        rank0_only=True,
+    )
+    
+    try:
+        dist_checkpointer.save_checkpoint(
+                    state_dict={"app": app_state},
+                    output_dir=ckpt_path,           
+                    tag=tag
+                )
+
+
+        # 保存dataloader状态（如果有）
+        if dataloader is not None:
+            try:
+                dataloader_state = {
+                    "dataloader_state_dict": dataloader.state_dict()
+                }
+                dataloader_path = os.path.join(ckpt_path, "dataloader_ckpt")
+                if dist.get_rank() == 0:
+                    os.makedirs(dataloader_path, exist_ok=True)
+                dist.barrier()
+                
+                # 每个rank保存自己的dataloader状态
+                torch.save(
+                    dataloader_state,
+                    os.path.join(dataloader_path, f"rank{dist.get_rank()}.pt")
+                )
+                print_rank_0(f"Saved dataloader state to {dataloader_path}")
+            except:
+                logging.error("Failed to save dataloader state!")
+    
+    except Exception as e:
+        logging.error(f"Failed to save checkpoint: {str(e)}")
+        raise e
+    
+    finally:
+        # 确保所有进程同步
+        dist.barrier()
+
+
 def get_resume_info(args):
   # return: ckpt_folder, ckpt_tag, rewrite_flag
   if not args.auto_resume_local_latest:
@@ -330,13 +418,14 @@ def train():
     set_activation_checkpointing(
       model, auto_wrap_policy={Qwen2VLDecoderLayer, Qwen2VLVisionBlock}
     )
-
+  if args.fp32_weight: model = model.float()
   shard_model(
     model=model,
     shard_conditions=[get_shard_conditions],
     cpu_offload=False,
     reshard_after_forward=True,
     dp_mesh=device_mesh,
+    fp32_weight=args.fp32_weight
   )
   dist.barrier()
 
@@ -428,6 +517,9 @@ def train():
 
   resume_from, ckpt_id, rewrite_resume_flag = get_resume_info(args)
 
+  app_state = AppState(model=model)
+  dist_checkpointer = DistributedCheckpointer()
+
   if rewrite_resume_flag:
     args.resume_dataloader = True
     args.load_weights_only = False
@@ -439,15 +531,29 @@ def train():
     print_rank_0(
       f"Resume from checkpoint: {ckpt_path}, "
       f"load_weights_only={args.load_weights_only}")
-    
+
     if not os.path.exists(ckpt_path):
       raise ValueError(f"Checkpoint path {ckpt_path} does not exist")
-      
-    _, client_state = model.load_checkpoint(
-      resume_from, ckpt_id, load_module_only=args.load_weights_only)
+
+    # 只加载模型参数，不考虑优化器状态
+    client_state = {}
+
+    # 获取state_dict用于加载
+    state_dict = {"app": app_state}
+    
+    # 使用DCP API加载分片数据
+    dist_checkpointer.load_checkpoint(
+        state_dict=state_dict,  # 提供state_dict参数
+        checkpoint_dir=resume_from,
+        tag=ckpt_id
+    )
+    
+    print_rank_0(f"Successfully loaded model using distributed checkpoint")
+
 
     if args.resume_dataloader:
-      dataloader_resume_path = os.path.join(resume_from, "dataloader_ckpt", f"rank{dist.get_rank()}_{ckpt_id}.pth")
+      print_rank_0(f"resume_from={resume_from}, len={len(resume_from)}")
+      dataloader_resume_path = os.path.join(resume_from, "dataloader_ckpt", f"rank{dist.get_rank()}.pt")
       # Add validation for dataloader checkpoint
       if not os.path.exists(dataloader_resume_path):
         print_rank_0(f"Warning: Dataloader checkpoint {dataloader_resume_path} does not exist")
@@ -651,10 +757,11 @@ def train():
           acc_num_samples / dist.get_world_size() / (end_time - start_time)
         valid_tokens_per_sec_per_gpu = \
           acc_valid_num_tokens / dist.get_world_size() / (end_time - start_time)
-        avg_loss = acc_avg_loss / args.gradient_accumulation_steps
+        avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
         start_time = end_time
         log_dict = {
           "training/loss": avg_loss,
+          f"Grad Norm: {get_global_grad_norm(model)}, "
           "training/learning_rate": learning_rate,
           "training/vision_learning_rate": vision_learning_rate,
           "perf/sec_per_step": sec_per_step,
@@ -710,6 +817,7 @@ def train():
         print_rank_0(
           f"Step: {global_step}, Loss: {avg_loss}, "
           f"Learning Rate: {learning_rate}, "
+          f"Grad Norm: {get_global_grad_norm(model)}, "
           f"Sec per Step: {sec_per_step}",
           f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
           f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
@@ -740,15 +848,21 @@ def train():
       torch.cuda.empty_cache()
 
       with Timer("save checkpoint"):
-        model.save_checkpoint(
-          save_dir=args.output_dir, client_state = {
-            "total_num_valid_tokens": total_num_valid_tokens,
-            "total_num_tokens": total_num_tokens,
-            "total_num_samples": total_num_samples,
-            "total_data_source_samples": total_data_source_samples,
-            "total_data_source_tokens": total_data_source_tokens,
-          }
-        )
+        save_model_checkpoint(
+                    model=model,
+                    save_dir=args.output_dir,
+                    tag=f"_{global_step}",
+                    client_state={
+                        "total_num_valid_tokens": total_num_valid_tokens,
+                        "total_num_tokens": total_num_tokens,
+                        "total_num_samples": total_num_samples,
+                        "total_data_source_samples": total_data_source_samples,
+                        "total_data_source_tokens": total_data_source_tokens,
+                    },
+                    dataloader=dataloader,
+                    app_state=app_state,
+                    dist_checkpointer=dist_checkpointer,
+                )
         try:
           dataloader_state_dict = {
             "dataloader_state_dict": dataloader.state_dict()
@@ -769,42 +883,21 @@ def train():
               f"rank{dist.get_rank()}_global_step{global_step}.pth")
             )
 
-  print_rank_0("Save checkpoint..")
-  model.save_checkpoint(save_dir=args.output_dir, client_state = {
-      "total_num_valid_tokens": total_num_valid_tokens,
-      "total_num_tokens": total_num_tokens,
-      "total_num_samples": total_num_samples,
-      "total_data_source_samples": total_data_source_samples,
-      "total_data_source_tokens": total_data_source_tokens
-    }
-  )
-  try:
-    # dataloader ckpt
-    dataloader_state_dict = {
-      "dataloader_state_dict": dataloader.state_dict()
-    }
-  except:
-    dataloader_state_dict = None
-    logging.error(f"Dataloader cannot dump state_dict!!!!!!!!")
-    
-  if dataloader_state_dict is not None:
-    if dist.get_rank() == 0:
-      os.makedirs(dataloader_path, exist_ok=True)
-    dist.barrier()
-    torch.save(
-      dataloader_state_dict, os.path.join(dataloader_path,
-      f"rank{dist.get_rank()}_global_step{global_step}.pth")
-    )
-
-  if args.merge_checkpoint and dist.get_rank() == 0:
-    convert_zero_checkpoint_to_state_dict(
-        args.output_dir,
-        output_file=args.merge_checkpoint_output_file,
-        dtype=args.merge_checkpoint_dtype
-    )
-
-  if dist.get_rank() == 0:
-    logging.info("Training finished!")
+  save_model_checkpoint(
+                      model=model,
+                      save_dir=args.output_dir,
+                      tag=f"_{global_step}",
+                      client_state={
+                          "total_num_valid_tokens": total_num_valid_tokens,
+                          "total_num_tokens": total_num_tokens,
+                          "total_num_samples": total_num_samples,
+                          "total_data_source_samples": total_data_source_samples,
+                          "total_data_source_tokens": total_data_source_tokens,
+                      },
+                      dataloader=dataloader,
+                      app_state=app_state,
+                      dist_checkpointer=dist_checkpointer,
+                  )
 
 if __name__ == "__main__":
   train()
