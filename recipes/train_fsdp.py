@@ -761,7 +761,7 @@ def train():
         start_time = end_time
         log_dict = {
           "training/loss": avg_loss,
-          f"Grad Norm": get_global_grad_norm(model).detach().cpu().item(),
+          f"training/grad_norm": get_global_grad_norm(model).detach().cpu().item(),
           "training/learning_rate": learning_rate,
           "training/vision_learning_rate": vision_learning_rate,
           "perf/sec_per_step": sec_per_step,
