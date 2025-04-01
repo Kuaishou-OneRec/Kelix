@@ -185,7 +185,7 @@ def get_argument_parser():
   parser.add_argument("--enable_gradient_checkpointing", action="store_true",
                       help="Enable gradient checkpointing during training")
   
-  parser.add_argument("--gradient_accumulation_steps", type=int, default=4,
+  parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
                       help="Gradient accumulation steps")
   
   parser.add_argument("--sequence_parallel_size", type=int, default=1,
