@@ -58,7 +58,7 @@ MASTER_PORT=8499
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config examples/vlm/configs/debug7b_fsdp_3p_v1_debug.json \
+    --dataset_config examples/vlm/configs/debug7b_fsdp_3p_v0_debug.json \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
     --max_length 30000 \
