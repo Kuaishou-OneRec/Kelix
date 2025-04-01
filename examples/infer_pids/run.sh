@@ -1,55 +1,33 @@
-# Step1: download using recovlm.services.clients.PidInfoClient
+#!/bin/bash
+set -e
 
-# Input: a file of pid list, seperate by \n
+# 检查输入参数
+if [ "$#" -ne 1 ]; then
+    echo "Usage: $0 <pid_list_file>"
+    exit 1
+fi
 
-# for each pid, download via:
-# PidInfoClient().get_pid_info(1468086843497)
-# return:
-# {
-#   "error": None,
-#   "media_path": /path/,
-#   "pid": 1468086843497,
-#   "success": True,
-#   "text_fields": {
-#     "asr": "",
-#     "caption": "",
-#     "ocr": "",
-#     "text": "",
-#     "title": ""
-#   },
-#   "timing": {
-#     "media_retrieval": 0.3490316867828369,
-#     "text_retrieval": 3.919825315475464,
-#     "total": 4.268903017044067
-#   }
-# }
+PID_LIST_FILE=$1
+OUTPUT_DIR="./output"
+DATASET_DIR="${OUTPUT_DIR}/dataset"
 
-# Step2: prepare dataset
-# prepare dataset as a parquet, 
-# format;
+# 创建必要的目录
+mkdir -p "${OUTPUT_DIR}"
+mkdir -p "${DATASET_DIR}"
 
-# 000000000.json
-# {
-#     "__key__": 000000000, 
-#     "messages": [
-#         {
-#             "role": "user",
-#             "content": [
-#                 {
-#                     "type": "video",
-#                     "video": "file:///path/to/video1.mp4",
-#                     "max_pixels": 360 * 420,
-#                     "fps": 1.0,
-#                     "video_start": 0,
-#                     "video_end":
-#                 },
-#                 {"type": "text", "text": "Describe this video."},
-#             ]
-#         },
-#         {"role": "assistant", "content": "The video describe ..."},
-#     ],
-#     "source": "kwai_video"
-# }
+# Step 1: 下载PID信息
+echo "Step 1: Downloading PID information..."
+python3 download_pids.py "${PID_LIST_FILE}" --output-dir "${OUTPUT_DIR}"
 
-# Step3: run batch infer
-# call recovlm/recipes/offline_batch_inference.py
+# Step 2: 准备数据集
+echo "Step 2: Preparing dataset..."
+python3 prepare_dataset.py --input-dir "${OUTPUT_DIR}" --output-file "${DATASET_DIR}/dataset.jsonl"
+
+# Step 3: 运行批量推理
+echo "Step 3: Running batch inference..."
+python -m recovlm.recipes.offline_batch_inference \
+    --input "${DATASET_DIR}/dataset.jsonl" \
+    --output "${OUTPUT_DIR}/results.jsonl" \
+    --batch_size 4
+
+echo "All steps completed successfully!"
