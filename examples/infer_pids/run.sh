@@ -17,17 +17,21 @@ mkdir -p "${DATASET_DIR}"
 
 # Step 1: 下载PID信息
 echo "Step 1: Downloading PID information..."
-python3 download_pids.py "${PID_LIST_FILE}" --output-dir "${OUTPUT_DIR}"
+python3 download.py "${PID_LIST_FILE}" --output-dir "${OUTPUT_DIR}"
 
 # Step 2: 准备数据集
 echo "Step 2: Preparing dataset..."
-python3 prepare_dataset.py --input-dir "${OUTPUT_DIR}" --output-file "${DATASET_DIR}/dataset.jsonl"
+python3 prepare_dataset.py \
+    --input-dir "${OUTPUT_DIR}" \
+    --output-path "${DATASET_DIR}/dataset" \
+    --prompt-name "describe_video" \
+    --num-shards 4
 
-# Step 3: 运行批量推理
-echo "Step 3: Running batch inference..."
-python -m recovlm.recipes.offline_batch_inference \
-    --input "${DATASET_DIR}/dataset.jsonl" \
-    --output "${OUTPUT_DIR}/results.jsonl" \
-    --batch_size 4
+# # Step 3: 运行批量推理
+# echo "Step 3: Running batch inference..."
+# python -m recovlm.recipes.offline_batch_inference \
+#     --input "${DATASET_DIR}/dataset.*.parquet" \
+#     --output "${OUTPUT_DIR}/results.jsonl" \
+#     --batch_size 4
 
-echo "All steps completed successfully!"
+# echo "All steps completed successfully!"
