@@ -371,6 +371,7 @@ def train():
   ### initialize model parallel group
   initialize_model_parallel(args.sequence_parallel_size)
   print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
+  sp_size = get_sequence_parallel_world_size()
 
   set_random_seed(args.seed)
 
@@ -767,10 +768,10 @@ def train():
           "perf/sec_per_step": sec_per_step,
           "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
           "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
-          "perf/total_num_tokens": total_num_tokens,
-          "perf/total_num_samples": total_num_samples,
-          "perf/valid_total_num_tokens": total_num_valid_tokens,
-          "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
+          "perf/total_num_tokens": total_num_tokens / sp_size,
+          "perf/total_num_samples": total_num_samples / sp_size,
+          "perf/valid_total_num_tokens": total_num_valid_tokens / sp_size,
+          "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu / sp_size,
           "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
         }
 
@@ -787,7 +788,7 @@ def train():
               tb_writer.add_scalar(
                 f"x_token_{name}",
                 data,
-                global_step=total_num_valid_tokens,
+                global_step=total_num_valid_tokens / sp_size,
                 new_style=True
               )
 
