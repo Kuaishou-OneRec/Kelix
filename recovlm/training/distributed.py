@@ -38,6 +38,18 @@ torch_version = torch.__version__
 _DISTRIBUTED_STATE_DICT_API_IS_AVAILABLE = False
 
 
+def get_world_size_and_rank() -> Tuple[int, int]:
+    """Function that gets the current world size (aka total number
+    of ranks) and rank number of the current process in the default process group.
+
+    Returns:
+        Tuple[int, int]: world size, rank
+    """
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        return torch.distributed.get_world_size(), torch.distributed.get_rank()
+    else:
+        return 1, 0
+    
 def is_distributed() -> bool:
     """Check if all environment variables required to initialize torch.distributed are set
     and distributed is properly installed. This indicates a distributed run.
