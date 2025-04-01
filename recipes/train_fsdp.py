@@ -79,8 +79,9 @@ def get_argument_parser():
                             "the --resume_dataloader switch will be turned on, " \
                             "while the --load_weights_only option will be turned off.")
   
-  parser.add_argument("--fp32_weight", type=bool, default=True,
-                      help="Whether use fp32 for model weight updating")
+
+  parser.add_argument("--reshard_after_forward", type=bool, default=True,
+                      help="enable reshard_after_forward to enable Zero3 (default)")
 
   parser.add_argument("--save_checkpoint_per_step", type=int, default=1000,
                       help="The number of steps to save a checkpoint")
@@ -423,7 +424,7 @@ def train():
     model=model,
     shard_conditions=[get_shard_conditions],
     cpu_offload=False,
-    reshard_after_forward=True,
+    reshard_after_forward=args.reshard_after_forward,
     dp_mesh=device_mesh,
     fp32_weight=args.fp32_weight
   )
