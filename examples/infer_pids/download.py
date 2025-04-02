@@ -17,6 +17,7 @@ def download_pid_info(pid_list_file: str, output_dir: str):
     for pid in pids:
         output_file = output_dir / f"{pid}.json"
         if output_file.exists():
+            print(f"Skipping PID {pid} because it already exists")
             continue
             
         try:
