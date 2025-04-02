@@ -321,6 +321,7 @@ def compute_rlhf_loss(
             object_list=tensor_list, obj=tensor,
             group=group
         )
+        tensor_list = [x.to(torch.cuda.current_device()) for x in tensor_list]
         return torch.concat(tensor_list, dim=dim)
 
     def get_eos_token_rewards(batch_rewards, batch_token_ids):
