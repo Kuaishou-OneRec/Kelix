@@ -333,8 +333,9 @@ def compute_rlhf_loss(
             token_is_pad = (token_ids == pad_id)
             prev_is_pad = (torch.roll(token_ids, 1) == pad_id)
             prev_is_pad[0] = False
-            eos_indices = (token_is_pad & ~prev_is_pad).nonzero().flatten()
+            eos_indices = (token_is_pad & (~prev_is_pad)).nonzero().flatten()
 
+            print("[ZDJ]", eos_indices, token_is_pad, prev_is_pad)
             eos_rewards = rewards[eos_indices]
             batch_eos_rewards.append(eos_rewards)
         return batch_eos_rewards
@@ -386,7 +387,7 @@ def compute_rlhf_loss(
 
         chosen_num_samples = sum([x.numel() for x in batch_chosen_eos_rewards])
         rejected_num_samples = sum([x.numel() for x in batch_rejected_eos_rewards])
-        assert chosen_num_samples == rejected_num_samples and chosen_num_samples > 0, "{} {}".format(batch_chosen_eos_rewards, batch_rejected_eos_rewards)
+        assert chosen_num_samples == rejected_num_samples and chosen_num_samples > 0, "{} {}".format(chosen_token_ids, rejected_token_ids)
 
         for chosen_eos_rewards, rejected_eos_rewards in zip(batch_chosen_eos_rewards, batch_rejected_eos_rewards):
             assert chosen_eos_rewards.shape == rejected_eos_rewards.shape
