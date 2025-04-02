@@ -25,7 +25,7 @@ echo "Output directory: $OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
 # 调用转换脚本
-python recovlm/utils/convert_deepspeed_checkpoint.py \
+python3 recovlm/utils/convert_deepspeed_checkpoint.py \
     --input_dir "$CHECKPOINT_DIR" \
     --output_dir "$OUTPUT_DIR"
 
