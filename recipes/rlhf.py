@@ -127,14 +127,16 @@ def get_argument_parser():
                       help="Whether to monitor loss of each datasource")
     parser.add_argument("--monitor_datasource_cnt", action="store_true",
                       help="Whether to monitor cnt of each datasource")
+    parser.add_argument("--loss_style", type=str, choices=["token", "sample"]
+                      help="Token wise loss or sample wise loss")
 
-    ############ DPO specific args ############
-    parser.add_argument("--dpo_beta", type=float, default=0.1,
-                      help="The beta parameter for DPO loss")
-    parser.add_argument("--label_smoothing", type=float, default=0.0,
-                      help="Label smoothing parameter for DPO loss")
-    parser.add_argument("--dpo_reference_free", action="store_true",
-                      help="Whether to use reference-free DPO training")
+    ############ RLHF specific args ############
+    # parser.add_argument("--rlhf_beta", type=float, default=0.1,
+    #                   help="The beta parameter for RLHF loss")
+    # parser.add_argument("--label_smoothing", type=float, default=0.0,
+    #                   help="Label smoothing parameter for RLHF loss")
+    # parser.add_argument("--rlhf_reference_free", action="store_true",
+    #                   help="Whether to use reference-free RLHF training")
 
     ############ System Vars ############
     parser.add_argument("--kml_id", type=str, default=None,
@@ -239,7 +241,7 @@ def pad_to_length(tensor: torch.Tensor, length: int, pad_value: Union[int, float
             dim=dim,
         )
 
-def get_batch_logps(
+def get_batch_rewards(
     logits: torch.FloatTensor,
     labels: torch.LongTensor,
     mask: torch.BoolTensor,
@@ -248,7 +250,7 @@ def get_batch_logps(
 ) -> torch.FloatTensor:
     """计算每个序列的对数概率
     Args:
-        logits: shape (batch_size, seq_len/parallel_size, vocab_size)
+        logits: shape (batch_size, seq_len/parallel_size, 1)
         labels: shape (batch_size, seq_len) 
         mask: shape (batch_size, seq_len)
         ignore_index: 忽略的标签值
@@ -274,67 +276,125 @@ def get_batch_logps(
     
     # 获取本地序列部分
     local_labels = get_local_sequence(labels, seq_idx=1)
-    valid_mask = get_local_sequence(mask, seq_idx=1).reshape(-1)
+    valid_mask = get_local_sequence(mask, seq_idx=1)
 
-    log_probs = F.log_softmax(logits.float(), dim=-1)
+    return logits.squeeze(-1), local_labels, valid_mask
+
+    # log_probs = F.log_softmax(logits.float(), dim=-1)
     
-    # 创建新的张量进行标签处理
-    valid_labels = local_labels.clone()
-    valid_labels[valid_labels == ignore_index] = 0
+    # # 创建新的张量进行标签处理
+    # valid_labels = local_labels.clone()
+    # valid_labels[valid_labels == ignore_index] = 0
     
-    # 使用新的张量进行gather操作
-    token_log_probs = log_probs.gather(
-        dim=-1, 
-        index=valid_labels.unsqueeze(-1)
-    ).squeeze(-1)
+    # # 使用新的张量进行gather操作
+    # token_log_probs = log_probs.gather(
+    #     dim=-1, 
+    #     index=valid_labels.unsqueeze(-1)
+    # ).squeeze(-1)
     
-    # 将ignore_index位置的概率置为0
-    token_log_probs = token_log_probs * (local_labels != ignore_index).float()
+    # # 将ignore_index位置的概率置为0
+    # token_log_probs = token_log_probs * (local_labels != ignore_index).float()
         
-    return token_log_probs
+    # return token_log_probs
 
-def compute_dpo_loss(
-    policy_chosen_logps: torch.FloatTensor,
-    policy_rejected_logps: torch.FloatTensor,
-    reference_chosen_logps: torch.FloatTensor,
-    reference_rejected_logps: torch.FloatTensor,
-    beta: float,
-    label_smoothing: float = 0.0,
-    reference_free: bool = False
+
+def compute_rlhf_loss(
+    chosen_rewards: torch.FloatTensor,
+    rejected_rewards: torch.FloatTensor,
+    chosen_token_ids: torch.LongTensor,
+    rejected_token_ids: torch.LongTensor,
+    pad_id: int = 151643,
+    loss_style="sample",
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
-    # 计算rewards，确保保持梯度
-    if reference_free:
-        chosen_rewards = policy_chosen_logps
-        rejected_rewards = policy_rejected_logps
-    else:
-        chosen_rewards = policy_chosen_logps - reference_chosen_logps.detach()  # 分离参考模型的梯度
-        rejected_rewards = policy_rejected_logps - reference_rejected_logps.detach()
+    # # 计算rewards，确保保持梯度
+    # chosen_rewards = reward_chosen_logps
+    # rejected_rewards = reward_rejected_logps
     
+    def gather_concat_tensor(tensor, dim=1):
+        tensor_list = [None for _ in range(world_size)]
+        dist.all_gather_object(
+            object_list=tensor_list, obj=tensor,
+            group=group
+        )
+        return torch.concat(tensor, dim=dim)
+
+    def get_pad_token_rewards(batch_rewards, batch_token_ids):
+        batch_eos_rewards = list()
+        for i in range(batch_rewards.shape[0]):
+            token_ids = batch_token_ids[i]
+            rewards = batch_rewards[i]
+            eos_indices = (token_ids == pad_id).nonzero().flatten()
+            pad_value = eos_indices.new_full((1, ), -100)
+            shift_eos_indices = torch.concat([pad_value, eos_indices[:-1]], dim=0)
+            eos_indices = eos_indices[(eos_indices - shift_eos_indices - 1).nonzero().flatten()]
+
+            eos_rewards = rewards[eos_indices]
+            batch_eos_rewards.append(eos_rewards)
+        return batch_eos_rewards
+
+    assert loss_style in ["sample", "token"]
+
+    group = get_sequence_parallel_group()
+    world_size = dist.get_world_size(group)
+
+    gathered_chosen_rewards = gather_concat_tensor(chosen_rewards, dim=1)
+    gathered_rejected_rewards = gather_concat_tensor(rejected_rewards, dim=1)
+
     chosen_size = chosen_rewards.shape[1]
     rejected_size = rejected_rewards.shape[1]
+    batch_size = chosen_rewards.shape[0]
+
+    if loss_style == "sample":
+        batch_chosen_eos_rewards = get_pad_token_rewards(chosen_rewards, chosen_token_ids)
+        batch_rejected_eos_rewards = get_pad_token_rewards(rejected_rewards, rejected_token_ids)
+
+        losses = 0.
+        chosen_rewards_sum = 0.
+        rejected_rewards_sum = 0.
+
+        chosen_num_samples = sum([x.numel() for x in batch_chosen_eos_rewards])
+        rejected_num_samples = sum([x.numel() for x in batch_rejected_eos_rewards])
+        assert chosen_num_samples == rejected_num_samples and chosen_num_samples > 0
+
+        for chosen_eos_rewards, rejected_eos_rewards in zip(batch_chosen_eos_rewards, batch_rejected_eos_rewards):
+            assert tuple(chosen_eos_rewards.shape) == tuple(rejected_eos_rewards.shape)
+
+            chosen_rewards_sum += chosen_eos_rewards.sum()
+            rejected_rewards_sum += rejected_eos_rewards.sum()
+    
+            logits = chosen_rewards - rejected_rewards
+
+            # 检查数值稳定性
+            if torch.isnan(logits).any() or torch.isinf(logits).any():
+                print_rank_0("====rlhf==== ERROR: logits contains nan or inf values!")
+                print_rank_0(f"====rlhf==== chosen_eos_rewards: {chosen_eos_rewards}")
+                print_rank_0(f"====rlhf==== rejected_eos_rewards: {rejected_eos_rewards}")
+                raise ValueError("logits contains nan or inf values")
+            
+            loss = -F.logsigmoid(logits)
+            losses += loss.sum()
+        losses = losses / world_size / chosen_num_samples
+        return losses, chosen_rewards_sum / chosen_num_samples, rejected_rewards_sum / chosen_num_samples
+
+    losses = 0.
+    
+
     if chosen_size <= rejected_size:
         rejected_rewards = rejected_rewards[:, :chosen_size]
     else:
         rejected_rewards = pad_to_length(rejected_rewards, chosen_size, 0)
 
     # 计算logits和loss
-    logits = beta * (chosen_rewards - rejected_rewards)
+    logits = chosen_rewards - rejected_rewards
     
     # 检查数值稳定性
     if torch.isnan(logits).any() or torch.isinf(logits).any():
-        print_rank_0("====dpo==== ERROR: logits contains nan or inf values!")
-        print_rank_0(f"====dpo==== policy_chosen_logps: {policy_chosen_logps}")
-        print_rank_0(f"====dpo==== policy_rejected_logps: {policy_rejected_logps}")
-        if not reference_free:
-            print_rank_0(f"====dpo==== reference_chosen_logps: {reference_chosen_logps}")
-            print_rank_0(f"====dpo==== reference_rejected_logps: {reference_rejected_logps}")
+        print_rank_0("====rlhf==== ERROR: logits contains nan or inf values!")
+        print_rank_0(f"====rlhf==== chosen_rewards: {chosen_rewards}")
+        print_rank_0(f"====rlhf==== rejected_rewards: {rejected_rewards}")
         raise ValueError("logits contains nan or inf values")
     
     losses = -F.logsigmoid(logits)
-    
-    if label_smoothing > 0:
-        # 添加 label smoothing
-        losses = (1 - label_smoothing) * losses + label_smoothing * (-F.logsigmoid(-logits))
 
     loss = losses.mean()
     chosen_reward = chosen_rewards.mean()
@@ -374,7 +434,7 @@ def get_resume_info(args):
             if not os.path.exists(ckpt_path):
                 raise ValueError(f"Latest checkpoint path {ckpt_path} does not exist")
                 
-            print_rank_0(f"====dpo==== Check output_ckpt exists, auto resume from output_folder. " \
+            print_rank_0(f"====rlhf==== Check output_ckpt exists, auto resume from output_folder. " \
                         f"checkpoint: resume_from={args.output_dir}, resume_tag={ckpt_id}")
             return args.output_dir, ckpt_id, True
         else:
@@ -480,17 +540,16 @@ def split_outputs(outputs, sequence_lengths):
     chosen_outputs = type('Outputs', (), {})()
     rejected_outputs = type('Outputs', (), {})()
     
-    # 只处理logits字段
-    if hasattr(outputs, 'logits'):
-        logits = outputs.logits  # shape: [batch_size, local_seq_len, vocab_size]
-        print_rank_0("[ZDJ] in split_outputs", logits.shape)
+    # 只处理reward_logits字段
+    if hasattr(outputs, 'reward_logits'):
+        reward_logits = outputs.reward_logits.squeeze(-1)  # shape: [batch_size, local_seq_len]
         
         # 获取local sequence的chosen部分长度
         chosen_length = sequence_lengths["chosen_length"] // get_sequence_parallel_world_size()
         
-        # 在序列维度上分割logits
-        chosen_outputs.logits = logits[:, :chosen_length]
-        rejected_outputs.logits = logits[:, chosen_length:]
+        # 在序列维度上分割reward_logits
+        chosen_outputs.reward_logits = reward_logits[:, :chosen_length]
+        rejected_outputs.reward_logits = reward_logits[:, chosen_length:]
     
     return chosen_outputs, rejected_outputs
 
@@ -508,7 +567,7 @@ def train():
     assert args.learning_rate > 0.0
     if args.vision_learning_rate < 0.0:
         args.vision_learning_rate = args.learning_rate
-        print_rank_0("====dpo==== Setting vision_learning_rate to learning_rate")
+        print_rank_0("====rlhf==== Setting vision_learning_rate to learning_rate")
 
     assert all([args.commit_id, args.seed, args.comment]), \
         "Git commit, seed, and comment is required for reproducibility"
@@ -521,13 +580,13 @@ def train():
         "save_checkpoint_every_epoch should be set."
 
     # 4. 设置环境变量
-    print_rank_0("====dpo==== Setting environment variables...")
+    print_rank_0("====rlhf==== Setting environment variables...")
     os.environ["KML_ID"] = args.kml_id
     os.environ["KML_TASK_ID"] = args.kml_task_id
 
     # 5. 初始化模型并行
     initialize_model_parallel(args.sequence_parallel_size)
-    print_rank_0(f"====dpo==== Sequence parallel size: {get_sequence_parallel_world_size()}")
+    print_rank_0(f"====rlhf==== Sequence parallel size: {get_sequence_parallel_world_size()}")
 
     # 6. 设置随机种子
     set_random_seed(args.seed)
@@ -537,7 +596,7 @@ def train():
     if dist.get_rank() == 0:
         args_dict = vars(args)
         args_str = json.dumps(args_dict, indent=4, ensure_ascii=False)
-        print_rank_0(f"====dpo==== Training Arguments:\n{args_str}")
+        print_rank_0(f"====rlhf==== Training Arguments:\n{args_str}")
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
         os.makedirs(args.output_dir, exist_ok=True)
         with open(os.path.join(args.output_dir,
@@ -546,7 +605,7 @@ def train():
             f.write(args_str + "\n")
 
     # 8. 初始化tensorboard
-    print_rank_0("====dpo==== Initializing tensorboard writer...")
+    print_rank_0("====rlhf==== Initializing tensorboard writer...")
     tb_writer = None
     if dist.get_rank() == 0:
         os.makedirs(args.output_dir, exist_ok=True)
@@ -557,52 +616,52 @@ def train():
         tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
     # 9. 初始化模型
-    print_rank_0("====dpo==== Initializing models...")
+    print_rank_0("====rlhf==== Initializing models...")
     with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config,
                            enabled=False):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
             args.model_dir, _attn_implementation="flash_attention_2",
             use_cache=False)
-        ref_model = Qwen2VLForConditionalGeneration.from_pretrained(
-            args.model_dir, _attn_implementation="flash_attention_2",
-            use_cache=False)
+        # ref_model = Qwen2VLForConditionalGeneration.from_pretrained(
+        #     args.model_dir, _attn_implementation="flash_attention_2",
+        #     use_cache=False)
         
         # 冻结参考模型的所有参数
-        print_rank_0("====dpo==== Freezing reference model parameters...")
-        for param in ref_model.parameters():
-            param.requires_grad = False
-        ref_model.eval()  # 设置为评估模式
+        # print_rank_0("====rlhf==== Freezing reference model parameters...")
+        # for param in ref_model.parameters():
+        #     param.requires_grad = False
+        # ref_model.eval()  # 设置为评估模式
 
-    # 10. 设置策略模型的参数冻结（如果需要）
+    # 10. 设置reward模型的参数冻结（如果需要）
     if args.freeze_llm:
-        print_rank_0("====dpo==== Freezing LLM parameters...")
+        print_rank_0("====rlhf==== Freezing LLM parameters...")
         for name, param in model.named_parameters():
             if not name.startswith("visual"):
-                print_rank_0(f"====dpo==== Disable LLM grad: {name}")
+                print_rank_0(f"====rlhf==== Disable LLM grad: {name}")
                 param.requires_grad = False
         print_rank_0("=" * 50)
 
     if args.freeze_visual:
-        print_rank_0("====dpo==== Freezing visual encoder parameters...")
+        print_rank_0("====rlhf==== Freezing visual encoder parameters...")
         for name, param in model.named_parameters():
             if name.startswith("visual"):
-                print_rank_0(f"====dpo==== Disable visual encoder grad: {name}")
+                print_rank_0(f"====rlhf==== Disable visual encoder grad: {name}")
                 param.requires_grad = False
         print_rank_0("=" * 50)
 
     if args.freeze_visual_without_adapter:
-        print_rank_0("====dpo==== Freezing visual encoder parameters (except adapter)...")
+        print_rank_0("====rlhf==== Freezing visual encoder parameters (except adapter)...")
         for name, param in model.named_parameters():
             if name.startswith("visual") and not name.startswith("visual.merger."):
-                print_rank_0(f"====dpo==== Disable visual encoder grad: {name}")
+                print_rank_0(f"====rlhf==== Disable visual encoder grad: {name}")
                 param.requires_grad = False
         print_rank_0("=" * 50)
 
     # 打印训练参数日志
-    print_rank_0("====dpo==== Parameters requiring gradients:")
+    print_rank_0("====rlhf==== Parameters requiring gradients:")
     for name, param in model.named_parameters():
         if param.requires_grad:
-            print_rank_0(f"====dpo==== params not freeze: {name}")
+            print_rank_0(f"====rlhf==== params not freeze: {name}")
     print_rank_0("=" * 50)
 
     if args.enable_gradient_checkpointing:
@@ -635,7 +694,7 @@ def train():
     )
 
     # 使用 deepspeed 初始化模型
-    print_rank_0("====dpo==== Initializing deepspeed...")
+    print_rank_0("====rlhf==== Initializing deepspeed...")
     with Timer("Initialize deepspeed model."):
         # 首先初始化主模型
         model, optimizer, _, lr_scheduler = deepspeed.initialize(
@@ -645,21 +704,21 @@ def train():
             lr_scheduler=lr_scheduler
         )
 
-        # 首先确保参考模型所有参数都被冻结
-        ref_model.eval()
-        for param in ref_model.parameters():
-            param.requires_grad = False
+        # # 首先确保参考模型所有参数都被冻结
+        # ref_model.eval()
+        # for param in ref_model.parameters():
+        #     param.requires_grad = False
 
-        # 使用 DeepSpeed 引擎直接包装模型
-        ref_model = deepspeed.init_inference(
-            model=ref_model,
-            dtype=torch.bfloat16,
-            replace_with_kernel_inject=False
-        )
+        # # 使用 DeepSpeed 引擎直接包装模型
+        # ref_model = deepspeed.init_inference(
+        #     model=ref_model,
+        #     dtype=torch.bfloat16,
+        #     replace_with_kernel_inject=False
+        # )
 
-        # 确保模型在正确的设备上
-        if torch.cuda.is_available():
-            ref_model = ref_model.cuda()
+        # # 确保模型在正确的设备上
+        # if torch.cuda.is_available():
+        #     ref_model = ref_model.cuda()
 
     # 11. 初始化统计变量
     total_num_tokens = 0
@@ -674,14 +733,14 @@ def train():
     if rewrite_resume_flag:
         args.resume_dataloader = True
         args.load_weights_only = False
-        print_rank_0(f"====dpo==== WARN: --resume_dataloader is rewritten to True\n" \
-                     f"====dpo==== WARN: --load_weights_only is rewritten to False\n")
+        print_rank_0(f"====rlhf==== WARN: --resume_dataloader is rewritten to True\n" \
+                     f"====rlhf==== WARN: --load_weights_only is rewritten to False\n")
 
     # 13. 如果需要从checkpoint恢复
     if ckpt_id:
         ckpt_path = os.path.join(resume_from, ckpt_id)
         print_rank_0(
-            f"====dpo==== Resume from checkpoint: {ckpt_path}, "
+            f"====rlhf==== Resume from checkpoint: {ckpt_path}, "
             f"load_weights_only={args.load_weights_only}")
         
         if not os.path.exists(ckpt_path):
@@ -694,16 +753,16 @@ def train():
             dataloader_resume_path = os.path.join(resume_from, "dataloader_ckpt", 
                                                 f"rank{dist.get_rank()}_{ckpt_id}.pth")
             if not os.path.exists(dataloader_resume_path):
-                print_rank_0(f"====dpo==== Warning: Dataloader checkpoint {dataloader_resume_path} does not exist")
-                print_rank_0("====dpo==== Will start training without resuming dataloader state")
+                print_rank_0(f"====rlhf==== Warning: Dataloader checkpoint {dataloader_resume_path} does not exist")
+                print_rank_0("====rlhf==== Will start training without resuming dataloader state")
                 dataloader_state_dict = None
             else:
                 try:
                     dataloader_state_dict = torch.load(dataloader_resume_path)["dataloader_state_dict"]
-                    print_rank_0(f"====dpo==== Successfully loaded dataloader state from {dataloader_resume_path}")
+                    print_rank_0(f"====rlhf==== Successfully loaded dataloader state from {dataloader_resume_path}")
                 except Exception as e:
-                    print_rank_0(f"====dpo==== Error loading dataloader checkpoint: {str(e)}")
-                    print_rank_0("====dpo==== Will start training without resuming dataloader state")
+                    print_rank_0(f"====rlhf==== Error loading dataloader checkpoint: {str(e)}")
+                    print_rank_0("====rlhf==== Will start training without resuming dataloader state")
                     dataloader_state_dict = None
 
         if not args.load_weights_only:
@@ -741,12 +800,12 @@ def train():
       if args.resume_dataloader and dataloader_state_dict is not None:
         dataloader.load_state_dict(dataloader_state_dict)
 
-    loss_fn_chosen = CrossEntropyLoss(
-        ignore_index=-100, return_token_loss=True, shift_labels=False)
-    loss_fn_rejected = CrossEntropyLoss(
-        ignore_index=-100, return_token_loss=True, shift_labels=False)
-    loss_fn_ref = CrossEntropyLoss(
-        ignore_index=-100, return_token_loss=True, shift_labels=False)
+    # loss_fn_chosen = CrossEntropyLoss(
+    #     ignore_index=-100, return_token_loss=True, shift_labels=False)
+    # loss_fn_rejected = CrossEntropyLoss(
+    #     ignore_index=-100, return_token_loss=True, shift_labels=False)
+    # loss_fn_ref = CrossEntropyLoss(
+    #     ignore_index=-100, return_token_loss=True, shift_labels=False)
     
     # 加载处理器
     processor = Qwen2VLProcessor.from_pretrained(args.model_dir)
@@ -772,29 +831,29 @@ def train():
     total_data_source_tokens = collections.defaultdict(int)
 
     # 在初始化模型之后，确保两个模型都在正确的设备上并设置正确的数据类型
-    print_rank_0("====dpo==== Moving models to device and setting dtype...")
+    print_rank_0("====rlhf==== Moving models to device and setting dtype...")
     device = model.device
     dtype = torch.bfloat16  # 或者使用 torch.bfloat16，取决于你的需求
     
-    # 修改这部分代码来检查ref_model的设备和数据类型
-    print_rank_0(f"====dpo==== Model device: {model.device}, dtype: {model.dtype}")
-    # 对于ref_model，我们检查其模块参数而不是直接访问device和dtype
-    ref_model_param = next(ref_model.module.parameters())  # 使用.module访问底层PyTorch模型
-    print_rank_0(f"====dpo==== Ref model device: {ref_model_param.device}, dtype: {ref_model_param.dtype}")
+    # # 修改这部分代码来检查ref_model的设备和数据类型
+    # print_rank_0(f"====rlhf==== Model device: {model.device}, dtype: {model.dtype}")
+    # # 对于ref_model，我们检查其模块参数而不是直接访问device和dtype
+    # ref_model_param = next(ref_model.module.parameters())  # 使用.module访问底层PyTorch模型
+    # print_rank_0(f"====rlhf==== Ref model device: {ref_model_param.device}, dtype: {ref_model_param.dtype}")
     
     # 确保模型参数使用正确的数据类型
     model = model.to(dtype)
-    ref_model = ref_model.to(dtype)
+    # ref_model = ref_model.to(dtype)
     
     # 训练循环
     model.train()
-    ref_model.eval()
+    # ref_model.eval()
 
     # 在训练开始前添加
-    print_rank_0(f"====dpo==== DPO training configuration:")
-    print_rank_0(f"Beta: {args.dpo_beta}")
-    print_rank_0(f"Label smoothing: {args.label_smoothing}")
-    print_rank_0(f"Reference free: {args.dpo_reference_free}")
+    # print_rank_0(f"====rlhf==== RLHF training configuration:")
+    # print_rank_0(f"Beta: {args.rlhf_beta}")
+    # print_rank_0(f"Label smoothing: {args.label_smoothing}")
+    # print_rank_0(f"Reference free: {args.rlhf_reference_free}")
 
     # 在模型forward之前添加类型检查和转换
     def ensure_input_types(inputs):
@@ -817,9 +876,6 @@ def train():
         chosen_inputs, rejected_inputs = batch
         to_cuda(chosen_inputs)
         to_cuda(rejected_inputs)
-
-        print_rank_0("[ZDJ] in chosen_inputs", chosen_inputs.shape)
-        print_rank_0("[ZDJ] in rejected_inputs", rejected_inputs.shape)
         
         # 确保输入类型正确
         chosen_inputs = ensure_input_types(chosen_inputs)
@@ -829,28 +885,27 @@ def train():
         combined_inputs, sequence_lengths = concatenate_inputs(
             chosen_inputs, rejected_inputs)
         
-        print_rank_0("[ZDJ] in combined_inputs", combined_inputs.shape)
-        # Forward pass
-        with torch.no_grad():
-            # 参考模型的 forward pass，确保使用相同的输入格式
-            ref_outputs = ref_model(
-                input_ids=combined_inputs["input_ids"],
-                attention_mask=combined_inputs.get("attention_mask", None),
-                pixel_values=combined_inputs.get("pixel_values", None),
-                image_grid_thw=combined_inputs.get("image_grid_thw", None),
-                pixel_values_videos=combined_inputs.get("pixel_values_videos", None),
-                video_grid_thw=combined_inputs.get("video_grid_thw", None),
-                cu_seqlens=combined_inputs.get("cu_seqlens", None)
-            )
-            if torch.isnan(ref_outputs.logits).any() or torch.isinf(ref_outputs.logits).any():
-                print_rank_0("====dpo==== ERROR: ref_outputs.logits contains nan or inf values!")
-                raise ValueError("ref_outputs.logits contains nan or inf values")
+        # # Forward pass
+        # with torch.no_grad():
+        #     # 参考模型的 forward pass，确保使用相同的输入格式
+        #     ref_outputs = ref_model(
+        #         input_ids=combined_inputs["input_ids"],
+        #         attention_mask=combined_inputs.get("attention_mask", None),
+        #         pixel_values=combined_inputs.get("pixel_values", None),
+        #         image_grid_thw=combined_inputs.get("image_grid_thw", None),
+        #         pixel_values_videos=combined_inputs.get("pixel_values_videos", None),
+        #         video_grid_thw=combined_inputs.get("video_grid_thw", None),
+        #         cu_seqlens=combined_inputs.get("cu_seqlens", None)
+        #     )
+        #     if torch.isnan(ref_outputs.logits).any() or torch.isinf(ref_outputs.logits).any():
+        #         print_rank_0("====rlhf==== ERROR: ref_outputs.logits contains nan or inf values!")
+        #         raise ValueError("ref_outputs.logits contains nan or inf values")
             
-            ref_chosen_outputs, ref_rejected_outputs = split_outputs(
-                ref_outputs, sequence_lengths)
+        #     ref_chosen_outputs, ref_rejected_outputs = split_outputs(
+        #         ref_outputs, sequence_lengths)
 
-        # 策略模型的 forward pass
-        policy_outputs = model(
+        # reward模型的 forward pass
+        reward_outputs = model(
             input_ids=combined_inputs["input_ids"],
             attention_mask=combined_inputs.get("attention_mask", None),
             pixel_values=combined_inputs.get("pixel_values", None),
@@ -859,57 +914,53 @@ def train():
             video_grid_thw=combined_inputs.get("video_grid_thw", None),
             cu_seqlens=combined_inputs.get("cu_seqlens", None)
         )
-
-        tmp_logits = policy_outputs.logits
-        print_rank_0("[ZDJ] in tmp_logits", tmp_logits.shape)
-        if torch.isnan(policy_outputs.logits).any() or torch.isinf(policy_outputs.logits).any():
-            print_rank_0("====dpo==== ERROR: policy_outputs.logits contains nan or inf values!")
-            raise ValueError("policy_outputs.logits contains nan or inf values")  
+        # if torch.isnan(reward_outputs.logits).any() or torch.isinf(reward_outputs.logits).any():
+        #     print_rank_0("====rlhf==== ERROR: reward_outputs.logits contains nan or inf values!")
+        #     raise ValueError("reward_outputs.logits contains nan or inf values")  
         
-        policy_chosen_outputs, policy_rejected_outputs = split_outputs(
-            policy_outputs, sequence_lengths)
+        if torch.isnan(reward_outputs.reward_logits).any() or torch.isinf(reward_outputs.reward_logits).any():
+            print_rank_0("====rlhf==== ERROR: reward_outputs.reward_logits contains nan or inf values!")
+            raise ValueError("reward_outputs.reward_logits contains nan or inf values")
+        
+        reward_chosen_outputs, reward_rejected_outputs = split_outputs(
+            reward_outputs, sequence_lengths)
 
         # 计算 log probabilities，使用 mask 确保只考虑有效 token
         chosen_mask = chosen_inputs["loss_mask"]
         rejected_mask = rejected_inputs["loss_mask"]
 
-        with torch.no_grad():
-            ref_chosen_logps = get_batch_logps(
-                ref_chosen_outputs.logits, 
-                chosen_inputs["input_ids"],
-                chosen_mask,
-                average_log_prob=True
-            )
-            ref_rejected_logps = get_batch_logps(
-                ref_rejected_outputs.logits,
-                rejected_inputs["input_ids"],
-                rejected_mask,
-                average_log_prob=True
-            )
+        # with torch.no_grad():
+        #     ref_chosen_logps = get_batch_rewards(
+        #         ref_chosen_outputs.logits, 
+        #         chosen_inputs["input_ids"],
+        #         chosen_mask,
+        #         average_log_prob=True
+        #     )
+        #     ref_rejected_logps = get_batch_rewards(
+        #         ref_rejected_outputs.logits,
+        #         rejected_inputs["input_ids"],
+        #         rejected_mask,
+        #         average_log_prob=True
+        #     )
 
-        # 计算策略模型的log probs，保持梯度
-        policy_chosen_logps = get_batch_logps(
-            policy_chosen_outputs.logits,
+        # 计算reward模型的reward，保持梯度
+        reward_chosen, chosen_labels, chosen_masks = get_batch_rewards(
+            reward_chosen_outputs.reward_logits,
             chosen_inputs["input_ids"],
             chosen_mask,
             average_log_prob=True
         )
-        policy_rejected_logps = get_batch_logps(
-            policy_rejected_outputs.logits,
+        reward_rejected, rejected_labels, rejected_masks = get_batch_rewards(
+            reward_rejected_outputs.reward_logits,
             rejected_inputs["input_ids"],
             rejected_mask,
             average_log_prob=True
         )
 
-        # 计算 DPO loss
-        loss, chosen_rewards, rejected_rewards = compute_dpo_loss(
-            policy_chosen_logps=policy_chosen_logps,
-            policy_rejected_logps=policy_rejected_logps,
-            reference_chosen_logps=ref_chosen_logps,
-            reference_rejected_logps=ref_rejected_logps,
-            beta=args.dpo_beta,
-            label_smoothing=args.label_smoothing,
-            reference_free=args.dpo_reference_free
+        # 计算 RLHF loss
+        loss, chosen_rewards, rejected_rewards = compute_rlhf_loss(
+            reward_chosen=reward_chosen,
+            reward_rejected=reward_rejected,
         )
 
         loss_fn = CrossEntropyLoss(
@@ -919,21 +970,21 @@ def train():
         chosen_pad = torch.full((chosen_labels.shape[0], 1), loss_fn.ignore_index, dtype=chosen_labels.dtype).to(device=chosen_labels.device)
         chosen_labels = torch.cat([chosen_labels[:, 1:], chosen_pad], dim=-1) # shift
         local_chosen_labels = get_local_sequence(chosen_labels, seq_idx=1)
-        chosen_loss, per_token_chosen_loss = loss_fn(logits=policy_chosen_outputs.logits, labels=local_chosen_labels)
+        chosen_loss, per_token_chosen_loss = loss_fn(logits=reward_chosen_outputs.reward_logits, labels=local_chosen_labels)
 
         rejected_input_ids = rejected_inputs["input_ids"] * (rejected_inputs["input_ids"] > 0).to(torch.int64)
         rejected_labels = rejected_input_ids * rejected_mask + loss_fn.ignore_index * (1 - rejected_mask)
         rejected_pad = torch.full((rejected_labels.shape[0], 1), loss_fn.ignore_index, dtype=rejected_labels.dtype).to(device=rejected_labels.device)
         rejected_labels = torch.cat([rejected_labels[:, 1:], rejected_pad], dim=-1) # shift
         local_rejected_labels = get_local_sequence(rejected_labels, seq_idx=1)
-        rejected_loss, per_token_rejected_loss = loss_fn(logits=policy_rejected_outputs.logits, labels=local_rejected_labels)
+        rejected_loss, per_token_rejected_loss = loss_fn(logits=reward_rejected_outputs.reward_logits, labels=local_rejected_labels)
 
         # 使用 DeepSpeed 进行反向传播
-        print_rank_0("====dpo==== Backward...")
+        print_rank_0("====rlhf==== Backward...")
         model.backward(loss)
-        print_rank_0(f"====dpo==== Loss: {loss.item()}")
+        print_rank_0(f"====rlhf==== Loss: {loss.item()}")
         model.step()
-        print_rank_0(f"====dpo==== Step... {acc_step}")
+        print_rank_0(f"====rlhf==== Step... {acc_step}")
         # 统计信息
         input_ids = combined_inputs["input_ids"]
         # sample 只考虑 chosen 的
@@ -1072,9 +1123,9 @@ def train():
             acc_num_tokens = 0
             acc_valid_num_tokens = 0
             start_time = end_time
-        exit(0)
+    
     # 在训练循环结束后保存最终checkpoint
-    print_rank_0("====dpo==== Saving final checkpoint...")
+    print_rank_0("====rlhf==== Saving final checkpoint...")
     model.save_checkpoint(
         save_dir=args.output_dir,
         client_state={
@@ -1093,7 +1144,7 @@ def train():
         }
     except:
         dataloader_state_dict = None
-        logging.error("====dpo==== Dataloader cannot dump state_dict!!!!!!!!")
+        logging.error("====rlhf==== Dataloader cannot dump state_dict!!!!!!!!")
 
     if dataloader_state_dict is not None:
         dataloader_path = os.path.join(args.output_dir, "dataloader_ckpt")
@@ -1114,13 +1165,13 @@ def train():
         )
     
     if dist.get_rank() == 0:
-        logging.info("====dpo==== Training finished!")
+        logging.info("====rlhf==== Training finished!")
 
     # 为了调试sequence parallel问题，添加同步点和shape检查
     dist.barrier()  # 确保所有进程同步到这里
-    print_rank_0(f"====dpo==== Rank {dist.get_rank()} finished forward pass")
-    print_rank_0(f"====dpo==== chosen_input_ids shape: {chosen_inputs['input_ids'].shape}")
-    print_rank_0(f"====dpo==== rejected_input_ids shape: {rejected_inputs['input_ids'].shape}")
+    print_rank_0(f"====rlhf==== Rank {dist.get_rank()} finished forward pass")
+    print_rank_0(f"====rlhf==== chosen_input_ids shape: {chosen_inputs['input_ids'].shape}")
+    print_rank_0(f"====rlhf==== rejected_input_ids shape: {rejected_inputs['input_ids'].shape}")
 
     # 在训练循环中添加定期保存checkpoint的逻辑
     if iteration % args.save_checkpoint_per_step == 0 and \
@@ -1145,7 +1196,7 @@ def train():
                 }
             except:
                 dataloader_state_dict = None
-                logging.error(f"====dpo==== Dataloader cannot dump state_dict!!!!!!!!")
+                logging.error(f"====rlhf==== Dataloader cannot dump state_dict!!!!!!!!")
             
             if dataloader_state_dict is not None:
                 # dataloader ckpt

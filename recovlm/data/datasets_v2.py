@@ -288,8 +288,7 @@ class Qwen2VLInputBuilder:
               text_len).view(1, -1).expand(3, -1) + st_idx)
 
         llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-        position_ids[..., i, attention_mask[i] ==
-                     1] = llm_positions.to(position_ids.device)
+        position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
         mrope_position_deltas.append(
             llm_positions.max() + 1 - len(total_input_ids[i]))
       mrope_position_deltas = torch.tensor(
@@ -583,13 +582,15 @@ class ParquetDataset(IterableDataset):
 
 
 class DistributedDataset(IterableDataset):
-  def __init__(self, 
-               sources: str,
-               rank: int = 0,
-               world_size: int = 1,
-               num_workers: int=8,
-               seed: int=1024,
-               num_epochs: int=1):
+  def __init__(
+    self, 
+    sources: str,
+    rank: int = 0,
+    world_size: int = 1,
+    num_workers: int=8,
+    seed: int=1024,
+    num_epochs: int=1
+  ):
     self.rng = random.Random(seed)
     self.rank = rank
     self.world_size = world_size
