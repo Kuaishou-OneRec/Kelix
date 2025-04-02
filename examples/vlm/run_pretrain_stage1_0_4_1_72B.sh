@@ -122,7 +122,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --logging_per_step 10 \
                 --fp32_weight true \
                 --seed 19260817 \
-                --enable_gradient_checkpointing \    
+                --enable_gradient_checkpointing \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
