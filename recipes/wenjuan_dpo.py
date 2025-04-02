@@ -818,8 +818,8 @@ def train():
         to_cuda(chosen_inputs)
         to_cuda(rejected_inputs)
 
-        print_rank_0("[ZDJ] in chosen_inputs", chosen_inputs.shape)
-        print_rank_0("[ZDJ] in rejected_inputs", rejected_inputs.shape)
+        print_rank_0("[ZDJ] in chosen_inputs", chosen_inputs["input_ids"].shape)
+        print_rank_0("[ZDJ] in rejected_inputs", rejected_inputs["input_ids"].shape)
         
         # 确保输入类型正确
         chosen_inputs = ensure_input_types(chosen_inputs)
