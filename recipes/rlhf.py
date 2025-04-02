@@ -127,7 +127,7 @@ def get_argument_parser():
                       help="Whether to monitor loss of each datasource")
     parser.add_argument("--monitor_datasource_cnt", action="store_true",
                       help="Whether to monitor cnt of each datasource")
-    parser.add_argument("--loss_style", type=str, choices=["token", "sample"],
+    parser.add_argument("--loss_style", type=str, choices=["token", "sample"], default="sample",
                       help="Token wise loss or sample wise loss")
 
     ############ RLHF specific args ############
