@@ -1072,7 +1072,7 @@ def train():
             acc_num_tokens = 0
             acc_valid_num_tokens = 0
             start_time = end_time
-        exit(0)
+
     # 在训练循环结束后保存最终checkpoint
     print_rank_0("====dpo==== Saving final checkpoint...")
     model.save_checkpoint(

@@ -53,7 +53,7 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 
 
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
-    recipes/wenjuan_dpo.py --model_dir $MODEL_DIR \
+    recipes/rlhf.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
     --dataset_config /llm_reco/lingzhixin/recovlm/examples/vlm/configs/video_vvabs_data_dpo_8w_v0.json \
     --monitor_datasource_loss \
