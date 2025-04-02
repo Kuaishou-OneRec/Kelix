@@ -140,14 +140,14 @@ class Qwen2VLInputBuilder:
         max_visual_tokens_per_image * (self.patch_size ** 2) * \
           (self.spatial_merge_size ** 2)
       # video split params
-      if kwargs["video_nframe"] > 0:
-        block["nframes"] = kwargs["video_nframe"]
-      if kwargs["video_fps"] > 0:
-        block["fps"] = kwargs["video_fps"]
-      if kwargs["video_min_frames"] > 0:
-        block["min_frames"] = kwargs["video_min_frames"]
-      if kwargs["video_max_frames"] > 0:
-        block["max_frames"] = kwargs["video_max_frames"]
+      if kwargs.get("video_nframe", self.video_nframe) > 0:
+        block["nframes"] = kwargs.get("video_nframe", self.video_nframe)
+      if kwargs.get("video_nframe", self.video_fps) > 0:
+        block["fps"] = kwargs.get("video_nframe", self.video_fps)
+      if kwargs.get("video_min_frames", self.video_min_frames) > 0:
+        block["min_frames"] = kwargs.get("video_min_frames", self.video_min_frames)
+      if kwargs.get("video_max_frames", self.video_max_frames) > 0:
+        block["max_frames"] = kwargs.get("video_max_frames", self.video_max_frames)
     else:
       raise ValueError(
         f"Unsupport video type. {type(block['video'])=}")
