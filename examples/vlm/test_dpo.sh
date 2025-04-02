@@ -59,7 +59,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
     --enable_gradient_checkpointing \
-    --max_length 16384 \
+    --max_length 32768 \
     --learning_rate 1e-6 \
     --min_lr 0.0 \
     --weight_decay 0.1 \

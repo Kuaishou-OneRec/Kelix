@@ -130,6 +130,12 @@ def get_argument_parser():
     parser.add_argument("--loss_style", type=str, choices=["token", "sample"], default="sample",
                       help="Token wise loss or sample wise loss")
 
+    ############ Processor Args ############
+    parser.add_argument("--pad_id", type=int, default=151643,
+                      help="Processor pad token id")
+    parser.add_argument("--eos_id", type=int, default=151645,
+                      help="Processor eos token id")
+
     ############ RLHF specific args ############
     # parser.add_argument("--rlhf_beta", type=float, default=0.1,
     #                   help="The beta parameter for RLHF loss")
@@ -303,7 +309,8 @@ def compute_rlhf_loss(
     rejected_rewards: torch.FloatTensor,
     chosen_token_ids: torch.LongTensor,
     rejected_token_ids: torch.LongTensor,
-    pad_id: int = 151645,
+    eos_token_id: int = 151645,
+    pad_id: int = 151643,
     loss_style="sample",
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
     # # 计算rewards，确保保持梯度
@@ -330,12 +337,12 @@ def compute_rlhf_loss(
             token_ids = batch_token_ids[i]
             rewards = batch_rewards[i]
 
-            token_is_pad = (token_ids == pad_id)
-            prev_is_pad = (torch.roll(token_ids, 1) == pad_id)
-            prev_is_pad[0] = False
-            eos_indices = (token_is_pad & (~prev_is_pad)).nonzero().flatten()
+            token_is_eos = (token_ids == eos_token_id)
+            prev_is_eos = (torch.roll(token_ids, 1) == eos_token_id)
+            prev_is_eos[0] = False
+            eos_indices = (token_is_eos & (~prev_is_eos)).nonzero().flatten()
 
-            print("[ZDJ]", eos_indices, token_is_pad, prev_is_pad)
+            print("[ZDJ]", eos_indices, token_is_eos, prev_is_eos)
             eos_rewards = rewards[eos_indices]
             batch_eos_rewards.append(eos_rewards)
         return batch_eos_rewards
@@ -346,13 +353,13 @@ def compute_rlhf_loss(
             token_ids = batch_token_ids[i]
             rewards = batch_rewards[i]
 
-            token_is_pad = (token_ids == pad_id)
-            prev_is_pad = (torch.roll(token_ids, 1) == pad_id)
-            prev_is_pad[0] = False
-            eos_indices = (token_is_pad & (~prev_is_pad)).nonzero().flatten()
+            token_is_eos = (token_ids == eos_token_id)
+            prev_is_eos = (torch.roll(token_ids, 1) == eos_token_id)
+            prev_is_eos[0] = False
+            eos_indices = (token_is_eos & (~prev_is_eos)).nonzero().flatten()
 
-            prev_is_pad[0] = True
-            bos_indices = (prev_is_pad & (~token_is_pad)).nonzero().flatten()
+            prev_is_eos[0] = True
+            bos_indices = (prev_is_eos & (~token_is_eos)).nonzero().flatten()
             assert eos_indices.shape[0] == bos_indices.shape[0]
 
             for start, end in zip(bos_indices, eos_indices):
