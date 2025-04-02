@@ -137,14 +137,14 @@ class Qwen2VLInputBuilder:
         max_visual_tokens_per_image * (self.patch_size ** 2) * \
           (self.spatial_merge_size ** 2)
       # video split params
-      if kwargs["video_nframe"] > 0:
-        block["nframes"] = kwargs["video_nframe"]
-      if kwargs["video_fps"] > 0:
-        block["fps"] = kwargs["video_fps"]
-      if kwargs["video_min_frames"] > 0:
-        block["min_frames"] = kwargs["video_min_frames"]
-      if kwargs["video_max_frames"] > 0:
-        block["max_frames"] = kwargs["video_max_frames"]
+      if kwargs.get("video_nframe", 0) > 0:
+        block["nframes"] = kwargs.get("video_nframe", 0)
+      if kwargs.get("video_fps", 0) > 0:
+        block["fps"] = kwargs.get("video_fps", 0)
+      if kwargs.get("video_min_frames", 1) > 0:
+        block["min_frames"] = kwargs.get("video_min_frames", 1)
+      if kwargs.get("video_max_frames", 120) > 0:
+        block["max_frames"] = kwargs.get("video_max_frames", 120)
     else:
       raise ValueError(
         f"Unsupport video type. {type(block['video'])=}")
@@ -1097,7 +1097,12 @@ class VllmInferenceDataset(DistributedDataset):
     self.max_visual_tokens_per_image = \
       kwargs.get("max_visual_tokens_per_image", 512)
     self.max_images = kwargs.get("max_images", 10)
+    self.video_fps = kwargs.get("video_fps", 1.0)
+    self.video_nframe = kwargs.get("video_nframe", 60)
+    self.video_min_frames = kwargs.get("video_min_frames", 2)
+    self.video_max_frames = kwargs.get("video_max_frames", 60)
     self.system_prompt = system_prompt
+    self.kwargs = kwargs
 
     self.input_builder = Qwen2VLInputBuilder(
       pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -1105,8 +1110,7 @@ class VllmInferenceDataset(DistributedDataset):
     )
 
   def _process(self,
-               sample: Dict[str, Any],
-               **kwargs) -> Dict[str, torch.Tensor]:
+               sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
     assert "messages" in sample["json"], \
         f"sample must contain 'messages' key, but got {sample['json'].keys()}"
 
@@ -1118,9 +1122,9 @@ class VllmInferenceDataset(DistributedDataset):
         continue
       for block in content:
         if block["type"] == "image":
-          self.input_builder.fill_image_block(block, sample, **kwargs)
+          self.input_builder.fill_image_block(block, sample, **self.kwargs)
         elif block["type"] == "video":
-          self.input_builder.fill_video_block(block, sample, **kwargs)
+          self.input_builder.fill_video_block(block, sample, **self.kwargs)
         elif block["type"] == "text":
           continue
         else:
