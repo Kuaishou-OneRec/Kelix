@@ -8,6 +8,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from typing import List, Dict
 import math
+import glob
 
 def get_media_info(pid: str, photo_dir: str) -> Dict:
     """从json文件中获取媒体信息"""
@@ -79,15 +80,6 @@ def create_sample(pid: str, info: Dict, prompt_loader, prompt_name=None):
         videos_json = json.dumps([media_path])
         images_json = json.dumps({})
     else:
-        # # media_path是图片路径列表
-        # if isinstance(media_path, str):
-        #     try:
-        #         media_paths = json.loads(media_path)
-        #     except json.JSONDecodeError:
-        #         media_paths = [media_path]  # 单张图片的情况
-        # else:
-        #     media_paths = media_path
-
         # 检查所有图片是否存在
         valid_paths = [path for path in media_path if os.path.exists(path)]
         if not valid_paths:
@@ -108,15 +100,6 @@ def create_sample(pid: str, info: Dict, prompt_loader, prompt_name=None):
         },
         {"role": "assistant", "content": ""}
     ]
-
-    # # 添加文本字段到metadata
-    # metadata = {
-    #     "asr": info.get("text_fields", {}).get("asr", ""),
-    #     "caption": info.get("text_fields", {}).get("caption", ""),
-    #     "ocr": info.get("text_fields", {}).get("ocr", ""),
-    #     "text": info.get("text_fields", {}).get("text", ""),
-    #     "title": info.get("text_fields", {}).get("title", "")
-    # }
 
     return {
         "images": images_json,
@@ -152,6 +135,9 @@ def save_to_parquet(samples: List[Dict], output_path: str, num_shards: int = 1):
         ('uuid', pa.string())        # 样本uuid
     ])
 
+    # 存储所有生成的parquet文件路径
+    generated_files = []
+
     # 按分片保存数据
     for shard_id in range(num_shards):
         start_idx = shard_id * shard_size
@@ -160,6 +146,7 @@ def save_to_parquet(samples: List[Dict], output_path: str, num_shards: int = 1):
 
         # 构建分片文件名 (使用part-前缀)
         shard_path = f"{output_path}/part-{shard_id:05d}-of-{num_shards:05d}.parquet"
+        generated_files.append(shard_path)
 
         # 转换数据为Arrow表格式
         table = pa.Table.from_pylist(shard_samples, schema=schema)
@@ -167,11 +154,46 @@ def save_to_parquet(samples: List[Dict], output_path: str, num_shards: int = 1):
         # 写入parquet文件
         pq.write_table(table, shard_path)
         print(f"Saved shard {shard_id + 1}/{num_shards} with {len(shard_samples)} samples to {shard_path}")
+    
+    return generated_files
+
+def create_index_file(parquet_files: List[str], output_dir: str):
+    """创建索引文件，包含所有parquet文件的路径"""
+    # 使用绝对路径
+    absolute_paths = [os.path.abspath(f) for f in parquet_files]
+    
+    # 创建索引文件
+    index_path = os.path.join(output_dir, "index.json")
+    with open(index_path, 'w') as f:
+        json.dump(absolute_paths, f, indent=2)
+    
+    print(f"Created index file at {index_path}")
+    return index_path
+
+def create_dataset_config(index_path: str, output_dir: str, model_path: str = None, name: str = "vllm_infer"):
+    """创建dataset_config文件"""
+    config = {
+        "name": name,
+        "sources": index_path,
+        "min_visual_tokens_per_image": 4,
+        "max_visual_tokens_per_image": 1024,
+        "pretrained_model_name_or_path": model_path or "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
+        "max_images": 10,
+        "num_workers": 4
+    }
+    
+    config_path = os.path.join(output_dir, "dataset_config.json")
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=2)
+    
+    print(f"Created dataset config at {config_path}")
+    return config_path
 
 def prepare_dataset(pid_list_file: str, output_path: str,
                     photo_dir: str,
                     prompt_name: str = None,
-                    num_shards: int = 1):
+                    num_shards: int = 1,
+                    model_path: str = None):
     """从PID列表准备数据集并保存为parquet格式"""
     # 初始化PromptLoader
     prompt_loader = PromptLoader()
@@ -199,8 +221,22 @@ def prepare_dataset(pid_list_file: str, output_path: str,
 
     print(f"Created {len(samples)} valid samples")
     
+    # 确保输出目录存在
+    output_dir = os.path.dirname(output_path)
+    os.makedirs(output_dir, exist_ok=True)
+    
     if samples:
-        save_to_parquet(samples, output_path, num_shards)
+        # 保存parquet文件并获取生成的文件列表
+        parquet_files = save_to_parquet(samples, output_path, num_shards)
+        
+        if parquet_files:
+            # 创建索引文件
+            index_path = create_index_file(parquet_files, output_dir)
+            
+            # 创建dataset_config文件
+            create_dataset_config(index_path, output_dir, model_path)
+        else:
+            print("No parquet files were generated")
     else:
         print("No valid samples to save")
 
@@ -216,8 +252,10 @@ if __name__ == "__main__":
                        help="Name of the prompt to use")
     parser.add_argument("--num-shards", type=int, default=1,
                        help="Number of shards to split the dataset into")
+    parser.add_argument("--model-path", default=None,
+                       help="Path to the model for dataset config")
     
     args = parser.parse_args()
     prepare_dataset(
         args.pid_list_file, args.output_path, args.photo_dir, 
-        args.prompt_name, args.num_shards)
+        args.prompt_name, args.num_shards, args.model_path)
