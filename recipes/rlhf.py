@@ -342,7 +342,6 @@ def compute_rlhf_loss(
             prev_is_eos[0] = False
             eos_indices = (token_is_eos & (~prev_is_eos)).nonzero().flatten()
 
-            print("[ZDJ]", eos_indices, token_is_eos, prev_is_eos)
             eos_rewards = rewards[eos_indices]
             batch_eos_rewards.append(eos_rewards)
         return batch_eos_rewards
