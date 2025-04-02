@@ -56,7 +56,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/train_fsdp.py \
      --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config /llm_reco/maosiyang/msy_m_pt/recovlm/examples/vlm/configs/msy_stage1_cmt_7b_2.json \
+    --dataset_config examples/vlm/configs/msy_stage1_cmt_7b_2_dsv2.json \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
     --load_weights_only \
