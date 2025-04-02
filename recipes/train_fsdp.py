@@ -79,7 +79,9 @@ def get_argument_parser():
                             "the --resume_dataloader switch will be turned on, " \
                             "while the --load_weights_only option will be turned off.")
   
-
+  parser.add_argument("--fp32_weight", type=bool, default=True,
+                      help="Whether use fp32 for model weight updating")
+  
   parser.add_argument("--reshard_after_forward", type=bool, default=True,
                       help="enable reshard_after_forward to enable Zero3 (default)")
 
@@ -221,7 +223,6 @@ def get_argument_parser():
   parser.add_argument("--heartbeat_monitor", action="store_true",
                       help="Whether to upload heartbeat to remote")
   
-
   return parser
 
 
