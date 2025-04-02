@@ -39,7 +39,7 @@ def create_video_content(media_path: str) -> List[Dict]:
     return [
         {
             "type": "video",
-            "video": f"file://{media_path}",
+            "video": media_path",
             "max_pixels": 1280 * 28 * 28,
             "min_pixels": 16 * 28 * 28,
             "fps": 1.0
@@ -51,10 +51,10 @@ def create_images_content(image_paths: List[str]) -> List[Dict]:
     return [
         {
             "type": "image",
-            "image": f"{i}.jpg",  # 使用相对路径，与json文件同目录
+            "image": path,  # 直接使用图片的绝对路径
             "max_pixels": 1280 * 28 * 28,
             "min_pixels": 16 * 28 * 28,
-        } for i in range(len(image_paths))
+        } for path in image_paths
     ]
 
 def create_sample(pid: str, info: Dict, prompt_loader, prompt_name=None):
@@ -77,7 +77,7 @@ def create_sample(pid: str, info: Dict, prompt_loader, prompt_name=None):
             print(f"Warning: Video file not found: {media_path}")
             return None
         content = create_video_content(media_path)
-        videos_json = json.dumps([media_path])
+        videos_json = json.dumps({})
         images_json = json.dumps({})
     else:
         # 检查所有图片是否存在
@@ -87,10 +87,9 @@ def create_sample(pid: str, info: Dict, prompt_loader, prompt_name=None):
             return None
 
         content = create_images_content(valid_paths)
-        # 创建图片映射 {0.jpg: image_path_0, 1.jpg: image_path_1, ...}
-        images_map = {f"{i}.jpg": path for i, path in enumerate(valid_paths)}
-        images_json = json.dumps(images_map)
-        videos_json = json.dumps([])
+        # 直接使用图片的绝对路径列表
+        images_json = json.dumps({})
+        videos_json = json.dumps({})
 
     # 构建messages
     messages_data = [
