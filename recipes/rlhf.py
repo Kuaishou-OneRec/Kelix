@@ -321,7 +321,7 @@ def compute_rlhf_loss(
             object_list=tensor_list, obj=tensor,
             group=group
         )
-        return torch.concat(tensor, dim=dim)
+        return torch.concat(tensor_list, dim=dim)
 
     def get_eos_token_rewards(batch_rewards, batch_token_ids):
         batch_eos_rewards = list()
