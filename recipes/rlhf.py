@@ -1008,8 +1008,8 @@ def train():
         loss, chosen_rewards, rejected_rewards = compute_rlhf_loss(
             chosen_rewards=reward_chosen,
             rejected_rewards=reward_rejected,
-            chosen_token_ids=rejected_labels,
-            rejected_token_ids=rejected_labels,
+            chosen_token_ids=chosen_inputs["input_ids"],
+            rejected_token_ids=rejected_inputs["input_ids"],
             loss_style=args.loss_style
         )
 
