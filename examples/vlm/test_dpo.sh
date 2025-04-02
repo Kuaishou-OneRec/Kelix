@@ -78,8 +78,8 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --commit_id $git_hash \
     --kml_id $KML_ID \
     --kml_task_id $KML_TASK_ID \
-    --resume_from_tag global_step1600 \
+    # --resume_from_tag global_step1600 \
     --load_weights_only \
-    --resume_from /llm_reco_ssd/lingzhixin/model_output_vvcmp/RecoVLM/Qwen2-VL-7B-sft_good_ids1_use_cot1/0.0.0.1/ \
+    # --resume_from /llm_reco_ssd/lingzhixin/model_output_vvcmp/RecoVLM/Qwen2-VL-7B-sft_good_ids1_use_cot1/0.0.0.1/ \
     --deepspeed \
    --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
