@@ -13,7 +13,6 @@ Qwen-VL-Chat/
 Qwen-VL-Chat-Int4/
 SimSun.ttf
 hostfile
-*.txt
 
 *.log
 *.err
@@ -23,6 +22,7 @@ hostfile
 *.parquet
 *.swp
 *.xlsx
+.git
 
 recovlm/benchmark/eval/tmp*
 recovlm/benchmark/tmp*
