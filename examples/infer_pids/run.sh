@@ -17,6 +17,8 @@ DATASET_DIR="${CACHE_DIR}/Dataset"
 mkdir -p "${OUTPUT_DIR}"
 mkdir -p "${DATASET_DIR}"
 
+export PYTHONPATH="/llm_reco_ssd/zhouyang12/code/dev/batch_infer/recovlm:${PYTHONPATH}"
+
 # Step 1: 下载PID信息
 echo "Step 1: Downloading PID information..."
 python3 download.py "${PID_LIST_FILE}" --output-dir "${OUTPUT_DIR}"
