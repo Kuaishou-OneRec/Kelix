@@ -91,7 +91,8 @@ def get_vllm_inference_dataloader(sources: str,
                                   world_size=1,
                                   batch_size=1,
                                   max_images=10,
-                                  system_prompt = DEFAULT_SYSTEM_PROMPT):
+                                  system_prompt = DEFAULT_SYSTEM_PROMPT,
+                                  **kwargs):
   """Create dataloader for vision prompt"""
   dataset = VllmInferenceDataset(
     sources=sources,
@@ -103,7 +104,8 @@ def get_vllm_inference_dataloader(sources: str,
     rank=rank,
     world_size=world_size,
     max_images=max_images,
-    system_prompt=system_prompt
+    system_prompt=system_prompt,
+    **kwargs
   )
   def collate_fn(samples):
     return samples
