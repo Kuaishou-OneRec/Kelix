@@ -24,14 +24,6 @@ mkdir -p /tmp/_wids_cache
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
-export LD_PRELOAD=/llm_reco_ssd/luoxinchen/libs/libnccl.so.2.21.5.noece.cpu
-export NCCL_IB_QPS_PER_CONNECTION=2
-export NCCL_IB_DISABLE=0
-export NCCL_IB_GID_INDEX=3
-export NCCL_IB_HCA=mlx5
-export NCCL_ALGO=^NVLS,NVLSTree
-
-
 # 注意修改实验内容备注
 comment="version:0.4.1;model_size:72B;GPU_type:H800;data:inner & outer comments"
 
@@ -52,35 +44,91 @@ echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=$PWD:$PYTHONPATH
 
-nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
-    recipes/train_fsdp.py \
-     --model_dir $MODEL_DIR \
-    --output_dir $OUTPUT_DIR \
-    --dataset_config examples/vlm/configs/msy_stage1_cmt_7b_2_dsv2.json \
-    --monitor_datasource_loss \
-    --monitor_datasource_cnt \
-    --load_weights_only \
-    --auto_resume_local_latest \
-    --enable_gradient_checkpointing \
-    --max_length 30000 \
-    --learning_rate 1e-6 \
-    --min_lr 0.0 \
-    --weight_decay 0.1 \
-    --lr_scheduler_type cosine \
-    --num_warmup_steps 500 \
-    --num_training_steps 54000 \
-    --save_checkpoint_per_step 1000 \
-    --sequence_parallel_size 4 \
-    --use_flash_attention_2 \
-    --reshard_after_forward true \
-    --logging_per_step 10 \
-    --seed 19260817 \
-    --merge_checkpoint \
-    --merge_checkpoint_dtype bf16 \
-    --merge_checkpoint_output_file pytorch_model.bin \
-    --comment "$comment" \
-    --commit_id $git_hash \
-    --kml_id $KML_ID \
-    --kml_task_id $KML_TASK_ID \
-    --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+
+source set_env.sh
+
+hostfile=/etc/mpi/hostfile_seq
+Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
+np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
+
+MASTER_ADDR=$MY_NODE_IP
+MASTER_PORT=8499
+
+nohup mpirun --allow-run-as-root -np $np \
+        -mca plm_rsh_args "-p ${Port}"  \
+        -hostfile $hostfile \
+        -x HOROVOD_MPI_THREADS_DISABLE=1 \
+        -x MPI_THREAD_SINGLE=1 \
+        -x CUDA_DEVICE_MAX_CONNECTIONS=1 \
+        -bind-to none  -map-by slot \
+        -mca opal_set_max_sys_limits 1 \
+        -mca plm_rsh_num_concurrent 300 \
+        -mca routed_radix 600 \
+        -mca btl_tcp_if_include eth04 \
+        -mca btl_openib_allow_ib true \
+        --mca btl tcp,self \
+        -x NO_COLOR=1 \
+        -x TERM=dumb \
+        -x COLORTERM=0 \
+        -x PYTHONIOENCODING=utf-8 \
+        -x NCCL_IB_QPS_PER_CONNECTION=4 \
+        -x NCCL_IB_DISABLE=0 \
+        -x NCCL_IB_GID_INDEX=3 \
+        -x NCCL_IB_HCA=mlx5 \
+        -x NCCL_NET_OVERHEAD=1000 \
+        -x NCCL_PROTO=^LL128 \
+        -x NCCL_MIN_NCHANNELS=4 \
+        -x NCCL_ALGO=^NVLS,NVLSTree \
+        -x LD_LIBRARY_PATH=$LIBRARY_PATH \
+        -x PATH \
+        -x PYTHONPATH=$PYTHONPATH \
+        -x JAVA_HOME=$JAVA_HOME \
+        -x HIVE_HOME=$HIVE_HOME \
+        -x CLASSPATH=$CLASSPATH \
+        -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
+        -x HADOOP_HOME=$HADOOP_HOME \
+        -x SPARK_HOME=$SPARK_HOME \
+        -x KWS_SERVICE_REGION=$KWS_SERVICE_REGION \
+        -x KWS_SERVICE_DC=$KWS_SERVICE_DC \
+        -x KWS_SERVICE_CATALOG=$KWS_SERVICE_CATALOG \
+        -x KWS_SERVICE_NAME=$KWS_SERVICE_NAME \
+        -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
+        -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
+        -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
+        -x MASTER_ADDR=$MASTER_ADDR \
+        -x MASTER_PORT=$MASTER_PORT \
+        -x LD_PRELOAD=$LD_PRELOAD \
+        -x KAI_FLAG_FILE \
+        -x KML_ID \
+        -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
+        -x http_proxy=\
+        -x https_proxy=\
+        python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
+                --output_dir $OUTPUT_DIR \
+                --dataset_config examples/vlm/configs/msy_stage1_cmt_7b_2_dsv2.json \
+                --monitor_datasource_loss \
+                --monitor_datasource_cnt \
+                --max_length 30000 \
+                --learning_rate 1e-6 \
+                --min_lr 0.0 \
+                --weight_decay 0.1 \
+                --lr_scheduler_type cosine \
+                --num_warmup_steps 500 \
+                --num_training_steps 54000 \
+                --save_checkpoint_per_step 1000 \
+                --sequence_parallel_size 4 \
+                --use_flash_attention_2 \
+                --reshard_after_forward true \
+                --logging_per_step 10 \
+                --fp32_weight true \
+                --seed 19260817 \
+                --enable_gradient_checkpointing \    
+                --merge_checkpoint \
+                --merge_checkpoint_dtype bf16 \
+                --merge_checkpoint_output_file pytorch_model.bin \
+                --comment "$comment" \
+                --commit_id $git_hash \
+                --kml_id $KML_ID \
+                --kml_task_id $KML_TASK_ID \
+                --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
