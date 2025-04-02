@@ -303,7 +303,7 @@ def compute_rlhf_loss(
     rejected_rewards: torch.FloatTensor,
     chosen_token_ids: torch.LongTensor,
     rejected_token_ids: torch.LongTensor,
-    pad_id: int = 151643,
+    pad_id: int = 151645,
     loss_style="sample",
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
     # # 计算rewards，确保保持梯度
