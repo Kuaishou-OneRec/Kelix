@@ -158,11 +158,8 @@ def save_to_parquet(samples: List[Dict], output_path: str, num_shards: int = 1):
         end_idx = min((shard_id + 1) * shard_size, len(samples))
         shard_samples = samples[start_idx:end_idx]
 
-        # 构建分片文件名
-        if num_shards > 1:
-            shard_path = f"{output_path}.{shard_id:05d}-of-{num_shards:05d}.parquet"
-        else:
-            shard_path = f"{output_path}.parquet"
+        # 构建分片文件名 (使用part-前缀)
+        shard_path = f"{output_path}/part-{shard_id:05d}-of-{num_shards:05d}.parquet"
 
         # 转换数据为Arrow表格式
         table = pa.Table.from_pylist(shard_samples, schema=schema)

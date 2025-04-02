@@ -40,7 +40,7 @@ python3 examples/infer_pids/download.py \
 echo "Step 2: Preparing dataset..."
 python3 examples/infer_pids/prepare_dataset.py \
     "${PID_LIST_FILE}" \
-    --output-path "${CURRENT_DATASET_DIR}/${DATASET_NAME}" \
+    --output-path "${CURRENT_DATASET_DIR}" \
     --photo-dir "${PHOTO_DIR}" \
     --prompt-name "${PROMPT_NAME}" \
     --num-shards 4
@@ -48,8 +48,8 @@ python3 examples/infer_pids/prepare_dataset.py \
 # # 运行批量推理
 # echo "Running batch inference..."
 # python -m recovlm.recipes.offline_batch_inference \
-#     --input "${CURRENT_DATASET_DIR}/${DATASET_NAME}.*.parquet" \
-#     --output "${CURRENT_DATASET_DIR}/${DATASET_NAME}_results.jsonl" \
+#     --input "${CURRENT_DATASET_DIR}/part-*.parquet" \
+#     --output "${CURRENT_DATASET_DIR}/results.jsonl" \
 #     --batch_size 4
 
 echo "All steps completed successfully!"
