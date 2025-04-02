@@ -4,6 +4,7 @@ from recovlm.services.clients import PidInfoClient
 import json
 import os
 from pathlib import Path
+from tqdm import tqdm
 
 def download_pid_info(pid_list_file: str, output_dir: str):
     """下载PID信息并保存为JSON文件"""
@@ -14,7 +15,7 @@ def download_pid_info(pid_list_file: str, output_dir: str):
     with open(pid_list_file, 'r') as f:
         pids = [line.strip() for line in f if line.strip()]
 
-    for pid in pids:
+    for pid in tqdm(pids):
         output_file = output_dir / f"{pid}.json"
         if output_file.exists():
             print(f"Skipping PID {pid} because it already exists")
