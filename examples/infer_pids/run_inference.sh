@@ -12,7 +12,7 @@ DATASET_CONFIG=$2
 OUTPUT_DIR=$3
 NUM_WORKERS=${4:-8}           # Default value: 8
 NUM_GPUS_PER_NODE=${5:-8}     # Default value: 8
-NUM_INFERENCE_NODE=${6:-4}    # Default value: 4
+NUM_INFERENCE_NODE=${6:-2}    # Default value: 4
 TP_SIZE=${7:-4}               # Default value: 8
 
 bash tools/init_ray_cluster.sh
