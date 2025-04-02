@@ -176,9 +176,13 @@ def create_dataset_config(index_path: str, output_dir: str, model_path: str = No
         "sources": index_path,
         "min_visual_tokens_per_image": 4,
         "max_visual_tokens_per_image": 1024,
+        "video_fps": 1.0,
+        "video_min_frames": 2,
+        "video_max_frames": 60,
         "pretrained_model_name_or_path": model_path or "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
         "max_images": 10,
-        "num_workers": 4
+        "num_workers": 4,
+        "shrink_ratio": 0.7
     }
     
     # 保存在与parquet文件相同的目录下
