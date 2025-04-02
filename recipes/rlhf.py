@@ -598,6 +598,16 @@ def split_outputs(outputs, sequence_lengths):
         chosen_outputs.reward_logits = reward_logits[:, :chosen_length]
         rejected_outputs.reward_logits = reward_logits[:, chosen_length:]
     
+    if hasattr(outputs, 'logits'):
+        reward_logits = outputs.logits  # shape: [batch_size, local_seq_len, vocab_size]
+        
+        # 获取local sequence的chosen部分长度
+        chosen_length = sequence_lengths["chosen_length"] // get_sequence_parallel_world_size()
+        
+        # 在序列维度上分割reward_logits
+        chosen_outputs.logits = logits[:, :chosen_length]
+        rejected_outputs.reward_logits = logits[:, chosen_length:]
+    
     return chosen_outputs, rejected_outputs
 
 
