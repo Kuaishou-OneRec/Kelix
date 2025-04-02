@@ -120,7 +120,14 @@ class Qwen2VLInputBuilder:
         kwargs.get(
           "max_visual_tokens_per_image", self.max_visual_tokens_per_image)
 
-    if isinstance(block["video"], list):
+    if all([isinstance(image_block, str) for image_block in block["video"]]):
+      block["video"] = [
+        {
+          "type": "image",
+          "image": image_str
+        }
+        for image_str in block["video"]
+      ]
       for image_block in block["video"]:
         assert image_block["type"] == "image" and "image" in image_block
         self._fill_image_block(image_block, sample, **kwargs)

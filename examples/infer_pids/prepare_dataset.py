@@ -50,11 +50,11 @@ def create_images_content(image_paths: List[str]) -> List[Dict]:
     """创建多图类型的content"""
     return [
         {
-            "type": "image",
-            "image": path,  # 直接使用图片的绝对路径
+            "type": "video",
+            "video": image_paths,  # 直接使用图片的绝对路径
             "max_pixels": 1280 * 28 * 28,
             "min_pixels": 16 * 28 * 28,
-        } for path in image_paths
+        }
     ]
 
 def create_sample(pid: str, info: Dict, prompt_loader, prompt_name=None):
@@ -70,9 +70,9 @@ def create_sample(pid: str, info: Dict, prompt_loader, prompt_name=None):
         prompt = "Describe this content."
 
     # 判断媒体类型
-    is_video = isinstance(media_path, str) and media_path.endswith('.mp4')
+    is_mp4 = isinstance(media_path, str) and media_path.endswith('.mp4')
 
-    if is_video:
+    if is_mp4:
         if not os.path.exists(media_path):
             print(f"Warning: Video file not found: {media_path}")
             return None
