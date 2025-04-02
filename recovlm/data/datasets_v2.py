@@ -130,7 +130,7 @@ class Qwen2VLInputBuilder:
       ]
       for image_block in block["video"]:
         assert image_block["type"] == "image" and "image" in image_block
-        self._fill_image_block(image_block, sample, **kwargs)
+        self.fill_image_block(image_block, sample, **kwargs)
 
     elif isinstance(block["video"], str) or isinstance(block["video"], bytes):
       # video in local tar, replace by video bytes
