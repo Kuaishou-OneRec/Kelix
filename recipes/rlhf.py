@@ -1020,14 +1020,14 @@ def train():
         chosen_pad = torch.full((chosen_labels.shape[0], 1), loss_fn.ignore_index, dtype=chosen_labels.dtype).to(device=chosen_labels.device)
         chosen_labels = torch.cat([chosen_labels[:, 1:], chosen_pad], dim=-1) # shift
         local_chosen_labels = get_local_sequence(chosen_labels, seq_idx=1)
-        chosen_loss, per_token_chosen_loss = loss_fn(logits=reward_chosen_outputs.reward_logits, labels=local_chosen_labels)
+        chosen_loss, per_token_chosen_loss = loss_fn(logits=reward_chosen_outputs.logits, labels=local_chosen_labels)
 
         rejected_input_ids = rejected_inputs["input_ids"] * (rejected_inputs["input_ids"] > 0).to(torch.int64)
         rejected_labels = rejected_input_ids * rejected_mask + loss_fn.ignore_index * (1 - rejected_mask)
         rejected_pad = torch.full((rejected_labels.shape[0], 1), loss_fn.ignore_index, dtype=rejected_labels.dtype).to(device=rejected_labels.device)
         rejected_labels = torch.cat([rejected_labels[:, 1:], rejected_pad], dim=-1) # shift
         local_rejected_labels = get_local_sequence(rejected_labels, seq_idx=1)
-        rejected_loss, per_token_rejected_loss = loss_fn(logits=reward_rejected_outputs.reward_logits, labels=local_rejected_labels)
+        rejected_loss, per_token_rejected_loss = loss_fn(logits=reward_rejected_outputs.logits, labels=local_rejected_labels)
 
         # 使用 DeepSpeed 进行反向传播
         print_rank_0("====rlhf==== Backward...")
