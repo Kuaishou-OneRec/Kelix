@@ -221,7 +221,8 @@ def get_argument_parser():
   parser.add_argument("--heartbeat_monitor", action="store_true",
                       help="Whether to upload heartbeat to remote")
   
-
+  parser.add_argument("--fp32_weight", type=bool, default=True,
+                      help="Whether use fp32 for model weight updating")
   return parser
 
 
