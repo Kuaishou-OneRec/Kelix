@@ -14,7 +14,7 @@ import torch
 import torch.distributed as dist
 from torch import nn
 
-from torch.distributed._composable.fsdp import CPUOffloadPolicy, fully_shard
+from torch.distributed._composable.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
 from torch.distributed._tensor import distribute_tensor, DTensor
 from torch.distributed._tensor.placement_types import DTensorSpec, TensorMeta
 from torch.distributed.checkpoint.state_dict import (
@@ -38,6 +38,18 @@ torch_version = torch.__version__
 _DISTRIBUTED_STATE_DICT_API_IS_AVAILABLE = False
 
 
+def get_world_size_and_rank() -> Tuple[int, int]:
+    """Function that gets the current world size (aka total number
+    of ranks) and rank number of the current process in the default process group.
+
+    Returns:
+        Tuple[int, int]: world size, rank
+    """
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        return torch.distributed.get_world_size(), torch.distributed.get_rank()
+    else:
+        return 1, 0
+    
 def is_distributed() -> bool:
     """Check if all environment variables required to initialize torch.distributed are set
     and distributed is properly installed. This indicates a distributed run.
@@ -161,7 +173,9 @@ def shard_model(
     *,
     cpu_offload: bool,
     reshard_after_forward: bool = True,
-    dp_mesh: Optional[DeviceMesh] = None) -> None:
+    dp_mesh: Optional[DeviceMesh] = None,
+    fp32_weight=True
+    ) -> None:
     """
     Utility to shard a model with FSDP using the PyTorch Distributed fully_shard API.
 
@@ -186,6 +200,7 @@ def shard_model(
         ValueError: If no layer modules were sharded, indicating that no shard_condition was triggered.
     """
     fsdp_kwargs = {"reshard_after_forward": reshard_after_forward, "mesh": dp_mesh}
+    if fp32_weight: fsdp_kwargs["mp_policy"] = MixedPrecisionPolicy(param_dtype=torch.bfloat16, reduce_dtype=torch.bfloat16)
     if cpu_offload:
         fsdp_kwargs["offload_policy"] = CPUOffloadPolicy()
 
@@ -204,6 +219,7 @@ def shard_model(
 
     # Finally shard the entire model to account for any stragglers
     fully_shard(model, **fsdp_kwargs)
+
 
 def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]):
     meta_sharded_sd = model.state_dict()
