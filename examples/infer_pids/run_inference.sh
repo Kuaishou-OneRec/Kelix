@@ -13,7 +13,7 @@ OUTPUT_DIR=$3
 NUM_WORKERS=${4:-8}           # Default value: 8
 NUM_GPUS_PER_NODE=${5:-8}     # Default value: 8
 NUM_INFERENCE_NODE=${6:-4}    # Default value: 4
-TP_SIZE=${7:-8}               # Default value: 8
+TP_SIZE=${7:-4}               # Default value: 8
 
 bash tools/init_ray_cluster.sh
 
@@ -26,12 +26,11 @@ ray job submit --working-dir ./ -- \
     --num_gpus_per_node $NUM_GPUS_PER_NODE \
     --num_inference_node $NUM_INFERENCE_NODE \
     --tp_size $TP_SIZE \
-    --num_generations 1 \
+    --num_generations 5 \
     --max_new_tokens 8192 \
-    --batch_size 1024 \
+    --batch_size 256 \
     --temperature 1.0 \
-    --top_p 0.001 \
-    --top_k 1 \
+    --top_p 0.95 \
     --repetition_penalty 1.05 \
     --limit_mm_per_prompt 10
 

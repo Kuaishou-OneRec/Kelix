@@ -8,9 +8,9 @@ PARENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export PYTHONPATH=$PWD:$PYTHONPATH
 
 # 检查输入参数
-if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
-    echo "Usage: $0 <pid_list_file> [dataset_name] [prompt_name]"
-    echo "Example: $0 pid_list.txt my_dataset describe_video"
+if [ "$#" -lt 1 ] || [ "$#" -gt 4 ]; then
+    echo "Usage: $0 <pid_list_file> [dataset_name] [prompt_name] [model_dir]"
+    echo "Example: $0 pid_list.txt my_dataset describe_video /path/to/model"
     exit 1
 fi
 
@@ -21,6 +21,7 @@ DATASET_DIR="${CACHE_DIR}/Dataset"
 PID_LIST_FILE=$1
 DATASET_NAME=${2:-"dataset"}  # 如果没有提供dataset_name，默认使用"dataset"
 PROMPT_NAME=${3:-"describe_video"}  # 如果没有提供prompt_name，默认使用"describe_video"
+MODEL_DIR=${4:-"/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-72B-Instruct"}  # 如果没有提供model_dir，使用默认值
 
 # 创建必要的目录
 mkdir -p "${PHOTO_DIR}"
@@ -43,13 +44,22 @@ python3 examples/infer_pids/prepare_dataset.py \
     --output-path "${CURRENT_DATASET_DIR}" \
     --photo-dir "${PHOTO_DIR}" \
     --prompt-name "${PROMPT_NAME}" \
-    --num-shards 4
+    --num-shards 4 \
+    --model-path "${MODEL_DIR}"
 
-# # 运行批量推理
-# echo "Running batch inference..."
-# python -m recovlm.recipes.offline_batch_inference \
-#     --input "${CURRENT_DATASET_DIR}/part-*.parquet" \
-#     --output "${CURRENT_DATASET_DIR}/results.jsonl" \
-#     --batch_size 4
+# Step 3: 运行批量推理
+echo "Step 3: Running batch inference..."
+# 获取dataset_config.json的路径
+DATASET_CONFIG="${CURRENT_DATASET_DIR}/dataset_config.json"
+# 设置输出目录
+OUTPUT_DIR="${MODEL_DIR}/${DATASET_NAME}"
+
+mkdir -p "${OUTPUT_DIR}"
+
+# 调用run_inference.sh进行推理
+bash examples/infer_pids/run_inference.sh \
+    "${MODEL_DIR}" \
+    "${DATASET_CONFIG}" \
+    "${OUTPUT_DIR}"
 
 echo "All steps completed successfully!"
