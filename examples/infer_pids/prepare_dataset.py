@@ -39,7 +39,7 @@ def create_video_content(media_path: str) -> List[Dict]:
     return [
         {
             "type": "video",
-            "video": media_path",
+            "video": media_path,
             "max_pixels": 1280 * 28 * 28,
             "min_pixels": 16 * 28 * 28,
             "fps": 1.0
