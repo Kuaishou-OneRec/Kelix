@@ -162,7 +162,7 @@ def create_index_file(parquet_files: List[str], output_dir: str):
     # 使用绝对路径
     absolute_paths = [os.path.abspath(f) for f in parquet_files]
     
-    # 创建索引文件
+    # 创建索引文件，保存在与parquet文件相同的目录下
     index_path = os.path.join(output_dir, "index.json")
     with open(index_path, 'w') as f:
         json.dump(absolute_paths, f, indent=2)
@@ -182,6 +182,7 @@ def create_dataset_config(index_path: str, output_dir: str, model_path: str = No
         "num_workers": 4
     }
     
+    # 保存在与parquet文件相同的目录下
     config_path = os.path.join(output_dir, "dataset_config.json")
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=2)
@@ -230,11 +231,14 @@ def prepare_dataset(pid_list_file: str, output_path: str,
         parquet_files = save_to_parquet(samples, output_path, num_shards)
         
         if parquet_files:
-            # 创建索引文件
-            index_path = create_index_file(parquet_files, output_dir)
+            # 获取parquet文件所在的目录（应该与output_path相同）
+            parquet_dir = os.path.dirname(parquet_files[0])
             
-            # 创建dataset_config文件
-            create_dataset_config(index_path, output_dir, model_path)
+            # 创建索引文件，并保存在parquet目录下
+            index_path = create_index_file(parquet_files, parquet_dir)
+            
+            # 创建dataset_config文件，并保存在parquet目录下
+            create_dataset_config(index_path, parquet_dir, model_path)
         else:
             print("No parquet files were generated")
     else:
