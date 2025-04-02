@@ -386,10 +386,10 @@ def compute_rlhf_loss(
 
         chosen_num_samples = sum([x.numel() for x in batch_chosen_eos_rewards])
         rejected_num_samples = sum([x.numel() for x in batch_rejected_eos_rewards])
-        assert chosen_num_samples == rejected_num_samples and chosen_num_samples > 0
+        assert chosen_num_samples == rejected_num_samples and chosen_num_samples > 0, "{} {}".format(chosen_num_samples, rejected_num_samples)
 
         for chosen_eos_rewards, rejected_eos_rewards in zip(batch_chosen_eos_rewards, batch_rejected_eos_rewards):
-            assert tuple(chosen_eos_rewards.shape) == tuple(rejected_eos_rewards.shape)
+            assert chosen_eos_rewards.shape == rejected_eos_rewards.shape
 
             chosen_rewards_sum += chosen_eos_rewards.sum()
             rejected_rewards_sum += rejected_eos_rewards.sum()
