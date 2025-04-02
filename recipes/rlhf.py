@@ -1026,7 +1026,9 @@ def train():
             rejected_rewards=reward_rejected,
             chosen_token_ids=chosen_inputs["input_ids"],
             rejected_token_ids=rejected_inputs["input_ids"],
-            loss_style=args.loss_style
+            loss_style=args.loss_style,
+            eos_token_id=args.eos_id,
+            pad_id=args.pad_id
         )
 
         loss_fn = CrossEntropyLoss(
