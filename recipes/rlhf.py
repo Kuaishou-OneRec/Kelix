@@ -309,6 +309,11 @@ def compute_rlhf_loss(
     # # 计算rewards，确保保持梯度
     # chosen_rewards = reward_chosen_logps
     # rejected_rewards = reward_rejected_logps
+
+    assert loss_style in ["sample", "token"]
+
+    group = get_sequence_parallel_group()
+    world_size = dist.get_world_size(group)
     
     def gather_concat_tensor(tensor, dim=1):
         tensor_list = [None for _ in range(world_size)]
@@ -318,35 +323,61 @@ def compute_rlhf_loss(
         )
         return torch.concat(tensor, dim=dim)
 
-    def get_pad_token_rewards(batch_rewards, batch_token_ids):
+    def get_eos_token_rewards(batch_rewards, batch_token_ids):
         batch_eos_rewards = list()
         for i in range(batch_rewards.shape[0]):
             token_ids = batch_token_ids[i]
             rewards = batch_rewards[i]
-            eos_indices = (token_ids == pad_id).nonzero().flatten()
-            pad_value = eos_indices.new_full((1, ), -100)
-            shift_eos_indices = torch.concat([pad_value, eos_indices[:-1]], dim=0)
-            eos_indices = eos_indices[(eos_indices - shift_eos_indices - 1).nonzero().flatten()]
+
+            token_is_pad = (token_ids == pad_id)
+            prev_is_pad = (torch.roll(token_ids, 1) == pad_id)
+            prev_is_pad[0] = False
+            eos_indices = (token_is_pad & ~prev_is_pad).nonzero().flatten()
 
             eos_rewards = rewards[eos_indices]
             batch_eos_rewards.append(eos_rewards)
         return batch_eos_rewards
 
-    assert loss_style in ["sample", "token"]
+    def get_sample_all_token_rewards(batch_rewards, batch_token_ids):
+        all_token_rewards = list()
+        for i in range(batch_rewards.shape[0]):
+            token_ids = batch_token_ids[i]
+            rewards = batch_rewards[i]
 
-    group = get_sequence_parallel_group()
-    world_size = dist.get_world_size(group)
+            token_is_pad = (token_ids == pad_id)
+            prev_is_pad = (torch.roll(token_ids, 1) == pad_id)
+            prev_is_pad[0] = False
+            eos_indices = (token_is_pad & (~prev_is_pad)).nonzero().flatten()
+
+            prev_is_pad[0] = True
+            bos_indices = (prev_is_pad & (~token_is_pad)).nonzero().flatten()
+            assert eos_indices.shape[0] == bos_indices.shape[0]
+
+            for start, end in zip(bos_indices, eos_indices):
+                all_token_rewards.append(batch_rewards[start: end + 1])
+        return all_token_rewards
+
+    def pad_fixed_length_1d(tensor, length, value, left_padding=False):
+        if tensor.shape[0] >= length:
+            return tensor
+        padding_length = length - tensor.shape[0]
+        padding = tensor.new_full((padding_length, ), value, dtype=tensor.dtype)
+        if left_padding:
+            new_tensor = torch.concat([padding, tensor], dim=0)
+        else:
+            new_tensor = torch.concat([tensor, padding], dim=0)
+        return new_tensor
 
     gathered_chosen_rewards = gather_concat_tensor(chosen_rewards, dim=1)
     gathered_rejected_rewards = gather_concat_tensor(rejected_rewards, dim=1)
 
-    chosen_size = chosen_rewards.shape[1]
-    rejected_size = rejected_rewards.shape[1]
-    batch_size = chosen_rewards.shape[0]
+    chosen_size = gathered_chosen_rewards.shape[1]
+    rejected_size = gathered_rejected_rewards.shape[1]
+    batch_size = gathered_chosen_rewards.shape[0]
 
     if loss_style == "sample":
-        batch_chosen_eos_rewards = get_pad_token_rewards(chosen_rewards, chosen_token_ids)
-        batch_rejected_eos_rewards = get_pad_token_rewards(rejected_rewards, rejected_token_ids)
+        batch_chosen_eos_rewards = get_eos_token_rewards(gathered_chosen_rewards, chosen_token_ids)
+        batch_rejected_eos_rewards = get_eos_token_rewards(gathered_rejected_rewards, rejected_token_ids)
 
         losses = 0.
         chosen_rewards_sum = 0.
@@ -362,7 +393,7 @@ def compute_rlhf_loss(
             chosen_rewards_sum += chosen_eos_rewards.sum()
             rejected_rewards_sum += rejected_eos_rewards.sum()
     
-            logits = chosen_rewards - rejected_rewards
+            logits = chosen_eos_rewards - rejected_eos_rewards
 
             # 检查数值稳定性
             if torch.isnan(logits).any() or torch.isinf(logits).any():
@@ -377,30 +408,44 @@ def compute_rlhf_loss(
         return losses, chosen_rewards_sum / chosen_num_samples, rejected_rewards_sum / chosen_num_samples
 
     losses = 0.
-    
+    chosen_rewards_sum = 0.
+    rejected_rewards_sum = 0.
 
-    if chosen_size <= rejected_size:
-        rejected_rewards = rejected_rewards[:, :chosen_size]
-    else:
-        rejected_rewards = pad_to_length(rejected_rewards, chosen_size, 0)
+    chosen_token_rewards_list = get_sample_all_token_rewards(gathered_chosen_rewards, chosen_token_ids)
+    rejected_token_rewards_list = get_sample_all_token_rewards(gathered_rejected_rewards, rejected_token_ids)
 
-    # 计算logits和loss
-    logits = chosen_rewards - rejected_rewards
-    
-    # 检查数值稳定性
-    if torch.isnan(logits).any() or torch.isinf(logits).any():
-        print_rank_0("====rlhf==== ERROR: logits contains nan or inf values!")
-        print_rank_0(f"====rlhf==== chosen_rewards: {chosen_rewards}")
-        print_rank_0(f"====rlhf==== rejected_rewards: {rejected_rewards}")
-        raise ValueError("logits contains nan or inf values")
-    
-    losses = -F.logsigmoid(logits)
+    assert len(chosen_token_rewards_list) == len(rejected_token_rewards_list)
 
-    loss = losses.mean()
-    chosen_reward = chosen_rewards.mean()
-    rejected_reward = rejected_rewards.mean()
+    for chosen_token_rewards, rejected_token_rewards in zip(chosen_token_rewards_list, rejected_token_rewards_list):
+        max_length = max(chosen_token_rewards.shape[0], rejected_token_rewards.shape[0])
+        
+        chosen_token_rewards = pad_fixed_length_1d(chosen_token_rewards, max_length, 0.)
+        rejected_token_rewards = pad_fixed_length_1d(rejected_token_rewards, max_length, 0.)
+
+        padding_chosen_token_ids = pad_fixed_length_1d(chosen_token_ids, max_length, pad_id)
+        padding_rejected_token_ids = pad_fixed_length_1d(rejected_token_ids, max_length, pad_id)
+
+        divergence_token_indices = (padding_chosen_token_ids != padding_rejected_token_ids).nonzero().flatten()[0]
+        partial_chosen_rewards = chosen_token_rewards[divergence_token_indices:]
+        partial_rejected_rewards = rejected_token_rewards[divergence_token_indices:]
+
+        logits = partial_chosen_rewards - partial_rejected_rewards
+
+        if torch.isnan(logits).any() or torch.isinf(logits).any():
+            print_rank_0("====rlhf==== ERROR: logits contains nan or inf values!")
+            print_rank_0(f"====rlhf==== partial_chosen_rewards: {partial_chosen_rewards}")
+            print_rank_0(f"====rlhf==== partial_rejected_rewards: {partial_rejected_rewards}")
+            raise ValueError("logits contains nan or inf values")
+        
+        loss = -F.logsigmoid(logits)
+        losses += loss.mean()
+        chosen_rewards_sum += partial_chosen_rewards.mean()
+        rejected_rewards_sum += partial_rejected_rewards.mean()
+
+    chosen_num_samples = len(chosen_token_rewards)
+    losses = losses / chosen_num_samples / world_size
     
-    return loss, chosen_reward, rejected_reward
+    return losses, chosen_rewards_sum / chosen_num_samples, rejected_rewards_sum / chosen_num_samples
 
 
 def get_resume_info(args):
