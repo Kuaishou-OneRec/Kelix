@@ -1004,8 +1004,11 @@ def train():
 
         # 计算 RLHF loss
         loss, chosen_rewards, rejected_rewards = compute_rlhf_loss(
-            reward_chosen=reward_chosen,
-            reward_rejected=reward_rejected,
+            chosen_rewards=reward_chosen,
+            rejected_rewards=reward_rejected,
+            chosen_token_ids=rejected_labels,
+            rejected_token_ids=rejected_labels,
+            loss_style=args.loss_style
         )
 
         loss_fn = CrossEntropyLoss(
