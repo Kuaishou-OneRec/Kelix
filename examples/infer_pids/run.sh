@@ -2,39 +2,37 @@
 set -e
 
 # 检查输入参数
-if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
-    echo "Usage: $0 <pid_list_file> [dataset_name]"
-    echo "Example: $0 pid_list.txt my_dataset"
+if [ "$#" -lt 1 ] || [ "$#" -gt 3 ]; then
+    echo "Usage: $0 <pid_list_file> [dataset_name] [prompt_name]"
+    echo "Example: $0 pid_list.txt my_dataset describe_video"
     exit 1
 fi
 
-PID_LIST_FILE=$1
 CACHE_DIR="/llm_reco/zhouyang12/.cache"
-OUTPUT_DIR="${CACHE_DIR}/Photo"
+PHOTO_DIR="${CACHE_DIR}/Photo"
 DATASET_DIR="${CACHE_DIR}/Dataset"
 
+PID_LIST_FILE=$1
+DATASET_NAME=${2:-"dataset"}  # 如果没有提供dataset_name，默认使用"dataset"
+PROMPT_NAME=${3:-"describe_video"}  # 如果没有提供prompt_name，默认使用"describe_video"
+
 # 创建必要的目录
-mkdir -p "${OUTPUT_DIR}"
+mkdir -p "${PHOTO_DIR}"
 mkdir -p "${DATASET_DIR}"
 
-export PYTHONPATH="/llm_reco_ssd/zhouyang12/code/dev/batch_infer/recovlm:${PYTHONPATH}"
-
-# Step 1: 下载PID信息
-echo "Step 1: Downloading PID information..."
-python3 download.py "${PID_LIST_FILE}" --output-dir "${OUTPUT_DIR}"
-
-# Step 2: 准备数据集
-echo "Step 2: Preparing dataset..."
+# 准备数据集
+echo "Preparing dataset..."
 python3 prepare_dataset.py \
-    --input-dir "${OUTPUT_DIR}" \
+    "${PID_LIST_FILE}" \
     --output-path "${DATASET_DIR}/${DATASET_NAME}" \
-    --prompt-name "describe_video" \
-    --num-shards 16
+    --photo-dir "${PHOTO_DIR}" \
+    --prompt-name "${PROMPT_NAME}" \
+    --num-shards 4
 
-# # Step 3: 运行批量推理
-# echo "Step 3: Running batch inference..."
+# # 运行批量推理
+# echo "Running batch inference..."
 # python -m recovlm.recipes.offline_batch_inference \
-#     --input "${DATASET_DIR}/${DATASET_NAME}/*.parquet" \
+#     --input "${DATASET_DIR}/${DATASET_NAME}.*.parquet" \
 #     --output "${OUTPUT_DIR}/${DATASET_NAME}_results.jsonl" \
 #     --batch_size 4
 
