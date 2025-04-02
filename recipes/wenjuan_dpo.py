@@ -829,7 +829,7 @@ def train():
         combined_inputs, sequence_lengths = concatenate_inputs(
             chosen_inputs, rejected_inputs)
         
-        print_rank_0("[ZDJ] in combined_inputs", combined_inputs.shape)
+        print_rank_0("[ZDJ] in combined_inputs", combined_inputs["input_ids"].shape)
         # Forward pass
         with torch.no_grad():
             # 参考模型的 forward pass，确保使用相同的输入格式
