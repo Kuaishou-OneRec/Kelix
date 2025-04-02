@@ -155,6 +155,8 @@ def main():
   args = get_arguments()
   world_size = args.num_gpus_per_node * args.num_inference_node // \
     args.tp_size
+  
+  print(f"world_size: {world_size}")
 
   # create output directory
   os.makedirs(args.output_dir, exist_ok=True)
