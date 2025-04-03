@@ -359,7 +359,7 @@ def compute_rlhf_loss(
 
             prev_is_eos[0] = True
             bos_indices = (prev_is_eos & (~token_is_eos)).nonzero().flatten()
-            assert eos_indices.shape[0] == bos_indices.shape[0]
+            assert eos_indices.shape[0] == bos_indices.shape[0], "{} {}".format(eos_indices, bos_indices)
 
             for start, end in zip(bos_indices, eos_indices):
                 all_token_rewards.append(batch_rewards[start: end + 1])
