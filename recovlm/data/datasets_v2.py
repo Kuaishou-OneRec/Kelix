@@ -67,9 +67,9 @@ class Qwen2VLInputBuilder:
     self.vision_start_token_id = self.model_config.vision_start_token_id
     self.vision_end_token_id = self.model_config.vision_end_token_id
     self.pad_token_id = self.model_config.pad_token_id
-    self.video_nframe = kwargs.get("video_nframe", -1)
-    self.video_fps = kwargs.get("video_fps", 2.0)
-    self.video_min_frames = kwargs.get("video_min_frames", -1)
+    self.video_nframe = kwargs.get("video_nframe", 0)
+    self.video_fps = kwargs.get("video_fps", 1.0)
+    self.video_min_frames = kwargs.get("video_min_frames", 1)
     self.video_max_frames = kwargs.get("video_max_frames", 120)
     self.min_visual_tokens_per_image = \
         kwargs.get("min_visual_tokens_per_image", 4)
@@ -1103,9 +1103,9 @@ class VllmInferenceDataset(DistributedDataset):
       kwargs.get("min_visual_tokens_per_image", 4)
     self.max_visual_tokens_per_image = \
       kwargs.get("max_visual_tokens_per_image", 512)
-    self.max_images = kwargs.get("max_images", 10)
+    self.max_images = max_images
     self.video_fps = kwargs.get("video_fps", 1.0)
-    self.video_nframe = kwargs.get("video_nframe", 60)
+    self.video_nframe = kwargs.get("video_nframe", 0)
     self.video_min_frames = kwargs.get("video_min_frames", 2)
     self.video_max_frames = kwargs.get("video_max_frames", 60)
     self.system_prompt = system_prompt

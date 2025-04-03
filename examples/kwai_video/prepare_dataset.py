@@ -8,7 +8,6 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from typing import List, Dict
 import math
-import glob
 import uuid
 from recovlm.utils.media import encode_image
 
