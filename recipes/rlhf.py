@@ -392,6 +392,7 @@ def compute_rlhf_loss(
             sample_idx = batch_sample_idx[i]
 
             unique_sample_idx = torch.unique(sample_idx)
+            print("[ZDJ] hahaha", sample_idx.shape, unique_sample_idx.shape)
             unique_sample_idx = unique_sample_idx.sort()
             if unique_sample_idx[0].item() == -1:
                 unique_sample_idx = unique_sample_idx[1:]
