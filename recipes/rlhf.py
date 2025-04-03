@@ -400,6 +400,7 @@ def compute_rlhf_loss(
                 sample_indices = (sample_idx == idx.item()).nonzero().flatten()
                 if only_eos:
                     sample_indices = sample_indices[-1:]
+                    assert sample_indices[0].item() == pad_id
                 rewards_list.append(rewards[sample_indices])
             # assert cu_seqlens[0] == 0, cu_seqlens
 
