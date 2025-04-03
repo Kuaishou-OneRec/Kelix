@@ -356,8 +356,8 @@ def compute_rlhf_loss(
     rejected_rewards: torch.FloatTensor,
     chosen_token_ids: torch.LongTensor,
     rejected_token_ids: torch.LongTensor,
-    chosen_cu_seqlens: torch.IntTensor,
-    rejected_cu_seqlens: torch.IntTensor,
+    chosen_sample_idx: torch.IntTensor,
+    rejected_sample_idx: torch.IntTensor,
     eos_token_id: int = 151645,
     pad_id: int = 151643,
     newline_id: int = 198,
@@ -381,40 +381,44 @@ def compute_rlhf_loss(
         tensor_list = [x.to(torch.cuda.current_device()) for x in tensor_list]
         return torch.concat(tensor_list, dim=dim)
 
-    def get_eos_token_rewards(batch_rewards, batch_token_ids, batch_cu_seqlens):
-        batch_eos_rewards = list()
-        if batch_cu_seqlens.dim() == 1:
-            batch_cu_seqlens = batch_cu_seqlens[None, :]
+    def get_token_rewards(batch_rewards, batch_token_ids, batch_sample_idx, only_eos=False):
+        rewards_list = list()
+        if batch_sample_idx.dim() == 1:
+            batch_sample_idx = batch_cu_sample_idx[None, :]
 
         for i in range(batch_rewards.shape[0]):
             token_ids = batch_token_ids[i]
             rewards = batch_rewards[i]
-            cu_seqlens = batch_cu_seqlens[i]
+            sample_idx = batch_sample_idx[i]
 
-            num_padding = (token_ids.flip(0) == pad_id).cumprod(dim=0).sum().item() - 1
-            assert num_padding >= 0
-            if num_padding > 0:
-                rewards = rewards[:-num_padding]
-                token_ids = token_ids[:-num_padding]
-                cu_seqlens = cu_seqlens[:-1]
-            assert cu_seqlens[0] == 0, cu_seqlens
+            unique_sample_idx = torch.unique(sample_idx)
+            unique_sample_idx = unique_sample_idx.sort()
+            if unique_sample_idx[0].item() == -1:
+                unique_sample_idx = unique_sample_idx[1:]
 
-            eos_indices = list()
-            for j in range(1, len(cu_seqlens)):
-                index = cu_seqlens[j]
-                print("[ZDJ]", token_ids[index - 2: index + 2])
-                assert token_ids[index - 1] == pad_id, token_ids[index - 1]
-                # assert token_ids[index - 2] == eos_token_id, token_ids[index - 2]
-                eos_indices.append(index - 1)
+            for idx in unique_sample_idx:
+                sample_indices = (sample_idx == idx.item()).nonzero().flatten()
+                if only_eos:
+                    sample_indices = sample_indices[-1:]
+                rewards_list.append(rewards[sample_indices])
+            # assert cu_seqlens[0] == 0, cu_seqlens
 
-            # token_is_eos = (token_ids == eos_token_id)
-            # prev_is_eos = (torch.roll(token_ids, 1) == eos_token_id)
-            # prev_is_eos[0] = False
-            # eos_indices = (token_is_eos & (~prev_is_eos)).nonzero().flatten()
+            # eos_indices = list()
+            # for j in range(1, len(cu_seqlens)):
+            #     index = cu_seqlens[j]
+            #     print("[ZDJ]", token_ids[index - 2: index + 2])
+            #     assert token_ids[index - 1] == pad_id, token_ids[index - 1]
+            #     # assert token_ids[index - 2] == eos_token_id, token_ids[index - 2]
+            #     eos_indices.append(index - 1)
 
-            eos_rewards = rewards[eos_indices]
-            batch_eos_rewards.append(eos_rewards)
-        return batch_eos_rewards
+            # # token_is_eos = (token_ids == eos_token_id)
+            # # prev_is_eos = (torch.roll(token_ids, 1) == eos_token_id)
+            # # prev_is_eos[0] = False
+            # # eos_indices = (token_is_eos & (~prev_is_eos)).nonzero().flatten()
+
+            # eos_rewards = rewards[eos_indices]
+            # batch_eos_rewards.append(eos_rewards)
+        return rewards_list
 
     def get_sample_all_token_rewards(batch_rewards, batch_token_ids):
         all_token_rewards = list()
@@ -1090,15 +1094,14 @@ def train():
             average_log_prob=True
         )
 
-        print("[ZDJ] seq", combined_inputs["cu_seqlens"])
         # 计算 RLHF loss
         loss, chosen_rewards, rejected_rewards = compute_rlhf_loss(
             chosen_rewards=reward_chosen,
             rejected_rewards=reward_rejected,
             chosen_token_ids=chosen_inputs["input_ids"],
             rejected_token_ids=rejected_inputs["input_ids"],
-            chosen_cu_seqlens=chosen_inputs["cu_seqlens"],
-            rejected_cu_seqlens=rejected_inputs["cu_seqlens"],
+            chosen_sample_idx=chosen_inputs["sample_idx"],
+            rejected_sample_idx=rejected_inputs["sample_idx"],
             loss_style=args.loss_style,
             eos_token_id=args.eos_id,
             pad_id=args.pad_id
