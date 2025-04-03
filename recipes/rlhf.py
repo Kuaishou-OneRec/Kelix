@@ -391,7 +391,8 @@ def compute_rlhf_loss(
             rewards = batch_rewards[i]
             cu_seqlens = batch_cu_seqlens[i]
 
-            num_padding = (token_ids.flip(0) == pad_id).cumprod(dim=0).sum().item()
+            num_padding = (token_ids.flip(0) == pad_id).cumprod(dim=0).sum().item() - 1
+            assert num_padding >= 0
             if num_padding > 0:
                 rewards = rewards[:-num_padding]
                 token_ids = token_ids[:-num_padding]
@@ -401,10 +402,8 @@ def compute_rlhf_loss(
             eos_indices = list()
             for j in range(1, len(cu_seqlens)):
                 index = cu_seqlens[j]
-                print("[ZDJ]", token_ids[index - 2: index + 2])
-                assert token_ids[index - 1] == newline_id, token_ids[index - 1]
-                assert token_ids[index - 2] == eos_token_id, token_ids[index - 2]
-                eos_indices.append(index - 2)
+                assert token_ids[index - 1] == pad_id, token_ids[index - 1]
+                eos_indices.append(index - 1)
 
             # token_is_eos = (token_ids == eos_token_id)
             # prev_is_eos = (torch.roll(token_ids, 1) == eos_token_id)
