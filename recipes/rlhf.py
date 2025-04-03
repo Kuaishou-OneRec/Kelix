@@ -332,15 +332,18 @@ class DisCoGather(torch.autograd.Function):
         ]
         dist.all_gather(gathered_tensors, tensor.contiguous(), group=group)
 
-        gathered_tensors = torch.cat(gathered_tensors, dim=0)
+        gathered_tensors = torch.cat(gathered_tensors, dim=1)
         gathered_tensors.requires_grad_(True)
 
         return gathered_tensors
 
     @staticmethod
     def backward(ctx, grad_output):
+        lengths = grad_output.shape[1]
+        world_size = get_sequence_parallel_world_size()
+        local_lengths = lengths // world_size
         dist.all_reduce(grad_output, op=torch.distributed.ReduceOp.AVG)
-        return grad_output[ctx.bs * ctx.rank: ctx.bs * (ctx.rank + 1)]
+        return grad_output[:, ctx.rank * local_lengths: local_lengths * (ctx.rank + 1)]
 
 
 
