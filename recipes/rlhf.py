@@ -392,7 +392,7 @@ def compute_rlhf_loss(
             rewards = rewards[:num_padding]
             token_ids = token_ids[:num_padding]
             if num_padding > 0:
-                cu_seqlens.pop(-1)
+                cu_seqlens = cu_seqlens[:-1]
             assert cu_seqlens[0] == 0, cu_seqlens
 
             eos_indices = list()
