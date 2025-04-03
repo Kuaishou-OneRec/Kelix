@@ -401,6 +401,7 @@ def compute_rlhf_loss(
             eos_indices = list()
             for j in range(1, len(cu_seqlens)):
                 index = cu_seqlens[j]
+                print("[ZDJ]", token_ids[index - 2: index + 2])
                 assert token_ids[index - 1] == newline_id, token_ids[index - 1]
                 assert token_ids[index - 2] == eos_token_id, token_ids[index - 2]
                 eos_indices.append(index - 2)
