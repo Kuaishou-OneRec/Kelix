@@ -449,8 +449,8 @@ def compute_rlhf_loss(
     batch_size = gathered_chosen_rewards.shape[0]
 
     if loss_style == "sample":
-        batch_chosen_eos_rewards = get_eos_token_rewards(gathered_chosen_rewards, chosen_token_ids)
-        batch_rejected_eos_rewards = get_eos_token_rewards(gathered_rejected_rewards, rejected_token_ids)
+        batch_chosen_eos_rewards = get_eos_token_rewards(gathered_chosen_rewards, chosen_token_ids, chosen_cu_seqlens)
+        batch_rejected_eos_rewards = get_eos_token_rewards(gathered_rejected_rewards, rejected_token_ids, rejected_cu_seqlens)
 
         losses = 0.
         chosen_rewards_sum = 0.
