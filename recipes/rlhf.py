@@ -423,8 +423,8 @@ def compute_rlhf_loss(
             new_tensor = torch.concat([tensor, padding], dim=0)
         return new_tensor
 
-    gathered_chosen_rewards = disco_gather(chosen_rewards)
-    gathered_rejected_rewards = disco_gather(rejected_rewards)
+    gathered_chosen_rewards = gather_concat_tensor(chosen_rewards)
+    gathered_rejected_rewards = gather_concat_tensor(rejected_rewards)
 
     chosen_size = gathered_chosen_rewards.shape[1]
     rejected_size = gathered_rejected_rewards.shape[1]
