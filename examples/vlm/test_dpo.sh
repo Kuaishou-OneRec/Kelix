@@ -79,7 +79,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --kml_id $KML_ID \
     --kml_task_id $KML_TASK_ID \
     --load_weights_only \
-    --loss_style token \
+    --loss_style sample \
     --deepspeed \
    --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
