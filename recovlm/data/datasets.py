@@ -1126,7 +1126,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     return len(inputs["input_ids"][0])
 
-  fsample_idx(self, buffer: List[Dict[str, torch.Tensor]]):
+  def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
     packed_input_ids: List[torch.Tensor] = []
     packed_position_ids: List[torch.Tensor] = []
     packed_loss_mask: List[torch.Tensor] = []
