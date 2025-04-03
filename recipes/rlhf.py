@@ -356,8 +356,11 @@ def compute_rlhf_loss(
     rejected_rewards: torch.FloatTensor,
     chosen_token_ids: torch.LongTensor,
     rejected_token_ids: torch.LongTensor,
+    chosen_cu_seqlens: torch.IntTensor,
+    rejected_cu_seqlens: torch.IntTensor,
     eos_token_id: int = 151645,
     pad_id: int = 151643,
+    newline_id: int = 198,
     loss_style="sample",
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
     # # 计算rewards，确保保持梯度
@@ -378,16 +381,31 @@ def compute_rlhf_loss(
         tensor_list = [x.to(torch.cuda.current_device()) for x in tensor_list]
         return torch.concat(tensor_list, dim=dim)
 
-    def get_eos_token_rewards(batch_rewards, batch_token_ids):
+    def get_eos_token_rewards(batch_rewards, batch_token_ids, batch_cu_seqlens):
         batch_eos_rewards = list()
         for i in range(batch_rewards.shape[0]):
             token_ids = batch_token_ids[i]
             rewards = batch_rewards[i]
+            cu_seqlens = batch_cu_seqlens[i]
 
-            token_is_eos = (token_ids == eos_token_id)
-            prev_is_eos = (torch.roll(token_ids, 1) == eos_token_id)
-            prev_is_eos[0] = False
-            eos_indices = (token_is_eos & (~prev_is_eos)).nonzero().flatten()
+            num_padding = (token_ids.flip(0) == pad_id).cumprod().sum().item()
+            rewards = rewards[:num_padding]
+            token_ids = token_ids[:num_padding]
+            if num_padding > 0:
+                cu_seqlens.pop(-1)
+            assert cu_seqlens[0] == 0, cu_seqlens
+
+            eos_indices = list()
+            for j in range(1, len(cu_seqlens)):
+                index = cu_seqlens[j]
+                assert token_ids[index - 1] == newline_id, token_ids[index - 1]
+                assert token_ids[index - 2] == eos_token_id, token_ids[index - 2]
+                eos_indices.append(index - 2)
+
+            # token_is_eos = (token_ids == eos_token_id)
+            # prev_is_eos = (torch.roll(token_ids, 1) == eos_token_id)
+            # prev_is_eos[0] = False
+            # eos_indices = (token_is_eos & (~prev_is_eos)).nonzero().flatten()
 
             eos_rewards = rewards[eos_indices]
             batch_eos_rewards.append(eos_rewards)
@@ -423,8 +441,8 @@ def compute_rlhf_loss(
             new_tensor = torch.concat([tensor, padding], dim=0)
         return new_tensor
 
-    gathered_chosen_rewards = disco_gather(chosen_rewards)
-    gathered_rejected_rewards = disco_gather(rejected_rewards)
+    gathered_chosen_rewards = gather_concat_tensor(chosen_rewards)
+    gathered_rejected_rewards = gather_concat_tensor(rejected_rewards)
 
     chosen_size = gathered_chosen_rewards.shape[1]
     rejected_size = gathered_rejected_rewards.shape[1]
@@ -1073,6 +1091,8 @@ def train():
             rejected_rewards=reward_rejected,
             chosen_token_ids=chosen_inputs["input_ids"],
             rejected_token_ids=rejected_inputs["input_ids"],
+            chosen_cu_seqlens=chosen_inputs["cu_seqlens"],
+            rejected_cu_seqlens=rejected_inputs["cu_seqlens"],
             loss_style=args.loss_style,
             eos_token_id=args.eos_id,
             pad_id=args.pad_id
