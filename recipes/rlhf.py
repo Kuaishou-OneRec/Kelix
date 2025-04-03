@@ -304,6 +304,50 @@ def get_batch_rewards(
     # return token_log_probs
 
 
+# tensor_list = [None for _ in range(world_size)]
+#         dist.all_gather_object(
+#             object_list=tensor_list, obj=tensor,
+#             group=group
+#         )
+#         tensor_list = [x.to(torch.cuda.current_device()) for x in tensor_list]
+#         return torch.concat(tensor_list, dim=dim)
+# group = get_sequence_parallel_group()
+#     world_size = dist.get_world_size(group)
+class DisCoGather(torch.autograd.Function):
+    """An autograd function that performs allgather on a tensor."""
+
+    @staticmethod
+    def forward(ctx, tensor):
+        if not dist.is_initialized():
+            raise "torch.distributed is not initialized"
+
+        group = get_sequence_parallel_group()
+        world_size = dist.get_world_size(group)
+        # world_size = torch.distributed.get_world_size()
+        ctx.bs = tensor.shape[0]
+        ctx.rank = dist.get_rank(group=group)
+
+        gathered_tensors = [
+            torch.zeros_like(tensor) for _ in range(world_size)
+        ]
+        dist.all_gather(gathered_tensors, tensor.contiguous(), group=group)
+
+        gathered_tensors = torch.cat(gathered_tensors, dim=0)
+        gathered_tensors.requires_grad_(True)
+
+        return gathered_tensors
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        dist.all_reduce(grad_output, op=torch.distributed.ReduceOp.AVG)
+        return grad_output[ctx.bs * ctx.rank: ctx.bs * (ctx.rank + 1)]
+
+
+
+def disco_gather(tensor):
+    return DisCoGather.apply(tensor)
+
+
 def compute_rlhf_loss(
     chosen_rewards: torch.FloatTensor,
     rejected_rewards: torch.FloatTensor,
@@ -376,8 +420,8 @@ def compute_rlhf_loss(
             new_tensor = torch.concat([tensor, padding], dim=0)
         return new_tensor
 
-    gathered_chosen_rewards = gather_concat_tensor(chosen_rewards, dim=1)
-    gathered_rejected_rewards = gather_concat_tensor(rejected_rewards, dim=1)
+    gathered_chosen_rewards = disco_gather(chosen_rewards)
+    gathered_rejected_rewards = disco_gather(rejected_rewards)
 
     chosen_size = gathered_chosen_rewards.shape[1]
     rejected_size = gathered_rejected_rewards.shape[1]
