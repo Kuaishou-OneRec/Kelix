@@ -388,6 +388,7 @@ def compute_rlhf_loss(
             rewards = batch_rewards[i]
             cu_seqlens = batch_cu_seqlens[i]
 
+            print("[ZDJ]", cu_seqlens)
             num_padding = (token_ids.flip(0) == pad_id).cumprod(dim=0).sum().item()
             if num_padding > 0:
                 rewards = rewards[:-num_padding]
