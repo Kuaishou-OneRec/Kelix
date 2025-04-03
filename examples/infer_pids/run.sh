@@ -48,18 +48,18 @@ python3 examples/infer_pids/prepare_dataset.py \
     --model-path "${MODEL_DIR}"
 
 # Step 3: 运行批量推理
-echo "Step 3: Running batch inference..."
-# 获取dataset_config.json的路径
-DATASET_CONFIG="${CURRENT_DATASET_DIR}/dataset_config.json"
-# 设置输出目录
-OUTPUT_DIR="${MODEL_DIR}/${DATASET_NAME}"
+# echo "Step 3: Running batch inference..."
+# # 获取dataset_config.json的路径
+# DATASET_CONFIG="${CURRENT_DATASET_DIR}/dataset_config.json"
+# # 设置输出目录
+# OUTPUT_DIR="${MODEL_DIR}/${DATASET_NAME}"
 
-mkdir -p "${OUTPUT_DIR}"
+# mkdir -p "${OUTPUT_DIR}"
 
-# 调用run_inference.sh进行推理
-bash examples/infer_pids/run_inference.sh \
-    "${MODEL_DIR}" \
-    "${DATASET_CONFIG}" \
-    "${OUTPUT_DIR}"
+# # 调用run_inference.sh进行推理
+# bash examples/infer_pids/run_inference.sh \
+#     "${MODEL_DIR}" \
+#     "${DATASET_CONFIG}" \
+#     "${OUTPUT_DIR}"
 
-echo "All steps completed successfully!"
+# echo "All steps completed successfully!"
