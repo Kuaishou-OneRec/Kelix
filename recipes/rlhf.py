@@ -389,9 +389,9 @@ def compute_rlhf_loss(
             cu_seqlens = batch_cu_seqlens[i]
 
             num_padding = (token_ids.flip(0) == pad_id).cumprod(dim=0).sum().item()
-            rewards = rewards[:num_padding]
-            token_ids = token_ids[:num_padding]
             if num_padding > 0:
+                rewards = rewards[:-num_padding]
+                token_ids = token_ids[:-num_padding]
                 cu_seqlens = cu_seqlens[:-1]
             assert cu_seqlens[0] == 0, cu_seqlens
 
