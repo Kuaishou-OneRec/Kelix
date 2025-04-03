@@ -1086,6 +1086,7 @@ def train():
             average_log_prob=True
         )
 
+        print("[ZDJ] seq", combined_inputs["cu_seqlens"])
         # 计算 RLHF loss
         loss, chosen_rewards, rejected_rewards = compute_rlhf_loss(
             chosen_rewards=reward_chosen,
