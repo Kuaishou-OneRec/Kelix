@@ -383,12 +383,14 @@ def compute_rlhf_loss(
 
     def get_eos_token_rewards(batch_rewards, batch_token_ids, batch_cu_seqlens):
         batch_eos_rewards = list()
+        if batch_cu_seqlens.dim() == 1:
+            batch_cu_seqlens = batch_cu_seqlens[None, :]
+
         for i in range(batch_rewards.shape[0]):
             token_ids = batch_token_ids[i]
             rewards = batch_rewards[i]
             cu_seqlens = batch_cu_seqlens[i]
 
-            print("[ZDJ]", cu_seqlens)
             num_padding = (token_ids.flip(0) == pad_id).cumprod(dim=0).sum().item()
             if num_padding > 0:
                 rewards = rewards[:-num_padding]
