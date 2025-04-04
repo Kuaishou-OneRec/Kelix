@@ -342,6 +342,7 @@ class DisCoGather(torch.autograd.Function):
         lengths = grad_output.shape[1]
         world_size = get_sequence_parallel_world_size()
         local_lengths = lengths // world_size
+        print("[ZDJ] in ", local_lengths)
         dist.all_reduce(grad_output, op=torch.distributed.ReduceOp.AVG)
         return grad_output[:, ctx.rank * local_lengths: local_lengths * (ctx.rank + 1)]
 
@@ -391,6 +392,7 @@ def compute_rlhf_loss(
             rewards = batch_rewards[i]
             sample_idx = batch_sample_idx[i]
 
+            print("[ZDJ] for", sample_idx.shape)
             unique_sample_idx = torch.unique(sample_idx)
             unique_sample_idx, _ = unique_sample_idx.sort()
             if unique_sample_idx[0].item() == -1:
@@ -451,8 +453,8 @@ def compute_rlhf_loss(
             new_tensor = torch.concat([tensor, padding], dim=0)
         return new_tensor
 
-    gathered_chosen_rewards = gather_concat_tensor(chosen_rewards)
-    gathered_rejected_rewards = gather_concat_tensor(rejected_rewards)
+    gathered_chosen_rewards = disco_gather(chosen_rewards)
+    gathered_rejected_rewards = disco_gather(rejected_rewards)
 
     chosen_size = gathered_chosen_rewards.shape[1]
     rejected_size = gathered_rejected_rewards.shape[1]
