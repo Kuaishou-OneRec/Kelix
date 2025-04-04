@@ -391,7 +391,7 @@ def compute_rlhf_loss(
             rewards = batch_rewards[i]
             sample_idx = batch_sample_idx[i]
 
-            print("[ZDJ] test", sample_idx, token_ids.shape)
+            print("[ZDJ] test", sample_idx, token_ids.shape, sample_idx.shape)
             unique_sample_idx = torch.unique(sample_idx)
             unique_sample_idx, _ = unique_sample_idx.sort()
             if unique_sample_idx[0].item() == -1:
@@ -399,10 +399,9 @@ def compute_rlhf_loss(
 
             for idx in unique_sample_idx:
                 sample_indices = (sample_idx == idx.item()).nonzero().flatten()
-                print("[ZDJ] nb", sample_indices[-10:])
                 if only_eos:
                     sample_indices = sample_indices[-1:]
-                    assert sample_indices[0].item() == pad_id, sample_indices
+                    assert token_ids[sample_indices].item() == pad_id, token_ids[sample_indices]
                 rewards_list.append(rewards[sample_indices])
             # assert cu_seqlens[0] == 0, cu_seqlens
 
