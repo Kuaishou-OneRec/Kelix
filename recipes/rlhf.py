@@ -344,6 +344,7 @@ class DisCoGather(torch.autograd.Function):
         local_lengths = lengths // world_size
         print("[ZDJ] in ", local_lengths)
         dist.all_reduce(grad_output, op=torch.distributed.ReduceOp.AVG)
+        print("[WHM]")
         return grad_output[:, ctx.rank * local_lengths: local_lengths * (ctx.rank + 1)]
 
 
