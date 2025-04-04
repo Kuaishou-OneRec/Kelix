@@ -323,7 +323,7 @@ class DisCoGather(torch.autograd.Function):
 
         group = get_sequence_parallel_group()
         world_size = dist.get_world_size(group)
-        print("[ZDJ] world_size", world_size)
+        # world_size = torch.distributed.get_world_size()
         ctx.bs = tensor.shape[0]
         ctx.rank = dist.get_rank(group=group)
 
@@ -364,7 +364,9 @@ def compute_rlhf_loss(
     newline_id: int = 198,
     loss_style="sample",
 ) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.FloatTensor]:
-    # 计算rewards，确保保持梯度
+    # # 计算rewards，确保保持梯度
+    # chosen_rewards = reward_chosen_logps
+    # rejected_rewards = reward_rejected_logps
 
     assert loss_style in ["sample", "token"]
 
@@ -390,6 +392,7 @@ def compute_rlhf_loss(
             rewards = batch_rewards[i]
             sample_idx = batch_sample_idx[i]
 
+            print("[ZDJ] for", sample_idx.shape)
             unique_sample_idx = torch.unique(sample_idx)
             unique_sample_idx, _ = unique_sample_idx.sort()
             if unique_sample_idx[0].item() == -1:
