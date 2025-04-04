@@ -5,7 +5,6 @@
     "min_visual_tokens_per_image": 4,
     "max_visual_tokens_per_image": 2700,
     "video_nframe": 10,
-    "video_fps": 2.0,
     "video_min_frames": 4,
     "video_max_frames": 32,
     "base_model_dir": "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
