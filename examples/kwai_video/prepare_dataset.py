@@ -60,7 +60,7 @@ def create_images_content(image_paths: List[str]) -> List[Dict]:
         }
     ]
 
-def create_sample(pid: str, info: Dict, prompt_loader, prompt_name=None):
+def create_sample(pid: str, info: Dict, prompt_loader, prompt=None):
     """为单个PID创建数据样本"""
     media_path = info['media_path']
     if not media_path:
@@ -68,7 +68,7 @@ def create_sample(pid: str, info: Dict, prompt_loader, prompt_name=None):
         return None
 
     # 使用PromptLoader加载prompt
-    prompt = prompt_loader.load(prompt_name)
+    prompt = prompt_loader.load(prompt)
     if not prompt:
         prompt = "Describe this content."
 
@@ -111,8 +111,7 @@ def create_sample(pid: str, info: Dict, prompt_loader, prompt_name=None):
         "messages": json.dumps(messages_data),
         "segments": json.dumps([]),
         "metadata": json.dumps({}),
-        "uuid": str(uuid.uuid4()),
-        "__key__": pid
+        "uuid": str(pid)
     }
 
 def save_to_parquet(samples: List[Dict], output_path: str, num_shards: int = 1):
@@ -136,9 +135,7 @@ def save_to_parquet(samples: List[Dict], output_path: str, num_shards: int = 1):
         ('messages', pa.string()),   # json string, chat格式数据
         ('segments', pa.string()),   # json string, pretrain格式数据
         ('metadata', pa.string()),   # json string, map<string, string>
-        ('uuid', pa.string()),       # 样本uuid
-        ('__key__', pa.string()),    # 样本__key__
-        ('__url__', pa.string()),    # 样本所在文件路径
+        ('uuid', pa.string())        # 样本uuid
     ])
 
     # 存储所有生成的parquet文件路径
@@ -153,8 +150,6 @@ def save_to_parquet(samples: List[Dict], output_path: str, num_shards: int = 1):
         # 构建分片文件名 (使用part-前缀)
         shard_path = f"{output_path}/part-{shard_id:05d}-of-{num_shards:05d}.parquet"
         generated_files.append(shard_path)
-        for sample in shard_samples:
-            sample["__url__"] = shard_path
         # 转换数据为Arrow表格式
         table = pa.Table.from_pylist(shard_samples, schema=schema)
         
@@ -177,7 +172,7 @@ def create_index_file(parquet_files: List[str], output_dir: str):
     print(f"Created index file at {index_path}")
     return index_path
 
-def create_dataset_config(index_path: str, output_dir: str, model_path: str = None, name: str = "vllm_infer"):
+def create_dataset_config(index_path: str, output_dir: str, tokenizer_path: str = None, name: str = "vllm_infer"):
     """创建dataset_config文件"""
     config = {
         "name": name,
@@ -187,8 +182,8 @@ def create_dataset_config(index_path: str, output_dir: str, model_path: str = No
         "video_fps": 1.0,
         "video_min_frames": 2,
         "video_max_frames": 60,
-        "pretrained_model_name_or_path": model_path or "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
-        "max_images": 10,
+        "pretrained_model_name_or_path": tokenizer_path or "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
+        "max_images": 30,
         "num_workers": 4,
         "shrink_ratio": 0.7
     }
@@ -203,9 +198,9 @@ def create_dataset_config(index_path: str, output_dir: str, model_path: str = No
 
 def prepare_dataset(pid_list_file: str, output_path: str,
                     photo_dir: str,
-                    prompt_name: str = None,
+                    prompt: str = None,
                     num_shards: int = 1,
-                    model_path: str = None):
+                    tokenizer_path: str = None):
     """从PID列表准备数据集并保存为parquet格式"""
     # 初始化PromptLoader
     prompt_loader = PromptLoader()
@@ -222,7 +217,7 @@ def prepare_dataset(pid_list_file: str, output_path: str,
         try:
             info = get_media_info(pid, photo_dir)
             if info:
-                sample = create_sample(pid, info, prompt_loader, prompt_name)
+                sample = create_sample(pid, info, prompt_loader, prompt)
                 if sample:
                     samples.append(sample)
             else:
@@ -230,7 +225,6 @@ def prepare_dataset(pid_list_file: str, output_path: str,
         except Exception as e:
             print(f"Error processing PID {pid}: {str(e)}")
             continue
-
     print(f"Created {len(samples)} valid samples")
     
     # 确保输出目录存在
@@ -249,7 +243,7 @@ def prepare_dataset(pid_list_file: str, output_path: str,
             index_path = create_index_file(parquet_files, parquet_dir)
             
             # 创建dataset_config文件，并保存在parquet目录下
-            create_dataset_config(index_path, parquet_dir, model_path)
+            create_dataset_config(index_path, parquet_dir, tokenizer_path)
         else:
             print("No parquet files were generated")
     else:
@@ -257,20 +251,22 @@ def prepare_dataset(pid_list_file: str, output_path: str,
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Prepare dataset from PID list")
-    parser.add_argument("pid_list_file", 
+    parser.add_argument("pid_list_file",
                        help="File containing list of PIDs")
     parser.add_argument("--output-path", default="./output/dataset/dataset",
                        help="Output path for parquet files (without extension)")
     parser.add_argument("--photo-dir", default="/llm_reco/zhouyang12/.cache/Photo",
                        help="Cache directory containing Photo folder")
-    parser.add_argument("--prompt-name", default=None,
+    parser.add_argument("--prompt", default=None,
                        help="Name of the prompt to use")
+    parser.add_argument("--system-prompt", default=None,
+                       help="Name of the system prompt to use")
     parser.add_argument("--num-shards", type=int, default=1,
                        help="Number of shards to split the dataset into")
-    parser.add_argument("--model-path", default=None,
+    parser.add_argument("--tokenizer-path", default=None,
                        help="Path to the model for dataset config")
     
     args = parser.parse_args()
     prepare_dataset(
         args.pid_list_file, args.output_path, args.photo_dir, 
-        args.prompt_name, args.num_shards, args.model_path)
+        args.prompt, args.num_shards, args.tokenizer_path)

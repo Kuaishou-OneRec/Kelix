@@ -120,7 +120,8 @@ class Qwen2VLInputBuilder:
         kwargs.get(
           "max_visual_tokens_per_image", self.max_visual_tokens_per_image)
 
-    if all([isinstance(image_block, str) for image_block in block["video"]]):
+    if isinstance(block["video"], list) and \
+        all([isinstance(image_block, str) for image_block in block["video"]]):
       block["video"] = [
         {
           "type": "image",
@@ -540,7 +541,7 @@ class ParquetDataset(IterableDataset):
     )
 
     # Add a progress bar, dd a progress bar
-    for epoch_fn in tqdm(worker_files, desc=f"[Worker-{worker}] processing: "):
+    for epoch_fn in tqdm(worker_files, desc=f"[Worker-{worker}] process file: "):
       fn, epoch_idx = epoch_fn
       if (fn, epoch_idx) in finish_dict:
         logger.warning(f"[Worker-{worker}] {fn} has been processed, skip.")
@@ -572,7 +573,7 @@ class ParquetDataset(IterableDataset):
           f"{fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
         row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
 
-        for row_idx, row in row_pandas.iterrows():
+        for row_idx, row in tqdm(row_pandas.iterrows(), desc=f"[Worker-{worker}] process row: "):
           if row_idx < offset:
             continue
           try:

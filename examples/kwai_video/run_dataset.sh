@@ -10,6 +10,8 @@ TOKENIZER_PATH=$7
 
 mkdir -p "${DATASET_DIR}"
 
+export PYTHONPATH=$(pwd):$PYTHONPATH
+
 python3 examples/kwai_video/prepare_dataset.py \
     "${PID_LIST_FILE}" \
     --output-path "${DATASET_DIR}" \
