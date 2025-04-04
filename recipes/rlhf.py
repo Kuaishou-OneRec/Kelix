@@ -323,7 +323,9 @@ class DisCoGather(torch.autograd.Function):
 
         group = get_sequence_parallel_group()
         world_size = dist.get_world_size(group)
-        ctx.bs = tensor.shape[0]
+
+        ctx.group = group
+        ctx.world_size = world_size
         ctx.rank = dist.get_rank(group=group)
 
         gathered_tensors = [
@@ -338,10 +340,12 @@ class DisCoGather(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        group = get_sequence_parallel_group()
+        group = ctx.group = group
         lengths = grad_output.shape[1]
-        world_size = get_sequence_parallel_world_size()
+        world_size = ctx.world_size
+
         local_lengths = lengths // world_size
+
         dist.all_reduce(grad_output, op=torch.distributed.ReduceOp.AVG, group=group)
         return grad_output[:, ctx.rank * local_lengths: local_lengths * (ctx.rank + 1)]
 
@@ -397,46 +401,12 @@ def compute_rlhf_loss(
             for idx in unique_sample_idx:
                 sample_indices = (sample_idx == idx.item()).nonzero().flatten()
                 if only_eos:
+                    assert token_ids[sample_indices[-2]].item() == newline_id, token_ids[sample_indices[-2]]
                     sample_indices = sample_indices[-1:]
                     assert token_ids[sample_indices].item() == pad_id, token_ids[sample_indices]
                 rewards_list.append(rewards[sample_indices])
-            # assert cu_seqlens[0] == 0, cu_seqlens
 
-            # eos_indices = list()
-            # for j in range(1, len(cu_seqlens)):
-            #     index = cu_seqlens[j]
-            #     print("[ZDJ]", token_ids[index - 2: index + 2])
-            #     assert token_ids[index - 1] == pad_id, token_ids[index - 1]
-            #     # assert token_ids[index - 2] == eos_token_id, token_ids[index - 2]
-            #     eos_indices.append(index - 1)
-
-            # # token_is_eos = (token_ids == eos_token_id)
-            # # prev_is_eos = (torch.roll(token_ids, 1) == eos_token_id)
-            # # prev_is_eos[0] = False
-            # # eos_indices = (token_is_eos & (~prev_is_eos)).nonzero().flatten()
-
-            # eos_rewards = rewards[eos_indices]
-            # batch_eos_rewards.append(eos_rewards)
         return rewards_list
-
-    def get_sample_all_token_rewards(batch_rewards, batch_token_ids):
-        all_token_rewards = list()
-        for i in range(batch_rewards.shape[0]):
-            token_ids = batch_token_ids[i]
-            rewards = batch_rewards[i]
-
-            token_is_eos = (token_ids == eos_token_id)
-            prev_is_eos = (torch.roll(token_ids, 1) == eos_token_id)
-            prev_is_eos[0] = False
-            eos_indices = (token_is_eos & (~prev_is_eos)).nonzero().flatten()
-
-            prev_is_eos[0] = True
-            bos_indices = (prev_is_eos & (~token_is_eos)).nonzero().flatten()
-            assert eos_indices.shape[0] == bos_indices.shape[0], "{} {}".format(eos_indices, bos_indices)
-
-            for start, end in zip(bos_indices, eos_indices):
-                all_token_rewards.append(batch_rewards[start: end + 1])
-        return all_token_rewards
 
     def pad_fixed_length_1d(tensor, length, value, left_padding=False):
         if tensor.shape[0] >= length:
