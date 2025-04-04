@@ -4,7 +4,7 @@
 
 ### 镜像
 
-`deepspeed:v1.6_vllm0.8.1_ray_torch2.5.1_cuda11.8.0_python3.10.12_transformers4.49_zh`
+`deepspeed:v1.6_vllm0.8.1_ray_torch2.5.1_cuda11.8.0_python3.10.12_transformers4.49`
 
 ### 使用
 
