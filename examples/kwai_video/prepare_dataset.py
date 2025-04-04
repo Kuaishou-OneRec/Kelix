@@ -54,7 +54,7 @@ def create_images_content(image_paths: List[str]) -> List[Dict]:
             "type": "video",
             "video": [
                 f"{i}.jpg" for i in range(len(image_paths))
-            ],  # 直接使用图片的绝对路径
+            ],
             "max_pixels": 1280 * 28 * 28,
             "min_pixels": 16 * 28 * 28,
         }

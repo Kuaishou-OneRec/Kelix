@@ -10,7 +10,7 @@
 
 原理：通过Ray起多个vLLM Engine，每个Engine对应一个Rank，对数据集按照Rank做Sharding，每个Rank调用自己的Engine处理对应的Shard，从而实现多机多卡分布式离线推理。
 
-所以，首先需要制作数据集，目前只支持Parquet格式。数据集格式参考项目主页README的Data Preparation部分。数据集文件个数需要大于等于vLLM Engine个数。vLLM Engine个数取决于模型推理时的tp_size和机器数量，N_GPUS // TP_SIZE = N_ENGINES。通常Qwen 7B推荐tp=4，72B推荐tp=8。
+所以，首先需要制作数据集，目前只支持Parquet格式。数据集格式参考项目主页README的Data Preparation部分。数据集文件个数需要大于等于N_ENGINES(vLLM Engine个数) * NUM_WORKERS(torch dataset的worker个数)。vLLM Engine个数取决于模型推理时的tp_size和机器数量，N_GPUS // TP_SIZE = N_ENGINES。通常Qwen2-VL 7B推荐tp=4，72B推荐tp=8。
 
 数据集制作好之后，参考本文件夹下的`run_vllm_inference.sh`，自己修改对应参数，batch_size可以设大一些，vLLM是串行处理的，不会OOM。
 
