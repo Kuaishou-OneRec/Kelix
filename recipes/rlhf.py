@@ -133,8 +133,6 @@ def get_argument_parser():
     ############ Processor Args ############
     parser.add_argument("--pad_id", type=int, default=151643,
                       help="Processor pad token id")
-    parser.add_argument("--eos_id", type=int, default=151645,
-                      help="Processor eos token id")
 
     ############ RLHF specific args ############
     # parser.add_argument("--rlhf_beta", type=float, default=0.1,
@@ -286,33 +284,7 @@ def get_batch_rewards(
 
     return logits.squeeze(-1), local_labels, valid_mask
 
-    # log_probs = F.log_softmax(logits.float(), dim=-1)
-    
-    # # 创建新的张量进行标签处理
-    # valid_labels = local_labels.clone()
-    # valid_labels[valid_labels == ignore_index] = 0
-    
-    # # 使用新的张量进行gather操作
-    # token_log_probs = log_probs.gather(
-    #     dim=-1, 
-    #     index=valid_labels.unsqueeze(-1)
-    # ).squeeze(-1)
-    
-    # # 将ignore_index位置的概率置为0
-    # token_log_probs = token_log_probs * (local_labels != ignore_index).float()
-        
-    # return token_log_probs
 
-
-# tensor_list = [None for _ in range(world_size)]
-#         dist.all_gather_object(
-#             object_list=tensor_list, obj=tensor,
-#             group=group
-#         )
-#         tensor_list = [x.to(torch.cuda.current_device()) for x in tensor_list]
-#         return torch.concat(tensor_list, dim=dim)
-# group = get_sequence_parallel_group()
-#     world_size = dist.get_world_size(group)
 class DisCoGather(torch.autograd.Function):
     """An autograd function that performs allgather on a tensor."""
 
@@ -362,7 +334,6 @@ def compute_rlhf_loss(
     rejected_token_ids: torch.LongTensor,
     chosen_sample_idx: torch.IntTensor,
     rejected_sample_idx: torch.IntTensor,
-    eos_token_id: int = 151645,
     pad_id: int = 151643,
     newline_id: int = 198,
     loss_style="sample",
@@ -414,10 +385,10 @@ def compute_rlhf_loss(
         padding_length = length - tensor.shape[0]
         padding = tensor.new_full((padding_length, ), value, dtype=tensor.dtype)
         if left_padding:
-            new_tensor = torch.concat([padding, tensor], dim=0)
+            padding_tensor = torch.concat([padding, tensor], dim=0)
         else:
-            new_tensor = torch.concat([tensor, padding], dim=0)
-        return new_tensor
+            padding_tensor = torch.concat([tensor, padding], dim=0)
+        return padding_tensor
 
     gathered_chosen_rewards = disco_gather(chosen_rewards)
     gathered_rejected_rewards = disco_gather(rejected_rewards)
@@ -462,8 +433,8 @@ def compute_rlhf_loss(
     chosen_rewards_sum = 0.
     rejected_rewards_sum = 0.
 
-    chosen_token_rewards_list = get_sample_all_token_rewards(gathered_chosen_rewards, chosen_token_ids)
-    rejected_token_rewards_list = get_sample_all_token_rewards(gathered_rejected_rewards, rejected_token_ids)
+    chosen_token_rewards_list = get_token_rewards(gathered_chosen_rewards, chosen_token_ids, chosen_sample_idx, only_eos=False)
+    rejected_token_rewards_list = get_token_rewards(gathered_rejected_rewards, rejected_token_ids, rejected_sample_idx, only_eos=False)
 
     assert len(chosen_token_rewards_list) == len(rejected_token_rewards_list)
 
@@ -598,6 +569,10 @@ def concatenate_inputs(chosen_inputs, rejected_inputs):
         # 添加调试信息
         if isinstance(chosen_inputs[key], torch.Tensor):
             print_rank_0(f"Input shapes - {key}: {chosen_inputs[key].shape}, {rejected_inputs[key].shape}")
+            if key == "sample_idx":
+                from collections import Counter
+                tensor = chosen_inputs[key].flatten().detach().cpu().numpy()
+                print_rank_0("Sample_idx", dict(Counter(list(tensor))))
         if key in ["input_ids", "attention_mask", "loss_mask", "cu_seqlens"]:
             continue
 
@@ -1072,7 +1047,6 @@ def train():
             chosen_sample_idx=chosen_inputs["sample_idx"],
             rejected_sample_idx=rejected_inputs["sample_idx"],
             loss_style=args.loss_style,
-            eos_token_id=args.eos_id,
             pad_id=args.pad_id
         )
 
