@@ -575,6 +575,8 @@ def concatenate_inputs(chosen_inputs, rejected_inputs):
                 for x in list(tensor):
                     print_rank_0("[ZDJ]", x)
                 # print_rank_0("Sample_idx", dict(Counter(list(tensor))))
+            if key == "cu_seqlens":
+                print_rank_0(chosen_inputs[key])
             
         if key in ["input_ids", "attention_mask", "loss_mask", "cu_seqlens"]:
             continue
