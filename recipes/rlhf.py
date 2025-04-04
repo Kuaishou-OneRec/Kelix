@@ -323,7 +323,7 @@ class DisCoGather(torch.autograd.Function):
 
         group = get_sequence_parallel_group()
         world_size = dist.get_world_size(group)
-        print("[ZDJ] world_size", world_size)
+        print("[ZDJ] world_size", tensor.shape)
         ctx.bs = tensor.shape[0]
         ctx.rank = dist.get_rank(group=group)
 
@@ -342,8 +342,8 @@ class DisCoGather(torch.autograd.Function):
         lengths = grad_output.shape[1]
         world_size = get_sequence_parallel_world_size()
         local_lengths = lengths // world_size
-        print("[ZDJ] in ", local_lengths)
         dist.all_reduce(grad_output, op=torch.distributed.ReduceOp.AVG)
+        print("[ZDJ]", grad_output.shape)
         return grad_output[:, ctx.rank * local_lengths: local_lengths * (ctx.rank + 1)]
 
 
