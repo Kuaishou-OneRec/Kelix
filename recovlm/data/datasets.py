@@ -1422,6 +1422,15 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
 
     if isinstance(block["video"], list):
+      #TODO:把数据格式统一成，video 的list中的image都是dict格式。
+      if all([isinstance(image_block, str) for image_block in block["video"]]):
+        block["video"] = [
+          {
+            "type": "image",
+            "image": image_str
+          }
+          for image_str in block["video"]
+        ]
       for image_block in block["video"]:
         assert image_block["type"] == "image" and "image" in image_block
         self._fill_image_block(image_block, sample_dict, conf)
