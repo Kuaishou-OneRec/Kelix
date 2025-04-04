@@ -398,6 +398,7 @@ def compute_rlhf_loss(
 
             for idx in unique_sample_idx:
                 sample_indices = (sample_idx == idx.item()).nonzero().flatten()
+                print("[ZDJ] nb", sample_indices[-10:])
                 if only_eos:
                     sample_indices = sample_indices[-1:]
                     assert sample_indices[0].item() == pad_id, sample_indices
