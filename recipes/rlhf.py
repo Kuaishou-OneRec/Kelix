@@ -340,7 +340,7 @@ class DisCoGather(torch.autograd.Function):
 
     @staticmethod
     def backward(ctx, grad_output):
-        group = ctx.group = group
+        group = ctx.group
         lengths = grad_output.shape[1]
         world_size = ctx.world_size
 
