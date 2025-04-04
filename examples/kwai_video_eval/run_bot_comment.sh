@@ -15,7 +15,7 @@ ray job submit --working-dir ./ -- \
     --output_dir $OUTPUT_DIR \
     --num_workers 4 \
     --num_gpus_per_node 8 \
-    --num_inference_node 1 \
+    --num_inference_node 2 \
     --tp_size 4 \
     --num_generations 5 \
     --max_new_tokens 2048 \
