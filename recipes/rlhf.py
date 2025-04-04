@@ -391,6 +391,7 @@ def compute_rlhf_loss(
             rewards = batch_rewards[i]
             sample_idx = batch_sample_idx[i]
 
+            print("[ZDJ] test", sample_idx, token_ids.shape)
             unique_sample_idx = torch.unique(sample_idx)
             unique_sample_idx, _ = unique_sample_idx.sort()
             if unique_sample_idx[0].item() == -1:
