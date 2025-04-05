@@ -474,7 +474,11 @@ def compute_rlhf_loss(
         padding_chosen_token_ids = pad_fixed_length_1d(chosen_tokens, max_length, pad_id)
         padding_rejected_token_ids = pad_fixed_length_1d(rejected_tokens, max_length, pad_id)
 
-        divergence_token_indices = (padding_chosen_token_ids != padding_rejected_token_ids).nonzero().flatten()[0]
+        divergence_token_indices = (padding_chosen_token_ids != padding_rejected_token_ids).nonzero().flatten()
+        if divergence_token_indices.numel() > 0:
+            divergence_token_indices = divergence_token_indices[0].item()
+        else:
+            divergence_token_indices = 0
         partial_chosen_rewards = chosen_token_rewards[divergence_token_indices:]
         partial_rejected_rewards = rejected_token_rewards[divergence_token_indices:]
 
