@@ -356,6 +356,7 @@ def compute_rlhf_loss(
 
     def get_token_rewards(batch_rewards, batch_token_ids, batch_sample_idx, only_eos=False):
         rewards_list = list()
+        tokens_list = list()
         if batch_sample_idx.dim() == 1:
             batch_sample_idx = batch_cu_sample_idx[None, :]
 
@@ -376,8 +377,9 @@ def compute_rlhf_loss(
                     sample_indices = sample_indices[-1:]
                     assert token_ids[sample_indices].item() == pad_id, token_ids[sample_indices]
                 rewards_list.append(rewards[sample_indices])
+                tokens_list.append(token_ids[sample_indices])
 
-        return rewards_list
+        return rewards_list, tokens_list
 
     def pad_fixed_length_1d(tensor, length, value, left_padding=False):
         if tensor.shape[0] >= length:
@@ -398,8 +400,8 @@ def compute_rlhf_loss(
     batch_size = gathered_chosen_rewards.shape[0]
 
     if loss_style == "sample":
-        batch_chosen_eos_rewards = get_token_rewards(gathered_chosen_rewards, chosen_token_ids, chosen_sample_idx, only_eos=True)
-        batch_rejected_eos_rewards = get_token_rewards(gathered_rejected_rewards, rejected_token_ids, rejected_sample_idx, only_eos=True)
+        batch_chosen_eos_rewards, _ = get_token_rewards(gathered_chosen_rewards, chosen_token_ids, chosen_sample_idx, only_eos=True)
+        batch_rejected_eos_rewards, _ = get_token_rewards(gathered_rejected_rewards, rejected_token_ids, rejected_sample_idx, only_eos=True)
 
         losses = 0.
         chosen_rewards_sum = 0.
@@ -433,19 +435,34 @@ def compute_rlhf_loss(
     chosen_rewards_sum = 0.
     rejected_rewards_sum = 0.
 
-    chosen_token_rewards_list = get_token_rewards(gathered_chosen_rewards, chosen_token_ids, chosen_sample_idx, only_eos=False)
-    rejected_token_rewards_list = get_token_rewards(gathered_rejected_rewards, rejected_token_ids, rejected_sample_idx, only_eos=False)
+    chosen_token_rewards_list, chosen_token_list = get_token_rewards(
+        gathered_chosen_rewards, 
+        chosen_token_ids, 
+        chosen_sample_idx, 
+        only_eos=False
+    )
+    rejected_token_rewards_list, rejected_token_list = get_token_rewards(
+        gathered_rejected_rewards, 
+        rejected_token_ids, 
+        rejected_sample_idx, 
+        only_eos=False
+    )
 
     assert len(chosen_token_rewards_list) == len(rejected_token_rewards_list)
 
-    for chosen_token_rewards, rejected_token_rewards in zip(chosen_token_rewards_list, rejected_token_rewards_list):
+    for chosen_token_rewards, rejected_token_rewards, chosen_tokens, rejected_tokens in zip(
+        chosen_token_rewards_list, 
+        rejected_token_rewards_list,
+        chosen_token_list,
+        rejected_token_list
+    ):
         max_length = max(chosen_token_rewards.shape[0], rejected_token_rewards.shape[0])
         
         chosen_token_rewards = pad_fixed_length_1d(chosen_token_rewards, max_length, 0.)
         rejected_token_rewards = pad_fixed_length_1d(rejected_token_rewards, max_length, 0.)
 
-        padding_chosen_token_ids = pad_fixed_length_1d(chosen_token_ids, max_length, pad_id)
-        padding_rejected_token_ids = pad_fixed_length_1d(rejected_token_ids, max_length, pad_id)
+        padding_chosen_token_ids = pad_fixed_length_1d(chosen_tokens, max_length, pad_id)
+        padding_rejected_token_ids = pad_fixed_length_1d(rejected_tokens, max_length, pad_id)
 
         divergence_token_indices = (padding_chosen_token_ids != padding_rejected_token_ids).nonzero().flatten()[0]
         partial_chosen_rewards = chosen_token_rewards[divergence_token_indices:]
