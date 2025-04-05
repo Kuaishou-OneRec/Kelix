@@ -400,8 +400,18 @@ def compute_rlhf_loss(
     batch_size = gathered_chosen_rewards.shape[0]
 
     if loss_style == "sample":
-        batch_chosen_eos_rewards, _ = get_token_rewards(gathered_chosen_rewards, chosen_token_ids, chosen_sample_idx, only_eos=True)
-        batch_rejected_eos_rewards, _ = get_token_rewards(gathered_rejected_rewards, rejected_token_ids, rejected_sample_idx, only_eos=True)
+        batch_chosen_eos_rewards, _ = get_token_rewards(
+            gathered_chosen_rewards, 
+            chosen_token_ids, 
+            chosen_sample_idx, 
+            only_eos=True
+        )
+        batch_rejected_eos_rewards, _ = get_token_rewards(
+            gathered_rejected_rewards, 
+            rejected_token_ids, 
+            rejected_sample_idx, 
+            only_eos=True
+        )
 
         losses = 0.
         chosen_rewards_sum = 0.
@@ -409,7 +419,7 @@ def compute_rlhf_loss(
 
         chosen_num_samples = sum([x.numel() for x in batch_chosen_eos_rewards])
         rejected_num_samples = sum([x.numel() for x in batch_rejected_eos_rewards])
-        assert chosen_num_samples == rejected_num_samples and chosen_num_samples > 0, "{} {}".format(chosen_token_ids, rejected_token_ids)
+        assert chosen_num_samples == rejected_num_samples and chosen_num_samples > 0
 
         for chosen_eos_rewards, rejected_eos_rewards in zip(batch_chosen_eos_rewards, batch_rejected_eos_rewards):
             assert chosen_eos_rewards.shape == rejected_eos_rewards.shape
