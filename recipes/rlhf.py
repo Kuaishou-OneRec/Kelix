@@ -569,20 +569,6 @@ def concatenate_inputs(chosen_inputs, rejected_inputs):
         # 添加调试信息
         if isinstance(chosen_inputs[key], torch.Tensor):
             print_rank_0(f"Input shapes - {key}: {chosen_inputs[key].shape}, {rejected_inputs[key].shape}")
-            if key == "input_ids":
-                from collections import Counter
-                tensor = chosen_inputs[key].flatten().detach().cpu().numpy()
-                for x in list(tensor):
-                    print_rank_0("[ZDJ]", x)
-                # print_rank_0("Sample_idx", dict(Counter(list(tensor))))
-            if key == "sample_idx":
-                from collections import Counter
-                tensor = chosen_inputs[key].flatten().detach().cpu().numpy()
-                # for x in list(tensor):
-                #     print_rank_0("[ZDJ]", x)
-                print_rank_0("Sample_idx", dict(Counter(list(tensor))))
-            if key == "cu_seqlens":
-                print_rank_0(chosen_inputs[key])
             
         if key in ["input_ids", "attention_mask", "loss_mask", "cu_seqlens"]:
             continue
