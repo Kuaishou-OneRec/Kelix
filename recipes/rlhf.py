@@ -322,7 +322,6 @@ class DisCoGather(torch.autograd.Function):
         return grad_output[:, ctx.rank * local_lengths: local_lengths * (ctx.rank + 1)]
 
 
-
 def disco_gather(tensor):
     return DisCoGather.apply(tensor)
 
@@ -492,8 +491,9 @@ def compute_rlhf_loss(
             print_rank_0(f"====rlhf==== partial_rejected_rewards: {partial_rejected_rewards}")
             raise ValueError("logits contains nan or inf values")
         
-        loss = -F.logsigmoid(logits)
-        losses += loss.mean()
+        logits = torch.sigmoid(logits).mean()
+        loss = -torch.log(logits)
+        losses += loss
         chosen_rewards_sum += partial_chosen_rewards.mean()
         rejected_rewards_sum += partial_rejected_rewards.mean()
 
