@@ -476,6 +476,8 @@ def compute_rlhf_loss(
 
         divergence_token_indices = (padding_chosen_token_ids != padding_rejected_token_ids).nonzero().flatten()
         if divergence_token_indices.numel() > 0:
+            print_rank_0("[ZDJ]", padding_chosen_token_ids[divergence_token_indices])
+            print_rank_0("[ZDJ]", padding_rejected_token_ids[divergence_token_indices])
             divergence_token_indices = divergence_token_indices[0].item()
         else:
             divergence_token_indices = 0
