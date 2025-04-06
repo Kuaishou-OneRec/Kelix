@@ -55,7 +55,7 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/rlhf.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config /llm_reco/zangdunju/vllm/rlhf/recovlm/examples/vlm/configs/comment_reward.json \
+    --dataset_config /llm_reco/zangdunju/vllm/rlhf/recovlm/examples/vlm/configs/72b_comment_reward.json \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
     --enable_gradient_checkpointing \
