@@ -52,6 +52,7 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 # --load_weights_only \
 
 
+
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/rlhf.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
