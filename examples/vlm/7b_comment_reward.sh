@@ -15,8 +15,8 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco_ssd/zangdunju/output2/RecoVLM/Qwen2-VL-7B-RL/reward_model/0.0.0.1_sample
+MODEL_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.3.1/cmt/global_step9001/merged9001 # Pretrained/Base model path
+OUTPUT_DIR=/llm_reco_ssd/zangdunju/output2/RecoVLM/Qwen2-VL-7B-RL/reward_model/0.0.0.2_sample
 
 mkdir -p $OUTPUT_DIR
 
@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="sft 0.0.0.1: stg2 is 0.0.0.1 sample reward model"
+comment="sft 0.0.0.1: stg2 is 0.0.0.1 sample reward model after sft"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
