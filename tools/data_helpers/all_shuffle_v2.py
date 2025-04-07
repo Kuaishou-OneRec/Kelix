@@ -164,6 +164,9 @@ class AutoShuffler(MPIBase):
         self._shuffle_stage()
         self.comm.barrier()
 
+        if self.rank == 0:
+            self.fs.rm(self.prepare_output_dir, recursive=True)
+
 def main():
     parser = argparse.ArgumentParser(description="Auto Two-Stage Shuffler")
     parser.add_argument("--input", required=True, nargs="+", 
