@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.3.1/cmt/global_step9001/merged9001 # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco_ssd/zangdunju/output2/RecoVLM/Qwen2-VL-7B-RL/reward_model/0.0.0.2_sample
+OUTPUT_DIR=/llm_reco_ssd/zangdunju/output2/RecoVLM/Qwen2-VL-7B-RL/reward_model/0.0.0.2_token
 
 mkdir -p $OUTPUT_DIR
 
@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="sft 0.0.0.1: stg2 is 0.0.0.1 sample reward model after sft"
+comment="sft 0.0.0.1: stg2 is 0.0.0.1 token reward model after sft"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -80,7 +80,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --kml_id $KML_ID \
     --kml_task_id $KML_TASK_ID \
     --load_weights_only \
-    --loss_style sample \
+    --loss_style token \
     --deepspeed \
    --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
