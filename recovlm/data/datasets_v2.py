@@ -126,14 +126,11 @@ class Qwen2VLInputBuilder:
           "max_visual_tokens_per_image", self.max_visual_tokens_per_image)
 
     if isinstance(block["video"], list):
+      if all([isinstance(image_block, str) for image_block in block["video"]]):
+        block["video"] = [{"type": "image", "image": image_str} for image_str in block["video"]]
       for image_block in block["video"]:
-        try:
-          assert image_block["type"] == "image" and "image" in image_block, f"get image_block={image_block}"
-          self.fill_image_block(image_block, sample, **kwargs)
-        except:
-          import traceback
-          print(f"image_block={image_block}, sample={sample.keys()}")
-          traceback.print_exc()
+        self.fill_image_block(image_block, sample, **kwargs)
+
 
     elif isinstance(block["video"], str) or isinstance(block["video"], bytes):
       # video in local tar, replace by video bytes
