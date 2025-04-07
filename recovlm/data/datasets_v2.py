@@ -334,7 +334,7 @@ class Qwen2VLInputBuilder:
     except Exception as e:
       import traceback
       traceback.print_exc()
-      raise ValueError(f"Failed to parse vision info: {e}")
+      raise ValueError(f"Failed to parse vision info: {e}, messages={messages[:1000]}")
     
     if image_inputs:
       image_inputs = image_inputs[:self.max_images]
