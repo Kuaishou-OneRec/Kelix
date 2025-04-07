@@ -9,6 +9,8 @@ import base64
 from pathlib import Path
 from io import BytesIO
 from PIL import Image
+from recovlm.utils.common import print_rank_0, Timer
+
 
 import torch.nn.functional as F
 
@@ -453,7 +455,7 @@ class ParquetDataset(IterableDataset):
     # update
     self.finish_dict_all[worker].update(tmp_finish_dict)
     self.offset_dict_all[worker].update(tmp_offset_dict)
-    logger.warning(f"[rank{rank}-woker{worker}] load checkpoint success.")
+    logger.warning(f"[rank{dist.get_rank()}-woker{worker}] load checkpoint success.")
 
   def _parser(self, row, file_url):
     try:
@@ -524,7 +526,9 @@ class ParquetDataset(IterableDataset):
         image_bytes_stream = BytesIO(image_bytes)
         image = Image.open(image_bytes_stream)
         samples[image_name] = image
+      print_rank_0(2345542, samples.keys())
       return samples
+    
     except:
       logger.error(
         f"ParquetDataset parse sample error!!! "
@@ -1309,7 +1313,7 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
     assert "message" in sample["json"] or "messages" in sample["json"]
     data_conf["max_visual_tokens_per_image"] = max(
         data_conf["max_visual_tokens_per_image"], data_conf["min_visual_tokens_per_image"])
-    
+    print_rank_0("ppppppp1111", sample.keys())
     # print_rank_0(print_input_info(data_conf, "data_conf:", return_str=True))
     msg_key = "message" if "message" in sample["json"] else "messages"
     messages = sample["json"][msg_key]
@@ -1619,6 +1623,7 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
     cur_length = 0
 
     for sample in self.dataset:
+      print_rank_0(345655555, sample.keys())
       sample_key = sample["__key__"] if "__key__" in sample else ""
       sample_url = sample["__url__"] if "__url__" in sample else ""
 
