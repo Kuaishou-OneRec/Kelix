@@ -329,8 +329,13 @@ class Qwen2VLInputBuilder:
       messages, tokenize=False,
       add_generation_prompt=True
     )
-
-    image_inputs, video_inputs = process_vision_info(messages)
+    try:
+      image_inputs, video_inputs = process_vision_info(messages)
+    except Exception as e:
+      import traceback
+      traceback.print_exc()
+      raise ValueError(f"Failed to parse vision info: {e}")
+    
     if image_inputs:
       image_inputs = image_inputs[:self.max_images]
     if video_inputs:
