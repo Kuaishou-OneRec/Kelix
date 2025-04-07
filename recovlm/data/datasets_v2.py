@@ -10,7 +10,7 @@ from pathlib import Path
 from io import BytesIO
 from PIL import Image
 from recovlm.utils.common import print_rank_0, Timer
-
+import os
 
 import torch.nn.functional as F
 
@@ -33,6 +33,52 @@ from recovlm.utils.common import shell_hdfs_ls, load_parquet_file
 from tqdm import tqdm
 
 logger = init_logger(__name__)
+
+import json
+
+import requests
+
+class PidInfoClient:
+    """简化版PID信息服务客户端"""
+    # 
+    def __init__(self, host='10.84.241.154', port=8000, timeout=30):
+        """初始化客户端
+        
+        Args:
+            host: 服务主机地址，默认为localhost
+            port: 服务端口，默认为8000
+            timeout: 请求超时时间（秒），默认30秒
+        """
+        self.base_url = f'http://{host}:{port}/pid_info'
+        self.timeout = timeout
+    #
+    def get_pid_info(self, pid, downloader_params=None, text_params=None):
+        """获取指定PID的信息
+        
+        Args:
+            pid: 内容ID
+            downloader_params: 下载器的可选参数，如 {'verbose': True}
+            text_params: 文本检索的可选参数，如 {'cache_only': True}
+            
+        Returns:
+            包含PID信息的字典
+        """
+        # 如果有自定义参数，使用POST请求
+        if downloader_params is not None or text_params is not None:
+            data = {'pid': int(pid)}
+            if downloader_params is not None:
+                data['downloader_params'] = downloader_params
+            if text_params is not None:
+                data['text_params'] = text_params
+            #
+            response = requests.post(self.base_url, json=data, timeout=self.timeout)
+        else:
+            # 否则使用GET请求
+            response = requests.get(f'{self.base_url}?pid={pid}', timeout=self.timeout)
+        #
+        # 返回JSON响应
+        return response.json()
+
 
 DEFAULT_SYSTEM_PROMPT = \
 """You are a helpful assistant."""
@@ -59,6 +105,7 @@ Let me analyze this question carefully...
 class Qwen2VLInputBuilder:
   def __init__(self,
                pretrained_model_name_or_path: Optional[str] = None,
+               pid_info_client_host='10.84.241.154',
                **kwargs):
     self.processor = \
         AutoProcessor.from_pretrained(pretrained_model_name_or_path)
@@ -81,6 +128,7 @@ class Qwen2VLInputBuilder:
     self.max_visual_tokens_per_image = \
         kwargs.get("max_visual_tokens_per_image", 512)
     self.max_images = kwargs.get("max_images", 10)
+    self.pid_info_client = PidInfoClient(pid_info_client_host)
 
   def fill_image_block(self,
                        block: Dict[str, Any],
@@ -136,6 +184,13 @@ class Qwen2VLInputBuilder:
       # video in local tar, replace by video bytes
       if isinstance(block["video"], str) and block["video"] in sample:
         block["video"] = sample[block["video"]]
+      
+      if isinstance(block["video"], str) and not os.path.exists(block["video"]):
+        # media_path
+        pid_info = self.pid_info_client.get_pid_info(block["video"].split(".")[0].split('/')[-1])
+        if pid_info['media_type'] != 'video': raise ValueError(f"media_type={pid_info['media_type']} is not video")
+        block["video"] = pid_info["media_path"]
+
       # fill other params
       block["min_pixels"] = \
         min_visual_tokens_per_image * (self.patch_size ** 2) * \
