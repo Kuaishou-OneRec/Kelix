@@ -132,7 +132,7 @@ class Qwen2VLInputBuilder:
           self.fill_image_block(image_block, sample, **kwargs)
         except:
           import traceback
-          print(f"image_block={image_block}")
+          print(f"image_block={image_block}, sample={sample.keys()}")
           traceback.print_exc()
 
     elif isinstance(block["video"], str) or isinstance(block["video"], bytes):
@@ -526,7 +526,7 @@ class ParquetDataset(IterableDataset):
         image_bytes_stream = BytesIO(image_bytes)
         image = Image.open(image_bytes_stream)
         samples[image_name] = image
-      print_rank_0(2345542, samples.keys())
+      print_rank_0(2345542, samples.keys(), images.keys())
       return samples
     
     except:
