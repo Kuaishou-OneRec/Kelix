@@ -125,8 +125,13 @@ class Qwen2VLInputBuilder:
 
     if isinstance(block["video"], list):
       for image_block in block["video"]:
-        assert image_block["type"] == "image" and "image" in image_block, f"get image_block={image_block}"
-        self.fill_image_block(image_block, sample, **kwargs)
+        try:
+          assert image_block["type"] == "image" and "image" in image_block, f"get image_block={image_block}"
+          self.fill_image_block(image_block, sample, **kwargs)
+        except:
+          import traceback
+          print(f"image_block={image_block}")
+          traceback.print_exc()
 
     elif isinstance(block["video"], str) or isinstance(block["video"], bytes):
       # video in local tar, replace by video bytes
