@@ -1,6 +1,7 @@
 from typing import Dict, Any, List
 import io
 import torch
+import argparse
 import sys
 sys.path.append("/llm_reco/zangdunju/vllm/rlhf/recovlm")
 from tqdm import tqdm
@@ -22,22 +23,72 @@ from vllm import LLM, SamplingParams
 from recovlm.training.parallel import initialize_model_parallel
 
 
-file = "/llm_reco/zangdunju/dataset/tmp/test/test.parquet"
-model_dir = "/llm_reco_ssd/zangdunju/models/Reward"
-deepspeed.init_distributed()
-initialize_model_parallel(1)
+def evaluate(df, model):
 
-model = Qwen2VLForConditionalGeneration.from_pretrained(
-    model_dir, 
-    _attn_implementation="flash_attention_2",
-    use_cache=False
-)
-model = model.cuda()
-model = model.to(torch.bfloat16)
-processor = Qwen2VLProcessor.from_pretrained(model_dir)
-model.eval()
+    tot = 0
+    acc = 0
+    for _, row in tqdm(df.iterrows()):
+        raw_images = row.images
+        images = parse_images(row.images)
+        chosen = json.loads(row.messages) + [json.loads(row.chosen)]
+        rejected = json.loads(row.messages) + [json.loads(row.rejected)]
+        chosen_inputs = process(processor, chosen, images=images, raw_images=raw_images)
+        rejected_inputs = process(processor, rejected, images=images)
 
-df = pd.read_parquet(file)
+        print(chosen_inputs["input_ids"].numel())
+        if chosen_inputs["input_ids"].shape[-1] >= 3000 or rejected_inputs["input_ids"].shape[-1] >= 3000:
+            continue
+        tot += 1
+        chosen_output = model(
+            chosen_inputs["input_ids"],
+            image_grid_thw=chosen_inputs.get("image_grid_thw"),
+            video_grid_thw=chosen_inputs.get("video_grid_thw"),
+            pixel_values=chosen_inputs.get("pixel_values"),
+            pixel_values_videos=chosen_inputs.get("pixel_values_videos"),
+            cu_seqlens=chosen_inputs.get("cu_seqlens")
+        )
+        rejected_output = model(
+            rejected_inputs["input_ids"],
+            image_grid_thw=rejected_inputs.get("image_grid_thw"),
+            video_grid_thw=rejected_inputs.get("video_grid_thw"),
+            pixel_values=rejected_inputs.get("pixel_values"),
+            pixel_values_videos=rejected_inputs.get("pixel_values_videos"),
+            cu_seqlens=rejected_inputs.get("cu_seqlens")
+        )
+
+        assert chosen_inputs["input_ids"].flatten()[-1].item() == 198
+        assert rejected_inputs["input_ids"].flatten()[-1].item() == 198
+
+        chosen_rewards = chosen_output.reward_logits.flatten()[-1].item()
+        rejected_rewards = rejected_output.reward_logits.flatten()[-1].item()
+
+        acc += int(chosen_rewards > rejected_rewards)
+        torch.cuda.empty_cache()
+
+    return {
+        "acc": acc,
+        "tot": tot
+    }
+
+
+def main():
+    file = args.file
+    model_dir = args.model_dir
+    
+    deepspeed.init_distributed()
+    initialize_model_parallel(1)
+
+    model = Qwen2VLForConditionalGeneration.from_pretrained(
+        model_dir, 
+        _attn_implementation="flash_attention_2",
+        use_cache=False
+    )
+    model = model.cuda()
+    model = model.to(torch.bfloat16)
+    processor = Qwen2VLProcessor.from_pretrained(model_dir)
+    model.eval()
+
+    evaluate(df)
 
 
 def parse_images(images=None):
@@ -103,49 +154,9 @@ def process(processor, messages, images=None, raw_images=None):
     return inputs
 
 
-tot = 0
-acc = 0
-for _, row in tqdm(df.iterrows()):
-    raw_images = row.images
-    images = parse_images(row.images)
-    chosen = json.loads(row.messages) + [json.loads(row.chosen)]
-    rejected = json.loads(row.messages) + [json.loads(row.rejected)]
-    chosen_inputs = process(processor, chosen, images=images, raw_images=raw_images)
-    rejected_inputs = process(processor, rejected, images=images)
-
-    print(chosen_inputs["input_ids"].numel())
-    if chosen_inputs["input_ids"].shape[-1] >= 3000 or rejected_inputs["input_ids"].shape[-1] >= 3000:
-        continue
-    tot += 1
-    chosen_output = model(
-        chosen_inputs["input_ids"],
-        image_grid_thw=chosen_inputs.get("image_grid_thw"),
-        video_grid_thw=chosen_inputs.get("video_grid_thw"),
-        pixel_values=chosen_inputs.get("pixel_values"),
-        pixel_values_videos=chosen_inputs.get("pixel_values_videos"),
-        cu_seqlens=chosen_inputs.get("cu_seqlens")
-    )
-    rejected_output = model(
-        rejected_inputs["input_ids"],
-        image_grid_thw=rejected_inputs.get("image_grid_thw"),
-        video_grid_thw=rejected_inputs.get("video_grid_thw"),
-        pixel_values=rejected_inputs.get("pixel_values"),
-        pixel_values_videos=rejected_inputs.get("pixel_values_videos"),
-        cu_seqlens=rejected_inputs.get("cu_seqlens")
-    )
-
-    # assert chosen_inputs["input_ids"].dim() == 10, chosen_inputs["input_ids"].shape
-    assert chosen_inputs["input_ids"].flatten()[-1].item() == 198
-    assert rejected_inputs["input_ids"].flatten()[-1].item() == 198
-
-    chosen_rewards = chosen_output.reward_logits.flatten()[-1].item()
-    rejected_rewards = rejected_output.reward_logits.flatten()[-1].item()
-
-    acc += int(chosen_rewards > rejected_rewards)
-    # if tot == 40:
-    #     break
-    # print(torch.cuda.memory_allocated())
-    torch.cuda.empty_cache()
-    # print(torch.cuda.memory_allocated())
-
-print(f"{acc}/{tot}")
+if __name__ == "__main__":
+    parser = argparse.AugmentParser()
+    parser.add_argument("--file", type=str, default="/llm_reco/zangdunju/dataset/tmp/test/test.parquet")
+    parser.add_argument("--model_dir", type=str, default="/llm_reco_ssd/zangdunju/models/Reward")
+    ags = parser.parse_args()
+    main(ags)

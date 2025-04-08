@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.3.1/cmt/global_step9001/merged9001 # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco_ssd/zangdunju/output2/RecoVLM/Qwen2-VL-7B-RL/reward_model/0.0.0.3_sample
+OUTPUT_DIR=/llm_reco_ssd/zangdunju/output2/RecoVLM/Qwen2-VL-7B-RL/reward_model/0.0.0.4_sample
 
 mkdir -p $OUTPUT_DIR
 

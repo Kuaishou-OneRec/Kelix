@@ -371,10 +371,12 @@ def compute_rlhf_loss(
 
             for idx in unique_sample_idx:
                 sample_indices = (sample_idx == idx.item()).nonzero().flatten()
+                assert token_ids[sample_indices[-2]].item() == newline_id, token_ids[sample_indices[-2]]
+                assert token_ids[sample_indices[-1]].item() == pad_id, token_ids[sample_indices[-1]]
                 if only_eos:
-                    assert token_ids[sample_indices[-2]].item() == newline_id, token_ids[sample_indices[-2]]
-                    sample_indices = sample_indices[-1:]
-                    assert token_ids[sample_indices].item() == pad_id, token_ids[sample_indices]
+                    sample_indices = sample_indices[-2:-1]
+                else:
+                    sample_indices = sample_indices[:-1]
                 rewards_list.append(rewards[sample_indices])
                 tokens_list.append(token_ids[sample_indices])
 
@@ -1259,7 +1261,7 @@ def train():
         # print_rank_0(f"====rlhf==== rejected_input_ids shape: {rejected_inputs['input_ids'].shape}")
 
         # 在训练循环中添加定期保存checkpoint的逻辑
-        if iteration % args.save_checkpoint_per_step == 0 and \
+        if (iteration % args.save_checkpoint_per_step == 0 or iteration % 1440 == 0) and \
             iteration > 0 and model.is_gradient_accumulation_boundary():
             
             torch.cuda.empty_cache()
