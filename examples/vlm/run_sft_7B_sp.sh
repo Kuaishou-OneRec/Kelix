@@ -9,12 +9,12 @@ else
         echo "Git user.emal: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-sft/0.0.3.1
-
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct # Pretrained/Base model path
+OUTPUT_DIR=/llm_reco/lingzhixin/output2/RecoVLM-dev/Qwen2-VL-7B-run_sft_7B_sp/0.0.2
+rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
@@ -22,10 +22,11 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="sft，vs 0.0.3.0: stg2 is 0.0.25.5:global_step32000"
+comment="7B FSDP"
+
 
 git add --all
-git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
+git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
 git_hash=$(git rev-parse --short HEAD)
 
 set -x
@@ -41,18 +42,26 @@ echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=$PWD:$PYTHONPATH
 
+source set_env.sh
+
+hostfile=/etc/mpi/hostfile_seq
+Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
+np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
+
+MASTER_ADDR=$MY_NODE_IP
+MASTER_PORT=8499
+
+
+
+
+
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
-    --dataset_config ./examples/vlm/configs/sft_llava_one_vision_vlmsft.json \
+    --dataset_config examples/vlm/configs/debug7b_fsdp_3p_v1_debug.json \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
-    --resume_from /llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage2/0.0.25.5 \
-    --resume_from_tag global_step32000 \
-    --load_weights_only \
-    --auto_resume_local_latest \
-    --enable_gradient_checkpointing \
-    --max_length 32768 \
+    --max_length 30000 \
     --learning_rate 1e-6 \
     --min_lr 0.0 \
     --weight_decay 0.1 \
@@ -64,6 +73,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --use_flash_attention_2 \
     --logging_per_step 10 \
     --seed 19260817 \
+    --enable_gradient_checkpointing \
     --merge_checkpoint \
     --merge_checkpoint_dtype bf16 \
     --merge_checkpoint_output_file pytorch_model.bin \
@@ -72,3 +82,6 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --kml_id $KML_ID \
     --kml_task_id $KML_TASK_ID \
     --deepspeed --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+
+
+
