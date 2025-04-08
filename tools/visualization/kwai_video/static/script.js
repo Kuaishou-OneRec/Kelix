@@ -62,15 +62,15 @@ async function updateDisplay() {
         if (mediaInfo.media_type === 'video') {
             mediaContainer.innerHTML = `
                 <video controls>
-                    <source src="/media${mediaInfo.media_path}" type="video/mp4">
+                    <source src="${mediaInfo.media_path}" type="video/mp4">
                     Your browser does not support the video tag.
                 </video>
             `;
         } else {
             // Handle multiple images
             const images = Array.isArray(mediaInfo.media_path) 
-                ? mediaInfo.media_path.map(path => `<img src="/media${path}" alt="Image">`)
-                : [`<img src="/media${mediaInfo.media_path}" alt="Image">`];
+                ? mediaInfo.media_path.map(path => `<img src="${path}" alt="Image">`)
+                : [`<img src="${mediaInfo.media_path}" alt="Image">`];
             mediaContainer.innerHTML = images.join('');
         }
     } catch (error) {
