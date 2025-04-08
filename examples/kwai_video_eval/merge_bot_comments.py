@@ -21,6 +21,8 @@ def main():
                         help='Path of the response directory')
     parser.add_argument('--output_file', type=str, default='merged_bot_comments.jsonl',
                         help='Output file path')
+    parser.add_argument('--num_responses', type=int, default=5,
+                        help='Number of responses to include, each as a separate column')
     args = parser.parse_args()
 
     # Load bot_comment.jsonl
@@ -40,9 +42,11 @@ def main():
     merged_data = []
     for comment in bot_comments:
         photo_id = comment['photo_id']
-        # print([photo_id])
         if str(photo_id) in responses_by_photo:
-            comment['responses'] = responses_by_photo[str(photo_id)]
+            responses = responses_by_photo[str(photo_id)]
+            # Add each response as a separate column
+            for i in range(min(args.num_responses, len(responses))):
+                comment[f'response_{i+1}'] = responses[i]
         merged_data.append(comment)
 
     # Write the merged data to a new file
