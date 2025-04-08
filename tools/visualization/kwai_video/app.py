@@ -67,24 +67,14 @@ def get_media_info(key):
     with open(json_path, 'r', encoding='utf-8') as f:
         media_info = json.load(f)
     
-    # Convert file paths to URLs
-    if media_info['media_type'] == 'video':
-        media_info['media_path'] = url_for('serve_media', key=key, filename=os.path.basename(media_info['media_path']))
-    else:
-        media_info['media_path'] = [url_for('serve_media', key=key, filename=os.path.basename(path)) 
-                                  for path in media_info['media_path']]
-    
     return jsonify(media_info)
 
-@app.route('/media/<key>/<path:filename>')
-def serve_media(key, filename):
-    media_folder = get_pid_folder(key, Path(CACHE_FOLDER))
-    file_path = media_folder / filename
-    
-    if not os.path.exists(file_path):
+@app.route('/media/<path:filepath>')
+def serve_media(filepath):
+    if not os.path.exists(filepath):
         return jsonify({'error': 'Media file not found'}), 404
-    print(file_path)
-    return send_file(file_path)
+    
+    return send_file(filepath)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8888)
