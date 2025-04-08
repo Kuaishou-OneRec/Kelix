@@ -175,8 +175,7 @@ def create_dataset_config(index_path: str,
                           video_min_frames: int = 2,
                           video_max_frames: int = 60,
                           max_images: int = 30,
-                          num_workers: int = 4,
-                          shrink_ratio: float = 0.7):
+                          num_workers: int = 4):
     """创建dataset_config文件"""
     config = {
         "name": name,
@@ -191,7 +190,7 @@ def create_dataset_config(index_path: str,
             "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
         "max_images": max_images,
         "num_workers": num_workers,
-        "shrink_ratio": shrink_ratio
+        "shrink_ratio": 0.7
     }
     
     # 保存在与parquet文件相同的目录下
@@ -306,4 +305,4 @@ if __name__ == "__main__":
         args.video_fps,
         args.video_min_frames,
         args.video_max_frames,
-        args.max_images, args.num_workers, args.shrink_ratio)
+        args.max_images, args.num_workers)
