@@ -69,7 +69,7 @@ async function updateDisplay() {
         if (mediaInfo.media_type === 'video') {
             mediaContainer.innerHTML = `
                 <video controls style="max-width: 100%; max-height: 600px;">
-                    <source src="/serve_media?path=${encodeURIComponent(mediaInfo.media_path)}" type="video/mp4">
+                    <source src="${mediaInfo.media_path}" type="video/mp4">
                     Your browser does not support the video tag.
                 </video>
             `;
@@ -78,56 +78,39 @@ async function updateDisplay() {
             const paths = Array.isArray(mediaInfo.media_path) ? mediaInfo.media_path : [mediaInfo.media_path];
             
             if (paths.length === 1) {
-                // Single image, no need for carousel
-                mediaContainer.innerHTML = `
-                    <div class="single-image-container">
-                        <img src="/serve_media?path=${encodeURIComponent(paths[0])}" alt="Image" class="img-fluid">
-                    </div>
-                `;
+                mediaContainer.innerHTML = `<img src="${paths[0]}" class="img-fluid" style="max-height: 600px;">`;
             } else {
-                // Multiple images, use carousel
-                const carouselId = 'imageCarousel';
-                const carouselItems = paths.map((path, index) => `
-                    <div class="carousel-item ${index === 0 ? 'active' : ''}">
-                        <img src="/serve_media?path=${encodeURIComponent(path)}" class="d-block w-100" alt="Image ${index + 1}">
-                    </div>
-                `).join('');
-
                 mediaContainer.innerHTML = `
-                    <div id="${carouselId}" class="carousel slide">
-                        <div class="carousel-inner">
-                            ${carouselItems}
+                    <div id="imageCarousel" class="carousel slide" data-bs-ride="carousel">
+                        <div class="carousel-indicators">
+                            ${paths.map((_, index) => `
+                                <button type="button" data-bs-target="#imageCarousel" data-bs-slide-to="${index}" 
+                                    class="${index === 0 ? 'active' : ''}" aria-current="${index === 0 ? 'true' : 'false'}" 
+                                    aria-label="Slide ${index + 1}"></button>
+                            `).join('')}
                         </div>
-                        <button class="carousel-control-prev" type="button" data-bs-target="#${carouselId}" data-bs-slide="prev">
+                        <div class="carousel-inner">
+                            ${paths.map((path, index) => `
+                                <div class="carousel-item ${index === 0 ? 'active' : ''}">
+                                    <img src="${path}" class="d-block w-100" alt="Image ${index + 1}" style="max-height: 600px; object-fit: contain;">
+                                </div>
+                            `).join('')}
+                        </div>
+                        <button class="carousel-control-prev" type="button" data-bs-target="#imageCarousel" data-bs-slide="prev">
                             <span class="carousel-control-prev-icon" aria-hidden="true"></span>
                             <span class="visually-hidden">Previous</span>
                         </button>
-                        <button class="carousel-control-next" type="button" data-bs-target="#${carouselId}" data-bs-slide="next">
+                        <button class="carousel-control-next" type="button" data-bs-target="#imageCarousel" data-bs-slide="next">
                             <span class="carousel-control-next-icon" aria-hidden="true"></span>
                             <span class="visually-hidden">Next</span>
                         </button>
-                        <div class="carousel-indicators">
-                            ${paths.map((_, index) => `
-                                <button type="button" 
-                                    data-bs-target="#${carouselId}" 
-                                    data-bs-slide-to="${index}" 
-                                    ${index === 0 ? 'class="active" aria-current="true"' : ''}
-                                    aria-label="Slide ${index + 1}">
-                                </button>
-                            `).join('')}
-                        </div>
                     </div>
                 `;
-
+                
                 // 初始化新的轮播图
-                const carouselElement = document.getElementById(carouselId);
-                if (carouselElement) {
-                    currentCarousel = new bootstrap.Carousel(carouselElement, {
-                        interval: false,  // 禁用自动轮播
-                        keyboard: true,   // 启用键盘控制
-                        touch: true       // 启用触摸滑动
-                    });
-                }
+                currentCarousel = new bootstrap.Carousel(document.getElementById('imageCarousel'), {
+                    interval: 3000  // 设置3秒自动轮播
+                });
             }
         }
     } catch (error) {
