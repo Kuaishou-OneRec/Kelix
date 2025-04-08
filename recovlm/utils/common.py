@@ -14,6 +14,8 @@ import os
 from infra.perflog import create_perf_context
 import pyarrow.parquet as pq
 
+from recovlm.training.distributed import get_world_size_and_rank
+
 
 def print_rank_n(*msg, rank=0):
   if dist.get_rank() == rank:
@@ -358,7 +360,7 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
         return hash_hex
 
     worker_id = get_worker_info()[0]
-    rank_id = dist.get_rank()
+    rank_id = get_world_size_and_rank()[1]
 
     cache_dir = f'/code/dataset_cache/{worker_id}_{rank_id}'
     os.makedirs(cache_dir, exist_ok=True)
