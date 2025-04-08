@@ -63,6 +63,9 @@ async function updateDisplay() {
         // 清除现有内容
         mediaContainer.innerHTML = '';
 
+        // 处理媒体路径
+        const getMediaUrl = (path) => `/serve_media?path=${encodeURIComponent(path)}`;
+
         if (mediaInfo.media_type === 'video') {
             const videoElement = document.createElement('video');
             videoElement.controls = true;
@@ -70,7 +73,7 @@ async function updateDisplay() {
             videoElement.style.maxHeight = '600px';
             
             const sourceElement = document.createElement('source');
-            sourceElement.src = mediaInfo.media_path;
+            sourceElement.src = getMediaUrl(mediaInfo.media_path);
             sourceElement.type = 'video/mp4';
             
             videoElement.appendChild(sourceElement);
@@ -81,7 +84,7 @@ async function updateDisplay() {
             
             if (paths.length === 1) {
                 const imgElement = document.createElement('img');
-                imgElement.src = paths[0];
+                imgElement.src = getMediaUrl(paths[0]);
                 imgElement.className = 'img-fluid';
                 imgElement.style.maxHeight = '600px';
                 mediaContainer.appendChild(imgElement);
@@ -115,7 +118,7 @@ async function updateDisplay() {
                     item.className = `carousel-item ${index === 0 ? 'active' : ''}`;
                     
                     const img = document.createElement('img');
-                    img.src = path;
+                    img.src = getMediaUrl(path);
                     img.className = 'd-block w-100';
                     img.alt = `Image ${index + 1}`;
                     img.style.maxHeight = '600px';
