@@ -60,56 +60,103 @@ async function updateDisplay() {
             return;
         }
 
-        // 销毁现有的轮播图实例
-        if (currentCarousel) {
-            currentCarousel.dispose();
-            currentCarousel = null;
-        }
+        // 清除现有内容
+        mediaContainer.innerHTML = '';
 
         if (mediaInfo.media_type === 'video') {
-            mediaContainer.innerHTML = `
-                <video controls style="max-width: 100%; max-height: 600px;">
-                    <source src="${mediaInfo.media_path}" type="video/mp4">
-                    Your browser does not support the video tag.
-                </video>
-            `;
+            const videoElement = document.createElement('video');
+            videoElement.controls = true;
+            videoElement.style.maxWidth = '100%';
+            videoElement.style.maxHeight = '600px';
+            
+            const sourceElement = document.createElement('source');
+            sourceElement.src = mediaInfo.media_path;
+            sourceElement.type = 'video/mp4';
+            
+            videoElement.appendChild(sourceElement);
+            mediaContainer.appendChild(videoElement);
         } else {
             // Handle multiple images with carousel
             const paths = Array.isArray(mediaInfo.media_path) ? mediaInfo.media_path : [mediaInfo.media_path];
             
             if (paths.length === 1) {
-                mediaContainer.innerHTML = `<img src="${paths[0]}" class="img-fluid" style="max-height: 600px;">`;
+                const imgElement = document.createElement('img');
+                imgElement.src = paths[0];
+                imgElement.className = 'img-fluid';
+                imgElement.style.maxHeight = '600px';
+                mediaContainer.appendChild(imgElement);
             } else {
-                mediaContainer.innerHTML = `
-                    <div id="imageCarousel" class="carousel slide" data-bs-ride="carousel">
-                        <div class="carousel-indicators">
-                            ${paths.map((_, index) => `
-                                <button type="button" data-bs-target="#imageCarousel" data-bs-slide-to="${index}" 
-                                    class="${index === 0 ? 'active' : ''}" aria-current="${index === 0 ? 'true' : 'false'}" 
-                                    aria-label="Slide ${index + 1}"></button>
-                            `).join('')}
-                        </div>
-                        <div class="carousel-inner">
-                            ${paths.map((path, index) => `
-                                <div class="carousel-item ${index === 0 ? 'active' : ''}">
-                                    <img src="${path}" class="d-block w-100" alt="Image ${index + 1}" style="max-height: 600px; object-fit: contain;">
-                                </div>
-                            `).join('')}
-                        </div>
-                        <button class="carousel-control-prev" type="button" data-bs-target="#imageCarousel" data-bs-slide="prev">
-                            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-                            <span class="visually-hidden">Previous</span>
-                        </button>
-                        <button class="carousel-control-next" type="button" data-bs-target="#imageCarousel" data-bs-slide="next">
-                            <span class="carousel-control-next-icon" aria-hidden="true"></span>
-                            <span class="visually-hidden">Next</span>
-                        </button>
-                    </div>
+                const carouselElement = document.createElement('div');
+                carouselElement.id = 'imageCarousel';
+                carouselElement.className = 'carousel slide';
+                carouselElement.setAttribute('data-bs-ride', 'carousel');
+                
+                // 创建轮播指示器
+                const indicators = document.createElement('div');
+                indicators.className = 'carousel-indicators';
+                paths.forEach((_, index) => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.setAttribute('data-bs-target', '#imageCarousel');
+                    button.setAttribute('data-bs-slide-to', index.toString());
+                    if (index === 0) {
+                        button.className = 'active';
+                        button.setAttribute('aria-current', 'true');
+                    }
+                    button.setAttribute('aria-label', `Slide ${index + 1}`);
+                    indicators.appendChild(button);
+                });
+                
+                // 创建轮播内容
+                const inner = document.createElement('div');
+                inner.className = 'carousel-inner';
+                paths.forEach((path, index) => {
+                    const item = document.createElement('div');
+                    item.className = `carousel-item ${index === 0 ? 'active' : ''}`;
+                    
+                    const img = document.createElement('img');
+                    img.src = path;
+                    img.className = 'd-block w-100';
+                    img.alt = `Image ${index + 1}`;
+                    img.style.maxHeight = '600px';
+                    img.style.objectFit = 'contain';
+                    
+                    item.appendChild(img);
+                    inner.appendChild(item);
+                });
+                
+                // 创建控制按钮
+                const prevButton = document.createElement('button');
+                prevButton.className = 'carousel-control-prev';
+                prevButton.type = 'button';
+                prevButton.setAttribute('data-bs-target', '#imageCarousel');
+                prevButton.setAttribute('data-bs-slide', 'prev');
+                prevButton.innerHTML = `
+                    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Previous</span>
                 `;
                 
-                // 初始化新的轮播图
-                currentCarousel = new bootstrap.Carousel(document.getElementById('imageCarousel'), {
-                    interval: 3000  // 设置3秒自动轮播
+                const nextButton = document.createElement('button');
+                nextButton.className = 'carousel-control-next';
+                nextButton.type = 'button';
+                nextButton.setAttribute('data-bs-target', '#imageCarousel');
+                nextButton.setAttribute('data-bs-slide', 'next');
+                nextButton.innerHTML = `
+                    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                    <span class="visually-hidden">Next</span>
+                `;
+                
+                // 组装轮播图
+                carouselElement.appendChild(indicators);
+                carouselElement.appendChild(inner);
+                carouselElement.appendChild(prevButton);
+                carouselElement.appendChild(nextButton);
+                
+                mediaContainer.appendChild(carouselElement);
+                
+                // 初始化轮播图
+                currentCarousel = new bootstrap.Carousel(carouselElement, {
+                    interval: 3000
                 });
             }
         }
