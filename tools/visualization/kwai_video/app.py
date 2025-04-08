@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 import json
 import os
 from pathlib import Path
@@ -68,6 +68,14 @@ def get_media_info(key):
         media_info = json.load(f)
     
     return jsonify(media_info)
+
+@app.route('/serve_media')
+def serve_media():
+    file_path = request.args.get('path')
+    if not file_path or not os.path.exists(file_path):
+        return jsonify({'error': 'Media file not found'}), 404
+    
+    return send_file(file_path)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8888)
