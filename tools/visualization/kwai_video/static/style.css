@@ -108,32 +108,32 @@ body {
     object-fit: contain;
 }
 
+/* 控制按钮样式 */
 .carousel-control-prev,
 .carousel-control-next {
-    width: 80px;  /* Wider click area */
-    opacity: 0;  /* Hide by default */
-    transition: opacity 0.3s;
-    background: none;  /* Remove background */
+    width: 10%;
+    background: rgba(0,0,0,0.1);
+    opacity: 1;
+}
+
+.carousel-control-prev:hover,
+.carousel-control-next:hover {
+    background: rgba(0,0,0,0.3);
 }
 
 .carousel-control-prev-icon,
 .carousel-control-next-icon {
-    width: 40px;  /* Larger icons */
+    width: 40px;
     height: 40px;
-    background-color: rgba(0,0,0,0.5);  /* Dark background for icons */
-    border-radius: 50%;  /* Circular background */
-    padding: 12px;
+    background-color: rgba(0,0,0,0.6);
+    border-radius: 50%;
 }
 
-.carousel:hover .carousel-control-prev,
-.carousel:hover .carousel-control-next {
-    opacity: 1;  /* Show on hover */
-}
-
+/* 指示器样式 */
 .carousel-indicators {
     margin-bottom: 0;
     padding: 15px 0;
-    background: rgba(0,0,0,0.5);
+    background: rgba(0,0,0,0.3);
 }
 
 .carousel-indicators button {
@@ -141,10 +141,11 @@ body {
     height: 12px;
     border-radius: 50%;
     margin: 0 6px;
-    background-color: rgba(255,255,255,0.5);
-    border: none;
+    background-color: #666 !important;
+    opacity: 0.5;
 }
 
 .carousel-indicators button.active {
-    background-color: #fff;
+    background-color: #fff !important;
+    opacity: 1;
 } 

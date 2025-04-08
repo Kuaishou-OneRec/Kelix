@@ -83,7 +83,7 @@ async function updateDisplay() {
                 `).join('');
 
                 mediaContainer.innerHTML = `
-                    <div id="${carouselId}" class="carousel slide" data-bs-ride="carousel">
+                    <div id="${carouselId}" class="carousel carousel-dark slide" data-bs-interval="false">
                         <div class="carousel-inner">
                             ${carouselItems}
                         </div>
@@ -108,12 +108,17 @@ async function updateDisplay() {
                     </div>
                 `;
 
-                // Initialize the carousel
-                new bootstrap.Carousel(document.getElementById(carouselId), {
-                    interval: false, // 不自动轮播
-                    touch: true,    // 允许触摸滑动
-                    keyboard: true  // 允许键盘控制
-                });
+                // 等待 DOM 更新完成后再初始化轮播图
+                setTimeout(() => {
+                    const carousel = document.getElementById(carouselId);
+                    if (carousel) {
+                        new bootstrap.Carousel(carousel, {
+                            interval: false,
+                            touch: true,
+                            keyboard: true
+                        });
+                    }
+                }, 0);
             }
         }
     } catch (error) {
