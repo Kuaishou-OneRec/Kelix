@@ -83,7 +83,7 @@ def serve_media(key, filename):
     
     if not os.path.exists(file_path):
         return jsonify({'error': 'Media file not found'}), 404
-    
+    print(file_path)
     return send_file(file_path)
 
 if __name__ == '__main__':
