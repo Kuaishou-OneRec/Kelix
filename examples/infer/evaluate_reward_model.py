@@ -55,7 +55,7 @@ def parse_images(images=None):
     return None
 
 
-def process(processor, messages, images=None, raw_images=None):
+def process(processor, messages, images=None):
     
     for message in messages:
         for block in message["content"]:
@@ -65,7 +65,7 @@ def process(processor, messages, images=None, raw_images=None):
             elif block["type"] == "video":
                 block["nframes"] = 10
                 if isinstance(block["video"], list):
-                    assert images is not None, len(json.loads(raw_images))
+                    assert images is not None
                     for i in range(len(block["video"])):
                         image_block = block["video"][i]
                         if isinstance(image_block, str):
@@ -81,11 +81,16 @@ def process(processor, messages, images=None, raw_images=None):
                         else:
                             raise TypeError
 
+    # if messages[0]["role"] != "system":
+    #     messages.insert(0, {"role": "system", "content": "You are a helpful assistant."})
+
+    # print(messages)
     text = processor.apply_chat_template(
         messages,
         tokenize=False,
         add_generation_prompt=False
     )
+    print(text)
     image_inputs, video_inputs = process_vision_info(messages)
     inputs = processor(
         text=text,
@@ -106,11 +111,10 @@ def process(processor, messages, images=None, raw_images=None):
 tot = 0
 acc = 0
 for _, row in tqdm(df.iterrows()):
-    raw_images = row.images
     images = parse_images(row.images)
     chosen = json.loads(row.messages) + [json.loads(row.chosen)]
     rejected = json.loads(row.messages) + [json.loads(row.rejected)]
-    chosen_inputs = process(processor, chosen, images=images, raw_images=raw_images)
+    chosen_inputs = process(processor, chosen, images=images)
     rejected_inputs = process(processor, rejected, images=images)
 
     print(chosen_inputs["input_ids"].numel())
