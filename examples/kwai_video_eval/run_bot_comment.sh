@@ -2,7 +2,8 @@
 
 MODEL_DIR=${1:-"/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.3.1/cmt/global_step9001/merged9001"}
 DATASET_CONFIG=${2:-"/llm_reco/zhouyang12/.cache/Dataset/CreateBotComment/dataset_config.json"}
-OUTPUT_DIR=${3:-"/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.3.1/cmt/global_step9001/merged9001/bot_comment_v2"}
+#OUTPUT_DIR=${3:-"/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.3.1/cmt/global_step9001/merged9001/bot_comment_v2"}
+OUTPUT_DIR=$MODEL_DIR/bot_comment
 
 mkdir -p $OUTPUT_DIR 
 
