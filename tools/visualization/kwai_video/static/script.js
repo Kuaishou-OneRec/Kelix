@@ -67,11 +67,47 @@ async function updateDisplay() {
                 </video>
             `;
         } else {
-            // Handle multiple images
-            const images = Array.isArray(mediaInfo.media_path) 
-                ? mediaInfo.media_path.map(path => `<img src="/serve_media?path=${encodeURIComponent(path)}" alt="Image">`)
-                : [`<img src="/serve_media?path=${encodeURIComponent(mediaInfo.media_path)}" alt="Image">`];
-            mediaContainer.innerHTML = images.join('');
+            // Handle multiple images with carousel
+            const paths = Array.isArray(mediaInfo.media_path) ? mediaInfo.media_path : [mediaInfo.media_path];
+            
+            if (paths.length === 1) {
+                // Single image, no need for carousel
+                mediaContainer.innerHTML = `<img src="/serve_media?path=${encodeURIComponent(paths[0])}" alt="Image" class="img-fluid">`;
+            } else {
+                // Multiple images, use carousel
+                const carouselId = 'imageCarousel';
+                const carouselItems = paths.map((path, index) => `
+                    <div class="carousel-item ${index === 0 ? 'active' : ''}">
+                        <img src="/serve_media?path=${encodeURIComponent(path)}" class="d-block w-100" alt="Image ${index + 1}">
+                    </div>
+                `).join('');
+
+                mediaContainer.innerHTML = `
+                    <div id="${carouselId}" class="carousel slide" data-bs-ride="carousel">
+                        <div class="carousel-inner">
+                            ${carouselItems}
+                        </div>
+                        <button class="carousel-control-prev" type="button" data-bs-target="#${carouselId}" data-bs-slide="prev">
+                            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                            <span class="visually-hidden">Previous</span>
+                        </button>
+                        <button class="carousel-control-next" type="button" data-bs-target="#${carouselId}" data-bs-slide="next">
+                            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                            <span class="visually-hidden">Next</span>
+                        </button>
+                        <div class="carousel-indicators">
+                            ${paths.map((_, index) => `
+                                <button type="button" 
+                                    data-bs-target="#${carouselId}" 
+                                    data-bs-slide-to="${index}" 
+                                    ${index === 0 ? 'class="active" aria-current="true"' : ''}
+                                    aria-label="Slide ${index + 1}">
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
         }
     } catch (error) {
         mediaContainer.innerHTML = `<div class="alert alert-danger">Error loading media: ${error.message}</div>`;
