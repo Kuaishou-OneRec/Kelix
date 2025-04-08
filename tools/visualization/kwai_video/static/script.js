@@ -1,5 +1,6 @@
 let items = [];
 let currentIndex = 0;
+let currentCarousel = null;  // 保存当前的轮播图实例
 
 document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -59,9 +60,15 @@ async function updateDisplay() {
             return;
         }
 
+        // 销毁现有的轮播图实例
+        if (currentCarousel) {
+            currentCarousel.dispose();
+            currentCarousel = null;
+        }
+
         if (mediaInfo.media_type === 'video') {
             mediaContainer.innerHTML = `
-                <video controls>
+                <video controls style="max-width: 100%; max-height: 600px;">
                     <source src="/serve_media?path=${encodeURIComponent(mediaInfo.media_path)}" type="video/mp4">
                     Your browser does not support the video tag.
                 </video>
@@ -72,7 +79,11 @@ async function updateDisplay() {
             
             if (paths.length === 1) {
                 // Single image, no need for carousel
-                mediaContainer.innerHTML = `<img src="/serve_media?path=${encodeURIComponent(paths[0])}" alt="Image" class="img-fluid">`;
+                mediaContainer.innerHTML = `
+                    <div class="single-image-container">
+                        <img src="/serve_media?path=${encodeURIComponent(paths[0])}" alt="Image" class="img-fluid">
+                    </div>
+                `;
             } else {
                 // Multiple images, use carousel
                 const carouselId = 'imageCarousel';
@@ -83,7 +94,7 @@ async function updateDisplay() {
                 `).join('');
 
                 mediaContainer.innerHTML = `
-                    <div id="${carouselId}" class="carousel carousel-dark slide" data-bs-interval="false">
+                    <div id="${carouselId}" class="carousel slide">
                         <div class="carousel-inner">
                             ${carouselItems}
                         </div>
@@ -108,17 +119,15 @@ async function updateDisplay() {
                     </div>
                 `;
 
-                // 等待 DOM 更新完成后再初始化轮播图
-                setTimeout(() => {
-                    const carousel = document.getElementById(carouselId);
-                    if (carousel) {
-                        new bootstrap.Carousel(carousel, {
-                            interval: false,
-                            touch: true,
-                            keyboard: true
-                        });
-                    }
-                }, 0);
+                // 初始化新的轮播图
+                const carouselElement = document.getElementById(carouselId);
+                if (carouselElement) {
+                    currentCarousel = new bootstrap.Carousel(carouselElement, {
+                        interval: false,  // 禁用自动轮播
+                        keyboard: true,   // 启用键盘控制
+                        touch: true       // 启用触摸滑动
+                    });
+                }
             }
         }
     } catch (error) {
