@@ -20,7 +20,7 @@ body {
     background-color: #f1f1f1;
     border-radius: 4px;
     overflow: hidden;
-    max-width: 100%;
+    width: 100%;
     margin: 0 auto;
 }
 
@@ -83,35 +83,68 @@ body {
     background-color: #000;
     border-radius: 8px;
     overflow: hidden;
+    width: 100%;
+    height: 600px;  /* Fixed height */
+}
+
+.carousel-inner {
+    width: 100%;
+    height: 100%;
 }
 
 .carousel-item {
-    height: 500px;  /* Fixed height for carousel items */
+    height: 100%;
     background-color: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .carousel-item img {
-    height: 100%;
-    width: 100%;
-    object-fit: contain;  /* Maintain aspect ratio */
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
 }
 
 .carousel-control-prev,
 .carousel-control-next {
-    width: 10%;
-    opacity: 0.8;
-    background: rgba(0,0,0,0.5);
+    width: 80px;  /* Wider click area */
+    opacity: 0;  /* Hide by default */
+    transition: opacity 0.3s;
+    background: none;  /* Remove background */
+}
+
+.carousel-control-prev-icon,
+.carousel-control-next-icon {
+    width: 40px;  /* Larger icons */
+    height: 40px;
+    background-color: rgba(0,0,0,0.5);  /* Dark background for icons */
+    border-radius: 50%;  /* Circular background */
+    padding: 12px;
+}
+
+.carousel:hover .carousel-control-prev,
+.carousel:hover .carousel-control-next {
+    opacity: 1;  /* Show on hover */
 }
 
 .carousel-indicators {
     margin-bottom: 0;
-    padding: 10px 0;
+    padding: 15px 0;
     background: rgba(0,0,0,0.5);
 }
 
 .carousel-indicators button {
-    width: 10px;
-    height: 10px;
+    width: 12px;
+    height: 12px;
     border-radius: 50%;
-    margin: 0 5px;
+    margin: 0 6px;
+    background-color: rgba(255,255,255,0.5);
+    border: none;
+}
+
+.carousel-indicators button.active {
+    background-color: #fff;
 } 
