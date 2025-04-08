@@ -58,8 +58,8 @@ def load_file():
 @app.route('/get_media_info/<key>')
 def get_media_info(key):
     json_path = get_pid_folder(
-        key, Path('/llm_reco/zhouyang/.cache/Photo')) / f"{key}.json"
-    
+        key, Path('/llm_reco/zhouyang12/.cache/Photo')) / f"{key}.json"
+
     if not os.path.exists(json_path):
         return jsonify({'error': 'Media info not found'}), 404
     
