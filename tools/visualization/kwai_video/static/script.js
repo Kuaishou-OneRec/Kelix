@@ -95,4 +95,45 @@ document.getElementById('nextBtn').addEventListener('click', () => {
         currentIndex++;
         updateDisplay();
     }
+});
+
+document.getElementById('loadMoreBtn').addEventListener('click', async () => {
+    const filePath = document.getElementById('filePath').value;
+    const loadCount = document.getElementById('loadCount').value;
+    
+    if (!filePath) {
+        alert('Please enter a file path');
+        return;
+    }
+
+    try {
+        const response = await fetch('/load_file', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                file_path: filePath,
+                start_index: items.length,  // Start from where we left off
+                count: parseInt(loadCount)
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to load more items');
+        }
+
+        const data = await response.json();
+        items = items.concat(data.items);  // Append new items to existing ones
+        
+        // Hide load more button if no more items
+        if (!data.has_more) {
+            document.getElementById('loadMoreBtn').style.display = 'none';
+        }
+        
+        updateDisplay();
+    } catch (error) {
+        alert('Error loading more items: ' + error.message);
+    }
 }); 
