@@ -254,12 +254,13 @@ def prepare_dataset(pid_list_file: str, output_dir: str,
             
             # 创建dataset_config文件，并保存在parquet目录下
             create_dataset_config(index_path, parquet_dir, tokenizer_path,
+                                  "vllm_infer",
                                   min_visual_tokens_per_image,
                                   max_visual_tokens_per_image,
                                   video_fps,
                                   video_min_frames,
                                   video_max_frames,
-                                  max_images, num_workers, shrink_ratio)
+                                  max_images, num_workers)
         else:
             print("No parquet files were generated")
     else:
