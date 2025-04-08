@@ -100,7 +100,6 @@ def get_chat_completion_vision_v2_parquet_dataloader(sources: str,
     Returns:
         DataLoader: 返回配置好的DataLoader实例
     """
-    print(11214333, num_workers, rank, world_size)
     dataset = ChatCompletionVisionV2ParquetDataset(
         sources=sources,
         num_workers=num_workers,
