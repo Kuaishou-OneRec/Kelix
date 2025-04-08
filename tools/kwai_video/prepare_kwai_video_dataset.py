@@ -12,7 +12,7 @@ from recovlm.utils.media import encode_image, get_pid_folder
 
 def get_media_info(pid: str, photo_dir: str) -> Dict:
     """从json文件中获取媒体信息"""
-    json_path = get_pid_folder(pid, photo_dir) / f"{pid}.json"
+    json_path = get_pid_folder(pid, Path(photo_dir)) / f"{pid}.json"
     if not os.path.exists(json_path):
         return None
 
