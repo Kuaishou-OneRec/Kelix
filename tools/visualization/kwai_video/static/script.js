@@ -1,0 +1,92 @@
+let items = [];
+let currentIndex = 0;
+
+document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fileInput = document.getElementById('jsonlFile');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        alert('Please select a file');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error('Upload failed');
+        }
+
+        const data = await response.json();
+        items = data.items;
+        currentIndex = 0;
+        
+        document.getElementById('contentSection').style.display = 'block';
+        updateDisplay();
+    } catch (error) {
+        alert('Error uploading file: ' + error.message);
+    }
+});
+
+async function updateDisplay() {
+    if (items.length === 0) return;
+
+    const item = items[currentIndex];
+    const mediaContainer = document.getElementById('mediaContainer');
+    const responsesContainer = document.getElementById('responsesContainer');
+    const itemCounter = document.getElementById('itemCounter');
+
+    // Update counter
+    itemCounter.textContent = `Item ${currentIndex + 1} of ${items.length}`;
+
+    // Update media display
+    try {
+        const mediaInfo = await fetch(`/get_media_info/${item.__key__}`).then(res => res.json());
+        
+        if (mediaInfo.error) {
+            mediaContainer.innerHTML = `<div class="alert alert-warning">${mediaInfo.error}</div>`;
+            return;
+        }
+
+        if (mediaInfo.media_type === 'video') {
+            mediaContainer.innerHTML = `
+                <video controls>
+                    <source src="${mediaInfo.media_path}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            `;
+        } else {
+            // Handle multiple images
+            const images = mediaInfo.media_path.map(path => `<img src="${path}" alt="Image">`).join('');
+            mediaContainer.innerHTML = images;
+        }
+    } catch (error) {
+        mediaContainer.innerHTML = `<div class="alert alert-danger">Error loading media: ${error.message}</div>`;
+    }
+
+    // Update responses
+    responsesContainer.innerHTML = item.responses.map(response => 
+        `<div class="response-item">${response}</div>`
+    ).join('');
+}
+
+document.getElementById('prevBtn').addEventListener('click', () => {
+    if (currentIndex > 0) {
+        currentIndex--;
+        updateDisplay();
+    }
+});
+
+document.getElementById('nextBtn').addEventListener('click', () => {
+    if (currentIndex < items.length - 1) {
+        currentIndex++;
+        updateDisplay();
+    }
+}); 
