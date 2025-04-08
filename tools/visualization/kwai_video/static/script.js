@@ -107,6 +107,13 @@ async function updateDisplay() {
                         </div>
                     </div>
                 `;
+
+                // Initialize the carousel
+                new bootstrap.Carousel(document.getElementById(carouselId), {
+                    interval: false, // 不自动轮播
+                    touch: true,    // 允许触摸滑动
+                    keyboard: true  // 允许键盘控制
+                });
             }
         }
     } catch (error) {
