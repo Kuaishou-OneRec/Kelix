@@ -3,25 +3,29 @@ let currentIndex = 0;
 
 document.getElementById('uploadForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const fileInput = document.getElementById('jsonlFile');
-    const file = fileInput.files[0];
+    const filePath = document.getElementById('filePath').value;
+    const loadCount = document.getElementById('loadCount').value;
     
-    if (!file) {
-        alert('Please select a file');
+    if (!filePath) {
+        alert('Please enter a file path');
         return;
     }
 
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
-        const response = await fetch('/upload', {
+        const response = await fetch('/load_file', {
             method: 'POST',
-            body: formData
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                file_path: filePath,
+                count: parseInt(loadCount)
+            })
         });
 
         if (!response.ok) {
-            throw new Error('Upload failed');
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to load file');
         }
 
         const data = await response.json();
@@ -31,7 +35,7 @@ document.getElementById('uploadForm').addEventListener('submit', async (e) => {
         document.getElementById('contentSection').style.display = 'block';
         updateDisplay();
     } catch (error) {
-        alert('Error uploading file: ' + error.message);
+        alert('Error loading file: ' + error.message);
     }
 });
 
