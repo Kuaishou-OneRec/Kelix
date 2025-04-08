@@ -41,8 +41,8 @@ def main():
     merged_data = []
     for comment in bot_comments:
         photo_id = comment['photo_id']
-        if photo_id in responses_by_photo:
-            comment['responses'] = responses_by_photo[photo_id]
+        if str(photo_id) in responses_by_photo:
+            comment['responses'] = responses_by_photo[str(photo_id)]
         merged_data.append(comment)
     
     # Write the merged data to a new file
