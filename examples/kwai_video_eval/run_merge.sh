@@ -11,5 +11,5 @@ OUTPUT_FILE=${3:-"bot_comments_sft.jsonl"}
 # Run the merge script with arguments
 python3 merge_bot_comments.py \
     --bot_comment_file "$BOT_COMMENT_FILE" \
-    --response_dir "$RANK_DIR" \
-    --output_file "$OUTPUT_FILE" 
+    --response_dir "$RESPONSE_DIR" \
+    --output_file "$OUTPUT_FILE" \
