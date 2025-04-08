@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import os.path as osp
 from pathlib import Path
 import argparse
 from recovlm.data.prompts import PromptLoader
@@ -72,6 +73,9 @@ def create_sample(pid: str, info: Dict, prompt_loader, prompt=None):
     if is_mp4:
         if not os.path.exists(media_path):
             print(f"Warning: Video file not found: {media_path}")
+            return None
+        if not osp.exists(media_path) or osp.getsize(media_path) == 0:
+            print(f"Warning: Video file is empty: {media_path}")
             return None
         content = create_video_content(media_path)
         videos_json = json.dumps({})
