@@ -1,4 +1,5 @@
 # TODO: clean utils
+from typing import Tuple
 from rich import print
 import time
 import torch
@@ -13,7 +14,6 @@ import subprocess
 import os
 from infra.perflog import create_perf_context
 import pyarrow.parquet as pq
-
 
 def print_rank_n(*msg, rank=0):
   if dist.get_rank() == rank:
@@ -329,8 +329,19 @@ def calculate_text_hash(text):
     hash_hex = hash_object.hexdigest()
     return hash_hex
 
+def get_world_size_and_rank() -> Tuple[int, int]:
+    """Function that gets the current world size (aka total number
+    of ranks) and rank number of the current process in the default process group.
 
-
+    Returns:
+        Tuple[int, int]: world size, rank
+    """
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        return torch.distributed.get_world_size(), torch.distributed.get_rank()
+    elif "RANK" in os.environ and "WORLD_SIZE" in os.environ:
+        return int(os.environ["WORLD_SIZE"]), int(os.environ["RANK"])
+    else:
+        return 1, 0
 
 def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
     """Load a parquet file, with fallback to local cache if HDFS read fails.
@@ -358,7 +369,7 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
         return hash_hex
 
     worker_id = get_worker_info()[0]
-    rank_id = dist.get_rank()
+    rank_id = get_world_size_and_rank()[1]
 
     cache_dir = f'/code/dataset_cache/{worker_id}_{rank_id}'
     os.makedirs(cache_dir, exist_ok=True)

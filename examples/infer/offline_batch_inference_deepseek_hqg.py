@@ -83,6 +83,7 @@ def encode_image(image_path):
   # 将编码后的图片转换为Base64字符串
   return base64.b64encode(encoded_image).decode("utf-8")
 
+
 class LLMPredictor:
 
     def __init__(self):

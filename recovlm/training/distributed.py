@@ -47,6 +47,8 @@ def get_world_size_and_rank() -> Tuple[int, int]:
     """
     if torch.distributed.is_available() and torch.distributed.is_initialized():
         return torch.distributed.get_world_size(), torch.distributed.get_rank()
+    elif "RANK" in os.environ and "WORLD_SIZE" in os.environ:
+        return int(os.environ["WORLD_SIZE"]), int(os.environ["RANK"])
     else:
         return 1, 0
     
