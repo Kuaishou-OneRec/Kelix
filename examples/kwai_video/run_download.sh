@@ -12,8 +12,9 @@ DATASET_DIR=${CACHE_DIR}/Dataset
 mkdir -p "${PHOTO_DIR}"
 mkdir -p "${DATASET_DIR}"
 
+export PYTHONPATH=$(pwd):$PYTHONPATH
 
 echo "Downloading PID information..."
-python3 examples/kwai_video/download.py \
+python3 tools/kwai_video/download_kwai_video.py \
     "${PID_LIST_FILE}" \
     --output-dir "${PHOTO_DIR}"

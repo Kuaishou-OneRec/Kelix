@@ -16,8 +16,8 @@ def download_pid_info(pid_list_file: str, output_dir: str):
         pids = [line.strip() for line in f if line.strip()]
 
     for pid in tqdm(pids):
-        #output_file = get_pid_folder(pid, output_dir) / f"{pid}.json"
-        output_file = output_dir / f"{pid}.json"
+        output_file = get_pid_folder(pid, output_dir) / f"{pid}.json"
+        #output_file = output_dir / f"{pid}.json"
         if output_file.exists():
             print(f"Skipping PID {pid} because it already exists")
             continue

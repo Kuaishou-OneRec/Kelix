@@ -18,4 +18,6 @@
 
 也适合小批量数据的处理（<10w）。同样准备pid list，写到.txt文件中，用`\n`分割。
 
-然后运行`bash examples/kwai_video/run_dataset.sh /path/of/pids /path/of/cache`
+然后运行`bash examples/kwai_video/run_dataset.sh /path/of/pids output_dir /path/of/photo`
+
+其中`output_dir`是你的输出路径，`/path/of/photo`是存放pid info的路径，如果使用了`run_download.sh`脚本准备数据，默认情况下是`/path/of/cache/Photo`
