@@ -1241,6 +1241,61 @@ def train():
             acc_valid_num_tokens = 0
             start_time = end_time
     
+        # # 合并检查点
+        # if args.merge_checkpoint and dist.get_rank() == 0:
+        #     convert_zero_checkpoint_to_state_dict(
+        #         args.output_dir,
+        #         output_file=args.merge_checkpoint_output_file,
+        #         dtype=args.merge_checkpoint_dtype
+        #     )
+        
+        # if dist.get_rank() == 0:
+        #     logging.info("====rlhf==== Training finished!")
+
+        # # 为了调试sequence parallel问题，添加同步点和shape检查
+        # dist.barrier()  # 确保所有进程同步到这里
+        # print_rank_0(f"====rlhf==== Rank {dist.get_rank()} finished forward pass")
+        # print_rank_0(f"====rlhf==== chosen_input_ids shape: {chosen_inputs['input_ids'].shape}")
+        # print_rank_0(f"====rlhf==== rejected_input_ids shape: {rejected_inputs['input_ids'].shape}")
+
+        # 在训练循环中添加定期保存checkpoint的逻辑
+        if iteration % args.save_checkpoint_per_step == 0 and \
+            iteration > 0 and model.is_gradient_accumulation_boundary():
+            
+            torch.cuda.empty_cache()
+
+            with Timer("save checkpoint"):
+                model.save_checkpoint(
+                    save_dir=args.output_dir,
+                    client_state={
+                        "total_num_valid_tokens": total_num_valid_tokens,
+                        "total_num_tokens": total_num_tokens,
+                        "total_num_samples": total_num_samples,
+                        "total_data_source_samples": total_data_source_samples,
+                        "total_data_source_tokens": total_data_source_tokens,
+                    }
+                )
+                try:
+                    dataloader_state_dict = {
+                        "dataloader_state_dict": dataloader.state_dict()
+                    }
+                except:
+                    dataloader_state_dict = None
+                    logging.error(f"====rlhf==== Dataloader cannot dump state_dict!!!!!!!!")
+                
+                if dataloader_state_dict is not None:
+                    # dataloader ckpt
+                    dataloader_path = os.path.join(args.output_dir, "dataloader_ckpt")
+                    if dist.get_rank() == 0:
+                        os.makedirs(dataloader_path, exist_ok=True)
+                    dist.barrier()
+                    torch.save(
+                        dataloader_state_dict,
+                        os.path.join(
+                            dataloader_path,
+                            f"rank{dist.get_rank()}_global_step{iteration}.pth"
+                        )
+                    )
     # 在训练循环结束后保存最终checkpoint
     print_rank_0("====rlhf==== Saving final checkpoint...")
     model.save_checkpoint(
@@ -1271,64 +1326,7 @@ def train():
         torch.save(
             dataloader_state_dict,
             os.path.join(dataloader_path, f"rank{dist.get_rank()}_final.pth")
-        )
-    
-    # 合并检查点
-    if args.merge_checkpoint and dist.get_rank() == 0:
-        convert_zero_checkpoint_to_state_dict(
-            args.output_dir,
-            output_file=args.merge_checkpoint_output_file,
-            dtype=args.merge_checkpoint_dtype
-        )
-    
-    if dist.get_rank() == 0:
-        logging.info("====rlhf==== Training finished!")
-
-    # 为了调试sequence parallel问题，添加同步点和shape检查
-    dist.barrier()  # 确保所有进程同步到这里
-    print_rank_0(f"====rlhf==== Rank {dist.get_rank()} finished forward pass")
-    print_rank_0(f"====rlhf==== chosen_input_ids shape: {chosen_inputs['input_ids'].shape}")
-    print_rank_0(f"====rlhf==== rejected_input_ids shape: {rejected_inputs['input_ids'].shape}")
-
-    # 在训练循环中添加定期保存checkpoint的逻辑
-    if iteration % args.save_checkpoint_per_step == 0 and \
-        iteration > 0 and model.is_gradient_accumulation_boundary():
-        
-        torch.cuda.empty_cache()
-
-        with Timer("save checkpoint"):
-            model.save_checkpoint(
-                save_dir=args.output_dir,
-                client_state={
-                    "total_num_valid_tokens": total_num_valid_tokens,
-                    "total_num_tokens": total_num_tokens,
-                    "total_num_samples": total_num_samples,
-                    "total_data_source_samples": total_data_source_samples,
-                    "total_data_source_tokens": total_data_source_tokens,
-                }
-            )
-            try:
-                dataloader_state_dict = {
-                    "dataloader_state_dict": dataloader.state_dict()
-                }
-            except:
-                dataloader_state_dict = None
-                logging.error(f"====rlhf==== Dataloader cannot dump state_dict!!!!!!!!")
-            
-            if dataloader_state_dict is not None:
-                # dataloader ckpt
-                dataloader_path = os.path.join(args.output_dir, "dataloader_ckpt")
-                if dist.get_rank() == 0:
-                    os.makedirs(dataloader_path, exist_ok=True)
-                dist.barrier()
-                torch.save(
-                    dataloader_state_dict,
-                    os.path.join(
-                        dataloader_path,
-                        f"rank{dist.get_rank()}_global_step{iteration}.pth"
-                    )
-                )
-
+    )
 
 
 if __name__ == "__main__":
