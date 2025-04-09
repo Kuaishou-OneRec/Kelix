@@ -192,14 +192,10 @@ async function updateDisplay() {
         mediaContainer.innerHTML = `<div class="alert alert-danger">Error loading media: ${error.message}</div>`;
     }
 
-    // Update responses
-    if (item.responses && Array.isArray(item.responses)) {
-        responsesContainer.innerHTML = item.responses.map(response => 
-            `<div class="response-item">${response}</div>`
-        ).join('');
-    } else {
-        responsesContainer.innerHTML = '<div class="alert alert-info">No responses available</div>';
-    }
+    // Update responses - 直接从 item 中读取 responses
+    responsesContainer.innerHTML = item.responses.map(response => 
+        `<div class="response-item">${response}</div>`
+    ).join('');
 }
 
 document.getElementById('prevBtn').addEventListener('click', () => {
