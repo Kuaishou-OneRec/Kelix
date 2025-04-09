@@ -44,7 +44,7 @@ def prepare_llm_judge_dataset(
         data = pq.read_table(input_file).to_pylist()
             
         for item in data:
-            photo_id = item['photo']
+            photo_id = str(item['photo'])
             comments = json.loads(item['content_list'])
             id_list = json.loads(item['id_list'])
             assert len(comments) == len(id_list), \
