@@ -49,6 +49,10 @@ def prepare_llm_judge_dataset(
             id_list = json.loads(item['id_list'])
             assert len(comments) == len(id_list), \
                 f"comments and id_list have different length: {len(comments)} != {len(id_list)}"
+            
+            pos = item['god_comment']
+            neg = item['negative_list']
+            pids = [pos] + neg
             # Get media info
             media_info = get_media_info(photo_id, photo_dir)
             if not media_info:
@@ -57,6 +61,8 @@ def prepare_llm_judge_dataset(
             media_content, videos_json, images_json = \
                 create_media_content(media_info['media_path'])
             for comment, id in zip(comments, id_list):
+                if not comment in pids:
+                    continue
                 # Create messages in chat format
                 message = {
                     "role": "user",
