@@ -47,7 +47,8 @@ def prepare_llm_judge_dataset(
             photo_id = item['photo']
             comments = item['content_list']
             id_list = item['id_list']
-            assert len(comments) == len(id_list), "comments and id_list have different length"
+            assert len(comments) == len(id_list), \
+                f"comments and id_list have different length: {len(comments)} != {len(id_list)}"
             # Get media info
             media_info = get_media_info(photo_id, photo_dir)
             if not media_info:
