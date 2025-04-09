@@ -72,7 +72,7 @@ async function updateDisplay() {
 
         // Add photo_id and prompt display
         const infoDiv = document.createElement('div');
-        infoDiv.className = 'mb-3';
+        infoDiv.className = 'mb-3 p-3 bg-light rounded';
         
         if (photoId) {
             const photoIdP = document.createElement('p');
@@ -82,6 +82,7 @@ async function updateDisplay() {
         
         if (item.prompt) {
             const promptP = document.createElement('p');
+            promptP.className = 'mb-0';
             promptP.innerHTML = `<strong>Prompt:</strong> ${item.prompt}`;
             infoDiv.appendChild(promptP);
         }
