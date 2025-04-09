@@ -499,7 +499,7 @@ class ParquetDataset(IterableDataset):
       }
 
       # process message or segments -> webdataset_key = json
-      sample_data = {"source": data_source, "meta": row.get("meta", json.dumps({}))}
+      sample_data = {"source": data_source, "meta": row.get("metadata", json.dumps({}))}
 
       if "chosen" in row:
         chosen = row["chosen"]
