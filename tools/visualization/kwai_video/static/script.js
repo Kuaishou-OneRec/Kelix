@@ -53,7 +53,14 @@ async function updateDisplay() {
 
     // Update media display
     try {
-        const mediaInfo = await fetch(`/get_media_info/${item.__key__}`).then(res => res.json());
+        // 使用 meta.photo_id 作为 key 来获取媒体信息
+        const photoId = item.meta?.photo_id;
+        if (!photoId) {
+            mediaContainer.innerHTML = `<div class="alert alert-warning">No photo ID found in meta data</div>`;
+            return;
+        }
+
+        const mediaInfo = await fetch(`/get_media_info/${photoId}`).then(res => res.json());
         
         if (mediaInfo.error) {
             mediaContainer.innerHTML = `<div class="alert alert-warning">${mediaInfo.error}</div>`;
@@ -62,6 +69,24 @@ async function updateDisplay() {
 
         // 清除现有内容
         mediaContainer.innerHTML = '';
+
+        // Add photo_id and prompt display
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'mb-3';
+        
+        if (photoId) {
+            const photoIdP = document.createElement('p');
+            photoIdP.innerHTML = `<strong>Photo ID:</strong> ${photoId}`;
+            infoDiv.appendChild(photoIdP);
+        }
+        
+        if (item.prompt) {
+            const promptP = document.createElement('p');
+            promptP.innerHTML = `<strong>Prompt:</strong> ${item.prompt}`;
+            infoDiv.appendChild(promptP);
+        }
+        
+        mediaContainer.appendChild(infoDiv);
 
         // 处理媒体路径
         const getMediaUrl = (path) => `/serve_media?path=${encodeURIComponent(path)}`;
