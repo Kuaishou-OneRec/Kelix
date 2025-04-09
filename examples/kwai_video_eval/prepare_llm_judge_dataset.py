@@ -69,21 +69,28 @@ def prepare_llm_judge_dataset(
                 if not comment in pids:
                     continue
                 # Create messages in chat format
+                messages = []
                 message = {
                     "role": "user",
                     "content":
-                        [{"type": "text", "text": "视频："}] + \
+                        [{"type": "text", "text": "视频：\n\n"}] + \
                         media_content + \
-                        [{"type": "text", "text": "评论：" + comment}]
+                        [{"type": "text", "text": "评论：\n\n" + comment}]
                 }
                 if prompt:
                     message["content"].append({"type": "text", "text": prompt})
+                if system_prompt:
+                    messages.append({
+                        "role": "system",
+                        "content": system_prompt
+                    })
+                messages.append(message)
                 # Create sample
                 sample = {
                     "images": images_json,
                     "videos": videos_json,
                     "source": "llm_judge",
-                    "messages": json.dumps([message]),
+                    "messages": json.dumps(messages),
                     "segments": "[]",  # No segments in this dataset
                     "metadata": json.dumps({
                         "photo_id": photo_id,
@@ -95,11 +102,11 @@ def prepare_llm_judge_dataset(
 
     # Save to parquet dataset
     save_parquet_dataset(
-        samples=samples,
+        samples=samples[:128],
         output_dir=output_dir,
         num_shards=num_shards,
         tokenizer_path=tokenizer_path,
-        name="llm_judge_dataset"
+        name="vllm_infer"
     )
 
 if __name__ == "__main__":

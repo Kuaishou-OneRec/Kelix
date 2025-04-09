@@ -499,7 +499,7 @@ class ParquetDataset(IterableDataset):
       }
 
       # process message or segments -> webdataset_key = json
-      sample_data = {"source": data_source}
+      sample_data = {"source": data_source, "meta": row.get("meta", json.dumps({}))}
 
       if "chosen" in row:
         chosen = row["chosen"]
@@ -1205,6 +1205,7 @@ class VllmInferenceDataset(DistributedDataset):
       },
       "annotation": annotation,
       "source": sample["json"]["source"],
+      "meta": json.loads(sample["json"]["meta"]),
       "__key__": sample["__key__"],
       "__url__": sample["__url__"],
     }
