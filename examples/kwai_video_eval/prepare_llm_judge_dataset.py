@@ -95,13 +95,13 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Prepare LLM judge dataset")
-    parser.add_argument("--photo_dir", type=str, default=None, help="Directory containing photo information")
-    parser.add_argument("--input_files", type=str, default=None, help="Input JSON files containing photo IDs and responses")
-    parser.add_argument("--output_dir", type=str, default=None, help="Directory to save the parquet dataset")
+    parser.add_argument("--photo-dir", type=str, default=None, help="Directory containing photo information")
+    parser.add_argument("--input-files", type=str, default=None, help="Input JSON files containing photo IDs and responses")
+    parser.add_argument("--output-dir", type=str, default=None, help="Directory to save the parquet dataset")
     parser.add_argument("--prompt", type=str, default=None, help="Prompt template to use for each sample")
-    parser.add_argument("--system_prompt", type=str, default=None, help="System prompt to use")
-    parser.add_argument("--num_shards", type=int, default=1, help="Number of shards to split the dataset into")
-    parser.add_argument("--tokenizer_path", type=str, default=None, help="Path to the tokenizer")
+    parser.add_argument("--system-prompt", type=str, default=None, help="System prompt to use")
+    parser.add_argument("--num-shards", type=int, default=1, help="Number of shards to split the dataset into")
+    parser.add_argument("--tokenizer-path", type=str, default=None, help="Path to the tokenizer")
     
     args = parser.parse_args()
     
