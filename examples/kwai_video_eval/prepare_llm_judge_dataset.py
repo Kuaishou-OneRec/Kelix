@@ -45,8 +45,8 @@ def prepare_llm_judge_dataset(
             
         for item in data:
             photo_id = item['photo']
-            comments = item['content_list']
-            id_list = item['id_list']
+            comments = json.loads(item['content_list'])
+            id_list = json.loads(item['id_list'])
             assert len(comments) == len(id_list), \
                 f"comments and id_list have different length: {len(comments)} != {len(id_list)}"
             # Get media info
