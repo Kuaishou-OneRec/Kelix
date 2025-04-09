@@ -193,9 +193,13 @@ async function updateDisplay() {
     }
 
     // Update responses
-    responsesContainer.innerHTML = item.responses.map(response => 
-        `<div class="response-item">${response}</div>`
-    ).join('');
+    if (item.responses && Array.isArray(item.responses)) {
+        responsesContainer.innerHTML = item.responses.map(response => 
+            `<div class="response-item">${response}</div>`
+        ).join('');
+    } else {
+        responsesContainer.innerHTML = '<div class="alert alert-info">No responses available</div>';
+    }
 }
 
 document.getElementById('prevBtn').addEventListener('click', () => {
