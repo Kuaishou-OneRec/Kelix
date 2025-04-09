@@ -5,7 +5,7 @@ from typing import List, Dict
 import uuid
 from recovlm.utils.data import get_media_info, save_parquet_dataset, \
     create_media_content
-from recovlm.utils.prompt import PromptLoader
+from recovlm.data.prompts import PromptLoader
 import pyarrow.parquet as pq
 import glob
 
