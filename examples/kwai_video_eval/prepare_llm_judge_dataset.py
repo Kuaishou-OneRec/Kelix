@@ -33,7 +33,6 @@ def prepare_llm_judge_dataset(
     prompt_loader = PromptLoader()
     prompt = prompt_loader.load(prompt)
     system_prompt = prompt_loader.load(system_prompt)
-    assert prompt is not None, "Prompt is None"
     samples = []
     all_input_files = []
     for input_file in input_files.split(","):
