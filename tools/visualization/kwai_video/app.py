@@ -48,7 +48,6 @@ def load_file():
                     items.append(item)
                 except (StopIteration, json.JSONDecodeError):
                     break
-        print(items)
         return jsonify({
             'items': items,
             'has_more': len(items) == count  # Indicates if there might be more items
