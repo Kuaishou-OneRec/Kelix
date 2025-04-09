@@ -51,7 +51,7 @@ def prepare_llm_judge_dataset(
                 f"comments and id_list have different length: {len(comments)} != {len(id_list)}"
             
             pos = item['god_comment']
-            neg = item['negative_list']
+            neg = json.loads(item['negative_list'])
             pids = [pos] + neg
             # Get media info
             media_info = get_media_info(photo_id, photo_dir)
