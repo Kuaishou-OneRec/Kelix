@@ -1,7 +1,7 @@
 echo "Preparing dataset..."
 
 INPUT_FILES=${1:-"/llm_reco_ssd/zhouyang12/data/kwai_comment/reward/0.0.1/test_all.parquet"}
-DATASET_DIR=${2:-"/llm_reco/zhouyang12/.cache/Dataset/KwaiCommentJudge/"}
+DATASET_DIR=${2:-"/llm_reco/zhouyang12/.cache/Dataset/KwaiCommentJudgeCot/"}
 PHOTO_DIR=${3:-"/llm_reco/zhouyang12/.cache/Photo"}
 SYSTEM_PROMPT=${4:-"kwai_comment_judge_system_cot"}
 NUM_SHARDS=${5:-8}
