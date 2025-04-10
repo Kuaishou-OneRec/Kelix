@@ -42,7 +42,7 @@ def prepare_llm_judge_dataset(
         # with open(input_file, 'r') as f:
         #     data = json.load(f)
         data = pq.read_table(input_file).to_pylist()
-            
+        total_samples = 0
         for item in data:
             photo_id = str(item['photo'])
             comments = json.loads(item['content_list'])
@@ -58,6 +58,8 @@ def prepare_llm_judge_dataset(
             if not neg:
                 continue
             pids = [pos] + neg
+            print(len(pids))
+            total_samples += len(pids)
             # Get media info
             media_info = get_media_info(photo_id, photo_dir)
             if not media_info:
@@ -99,7 +101,7 @@ def prepare_llm_judge_dataset(
                     "uuid": str(uuid.uuid4())
                 }
                 samples.append(sample)
-
+    print(f"Total samples: {total_samples}, {len(samples)}")
     # Save to parquet dataset
     save_parquet_dataset(
         samples=samples[:128],
