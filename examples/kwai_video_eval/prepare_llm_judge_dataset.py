@@ -16,7 +16,8 @@ def prepare_llm_judge_dataset(
     prompt: str,
     system_prompt: str,
     num_shards: int = 1,
-    tokenizer_path: str = None
+    tokenizer_path: str = None,
+    top_k: int = 10
 ):
     """
     Prepare LLM judge dataset from input files containing photo IDs and responses.
@@ -39,27 +40,28 @@ def prepare_llm_judge_dataset(
         all_input_files.extend(glob.glob(input_file))
 
     for input_file in all_input_files:
-        # with open(input_file, 'r') as f:
-        #     data = json.load(f)
         data = pq.read_table(input_file).to_pylist()
-        total_samples = 0
         for item in data:
             photo_id = str(item['photo'])
             comments = json.loads(item['content_list'])
             id_list = json.loads(item['id_list'])
-            assert len(comments) == len(id_list), \
+            like_list = json.loads(item['like_list'])
+            assert len(comments) == len(id_list) and len(comments) == len(like_list), \
                 f"comments and id_list have different length: {len(comments)} != {len(id_list)}"
             
             pos = item['god_comment']
+            pos_id = item["id"]
             # 跳过没有正例和没有负例的样本
-            if not pos:
-                continue
-            neg = json.loads(item['negative_list'])
-            if not neg:
-                continue
-            pids = [pos] + neg
-            print(len(pids))
-            total_samples += len(pids)
+            sorted_comment = sorted(
+                zip(comments, id_list, like_list), key=lambda x: x[-1],
+                reverse=True
+            )[:top_k]
+            selected = set([pos])
+            top_comments = [(pos, pos_id)]
+            for comment, comment_id, _ in sorted_comment:
+                if comment in selected:
+                    continue
+                top_comments.append((comment, comment_id))
             # Get media info
             media_info = get_media_info(photo_id, photo_dir)
             if not media_info:
@@ -67,9 +69,7 @@ def prepare_llm_judge_dataset(
                 continue
             media_content, videos_json, images_json = \
                 create_media_content(media_info['media_path'])
-            for comment, id in zip(comments, id_list):
-                if not comment in pids:
-                    continue
+            for comment, comment_id in top_comments:
                 # Create messages in chat format
                 messages = []
                 message = {
@@ -96,15 +96,14 @@ def prepare_llm_judge_dataset(
                     "segments": "[]",  # No segments in this dataset
                     "metadata": json.dumps({
                         "photo_id": photo_id,
-                        "comment_id": id
+                        "comment_id": comment_id
                     }),
                     "uuid": str(uuid.uuid4())
                 }
                 samples.append(sample)
-    print(f"Total samples: {total_samples}, {len(samples)}")
     # Save to parquet dataset
     save_parquet_dataset(
-        samples=samples[:128],
+        samples=samples,
         output_dir=output_dir,
         num_shards=num_shards,
         tokenizer_path=tokenizer_path,
@@ -122,6 +121,7 @@ if __name__ == "__main__":
     parser.add_argument("--system-prompt", type=str, default=None, help="System prompt to use")
     parser.add_argument("--num-shards", type=int, default=1, help="Number of shards to split the dataset into")
     parser.add_argument("--tokenizer-path", type=str, default=None, help="Path to the tokenizer")
+    parser.add_argument("--top_k", type=str, default=None, help="Top k comment to selected.")
     
     args = parser.parse_args()
     
