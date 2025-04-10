@@ -12,7 +12,12 @@ import pickle
 import traceback
 import subprocess
 import os
-from infra.perflog import create_perf_context
+try:
+    from infra.perflog import create_perf_context
+    INFRA_AVAILABLE = True
+except ImportError:
+    INFRA_AVAILABLE = False
+    print("Warning: infra module not available, heart_beat functionality will be disabled")
 import pyarrow.parquet as pq
 
 def print_rank_n(*msg, rank=0):
@@ -279,6 +284,8 @@ def get_task_tag():
     return task_tag
 
 def heart_beat(num_tokens):
+    if not INFRA_AVAILABLE:
+        return
     current_file = os.path.abspath(__file__)
     log_ctx = create_perf_context('reco_vllm.pretrain', get_task_tag(), biz_def='infra', extra1=current_file)
     log_ctx.logstash_only(count=num_tokens)

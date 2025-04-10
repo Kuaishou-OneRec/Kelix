@@ -205,6 +205,7 @@ def create_dataset_config(index_path: str,
     print(f"Created dataset config at {config_path}")
     return config_path
 
+
 def prepare_dataset(pid_list_file: str, output_dir: str,
                     photo_dir: str,
                     prompt: str = None,

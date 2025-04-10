@@ -140,7 +140,9 @@ class GenerationActor:
               responses.append(output.text)
           all_response.append(responses)
           out.write(json.dumps({
+            "prompt": batch[prompt_idx]["vllm_inputs"]["prompt"],
             "annotation": batch[prompt_idx]["annotation"],
+            "meta": batch[prompt_idx]["meta"],
             "responses": all_response[prompt_idx],
             "source": batch[prompt_idx]["source"],
             "__key__": batch[prompt_idx]["__key__"],
