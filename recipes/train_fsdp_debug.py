@@ -34,6 +34,7 @@ from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
 from recovlm.models.intern_vl_3 import InternVLChatModel
+from transformers import AutoTokenizer, AutoModel
 
 from recovlm.data.dataloaders_v2 import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
@@ -416,8 +417,8 @@ def train():
 
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
     if args.model_type == 'intern-vl':
-      model = InternVLChatModel.from_pretrained(
-              args.model_dir, _attn_implementation="flash_attention_2",device_map='balanced')
+      model = AutoModel.from_pretrained(
+              args.model_dir, _attn_implementation="flash_attention_2")
     else:
       model = Qwen2VLForConditionalGeneration.from_pretrained(
               args.model_dir, _attn_implementation="flash_attention_2",
