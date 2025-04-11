@@ -426,7 +426,8 @@ def train():
                 args.model_dir, _attn_implementation="flash_attention_2",
                 use_cache=False
       )
-  print(model._tp_plan)
+  print_rank_0(model._tp_plan)
+  print_rank_0("*****--sfaf"*100)
   # check all param & buffer on meta device
   for tensor in itertools.chain(model.parameters(), model.buffers()):
     assert tensor.device == torch.device("meta")
