@@ -1,6 +1,5 @@
 Looking in indexes: https://pypi.corp.kuaishou.com/kuaishou/prod/+simple/
-Collecting accelerate
-  Downloading https://pypi.corp.kuaishou.com/kuaishou/prod/accelerate/1.6.0/accelerate-1.6.0-py3-none-any.whl (354 kB)
+Requirement already satisfied: accelerate in /usr/local/lib/python3.10/dist-packages (1.6.0)
 Requirement already satisfied: numpy<3.0.0,>=1.17 in /usr/local/lib/python3.10/dist-packages (from accelerate) (1.26.4)
 Requirement already satisfied: packaging>=20.0 in /usr/local/lib/python3.10/dist-packages (from accelerate) (24.2)
 Requirement already satisfied: psutil in /usr/local/lib/python3.10/dist-packages (from accelerate) (7.0.0)
@@ -34,5 +33,3 @@ Requirement already satisfied: urllib3<1.27,>=1.21.1 in /usr/local/lib/python3.1
 Requirement already satisfied: certifi>=2017.4.17 in /usr/local/lib/python3.10/dist-packages (from requests->huggingface-hub>=0.21.0->accelerate) (2021.10.8)
 Requirement already satisfied: charset-normalizer~=2.0.0 in /usr/local/lib/python3.10/dist-packages (from requests->huggingface-hub>=0.21.0->accelerate) (2.0.12)
 Requirement already satisfied: idna<4,>=2.5 in /usr/local/lib/python3.10/dist-packages (from requests->huggingface-hub>=0.21.0->accelerate) (3.3)
-Installing collected packages: accelerate
-Successfully installed accelerate-1.6.0
