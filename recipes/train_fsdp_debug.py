@@ -15,6 +15,7 @@ import itertools
 
 os.system("pip install timm")
 os.system("pip install accelerate>=0.26.0")
+os.system("pip install transformers==4.50.3")
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 
