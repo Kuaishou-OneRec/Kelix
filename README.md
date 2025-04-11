@@ -187,6 +187,31 @@ widsindex create *.tar --output index.json --process-num 256
     "source": "kwai_video"
 }
 ```
+多图格式的视频也可以按以下格式输入：
+
+```json
+000000000.json
+{
+    "__key__": 000000000, 
+    "messages": [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "video",
+                    "video": [
+                        "0.jpg", "1.jpg", "2.jpg"
+                    ]
+                },
+                {"type": "text", "text": "Describe this video."},
+            ]
+        },
+        {"role": "assistant", "content": "The video describe ..."},
+    ],
+    "source": "kwai_video"
+}
+```
+注意：Parquet文件目前图片输入只支持base64，需要先将图片编码成base64，将其塞到`images`这个map中，然后再messages中通过key引用对应的图片；mp4直接放绝对路径。
 
 ### Training
 

@@ -1,4 +1,5 @@
 # TODO: clean utils
+from typing import Tuple
 from rich import print
 import time
 import torch
@@ -11,7 +12,13 @@ import pickle
 import traceback
 import subprocess
 import os
-from infra.perflog import create_perf_context
+try:
+    from infra.perflog import create_perf_context
+    INFRA_AVAILABLE = True
+except ImportError:
+    INFRA_AVAILABLE = False
+    print("Warning: infra module not available, heart_beat functionality will be disabled")
+import pyarrow.parquet as pq
 
 def print_rank_n(*msg, rank=0):
   if dist.get_rank() == rank:
@@ -138,6 +145,7 @@ def to_device(batch, device):
   for key in list(batch.keys()):
     if isinstance(batch[key], torch.Tensor):
       batch[key] = batch[key].to(device=device)
+  return batch
 
 def to_cuda(batch):
   to_device(batch, device=torch.cuda.current_device())
@@ -276,6 +284,8 @@ def get_task_tag():
     return task_tag
 
 def heart_beat(num_tokens):
+    if not INFRA_AVAILABLE:
+        return
     current_file = os.path.abspath(__file__)
     log_ctx = create_perf_context('reco_vllm.pretrain', get_task_tag(), biz_def='infra', extra1=current_file)
     log_ctx.logstash_only(count=num_tokens)
@@ -295,3 +305,112 @@ def load_env():
       key, value = line.strip().split("=")
       env[key] = str(value)
   return env
+
+
+
+def get_next_free_port(start_port):
+  port = start_port
+  while port <= 65535:  # 端口号最大为 65535
+      try:
+          # 创建一个 TCP socket
+          sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+          # 尝试绑定到指定的端口
+          sock.bind(('0.0.0.0', port))
+          # 关闭 socket
+          sock.close()
+          return port
+      except OSError:
+          # 如果端口被占用，继续尝试下一个端口
+          port += 1
+  return None  # 如果没有找到可用端口，返回 None
+
+
+import hashlib
+
+def calculate_text_hash(text):
+    # 创建一个 SHA-256 哈希对象
+    hash_object = hashlib.sha256()
+    # 将文本编码为字节串并更新哈希对象
+    hash_object.update(text.encode('utf-8'))
+    # 获取十六进制表示的哈希值
+    hash_hex = hash_object.hexdigest()
+    return hash_hex
+
+def get_world_size_and_rank() -> Tuple[int, int]:
+    """Function that gets the current world size (aka total number
+    of ranks) and rank number of the current process in the default process group.
+
+    Returns:
+        Tuple[int, int]: world size, rank
+    """
+    if torch.distributed.is_available() and torch.distributed.is_initialized():
+        return torch.distributed.get_world_size(), torch.distributed.get_rank()
+    elif "RANK" in os.environ and "WORLD_SIZE" in os.environ:
+        return int(os.environ["WORLD_SIZE"]), int(os.environ["RANK"])
+    else:
+        return 1, 0
+
+def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
+    """Load a parquet file, with fallback to local cache if HDFS read fails.
+    
+    Args:
+        fn (str): Path to parquet file, can be HDFS path
+        retry (int): Number of retries
+        max_cache_files (int): Maximum number of files to keep in cache
+        
+    Returns:
+        pq.ParquetFile: Loaded parquet file object
+        
+    Raises:
+        Exception: If both HDFS and local cache loading fail
+    """
+    import hashlib
+
+    def calculate_text_hash(text):
+        # 创建一个 SHA-256 哈希对象
+        hash_object = hashlib.sha256()
+        # 将文本编码为字节串并更新哈希对象
+        hash_object.update(text.encode('utf-8'))
+        # 获取十六进制表示的哈希值
+        hash_hex = hash_object.hexdigest()
+        return hash_hex
+
+    worker_id = get_worker_info()[0]
+    rank_id = get_world_size_and_rank()[1]
+
+    cache_dir = f'/code/dataset_cache/{worker_id}_{rank_id}'
+    os.makedirs(cache_dir, exist_ok=True)
+    filename = os.path.basename(fn)
+
+    cache_fn = os.path.join(cache_dir, str(calculate_text_hash(fn)) + '_' + filename)
+    import time
+
+    def clean_cache_if_needed():
+        files = [os.path.join(cache_dir, f) for f in os.listdir(cache_dir) if os.path.isfile(os.path.join(cache_dir, f))]
+        if len(files) > max_cache_files:
+            files.sort(key=os.path.getctime)
+            for fn in files[:max_cache_files//2]:
+                print(f"Removing old cached file: {fn}")
+
+    for r in range(retry):
+        print(f"retrying for fn={fn}/{cache_fn}")
+        try:
+            if os.path.exists(cache_fn):
+                res = pq.ParquetFile(cache_fn)
+            else:
+                res = pq.ParquetFile(fn)
+            return res
+        
+        except Exception as e:          
+            # Try to download from HDFS
+            try:
+                clean_cache_if_needed()  # Clean cache before downloading new file
+                cmd = f'hadoop fs -get {fn} {cache_fn}'
+                os.system(cmd)
+                res = pq.ParquetFile(cache_fn)
+                return res
+            except Exception as e2:
+                time.sleep(2 + np.random.randint(0, 5))
+                
+                if r == retry - 1:
+                    raise Exception(f"Failed to load parquet file from both original path and cache.\nOriginal error: {e}\nCache error: {e2}")

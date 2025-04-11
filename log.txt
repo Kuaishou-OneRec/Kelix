@@ -1,0 +1,402 @@
+nohup: ignoring input
+script dir: /llm_reco/zangdunju/vllm/rlhf/recovlm/tools
+head_node_addr: 10.82.124.39
+Warning: Permanently added '[10.82.120.166]:53603' (ECDSA) to the list of known hosts.
+Warning: Permanently added '[10.82.120.217]:53603' (ECDSA) to the list of known hosts.
+Warning: Permanently added '[10.82.122.41]:53603' (ECDSA) to the list of known hosts.
+Warning: Permanently added '[10.82.122.95]:53603' (ECDSA) to the list of known hosts.
+Warning: Permanently added '[10.82.122.33]:53603' (ECDSA) to the list of known hosts.
+Warning: Permanently added '[10.82.124.77]:53603' (ECDSA) to the list of known hosts.
+Start ray head
+2025-04-10 18:53:09,162	INFO usage_lib.py:467 -- Usage stats collection is enabled by default without user confirmation because this terminal is detected to be non-interactive. To disable this, add `--disable-usage-stats` to the command that starts the cluster, or run the following command: `ray disable-usage-stats` before starting the cluster. See https://docs.ray.io/en/master/cluster/usage-stats.html for more details.
+2025-04-10 18:53:09,162	INFO scripts.py:865 -- [37mLocal node IP[39m: [1m10.82.124.39[22m
+Add ray node
+Add ray node
+Add ray node
+Add ray node
+Add ray node
+Add ray node
+2025-04-10 18:53:10,567	SUCC scripts.py:902 -- [32m--------------------[39m
+2025-04-10 18:53:10,567	SUCC scripts.py:903 -- [32mRay runtime started.[39m
+2025-04-10 18:53:10,567	SUCC scripts.py:904 -- [32m--------------------[39m
+2025-04-10 18:53:10,568	INFO scripts.py:906 -- [36mNext steps[39m
+2025-04-10 18:53:10,568	INFO scripts.py:909 -- To add another node to this Ray cluster, run
+2025-04-10 18:53:10,568	INFO scripts.py:912 -- [1m  ray start --address='10.82.124.39:6381'[22m
+2025-04-10 18:53:10,568	INFO scripts.py:921 -- To connect to this Ray cluster:
+2025-04-10 18:53:10,568	INFO scripts.py:923 -- [35mimport[39m[26m ray
+2025-04-10 18:53:10,568	INFO scripts.py:924 -- ray[35m.[39m[26minit()
+2025-04-10 18:53:10,568	INFO scripts.py:936 -- To submit a Ray job using the Ray Jobs CLI:
+2025-04-10 18:53:10,568	INFO scripts.py:937 -- [1m  RAY_ADDRESS='http://127.0.0.1:8265' ray job submit --working-dir . -- python my_script.py[22m
+2025-04-10 18:53:10,568	INFO scripts.py:946 -- See https://docs.ray.io/en/latest/cluster/running-applications/job-submission/index.html 
+2025-04-10 18:53:10,568	INFO scripts.py:950 -- for more information on submitting Ray jobs to the Ray cluster.
+2025-04-10 18:53:10,568	INFO scripts.py:955 -- To terminate the Ray runtime, run
+2025-04-10 18:53:10,568	INFO scripts.py:956 -- [1m  ray stop[22m
+2025-04-10 18:53:10,568	INFO scripts.py:959 -- To view the status of the cluster, use
+2025-04-10 18:53:10,568	INFO scripts.py:960 --   [1mray status[22m[26m
+2025-04-10 18:53:10,568	INFO scripts.py:964 -- To monitor and debug Ray, view the dashboard at 
+2025-04-10 18:53:10,568	INFO scripts.py:965 --   [1m127.0.0.1:8265[22m[26m
+2025-04-10 18:53:10,568	INFO scripts.py:972 -- [4mIf connection to the dashboard fails, check your firewall settings and network configuration.[24m
+[0m2025-04-10 18:53:11,120	INFO scripts.py:1047 -- [37mLocal node IP[39m: [1m10.82.120.166[22m
+2025-04-10 18:53:11,130	WARNING utils.py:580 -- Detecting docker specified CPUs. In previous versions of Ray, CPU detection in containers was incorrect. Please ensure that Ray has enough CPUs allocated. As a temporary workaround to revert to the prior behavior, set `RAY_USE_MULTIPROCESSING_CPU_COUNT=1` as an env var before starting Ray. Set the env var: `RAY_DISABLE_DOCKER_CPU_WARNING=1` to mute this warning.
+[2025-04-10 18:53:11,186 W 23982 23982] global_state_accessor.cc:429: Retrying to get node with node ID 43aa4178f015992bae0c2a1436cf5eb41190272ca7d8489e93994329
+2025-04-10 18:53:11,218	INFO scripts.py:1047 -- [37mLocal node IP[39m: [1m10.82.122.41[22m
+2025-04-10 18:53:11,229	WARNING utils.py:580 -- Detecting docker specified CPUs. In previous versions of Ray, CPU detection in containers was incorrect. Please ensure that Ray has enough CPUs allocated. As a temporary workaround to revert to the prior behavior, set `RAY_USE_MULTIPROCESSING_CPU_COUNT=1` as an env var before starting Ray. Set the env var: `RAY_DISABLE_DOCKER_CPU_WARNING=1` to mute this warning.
+2025-04-10 18:53:11,245	INFO scripts.py:1047 -- [37mLocal node IP[39m: [1m10.82.122.95[22m
+2025-04-10 18:53:11,248	INFO scripts.py:1047 -- [37mLocal node IP[39m: [1m10.82.120.217[22m
+2025-04-10 18:53:11,252	INFO scripts.py:1047 -- [37mLocal node IP[39m: [1m10.82.122.33[22m
+2025-04-10 18:53:11,255	INFO scripts.py:1047 -- [37mLocal node IP[39m: [1m10.82.124.77[22m
+2025-04-10 18:53:11,256	WARNING utils.py:580 -- Detecting docker specified CPUs. In previous versions of Ray, CPU detection in containers was incorrect. Please ensure that Ray has enough CPUs allocated. As a temporary workaround to revert to the prior behavior, set `RAY_USE_MULTIPROCESSING_CPU_COUNT=1` as an env var before starting Ray. Set the env var: `RAY_DISABLE_DOCKER_CPU_WARNING=1` to mute this warning.
+2025-04-10 18:53:11,259	WARNING utils.py:580 -- Detecting docker specified CPUs. In previous versions of Ray, CPU detection in containers was incorrect. Please ensure that Ray has enough CPUs allocated. As a temporary workaround to revert to the prior behavior, set `RAY_USE_MULTIPROCESSING_CPU_COUNT=1` as an env var before starting Ray. Set the env var: `RAY_DISABLE_DOCKER_CPU_WARNING=1` to mute this warning.
+2025-04-10 18:53:11,263	WARNING utils.py:580 -- Detecting docker specified CPUs. In previous versions of Ray, CPU detection in containers was incorrect. Please ensure that Ray has enough CPUs allocated. As a temporary workaround to revert to the prior behavior, set `RAY_USE_MULTIPROCESSING_CPU_COUNT=1` as an env var before starting Ray. Set the env var: `RAY_DISABLE_DOCKER_CPU_WARNING=1` to mute this warning.
+2025-04-10 18:53:11,266	WARNING utils.py:580 -- Detecting docker specified CPUs. In previous versions of Ray, CPU detection in containers was incorrect. Please ensure that Ray has enough CPUs allocated. As a temporary workaround to revert to the prior behavior, set `RAY_USE_MULTIPROCESSING_CPU_COUNT=1` as an env var before starting Ray. Set the env var: `RAY_DISABLE_DOCKER_CPU_WARNING=1` to mute this warning.
+[2025-04-10 18:53:11,267 W 22387 22387] global_state_accessor.cc:429: Retrying to get node with node ID aa9651a6a8f71317aa03e13bc061fc97360304a7a805bc4a3493f372
+[2025-04-10 18:53:11,294 W 25086 25086] global_state_accessor.cc:429: Retrying to get node with node ID 45baafbcc1a903c4c2e3ca84af3068c1ecd0f7c3c1e7427c79b2565f
+[2025-04-10 18:53:11,297 W 23503 23503] global_state_accessor.cc:429: Retrying to get node with node ID 36947a54bcc09bb503ca737950721beae564e4d82cc49ec14e883001
+[2025-04-10 18:53:11,303 W 22266 22266] global_state_accessor.cc:429: Retrying to get node with node ID f49afbe4065b0c46a1db7609cfbb3385ece376b2d54106af8674fcf0
+[2025-04-10 18:53:11,304 W 23069 23069] global_state_accessor.cc:429: Retrying to get node with node ID f3c7c2d8821b07a7824e9ad80e9931ae1b92ca5eb1fc585e260d08b8
+2025-04-10 18:53:12,188	SUCC scripts.py:1063 -- [32m--------------------[39m
+2025-04-10 18:53:12,188	SUCC scripts.py:1064 -- [32mRay runtime started.[39m
+2025-04-10 18:53:12,189	SUCC scripts.py:1065 -- [32m--------------------[39m
+2025-04-10 18:53:12,189	INFO scripts.py:1067 -- To terminate the Ray runtime, run
+2025-04-10 18:53:12,189	INFO scripts.py:1068 -- [1m  ray stop[22m
+[0m2025-04-10 18:53:12,269	SUCC scripts.py:1063 -- [32m--------------------[39m
+2025-04-10 18:53:12,269	SUCC scripts.py:1064 -- [32mRay runtime started.[39m
+2025-04-10 18:53:12,269	SUCC scripts.py:1065 -- [32m--------------------[39m
+2025-04-10 18:53:12,269	INFO scripts.py:1067 -- To terminate the Ray runtime, run
+2025-04-10 18:53:12,269	INFO scripts.py:1068 -- [1m  ray stop[22m
+[0m2025-04-10 18:53:12,296	SUCC scripts.py:1063 -- [32m--------------------[39m
+2025-04-10 18:53:12,296	SUCC scripts.py:1064 -- [32mRay runtime started.[39m
+2025-04-10 18:53:12,296	SUCC scripts.py:1065 -- [32m--------------------[39m
+2025-04-10 18:53:12,305	SUCC scripts.py:1063 -- [32m--------------------[39m
+2025-04-10 18:53:12,299	SUCC scripts.py:1063 -- [32m--------------------[39m
+2025-04-10 18:53:12,306	SUCC scripts.py:1063 -- [32m--------------------[39m
+2025-04-10 18:53:12,296	INFO scripts.py:1067 -- To terminate the Ray runtime, run
+2025-04-10 18:53:12,305	SUCC scripts.py:1064 -- [32mRay runtime started.[39m
+2025-04-10 18:53:12,299	SUCC scripts.py:1064 -- [32mRay runtime started.[39m
+2025-04-10 18:53:12,299	SUCC scripts.py:1065 -- [32m--------------------[39m
+2025-04-10 18:53:12,306	SUCC scripts.py:1064 -- [32mRay runtime started.[39m
+2025-04-10 18:53:12,296	INFO scripts.py:1068 -- [1m  ray stop[22m
+2025-04-10 18:53:12,305	SUCC scripts.py:1065 -- [32m--------------------[39m
+2025-04-10 18:53:12,306	SUCC scripts.py:1065 -- [32m--------------------[39m
+[0m2025-04-10 18:53:12,305	INFO scripts.py:1067 -- To terminate the Ray runtime, run
+2025-04-10 18:53:12,299	INFO scripts.py:1067 -- To terminate the Ray runtime, run
+2025-04-10 18:53:12,306	INFO scripts.py:1067 -- To terminate the Ray runtime, run
+2025-04-10 18:53:12,305	INFO scripts.py:1068 -- [1m  ray stop[22m
+2025-04-10 18:53:12,299	INFO scripts.py:1068 -- [1m  ray stop[22m
+2025-04-10 18:53:12,306	INFO scripts.py:1068 -- [1m  ray stop[22m
+[0m[0m[0m======== Autoscaler status: 2025-04-10 18:53:14.936795 ========
+Node status
+---------------------------------------------------------------
+Active:
+ 1 node_45baafbcc1a903c4c2e3ca84af3068c1ecd0f7c3c1e7427c79b2565f
+ 1 node_f3c7c2d8821b07a7824e9ad80e9931ae1b92ca5eb1fc585e260d08b8
+ 1 node_36947a54bcc09bb503ca737950721beae564e4d82cc49ec14e883001
+ 1 node_9db89b319225f6a3fafba23e1aec8c20b626e2f9b434a75a384052e1
+ 1 node_f49afbe4065b0c46a1db7609cfbb3385ece376b2d54106af8674fcf0
+ 1 node_43aa4178f015992bae0c2a1436cf5eb41190272ca7d8489e93994329
+ 1 node_aa9651a6a8f71317aa03e13bc061fc97360304a7a805bc4a3493f372
+Pending:
+ (no pending nodes)
+Recent failures:
+ (no failures)
+
+Resources
+---------------------------------------------------------------
+Usage:
+ 0.0/882.0 CPU
+ 0.0/56.0 GPU
+ 0B/5.55TiB memory
+ 0B/1.27TiB object_store_memory
+
+Demands:
+ (no resource demands)
+[0m======== Autoscaler status: 2025-04-10 18:53:14.936795 ========
+Node status
+---------------------------------------------------------------
+Active:
+ 1 node_45baafbcc1a903c4c2e3ca84af3068c1ecd0f7c3c1e7427c79b2565f
+ 1 node_f3c7c2d8821b07a7824e9ad80e9931ae1b92ca5eb1fc585e260d08b8
+ 1 node_36947a54bcc09bb503ca737950721beae564e4d82cc49ec14e883001
+ 1 node_9db89b319225f6a3fafba23e1aec8c20b626e2f9b434a75a384052e1
+ 1 node_f49afbe4065b0c46a1db7609cfbb3385ece376b2d54106af8674fcf0
+ 1 node_43aa4178f015992bae0c2a1436cf5eb41190272ca7d8489e93994329
+ 1 node_aa9651a6a8f71317aa03e13bc061fc97360304a7a805bc4a3493f372
+Pending:
+ (no pending nodes)
+Recent failures:
+ (no failures)
+
+Resources
+---------------------------------------------------------------
+Usage:
+ 0.0/882.0 CPU
+ 0.0/56.0 GPU
+ 0B/5.55TiB memory
+ 0B/1.27TiB object_store_memory
+
+Demands:
+ (no resource demands)
+[0m======== Autoscaler status: 2025-04-10 18:53:14.936795 ========
+Node status
+---------------------------------------------------------------
+Active:
+ 1 node_45baafbcc1a903c4c2e3ca84af3068c1ecd0f7c3c1e7427c79b2565f
+ 1 node_f3c7c2d8821b07a7824e9ad80e9931ae1b92ca5eb1fc585e260d08b8
+ 1 node_36947a54bcc09bb503ca737950721beae564e4d82cc49ec14e883001
+ 1 node_9db89b319225f6a3fafba23e1aec8c20b626e2f9b434a75a384052e1
+ 1 node_f49afbe4065b0c46a1db7609cfbb3385ece376b2d54106af8674fcf0
+ 1 node_43aa4178f015992bae0c2a1436cf5eb41190272ca7d8489e93994329
+ 1 node_aa9651a6a8f71317aa03e13bc061fc97360304a7a805bc4a3493f372
+Pending:
+ (no pending nodes)
+Recent failures:
+ (no failures)
+
+Resources
+---------------------------------------------------------------
+Usage:
+ 0.0/882.0 CPU
+ 0.0/56.0 GPU
+ 0B/5.55TiB memory
+ 0B/1.27TiB object_store_memory
+
+Demands:
+ (no resource demands)
+[0m======== Autoscaler status: 2025-04-10 18:53:14.936795 ========
+Node status
+---------------------------------------------------------------
+Active:
+ 1 node_45baafbcc1a903c4c2e3ca84af3068c1ecd0f7c3c1e7427c79b2565f
+ 1 node_f3c7c2d8821b07a7824e9ad80e9931ae1b92ca5eb1fc585e260d08b8
+ 1 node_36947a54bcc09bb503ca737950721beae564e4d82cc49ec14e883001
+ 1 node_9db89b319225f6a3fafba23e1aec8c20b626e2f9b434a75a384052e1
+ 1 node_f49afbe4065b0c46a1db7609cfbb3385ece376b2d54106af8674fcf0
+ 1 node_43aa4178f015992bae0c2a1436cf5eb41190272ca7d8489e93994329
+ 1 node_aa9651a6a8f71317aa03e13bc061fc97360304a7a805bc4a3493f372
+Pending:
+ (no pending nodes)
+Recent failures:
+ (no failures)
+
+Resources
+---------------------------------------------------------------
+Usage:
+ 0.0/882.0 CPU
+ 0.0/56.0 GPU
+ 0B/5.55TiB memory
+ 0B/1.27TiB object_store_memory
+
+Demands:
+ (no resource demands)
+[0m======== Autoscaler status: 2025-04-10 18:53:14.936795 ========
+Node status
+---------------------------------------------------------------
+Active:
+ 1 node_45baafbcc1a903c4c2e3ca84af3068c1ecd0f7c3c1e7427c79b2565f
+ 1 node_f3c7c2d8821b07a7824e9ad80e9931ae1b92ca5eb1fc585e260d08b8
+ 1 node_36947a54bcc09bb503ca737950721beae564e4d82cc49ec14e883001
+ 1 node_9db89b319225f6a3fafba23e1aec8c20b626e2f9b434a75a384052e1
+ 1 node_f49afbe4065b0c46a1db7609cfbb3385ece376b2d54106af8674fcf0
+ 1 node_43aa4178f015992bae0c2a1436cf5eb41190272ca7d8489e93994329
+ 1 node_aa9651a6a8f71317aa03e13bc061fc97360304a7a805bc4a3493f372
+Pending:
+ (no pending nodes)
+Recent failures:
+ (no failures)
+
+Resources
+---------------------------------------------------------------
+Usage:
+ 0.0/882.0 CPU
+ 0.0/56.0 GPU
+ 0B/5.55TiB memory
+ 0B/1.27TiB object_store_memory
+
+Demands:
+ (no resource demands)
+[0m======== Autoscaler status: 2025-04-10 18:53:14.936795 ========
+Node status
+---------------------------------------------------------------
+Active:
+ 1 node_45baafbcc1a903c4c2e3ca84af3068c1ecd0f7c3c1e7427c79b2565f
+ 1 node_f3c7c2d8821b07a7824e9ad80e9931ae1b92ca5eb1fc585e260d08b8
+ 1 node_36947a54bcc09bb503ca737950721beae564e4d82cc49ec14e883001
+ 1 node_9db89b319225f6a3fafba23e1aec8c20b626e2f9b434a75a384052e1
+ 1 node_f49afbe4065b0c46a1db7609cfbb3385ece376b2d54106af8674fcf0
+ 1 node_43aa4178f015992bae0c2a1436cf5eb41190272ca7d8489e93994329
+ 1 node_aa9651a6a8f71317aa03e13bc061fc97360304a7a805bc4a3493f372
+Pending:
+ (no pending nodes)
+Recent failures:
+ (no failures)
+
+Resources
+---------------------------------------------------------------
+Usage:
+ 0.0/882.0 CPU
+ 0.0/56.0 GPU
+ 0B/5.55TiB memory
+ 0B/1.27TiB object_store_memory
+
+Demands:
+ (no resource demands)
+[0m======== Autoscaler status: 2025-04-10 18:53:14.936795 ========
+Node status
+---------------------------------------------------------------
+Active:
+ 1 node_45baafbcc1a903c4c2e3ca84af3068c1ecd0f7c3c1e7427c79b2565f
+ 1 node_f3c7c2d8821b07a7824e9ad80e9931ae1b92ca5eb1fc585e260d08b8
+ 1 node_36947a54bcc09bb503ca737950721beae564e4d82cc49ec14e883001
+ 1 node_9db89b319225f6a3fafba23e1aec8c20b626e2f9b434a75a384052e1
+ 1 node_f49afbe4065b0c46a1db7609cfbb3385ece376b2d54106af8674fcf0
+ 1 node_43aa4178f015992bae0c2a1436cf5eb41190272ca7d8489e93994329
+ 1 node_aa9651a6a8f71317aa03e13bc061fc97360304a7a805bc4a3493f372
+Pending:
+ (no pending nodes)
+Recent failures:
+ (no failures)
+
+Resources
+---------------------------------------------------------------
+Usage:
+ 0.0/882.0 CPU
+ 0.0/56.0 GPU
+ 0B/5.55TiB memory
+ 0B/1.27TiB object_store_memory
+
+Demands:
+ (no resource demands)
+[0m2025-04-10 18:53:20,974	INFO dashboard_sdk.py:338 -- Uploading package gcs://_ray_pkg_6e21031320e46d16.zip.
+2025-04-10 18:53:20,975	INFO packaging.py:574 -- Creating a file package for local module './'.
+2025-04-10 18:53:20,736	INFO cli.py:39 -- [37mJob submission server address[39m: [1mhttp://127.0.0.1:8265[22m
+2025-04-10 18:53:24,082	SUCC cli.py:63 -- [32m-------------------------------------------------------[39m
+2025-04-10 18:53:24,082	SUCC cli.py:64 -- [32mJob 'raysubmit_E9VDvQS1J4ViBQ3D' submitted successfully[39m
+2025-04-10 18:53:24,082	SUCC cli.py:65 -- [32m-------------------------------------------------------[39m
+2025-04-10 18:53:24,082	INFO cli.py:289 -- [36mNext steps[39m
+2025-04-10 18:53:24,082	INFO cli.py:290 -- Query the logs of the job:
+2025-04-10 18:53:24,082	INFO cli.py:292 -- [1mray job logs raysubmit_E9VDvQS1J4ViBQ3D[22m
+2025-04-10 18:53:24,082	INFO cli.py:294 -- Query the status of the job:
+2025-04-10 18:53:24,082	INFO cli.py:296 -- [1mray job status raysubmit_E9VDvQS1J4ViBQ3D[22m
+2025-04-10 18:53:24,082	INFO cli.py:298 -- Request the job to be stopped:
+2025-04-10 18:53:24,082	INFO cli.py:300 -- [1mray job stop raysubmit_E9VDvQS1J4ViBQ3D[22m
+2025-04-10 18:53:24,103	INFO cli.py:307 -- Tailing logs until the job exits (disable with --no-wait):
+2025-04-10 18:53:23,923	INFO job_manager.py:530 -- Runtime env is setting up.
+如有问题, 请先参考通用FAQ: https://halo.corp.kuaishou.com/help/docs/bb8c63d537777c563fd04ba4dca24ee1
+如需开启框架的日志辅助问题定位, 可参考: https://infra-doc.corp.kuaishou.com/docs/infra-kess-python/logger.html
+不存在环境变量：KWS_SERVICE_REGION，使用默认值：HB1
+不存在环境变量：KWS_SERVICE_AZ，使用默认值：ZW
+不存在环境变量：KWS_SERVICE_PAZ，使用默认空值：
+INFO 04-10 18:53:30 __init__.py:183] Automatically detected platform cuda.
+Looking in indexes: https://pypi.corp.kuaishou.com/kuaishou/prod/+simple/
+Requirement already satisfied: decord in /usr/local/lib/python3.10/dist-packages (0.6.0)
+Requirement already satisfied: numpy>=1.14.0 in /usr/local/lib/python3.10/dist-packages (from decord) (1.26.4)
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+
+[notice] A new release of pip is available: 25.0 -> 25.0.1
+[notice] To update, run: python3 -m pip install --upgrade pip
+2025-04-10 18:53:32,210	INFO worker.py:1514 -- Using address 10.82.124.39:6381 set in the environment variable RAY_ADDRESS
+2025-04-10 18:53:32,210	INFO worker.py:1654 -- Connecting to existing Ray cluster at address: 10.82.124.39:6381...
+2025-04-10 18:53:32,219	INFO worker.py:1832 -- Connected to Ray cluster. View the dashboard at [1m[32m127.0.0.1:8265 [39m[22m
+[36m(pid=24478, ip=10.82.120.166)[0m INFO 04-10 18:53:36 __init__.py:183] Automatically detected platform cuda.
+[36m(InferLLM pid=24478, ip=10.82.120.166)[0m INFO 04-10 18:53:41 config.py:526] This model supports multiple tasks: {'classify', 'reward', 'embed', 'score', 'generate'}. Defaulting to 'generate'.
+[36m(InferLLM pid=24478, ip=10.82.120.166)[0m WARNING 04-10 18:53:41 cuda.py:100] To see benefits of async output processing, enable CUDA graph. Since, enforce-eager is enabled, async output processor cannot be used
+[36m(InferLLM pid=24478, ip=10.82.120.166)[0m WARNING 04-10 18:53:41 config.py:662] Async output processing is not supported on the current platform type cuda.
+[36m(InferLLM pid=24478, ip=10.82.120.166)[0m INFO 04-10 18:53:41 llm_engine.py:232] Initializing a V0 LLM engine (v0.7.1) with config: model='/llm_reco/chuchenglong/DPO/output/v1-20250408-003739/checkpoint-273-merged', speculative_config=None, tokenizer='/llm_reco/chuchenglong/DPO/output/v1-20250408-003739/checkpoint-273-merged', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, override_neuron_config=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=32768, download_dir=None, load_format=auto, tensor_parallel_size=4, pipeline_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=True, kv_cache_dtype=auto,  device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='xgrammar'), observability_config=ObservabilityConfig(otlp_traces_endpoint=None, collect_model_forward_time=False, collect_model_execute_time=False), seed=0, served_model_name=/llm_reco/chuchenglong/DPO/output/v1-20250408-003739/checkpoint-273-merged, num_scheduler_steps=1, multi_step_stream_outputs=True, enable_prefix_caching=False, chunked_prefill_enabled=False, use_async_output_proc=False, disable_mm_preprocessor_cache=False, mm_processor_kwargs=None, pooler_config=None, compilation_config={"splitting_ops":[],"compile_sizes":[],"cudagraph_capture_sizes":[],"max_capture_size":0}, use_cached_outputs=False, 
+[36m(pid=23999, ip=10.82.120.217)[0m INFO 04-10 18:53:40 __init__.py:183] Automatically detected platform cuda.[32m [repeated 10x across cluster] (Ray deduplicates logs by default. Set RAY_DEDUP_LOGS=0 to disable log deduplication, or see https://docs.ray.io/en/master/ray-observability/user-guides/configure-logging.html#log-deduplication for more options.)[0m
+[36m(InferLLM pid=24478, ip=10.82.120.166)[0m INFO 04-10 18:53:42 ray_distributed_executor.py:153] use_ray_spmd_worker: False
+[36m(InferLLM pid=24478, ip=10.82.120.166)[0m Connecting to existing Ray cluster at address: 10.82.124.39:6381...
+[36m(InferLLM pid=24478, ip=10.82.120.166)[0m Calling ray.init() again after it has already been called.
+[36m(InferLLM pid=23566, ip=10.82.124.77)[0m INFO 04-10 18:53:43 config.py:526] This model supports multiple tasks: {'score', 'generate', 'embed', 'classify', 'reward'}. Defaulting to 'generate'.
+[36m(InferLLM pid=22883, ip=10.82.122.41)[0m INFO 04-10 18:53:44 config.py:526] This model supports multiple tasks: {'classify', 'embed', 'reward', 'score', 'generate'}. Defaulting to 'generate'.
+[33m(raylet)[0m A worker died or was killed while executing a task by an unexpected system error. To troubleshoot the problem, check the logs for the dead worker. RayTask ID: ffffffffffffffff1a56f57575de62bb1d2de1be02000000 Worker ID: 64e094d56025f8560cf96431206911d894ead9089bc41882ed1a6988 Node ID: 36947a54bcc09bb503ca737950721beae564e4d82cc49ec14e883001 Worker IP address: 10.82.120.217 Worker port: 10006 Worker PID: 24059 Worker exit type: SYSTEM_ERROR Worker exit detail: Worker exits unexpectedly. Worker exits with an exit code None.
+Traceback (most recent call last):
+  File "/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources/working_dir_files/_ray_pkg_6e21031320e46d16/examples/infer/dpo_infer.py", line 359, in <module>
+    main(ags)
+  File "/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources/working_dir_files/_ray_pkg_6e21031320e46d16/examples/infer/dpo_infer.py", line 338, in main
+    ray.get([actor.run.remote() for actor in actor_list])
+  File "/usr/local/lib/python3.10/dist-packages/ray/_private/auto_init_hook.py", line 21, in auto_init_wrapper
+    return fn(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/ray/_private/client_mode_hook.py", line 103, in wrapper
+    return func(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/ray/_private/worker.py", line 2772, in get
+    values, debugger_breakpoint = worker.get_objects(object_refs, timeout=timeout)
+  File "/usr/local/lib/python3.10/dist-packages/ray/_private/worker.py", line 921, in get_objects
+    raise value
+ray.exceptions.ActorDiedError: The actor died unexpectedly before finishing this task.
+	class_name: InferenceActor
+	actor_id: 1a56f57575de62bb1d2de1be02000000
+	pid: 24059
+	namespace: e63784b0-d217-411c-a59d-5ecaa495cbb3
+	ip: 10.82.120.217
+The actor is dead because its worker process has died. Worker exit type: SYSTEM_ERROR Worker exit detail: Worker exits unexpectedly. Worker exits with an exit code None.
+[33m(raylet)[0m A worker died or was killed while executing a task by an unexpected system error. To troubleshoot the problem, check the logs for the dead worker. RayTask ID: ffffffffffffffffdfa2582dd6c86939a5887c8502000000 Worker ID: a57a99a5d4a47db9686dae2b58daa594ea3b256e5775b7a0b2b9bf43 Node ID: 9db89b319225f6a3fafba23e1aec8c20b626e2f9b434a75a384052e1 Worker IP address: 10.82.124.39 Worker port: 10133 Worker PID: 116731 Worker exit type: SYSTEM_ERROR Worker exit detail: Worker exits unexpectedly. Worker exits with an exit code None. The worker may have exceeded K8s pod memory limits.
+[36m(InferLLM pid=22883, ip=10.82.122.41)[0m WARNING 04-10 18:53:44 cuda.py:100] To see benefits of async output processing, enable CUDA graph. Since, enforce-eager is enabled, async output processor cannot be used[32m [repeated 2x across cluster][0m
+[36m(InferLLM pid=22883, ip=10.82.122.41)[0m WARNING 04-10 18:53:44 config.py:662] Async output processing is not supported on the current platform type cuda.[32m [repeated 2x across cluster][0m
+[36m(InferLLM pid=22883, ip=10.82.122.41)[0m INFO 04-10 18:53:44 llm_engine.py:232] Initializing a V0 LLM engine (v0.7.1) with config: model='/llm_reco/chuchenglong/DPO/output/v1-20250408-003739/checkpoint-273-merged', speculative_config=None, tokenizer='/llm_reco/chuchenglong/DPO/output/v1-20250408-003739/checkpoint-273-merged', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, override_neuron_config=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=32768, download_dir=None, load_format=auto, tensor_parallel_size=4, pipeline_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=True, kv_cache_dtype=auto,  device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='xgrammar'), observability_config=ObservabilityConfig(otlp_traces_endpoint=None, collect_model_forward_time=False, collect_model_execute_time=False), seed=0, served_model_name=/llm_reco/chuchenglong/DPO/output/v1-20250408-003739/checkpoint-273-merged, num_scheduler_steps=1, multi_step_stream_outputs=True, enable_prefix_caching=False, chunked_prefill_enabled=False, use_async_output_proc=False, disable_mm_preprocessor_cache=False, mm_processor_kwargs=None, pooler_config=None, compilation_config={"splitting_ops":[],"compile_sizes":[],"cudagraph_capture_sizes":[],"max_capture_size":0}, use_cached_outputs=False, [32m [repeated 2x across cluster][0m
+[36m(pid=116923)[0m INFO 04-10 18:53:44 __init__.py:183] Automatically detected platform cuda.[32m [repeated 17x across cluster][0m
+[36m(InferLLM pid=23566, ip=10.82.124.77)[0m INFO 04-10 18:53:44 ray_distributed_executor.py:153] use_ray_spmd_worker: False
+[33m(raylet)[0m A worker died or was killed while executing a task by an unexpected system error. To troubleshoot the problem, check the logs for the dead worker. RayTask ID: ffffffffffffffff03f7c94de5d48b7f6db84bc802000000 Worker ID: 5a5df8444df1da86ac0f3303c2d577dca66001d4198eb6de58a3bfd6 Node ID: 43aa4178f015992bae0c2a1436cf5eb41190272ca7d8489e93994329 Worker IP address: 10.82.120.166 Worker port: 10004 Worker PID: 24536 Worker exit type: SYSTEM_ERROR Worker exit detail: Worker exits unexpectedly. Worker exits with an exit code None.[32m [repeated 10x across cluster][0m
+[33m(raylet)[0m A worker died or was killed while executing a task by an unexpected system error. To troubleshoot the problem, check the logs for the dead worker. RayTask ID: ffffffffffffffffdc1823124f20d39c6499e7c602000000 Worker ID: 48a1c417e47622a039a1c626886feab3637bf5f50dc85a5bc54071c1 Node ID: 9db89b319225f6a3fafba23e1aec8c20b626e2f9b434a75a384052e1 Worker IP address: 10.82.124.39 Worker port: 10132 Worker PID: 116615 Worker exit type: SYSTEM_ERROR Worker exit detail: Worker exits unexpectedly. Worker exits with an exit code None. The worker may have exceeded K8s pod memory limits.[32m [repeated 2x across cluster][0m
+[36m(InferLLM pid=23566, ip=10.82.124.77)[0m Connecting to existing Ray cluster at address: 10.82.124.39:6381...
+[36m(InferLLM pid=23566, ip=10.82.124.77)[0m Calling ray.init() again after it has already been called.
+2025-04-10 18:53:48,168	ERR cli.py:71 -- [31m---------------------------------------[39m
+2025-04-10 18:53:48,168	ERR cli.py:72 -- [31mJob 'raysubmit_E9VDvQS1J4ViBQ3D' failed[39m
+2025-04-10 18:53:48,168	ERR cli.py:73 -- [31m---------------------------------------[39m
+2025-04-10 18:53:48,168	INFO cli.py:86 -- Status message: Job entrypoint command failed with exit code 1, last available logs (truncated to 20,000 chars):
+[33m(raylet)[0m A worker died or was killed while executing a task by an unexpected system error. To troubleshoot the problem, check the logs for the dead worker. RayTask ID: ffffffffffffffffdfa2582dd6c86939a5887c8502000000 Worker ID: a57a99a5d4a47db9686dae2b58daa594ea3b256e5775b7a0b2b9bf43 Node ID: 9db89b319225f6a3fafba23e1aec8c20b626e2f9b434a75a384052e1 Worker IP address: 10.82.124.39 Worker port: 10133 Worker PID: 116731 Worker exit type: SYSTEM_ERROR Worker exit detail: Worker exits unexpectedly. Worker exits with an exit code None. The worker may have exceeded K8s pod memory limits.
+[36m(InferLLM pid=22883, ip=10.82.122.41)[0m WARNING 04-10 18:53:44 cuda.py:100] To see benefits of async output processing, enable CUDA graph. Since, enforce-eager is enabled, async output processor cannot be used[32m [repeated 2x across cluster][0m
+[36m(InferLLM pid=22883, ip=10.82.122.41)[0m WARNING 04-10 18:53:44 config.py:662] Async output processing is not supported on the current platform type cuda.[32m [repeated 2x across cluster][0m
+[36m(InferLLM pid=22883, ip=10.82.122.41)[0m INFO 04-10 18:53:44 llm_engine.py:232] Initializing a V0 LLM engine (v0.7.1) with config: model='/llm_reco/chuchenglong/DPO/output/v1-20250408-003739/checkpoint-273-merged', speculative_config=None, tokenizer='/llm_reco/chuchenglong/DPO/output/v1-20250408-003739/checkpoint-273-merged', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, override_neuron_config=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=32768, download_dir=None, load_format=auto, tensor_parallel_size=4, pipeline_parallel_size=1, disable_custom_all_reduce=False, quantization=None, enforce_eager=True, kv_cache_dtype=auto,  device_config=cuda, decoding_config=DecodingConfig(guided_decoding_backend='xgrammar'), observability_config=ObservabilityConfig(otlp_traces_endpoint=None, collect_model_forward_time=False, collect_model_execute_time=False), seed=0, served_model_name=/llm_reco/chuchenglong/DPO/output/v1-20250408-003739/checkpoint-273-merged, num_scheduler_steps=1, multi_step_stream_outputs=True, enable_prefix_caching=False, chunked_prefill_enabled=False, use_async_output_proc=False, disable_mm_preprocessor_cache=False, mm_processor_kwargs=None, pooler_config=None, compilation_config={"splitting_ops":[],"compile_sizes":[],"cudagraph_capture_sizes":[],"max_capture_size":0}, use_cached_outputs=False, [32m [repeated 2x across cluster][0m
+[36m(pid=116923)[0m INFO 04-10 18:53:44 __init__.py:183] Automatically detected platform cuda.[32m [repeated 17x across cluster][0m
+[36m(InferLLM pid=23566, ip=10.82.124.77)[0m INFO 04-10 18:53:44 ray_distributed_executor.py:153] use_ray_spmd_worker: False
+[33m(raylet)[0m A worker died or was killed while executing a task by an unexpected system error. To troubleshoot the problem, check the logs for the dead worker. RayTask ID: ffffffffffffffff03f7c94de5d48b7f6db84bc802000000 Worker ID: 5a5df8444df1da86ac0f3303c2d577dca66001d4198eb6de58a3bfd6 Node ID: 43aa4178f015992bae0c2a1436cf5eb41190272ca7d8489e93994329 Worker IP address: 10.82.120.166 Worker port: 10004 Worker PID: 24536 Worker exit type: SYSTEM_ERROR Worker exit detail: Worker exits unexpectedly. Worker exits with an exit code None.[32m [repeated 10x across cluster][0m
+[33m(raylet)[0m A worker died or was killed while executing a task by an unexpected system error. To troubleshoot the problem, check the logs for the dead worker. RayTask ID: ffffffffffffffffdc1823124f20d39c6499e7c602000000 Worker ID: 48a1c417e47622a039a1c626886feab3637bf5f50dc85a5bc54071c1 Node ID: 9db89b319225f6a3fafba23e1aec8c20b626e2f9b434a75a384052e1 Worker IP address: 10.82.124.39 Worker port: 10132 Worker PID: 116615 Worker exit type: SYSTEM_ERROR Worker exit detail: Worker exits unexpectedly. Worker exits with an exit code None. The worker may have exceeded K8s pod memory limits.[32m [repeated 2x across cluster][0m
+[36m(InferLLM pid=23566, ip=10.82.124.77)[0m Connecting to existing Ray cluster at address: 10.82.124.39:6381...
+[36m(InferLLM pid=23566, ip=10.82.124.77)[0m Calling ray.init() again after it has already been called.
+
+Warning: Permanently added '[10.82.120.166]:53603' (ECDSA) to the list of known hosts.
+Warning: Permanently added '[10.82.122.41]:53603' (ECDSA) to the list of known hosts.
+Warning: Permanently added '[10.82.122.33]:53603' (ECDSA) to the list of known hosts.
+Warning: Permanently added '[10.82.124.77]:53603' (ECDSA) to the list of known hosts.
+Warning: Permanently added '[10.82.122.95]:53603' (ECDSA) to the list of known hosts.
+Warning: Permanently added '[10.82.120.217]:53603' (ECDSA) to the list of known hosts.
+2025-04-10 18:53:50,648	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/local/lib/python3.10/dist-packages/ray/core/src/ray/raylet/raylet --raylet_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --store_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --object_manager_port=0 --min_worker_port=10002 --max_worker_port=19999 --node_manager_port=0 --node_id=43aa4178f015992bae0c2a1436cf5eb41190272ca7d8489e93994329 --node_ip_address=10.82.120.166 --maximum_startup_concurrency=126 --static_resource_list=node:10.82.120.166,1.0,accelerator_type:A800,1,CPU,126,GPU,8,memory,873382662144,object_store_memory,200000000000 "--python_worker_command=/usr/bin/python3 /usr/local/lib/python3.10/dist-packages/ray/_private/workers/setup_worker.py /usr/local/lib/python3.10/dist-packages/ray/_private/workers/default_worker.py --node-ip-address=10.82.120.166 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --redis-address=None --metrics-agent-port=63791 --runtime-env-agent-port=62506 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --runtime-env-agent-port=62506 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --temp-dir=/tmp/ray --webui=127.0.0.1:8265 --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d RAY_WORKER_DYNAMIC_OPTION_PLACEHOLDER" --java_worker_command= --cpp_worker_command= --native_library_path=/usr/local/lib/python3.10/dist-packages/ray/cpp/lib --temp_dir=/tmp/ray --session_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --resource_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --metrics-agent-port=63791 --metrics_export_port=54641 --runtime_env_agent_port=62506 --object_store_memory=200000000000 --plasma_directory=/dev/shm --ray-debugger-external=0 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --labels= --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --ray_log_filepath=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs/raylet.out --num_prestart_python_workers=126 "--dashboard_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/dashboard/agent.py --node-ip-address=10.82.120.166 --metrics-export-port=54641 --dashboard-agent-port=63791 --listen-port=52365 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --temp-dir=/tmp/ray --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --session-name=session_2025-04-10_18-53-09_163077_104312 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d" "--runtime_env_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/runtime_env/agent/main.py --node-ip-address=10.82.120.166 --runtime-env-agent-port=62506 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --runtime-env-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --temp-dir=/tmp/ray"[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:50,785	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/local/lib/python3.10/dist-packages/ray/core/src/ray/raylet/raylet --raylet_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --store_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --object_manager_port=0 --min_worker_port=10002 --max_worker_port=19999 --node_manager_port=0 --node_id=f3c7c2d8821b07a7824e9ad80e9931ae1b92ca5eb1fc585e260d08b8 --node_ip_address=10.82.124.77 --maximum_startup_concurrency=126 --static_resource_list=node:10.82.124.77,1.0,accelerator_type:A800,1,CPU,126,GPU,8,memory,873382961152,object_store_memory,200000000000 "--python_worker_command=/usr/bin/python3 /usr/local/lib/python3.10/dist-packages/ray/_private/workers/setup_worker.py /usr/local/lib/python3.10/dist-packages/ray/_private/workers/default_worker.py --node-ip-address=10.82.124.77 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --redis-address=None --metrics-agent-port=57641 --runtime-env-agent-port=56670 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --runtime-env-agent-port=56670 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --temp-dir=/tmp/ray --webui=127.0.0.1:8265 --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d RAY_WORKER_DYNAMIC_OPTION_PLACEHOLDER" --java_worker_command= --cpp_worker_command= --native_library_path=/usr/local/lib/python3.10/dist-packages/ray/cpp/lib --temp_dir=/tmp/ray --session_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --resource_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --metrics-agent-port=57641 --metrics_export_port=59967 --runtime_env_agent_port=56670 --object_store_memory=200000000000 --plasma_directory=/dev/shm --ray-debugger-external=0 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --labels= --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --ray_log_filepath=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs/raylet.out --num_prestart_python_workers=126 "--dashboard_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/dashboard/agent.py --node-ip-address=10.82.124.77 --metrics-export-port=59967 --dashboard-agent-port=57641 --listen-port=52365 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --temp-dir=/tmp/ray --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --session-name=session_2025-04-10_18-53-09_163077_104312 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d" "--runtime_env_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/runtime_env/agent/main.py --node-ip-address=10.82.124.77 --runtime-env-agent-port=56670 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --runtime-env-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --temp-dir=/tmp/ray"[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:50,804	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/local/lib/python3.10/dist-packages/ray/core/src/ray/raylet/raylet --raylet_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --store_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --object_manager_port=0 --min_worker_port=10002 --max_worker_port=19999 --node_manager_port=0 --node_id=36947a54bcc09bb503ca737950721beae564e4d82cc49ec14e883001 --node_ip_address=10.82.120.217 --maximum_startup_concurrency=126 --static_resource_list=node:10.82.120.217,1.0,accelerator_type:A800,1,CPU,126,GPU,8,memory,873380917248,object_store_memory,200000000000 "--python_worker_command=/usr/bin/python3 /usr/local/lib/python3.10/dist-packages/ray/_private/workers/setup_worker.py /usr/local/lib/python3.10/dist-packages/ray/_private/workers/default_worker.py --node-ip-address=10.82.120.217 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --redis-address=None --metrics-agent-port=60373 --runtime-env-agent-port=63060 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --runtime-env-agent-port=63060 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --temp-dir=/tmp/ray --webui=127.0.0.1:8265 --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d RAY_WORKER_DYNAMIC_OPTION_PLACEHOLDER" --java_worker_command= --cpp_worker_command= --native_library_path=/usr/local/lib/python3.10/dist-packages/ray/cpp/lib --temp_dir=/tmp/ray --session_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --resource_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --metrics-agent-port=60373 --metrics_export_port=56167 --runtime_env_agent_port=63060 --object_store_memory=200000000000 --plasma_directory=/dev/shm --ray-debugger-external=0 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --labels= --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --ray_log_filepath=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs/raylet.out --num_prestart_python_workers=126 "--dashboard_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/dashboard/agent.py --node-ip-address=10.82.120.217 --metrics-export-port=56167 --dashboard-agent-port=60373 --listen-port=52365 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --temp-dir=/tmp/ray --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --session-name=session_2025-04-10_18-53-09_163077_104312 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d" "--runtime_env_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/runtime_env/agent/main.py --node-ip-address=10.82.120.217 --runtime-env-agent-port=63060 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --runtime-env-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --temp-dir=/tmp/ray"[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:50,811	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/local/lib/python3.10/dist-packages/ray/core/src/ray/raylet/raylet --raylet_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --store_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --object_manager_port=0 --min_worker_port=10002 --max_worker_port=19999 --node_manager_port=0 --node_id=f49afbe4065b0c46a1db7609cfbb3385ece376b2d54106af8674fcf0 --node_ip_address=10.82.122.33 --maximum_startup_concurrency=126 --static_resource_list=node:10.82.122.33,1.0,accelerator_type:A800,1,CPU,126,GPU,8,memory,873388322816,object_store_memory,200000000000 "--python_worker_command=/usr/bin/python3 /usr/local/lib/python3.10/dist-packages/ray/_private/workers/setup_worker.py /usr/local/lib/python3.10/dist-packages/ray/_private/workers/default_worker.py --node-ip-address=10.82.122.33 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --redis-address=None --metrics-agent-port=51750 --runtime-env-agent-port=63155 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --runtime-env-agent-port=63155 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --temp-dir=/tmp/ray --webui=127.0.0.1:8265 --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d RAY_WORKER_DYNAMIC_OPTION_PLACEHOLDER" --java_worker_command= --cpp_worker_command= --native_library_path=/usr/local/lib/python3.10/dist-packages/ray/cpp/lib --temp_dir=/tmp/ray --session_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --resource_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --metrics-agent-port=51750 --metrics_export_port=56816 --runtime_env_agent_port=63155 --object_store_memory=200000000000 --plasma_directory=/dev/shm --ray-debugger-external=0 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --labels= --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --ray_log_filepath=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs/raylet.out --num_prestart_python_workers=126 "--dashboard_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/dashboard/agent.py --node-ip-address=10.82.122.33 --metrics-export-port=56816 --dashboard-agent-port=51750 --listen-port=52365 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --temp-dir=/tmp/ray --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --session-name=session_2025-04-10_18-53-09_163077_104312 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d" "--runtime_env_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/runtime_env/agent/main.py --node-ip-address=10.82.122.33 --runtime-env-agent-port=63155 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --runtime-env-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --temp-dir=/tmp/ray"[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:50,812	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/local/lib/python3.10/dist-packages/ray/core/src/ray/raylet/raylet --raylet_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --store_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --object_manager_port=0 --min_worker_port=10002 --max_worker_port=19999 --node_manager_port=0 --node_id=aa9651a6a8f71317aa03e13bc061fc97360304a7a805bc4a3493f372 --node_ip_address=10.82.122.41 --maximum_startup_concurrency=126 --static_resource_list=node:10.82.122.41,1.0,accelerator_type:A800,1,CPU,126,GPU,8,memory,873387147264,object_store_memory,200000000000 "--python_worker_command=/usr/bin/python3 /usr/local/lib/python3.10/dist-packages/ray/_private/workers/setup_worker.py /usr/local/lib/python3.10/dist-packages/ray/_private/workers/default_worker.py --node-ip-address=10.82.122.41 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --redis-address=None --metrics-agent-port=42940 --runtime-env-agent-port=50496 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --runtime-env-agent-port=50496 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --temp-dir=/tmp/ray --webui=127.0.0.1:8265 --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d RAY_WORKER_DYNAMIC_OPTION_PLACEHOLDER" --java_worker_command= --cpp_worker_command= --native_library_path=/usr/local/lib/python3.10/dist-packages/ray/cpp/lib --temp_dir=/tmp/ray --session_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --resource_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --metrics-agent-port=42940 --metrics_export_port=63229 --runtime_env_agent_port=50496 --object_store_memory=200000000000 --plasma_directory=/dev/shm --ray-debugger-external=0 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --labels= --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --ray_log_filepath=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs/raylet.out --num_prestart_python_workers=126 "--dashboard_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/dashboard/agent.py --node-ip-address=10.82.122.41 --metrics-export-port=63229 --dashboard-agent-port=42940 --listen-port=52365 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --temp-dir=/tmp/ray --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --session-name=session_2025-04-10_18-53-09_163077_104312 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d" "--runtime_env_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/runtime_env/agent/main.py --node-ip-address=10.82.122.41 --runtime-env-agent-port=50496 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --runtime-env-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --temp-dir=/tmp/ray"[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:50,825	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/local/lib/python3.10/dist-packages/ray/core/src/ray/raylet/raylet --raylet_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --store_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --object_manager_port=0 --min_worker_port=10002 --max_worker_port=19999 --node_manager_port=0 --node_id=45baafbcc1a903c4c2e3ca84af3068c1ecd0f7c3c1e7427c79b2565f --node_ip_address=10.82.122.95 --maximum_startup_concurrency=126 --static_resource_list=node:10.82.122.95,1.0,accelerator_type:A800,1,CPU,126,GPU,8,memory,873382731776,object_store_memory,200000000000 "--python_worker_command=/usr/bin/python3 /usr/local/lib/python3.10/dist-packages/ray/_private/workers/setup_worker.py /usr/local/lib/python3.10/dist-packages/ray/_private/workers/default_worker.py --node-ip-address=10.82.122.95 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --redis-address=None --metrics-agent-port=41500 --runtime-env-agent-port=60802 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --runtime-env-agent-port=60802 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --temp-dir=/tmp/ray --webui=127.0.0.1:8265 --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d RAY_WORKER_DYNAMIC_OPTION_PLACEHOLDER" --java_worker_command= --cpp_worker_command= --native_library_path=/usr/local/lib/python3.10/dist-packages/ray/cpp/lib --temp_dir=/tmp/ray --session_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --resource_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --metrics-agent-port=41500 --metrics_export_port=57355 --runtime_env_agent_port=60802 --object_store_memory=200000000000 --plasma_directory=/dev/shm --ray-debugger-external=0 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --labels= --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --ray_log_filepath=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs/raylet.out --num_prestart_python_workers=126 "--dashboard_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/dashboard/agent.py --node-ip-address=10.82.122.95 --metrics-export-port=57355 --dashboard-agent-port=41500 --listen-port=52365 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --temp-dir=/tmp/ray --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --session-name=session_2025-04-10_18-53-09_163077_104312 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d" "--runtime_env_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/runtime_env/agent/main.py --node-ip-address=10.82.122.95 --runtime-env-agent-port=60802 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --runtime-env-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --temp-dir=/tmp/ray"[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:52,721	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/local/lib/python3.10/dist-packages/ray/core/src/ray/raylet/raylet --raylet_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --store_socket_name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --object_manager_port=0 --min_worker_port=10002 --max_worker_port=19999 --node_manager_port=0 --node_id=9db89b319225f6a3fafba23e1aec8c20b626e2f9b434a75a384052e1 --node_ip_address=10.82.124.39 --maximum_startup_concurrency=126 --static_resource_list=node:10.82.124.39,1.0,node:__internal_head__,1.0,accelerator_type:A800,1,CPU,126,GPU,8,memory,862539697152,object_store_memory,200000000000 "--python_worker_command=/usr/bin/python3 /usr/local/lib/python3.10/dist-packages/ray/_private/workers/setup_worker.py /usr/local/lib/python3.10/dist-packages/ray/_private/workers/default_worker.py --node-ip-address=10.82.124.39 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --redis-address=None --metrics-agent-port=64348 --runtime-env-agent-port=48637 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --runtime-env-agent-port=48637 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --temp-dir=/tmp/ray --webui=127.0.0.1:8265 --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d RAY_WORKER_DYNAMIC_OPTION_PLACEHOLDER" "--java_worker_command=/usr/bin/python3 /usr/local/lib/python3.10/dist-packages/ray/_private/workers/setup_worker.py -Dray.address=10.82.124.39:6381 -Dray.raylet.node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER -Dray.object-store.socket-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store -Dray.raylet.socket-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet -Dray.redis.username= -Dray.redis.password= -Dray.node-ip=10.82.124.39 -Dray.home=/usr/local/lib/python3.10/dist-packages/ray/../.. -Dray.logging.dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs -Dray.session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 RAY_WORKER_DYNAMIC_OPTION_PLACEHOLDER io.ray.runtime.runner.worker.DefaultWorker" --cpp_worker_command= --native_library_path=/usr/local/lib/python3.10/dist-packages/ray/cpp/lib --temp_dir=/tmp/ray --session_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --resource_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --metrics-agent-port=64348 --metrics_export_port=64445 --runtime_env_agent_port=48637 --object_store_memory=200000000000 --plasma_directory=/dev/shm --ray-debugger-external=0 --gcs-address=10.82.124.39:6381 --session-name=session_2025-04-10_18-53-09_163077_104312 --labels= --cluster-id=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --ray_log_filepath=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs/raylet.out --head --num_prestart_python_workers=126 "--dashboard_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/dashboard/agent.py --node-ip-address=10.82.124.39 --metrics-export-port=64445 --dashboard-agent-port=64348 --listen-port=52365 --node-manager-port=RAY_NODE_MANAGER_PORT_PLACEHOLDER --object-store-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/plasma_store --raylet-name=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/sockets/raylet --temp-dir=/tmp/ray --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --session-name=session_2025-04-10_18-53-09_163077_104312 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d" "--runtime_env_agent_command=/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/runtime_env/agent/main.py --node-ip-address=10.82.124.39 --runtime-env-agent-port=48637 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --runtime-env-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/runtime_resources --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --temp-dir=/tmp/ray"[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:58,037	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:58,037	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:58,175	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:58,176	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:58,194	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:58,195	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:58,201	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:58,202	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:58,202	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:58,203	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:58,215	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:53:58,216	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:54:00,150	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/autoscaler/_private/monitor.py --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --gcs-address=10.82.124.39:6381 --monitor-ip=10.82.124.39[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:54:00,150	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:54:00,151	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -m ray.util.client.server --address=10.82.124.39:6381 --host=0.0.0.0 --port=10001 --mode=proxy --runtime-env-agent-address=http://10.82.124.39:48637[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:54:00,154	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 -u /usr/local/lib/python3.10/dist-packages/ray/_private/log_monitor.py --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logs-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --gcs-address=10.82.124.39:6381 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:54:00,156	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/bin/python3 /usr/local/lib/python3.10/dist-packages/ray/dashboard/dashboard.py --host=127.0.0.1 --port=8265 --port-retries=0 --temp-dir=/tmp/ray --log-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --session-dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312 --logging-rotate-bytes=536870912 --logging-rotate-backup-count=5 --gcs-address=10.82.124.39:6381 --cluster-id-hex=5aedd742bf5e6b26baec60edc002acd7de66b6f6e5cbc574d760179d --node-ip-address=10.82.124.39[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:54:05,427	WARN scripts.py:1292 -- [33mStopped only 0 out of 2 Ray processes within the grace period 16 seconds. Set `[1m-v[22m[33m` to see more details. Remaining processes [psutil.Process(pid=24074, name='raylet', status='zombie', started='18:53:10'), psutil.Process(pid=24075, name='python3', status='zombie', started='18:53:10')] will be forcefully terminated.[39m
+2025-04-10 18:54:05,427	WARN scripts.py:1299 -- [33mYou can also use `[1m--force[22m[33m` to forcefully terminate processes or set higher `--grace-period` to wait longer time for proper termination.[39m
+[0m2025-04-10 18:54:05,567	WARN scripts.py:1292 -- [33mStopped only 0 out of 2 Ray processes within the grace period 16 seconds. Set `[1m-v[22m[33m` to see more details. Remaining processes [psutil.Process(pid=23161, name='raylet', status='zombie', started='18:53:10'), psutil.Process(pid=23162, name='python3', status='zombie', started='18:53:10')] will be forcefully terminated.[39m
+2025-04-10 18:54:05,567	WARN scripts.py:1299 -- [33mYou can also use `[1m--force[22m[33m` to forcefully terminate processes or set higher `--grace-period` to wait longer time for proper termination.[39m
+[0m2025-04-10 18:54:05,586	WARN scripts.py:1292 -- [33mStopped only 0 out of 2 Ray processes within the grace period 16 seconds. Set `[1m-v[22m[33m` to see more details. Remaining processes [psutil.Process(pid=23595, name='raylet', status='zombie', started='18:53:10'), psutil.Process(pid=23596, name='python3', status='zombie', started='18:53:10')] will be forcefully terminated.[39m
+2025-04-10 18:54:05,586	WARN scripts.py:1299 -- [33mYou can also use `[1m--force[22m[33m` to forcefully terminate processes or set higher `--grace-period` to wait longer time for proper termination.[39m
+[0m2025-04-10 18:54:05,593	WARN scripts.py:1292 -- [33mStopped only 0 out of 2 Ray processes within the grace period 16 seconds. Set `[1m-v[22m[33m` to see more details. Remaining processes [psutil.Process(pid=22358, name='raylet', status='zombie', started='18:53:11'), psutil.Process(pid=22359, name='python3', status='zombie', started='18:53:11')] will be forcefully terminated.[39m
+2025-04-10 18:54:05,593	WARN scripts.py:1299 -- [33mYou can also use `[1m--force[22m[33m` to forcefully terminate processes or set higher `--grace-period` to wait longer time for proper termination.[39m
+[0m2025-04-10 18:54:05,594	WARN scripts.py:1292 -- [33mStopped only 0 out of 2 Ray processes within the grace period 16 seconds. Set `[1m-v[22m[33m` to see more details. Remaining processes [psutil.Process(pid=22479, name='raylet', status='zombie', started='18:53:10'), psutil.Process(pid=22480, name='python3', status='zombie', started='18:53:10')] will be forcefully terminated.[39m
+2025-04-10 18:54:05,594	WARN scripts.py:1299 -- [33mYou can also use `[1m--force[22m[33m` to forcefully terminate processes or set higher `--grace-period` to wait longer time for proper termination.[39m
+[0m2025-04-10 18:54:05,606	WARN scripts.py:1292 -- [33mStopped only 0 out of 2 Ray processes within the grace period 16 seconds. Set `[1m-v[22m[33m` to see more details. Remaining processes [psutil.Process(pid=25178, name='raylet', status='zombie', started='18:53:11'), psutil.Process(pid=25179, name='python3', status='zombie', started='18:53:11')] will be forcefully terminated.[39m
+2025-04-10 18:54:05,606	WARN scripts.py:1299 -- [33mYou can also use `[1m--force[22m[33m` to forcefully terminate processes or set higher `--grace-period` to wait longer time for proper termination.[39m
+[0m2025-04-10 18:54:07,559	VINFO scripts.py:1215 -- Send termination request to `[1m/usr/local/lib/python3.10/dist-packages/ray/core/src/ray/gcs/gcs_server --log_dir=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs --config_list=eyJvYmplY3Rfc3BpbGxpbmdfY29uZmlnIjogIntcInR5cGVcIjogXCJmaWxlc3lzdGVtXCIsIFwicGFyYW1zXCI6IHtcImRpcmVjdG9yeV9wYXRoXCI6IFwiL3RtcC9yYXkvc2Vzc2lvbl8yMDI1LTA0LTEwXzE4LTUzLTA5XzE2MzA3N18xMDQzMTJcIn19IiwgImlzX2V4dGVybmFsX3N0b3JhZ2VfdHlwZV9mcyI6IHRydWV9 --gcs_server_port=6381 --metrics-agent-port=64348 --node-ip-address=10.82.124.39 --session-name=session_2025-04-10_18-53-09_163077_104312 --ray-commit=637116a090c052d061af5ba3bef8a467c8c3fc25 --ray_log_filepath=/tmp/ray/session_2025-04-10_18-53-09_163077_104312/logs/gcs_server.out[22m[26m` [2m(via SIGTERM)[22m[26m
+2025-04-10 18:54:14,943	WARN scripts.py:1292 -- [33mStopped only 0 out of 6 Ray processes within the grace period 16 seconds. Set `[1m-v[22m[33m` to see more details. Remaining processes [psutil.Process(pid=104670, name='raylet', status='zombie', started='18:53:09'), psutil.Process(pid=104743, name='python3', status='zombie', started='18:53:09'), psutil.Process(pid=104546, name='python3', status='zombie', started='18:53:08'), psutil.Process(pid=104547, name='python3', status='zombie', started='18:53:08'), psutil.Process(pid=104545, name='python3', status='zombie', started='18:53:08'), psutil.Process(pid=104380, name='gcs_server', status='zombie', started='18:53:08')] will be forcefully terminated.[39m
+2025-04-10 18:54:14,944	WARN scripts.py:1299 -- [33mYou can also use `[1m--force[22m[33m` to forcefully terminate processes or set higher `--grace-period` to wait longer time for proper termination.[39m
+[0m

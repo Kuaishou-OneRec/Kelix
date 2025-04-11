@@ -113,7 +113,6 @@ class Qwen2VLCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     rope_deltas: Optional[torch.LongTensor] = None
-    reward_logits: torch.FloatTensor = None
 
 
 class Qwen2VLRotaryEmbedding(nn.Module):
@@ -1483,7 +1482,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         self.model = Qwen2VLModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.reward_head = nn.Linear(config.hidden_size, 1, bias=False)
         self.rope_deltas = None  # cache rope_deltas here
 
         # Initialize weights and apply final processing
@@ -1800,7 +1798,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        reward_logits = self.reward_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1818,8 +1815,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             loss = loss_fct(shift_logits, shift_labels)
 
         if not return_dict:
-            # output = (logits,) + outputs[1:]
-            output = (logits,) + outputs[1:] + (reward_logits, )
+            output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
         return Qwen2VLCausalLMOutputWithPast(
@@ -1829,7 +1825,6 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
-            reward_logits=reward_logits
         )
 
     def prepare_inputs_for_generation(

@@ -71,6 +71,9 @@ def get_arguments():
 
   parser.add_argument("--max_new_tokens", type=int, default=1024)
 
+  parser.add_argument("--use_tqdm", action="store_true",
+                      help="Enable vllm tqdm.")
+
   return parser.parse_args()
 
 @ray.remote
@@ -87,7 +90,9 @@ class GenerationActor:
     with open(self.args.dataset_config, encoding="utf-8") as f:
       dataset_config = json.loads(f.read())
     if self.args.batch_size:
-        dataset_config["batch_size"] = self.args.batch_size
+      dataset_config["batch_size"] = self.args.batch_size
+    if self.args.num_workers:
+      dataset_config["num_workers"] = self.args.num_workers
     dataset = dataset_config.pop("name")
 
     self.dataloader = get_dataloader(
@@ -100,7 +105,7 @@ class GenerationActor:
 
   def generate(self):
     with open(f"{self.args.output_dir}/rank_{self.rank}", "w", encoding="utf-8") as out:
-      for batch in tqdm(self.dataloader):
+      for idx, batch in tqdm(enumerate(self.dataloader)):
         num_generations = self.args.num_generations
         max_generations_per_req = self.args.max_generations_per_req
         all_chunks = []
@@ -122,7 +127,7 @@ class GenerationActor:
             self.engine.generate.remote(
               [e["vllm_inputs"] for e in batch],
               sampling_params,
-              use_tqdm=True
+              use_tqdm=self.args.use_tqdm
             )
           )
           all_chunks.append(results)
@@ -135,13 +140,16 @@ class GenerationActor:
               responses.append(output.text)
           all_response.append(responses)
           out.write(json.dumps({
+            "prompt": batch[prompt_idx]["vllm_inputs"]["prompt"],
             "annotation": batch[prompt_idx]["annotation"],
+            "meta": batch[prompt_idx]["meta"],
             "responses": all_response[prompt_idx],
             "source": batch[prompt_idx]["source"],
             "__key__": batch[prompt_idx]["__key__"],
             "__url__": batch[prompt_idx]["__url__"]
           }) + "\n")
 
+    logger.info(f"Rank-{self.rank} finished.")
 class MyLLM(LLM):
   def __init__(self, *args, **kwargs):
     # a hack to make the script work.
@@ -155,6 +163,10 @@ def main():
   args = get_arguments()
   world_size = args.num_gpus_per_node * args.num_inference_node // \
     args.tp_size
+  
+  print(
+    f"world_size: {world_size}, tp_size: {args.tp_size}, num_inference_node: {args.num_inference_node}, "
+    f"num_gpus_per_node: {args.num_gpus_per_node}")
 
   # create output directory
   os.makedirs(args.output_dir, exist_ok=True)

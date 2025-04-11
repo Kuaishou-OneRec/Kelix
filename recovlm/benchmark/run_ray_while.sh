@@ -11,7 +11,7 @@ do
       :
     else
       echo "done"
-      for val in AI2D AI2D_no_mask RealWorldQA
+      for val in Flickr30k MMBenchCN MMBenchEN MME MMMU MMStar MMTBench MathVista OCRBench
       do
         python3 -u ray_batch_infer.py \
 		--GPU_num=$(($slots*$machines)) \
@@ -32,7 +32,7 @@ do
                 --RealWorldQA_path="/llm_reco_ssd/luoxinchen/dataset/RealWorldQA/RealWorldQA/data/merge/test-00000-of-00001.parquet" \
                 --mmbenchEn_benchmark_original_data="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/en/dev-00000-of-00001.parquet" \
                 --mmbenchCn_benchmark_original_data="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/cn/dev-00000-of-00001.parquet" \
-                --infer_steps=1 \
+                --infer_steps=27001 \
                 --model_folder=$model \
                 --logging_folder="${model}/log/benchmark/" \
                 --output_path="${model}/benchmark_output/" \

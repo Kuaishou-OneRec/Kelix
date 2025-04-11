@@ -60,14 +60,15 @@ class ParquetDataset(DistDataset):
             shard_files = None
         shard_files = self.comm.bcast(shard_files, root=0)
         shard_files = shard_files[self.rank::self.world_size]
-        self.mpi_print("shard_files", shard_files)
+        self.mpi_print("shard_files_len", len(shard_files))
         return shard_files    
     
     def __iter__(self):
         for fn, sid, shard_size in self.shard_files:
             df = pq.read_table(fn, columns=self.columns).to_pandas()
             if sid == 0:
-                self.mpi_print(f"====ParquetDataset====\nRead {fn}, total rows {len(df)}")
+                # self.mpi_print(f"====ParquetDataset====\nRead {fn}, total rows {len(df)}")
+                pass
             df = df[df.index % shard_size == sid]
             for _, row in df.iterrows():
                 row = row.to_dict()

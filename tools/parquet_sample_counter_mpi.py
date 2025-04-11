@@ -51,14 +51,29 @@ def count_hdfs_folder(data_folder):
     total_row_count = comm.reduce(local_row_count, op=MPI.SUM, root=0)
 
     if rank == 0:
-        print(f'{data_folder}\t{total_row_count}')
+        return data_folder, total_row_count
+    return None, None
 
 if __name__ == '__main__':
     data_file = sys.argv[1]
+    output_file = sys.argv[2] if len(sys.argv) > 2 else "results.txt"
+    
     hdfs_dirs = []
     with open(data_file) as fp:
         for line in fp:
             if line.strip() != "":
                 hdfs_dirs.append(line.strip())
+    
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    
+    results = []
     for fn in hdfs_dirs:
-        count_hdfs_folder(fn)
+        folder, count = count_hdfs_folder(fn)
+        if rank == 0 and folder is not None and count is not None:
+            results.append(f'{folder}\t{count}')
+    
+    if rank == 0:
+        with open(output_file, 'w') as f:
+            for result in results:
+                f.write(result + '\n')

@@ -16,7 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 from deepspeed.ops.adam import FusedAdam
 
 from recovlm.losses import CrossEntropyLoss
-from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
+from recovlm.models.qwen2_vl import Qwen2VLForConditionalGenerationV2 as Qwen2VLForConditionalGeneration
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
 from recovlm.data.dataloaders import get_dataloader
