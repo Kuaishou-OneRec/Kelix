@@ -28,7 +28,8 @@ from torch.utils.tensorboard import SummaryWriter
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
-from recovlm.data.dataloaders_v2 import get_dataloader
+from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
+from recovlm.data.dataloaders import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
 from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
@@ -603,7 +604,8 @@ def train():
         dataset_config, ensure_ascii=False, indent=2) + "\n")
 
   with Timer("Build dataloader"):
-    dataloader = get_dataloader(name=dataset, **dataset_config)
+    try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
+    except: dataloader = get_dataloader(name=dataset, **dataset_config)
     if args.resume_dataloader and dataloader_state_dict is not None:
       dataloader.load_state_dict(dataloader_state_dict)
 
