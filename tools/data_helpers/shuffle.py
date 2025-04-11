@@ -28,7 +28,7 @@ class Buffer(object):
 
     def append(self, df):
         if self.buffer is None:
-            self.buffer = df.reset_index(drop=True)
+            self.buffer = df
             return
         self.buffer = pd.concat([self.buffer, df], ignore_index=True, axis=0)
 
@@ -61,6 +61,7 @@ class BufferShuffler(MPIBase):
         self.tmp_dir = osp.join(self.output_dir, ".tmp")
         self.fs = pa.hdfs.connect(user="mpi")
         self.sample_rate_dict = dict()
+        self.scatter_files = list()
         if self.rank == 0:
             files = []
             for d in tqdm(input_dir, desc="list directory"):
@@ -73,6 +74,9 @@ class BufferShuffler(MPIBase):
                 if "parquet" in x
             ]
             np.random.shuffle(files)
+            while len(files) % self.world_size != 0:
+                files.append(None)
+
             self.fs.mkdir(self.output_dir)
             self.fs.mkdir(self.tmp_dir)
         else:
@@ -96,13 +100,60 @@ class BufferShuffler(MPIBase):
             sample = data.pop_sample(self.out_partition)
             self.write_df(sample)
 
+    def alltoall_by_chunk(self, df, chunk_size, return_list=True):
+
+        rank = self.rank
+        world_size = self.world_size
+        comm = self.comm
+
+        df_list = list()
+        for chunk_id in range(chunk_size):
+            pdf = df.iloc[chunk_id::chunk_size].copy()
+            send_dfs = [pdf[pdf["seed"] == r] for r in range(world_size)]
+
+            recv_dfs = comm.alltoall(send_dfs)
+            pdf = pd.concat(recv_dfs, axis=0, ignore_index=True)
+            df_list.append(pdf)
+        if return_list:
+            return df_list
+        return pd.concat(df_list, axis=0, ignore_index=True)
+
+    def build_empty_df(self, df):
+        rank = self.rank
+        world_size = self.world_size
+        comm = self.comm
+
+        if rank == 0:
+            assert df is not None
+            empty = df.iloc[:1].copy()
+            empty = empty.drop(empty.index)
+        else:
+            empty = None
+
+        empty = comm.bcast(empty, root=0)
+        if df is not None:
+            return df
+        return empty
+
+    def process_df(self, df):
+        df = self.build_empty_df(df)
+        df["seed"] = list(np.random.choice(range(self.world_size), size=len(df), replace=True))
+        df = self.alltoall_by_chunk(df, chunk_size=1, return_list=False)
+        df = df.drop(columns=["seed"])
+        return df
+
     def run(self):
+
         data = self.data
         for fn in tqdm(self.files):
-            dirname = osp.dirname(fn).rstrip("/")
-            sample_rate = self.sample_rate_dict.get(dirname, 1.0)
-            df = pq.read_table(fn).to_pandas()
-            df = df.sample(frac=sample_rate)
+            if fn is not None:
+                dirname = osp.dirname(fn).rstrip("/")
+                sample_rate = self.sample_rate_dict.get(dirname, 1.0)
+                df = pq.read_table(fn).to_pandas()
+                df = df.sample(frac=sample_rate)
+            else:
+                df = None
+            df = self.process_df(df)
             data.append(df)
             self.flush(self.max_buffer_size)
 

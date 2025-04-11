@@ -203,7 +203,7 @@ for _, row in tqdm(df.iterrows(), total=len(df)):
     
     rewards = list()
     comments = json.loads(row.content_list)
-    for i in range(min(len(comments), 100)):
+    for i in range(min(len(comments), 200)):
         answer = comments[i]
         assistant = {
             "role": "assistant",
@@ -237,4 +237,4 @@ for _, row in tqdm(df.iterrows(), total=len(df)):
     torch.cuda.empty_cache()
 
 df["rewards"] = rewards_list
-df.to_parquet("/llm_reco/zangdunju/dataset/tmp/process/tmp100.parquet", index=False)
+df.to_parquet("/llm_reco/zangdunju/dataset/tmp/process/tmp200.parquet", index=False)
