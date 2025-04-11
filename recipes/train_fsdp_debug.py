@@ -28,8 +28,7 @@ from torch.utils.tensorboard import SummaryWriter
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
-#inten-vl
-from recovlm.models.intern_vl_3 import InternVLChatModel
+from recovlm.models.inten_vl_3 import InternVLChatModel
 
 from recovlm.data.dataloaders_v2 import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
@@ -150,6 +149,10 @@ def get_argument_parser():
   
   parser.add_argument("--min_lr", type=float, default=1e-6,
                       help="The minimum learning rate to reach after the cosine schedule.")
+  
+  ############ model ############
+  parser.add_argument("--model_type", action=str,
+                      help="choose model type, one of `intern-vl`, `qwen-vl")
   
   ############ Optimizer Args ############
   parser.add_argument("--learning_rate", type=float, default=2e-4,
@@ -407,13 +410,17 @@ def train():
     tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    model = Qwen2VLForConditionalGeneration.from_pretrained(
-      args.model_dir, _attn_implementation="flash_attention_2",
-      use_cache=False
+    if args.model_type == 'intern-vl':
+      model = InternVLChatModel.from_pretrained(
+              args.model_dir, _attn_implementation="flash_attention_2",
+              use_cache=False)
+    else:
+      model = Qwen2VLForConditionalGeneration.from_pretrained(
+              args.model_dir, _attn_implementation="flash_attention_2",
+              use_cache=False
     )
   
-  
-  # check all param & buffer on meta device 
+  # check all param & buffer on meta device
   for tensor in itertools.chain(model.parameters(), model.buffers()):
     assert tensor.device == torch.device("meta")
 
@@ -422,9 +429,15 @@ def train():
     # 使用FSDP时，hf的gradient_checkpointing_enable()不会生效
     # model.gradient_checkpointing_enable(
     #     gradient_checkpointing_kwargs={"use_reentrant": False})
-    set_activation_checkpointing(
-      model, auto_wrap_policy={Qwen2VLDecoderLayer, Qwen2VLVisionBlock}
-    )
+    if args.model_type == 'intern-vl':
+      # set_activation_checkpointing(
+      #   model, auto_wrap_policy={Qwen2VLDecoderLayer, Qwen2VLVisionBlock}
+      # )
+      pass
+    else:
+      set_activation_checkpointing(
+        model, auto_wrap_policy={Qwen2VLDecoderLayer, Qwen2VLVisionBlock}
+      )
   if args.fp32_weight: model = model.float()
   shard_model(
     model=model,
