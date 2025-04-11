@@ -483,7 +483,6 @@ def split_outputs(outputs, sequence_lengths):
     # 只处理logits字段
     if hasattr(outputs, 'logits'):
         logits = outputs.logits  # shape: [batch_size, local_seq_len, vocab_size]
-        print_rank_0("[ZDJ] in split_outputs", logits.shape)
         
         # 获取local sequence的chosen部分长度
         chosen_length = sequence_lengths["chosen_length"] // get_sequence_parallel_world_size()
@@ -817,9 +816,6 @@ def train():
         chosen_inputs, rejected_inputs = batch
         to_cuda(chosen_inputs)
         to_cuda(rejected_inputs)
-
-        print_rank_0("[ZDJ] in chosen_inputs", chosen_inputs["input_ids"].shape)
-        print_rank_0("[ZDJ] in rejected_inputs", rejected_inputs["input_ids"].shape)
         
         # 确保输入类型正确
         chosen_inputs = ensure_input_types(chosen_inputs)
@@ -828,8 +824,7 @@ def train():
         # 合并输入以提高效率
         combined_inputs, sequence_lengths = concatenate_inputs(
             chosen_inputs, rejected_inputs)
-        
-        print_rank_0("[ZDJ] in combined_inputs", combined_inputs["input_ids"].shape)
+
         # Forward pass
         with torch.no_grad():
             # 参考模型的 forward pass，确保使用相同的输入格式
@@ -860,8 +855,6 @@ def train():
             cu_seqlens=combined_inputs.get("cu_seqlens", None)
         )
 
-        tmp_logits = policy_outputs.logits
-        print_rank_0("[ZDJ] in tmp_logits", tmp_logits.shape)
         if torch.isnan(policy_outputs.logits).any() or torch.isinf(policy_outputs.logits).any():
             print_rank_0("====dpo==== ERROR: policy_outputs.logits contains nan or inf values!")
             raise ValueError("policy_outputs.logits contains nan or inf values")  
