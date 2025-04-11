@@ -12,7 +12,11 @@ import logging
 import collections
 import pickle
 import itertools
+
+os.system("pip install timm")
+
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
+
 
 import torch
 import torch.nn as nn
