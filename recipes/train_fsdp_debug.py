@@ -415,15 +415,16 @@ def train():
     tb_writer.add_text("kml_id", args.kml_id, 0)
     tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
-  with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    if args.model_type == 'intern-vl':
-      model = AutoModel.from_pretrained(
-              args.model_dir, _attn_implementation="flash_attention_2",trust_remote_code=True)
-    else:
-      model = Qwen2VLForConditionalGeneration.from_pretrained(
-              args.model_dir, _attn_implementation="flash_attention_2",
-              use_cache=False
-    )
+
+  if args.model_type == 'intern-vl':
+      model = InternVLChatModel.from_pretrained(
+              args.model_dir, _attn_implementation="flash_attention_2",device_map='balanced')
+  else:
+      with set_default_dtype(torch.bfloat16), torch.device("meta"):
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+                args.model_dir, _attn_implementation="flash_attention_2",
+                use_cache=False
+      )
   
   # check all param & buffer on meta device
   for tensor in itertools.chain(model.parameters(), model.buffers()):
