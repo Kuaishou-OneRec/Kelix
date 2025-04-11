@@ -15,7 +15,8 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2B # Pretrained/Base model path
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct
+#MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2B # Pretrained/Base model path
 OUTPUT_DIR=/llm_reco/penghao03/intern-vl/output
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
@@ -116,7 +117,6 @@ nohup mpirun --allow-run-as-root -np $np \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --model_type intern-vl \
                 --num_warmup_steps 500 \
                 --num_training_steps 20000 \
                 --save_checkpoint_per_step 100 \
