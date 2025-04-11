@@ -37,6 +37,16 @@ class InternVLChatConfig(PretrainedConfig):
             **kwargs):
         super().__init__(**kwargs)
 
+        base_model_tp_plan = {
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.o_proj": "rowwise",
+            "layers.*.mlp.gate_proj": "colwise",
+            "layers.*.mlp.up_proj": "colwise",
+            "layers.*.mlp.down_proj": "rowwise",
+        }
+
         if vision_config is None:
             vision_config = {'architectures': ['InternVisionModel']}
             logger.info('vision_config is None. Initializing the InternVisionConfig with default values.')
@@ -52,6 +62,7 @@ class InternVLChatConfig(PretrainedConfig):
             self.llm_config = Qwen2Config(**llm_config)
         else:
             raise ValueError('Unsupported architecture: {}'.format(llm_config.get('architectures')[0]))
+
         self.use_backbone_lora = use_backbone_lora
         self.use_llm_lora = use_llm_lora
         self.select_layer = select_layer
@@ -93,5 +104,6 @@ class InternVLChatConfig(PretrainedConfig):
         output['ps_version'] = self.ps_version
         output['min_dynamic_patch'] = self.min_dynamic_patch
         output['max_dynamic_patch'] = self.max_dynamic_patch
+        output['base_model_tp_plan'] = self.base_model_tp_plan
 
         return output
