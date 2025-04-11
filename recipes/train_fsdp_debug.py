@@ -418,7 +418,7 @@ def train():
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
     if args.model_type == 'intern-vl':
       model = AutoModel.from_pretrained(
-              args.model_dir, _attn_implementation="flash_attention_2")
+              args.model_dir, _attn_implementation="flash_attention_2",trust_remote_code=True)
     else:
       model = Qwen2VLForConditionalGeneration.from_pretrained(
               args.model_dir, _attn_implementation="flash_attention_2",

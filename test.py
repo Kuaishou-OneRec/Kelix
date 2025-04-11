@@ -1,11 +1,11 @@
 import torch
 from transformers import AutoTokenizer, AutoModel
-# path = "/llm_reco/penghao03/intern-vl/InternVL3-2B"
-# model = AutoModel.from_pretrained(
-#     path,
-#     torch_dtype=torch.bfloat16,
-#     use_flash_attn=True,
-#     trust_remote_code=True).eval().cuda()
+path = "/llm_reco/penghao03/intern-vl/InternVL3-2B"
+model = AutoModel.from_pretrained(
+    path,
+    torch_dtype=torch.bfloat16,
+    use_flash_attn=True,
+    trust_remote_code=True).eval().cuda()
 
 import torch.nn as nn
 import torch.distributed as dist
