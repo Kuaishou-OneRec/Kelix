@@ -151,7 +151,7 @@ def get_argument_parser():
                       help="The minimum learning rate to reach after the cosine schedule.")
   
   ############ model ############
-  parser.add_argument("--model_type", action=str,
+  parser.add_argument("--model_type",type=str, default='qwen2-vl',
                       help="choose model type, one of `intern-vl`, `qwen-vl")
   
   ############ Optimizer Args ############
