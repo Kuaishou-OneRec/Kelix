@@ -29,8 +29,6 @@ except:
     print('FlashAttention2 is not installed.')
     has_flash_attn = False
 
-from recovlm.utils.common import print_rank_0
-
 logger = logging.get_logger(__name__)
 
 
