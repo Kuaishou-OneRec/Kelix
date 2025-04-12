@@ -363,7 +363,6 @@ def split_model(model_name):
     import os
     
     world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
-    print(world_size)
     config = InternVLChatConfig.from_pretrained(model_path, trust_remote_code=True)
     num_layers = config.llm_config.num_hidden_layers
     # Since the first GPU will be used for ViT, treat it as half a GPU.
