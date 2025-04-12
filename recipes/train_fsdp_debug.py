@@ -427,8 +427,8 @@ def train():
                   use_cache=False
         )
   # check all param & buffer on meta device
-  # for tensor in itertools.chain(model.parameters(), model.buffers()):
-  #   assert tensor.device == torch.device("meta")
+  for tensor in itertools.chain(model.parameters(), model.buffers()):
+    assert tensor.device == torch.device("meta")
 
   if args.enable_gradient_checkpointing:
     print_rank_0("Enable gradient checkpointing")
@@ -467,6 +467,7 @@ def train():
       if hasattr(m, "rope_init"):
         print_rank_0("Initialize RoPE")
         m.rope_init()
+      print(m)
   
   # 确保任何参数都被正确初始化
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
