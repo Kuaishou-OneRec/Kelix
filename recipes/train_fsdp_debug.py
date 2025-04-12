@@ -419,9 +419,9 @@ def train():
 
 
   if args.model_type == 'intern-vl':
-      device_map = split_model(args.model_dir)
+      #device_map = split_model(args.model_dir)
       model = InternVLChatModel.from_pretrained(
-              args.model_dir, _attn_implementation="flash_attention_2",device_map=device_map)
+              args.model_dir, _attn_implementation="flash_attention_2")
   else:
       with set_default_dtype(torch.bfloat16), torch.device("meta"):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
