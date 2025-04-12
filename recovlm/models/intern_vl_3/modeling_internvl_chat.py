@@ -88,13 +88,13 @@ class InternVLChatModel(PreTrainedModel):
         self.conv_template = get_conv_template(self.template)
         self.system_message = self.conv_template.system_message
 
-    def rope_init(self):
+    # def rope_init(self):
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(
-            self.config, device=None, **self.rope_kwargs
-        )
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
+    #     inv_freq, self.attention_scaling = self.rope_init_fn(
+    #         self.config, device=None, **self.rope_kwargs
+    #     )
+    #     self.register_buffer("inv_freq", inv_freq, persistent=False)
+    #     self.original_inv_freq = self.inv_freq
     
     def forward(
             self,
