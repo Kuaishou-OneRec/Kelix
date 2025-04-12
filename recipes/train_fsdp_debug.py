@@ -467,7 +467,6 @@ def train():
       if hasattr(m, "rope_init"):
         print_rank_0("Initialize RoPE")
         m.rope_init()
-      print(m)
   
   # 确保任何参数都被正确初始化
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
@@ -607,7 +606,11 @@ def train():
 
   dist.barrier()
 
-  processor = Qwen2VLProcessor.from_pretrained(args.model_dir)
+  if args.model_type=='intern-vl':
+    pass
+  else:
+    processor = Qwen2VLProcessor.from_pretrained(args.model_dir)
+  
 
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
