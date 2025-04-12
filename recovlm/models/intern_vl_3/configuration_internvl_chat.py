@@ -38,13 +38,13 @@ class InternVLChatConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         base_model_tp_plan = {
-            "layers.*.self_attn.q_proj": "colwise",
-            "layers.*.self_attn.k_proj": "colwise",
-            "layers.*.self_attn.v_proj": "colwise",
-            "layers.*.self_attn.o_proj": "rowwise",
-            "layers.*.mlp.gate_proj": "colwise",
-            "layers.*.mlp.up_proj": "colwise",
-            "layers.*.mlp.down_proj": "rowwise",
+            # "layers.*.self_attn.q_proj": "colwise",
+            # "layers.*.self_attn.k_proj": "colwise",
+            # "layers.*.self_attn.v_proj": "colwise",
+            # "layers.*.self_attn.o_proj": "rowwise",
+            # "layers.*.mlp.gate_proj": "colwise",
+            # "layers.*.mlp.up_proj": "colwise",
+            # "layers.*.mlp.down_proj": "rowwise",
         }
 
         if vision_config is None:
