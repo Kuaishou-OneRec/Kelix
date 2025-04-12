@@ -29,6 +29,8 @@ except:
     print('FlashAttention2 is not installed.')
     has_flash_attn = False
 
+from recovlm.utils.common import print_rank_0
+
 logger = logging.get_logger(__name__)
 
 
@@ -180,7 +182,7 @@ class InternAttention(nn.Module):
     def __init__(self, config: InternVisionConfig):
         super().__init__()
         self.config = config
-        print(config)
+        #print(config)
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.use_flash_attn = config.use_flash_attn and has_flash_attn

@@ -22,6 +22,7 @@ from .configuration_internvl_chat import InternVLChatConfig
 from .conversation import get_conv_template
 from .modeling_intern_vit import InternVisionModel, has_flash_attn
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -56,6 +57,9 @@ class InternVLChatModel(PreTrainedModel):
         use_flash_attn = use_flash_attn if has_flash_attn else False
         config.vision_config.use_flash_attn = True if use_flash_attn else False
         config.llm_config._attn_implementation = 'flash_attention_2' if use_flash_attn else 'eager'
+        
+        from recovlm.utils.common import print_rank_0
+        print(config)
 
         logger.info(f'num_image_token: {self.num_image_token}')
         logger.info(f'ps_version: {self.ps_version}')
