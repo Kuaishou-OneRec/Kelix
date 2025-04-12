@@ -6,6 +6,13 @@ model = InternVLChatModel.from_pretrained(
     path,
     use_flash_attn=True)
 
+
+layer_num = 24
+drop = 0.1
+dpr = [x.item() for x in torch.linspace(0, drop, layer_num)]
+print(dpr)
+x_dpr = [drop * i / max(1, layer_num - 1) for i in range(layer_num)]
+print(x_dpr)
 # print(model)
 # for n,p in model.named_parameters():
 #     print(n,p.shape)
