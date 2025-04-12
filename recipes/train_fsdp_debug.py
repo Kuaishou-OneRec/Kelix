@@ -418,6 +418,7 @@ def train():
     tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
 
+
   if args.model_type == 'intern-vl':
       #device_map = split_model(args.model_dir)
       model = InternVLChatModel.from_pretrained(
