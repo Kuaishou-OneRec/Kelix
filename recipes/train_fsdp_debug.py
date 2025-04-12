@@ -34,8 +34,8 @@ from torch.utils.tensorboard import SummaryWriter
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
-from recovlm.models.intern_vl_3 import InternVLChatModel
-from transformers import AutoTokenizer, AutoModel
+from recovlm.models.intern_vl_3 import InternVLChatModel,split_model
+#from transformers import AutoTokenizer, AutoModel
 
 from recovlm.data.dataloaders_v2 import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
@@ -378,6 +378,7 @@ def train():
   os.environ["KML_TASK_ID"] = args.kml_task_id
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+  print(world_size)
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
   # torch init
   torch.cuda.set_device(local_rank)
@@ -418,15 +419,16 @@ def train():
 
 
   if args.model_type == 'intern-vl':
+      device_map = split_model(args.mdoel_dir)
       model = InternVLChatModel.from_pretrained(
-              args.model_dir, _attn_implementation="flash_attention_2",device_map='balanced')
+              args.model_dir, _attn_implementation="flash_attention_2",device_map=device_map)
   else:
       with set_default_dtype(torch.bfloat16), torch.device("meta"):
         model = Qwen2VLForConditionalGeneration.from_pretrained(
                 args.model_dir, _attn_implementation="flash_attention_2",
                 use_cache=False
       )
-  print_rank_0(model._tp_plan)
+  #print_rank_0(model._tp_plan)
   # check all param & buffer on meta device
   for tensor in itertools.chain(model.parameters(), model.buffers()):
     assert tensor.device == torch.device("meta")
