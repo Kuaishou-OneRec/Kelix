@@ -6,6 +6,7 @@
 
 import warnings
 from typing import List, Optional, Tuple, Union
+import math
 
 import torch.utils.checkpoint
 import transformers
@@ -363,7 +364,7 @@ def split_model(model_name):
     import os
     
     world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
-    config = InternVLChatConfig.from_pretrained(model_name, trust_remote_code=True)
+    config = InternVLChatConfig.from_pretrained(model_name)
     num_layers = config.llm_config.num_hidden_layers
     # Since the first GPU will be used for ViT, treat it as half a GPU.
     num_layers_per_gpu = math.ceil(num_layers / (world_size - 0.5))
