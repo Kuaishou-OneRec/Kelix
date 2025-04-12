@@ -1,11 +1,19 @@
 import torch
 from transformers import AutoTokenizer, AutoModel
 from recovlm.models.intern_vl_3 import InternVLChatModel
-path = "/llm_reco/penghao03/intern-vl/InternVL3-2B"
-model = InternVLChatModel.from_pretrained(
-    path,
-    use_flash_attn=True)
+from recovlm.training.common import set_default_dtype
 
+import itertools
+
+path = "/llm_reco/penghao03/intern-vl/InternVL3-2B"
+with set_default_dtype(torch.bfloat16), torch.device("meta"):
+    model = InternVLChatModel.from_pretrained(
+            path,
+            use_flash_attn=True)
+
+for tensor in itertools.chain(model.parameters(), model.buffers()):
+    print(tensor)
+    assert tensor.device == torch.device("meta")
 
 layer_num = 24
 drop = 0.1

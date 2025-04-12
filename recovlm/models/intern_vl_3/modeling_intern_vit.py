@@ -312,6 +312,7 @@ class InternVisionEncoder(nn.Module):
         self.config = config
         # stochastic depth decay rule
         #dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
+        #TODO 两者scale区别检查
         dpr = [config.drop_path_rate * i / max(1, config.num_hidden_layers - 1) for i in range(config.num_hidden_layers)]
         self.layers = nn.ModuleList([
             InternVisionEncoderLayer(config, dpr[idx]) for idx in range(config.num_hidden_layers)])
