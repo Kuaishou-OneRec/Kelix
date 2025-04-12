@@ -4,4 +4,4 @@ from .modeling_intern_vit import InternVisionModel
 from .modeling_internvl_chat import InternVLChatModel
 
 __all__ = ['InternVisionConfig', 'InternVisionModel',
-           'InternVLChatConfig', 'InternVLChatModel']
+           'InternVLChatConfig', 'InternVLChatModel','split_model']
