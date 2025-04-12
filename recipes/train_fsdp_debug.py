@@ -419,7 +419,7 @@ def train():
 
 
   if args.model_type == 'intern-vl':
-      device_map = split_model(args.mdoel_dir)
+      device_map = split_model(args.model_dir)
       model = InternVLChatModel.from_pretrained(
               args.model_dir, _attn_implementation="flash_attention_2",device_map=device_map)
   else:
