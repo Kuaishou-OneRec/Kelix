@@ -418,17 +418,16 @@ def train():
     tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
 
-
-  if args.model_type == 'intern-vl':
-      #device_map = split_model(args.model_dir)
-      model = InternVLChatModel.from_pretrained(
-              args.model_dir, _attn_implementation="flash_attention_2")
-  else:
-      with set_default_dtype(torch.bfloat16), torch.device("meta"):
-        model = Qwen2VLForConditionalGeneration.from_pretrained(
-                args.model_dir, _attn_implementation="flash_attention_2",
-                use_cache=False
-      )
+  with set_default_dtype(torch.bfloat16), torch.device("meta"):
+    if args.model_type == 'intern-vl':
+        #device_map = split_model(args.model_dir)
+        model = InternVLChatModel.from_pretrained(
+                args.model_dir, _attn_implementation="flash_attention_2")
+    else:
+          model = Qwen2VLForConditionalGeneration.from_pretrained(
+                  args.model_dir, _attn_implementation="flash_attention_2",
+                  use_cache=False
+        )
   #print_rank_0(model._tp_plan)
   # check all param & buffer on meta device
   for tensor in itertools.chain(model.parameters(), model.buffers()):
