@@ -627,12 +627,12 @@ class DistributedDataset(IterableDataset):
     self.num_workers = num_workers
     self.num_epochs = num_epochs
     self.sources = sources
-    self.dataset = self._build(self.sources)
+    self.dataset,self.total_samples = self._build_source_dataset_build(self.sources)
     # for data_source monitor
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
 
-  def _build(self,sources):
+  def _build_source_dataset_build(self,sources):
     file_list = []
     files = []
     # TODO: support more file types
@@ -1709,7 +1709,7 @@ class ChatCompletionVisionV2ParquetDataset(ChatCompletionVisionDatasetV2):
     self.num_epochs = num_epochs
     super().__init__(sources, num_workers=num_workers, max_length=max_length, world_size=world_size, rank=rank, num_epochs=num_epochs, **kargs)
 
-  def _build(self, sources):
+  def _build_source_dataset_build(self, sources):
     data_file_list = []
     if dist.get_rank() == 0:
       data_files = []
@@ -1740,6 +1740,7 @@ class ChatCompletionVisionV2ParquetDataset(ChatCompletionVisionDatasetV2):
     return dataset, -1
 
   def state_dict(self, ):
+    print(self.dataset)
     return self.dataset.state_dict()
   
   def load_state_dict(self, state_dict):

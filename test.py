@@ -147,12 +147,28 @@ if __name__=='__main__':
     #      data = json.loads(f.read())
     # print(data)
     #parquet_path = 'viewfs://hadoop-lt-cluster/home/reco_6/mpi/lingzhixin/recovlm/parse_dataparse_data_to_parquet_vvabs_cot_v2/train_data_1w/cot_trial1/good_ids1_use_cot1-train-00060-of-00256.parquet'
-    parquet_path='viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2_shuffle/stage2_20250208_ocr/rank-579-33d7846e-e5e9-11ef-a6a5-a088c229d9d4.parquet'
-    #print(os.path.exists(parquet_path))
-    #data = load_parquet_file(parquet_path)
-    #data = pq.read_table(parquet_path).to_pandas()
-    data = pq.ParquetFile(parquet_path)
-    print(data)
+    # parquet_path='viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2_shuffle/stage2_20250208_ocr/rank-579-33d7846e-e5e9-11ef-a6a5-a088c229d9d4.parquet'
+    # #print(os.path.exists(parquet_path))
+    # #data = load_parquet_file(parquet_path)
+    # #data = pq.read_table(parquet_path).to_pandas()
+    # data = pq.ParquetFile(parquet_path)
+    # print(data)
+    class Parent:
+        def __init__(self):
+            self.method()  # 父类初始化时调用 self.method()
+        
+        def method(self):
+            print("Parent method")
+
+    class Child(Parent):
+        def __init__(self):
+            super().__init__()  # 调用父类的 __init__
+        
+        def method(self):  # 子类重写父类方法
+            print("Child method")
+
+    # 创建子类实例
+    child = Child()
 
     # 尝试分批次读取
     # batch_size = 10

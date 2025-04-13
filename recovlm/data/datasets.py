@@ -2163,6 +2163,7 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
     return dataset, -1
 
   def state_dict(self, ):
+    
     return self.dataset.state_dict()
   
   def load_state_dict(self, state_dict):
