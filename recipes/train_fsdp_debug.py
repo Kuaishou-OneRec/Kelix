@@ -14,8 +14,6 @@ import pickle
 import itertools
 
 os.system("pip install timm")
-os.system("pip install accelerate>=0.26.0")
-os.system("pip install transformers==4.50.0")
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 
@@ -30,7 +28,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-# from transformers import AutoTokenizer, AutoProcessor
+from transformers import AutoTokenizer
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
