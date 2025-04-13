@@ -567,14 +567,15 @@ class ParquetDataset(IterableDataset):
     
     for epoch_fn in tqdm(worker_files, desc=f"[Worker-{worker}] process file: "):
       fn, epoch_idx = epoch_fn
-      print(fn,"==="*100)
       if (fn, epoch_idx) in finish_dict:
         logger.warning(f"[Worker-{worker}] {fn} has been processed, skip.")
         continue
       logger.info(f"[Worker-{worker}] processing {fn}-epoch{epoch_idx}")
       # open parquet file
       try:
-        parquet_file = load_parquet_file(fn)
+        print("==="*100)
+        #parquet_file = load_parquet_file(fn)
+        parquet_file = pq.ParquetFile(fn)
       except Exception as e:
         logger.error(
           f"ParquetDataset error, open parquet fail!!! "

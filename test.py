@@ -2,8 +2,8 @@ import torch
 from transformers import AutoTokenizer, AutoModel
 from recovlm.models.intern_vl_3 import InternVLChatModel
 from recovlm.training.common import set_default_dtype
-#from recovlm.data.dataloaders_v2 import get_dataloader
-from recovlm.data.dataloaders import get_dataloader
+from recovlm.data.dataloaders_v2 import get_dataloader
+#from recovlm.data.dataloaders import get_dataloader
 from torch.utils.data import DataLoader
 import json
 import itertools
@@ -133,15 +133,15 @@ if __name__=='__main__':
     path = "/llm_reco/penghao03/intern-vl/InternVL3-2B"
 
     # debug dataloader
-    # dataset_config='examples/vlm/configs/debug7b_fsdp_3p_intern_vl.json'
+    dataset_config='examples/vlm/configs/debug7b_fsdp_3p_intern_vl.json'
     # #dataset_config='./examples/vlm/configs/stage1_parquet_ocr_0207.json'
-    # with open(dataset_config, encoding="utf-8") as f:
-    #     dataset_config = json.loads(f.read())
-    # dataset = dataset_config.pop("name")
+    with open(dataset_config, encoding="utf-8") as f:
+        dataset_config = json.loads(f.read())
+    dataset = dataset_config.pop("name")
 
-    # dataloader = get_dataloader(name=dataset,**dataset_config)
-    # for batch in dataloader:
-    #     print(batch)
+    dataloader = get_dataloader(name=dataset,**dataset_config)
+    for batch in dataloader:
+        print(batch)
     # json_path = '/llm_reco_ssd/zhangzixing/dataset/hdfs_data/recovlm_dataset_shuffle.ocr.0208.json'
     # with open(json_path, encoding="utf-8") as f:
     #      data = json.loads(f.read())
@@ -153,19 +153,19 @@ if __name__=='__main__':
     # #data = pq.read_table(parquet_path).to_pandas()
     # data = pq.ParquetFile(parquet_path)
     # print(data)
-    class Parent:
-        def __init__(self):
-            self.method()  # 父类初始化时调用 self.method()
+    # class Parent:
+    #     def __init__(self):
+    #         self.method()  # 父类初始化时调用 self.method()
         
-        def method(self):
-            print("Parent method")
+    #     def method(self):
+    #         print("Parent method")
 
-    class Child(Parent):
-        def __init__(self):
-            super().__init__()  # 调用父类的 __init__
+    # class Child(Parent):
+    #     def __init__(self):
+    #         super().__init__()  # 调用父类的 __init__
         
-        def method(self):  # 子类重写父类方法
-            print("Child method")
+    #     def method(self):  # 子类重写父类方法
+    #         print("Child method")
 
     # 创建子类实例
     child = Child()

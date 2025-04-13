@@ -393,7 +393,6 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
                 print(f"Removing old cached file: {fn}")
 
     for r in range(retry):
-        print('hahahaha'*100)
         print(f"retrying for fn={fn}/{cache_fn}")
         try:
             if os.path.exists(cache_fn):
