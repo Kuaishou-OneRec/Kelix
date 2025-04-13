@@ -1,3 +1,5 @@
+git config --global user.email 'penghao03@kuaishou.com'
+git config --global user.name 'penghao03'
 email=$(git config --get user.email)
 
 # 检查 email 是否为空
@@ -12,8 +14,8 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-VL-72B-Instruct # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/lingzhixin/output2/RecoVLM-dev/Qwen2-VL-72B-run_sft_72B_fsdp_sp/0.0.2
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct # Pretrained/Base model path
+OUTPUT_DIR=/llm_reco/penghao03/intern-vl/output
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -22,7 +24,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="72B FSDP"
+comment="debugP"
 
 
 git add --all
