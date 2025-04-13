@@ -500,7 +500,6 @@ class ParquetDataset(IterableDataset):
 
       # process message or segments -> webdataset_key = json
       sample_data = {"source": data_source, "meta": row.get("metadata", json.dumps({}))}
-
       if "chosen" in row:
         chosen = row["chosen"]
         if isinstance(chosen, str):
@@ -565,8 +564,10 @@ class ParquetDataset(IterableDataset):
     )
 
     # Add a progress bar, dd a progress bar
+    
     for epoch_fn in tqdm(worker_files, desc=f"[Worker-{worker}] process file: "):
       fn, epoch_idx = epoch_fn
+      print(fn,"==="*100)
       if (fn, epoch_idx) in finish_dict:
         logger.warning(f"[Worker-{worker}] {fn} has been processed, skip.")
         continue
@@ -579,7 +580,6 @@ class ParquetDataset(IterableDataset):
           f"ParquetDataset error, open parquet fail!!! "
           f"{fn=}, error_msg={traceback.format_exc()}")
         continue
-
       for group_idx in range(parquet_file.num_row_groups):
         offset = 0
         fn_group_key = (fn, epoch_idx, group_idx)
@@ -612,7 +612,6 @@ class ParquetDataset(IterableDataset):
             continue
           except GeneratorExit:
             raise
-
 
 class DistributedDataset(IterableDataset):
   def __init__(self, 
