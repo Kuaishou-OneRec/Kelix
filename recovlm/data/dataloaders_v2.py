@@ -74,6 +74,7 @@ def get_chat_completion_vision_v2_parquet_dataloader(sources: str,
                                                    datasource_config: Dict[str, Dict[str, Any]] = {},
                                                    pretrained_model_name_or_path: str = None,
                                                    max_images: int = 10,
+                                                   model_type:str = "qwen2-vl",
                                                    **kwargs
                                                    ):
     """
@@ -100,6 +101,7 @@ def get_chat_completion_vision_v2_parquet_dataloader(sources: str,
     Returns:
         DataLoader: 返回配置好的DataLoader实例
     """
+    
     dataset = ChatCompletionVisionV2ParquetDataset(
         sources=sources,
         num_workers=num_workers,
@@ -121,6 +123,7 @@ def get_chat_completion_vision_v2_parquet_dataloader(sources: str,
         rank=rank,
         world_size=world_size,
         max_images=max_images,
+        model_type=model_type
     )
 
     # 使用 StatefulDataLoader 以支持状态保存和恢复
@@ -282,7 +285,7 @@ def get_vllm_inference_dataloader(sources: str,
     collate_fn=collate_fn)
   return dataloader
 
-def get_dataloader(name: str, **kwargs):
+def get_dataloader(name: str,**kwargs):
   if name == "experience":
     return get_experience_dataloader(**kwargs)
   elif name == "vision_prompt":

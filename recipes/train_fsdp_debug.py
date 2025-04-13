@@ -439,6 +439,7 @@ def train():
       # set_activation_checkpointing(
       #   model, auto_wrap_policy={Qwen2VLDecoderLayer, Qwen2VLVisionBlock}
       # )
+      # ToDo 这部分逻辑后续补充 
       pass
     else:
       set_activation_checkpointing(
@@ -606,10 +607,8 @@ def train():
 
   dist.barrier()
 
-  if args.model_type=='intern-vl':
-    pass
-  else:
-    processor = Qwen2VLProcessor.from_pretrained(args.model_dir)
+
+  tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True, use_fast=False)
   
 
   ##############
@@ -657,12 +656,14 @@ def train():
   for micro_step, batch in enumerate(gather_by_group(dataloader, get_sequence_parallel_group())):
     if show_cnt > 0 and dist.get_rank() == 0:
       with Timer("Show data"):
-        input_text = processor.tokenizer.decode(batch['input_ids'][0])
+        input_text = tokenizer.decode(batch['input_ids'][0])
         print_rank_0(
             f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
         print_rank_0(batch)
         show_cnt -= 1
+    break
     data_source = batch.pop("data_source", None) # dataset source list cur batch
+    print_rank_0(batch)
     to_cuda(batch)
     input_ids = batch["input_ids"]
     loss_mask = batch["loss_mask"]
@@ -673,6 +674,7 @@ def train():
     video_grid_thw = batch.get("video_grid_thw", None)
     cu_seqlens = batch.get("cu_seqlens", None)
     sample_idx = batch["sample_idx"]
+    
 
     # 打印 token 数量
     token_count = input_ids.numel()  # 计算 token 数量

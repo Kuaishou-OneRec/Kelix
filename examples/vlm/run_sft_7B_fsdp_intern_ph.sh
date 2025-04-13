@@ -111,7 +111,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config examples/vlm/configs/debug7b_fsdp_3p_v1_debug.json \
+                --dataset_config examples/vlm/configs/debug7b_fsdp_3p_intern_vl.json \
                 --max_length 30000 \
                 --learning_rate 1e-6 \
                 --min_lr 0.0 \
