@@ -150,7 +150,8 @@ if __name__=='__main__':
     parquet_path='viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2_shuffle/stage2_20250208_ocr/rank-99-cc16e618-e5ec-11ef-bb58-946daee916a4.parquet'
     print(os.path.exists(parquet_path))
     #data = load_parquet_file(parquet_path)
-    data = pq.read_table(parquet_path).to_pandas()
+    #data = pq.read_table(parquet_path).to_pandas()
+    data = pq.ParquetFile(parquet_path)
     print(data)
 
     # 尝试分批次读取

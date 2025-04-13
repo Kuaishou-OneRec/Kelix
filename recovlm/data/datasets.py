@@ -2054,7 +2054,9 @@ class ParquetDataset(IterableDataset):
         
         # open parquet file
         try:
+          print("hahahahahha"*100)
           parquet_file = pq.ParquetFile(fn)
+          print("enenenen"*100)
         except Exception as e:
           logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
           parquet_file = None
