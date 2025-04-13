@@ -26,7 +26,7 @@ from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 from recovlm.models.intern_vl_3 import InternVLChatModel
 from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
-from recovlm.data.dataloaders import get_dataloader
+#from recovlm.data.dataloaders import get_dataloader
 
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss, CrossEntropyLossReweight
