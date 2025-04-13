@@ -129,6 +129,10 @@ def get_argument_parser():
   parser.add_argument("--min_lr", type=float, default=1e-6,
                       help="The minimum learning rate to reach after the cosine schedule.")
   
+  ############ model ############
+  parser.add_argument("--model_type",type=str, default='qwen2-vl',
+                      help="choose model type, one of `intern-vl`, `qwen-vl")
+  
   ############ Optimizer Args ############
   parser.add_argument("--learning_rate", type=float, default=2e-4,
                       help="The peak learning rate for optimizer.")

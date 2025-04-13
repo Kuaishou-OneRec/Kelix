@@ -42,6 +42,7 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     recipes/pretrain_vl_intern_vl.py --model_dir $MODEL_DIR \
+    --model_type intern-vl\
     --output_dir $OUTPUT_DIR \
     --dataset_config ./examples/vlm/configs/stage1_parquet_ocr_0207.json  \
     --monitor_datasource_loss \
