@@ -540,8 +540,9 @@ def train():
 
     # 后向过程日志
     logger.debug(f"Backward pass: Iteration {acc_step}, Labels shape: {labels.shape}")
-
+    print("--------asgsdfg-----"*100)
     with Timer("Fwd"):
+      print("hahahhahha"*100)
       output = model(
         input_ids, attention_mask=attention_mask,
         pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
