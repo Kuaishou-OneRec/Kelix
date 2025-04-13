@@ -1709,7 +1709,7 @@ class ChatCompletionVisionV2ParquetDataset(ChatCompletionVisionDatasetV2):
     self.num_epochs = num_epochs
     super().__init__(sources, num_workers=num_workers, max_length=max_length, world_size=world_size, rank=rank, num_epochs=num_epochs, **kargs)
 
-  def _build_source_dataset(self, sources):
+  def _build(self, sources):
     data_file_list = []
     if dist.get_rank() == 0:
       data_files = []
