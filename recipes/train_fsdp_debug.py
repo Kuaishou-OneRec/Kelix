@@ -607,7 +607,7 @@ def train():
   dist.barrier()
 
 
-  tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True, use_fast=False)
+  tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
   
 
   ##############
