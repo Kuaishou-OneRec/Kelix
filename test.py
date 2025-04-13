@@ -147,7 +147,7 @@ if __name__=='__main__':
     #      data = json.loads(f.read())
     # print(data)
     #parquet_path = 'viewfs://hadoop-lt-cluster/home/reco_6/mpi/lingzhixin/recovlm/parse_dataparse_data_to_parquet_vvabs_cot_v2/train_data_1w/cot_trial1/good_ids1_use_cot1-train-00060-of-00256.parquet'
-    parquet_path='viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2_shuffle/stage2_20250208_ocr/rank-99-cc16e618-e5ec-11ef-bb58-946daee916a4.parquet'
+    parquet_path='viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2_shuffle/stage2_20250208_ocr/rank-337-1a112f92-e5eb-11ef-90b1-946daee916f2.parquet'
     print(os.path.exists(parquet_path))
     #data = load_parquet_file(parquet_path)
     #data = pq.read_table(parquet_path).to_pandas()
