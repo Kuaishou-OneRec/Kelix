@@ -573,9 +573,8 @@ class ParquetDataset(IterableDataset):
       logger.info(f"[Worker-{worker}] processing {fn}-epoch{epoch_idx}")
       # open parquet file
       try:
-        print("==="*100)
         #parquet_file = load_parquet_file(fn)
-        parquet_file = pq.read_table(parquet_path).to_pandas()
+        parquet_file = pq.read_table(fn).to_pandas()
       except Exception as e:
         logger.error(
           f"ParquetDataset error, open parquet fail!!! "
