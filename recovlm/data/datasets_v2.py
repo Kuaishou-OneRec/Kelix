@@ -1740,7 +1740,6 @@ class ChatCompletionVisionV2ParquetDataset(ChatCompletionVisionDatasetV2):
     return dataset, -1
 
   def state_dict(self, ):
-    print(self.dataset)
     return self.dataset.state_dict()
   
   def load_state_dict(self, state_dict):
