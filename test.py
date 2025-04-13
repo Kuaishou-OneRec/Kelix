@@ -133,25 +133,26 @@ if __name__=='__main__':
     path = "/llm_reco/penghao03/intern-vl/InternVL3-2B"
 
     # debug dataloader
-    dataset_config='examples/vlm/configs/debug7b_fsdp_3p_intern_vl.json'
-    # #dataset_config='./examples/vlm/configs/stage1_parquet_ocr_0207.json'
-    with open(dataset_config, encoding="utf-8") as f:
-        dataset_config = json.loads(f.read())
-    dataset = dataset_config.pop("name")
+    # dataset_config='examples/vlm/configs/debug7b_fsdp_3p_intern_vl.json'
+    # # #dataset_config='./examples/vlm/configs/stage1_parquet_ocr_0207.json'
+    # with open(dataset_config, encoding="utf-8") as f:
+    #     dataset_config = json.loads(f.read())
+    # dataset = dataset_config.pop("name")
 
-    dataloader = get_dataloader(name=dataset,**dataset_config)
-    for batch in dataloader:
-        print(batch)
+    # dataloader = get_dataloader(name=dataset,**dataset_config)
+    # for batch in dataloader:
+    #     print(batch)
     # json_path = '/llm_reco_ssd/zhangzixing/dataset/hdfs_data/recovlm_dataset_shuffle.ocr.0208.json'
     # with open(json_path, encoding="utf-8") as f:
     #      data = json.loads(f.read())
     # print(data)
     #parquet_path = 'viewfs://hadoop-lt-cluster/home/reco_6/mpi/lingzhixin/recovlm/parse_dataparse_data_to_parquet_vvabs_cot_v2/train_data_1w/cot_trial1/good_ids1_use_cot1-train-00060-of-00256.parquet'
-    # parquet_path='viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2_shuffle/stage2_20250208_ocr/rank-579-33d7846e-e5e9-11ef-a6a5-a088c229d9d4.parquet'
+    parquet_path='good_ids1_use_cot1-train-00045-of-00256.parquet'
     # #print(os.path.exists(parquet_path))
     # #data = load_parquet_file(parquet_path)
-    # #data = pq.read_table(parquet_path).to_pandas()
-    # data = pq.ParquetFile(parquet_path)
+    #data = pq.read_table(parquet_path).to_pandas()
+    data = pq.ParquetFile(parquet_path)
+    print(data)
     # print(data)
     # class Parent:
     #     def __init__(self):
@@ -168,7 +169,7 @@ if __name__=='__main__':
     #         print("Child method")
 
     # 创建子类实例
-    child = Child()
+    #child = Child()
 
     # 尝试分批次读取
     # batch_size = 10

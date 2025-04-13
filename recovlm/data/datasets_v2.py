@@ -575,7 +575,7 @@ class ParquetDataset(IterableDataset):
       try:
         print("==="*100)
         #parquet_file = load_parquet_file(fn)
-        parquet_file = pq.ParquetFile(fn)
+        parquet_file = pq.read_table(parquet_path).to_pandas()
       except Exception as e:
         logger.error(
           f"ParquetDataset error, open parquet fail!!! "
