@@ -151,8 +151,6 @@ def get_argument_parser():
   parser.add_argument("--freeze_llm", action="store_true",
                       help="Freeze LLM parameters.")
 
-  parser.add_argument("--loss_type", str="ce",
-                      help="loss type")
 
   parser.add_argument("--freeze_visual", action="store_true",
                       help="Freeze visual encoder parameters.")
@@ -443,15 +441,15 @@ def train():
       dataloader.load_state_dict(dataloader_state_dict)
 
   ##############
-  ## TODO ’if else‘ use to verify reweight loss func
-  if args.loss_type is not None:
-    loss_fn = CrossEntropyLossReweight(
-      ignore_index=-100, return_token_loss=True, shift_labels=False, loss_reduction=args.loss_type
-    )
-  else:
+  # ## TODO ’if else‘ use to verify reweight loss func
+  # if args.loss_type is not None:
+  #   loss_fn = CrossEntropyLossReweight(
+  #     ignore_index=-100, return_token_loss=True, shift_labels=False, loss_reduction=args.loss_type
+  #   )
+  # else:
     # original loss
-    loss_fn = CrossEntropyLoss(
-      ignore_index=-100, return_token_loss=True, shift_labels=False)
+  loss_fn = CrossEntropyLoss(
+    ignore_index=-100, return_token_loss=True, shift_labels=False)
 
 
   start_time = time.time()
