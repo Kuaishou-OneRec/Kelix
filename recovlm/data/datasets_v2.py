@@ -627,22 +627,22 @@ class DistributedDataset(IterableDataset):
     self.num_workers = num_workers
     self.num_epochs = num_epochs
     self.sources = sources
-    self.dataset = self._build()
+    self.dataset = self._build(self.sources)
     # for data_source monitor
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
 
-  def _build(self):
+  def _build(self,sources):
     file_list = []
     files = []
     # TODO: support more file types
-    if self.sources.endswith(".json"):
-      with open(self.sources, "r") as fp:
+    if sources.endswith(".json"):
+      with open(sources, "r") as fp:
         files = json.loads(fp.read())
         files = sorted([
           fn for fn in files if fn.endswith(".parquet")])
     else:
-      folder = Path(self.sources)
+      folder = Path(sources)
       files = list(map(str, folder.rglob("*.parquet")))
 
     self.rng.shuffle(files)
