@@ -55,6 +55,7 @@ np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
+
 # debug7b_short.json
 # debug7b_fsdp_3p_v1_debug2_orids             
 # --enable_gradient_checkpointing \
