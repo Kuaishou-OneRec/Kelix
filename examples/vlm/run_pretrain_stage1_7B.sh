@@ -57,7 +57,6 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --save_checkpoint_per_step 3000 \
     --use_flash_attention_2 \
     --logging_per_step 10 \
-    --freeze_llm \
     --seed 19260817 \
     --merge_checkpoint \
     --merge_checkpoint_dtype bf16 \
