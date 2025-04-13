@@ -151,6 +151,9 @@ def get_argument_parser():
   parser.add_argument("--freeze_llm", action="store_true",
                       help="Freeze LLM parameters.")
 
+  parser.add_argument("--loss_type", str="ce",
+                      help="loss type")
+
   parser.add_argument("--freeze_visual", action="store_true",
                       help="Freeze visual encoder parameters.")
   
