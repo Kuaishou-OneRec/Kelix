@@ -140,6 +140,7 @@ class Qwen2VLInputBuilder:
         for image_str in block["video"]
       ]
       for image_block in block["video"]:
+        print(image_block)
         self.fill_image_block(image_block, sample, **kwargs)
 
 
@@ -1337,7 +1338,6 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
     messages = sample["json"][msg_key]
     for turn in messages:
       content = turn["content"]
-      print(turn)
       if isinstance(content, str):
         continue
       for block in content:
