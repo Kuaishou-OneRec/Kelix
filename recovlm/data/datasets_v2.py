@@ -1337,6 +1337,7 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
     messages = sample["json"][msg_key]
     for turn in messages:
       content = turn["content"]
+      print(turn)
       if isinstance(content, str):
         continue
       for block in content:
