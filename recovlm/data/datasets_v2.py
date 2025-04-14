@@ -573,9 +573,7 @@ class ParquetDataset(IterableDataset):
       logger.info(f"[Worker-{worker}] processing {fn}-epoch{epoch_idx}")
       # open parquet file
       try:
-        print("hahha"*100)
         parquet_file = load_parquet_file(fn)
-        print("okk"*100)
         #parquet_file = pq.read_table(fn).to_pandas()
         #parquet_file = pq.ParquetFile(fn)
       except Exception as e:
@@ -1647,7 +1645,6 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
 
       sample_key = sample["__key__"] if "__key__" in sample else ""
       sample_url = sample["__url__"] if "__url__" in sample else ""
-      print(sample)
       try:
         source_name = sample["json"]["source"]
         # WARN: ugly code, for dirty dataset.
