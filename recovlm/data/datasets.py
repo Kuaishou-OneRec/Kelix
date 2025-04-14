@@ -36,7 +36,7 @@ from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
-from recovlm.utils.intern_vl_utils import build_transform,dy
+from recovlm.utils.intern_vl_utils import build_transform
 
 from recovlm.models.intern_vl_3 import InternVLChatConfig
 
