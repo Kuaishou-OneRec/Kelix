@@ -2282,7 +2282,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         f"ChatCompletionVisionDataset(video_fps=...): video_fps, video_min_frames, "\
           f"video_max_frames will be ignored when video_nframe>0 ({video_nframe=})"
       )
-
+    self.image_size = image_size
     self.patch_size = patch_size
     self.shrink_ratio = shrink_ratio
     self.max_retry = max_retry
@@ -2321,8 +2321,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
   def get_transform(self):
       # Build transformation function
-      transform = build_transform(is_train=self.is_train, input_size=self.image_size,
-                                  pad2square=self.pad2square, normalize_type=self.normalize_type)
+      transform = build_transform(is_train=True, input_size=self.image_size,normalize_type=self.normalize_type)
       return transform
   
   def _build_source_dataset(self, sources):
