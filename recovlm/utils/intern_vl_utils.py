@@ -69,6 +69,22 @@ def expand2square(pil_img, background_color):
         result.paste(pil_img, ((height - width) // 2, 0))
         return result
 
+
+def simulate_jpeg_degradation(quality):
+    def jpeg_degrade(img):
+        with io.BytesIO() as output:
+            img.convert('RGB').save(output, format='JPEG', quality=quality)
+            output.seek(0)  # Move the reading cursor to the start of the stream
+            img_jpeg = Image.open(output).copy()  # Use .copy() to make sure the image is loaded in memory
+        return img_jpeg
+    return jpeg_degrade
+
+
+# Define the JPEG compression quality range, pre-create all JPEG compression functions
+qualities = list(range(75, 101))
+jpeg_degrade_functions = {quality: simulate_jpeg_degradation(quality) for quality in qualities}
+
+
 def build_transform(is_train, input_size, pad2square=False, normalize_type='imagenet'):
 
     IMAGENET_MEAN = (0.485, 0.456, 0.406)
