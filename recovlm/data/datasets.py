@@ -2053,7 +2053,6 @@ class ParquetDataset(IterableDataset):
         
         # open parquet file
         try:
-          print("hahahahahha"*100)
           print("ok"*100,fn)
           parquet_file = pq.ParquetFile(fn)
           print("enenenen"*100)
