@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
     ChatCompletionVisionDataset, ChatCompletionVisionParquetDataset, \
-    ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset
+    ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset,InternVLChatCompletionVisionParquetDataset
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
 

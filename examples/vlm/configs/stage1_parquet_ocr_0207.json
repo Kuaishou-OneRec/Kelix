@@ -7,7 +7,7 @@
     "video_fps": 2.0,
     "video_min_frames": 4,
     "video_max_frames": 32,
-    "base_model_dir": "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
+    "base_model_dir": "/llm_reco/penghao03/intern-vl/InternVL3-2B",
     "shrink_ratio": 0.7,
     "max_retry": 10,
     "multiple_of": 8,

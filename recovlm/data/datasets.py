@@ -2258,7 +2258,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                         video_max_frames
     """
 
-    
     self.template_name = template_name
     self.num_image_token = num_image_token()
     self.image_size = image_size
