@@ -247,8 +247,8 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           datasource_config={},
                                           **kwargs):
     model_type = kwargs.get('model_type','qwen2-vl')
-    ModelDataset = {'qwen2-vl':ChatCompletionVisionParquetDataset,'intern-vl':InternVLChatCompletionVisionParquetDataset}
     print(model_type)
+    ModelDataset = {'qwen2-vl':ChatCompletionVisionParquetDataset,'intern-vl':InternVLChatCompletionVisionParquetDataset}
     dataset = ModelDataset[model_type](
         sources = sources,
         num_workers = num_workers,
@@ -292,7 +292,8 @@ def get_chat_completion_vision_dpo_parquet_dataloader(sources: str,
                                           video_fps=2.0,
                                           video_min_frames=2,
                                           video_max_frames=120,
-                                          datasource_config={}):
+                                          datasource_config={},
+                                          **kwargs):
 
     dataset = ChatCompletionVisionDpoParquetDataset(
         sources = sources,
@@ -310,7 +311,8 @@ def get_chat_completion_vision_dpo_parquet_dataloader(sources: str,
         shrink_ratio=shrink_ratio,
         max_retry=max_retry,
         multiple_of=multiple_of,
-        datasource_config=datasource_config)
+        datasource_config=datasource_config
+        )
 
     ### packing, batching size=1; shuffle in dataset
     dataloader = StatefulDataLoader(
