@@ -163,9 +163,9 @@ def get_chat_completion_vision_dataloader(sources: str,
                                           video_fps=2.0,
                                           video_min_frames=2,
                                           video_max_frames=120,
-                                          datasource_config={}):
-
-    dataset = ChatCompletionVisionDataset(
+                                          datasource_config={}
+                                          ):
+        dataset = ChatCompletionVisionDataset(
         sources = sources,
         max_length = max_length,
         min_visual_tokens_per_image = min_visual_tokens_per_image,
@@ -180,15 +180,15 @@ def get_chat_completion_vision_dataloader(sources: str,
         multiple_of=multiple_of,
         datasource_config=datasource_config)
 
-    ### packing, batching size=1; shuffle in dataset
-    dataloader = DataLoader(
-        dataset=dataset,
-        shuffle=False,
-        batch_size=1,
-        num_workers=num_workers,
-        collate_fn=lambda x: x[0]
-    )
-    return dataloader
+        ### packing, batching size=1; shuffle in dataset
+        dataloader = DataLoader(
+            dataset=dataset,
+            shuffle=False,
+            batch_size=1,
+            num_workers=num_workers,
+            collate_fn=lambda x: x[0]
+        )
+        return dataloader
 
 def get_chat_completion_vision_dpo_dataloader(sources: str,
                                           max_length,
@@ -204,7 +204,6 @@ def get_chat_completion_vision_dpo_dataloader(sources: str,
                                           video_min_frames=2,
                                           video_max_frames=120,
                                           datasource_config={}):
-
     dataset = ChatCompletionVisionDpoDataset(
         sources = sources,
         max_length = max_length,
@@ -245,9 +244,12 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           video_fps=2.0,
                                           video_min_frames=2,
                                           video_max_frames=120,
-                                          datasource_config={}):
-
-    dataset = ChatCompletionVisionParquetDataset(
+                                          datasource_config={},
+                                          **kwargs):
+    model_type = kwargs.get('model_type','qwen2-vl')
+    ModelDataset = {'qwen2-vl':ChatCompletionVisionParquetDataset,'intern-vl':InternVLChatCompletionVisionParquetDataset}
+    print(model_type)
+    dataset = ModelDataset[model_type](
         sources = sources,
         num_workers = num_workers,
         num_epochs = num_epochs,
