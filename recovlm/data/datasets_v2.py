@@ -129,7 +129,7 @@ class Qwen2VLInputBuilder:
     max_visual_tokens_per_image = \
         kwargs.get(
           "max_visual_tokens_per_image", self.max_visual_tokens_per_image)
-
+    print(block)
     if isinstance(block["video"], list) and \
         all([isinstance(image_block, str) for image_block in block["video"]]):
       block["video"] = [
