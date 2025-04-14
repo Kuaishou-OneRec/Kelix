@@ -2267,9 +2267,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       down_sample_ratio = model_config.downsample_ratio
 
     self.tokenizer = tokenizer
+    self.max_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
     self.min_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
-    self.min_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
-    
+    print(max_visual_tokens_per_image,min_visual_tokens_per_image)
     self.video_nframe = video_nframe
     self.video_fps = video_fps
     self.video_min_frames = video_min_frames
@@ -2366,10 +2366,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if image.mode != "RGB":
       image = image.convert("RGB")
     block["image"] = image
-    block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
-        (self.spatial_merge_size ** 2)
-    block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
-        (self.spatial_merge_size ** 2)
   
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
@@ -2509,10 +2505,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           continue
         else:
           raise ValueError(f"sample process error, unsupport value type: {block['type']}")
-
+    print(messages)
     text = self.processor.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
     )
+    print(text)
 
     # append EOS token
     text += "<|endoftext|>"
