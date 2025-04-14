@@ -113,7 +113,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --dataset_config examples/vlm/configs/stage1_parquet_ocr_0207.json\
-                --max_length 30000 \
+                --max_length 3000 \
                 --learning_rate 1e-6 \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
