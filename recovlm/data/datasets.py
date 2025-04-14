@@ -36,6 +36,7 @@ from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
+from recovlm.utils.intern_vl_utils import build_transform,dy
 
 from recovlm.models.intern_vl_3 import InternVLChatConfig
 
@@ -2288,7 +2289,10 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.multiple_of = multiple_of
     self.shuffle_size = shuffle_size
     self.shuffle_initial_size = shuffle_initial_size
-  
+    self.min_dynamic_patch = min_dynamic_patch
+    self.max_dynamic_patch = max_dynamic_patch
+    self.sampling_method = sampling_method
+    self.normalize_type = normalize_type
     # self.image_token_id = image_token_id
     # self.video_token_id = video_token_id
     # self.vision_start_token_id = vision_start_token_id
@@ -2296,6 +2300,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     # self.pad_token_id = pad_token_id
     # self.patch_size = patch_size
     # Pad sequence to multiple of `multiple_of`
+
+    self.transform = self.get_transform()
 
 
     self.dataset, self.total_samples = self._build_source_dataset(sources)
@@ -2364,7 +2370,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
-
+    print(sample_dict)
     if isinstance(block["image"], str):
       image = sample_dict[block["image"]]
     else:
@@ -2372,7 +2378,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if image.mode != "RGB":
       image = image.convert("RGB")
     block["image"] = image
-  
+    print(self.transform(image))
+
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
                         conf: Dict[str, Any]):
