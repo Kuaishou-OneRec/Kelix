@@ -443,7 +443,7 @@ def train():
     dataset_config = json.loads(f.read())
   dataset = dataset_config.pop("name")
   dataset_config['model_type']=args.model_type
-  
+
   if args.max_length:
     print_rank_0(
       f"Overwrite max_length in dataset_config: "
