@@ -1212,7 +1212,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     for sample in self.dataset:
       sample_key = sample["__key__"] if "__key__" in sample else ""
       sample_url = sample["__url__"] if "__url__" in sample else ""
-
+      print(sample)
       try:
         source_name = sample["json"]["source"]
         # WARN: ugly code, for dirty dataset.
