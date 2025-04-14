@@ -1399,8 +1399,6 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
       data_format = "completion"
     else:
       raise NotImplementedError(f"Unsupported dataset format.")
-    
-    print(sample)
 
     source_conf = {
       "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
