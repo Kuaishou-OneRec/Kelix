@@ -5,14 +5,12 @@ from collections import Counter
 from typing import Dict
 
 import cv2
-import imageio
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torchvision.transforms as T
 import transformers
 from decord import VideoReader
-from internvl.conversation import get_conv_template
 from PIL import Image
 from torch.utils.data import ConcatDataset, WeightedRandomSampler
 from torchvision.transforms.functional import InterpolationMode
