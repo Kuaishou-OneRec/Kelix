@@ -133,7 +133,12 @@ def get_argument_parser():
   
   ############ model ############
   parser.add_argument("--model_type",type=str, default='qwen2-vl',
-                      help="choose model type, one of `intern-vl`, `qwen-vl")
+                      help="choose model type, one of `intern-vl`, `qwen2-vl")
+
+  ########### intern-vl ##########
+  parser.add_argument("--down_sample_ratio", type=float, default=0.5,
+                      help="down sample ratio,compress image token")
+
   
   ############ Optimizer Args ############
   parser.add_argument("--learning_rate", type=float, default=2e-4,
@@ -438,6 +443,11 @@ def train():
     dataset_config = json.loads(f.read())
   dataset = dataset_config.pop("name")
   dataset_config['model_type']=args.model_type
+  if model_type=="intern-vl":
+    dataset_config['force_image_size'] = model.config.force_image_size
+    dataset_config['patch_size'] = model.vision_config.patch_size
+    dataset_config['num_image_token'] = int((model.config.force_image_size // model.vision_config.patch_size) ** 2 * (args.down_sample_ratio ** 2))
+
   if args.max_length:
     print_rank_0(
       f"Overwrite max_length in dataset_config: "

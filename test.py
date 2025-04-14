@@ -1,6 +1,6 @@
 import torch
 from transformers import AutoTokenizer, AutoModel
-from recovlm.models.intern_vl_3 import InternVLChatModel
+from recovlm.models.intern_vl_3 import InternVLChatModel,InternVLChatConfig
 from recovlm.training.common import set_default_dtype
 from recovlm.data.dataloaders_v2 import get_dataloader
 #from recovlm.data.dataloaders import get_dataloader
@@ -147,12 +147,12 @@ if __name__=='__main__':
     #      data = json.loads(f.read())
     # print(data)
     #parquet_path = 'viewfs://hadoop-lt-cluster/home/reco_6/mpi/lingzhixin/recovlm/parse_dataparse_data_to_parquet_vvabs_cot_v2/train_data_1w/cot_trial1/good_ids1_use_cot1-train-00060-of-00256.parquet'
-    parquet_path='good_ids1_use_cot1-train-00045-of-00256.parquet'
-    # #print(os.path.exists(parquet_path))
-    # #data = load_parquet_file(parquet_path)
-    #data = pq.read_table(parquet_path).to_pandas()
-    data = pq.ParquetFile(parquet_path)
-    print(data)
+    # parquet_path='good_ids1_use_cot1-train-00045-of-00256.parquet'
+    # # #print(os.path.exists(parquet_path))
+    # # #data = load_parquet_file(parquet_path)
+    # #data = pq.read_table(parquet_path).to_pandas()
+    # data = pq.ParquetFile(parquet_path)
+    # print(data)
     # print(data)
     # class Parent:
     #     def __init__(self):
@@ -185,21 +185,14 @@ if __name__=='__main__':
 #     model = InternVLChatModel.from_pretrained(
 #             path,
 #             use_flash_attn=True)
+base_model_dir = '/llm_reco/penghao03/intern-vl/InternVL3-2B'
 
-# tokenizer = AutoTokenizer.from_pretrained(
-#     path, trust_remote_code=True)
+tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
+model_config = InternVLChatConfig.from_pretrained(base_model_dir)
+path_size = model_config.vision_config.patch_size
+image_size = model_config.force_image_size
 
-# print(tokenizer)
-# IMG_CONTEXT_TOKEN = '<IMG_CONTEXT>'
-# IMG_START_TOKEN = '<img>'
-# IMG_END_TOKEN = '</img>'
-# QUAD_START_TOKEN = '<quad>'
-# QUAD_END_TOKEN = '</quad>'
-# REF_START_TOKEN = '<ref>'
-# REF_END_TOKEN = '</ref>'
-# BOX_START_TOKEN = '<box>'
-# BOX_END_TOKEN = '</box>'
-# print(tokenizer.decode(IMG_CONTEXT_TOKEN))
+print(tokenizer.special_tokens_map)
 
 
 

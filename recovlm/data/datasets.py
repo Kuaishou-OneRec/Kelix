@@ -37,6 +37,9 @@ from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
 
+from recovlm.models.intern_vl_3 import InternVLChatConfig
+
+
 from recovlm.training.parallel import get_sequence_parallel_group, \
   get_sequence_parallel_world_size
 from recovlm.utils.common import print_rank_0, Timer
@@ -805,7 +808,6 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
-    print(block)
     if isinstance(block["video"], list):
         if all([isinstance(image_block, str) for image_block in block["video"]]):
           block["video"] = [
@@ -2283,7 +2285,12 @@ class ChatCompletionVisionDataset(IterableDataset):
                vision_start_token_id: int = 151652,
                vision_end_token_id: int = 151653,
                pad_token_id: int = 151643,
-               datasource_config:Dict[str, Dict[str, Any]] = {}):
+              min_dynamic_patch=1,
+               max_dynamic_patch=12,
+               sampling_method='rand',  # for video data
+               normalize_type='imagenet',
+               datasource_config:Dict[str, Dict[str, Any]] = {},
+               **kargs):
     """
     datasource_config: 默认覆盖全局配置
                       key: datasource_name
@@ -2295,44 +2302,53 @@ class ChatCompletionVisionDataset(IterableDataset):
                         video_min_frames
                         video_max_frames
     """
-    if base_model_dir:
-      processor = Qwen2VLProcessor.from_pretrained(base_model_dir)
-      model_config = Qwen2VLConfig.from_pretrained(base_model_dir)
-      spatial_merge_size = model_config.vision_config.spatial_merge_size
-      patch_size = model_config.vision_config.patch_size
-      image_token_id = model_config.image_token_id
-      video_token_id = model_config.video_token_id
-      vision_start_token_id = model_config.vision_start_token_id
-      vision_end_token_id = model_config.vision_end_token_id
-      pad_token_id = model_config.pad_token_id
 
-    self.processor = processor
-    self.min_visual_tokens_per_image = min_visual_tokens_per_image
-    self.max_visual_tokens_per_image = max_visual_tokens_per_image
+    
+    self.template_name = template_name
+    self.num_image_token = num_image_token()
+    self.image_size = image_size
+    self.max_num_frame = max_num_frame
+    self.min_num_frame = min_num_frame
+
+
+    if base_model_dir:
+      tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
+      model_config = InternVLChatConfig.from_pretrained(base_model_dir)
+      path_size = model_config.vision_config.patch_size
+      image_size = model_config.force_image_size
+      down_sample_ratio = model_config.downsample_ratio
+
+    self.tokenizer = tokenizer
+    self.visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
     self.video_nframe = video_nframe
     self.video_fps = video_fps
     self.video_min_frames = video_min_frames
     self.video_max_frames = video_max_frames
+    self.down_sample_ratio=down_sample_ratio
+
     if video_nframe > 0 and (video_fps > 0 or video_min_frames > 0 or video_max_frames > 0):
       logger.warning(
         f"ChatCompletionVisionDataset(video_fps=...): video_fps, video_min_frames, "\
           f"video_max_frames will be ignored when video_nframe>0 ({video_nframe=})"
       )
+
     self.patch_size = patch_size
     self.shrink_ratio = shrink_ratio
     self.max_retry = max_retry
-    self.spatial_merge_size = spatial_merge_size
-    self.image_token_id = image_token_id
-    self.video_token_id = video_token_id
-    self.vision_start_token_id = vision_start_token_id
-    self.vision_end_token_id = vision_end_token_id
-    self.pad_token_id = pad_token_id
-    self.patch_size = patch_size
-    # Pad sequence to multiple of `multiple_of`
     self.multiple_of = multiple_of
     self.shuffle_size = shuffle_size
     self.shuffle_initial_size = shuffle_initial_size
-    
+  
+    # self.image_token_id = image_token_id
+    # self.video_token_id = video_token_id
+    # self.vision_start_token_id = vision_start_token_id
+    # self.vision_end_token_id = vision_end_token_id
+    # self.pad_token_id = pad_token_id
+    # self.patch_size = patch_size
+    # Pad sequence to multiple of `multiple_of`
+
+
+
     self.dataset, self.total_samples = self._build_source_dataset(sources)
 
     # for data_source monitor
@@ -2341,6 +2357,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
+    # ToDo 检查这部分在intern-vl中应该设置为多少
     image_pad_len = 6
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
@@ -2654,7 +2671,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
   def _process(self, sample, source_name=None):
     # self._may_filter(sample)
-
+    print(sample)
     # get data format
     if "messages" in sample["json"] or "message" in sample["json"]:
       data_format = "chatml"
