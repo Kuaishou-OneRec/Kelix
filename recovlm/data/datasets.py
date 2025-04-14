@@ -2240,7 +2240,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                vision_start_token_id: int = 151652,
                vision_end_token_id: int = 151653,
                pad_token_id: int = 151643,
-              min_dynamic_patch=1,
+               min_dynamic_patch=1,
                max_dynamic_patch=12,
                sampling_method='rand',  # for video data
                normalize_type='imagenet',
@@ -2258,12 +2258,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                         video_max_frames
     """
 
-    self.template_name = template_name
-    self.num_image_token = num_image_token()
-    self.image_size = image_size
-    self.max_num_frame = max_num_frame
-    self.min_num_frame = min_num_frame
-
 
     if base_model_dir:
       tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
@@ -2273,7 +2267,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       down_sample_ratio = model_config.downsample_ratio
 
     self.tokenizer = tokenizer
-    self.visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
+    self.min_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
+    self.min_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
+    
     self.video_nframe = video_nframe
     self.video_fps = video_fps
     self.video_min_frames = video_min_frames
@@ -2300,7 +2296,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     # self.pad_token_id = pad_token_id
     # self.patch_size = patch_size
     # Pad sequence to multiple of `multiple_of`
-
 
 
     self.dataset, self.total_samples = self._build_source_dataset(sources)
