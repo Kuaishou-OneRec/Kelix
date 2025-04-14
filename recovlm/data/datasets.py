@@ -805,7 +805,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
-
+    print(block)
     if isinstance(block["video"], list):
         if all([isinstance(image_block, str) for image_block in block["video"]]):
           block["video"] = [
@@ -2053,9 +2053,9 @@ class ParquetDataset(IterableDataset):
         
         # open parquet file
         try:
-          print("ok"*100,fn)
-          parquet_file = pq.ParquetFile(fn)
-          print("enenenen"*100)
+          #parquet_file = pq.ParquetFile(fn)
+          parquet_file = load_parquet_file(fn)
+
         except Exception as e:
           logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
           parquet_file = None
