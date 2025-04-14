@@ -1639,7 +1639,6 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
         迭代器，用于逐个返回处理后的样本数据。
 
     """
-
     buffer = []
     source_list = []
     cur_length = 0
@@ -1648,7 +1647,7 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
 
       sample_key = sample["__key__"] if "__key__" in sample else ""
       sample_url = sample["__url__"] if "__url__" in sample else ""
-
+      print(sample)
       try:
         source_name = sample["json"]["source"]
         # WARN: ugly code, for dirty dataset.
@@ -1670,7 +1669,7 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
         error_ratio = self.source_error_cnt[source_name] * 1.0 / \
           self.source_sample_cnt[source_name]
         logger.error(
-          f"ChatCompletionVisionDataset process sample error. "
+          f"ChatCompletionVisionDatasetV2 process sample error. "
           f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
           f"errmsg={traceback.format_exc()}")
         continue
