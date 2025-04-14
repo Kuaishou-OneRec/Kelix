@@ -35,7 +35,7 @@ from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 from recovlm.models.intern_vl_3 import InternVLChatModel
 
 from recovlm.data.dataloaders_v2 import get_dataloader
-#from recovlm.data.dataloaders import get_dataloader
+
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
 from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
@@ -614,6 +614,7 @@ def train():
   with open(args.dataset_config, encoding="utf-8") as f:
     dataset_config = json.loads(f.read())
   dataset = dataset_config.pop("name")
+  dataset_config["model_type"] = args.model_type
   if args.max_length:
     print_rank_0(
       f"Overwrite max_length in dataset_config: "
