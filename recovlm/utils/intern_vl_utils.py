@@ -3,6 +3,7 @@ import random
 import re
 from collections import Counter
 from typing import Dict
+import io
 
 import cv2
 import numpy as np
