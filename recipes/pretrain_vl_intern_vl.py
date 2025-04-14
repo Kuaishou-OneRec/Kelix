@@ -136,8 +136,9 @@ def get_argument_parser():
                       help="choose model type, one of `intern-vl`, `qwen2-vl")
 
   ########### intern-vl ##########
-  parser.add_argument("--down_sample_ratio", type=float, default=0.5,
-                      help="down sample ratio,compress image token")
+
+  parser.add_argument("--normalize_type", type=str, default='imagenet',
+                      help="['imagenet', 'clip', 'siglip'] The normalization type for the image. Default is imagenet.")
 
   
   ############ Optimizer Args ############

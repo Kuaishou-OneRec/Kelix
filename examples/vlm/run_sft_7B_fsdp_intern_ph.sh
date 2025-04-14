@@ -17,7 +17,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco/penghao03/intern-vl/InternVL3-2B
 #MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2B # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/penghao03/intern-vl/output/datasetv2
+OUTPUT_DIR=/llm_reco/penghao03/intern-vl/output/dataset1
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -112,7 +112,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config examples/vlm/configs/debug7b_fsdp_3p_intern_vl.json \
+                --dataset_config examples/vlm/configs/stage2_parquet_ocrall_0207_1epoch.json \
                 --max_length 30000 \
                 --learning_rate 1e-6 \
                 --min_lr 0.0 \

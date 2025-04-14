@@ -2312,6 +2312,12 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     assert self.max_length > 0
 
     self.datasource_config = datasource_config
+
+  def get_transform(self):
+      # Build transformation function
+      transform = build_transform(is_train=self.is_train, input_size=self.image_size,
+                                  pad2square=self.pad2square, normalize_type=self.normalize_type)
+      return transform
   
   def _build_source_dataset(self, sources):
     total_samples = 0
@@ -2506,7 +2512,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         else:
           raise ValueError(f"sample process error, unsupport value type: {block['type']}")
     print(messages)
-    text = self.processor.apply_chat_template(
+    text = self.tokenizer.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
     )
     print(text)

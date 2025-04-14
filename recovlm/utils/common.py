@@ -414,3 +414,47 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
                 
                 if r == retry - 1:
                     raise Exception(f"Failed to load parquet file from both original path and cache.\nOriginal error: {e}\nCache error: {e2}")
+
+def build_transform(is_train, input_size, pad2square=False, normalize_type='imagenet'):
+  
+    IMAGENET_MEAN = (0.485, 0.456, 0.406)
+    IMAGENET_STD = (0.229, 0.224, 0.225)
+    CLIP_MEAN = (0.4814546, 0.4578275, 0.40821073)
+    CLIP_STD = (0.2686295, 0.2613025, 0.2757711)
+    SIGLIP_MEAN = (0.5, 0.5, 0.5)
+    SIGLIP_STD = (0.5, 0.5, 0.5)
+    
+    if normalize_type == 'imagenet':
+        MEAN, STD = IMAGENET_MEAN, IMAGENET_STD
+    elif normalize_type == 'clip':
+        MEAN, STD = CLIP_MEAN, CLIP_STD
+    elif normalize_type == 'siglip':
+        MEAN, STD = SIGLIP_MEAN, SIGLIP_STD
+    else:
+        raise NotImplementedError
+    if is_train:  # use data augumentation
+        transform = T.Compose([
+            T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
+            T.RandomChoice([T.Lambda(jpeg_degrade_functions[quality]) for quality in qualities]),
+            T.Resize((input_size, input_size), interpolation=InterpolationMode.BICUBIC),
+            T.ToTensor(),
+            T.Normalize(mean=MEAN, std=STD)
+        ])
+    else:
+        if pad2square is False:  # now we use this transform function by default
+            transform = T.Compose([
+                T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
+                T.Resize((input_size, input_size), interpolation=InterpolationMode.BICUBIC),
+                T.ToTensor(),
+                T.Normalize(mean=MEAN, std=STD)
+            ])
+        else:
+            transform = T.Compose([
+                T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
+                T.Lambda(lambda img: expand2square(img, tuple(int(x * 255) for x in MEAN))),
+                T.Resize((input_size, input_size), interpolation=InterpolationMode.BICUBIC),
+                T.ToTensor(),
+                T.Normalize(mean=MEAN, std=STD)
+            ])
+
+    return transform
