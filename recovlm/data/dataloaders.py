@@ -247,8 +247,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           datasource_config={},
                                           **kwargs):
     model_type = kwargs.get('model_type','qwen2-vl')
-    print(model_type)
-    ModelDataset = {'qwen2-vl':ChatCompletionVisionParquetDataset,'intern-vl':InternVLChatCompletionVisionParquetDataset}
+    ModelDataset = {'qwen2-vl':ChatCompletionVisionParquetDataset,'intern-vl':ChatCompletionVisionParquetDataset}
     dataset = ModelDataset[model_type](
         sources = sources,
         num_workers = num_workers,

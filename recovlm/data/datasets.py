@@ -2211,3 +2211,664 @@ class ChatCompletionVisionDpoParquetDataset(ChatCompletionVisionDpoDataset):
   
   def load_state_dict(self, state_dict):
     self.dataset.load_state_dict(state_dict)
+
+
+
+
+class InternVLChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
+    self.rng = random.Random(shuffle_seed)
+    self.num_workers = num_workers
+    self.num_epochs = num_epochs
+
+    super().__init__(sources, **kargs)
+
+  def _build_source_dataset(self, sources):
+    data_file_list = []
+    if dist.get_rank() == 0:
+      data_files = []
+      if isinstance(sources, str) and sources.endswith(".json"):
+        with open(sources, "r") as fp:
+          data_files = json.loads(fp.read())
+          data_files = [fn for fn in data_files if fn.endswith(".parquet")]
+      elif isinstance(sources, list):
+        for source in sources:
+          hdfs_files = shell_hdfs_ls(source)
+          data_files += [fn for fn in hdfs_files if fn.endswith(".parquet")]
+      # repeat
+      for i in range(self.num_epochs):
+        data_files.sort()
+        self.rng.shuffle(data_files)
+        data_file_list += [(fn, i) for fn in data_files]
+      logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: ori_file_num={len(data_files)} file_num={len(data_file_list)}")
+
+    t = [data_file_list]
+    dist.broadcast_object_list(t, src=0)
+    data_file_list = t[0]
+
+    logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: file_num={len(data_file_list)}")
+    if len(data_file_list) == 0:
+      raise ValueError(f"no datafile found!")
+
+    dataset = ParquetDataset(data_file_list, self.num_workers)
+    return dataset, -1
+
+  def state_dict(self, ):
+    return self.dataset.state_dict()
+  
+  def load_state_dict(self, state_dict):
+    self.dataset.load_state_dict(state_dict)
+    
+
+
+# class ChatCompletionVisionDataset(IterableDataset):
+#   def __init__(self,
+#                sources: Union[str, List[str]],
+#                max_length: int = 1024,
+#                min_visual_tokens_per_image: int = 4,
+#                max_visual_tokens_per_image: int = 512,
+#                video_nframe: int = -1,
+#                video_fps: float = 2.0,
+#                video_min_frames: int = -1,
+#                video_max_frames: int = 120,
+#                shrink_ratio: float = 0.9,
+#                max_retry: int = 5,
+#                multiple_of: int = 8,
+#                shuffle_size: int = 100000,
+#                shuffle_initial_size: int = 20000,
+#                base_model_dir: Optional[str] = None,
+#                processor: Optional[Qwen2VLProcessor] = None,
+#                spatial_merge_size: int = 2,
+#                patch_size: int = 14,
+#                image_token_id: int = 151655,
+#                video_token_id: int = 151656,
+#                vision_start_token_id: int = 151652,
+#                vision_end_token_id: int = 151653,
+#                pad_token_id: int = 151643,
+#                datasource_config:Dict[str, Dict[str, Any]] = {}):
+#     """
+#     datasource_config: 默认覆盖全局配置
+#                       key: datasource_name
+#                       Dict: datasource config, support params:
+#                         min_visual_tokens_per_image
+#                         max_visual_tokens_per_image
+#                         video_nframe
+#                         video_fps
+#                         video_min_frames
+#                         video_max_frames
+#     """
+#     if base_model_dir:
+#       processor = Qwen2VLProcessor.from_pretrained(base_model_dir)
+#       model_config = Qwen2VLConfig.from_pretrained(base_model_dir)
+#       spatial_merge_size = model_config.vision_config.spatial_merge_size
+#       patch_size = model_config.vision_config.patch_size
+#       image_token_id = model_config.image_token_id
+#       video_token_id = model_config.video_token_id
+#       vision_start_token_id = model_config.vision_start_token_id
+#       vision_end_token_id = model_config.vision_end_token_id
+#       pad_token_id = model_config.pad_token_id
+
+#     self.processor = processor
+#     self.min_visual_tokens_per_image = min_visual_tokens_per_image
+#     self.max_visual_tokens_per_image = max_visual_tokens_per_image
+#     self.video_nframe = video_nframe
+#     self.video_fps = video_fps
+#     self.video_min_frames = video_min_frames
+#     self.video_max_frames = video_max_frames
+#     if video_nframe > 0 and (video_fps > 0 or video_min_frames > 0 or video_max_frames > 0):
+#       logger.warning(
+#         f"ChatCompletionVisionDataset(video_fps=...): video_fps, video_min_frames, "\
+#           f"video_max_frames will be ignored when video_nframe>0 ({video_nframe=})"
+#       )
+#     self.patch_size = patch_size
+#     self.shrink_ratio = shrink_ratio
+#     self.max_retry = max_retry
+#     self.spatial_merge_size = spatial_merge_size
+#     self.image_token_id = image_token_id
+#     self.video_token_id = video_token_id
+#     self.vision_start_token_id = vision_start_token_id
+#     self.vision_end_token_id = vision_end_token_id
+#     self.pad_token_id = pad_token_id
+#     self.patch_size = patch_size
+#     # Pad sequence to multiple of `multiple_of`
+#     self.multiple_of = multiple_of
+#     self.shuffle_size = shuffle_size
+#     self.shuffle_initial_size = shuffle_initial_size
+    
+#     self.dataset, self.total_samples = self._build_source_dataset(sources)
+
+#     # for data_source monitor
+#     self.source_sample_cnt = {}
+#     self.source_error_cnt = {}
+
+#     # append image_pad for each packing
+#     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
+#     image_pad_len = 6
+#     self.max_length = max_length - image_pad_len
+#     assert self.max_length > 0
+
+#     self.datasource_config = datasource_config
+  
+#   def _build_source_dataset(self, sources):
+#     total_samples = 0
+#     if isinstance(sources, str):
+#       sources = sources.split(",")
+#     with Timer("Read urls"):
+#       urls = []
+#       for source in sources:
+#         with open(source, encoding="utf-8") as f:
+#           index = json.loads(f.read())["shardlist"]
+#           for item in index:
+#             urls.append(os.path.join(os.path.dirname(source), item["url"]))
+#             total_samples += item["nsamples"]
+
+#     with Timer("Sort -> Shuffle -> Broadcast"):
+#       # broadcast all urls
+#       urls.sort()
+#       random.shuffle(urls)
+#       t = [urls]
+#       dist.broadcast_object_list(t, src=0)
+#       urls = t[0]
+#       logger.info(f"[RANK{dist.get_rank()}] {urls=}")
+
+#     with Timer("Build dataset"):
+#       dataset = wds.WebDataset(
+#           urls,
+#           handler=wds.warn_and_continue,
+#           resampled=True,
+#           shardshuffle=True,
+#           cache_dir="/tmp/_wids_cache",
+#           nodesplitter=wds.split_by_node,
+#           workersplitter=wds.split_by_worker
+#       )
+
+#       dataset = dataset.shuffle(
+#           self.shuffle_size, initial=self.shuffle_initial_size).decode(
+#         "pil", handler=wds.warn_and_continue)
+      
+#     return dataset, total_samples
+
+#   def _fill_image_block(self, block: Dict[str, Any],
+#                         sample_dict: Dict[str, Any],
+#                         conf: Dict[str, Any]):
+
+#     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
+#     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
+
+#     if isinstance(block["image"], str):
+#       image = sample_dict[block["image"]]
+#     else:
+#       image = block["image"]
+#     if image.mode != "RGB":
+#       image = image.convert("RGB")
+#     block["image"] = image
+#     block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
+#         (self.spatial_merge_size ** 2)
+#     block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
+#         (self.spatial_merge_size ** 2)
+  
+#   def _fill_video_block(self, block: Dict[str, Any],
+#                         sample_dict: Dict[str, Any],
+#                         conf: Dict[str, Any]):
+
+#     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
+#     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
+
+#     if isinstance(block["video"], list):
+#         if all([isinstance(image_block, str) for image_block in block["video"]]):
+#           block["video"] = [
+#             {
+#               "type": "image",
+#               "image": image_str
+#             }
+#             for image_str in block["video"]
+#           ]
+#         for image_block in block["video"]:
+#           assert image_block["type"] == "image" and "image" in image_block
+#           self._fill_image_block(image_block, sample_dict, conf)
+
+#     elif isinstance(block["video"], str) or isinstance(block["video"], bytes):
+#       # video in local tar, replace by video bytes
+#       if isinstance(block["video"], str) and block["video"] in sample_dict:
+#         block["video"] = sample_dict[block["video"]]
+#       # fill other params
+#       block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
+#           (self.spatial_merge_size ** 2)
+#       block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
+#           (self.spatial_merge_size ** 2)
+#       # video split params
+#       if conf["video_nframe"] > 0:
+#         block["nframes"] = conf["video_nframe"]
+#       else:
+#         if conf["video_fps"] > 0:
+#           block["fps"] = conf["video_fps"]
+#         if conf["video_min_frames"] > 0:
+#           block["min_frames"] = conf["video_min_frames"]
+#         if conf["video_max_frames"] > 0:
+#           block["max_frames"] = conf["video_max_frames"]
+#     else:
+#       raise ValueError(f"Unsupport video type. {type(block['video'])=}")
+  
+#   def _process_completion(self,
+#                     sample: Dict[str, Any],
+#                     data_conf: Dict[str, Any] = {}) -> Dict[str, torch.Tensor]:
+#     assert "segments" in sample["json"]
+#     data_conf["max_visual_tokens_per_image"] = max(
+#         data_conf["max_visual_tokens_per_image"], data_conf["min_visual_tokens_per_image"])
+
+#     text = ""
+#     vision_infos = []
+#     segments = sample["json"]["segments"]
+#     for segment in segments:
+#       if segment["type"] == "text":
+#         text += segment["text"]
+#       elif segment["type"] == "image":
+#         text += "<|vision_start|><|image_pad|><|vision_end|>"
+#         self._fill_image_block(segment, sample,
+#                                 conf=data_conf)
+#         vision_infos.append(segment)
+#       elif segment["type"] == "video":
+#         text += "<|vision_start|><|video_pad|><|vision_end|>"
+#         self._fill_video_block(segment, sample,
+#                                 conf=data_conf)
+#         vision_infos.append(segment)
+#       else:
+#         logger.warning(f"!!! Unsupport {segment['type']=}, skip this segment.")
+    
+#     # append EOS token
+#     text += "<|endoftext|>"
+#     image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos)
+#     inputs = self.processor(
+#         text=text,
+#         images=image_inputs,
+#         videos=video_inputs,
+#         return_tensors="pt"
+#     )
+
+#     # For the Warning: (add by zzx)
+#     #   Token indices sequence length is longer than the specified maximum 
+#     #   sequence length for this model (**** > 32768). Running this sequence 
+#     #.  through the model will result in indexing errors
+#     if inputs["input_ids"].shape[-1] > 32768:
+#       print(f"Sample is too long. token_len={inputs['input_ids'].shape[-1]}")
+    
+#     # mask all vision token
+#     # <|vision_start|>: 151652 , <|vision_end|>: 151653, <|image_pad|>: 151655, <|video_pad|>: 151656
+#     input_ids = inputs["input_ids"]
+#     inputs["loss_mask"] = torch.ones_like(input_ids)
+#     inputs["loss_mask"][
+#         (input_ids == self.vision_start_token_id) | 
+#         (input_ids == self.vision_end_token_id) |
+#         (input_ids == self.image_token_id) |
+#         (input_ids == self.video_token_id)
+#       ] = 0
+#     # mask EOS token
+#     inputs["loss_mask"][-1][-1] = 0
+#     if inputs["loss_mask"].sum() == 0:
+#       raise ValueError(
+#         f"Unable to generate sample with 0 loss_mask."
+#       )
+
+#     inputs["position_ids"] = get_rope_index(
+#       inputs["input_ids"],
+#       image_grid_thw=inputs.get("image_grid_thw"),
+#       video_grid_thw=inputs.get("video_grid_thw"),
+#       spatial_merge_size=self.spatial_merge_size,
+#       image_token_id=self.image_token_id,
+#       video_token_id=self.video_token_id,
+#       vision_start_token_id=self.vision_start_token_id
+#     )
+#     inputs.pop("attention_mask")
+#     return inputs
+
+#   def _process_chat(self,
+#                     sample: Dict[str, Any],
+#                     data_conf: Dict[str, Any] = {}) -> Dict[str, torch.Tensor]:
+#     assert "message" in sample["json"] or "messages" in sample["json"]
+#     data_conf["max_visual_tokens_per_image"] = max(
+#         data_conf["max_visual_tokens_per_image"], data_conf["min_visual_tokens_per_image"])
+    
+#     msg_key = "message" if "message" in sample["json"] else "messages"
+#     messages = sample["json"][msg_key]
+#     for turn in messages:
+#       content = turn["content"]
+#       if isinstance(content, str):
+#         continue
+#       for block in content:
+#         if block["type"] == "image":
+#           self._fill_image_block(block, sample, 
+#                                   conf=data_conf)
+#         elif block["type"] == "video":
+#           self._fill_video_block(block, sample,
+#                                   conf=data_conf)
+#         elif block["type"] == "text":
+#           continue
+#         else:
+#           raise ValueError(f"sample process error, unsupport value type: {block['type']}")
+
+#     text = self.processor.apply_chat_template(
+#       messages, tokenize=False, add_generation_prompt=False
+#     )
+
+#     # append EOS token
+#     text += "<|endoftext|>"
+#     image_inputs, video_inputs = process_vision_info(messages)
+#     inputs = self.processor(
+#         text=text,
+#         images=image_inputs,
+#         videos=video_inputs,
+#         return_tensors="pt"
+#     )
+
+#     # For the Warning: (add by zzx)
+#     #   Token indices sequence length is longer than the specified maximum 
+#     #   sequence length for this model (**** > 32768). Running this sequence 
+#     #.  through the model will result in indexing errors
+#     if inputs["input_ids"].shape[-1] > 32768:
+#       raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
+    
+#     inputs["loss_mask"] = get_assistant_mask(
+#       inputs["input_ids"],
+#       start_pattern=[151644, 77091, 198],
+#       end_pattern=[151645, 198]
+#     )
+#     # mask EOS token
+#     inputs["loss_mask"][-1][-1] = 0
+#     if inputs["loss_mask"].sum() == 0:
+#       # try to process no text block, like content=""
+#       inputs["loss_mask"] = get_assistant_mask(
+#         inputs["input_ids"],
+#         start_pattern=[151644, 77091],
+#         end_pattern=[151645, 198]
+#       )
+#       if inputs["loss_mask"].sum() == 0:
+#         raise ValueError(
+#           f"Unable to generate sample with 0 loss_mask."
+#         )
+
+#     inputs["position_ids"] = get_rope_index(
+#       inputs["input_ids"],
+#       image_grid_thw=inputs.get("image_grid_thw"),
+#       video_grid_thw=inputs.get("video_grid_thw"),
+#       spatial_merge_size=self.spatial_merge_size,
+#       image_token_id=self.image_token_id,
+#       video_token_id=self.video_token_id,
+#       vision_start_token_id=self.vision_start_token_id
+#     )
+#     inputs.pop("attention_mask")
+#     return inputs
+  
+#   def _gen_pad_input(self, pad_len):
+#     text = "<|endoftext|>" * pad_len
+#     inputs = self.processor.tokenizer(text)
+#     inputs["input_ids"] = torch.tensor([inputs["input_ids"]], dtype=torch.int64) # shape=[1, N], for get_rope_index
+#     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
+#     inputs["position_ids"] = get_rope_index(
+#       inputs["input_ids"],
+#       spatial_merge_size=self.spatial_merge_size,
+#       image_token_id=self.image_token_id,
+#       video_token_id=self.video_token_id,
+#       vision_start_token_id=self.vision_start_token_id
+#     )
+#     inputs.pop("attention_mask")
+#     return inputs
+  
+#   def _gen_img_pad(self):
+#     """
+#     append an image, to trigger vit for pure text sample
+#     return 6 token: vstart, 4 * image_token, vend
+#     """
+#     text = "<|vision_start|><|image_pad|><|vision_end|>"
+#     pad_image = {
+#         "type": "image",
+#         "image": Image.new("RGB", (1, 1), (255, 255, 255))
+#     }
+
+#     self._fill_image_block(pad_image, sample_dict={}, conf={
+#         "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
+#         "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
+#         "video_nframe": self.video_nframe,
+#         "video_fps": self.video_fps,
+#         "video_min_frames": self.video_min_frames,
+#         "video_max_frames": self.video_max_frames
+#     })
+#     image_inputs, _ = process_vision_info(vision_infos=[pad_image])
+#     inputs = self.processor(
+#         text=text,
+#         images=image_inputs,
+#         videos=None,
+#         return_tensors="pt"
+#     )
+
+#     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
+#     inputs["position_ids"] = get_rope_index(
+#         inputs["input_ids"],
+#         image_grid_thw=inputs.get("image_grid_thw"),
+#         video_grid_thw=inputs.get("video_grid_thw"),
+#         spatial_merge_size=self.spatial_merge_size,
+#         image_token_id=self.image_token_id,
+#         video_token_id=self.video_token_id,
+#         vision_start_token_id=self.vision_start_token_id
+#     )
+
+#     inputs.pop("attention_mask")
+#     return inputs
+
+#   def _process(self, sample, source_name=None):
+#     # self._may_filter(sample)
+
+#     # get data format
+#     if "messages" in sample["json"] or "message" in sample["json"]:
+#       data_format = "chatml"
+#     elif "segments" in sample["json"]:
+#       data_format = "completion"
+#     else:
+#       raise NotImplementedError(f"Unsupported dataset format.")
+    
+#     source_conf = {
+#       "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
+#       "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
+#       "video_nframe": self.video_nframe,
+#       "video_fps": self.video_fps,
+#       "video_min_frames": self.video_min_frames,
+#       "video_max_frames": self.video_max_frames
+#     }
+
+#     if source_name != None and source_name in self.datasource_config:
+#       for key in source_conf:
+#         if key in self.datasource_config[source_name]:
+#           source_conf[key] = self.datasource_config[source_name][key]
+    
+#     for retry in range(self.max_retry):
+#       if data_format == "chatml":
+#         inputs = self._process_chat(sample, source_conf)
+#       elif data_format == "completion":
+#         inputs = self._process_completion(sample, source_conf)
+#       else:
+#         raise NotImplementedError(
+#             f"Unsupported dataset format `{data_format}`")
+
+#       if not inputs:
+#         raise ValueError("Empty inputs, skip")
+
+#       if inputs["input_ids"].shape[-1] > self.max_length:
+#         source_conf["max_visual_tokens_per_image"] = (
+#             source_conf["max_visual_tokens_per_image"] * self.shrink_ratio)
+#         continue
+#       else:
+#         assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"
+#         return inputs
+#     else:
+#       raise ValueError(
+#           f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
+#       )
+  
+#   def _append_sample_packing(self,
+#                              inputs: Dict[str, torch.Tensor],
+#                              packed_input_ids: List[torch.Tensor],
+#                              packed_position_ids: List[torch.Tensor],
+#                              packed_loss_mask: List[torch.Tensor],
+#                              packed_pixel_values: List[torch.Tensor],
+#                              packed_pixel_values_videos: List[torch.Tensor],
+#                              packed_image_gird_thw: List[torch.Tensor],
+#                              packed_video_grid_thw: List[torch.Tensor],
+#                              packed_sample_idx: List[torch.Tensor],
+#                              cu_seqlens: List[int],
+#                              sample_idx: Optional[int] = None):
+
+#     packed_input_ids.append(inputs["input_ids"].flatten())
+#     packed_loss_mask.append(inputs["loss_mask"].flatten())
+#     packed_position_ids.append(inputs["position_ids"])
+#     if sample_idx is None:
+#       sample_idx = len(cu_seqlens) - 1
+#     packed_sample_idx.append(
+#       torch.full_like(packed_input_ids[-1], sample_idx))
+
+#     if "pixel_values" in inputs:
+#       packed_pixel_values.append(inputs["pixel_values"])
+#       packed_image_gird_thw.append(inputs["image_grid_thw"])
+#     if "pixel_values_videos" in inputs:
+#       packed_pixel_values_videos.append(inputs["pixel_values_videos"])
+#       packed_video_grid_thw.append(inputs["video_grid_thw"])
+#     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
+#     return len(inputs["input_ids"][0])
+
+#   def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
+#     packed_input_ids: List[torch.Tensor] = []
+#     packed_position_ids: List[torch.Tensor] = []
+#     packed_loss_mask: List[torch.Tensor] = []
+#     packed_pixel_values: List[torch.Tensor] = []
+#     packed_pixel_values_videos: List[torch.Tensor] = []
+#     packed_image_gird_thw: List[torch.Tensor] = []
+#     packed_video_grid_thw: List[torch.Tensor] = []
+#     packed_sample_idx: List[torch.Tensor] = []
+#     cu_seqlens: List[int] = [0]
+
+#     valid_seq_len = 0
+#     for _, inputs in enumerate(buffer):
+#       valid_seq_len += self._append_sample_packing(inputs,
+#                                       packed_input_ids,
+#                                       packed_position_ids,
+#                                       packed_loss_mask,
+#                                       packed_pixel_values,
+#                                       packed_pixel_values_videos,
+#                                       packed_image_gird_thw,
+#                                       packed_video_grid_thw,
+#                                       packed_sample_idx,
+#                                       cu_seqlens)
+
+#     # append a pad image sequence to trigger ViT
+#     image_pad = self._gen_img_pad()
+#     self._append_sample_packing(image_pad,
+#                                 packed_input_ids,
+#                                 packed_position_ids,
+#                                 packed_loss_mask,
+#                                 packed_pixel_values,
+#                                 packed_pixel_values_videos,
+#                                 packed_image_gird_thw,
+#                                 packed_video_grid_thw,
+#                                 packed_sample_idx,
+#                                 cu_seqlens,
+#                                 sample_idx=-1)
+
+#     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
+#     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
+#     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
+#     packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
+#     packed_pixel_values = None if len(packed_pixel_values) == 0 else \
+#       torch.cat(packed_pixel_values, dim=0)
+#     packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else \
+#       torch.cat(packed_image_gird_thw, dim=0)
+#     packed_pixel_values_videos = \
+#       None if len(packed_pixel_values_videos) == 0 else \
+#         torch.cat(packed_pixel_values_videos, dim=0)
+#     packed_video_grid_thw = None if len(packed_video_grid_thw) == 0 else \
+#       torch.cat(packed_video_grid_thw, dim=0)
+
+#     # pad seq len to multiple_of
+#     if (
+#       self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
+#     ):
+#       padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+#       packed_input_ids = F.pad(
+#         packed_input_ids, (0, padding_len),
+#         value=self.processor.tokenizer.pad_token_id)
+#       packed_sample_idx = F.pad(
+#         packed_sample_idx, (0, padding_len), value=-1)
+#       packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
+#       packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
+#       cu_seqlens.append(cu_seqlens[-1] + padding_len)
+
+#     inputs = {
+#       "input_ids": packed_input_ids,
+#       "position_ids": packed_position_ids,
+#       "loss_mask": packed_loss_mask,
+#       "pixel_values": packed_pixel_values,
+#       "image_grid_thw": packed_image_gird_thw,
+#       "pixel_values_videos": packed_pixel_values_videos,
+#       "video_grid_thw": packed_video_grid_thw,
+#       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
+#       "sample_idx": packed_sample_idx.to(torch.int32)
+#     }
+#     return inputs
+
+#   def __iter__(self):
+#     buffer = []
+#     source_list = []
+#     cur_length = 0
+
+#     for sample in self.dataset:
+#       sample_key = sample["__key__"] if "__key__" in sample else ""
+#       sample_url = sample["__url__"] if "__url__" in sample else ""
+#       try:
+#         source_name = sample["json"]["source"]
+#         # WARN: ugly code, for dirty dataset.
+#         if source_name.startswith("PDFA"):
+#           source_name = "PDFA"
+#         elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+#           source_name = source_name.split("/")[4]
+#       except:
+#         source_name = "None"
+
+#       self.source_sample_cnt.setdefault(source_name, 0)
+#       self.source_sample_cnt[source_name] += 1
+
+#       try:
+#         inputs = self._process(sample, source_name)
+#       except:
+#         self.source_error_cnt.setdefault(source_name, 0)
+#         self.source_error_cnt[source_name] += 1
+#         error_ratio = self.source_error_cnt[source_name] * 1.0 / \
+#           self.source_sample_cnt[source_name]
+#         logger.error(
+#           f"ChatCompletionVisionDataset process sample error. "
+#           f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
+#           f"errmsg={traceback.format_exc()}")
+#         continue
+
+#       sample_length = inputs["input_ids"].shape[-1]
+#       if cur_length + sample_length > self.max_length:
+#         packed_inputs = self._packing(buffer)
+#         packed_inputs["data_source"] = source_list
+#         buffer = [inputs]
+#         source_list = [source_name]
+#         cur_length = sample_length
+
+#         # skip pure text sample
+#         # 有pad image，原则上不会出现纯文本输入
+#         if packed_inputs["pixel_values"] is None and \
+#             packed_inputs["pixel_values_videos"] is None:
+#           logger.warning("Skip pure text sample.")
+#           continue
+
+#         # skip 0 label pack
+#         if packed_inputs["loss_mask"].sum() == 0:
+#           logger.warning("Skip 0 lable sample.")
+#           continue
+
+#         yield packed_inputs
+
+#       else:
+#         buffer.append(inputs)
+#         source_list.append(source_name)
+#         cur_length += sample_length
