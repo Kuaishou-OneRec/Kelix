@@ -140,7 +140,6 @@ class Qwen2VLInputBuilder:
         for image_str in block["video"]
       ]
       for image_block in block["video"]:
-        print(image_block)
         self.fill_image_block(image_block, sample, **kwargs)
 
 
