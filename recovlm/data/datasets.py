@@ -42,7 +42,7 @@ from recovlm.training.parallel import get_sequence_parallel_group, \
 from recovlm.utils.common import print_rank_0, Timer
 
 import glob
-
+from recovlm.utils.common import shell_hdfs_ls, load_parquet_file
 from .templates import get_template
 from .prompts import PromptLoader
 
