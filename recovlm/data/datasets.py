@@ -2744,6 +2744,10 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     packed_video_grid_thw = None if len(packed_video_grid_thw) == 0 else \
       torch.cat(packed_video_grid_thw, dim=0)
 
+    packed_image_flags = None if len(packed_image_flags) == 0 else \
+      torch.cat(packed_image_flags, dim=0)
+
+
     # pad seq len to multiple_of
     if (
       self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
