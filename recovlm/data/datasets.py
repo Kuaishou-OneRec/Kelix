@@ -2516,7 +2516,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         else:
           raise ValueError(f"sample process error, unsupport value type: {block['type']}")
 
-    print(len(messages['json']['messages']))
+    print(messages['json'])
+    turn  = messages.get('json').get('messages',None)
+    print(turn)
 
     text = self.tokenizer.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
