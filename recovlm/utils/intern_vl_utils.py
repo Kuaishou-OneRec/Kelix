@@ -156,7 +156,6 @@ BOX_START_TOKEN = '<box>'
 BOX_END_TOKEN = '</box>'
 
 def preprocess_internvl(
-        messages
         template_name,
         sources,
         tokenizer: transformers.PreTrainedTokenizer,
