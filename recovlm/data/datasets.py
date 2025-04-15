@@ -2386,7 +2386,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     # Ensure that there is only one patch if dynamic image size is not enabled
     num_patches = pixel_values.size(0)
-    print(num_patchs)
+    print(num_patches)
 
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
