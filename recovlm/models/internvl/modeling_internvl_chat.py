@@ -11,8 +11,8 @@ import torch.distributed as dist
 import torch.utils.checkpoint
 import transformers
 from .conversation import get_conv_template
-from internvl.model.internlm2.modeling_internlm2 import InternLM2ForCausalLM
-from internvl.model.phi3.modeling_phi3 import Phi3ForCausalLM
+# from internvl.model.internlm2.modeling_internlm2 import InternLM2ForCausalLM
+# from internvl.model.phi3.modeling_phi3 import Phi3ForCausalLM
 from peft import LoraConfig, get_peft_model
 from torch import nn
 from torch.nn import CrossEntropyLoss
