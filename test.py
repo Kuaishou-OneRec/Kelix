@@ -1,32 +1,32 @@
-# import torch
-# from transformers import AutoTokenizer, AutoModel
-# from recovlm.models.intern_vl_3 import InternVLChatModel,InternVLChatConfig
-# from recovlm.training.common import set_default_dtype
-# from recovlm.data.dataloaders_v2 import get_dataloader
-# #from recovlm.data.dataloaders import get_dataloader
-# from torch.utils.data import DataLoader
-# import json
-# import itertools
-# from typing import Tuple
-# from rich import print
-# import time
-# import torch
-# import random
-# import numpy as np
-# from pathlib import Path
-# from transformers import set_seed as set_transformers_seed
-# import torch.distributed as dist
-# import pickle
-# import traceback
-# import subprocess
-# import os
-# try:
-#     from infra.perflog import create_perf_context
-#     INFRA_AVAILABLE = True
-# except ImportError:
-#     INFRA_AVAILABLE = False
-#     print("Warning: infra module not available, heart_beat functionality will be disabled")
-# import pyarrow.parquet as pq
+import torch
+from transformers import AutoTokenizer, AutoModel
+from recovlm.models.intern_vl_3 import InternVLChatModel,InternVLChatConfig
+from recovlm.training.common import set_default_dtype
+from recovlm.data.dataloaders_v2 import get_dataloader
+#from recovlm.data.dataloaders import get_dataloader
+from torch.utils.data import DataLoader
+import json
+import itertools
+from typing import Tuple
+from rich import print
+import time
+import torch
+import random
+import numpy as np
+from pathlib import Path
+from transformers import set_seed as set_transformers_seed
+import torch.distributed as dist
+import pickle
+import traceback
+import subprocess
+import os
+try:
+    from infra.perflog import create_perf_context
+    INFRA_AVAILABLE = True
+except ImportError:
+    INFRA_AVAILABLE = False
+    print("Warning: infra module not available, heart_beat functionality will be disabled")
+import pyarrow.parquet as pq
 
 # def print_rank_n(*msg, rank=0):
 #   if dist.get_rank() == rank:
@@ -185,14 +185,14 @@
 # #     model = InternVLChatModel.from_pretrained(
 # #             path,
 # #             use_flash_attn=True)
-# base_model_dir = '/llm_reco/penghao03/intern-vl/InternVL3-2B'
+base_model_dir = '/llm_reco/penghao03/intern-vl/InternVL3-2B'
 
-# tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
-# model_config = InternVLChatConfig.from_pretrained(base_model_dir)
-# path_size = model_config.vision_config.patch_size
-# image_size = model_config.force_image_size
+tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
+model_config = InternVLChatConfig.from_pretrained(base_model_dir)
+path_size = model_config.vision_config.patch_size
+image_size = model_config.force_image_size
 
-# print(tokenizer.special_tokens_map)
+print(tokenizer.special_tokens_map)
 
 
 
@@ -236,68 +236,70 @@
 # # from recovlm.models.intern_vl_3 import InternVLChatModel
 
 
-from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer, AutoProcessor
-from qwen_vl_utils import process_vision_info
+# from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer, AutoProcessor
+# from qwen_vl_utils import process_vision_info
 
 
-path = '/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct'
-# default: Load the model on the available device(s)
-# model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-#     path, torch_dtype="auto", device_map="auto"
-# )
+# path = '/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct'
+# # default: Load the model on the available device(s)
+# # model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+# #     path, torch_dtype="auto", device_map="auto"
+# # )
 
-# We recommend enabling flash_attention_2 for better acceleration and memory saving, especially in multi-image and video scenarios.
-# model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-#     "Qwen/Qwen2.5-VL-7B-Instruct",
-#     torch_dtype=torch.bfloat16,
-#     attn_implementation="flash_attention_2",
-#     device_map="auto",
-# )
+# # We recommend enabling flash_attention_2 for better acceleration and memory saving, especially in multi-image and video scenarios.
+# # model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+# #     "Qwen/Qwen2.5-VL-7B-Instruct",
+# #     torch_dtype=torch.bfloat16,
+# #     attn_implementation="flash_attention_2",
+# #     device_map="auto",
+# # )
 
-# default processer
-processor = AutoProcessor.from_pretrained(path)
+# # default processer
+# processor = AutoProcessor.from_pretrained(path)
 
-# The default range for the number of visual tokens per image in the model is 4-16384.
-# You can set min_pixels and max_pixels according to your needs, such as a token range of 256-1280, to balance performance and cost.
-# min_pixels = 256*28*28
-# max_pixels = 1280*28*28
-# processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
+# # The default range for the number of visual tokens per image in the model is 4-16384.
+# # You can set min_pixels and max_pixels according to your needs, such as a token range of 256-1280, to balance performance and cost.
+# # min_pixels = 256*28*28
+# # max_pixels = 1280*28*28
+# # processor = AutoProcessor.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
 
-messages = [
-    {
-        "role": "user",
-        "content": [
-            {
-                "type": "image",
-                "image": "/llm_reco/penghao03/demo.jpeg",
-            },
-            {"type": "text", "text": "Describe this image."},
-        ],
-    }
-]
-
-# Preparation for inference
-text = processor.apply_chat_template(
-    messages, tokenize=False, add_generation_prompt=True
-)
-print(text)
-image_inputs, video_inputs = process_vision_info(messages)
-inputs = processor(
-    text=[text],
-    images=image_inputs,
-    videos=video_inputs,
-    padding=True,
-    return_tensors="pt",
-)
-inputs = inputs.to("cuda")
-print(inputs.keys())
-
-# # Inference: Generation of the output
-# generated_ids = model.generate(**inputs, max_new_tokens=128)
-# generated_ids_trimmed = [
-#     out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+# messages = [
+#     {
+#         "role": "user",
+#         "content": [
+#             {
+#                 "type": "image",
+#                 "image": "/llm_reco/penghao03/demo.jpeg",
+#             },
+#             {"type": "text", "text": "Describe this image."},
+#         ],
+#     }
 # ]
-# output_text = processor.batch_decode(
-#     generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+
+# # Preparation for inference
+# text = processor.apply_chat_template(
+#     messages, tokenize=False, add_generation_prompt=True
 # )
-# print(output_text)
+# print(text)
+# image_inputs, video_inputs = process_vision_info(messages)
+# inputs = processor(
+#     text=[text],
+#     images=image_inputs,
+#     videos=video_inputs,
+#     padding=True,
+#     return_tensors="pt",
+# )
+# inputs = inputs.to("cuda")
+# print(inputs.keys())
+# add_bos_token = getattr(processor.tokenizer, 'add_bos_token', False)
+# print(add_bos_token)
+
+# # # Inference: Generation of the output
+# # generated_ids = model.generate(**inputs, max_new_tokens=128)
+# # generated_ids_trimmed = [
+# #     out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+# # ]
+# # output_text = processor.batch_decode(
+# #     generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+# # )
+# # print(output_text)

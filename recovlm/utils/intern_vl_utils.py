@@ -197,6 +197,9 @@ def preprocess_internvl(
 
     if add_bos_token:  # for InternLM series
         input_ids = [item[1:] for item in input_ids]
+    
+    #add eos token
+    
 
     final_input_ids, final_targets = [], []
     ignore_ids = tokenizer('<|im_start|>assistant\n', return_tensors='np').input_ids[0]
@@ -225,6 +228,7 @@ def preprocess_internvl(
 
     input_ids = input_ids.unsqueeze(0)
     targets = targets.unsqueeze(0)
+    
 
     return dict(
         input_ids=input_ids,

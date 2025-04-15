@@ -2537,34 +2537,20 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
             value += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
           elif turn['type']=='text':
             value += turn['text']
-        new_converations.append({'role':'user','value':value})
+        new_conversations.append({'role':'user','value':value})
 
       elif conversation['role'] == 'assistant':
-        new_converations.append({'role':'assistant','value':conversation['content']['text']})
+        new_conversations.append({'role':'assistant','value':conversation['content']['text']})
       else:
         raise NotImplementedError
 
-    print(new_converations)
-    inputs = preprocess_internvl(new_converations,self.tokenizer)
+    print(new_conversations)
+    inputs = preprocess_internvl(new_conversations,self.tokenizer)
     print(inputs)
 
     pixel_values = [self.transform(image) for image in images]
     pixel_values = torch.stack(pixel_values)
 
-
-    text = self.tokenizer.apply_chat_template(
-      messages, tokenize=False, add_generation_prompt=False
-    )
-
-    # append EOS token
-    text += "<|endoftext|>"
-    image_inputs, video_inputs = process_vision_info(messages)
-    inputs = self.processor(
-        text=text,
-        images=image_inputs,
-        videos=video_inputs,
-        return_tensors="pt"
-    )
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
