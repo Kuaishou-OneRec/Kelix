@@ -2533,6 +2533,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         for turn in content:
           if turn['type']=='image':
             images += [image for image in turn['images']]
+            num_image_tokens = self.visual_tokens_per_image * len(turn['images'])
             value += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
           elif turn['type']=='text':
             value += turn['text']
