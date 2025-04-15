@@ -13,7 +13,7 @@ import transformers
 from .conversation import get_conv_template
 # from internvl.model.internlm2.modeling_internlm2 import InternLM2ForCausalLM
 # from internvl.model.phi3.modeling_phi3 import Phi3ForCausalLM
-from peft import LoraConfig, get_peft_model
+#from peft import LoraConfig, get_peft_model
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from transformers import (AutoModel, GenerationConfig, LlamaForCausalLM,
@@ -117,27 +117,27 @@ class InternVLChatModel(PreTrainedModel):
         self.vision_model = get_peft_model(self.vision_model, lora_config)
         self.vision_model.print_trainable_parameters()
 
-    def wrap_llm_lora(self, r=128, lora_alpha=256, lora_dropout=0.05):
-        # Determine the target modules based on the architecture of the language model
-        if self.llm_arch_name == 'InternLM2ForCausalLM':
-            target_modules = ['attention.wqkv', 'attention.wo', 'feed_forward.w1', 'feed_forward.w2', 'feed_forward.w3']
-        elif self.llm_arch_name == 'Phi3ForCausalLM':
-            target_modules = ['mlp.down_proj', 'mlp.gate_up_proj', 'self_attn.o_proj', 'self_attn.qkv_proj']
-        elif self.llm_arch_name in ['Qwen2ForCausalLM', 'LlamaForCausalLM']:
-            target_modules = ['self_attn.q_proj', 'self_attn.k_proj', 'self_attn.v_proj', 'self_attn.o_proj',
-                              'mlp.gate_proj', 'mlp.down_proj', 'mlp.up_proj']
-        else:
-            raise NotImplemented
-        lora_config = LoraConfig(
-            r=r,
-            target_modules=target_modules,
-            lora_alpha=lora_alpha,
-            lora_dropout=lora_dropout,
-            task_type='CAUSAL_LM'
-        )
-        self.language_model = get_peft_model(self.language_model, lora_config)
-        self.language_model.enable_input_require_grads()
-        self.language_model.print_trainable_parameters()
+    # def wrap_llm_lora(self, r=128, lora_alpha=256, lora_dropout=0.05):
+    #     # Determine the target modules based on the architecture of the language model
+    #     if self.llm_arch_name == 'InternLM2ForCausalLM':
+    #         target_modules = ['attention.wqkv', 'attention.wo', 'feed_forward.w1', 'feed_forward.w2', 'feed_forward.w3']
+    #     elif self.llm_arch_name == 'Phi3ForCausalLM':
+    #         target_modules = ['mlp.down_proj', 'mlp.gate_up_proj', 'self_attn.o_proj', 'self_attn.qkv_proj']
+    #     elif self.llm_arch_name in ['Qwen2ForCausalLM', 'LlamaForCausalLM']:
+    #         target_modules = ['self_attn.q_proj', 'self_attn.k_proj', 'self_attn.v_proj', 'self_attn.o_proj',
+    #                           'mlp.gate_proj', 'mlp.down_proj', 'mlp.up_proj']
+    #     else:
+    #         raise NotImplemented
+    #     lora_config = LoraConfig(
+    #         r=r,
+    #         target_modules=target_modules,
+    #         lora_alpha=lora_alpha,
+    #         lora_dropout=lora_dropout,
+    #         task_type='CAUSAL_LM'
+    #     )
+    #     self.language_model = get_peft_model(self.language_model, lora_config)
+    #     self.language_model.enable_input_require_grads()
+    #     self.language_model.print_trainable_parameters()
 
     def forward(
             self,
