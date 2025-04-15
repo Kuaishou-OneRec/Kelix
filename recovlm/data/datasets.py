@@ -2387,7 +2387,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     # Ensure that there is only one patch if dynamic image size is not enabled
     num_patches = pixel_values.size(0)
     print(num_patchs)
-    
+
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
                         conf: Dict[str, Any]):
@@ -2501,8 +2501,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     )
     inputs.pop("attention_mask")
     return inputs
-  def _preprocess_internvl(self,messages):
-    
     
 
   def _process_chat(self,

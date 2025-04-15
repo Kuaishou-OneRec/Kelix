@@ -143,3 +143,104 @@ def build_transform(is_train, input_size, pad2square=False, normalize_type='imag
             ])
 
     return transform
+
+def preprocess_internvl(
+        template_name,
+        sources,
+        tokenizer: transformers.PreTrainedTokenizer,
+        num_image_token_list: list,
+        text_only: bool = False,
+        group_by_length: bool = False,
+        use_packed_ds: bool = False,
+        ds_name: str = None,
+        num_image: int = 1
+) -> Dict:
+    assert len(sources) == 1, 'process only the first conversations'
+    conversations = sources[0]
+
+    if conversations[0]['from'] == 'system':
+        system_prompt = conversations[0]['value']
+        conversations = conversations[1:]  # remove system prompt
+    else:
+        conv = get_conv_template(template_name)
+        system_prompt = conv.system_message
+        # system_prompt = None
+
+    if not text_only:
+        new_conversations = []
+        current_image_idx = 0
+        for conversation in conversations:
+            if conversation['from'] == 'human':
+                image_cnt = conversation['value'].count('<image>')
+                for i in range(image_cnt):
+                    if current_image_idx == num_image:
+                        break
+                    image_tokens = f'{IMG_START_TOKEN}{IMG_CONTEXT_TOKEN * num_image_token_list[current_image_idx]}{IMG_END_TOKEN}'
+                    conversation['value'] = conversation['value'].replace('<image>', image_tokens, 1)
+                    current_image_idx += 1
+            new_conversations.append(conversation)
+        conversations = new_conversations
+        assert current_image_idx == num_image, f'{current_image_idx} != {num_image}'
+
+    batches, roles = [], []
+    if system_prompt is not None:
+        batches.append(f'<|im_start|>system\n{system_prompt}<|im_end|>\n')
+        roles.append('system')
+    for conversation in conversations:
+        if conversation['from'] == 'human':
+            batches.append(f'<|im_start|>user\n{conversation["value"]}<|im_end|>\n')
+            roles.append('human')
+        elif conversation['from'] == 'gpt':
+            batches.append(f'<|im_start|>assistant\n{conversation["value"]}<|im_end|>\n')
+            roles.append('gpt')
+        else:
+            raise NotImplementedError
+
+    add_bos_token = getattr(tokenizer, 'add_bos_token', False)
+    if add_bos_token:  # for InternLM series
+        batches[0] = tokenizer.bos_token + batches[0]
+
+    # Tokenize conversations
+    input_ids = tokenizer(
+        batches,
+        return_tensors='np',
+        padding=False,
+        max_length=tokenizer.model_max_length,
+        truncation=False,
+    ).input_ids
+
+    if add_bos_token:  # for InternLM series
+        input_ids = [item[1:] for item in input_ids]
+
+    final_input_ids, final_targets = [], []
+    ignore_ids = tokenizer('<|im_start|>assistant\n', return_tensors='np').input_ids[0]
+    ignore_len = ignore_ids.shape[0] - 1 if add_bos_token else ignore_ids.shape[0]
+    for role, input_id in zip(roles, input_ids):
+        final_input_ids.append(input_id)
+        if role == 'system' or role == 'human':
+            final_targets.append(np.full(input_id.shape, IGNORE_TOKEN_ID))  # ignore
+        elif role == 'gpt':
+            target = input_id.copy()
+            target[:ignore_len] = IGNORE_TOKEN_ID  # ignore loss for `<|im_start|>assistant\n`
+            target[-1:] = IGNORE_TOKEN_ID  # ignore loss for `\n`
+            final_targets.append(target)
+        else:
+            raise NotImplementedError
+    input_ids = torch.tensor(np.concatenate(final_input_ids))[:tokenizer.model_max_length]
+    targets = torch.tensor(np.concatenate(final_targets))[:tokenizer.model_max_length]
+
+    padding = False if group_by_length or use_packed_ds else True
+    if padding:
+        current_length = input_ids.size(0)
+        padding_length = tokenizer.model_max_length - current_length
+        input_ids = F.pad(input_ids, (0, padding_length), value=tokenizer.pad_token_id)
+        targets = F.pad(targets, (0, padding_length), value=IGNORE_TOKEN_ID)
+
+    input_ids = input_ids.unsqueeze(0)
+    targets = targets.unsqueeze(0)
+
+    return dict(
+        input_ids=input_ids,
+        labels=targets,
+        attention_mask=input_ids.ne(tokenizer.pad_token_id),
+    )
