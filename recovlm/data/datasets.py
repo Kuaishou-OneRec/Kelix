@@ -2270,7 +2270,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.tokenizer = tokenizer
     self.max_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
     self.min_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
-    print(max_visual_tokens_per_image,min_visual_tokens_per_image)
+    print("max_visual_tokens_per_image:",max_visual_tokens_per_image,"min_visual_tokens_per_image:",min_visual_tokens_per_image,
+        "image_size:",image_size,'path_size:',patch_size)
     self.video_nframe = video_nframe
     self.video_fps = video_fps
     self.video_min_frames = video_min_frames
@@ -2516,9 +2517,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         else:
           raise ValueError(f"sample process error, unsupport value type: {block['type']}")
 
-    print(messages['json'])
-    turn  = messages.get('json').get('messages',None)
-    print(turn)
+    print(messages)
 
     text = self.tokenizer.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
@@ -2630,7 +2629,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
   def _process(self, sample, source_name=None):
     # self._may_filter(sample)
-    print(sample)
     # get data format
     if "messages" in sample["json"] or "message" in sample["json"]:
       data_format = "chatml"
