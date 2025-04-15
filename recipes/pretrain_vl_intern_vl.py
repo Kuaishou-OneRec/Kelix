@@ -521,6 +521,8 @@ def train():
     position_ids = batch.get("position_ids", None)
     image_flags = batch['image_flags']
 
+    print(pixel_values.dtype)
+
     # 打印 token 数量
     token_count = input_ids.numel()  # 计算 token 数量
     print_rank_0(f"Iteration {acc_step}: Token count = {token_count}")
