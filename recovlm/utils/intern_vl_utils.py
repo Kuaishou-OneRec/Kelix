@@ -213,11 +213,14 @@ def preprocess_internvl(
             final_targets.append(target)
         else:
             raise NotImplementedError
-    input_ids = torch.tensor(np.concatenate(final_input_ids))[:tokenizer.model_max_length]
-    targets = torch.tensor(np.concatenate(final_targets))[:tokenizer.model_max_length]
-    
-    input_ids = input_ids.unsqueeze(0)
-    targets = targets.unsqueeze(0)
+    try:
+        input_ids = torch.tensor(np.concatenate(final_input_ids))
+        targets = torch.tensor(np.concatenate(final_targets))
+
+        input_ids = input_ids.unsqueeze(0)
+        targets = targets.unsqueeze(0)
+    except:
+        print(final_input_ids)
     
 
     return dict(
