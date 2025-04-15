@@ -2296,13 +2296,10 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.sampling_method = sampling_method
     self.normalize_type = normalize_type
     self.use_thumbnail = use_thumbnail
-    # self.image_token_id = image_token_id
-    # self.video_token_id = video_token_id
-    # self.vision_start_token_id = vision_start_token_id
-    # self.vision_end_token_id = vision_end_token_id
-    # self.pad_token_id = pad_token_id
-    # self.patch_size = patch_size
-    # Pad sequence to multiple of `multiple_of`
+
+    self.img_context_token = '<IMG_CONTEXT>'
+    self.img_start_token = '<img>'
+    self.img_end_token = '</img>'
 
     self.transform = self.get_transform()
 
@@ -2381,12 +2378,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     block["image"] = image
     block['images'] = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=self.max_dynamic_patch,
                                         image_size=self.image_size, use_thumbnail=self.use_thumbnail)
-    pixel_values = [self.transform(image) for image in block['images']]
-    pixel_values = torch.stack(pixel_values)
-
-    # Ensure that there is only one patch if dynamic image size is not enabled
-    num_patches = pixel_values.size(0)
-    print(num_patches)
+    
 
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
@@ -2528,8 +2520,27 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         else:
           raise ValueError(f"sample process error, unsupport value type: {block['type']}")
 
+    images = []
+    num_image_token_list = []
+    image_tokens = ''
+    for conversation in messages:
+      if conversation['role'] == 'user':
+        content = conversation['content']
+        for turn in content:
+          if turn['type']=='image':
+            images += [image for i in turn['images']]
+            num_image_tokens = self.visual_tokens_per_image*len(turn['images'])
+            image_tokens += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
+          elif turn['type']=='text':
+            turn['text']+=image_tokens
+
     print(messages)
-    
+    pixel_values = [self.transform(image) for image in images]
+    pixel_values = torch.stack(pixel_values)
+
+
+
+
     text = self.tokenizer.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
     )
