@@ -281,15 +281,16 @@ text = processor.apply_chat_template(
     messages, tokenize=False, add_generation_prompt=True
 )
 print(text)
-# image_inputs, video_inputs = process_vision_info(messages)
-# inputs = processor(
-#     text=[text],
-#     images=image_inputs,
-#     videos=video_inputs,
-#     padding=True,
-#     return_tensors="pt",
-# )
-# inputs = inputs.to("cuda")
+image_inputs, video_inputs = process_vision_info(messages)
+inputs = processor(
+    text=[text],
+    images=image_inputs,
+    videos=video_inputs,
+    padding=True,
+    return_tensors="pt",
+)
+inputs = inputs.to("cuda")
+print(inputs.keys())
 
 # # Inference: Generation of the output
 # generated_ids = model.generate(**inputs, max_new_tokens=128)

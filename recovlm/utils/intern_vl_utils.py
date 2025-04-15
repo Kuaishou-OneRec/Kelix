@@ -17,6 +17,9 @@ from torch.utils.data import ConcatDataset, WeightedRandomSampler
 from torchvision.transforms.functional import InterpolationMode
 import transformers
 
+from transformers.trainer_pt_utils import LabelSmoother
+IGNORE_TOKEN_ID = LabelSmoother.ignore_index
+
 
 def find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, image_size):
     best_ratio_diff = float('inf')
@@ -162,59 +165,22 @@ from enum import IntEnum, auto
 from typing import Any, Dict, List, Tuple, Union
 
 def preprocess_internvl(
-        messages:list,
-        tokenizer: transformers.PreTrainedTokenizer,
-        num_image_token_list: list,
+        conversations:list,
+        tokenizer: transformers.PreTrainedTokenizer
 ) -> Dict:
     #'你是书生·万象，英文名是InternVL，是由上海人工智能实验室、清华大学及多家合作单位联合开发的多模态大语言模型。',
-    system_prompt = '<|im_start|>system\nYou are a helpful assistant.<|im_end|>'
+    system_prompt = 'You are a helpful assistant.'
     roles,batches = [],[]
-    for conversation in messages:
-        
-
-    for conversition in messages:
-      if conversition['role'] == 'user':
-
-
-
-    assert len(sources) == 1, 'process only the first conversations'
-    conversations = sources[0]
-
-    if conversations[0]['from'] == 'system':
-        system_prompt = conversations[0]['value']
-        conversations = conversations[1:]  # remove system prompt
-    else:
-        conv = get_conv_template(template_name)
-        system_prompt = conv.system_message
-        # system_prompt = None
-
-    if not text_only:
-        new_conversations = []
-        current_image_idx = 0
-        for conversation in conversations:
-            if conversation['from'] == 'human':
-                image_cnt = conversation['value'].count('<image>')
-                for i in range(image_cnt):
-                    if current_image_idx == num_image:
-                        break
-                    image_tokens = f'{IMG_START_TOKEN}{IMG_CONTEXT_TOKEN * num_image_token_list[current_image_idx]}{IMG_END_TOKEN}'
-                    conversation['value'] = conversation['value'].replace('<image>', image_tokens, 1)
-                    current_image_idx += 1
-            new_conversations.append(conversation)
-        conversations = new_conversations
-        assert current_image_idx == num_image, f'{current_image_idx} != {num_image}'
-
-    batches, roles = [], []
     if system_prompt is not None:
         batches.append(f'<|im_start|>system\n{system_prompt}<|im_end|>\n')
         roles.append('system')
     for conversation in conversations:
-        if conversation['from'] == 'human':
+        if conversation['role'] == 'user':
             batches.append(f'<|im_start|>user\n{conversation["value"]}<|im_end|>\n')
-            roles.append('human')
-        elif conversation['from'] == 'gpt':
+            roles.append('user')
+        elif conversation['role'] == 'assistant':
             batches.append(f'<|im_start|>assistant\n{conversation["value"]}<|im_end|>\n')
-            roles.append('gpt')
+            roles.append('assistant')
         else:
             raise NotImplementedError
 
@@ -222,12 +188,10 @@ def preprocess_internvl(
     if add_bos_token:  # for InternLM series
         batches[0] = tokenizer.bos_token + batches[0]
 
-    # Tokenize conversations
     input_ids = tokenizer(
         batches,
         return_tensors='np',
         padding=False,
-        max_length=tokenizer.model_max_length,
         truncation=False,
     ).input_ids
 
@@ -237,11 +201,12 @@ def preprocess_internvl(
     final_input_ids, final_targets = [], []
     ignore_ids = tokenizer('<|im_start|>assistant\n', return_tensors='np').input_ids[0]
     ignore_len = ignore_ids.shape[0] - 1 if add_bos_token else ignore_ids.shape[0]
+    
     for role, input_id in zip(roles, input_ids):
         final_input_ids.append(input_id)
-        if role == 'system' or role == 'human':
+        if role == 'system' or role == 'user':
             final_targets.append(np.full(input_id.shape, IGNORE_TOKEN_ID))  # ignore
-        elif role == 'gpt':
+        elif role == 'assistant':
             target = input_id.copy()
             target[:ignore_len] = IGNORE_TOKEN_ID  # ignore loss for `<|im_start|>assistant\n`
             target[-1:] = IGNORE_TOKEN_ID  # ignore loss for `\n`
@@ -251,12 +216,12 @@ def preprocess_internvl(
     input_ids = torch.tensor(np.concatenate(final_input_ids))[:tokenizer.model_max_length]
     targets = torch.tensor(np.concatenate(final_targets))[:tokenizer.model_max_length]
 
-    padding = False if group_by_length or use_packed_ds else True
-    if padding:
-        current_length = input_ids.size(0)
-        padding_length = tokenizer.model_max_length - current_length
-        input_ids = F.pad(input_ids, (0, padding_length), value=tokenizer.pad_token_id)
-        targets = F.pad(targets, (0, padding_length), value=IGNORE_TOKEN_ID)
+    # padding = False if group_by_length or use_packed_ds else True
+    # if padding:
+    #     current_length = input_ids.size(0)
+    #     padding_length = tokenizer.model_max_length - current_length
+    #     input_ids = F.pad(input_ids, (0, padding_length), value=tokenizer.pad_token_id)
+    #     targets = F.pad(targets, (0, padding_length), value=IGNORE_TOKEN_ID)
 
     input_ids = input_ids.unsqueeze(0)
     targets = targets.unsqueeze(0)

@@ -36,7 +36,7 @@ from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
-from recovlm.utils.intern_vl_utils import build_transform,dynamic_preprocess
+from recovlm.utils.intern_vl_utils import build_transform,dynamic_preprocess,preprocess_internvl
 
 from recovlm.models.intern_vl_3 import InternVLChatConfig
 
@@ -2520,27 +2520,35 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         else:
           raise ValueError(f"sample process error, unsupport value type: {block['type']}")
 
+
+    print(messages)
     images = []
     num_image_token_list = []
     image_tokens = ''
+    new_conversations = []
     for conversation in messages:
       if conversation['role'] == 'user':
+        value = ''
         content = conversation['content']
         for turn in content:
           if turn['type']=='image':
             images += [image for image in turn['images']]
-            num_image_tokens = self.visual_tokens_per_image*len(turn['images'])
-            image_tokens += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
+            value += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
           elif turn['type']=='text':
-            turn['text']+=image_tokens
+            value += turn['text']
+        new_converations.append({'role':'user','value':value})
 
-    print(messages)
-    
-    
+      elif conversation['role'] == 'assistant':
+        new_converations.append({'role':'assistant','value':conversation['content']['text']})
+      else:
+        raise NotImplementedError
+
+    print(new_converations)
+    inputs = preprocess_internvl(new_converations,self.tokenizer)
+    print(inputs)
+
     pixel_values = [self.transform(image) for image in images]
     pixel_values = torch.stack(pixel_values)
-
-
 
 
     text = self.tokenizer.apply_chat_template(
