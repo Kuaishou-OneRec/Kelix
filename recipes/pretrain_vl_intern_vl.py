@@ -24,7 +24,7 @@ from deepspeed.ops.adam import FusedAdam
 from transformers import AutoTokenizer
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
-from recovlm.models.intern_vl_3 import InternVLChatModel,replace_qwen2_attention_class
+from recovlm.models.internvl import InternVLChatModel,replace_qwen2_attention_class
 
 from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
 from recovlm.data.dataloaders import get_dataloader
@@ -302,7 +302,7 @@ def train():
 
   # enabled=False when zero stage < 3
   #replace_qwen2_attention_class()
-  
+
   with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config,
                            enabled=False):
     if args.model_type == 'intern-vl':

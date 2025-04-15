@@ -38,7 +38,7 @@ from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
 from recovlm.utils.intern_vl_utils import build_transform,dynamic_preprocess,preprocess_internvl
 
-from recovlm.models.intern_vl_3 import InternVLChatConfig
+from recovlm.models.internvl import InternVLChatConfig
 
 
 from recovlm.training.parallel import get_sequence_parallel_group, \
