@@ -1355,7 +1355,6 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
     assert self.max_length > 0
 
     self.datasource_config = datasource_config
-    print(f"datasource_config: {self.datasource_config}")
   
   def _build_source_dataset(self, sources):
     total_samples = 0
@@ -2245,6 +2244,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                max_dynamic_patch=12,
                sampling_method='rand',  # for video data
                normalize_type='imagenet',
+               use_thumbnail = True,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                **kargs):
     """
@@ -2271,8 +2271,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.max_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
     self.min_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
     self.visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
-    print("max_visual_tokens_per_image:",self.max_visual_tokens_per_image,"min_visual_tokens_per_image:",self.min_visual_tokens_per_image,
-        "visual_tokens_per_image :",self.visual_tokens_per_image ,"image_size:",image_size,'path_size:',patch_size,"down_sample_ratio:",down_sample_ratio)
+    # print("max_visual_tokens_per_image:",self.max_visual_tokens_per_image,"min_visual_tokens_per_image:",self.min_visual_tokens_per_image,
+    #     "visual_tokens_per_image :",self.visual_tokens_per_image ,"image_size:",image_size,'path_size:',patch_size,"down_sample_ratio:",down_sample_ratio)
     self.video_nframe = video_nframe
     self.video_fps = video_fps
     self.video_min_frames = video_min_frames
@@ -2295,6 +2295,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.max_dynamic_patch = max_dynamic_patch
     self.sampling_method = sampling_method
     self.normalize_type = normalize_type
+    self.use_thumbnail = use_thumbnail
     # self.image_token_id = image_token_id
     # self.video_token_id = video_token_id
     # self.vision_start_token_id = vision_start_token_id
@@ -2320,7 +2321,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     assert self.max_length > 0
 
     self.datasource_config = datasource_config
-    print(datasource_config)
 
   def get_transform(self):
       # Build transformation function
@@ -2379,6 +2379,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if image.mode != "RGB":
       image = image.convert("RGB")
     block["image"] = image
+    block['images'] = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=self.max_dynamic_patch,
+                                        image_size=self.image_size, use_thumbnail=self.use_thumbnail)
+                            
 
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
@@ -2521,6 +2524,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     print(messages)
     print(len(messages))
+    
     text = self.tokenizer.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
     )
