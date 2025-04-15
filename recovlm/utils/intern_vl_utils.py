@@ -144,6 +144,17 @@ def build_transform(is_train, input_size, pad2square=False, normalize_type='imag
 
     return transform
 
+
+IMG_CONTEXT_TOKEN = '<IMG_CONTEXT>'
+IMG_START_TOKEN = '<img>'
+IMG_END_TOKEN = '</img>'
+QUAD_START_TOKEN = '<quad>'
+QUAD_END_TOKEN = '</quad>'
+REF_START_TOKEN = '<ref>'
+REF_END_TOKEN = '</ref>'
+BOX_START_TOKEN = '<box>'
+BOX_END_TOKEN = '</box>'
+
 def preprocess_internvl(
         template_name,
         sources,

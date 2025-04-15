@@ -2381,7 +2381,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     block["image"] = image
     block['images'] = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=self.max_dynamic_patch,
                                         image_size=self.image_size, use_thumbnail=self.use_thumbnail)
-    pixel_values = [transform(image) for image in images]
+    pixel_values = [transform(image) for image in nums['images']]
     pixel_values = torch.stack(pixel_values)
 
     # Ensure that there is only one patch if dynamic image size is not enabled
