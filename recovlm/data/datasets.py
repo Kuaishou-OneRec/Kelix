@@ -2540,7 +2540,13 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         new_conversations.append({'role':'user','value':value})
 
       elif conversation['role'] == 'assistant':
-        new_conversations.append({'role':'assistant','value':conversation['content']['text']})
+        value = ''
+        content = conversation['content']
+        for turn in content:
+          if turn['type']=='text':
+            value += turn['text']
+            
+        new_conversations.append({'role':'assistant','value':value})
       else:
         raise NotImplementedError
 
