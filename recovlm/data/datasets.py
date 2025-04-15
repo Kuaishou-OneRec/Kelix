@@ -2271,8 +2271,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.max_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
     self.min_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
     self.visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
-    print("max_visual_tokens_per_image:",max_visual_tokens_per_image,"min_visual_tokens_per_image:",min_visual_tokens_per_image,
-        "visual_tokens_per_image :",visual_tokens_per_image ,"image_size:",image_size,'path_size:',patch_size,"down_sample_ratio:",down_sample_ratio)
+    print("max_visual_tokens_per_image:",self.max_visual_tokens_per_image,"min_visual_tokens_per_image:",self.min_visual_tokens_per_image,
+        "visual_tokens_per_image :",self.visual_tokens_per_image ,"image_size:",image_size,'path_size:',patch_size,"down_sample_ratio:",down_sample_ratio)
     self.video_nframe = video_nframe
     self.video_fps = video_fps
     self.video_min_frames = video_min_frames
@@ -2320,6 +2320,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     assert self.max_length > 0
 
     self.datasource_config = datasource_config
+    print(datasource_config)
 
   def get_transform(self):
       # Build transformation function
