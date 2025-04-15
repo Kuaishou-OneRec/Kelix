@@ -2553,8 +2553,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     pixel_values = [self.transform(image) for image in images]
     pixel_values = torch.stack(pixel_values)
     inputs["pixel_values"] = pixel_values
-    print(inputs["inputs_ids"].shape)
-    print(self.tokenizer.decode(inputs["inputs_ids"]))
+    print(inputs["input_ids"].shape)
+    print(self.tokenizer.decode(inputs["input_ids"]))
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
@@ -2581,16 +2581,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         raise ValueError(
           f"Unable to generate sample with 0 loss_mask."
         )
-
-    inputs["position_ids"] = get_rope_index(
-      inputs["input_ids"],
-      image_grid_thw=inputs.get("image_grid_thw"),
-      video_grid_thw=inputs.get("video_grid_thw"),
-      spatial_merge_size=self.spatial_merge_size,
-      image_token_id=self.image_token_id,
-      video_token_id=self.video_token_id,
-      vision_start_token_id=self.vision_start_token_id
-    )
+    position_ids = inputs['attention_mask'].long().cumsum(-1) - 1
+    position_ids.masked_fill_(ret['attention_mask'] == 0, 1)
+    inputs["position_ids"] = position_ids
     inputs.pop("attention_mask")
     return inputs
   
