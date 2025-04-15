@@ -10,9 +10,9 @@ from typing import List, Optional, Tuple, Union
 import torch.distributed as dist
 import torch.utils.checkpoint
 import transformers
-from intern_vl_3.conversation import get_conv_template
-from intern_vl_3.model.internlm2.modeling_internlm2 import InternLM2ForCausalLM
-from intern_vl_3.model.phi3.modeling_phi3 import Phi3ForCausalLM
+from .conversation import get_conv_template
+from internvl.model.internlm2.modeling_internlm2 import InternLM2ForCausalLM
+from internvl.model.phi3.modeling_phi3 import Phi3ForCausalLM
 from peft import LoraConfig, get_peft_model
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -72,13 +72,13 @@ class InternVLChatModel(PreTrainedModel):
         if language_model is not None:
             self.language_model = language_model
         else:
-            if config.llm_config.architectures[0] == 'LlamaForCausalLM':
-                self.language_model = LlamaForCausalLM(config.llm_config)
-            elif config.llm_config.architectures[0] == 'InternLM2ForCausalLM':
-                self.language_model = InternLM2ForCausalLM(config.llm_config)
-            elif config.llm_config.architectures[0] == 'Phi3ForCausalLM':
-                self.language_model = Phi3ForCausalLM(config.llm_config)
-            elif config.llm_config.architectures[0] == 'Qwen2ForCausalLM':
+            # if config.llm_config.architectures[0] == 'LlamaForCausalLM':
+            #     self.language_model = LlamaForCausalLM(config.llm_config)
+            # elif config.llm_config.architectures[0] == 'InternLM2ForCausalLM':
+            #     self.language_model = InternLM2ForCausalLM(config.llm_config)
+            # elif config.llm_config.architectures[0] == 'Phi3ForCausalLM':
+            #     self.language_model = Phi3ForCausalLM(config.llm_config)
+            if config.llm_config.architectures[0] == 'Qwen2ForCausalLM':
                 self.language_model = Qwen2ForCausalLM(config.llm_config)
             else:
                 raise NotImplementedError(f'{config.llm_config.architectures[0]} is not implemented.')
