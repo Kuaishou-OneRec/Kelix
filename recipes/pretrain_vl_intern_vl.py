@@ -301,7 +301,8 @@ def train():
     tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
   # enabled=False when zero stage < 3
-  replace_qwen2_attention_class()
+  #replace_qwen2_attention_class()
+  
   with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config,
                            enabled=False):
     if args.model_type == 'intern-vl':
