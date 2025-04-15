@@ -2547,6 +2547,13 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         new_conversations.append({"role":"assistant","value":value})
       else:
         raise NotImplementedError
+        
+    #如果是纯文本增加一张图片做引导
+    if not images:
+        image = Image.new('RGB', (224, 224), (255, 255, 255))
+        images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=self.max_dynamic_patch,
+                                        image_size=self.image_size, use_thumbnail=self.use_thumbnail)
+        new_conversations[0]['value'] = f'{self.img_start_token}{self.img_context_token * self.visual_tokens_per_image}{self.img_end_token}' + new_conversations[0]['value']
 
     inputs = preprocess_internvl(new_conversations,self.tokenizer)
     pixel_values = [self.transform(image) for image in images]
@@ -2598,33 +2605,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     )
     inputs.pop("attention_mask")
     return inputs
-  
-  def _gen_img_pad(self):
-    """
-    append an image, to trigger vit for pure text sample
-    return 6 token: vstart, 4 * image_token, vend
-    """
-    text = "<|vision_start|><|image_pad|><|vision_end|>"
-    pad_image = {
-        "type": "image",
-        "image": Image.new("RGB", (1, 1), (255, 255, 255))
-    }
-
-    self._fill_image_block(pad_image, sample_dict={}, conf={
-        "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
-        "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
-        "video_nframe": self.video_nframe,
-        "video_fps": self.video_fps,
-        "video_min_frames": self.video_min_frames,
-        "video_max_frames": self.video_max_frames
-    })
-    image_inputs, _ = process_vision_info(vision_infos=[pad_image])
-    inputs = self.processor(
-        text=text,
-        images=image_inputs,
-        videos=None,
-        return_tensors="pt"
-    )
 
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
     inputs["position_ids"] = get_rope_index(
@@ -2743,7 +2723,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       cu_seqlens)
 
     # append a pad image sequence to trigger ViT
-    image_pad = self._gen_img_pad()
     self._append_sample_packing(image_pad,
                                 packed_input_ids,
                                 packed_position_ids,
