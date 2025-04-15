@@ -303,3 +303,10 @@ print(tokenizer.special_tokens_map)
 # #     generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
 # # )
 # # print(output_text)
+
+from transformers import AutoTokenizer, AutoProcessor
+
+path = '/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct'
+processor = AutoProcessor.from_pretrained(path)
+
+print(processor.tokenizer.batch_decode([[151644, 77091, 198],[151645, 198]]))

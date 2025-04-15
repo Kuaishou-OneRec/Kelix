@@ -197,9 +197,6 @@ def preprocess_internvl(
 
     if add_bos_token:  # for InternLM series
         input_ids = [item[1:] for item in input_ids]
-    
-    #add eos token
-    
 
     final_input_ids, final_targets = [], []
     ignore_ids = tokenizer('<|im_start|>assistant\n', return_tensors='np').input_ids[0]
@@ -218,14 +215,7 @@ def preprocess_internvl(
             raise NotImplementedError
     input_ids = torch.tensor(np.concatenate(final_input_ids))[:tokenizer.model_max_length]
     targets = torch.tensor(np.concatenate(final_targets))[:tokenizer.model_max_length]
-
-    # padding = False if group_by_length or use_packed_ds else True
-    # if padding:
-    #     current_length = input_ids.size(0)
-    #     padding_length = tokenizer.model_max_length - current_length
-    #     input_ids = F.pad(input_ids, (0, padding_length), value=tokenizer.pad_token_id)
-    #     targets = F.pad(targets, (0, padding_length), value=IGNORE_TOKEN_ID)
-
+    
     input_ids = input_ids.unsqueeze(0)
     targets = targets.unsqueeze(0)
     

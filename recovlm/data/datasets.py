@@ -2520,43 +2520,41 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         else:
           raise ValueError(f"sample process error, unsupport value type: {block['type']}")
 
-
-    print(messages)
     images = []
     num_image_token_list = []
-    image_tokens = ''
+    image_tokens = ""
     new_conversations = []
     for conversation in messages:
-      if conversation['role'] == 'user':
-        value = ''
-        content = conversation['content']
+      if conversation['role'] == "user":
+        value = ""
+        content = conversation["content"]
         for turn in content:
-          if turn['type']=='image':
-            images += [image for image in turn['images']]
-            num_image_tokens = self.visual_tokens_per_image * len(turn['images'])
+          if turn["type"]=="image":
+            images += [image for image in turn["images"]]
+            num_image_tokens = self.visual_tokens_per_image * len(turn["images"])
             value += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
-          elif turn['type']=='text':
-            value += turn['text']
-        new_conversations.append({'role':'user','value':value})
+          elif turn["type"]=="text":
+            value += turn["text"]
+        new_conversations.append({"role":"user","value":value})
 
-      elif conversation['role'] == 'assistant':
-        value = ''
-        content = conversation['content']
+      elif conversation["role"] == "assistant":
+        value = ""
+        content = conversation["content"]
         for turn in content:
-          if turn['type']=='text':
-            value += turn['text']
-            
-        new_conversations.append({'role':'assistant','value':value})
+          if turn["type"]=="text":
+            value += turn["text"]
+
+        new_conversations.append({"role":"assistant","value":value})
       else:
         raise NotImplementedError
 
-    print(new_conversations)
     inputs = preprocess_internvl(new_conversations,self.tokenizer)
-    print(inputs)
 
     pixel_values = [self.transform(image) for image in images]
     pixel_values = torch.stack(pixel_values)
-
+    inputs["pixel_values"] = pixel_values
+    print(inputs["inputs_ids"].shape)
+    print(self.tokenizer.decode(inputs["inputs_ids"]))
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
