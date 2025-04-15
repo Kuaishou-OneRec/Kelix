@@ -2381,8 +2381,13 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     block["image"] = image
     block['images'] = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=self.max_dynamic_patch,
                                         image_size=self.image_size, use_thumbnail=self.use_thumbnail)
-                            
+    pixel_values = [transform(image) for image in images]
+    pixel_values = torch.stack(pixel_values)
 
+    # Ensure that there is only one patch if dynamic image size is not enabled
+    num_patches = pixel_values.size(0)
+    print(num_patchs)
+    
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
                         conf: Dict[str, Any]):
@@ -2496,6 +2501,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     )
     inputs.pop("attention_mask")
     return inputs
+  def _preprocess_internvl(self,messages):
+    
+    
 
   def _process_chat(self,
                     sample: Dict[str, Any],
@@ -2523,7 +2531,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           raise ValueError(f"sample process error, unsupport value type: {block['type']}")
 
     print(messages)
-    print(len(messages))
     
     text = self.tokenizer.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
