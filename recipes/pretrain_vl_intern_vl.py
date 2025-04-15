@@ -514,6 +514,8 @@ def train():
     video_grid_thw = batch.get("video_grid_thw", None)
     cu_seqlens = batch.get("cu_seqlens", None)
     sample_idx = batch["sample_idx"]
+    position_ids = batch.get("position_ids", None)
+    image_flags = batch['image_flags']
 
     # 打印 token 数量
     token_count = input_ids.numel()  # 计算 token 数量
@@ -548,13 +550,11 @@ def train():
 
     # 后向过程日志
     logger.debug(f"Backward pass: Iteration {acc_step}, Labels shape: {labels.shape}")
-    print("--------asgsdfg-----"*100)
     with Timer("Fwd"):
-      print("hahahhahha"*100)
       output = model(
-        input_ids, attention_mask=attention_mask,
-        pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
-        image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+        input_ids = input_ids, attention_mask=attention_mask,
+        pixel_values=pixel_values, position_ids=position_ids,
+        image_flags = image_flags,
         cu_seqlens=cu_seqlens
       )
       # (b, N/P, V)

@@ -2549,16 +2549,20 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         raise NotImplementedError
         
     #如果是纯文本增加一张图片做引导
-    if not images:
-        image = Image.new('RGB', (224, 224), (255, 255, 255))
-        images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=self.max_dynamic_patch,
+    image_flag = 1 if len(images) > 0 else 0
+
+    if image_flag==0:
+      image = Image.new('RGB', (224, 224), (255, 255, 255))
+      images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=1,
                                         image_size=self.image_size, use_thumbnail=self.use_thumbnail)
-        new_conversations[0]['value'] = f'{self.img_start_token}{self.img_context_token * self.visual_tokens_per_image}{self.img_end_token}' + new_conversations[0]['value']
+      new_conversations[0]['value'] = f'{self.img_start_token}{self.img_context_token * self.visual_tokens_per_image}{self.img_end_token}' + new_conversations[0]['value']
+
 
     inputs = preprocess_internvl(new_conversations,self.tokenizer)
     pixel_values = [self.transform(image) for image in images]
     pixel_values = torch.stack(pixel_values)
     inputs["pixel_values"] = pixel_values
+    inputs["image_flags"] = torch.tensor([image_flag] * len(images), dtype=torch.long)
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
@@ -2678,6 +2682,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                              packed_image_gird_thw: List[torch.Tensor],
                              packed_video_grid_thw: List[torch.Tensor],
                              packed_sample_idx: List[torch.Tensor],
+                             packed_image_flags:List[torch.Tensor],
                              cu_seqlens: List[int],
                              sample_idx: Optional[int] = None):
 
@@ -2696,6 +2701,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       packed_pixel_values_videos.append(inputs["pixel_values_videos"])
       #packed_video_grid_thw.append(inputs["video_grid_thw"])
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
+    packed_image_flags.append(inputs["image_flags"])
     return len(inputs["input_ids"][0])
 
   def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
@@ -2707,6 +2713,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     packed_image_gird_thw: List[torch.Tensor] = []
     packed_video_grid_thw: List[torch.Tensor] = []
     packed_sample_idx: List[torch.Tensor] = []
+    packed_image_flags:List[torch.Tensor] = []
     cu_seqlens: List[int] = [0]
 
     valid_seq_len = 0
@@ -2720,6 +2727,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       packed_image_gird_thw,
                                       packed_video_grid_thw,
                                       packed_sample_idx,
+                                      packed_image_flags,
                                       cu_seqlens)
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
@@ -2758,6 +2766,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       "image_grid_thw": packed_image_gird_thw,
       "pixel_values_videos": packed_pixel_values_videos,
       "video_grid_thw": packed_video_grid_thw,
+      "image_flags":packed_image_flags,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32)
     }
