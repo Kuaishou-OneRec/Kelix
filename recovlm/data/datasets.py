@@ -2451,7 +2451,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     # append EOS token
     text += "<|endoftext|>"
     image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos)
-    inputs = self.processor(
+    inputs = self.tokenizer(
         text=text,
         images=image_inputs,
         videos=video_inputs,
@@ -2593,7 +2593,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   
   def _gen_pad_input(self, pad_len):
     text = "<|endoftext|>" * pad_len
-    inputs = self.processor.tokenizer(text)
+    inputs = self.tokenizer(text)
     inputs["input_ids"] = torch.tensor([inputs["input_ids"]], dtype=torch.int64) # shape=[1, N], for get_rope_index
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
     inputs["position_ids"] = get_rope_index(
@@ -2743,7 +2743,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
       packed_input_ids = F.pad(
         packed_input_ids, (0, padding_len),
-        value=self.processor.tokenizer.pad_token_id)
+        value=self.tokenizer.pad_token_id)
       packed_sample_idx = F.pad(
         packed_sample_idx, (0, padding_len), value=-1)
       packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
