@@ -2549,7 +2549,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         raise NotImplementedError
 
     inputs = preprocess_internvl(new_conversations,self.tokenizer)
-    print(inputs)
     pixel_values = [self.transform(image) for image in images]
     pixel_values = torch.stack(pixel_values)
     inputs["pixel_values"] = pixel_values
@@ -2712,10 +2711,10 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     if "pixel_values" in inputs:
       packed_pixel_values.append(inputs["pixel_values"])
-      packed_image_gird_thw.append(inputs["image_grid_thw"])
+      #packed_image_gird_thw.append(inputs["image_grid_thw"])
     if "pixel_values_videos" in inputs:
       packed_pixel_values_videos.append(inputs["pixel_values_videos"])
-      packed_video_grid_thw.append(inputs["video_grid_thw"])
+      #packed_video_grid_thw.append(inputs["video_grid_thw"])
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     return len(inputs["input_ids"][0])
 
