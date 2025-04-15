@@ -24,7 +24,7 @@ from deepspeed.ops.adam import FusedAdam
 from transformers import AutoTokenizer
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
-from recovlm.models.intern_vl_3 import InternVLChatModel
+from recovlm.models.intern_vl_3 import InternVLChatModel,replace_qwen2_attention_class
 
 from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
 from recovlm.data.dataloaders import get_dataloader
@@ -301,6 +301,7 @@ def train():
     tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
   # enabled=False when zero stage < 3
+  replace_qwen2_attention_class()
   with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config,
                            enabled=False):
     if args.model_type == 'intern-vl':
@@ -312,7 +313,7 @@ def train():
                   args.model_dir, _attn_implementation="flash_attention_2",
                   use_cache=False
         )
-      
+    
 
   if args.freeze_llm:
     print_rank_0("Freeze LLM parameters.")
@@ -501,6 +502,7 @@ def train():
             f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
         print_rank_0(batch)
         show_cnt -= 1
+
 
     data_source = batch.pop("data_source", None) # dataset source list cur batch
     iteration = model.global_steps
