@@ -2369,7 +2369,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
-    print(sample_dict)
     if isinstance(block["image"], str):
       image = sample_dict[block["image"]]
     else:
@@ -2377,7 +2376,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if image.mode != "RGB":
       image = image.convert("RGB")
     block["image"] = image
-    print(self.transform(image))
 
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
@@ -2517,11 +2515,12 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           continue
         else:
           raise ValueError(f"sample process error, unsupport value type: {block['type']}")
-    print(messages)
+
+    print(len(messages['json']['messages']))
+
     text = self.tokenizer.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
     )
-    print(text)
 
     # append EOS token
     text += "<|endoftext|>"
