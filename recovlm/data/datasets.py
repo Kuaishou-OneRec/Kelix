@@ -2554,7 +2554,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     pixel_values = torch.stack(pixel_values)
     inputs["pixel_values"] = pixel_values
     print(inputs["input_ids"].shape)
-    print(self.tokenizer.decode(inputs["input_ids"]))
+    print(self.tokenizer.batch_decode(inputs["input_ids"]))
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
