@@ -2537,7 +2537,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
             value += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
           elif turn['type']=='text':
             value += turn['text']
-        new_conversations.append({'role':s'user','value':value})
+        new_conversations.append({'role':'user','value':value})
 
       elif conversation['role'] == 'assistant':
         new_conversations.append({'role':'assistant','value':conversation['content']['text']})
