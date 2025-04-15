@@ -220,7 +220,7 @@ def preprocess_internvl(
         input_ids = input_ids.unsqueeze(0)
         targets = targets.unsqueeze(0)
     except:
-        print(final_input_ids)
+        print(final_input_ids, targets)
     
 
     return dict(
