@@ -166,7 +166,6 @@ def preprocess_internvl(
         ds_name: str = None,
         num_image: int = 1
 ) -> Dict:
-
     assert len(sources) == 1, 'process only the first conversations'
     conversations = sources[0]
 
