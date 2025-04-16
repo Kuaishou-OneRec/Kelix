@@ -1,0 +1,33 @@
+strategy:
+  type: ViTStrategy
+verbose: 
+  type: ViTVerbose
+  verbose_per_step: 1
+monitor:
+  type: ViTMonitor
+report:
+  report_per_step: 1
+output:
+  dir: 123
+model:
+  dir: 123
+text_decoder:
+  enabled: false
+  model_dir: 234
+lr_scheduler:
+  type: cosine
+  num_warmup_steps: 200
+  num_training_steps: 2000
+  min_lr: 0.0
+optimizer:
+  type: muon
+  betas: (0.9, 0.95)
+  learn_rate: 1e-6
+  weight_decay: 0.01
+dataset:
+  type: ViTParquetDataset
+  num_workers: 2
+  sources: 12345
+  num_epochs: 1
+  loader:
+    num_workers: 2
