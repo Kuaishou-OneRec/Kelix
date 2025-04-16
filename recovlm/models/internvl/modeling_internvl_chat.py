@@ -93,7 +93,7 @@ class InternVLChatModel(PreTrainedModel):
             nn.Linear(llm_hidden_size, llm_hidden_size)
         )
 
-        self.img_context_token_id = None
+        self.img_context_token_id = 151667
         self.conv_template = get_conv_template(self.template)
         if hasattr(config, 'system_message'):
             self.system_message = config.system_message
@@ -101,11 +101,11 @@ class InternVLChatModel(PreTrainedModel):
             self.system_message = self.conv_template.system_message
         self.num_samples = 0
 
-        if config.use_backbone_lora:
-            self.wrap_backbone_lora(r=config.use_backbone_lora, lora_alpha=2 * config.use_backbone_lora)
+        # if config.use_backbone_lora:
+        #     self.wrap_backbone_lora(r=config.use_backbone_lora, lora_alpha=2 * config.use_backbone_lora)
 
-        if config.use_llm_lora:
-            self.wrap_llm_lora(r=config.use_llm_lora, lora_alpha=2 * config.use_llm_lora)
+        # if config.use_llm_lora:
+        #     self.wrap_llm_lora(r=config.use_llm_lora, lora_alpha=2 * config.use_llm_lora)
 
     def wrap_backbone_lora(self, r=128, lora_alpha=256, lora_dropout=0.05):
         lora_config = LoraConfig(
@@ -162,12 +162,18 @@ class InternVLChatModel(PreTrainedModel):
         image_flags = image_flags.squeeze(-1)
         input_embeds = self.language_model.get_input_embeddings()(input_ids).clone()
 
+        
         vit_embeds = self.extract_feature(pixel_values)
         vit_embeds = vit_embeds[image_flags == 1]
+
         vit_batch_size = pixel_values.shape[0]
 
+        print("inputs:",inputs.shape)
+        print("vit_embeds:",vit_embeds.shape)
+        print("vit_batch_size",vit_batch_size)
         B, N, C = input_embeds.shape
         input_embeds = input_embeds.reshape(B * N, C)
+        
 
         if torch.distributed.is_initialized() and torch.distributed.get_rank() == 0:
             print(f'dynamic ViT batch size: {vit_batch_size}, images per sample: {vit_batch_size / B}, dynamic token length: {N}')
@@ -178,6 +184,8 @@ class InternVLChatModel(PreTrainedModel):
 
         input_ids = input_ids.reshape(B * N)
         selected = (input_ids == self.img_context_token_id)
+        print("selected:",selected)
+        print("image_tokem",selected.sum())
         try:
             input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
             ignore_flag = False

@@ -1,6 +1,6 @@
 import torch
 from transformers import AutoTokenizer, AutoModel
-from recovlm.models.intern_vl_3 import InternVLChatModel,InternVLChatConfig
+from recovlm.models.internvl import InternVLChatModel,InternVLChatConfig
 from recovlm.training.common import set_default_dtype
 from recovlm.data.dataloaders_v2 import get_dataloader
 #from recovlm.data.dataloaders import get_dataloader
@@ -193,6 +193,7 @@ path_size = model_config.vision_config.patch_size
 image_size = model_config.force_image_size
 
 print(tokenizer.special_tokens_map)
+print(tokenizer('<IMG_CONTEXT>'))
 
 
 
