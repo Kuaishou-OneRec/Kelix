@@ -47,7 +47,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --dataset_config ./examples/vlm/configs/stage1_parquet_ocr_0207.json  \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
-    --max_length 4000 \
+    --max_length 12000 \
     --learning_rate 2e-4 \
     --min_lr 5e-6 \
     --auto_resume_local_latest \
