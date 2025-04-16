@@ -729,7 +729,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
             sliding_window = -1
 
         # TODO: SP暂时不考虑不packing的情况
-        #assert cu_seqlens is not None, "Pass cu_seqlens for FA2"
+        assert cu_seqlens is not None, "Pass cu_seqlens for FA2"
         if get_sequence_parallel_world_size() > 1:
             attn_output = self._dist_attn(
                 query=query_states,
@@ -1100,8 +1100,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             get_sequence_parallel_group(),
             0
         )
-        merged = self.merger(hidden_states)
-        return merged
+        return self.merger(hidden_states)
     
 
 @add_start_docstrings(
