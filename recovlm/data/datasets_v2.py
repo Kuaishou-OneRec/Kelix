@@ -29,13 +29,16 @@ from recovlm.data.prompts import PromptLoader
 
 from transformers import AutoTokenizer, AutoProcessor, AutoConfig
 from recovlm.utils.common import shell_hdfs_ls, load_parquet_file
-from recovlm.services.clients import PidInfoClient
 
 from tqdm import tqdm
 
 logger = init_logger(__name__)
 
 import json
+
+import requests
+
+
 
 DEFAULT_SYSTEM_PROMPT = \
 """You are a helpful assistant."""
@@ -76,9 +79,9 @@ class Qwen2VLInputBuilder:
     self.vision_start_token_id = self.model_config.vision_start_token_id
     self.vision_end_token_id = self.model_config.vision_end_token_id
     self.pad_token_id = self.model_config.pad_token_id
-    self.video_nframe = kwargs.get("video_nframe", 0)
-    self.video_fps = kwargs.get("video_fps", 1.0)
-    self.video_min_frames = kwargs.get("video_min_frames", 1)
+    self.video_nframe = kwargs.get("video_nframe", -1)
+    self.video_fps = kwargs.get("video_fps", 2.0)
+    self.video_min_frames = kwargs.get("video_min_frames", -1)
     self.video_max_frames = kwargs.get("video_max_frames", 120)
     self.min_visual_tokens_per_image = \
         kwargs.get("min_visual_tokens_per_image", 4)
@@ -130,15 +133,9 @@ class Qwen2VLInputBuilder:
         kwargs.get(
           "max_visual_tokens_per_image", self.max_visual_tokens_per_image)
 
-    if isinstance(block["video"], list) and \
-        all([isinstance(image_block, str) for image_block in block["video"]]):
-      block["video"] = [
-        {
-          "type": "image",
-          "image": image_str
-        }
-        for image_str in block["video"]
-      ]
+    if isinstance(block["video"], list):
+      if all([isinstance(image_block, str) for image_block in block["video"]]):
+        block["video"] = [{"type": "image", "image": image_str} for image_str in block["video"]]
       for image_block in block["video"]:
         self.fill_image_block(image_block, sample, **kwargs)
 
@@ -499,7 +496,7 @@ class ParquetDataset(IterableDataset):
       }
 
       # process message or segments -> webdataset_key = json
-      sample_data = {"source": data_source, "meta": row.get("metadata", json.dumps({}))}
+      sample_data = {"source": data_source}
 
       if "chosen" in row:
         chosen = row["chosen"]
@@ -565,7 +562,7 @@ class ParquetDataset(IterableDataset):
     )
 
     # Add a progress bar, dd a progress bar
-    for epoch_fn in tqdm(worker_files, desc=f"[Worker-{worker}] process file: "):
+    for epoch_fn in tqdm(worker_files, desc=f"[Worker-{worker}] processing: "):
       fn, epoch_idx = epoch_fn
       if (fn, epoch_idx) in finish_dict:
         logger.warning(f"[Worker-{worker}] {fn} has been processed, skip.")
@@ -597,7 +594,7 @@ class ParquetDataset(IterableDataset):
           f"{fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
         row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
 
-        for row_idx, row in tqdm(row_pandas.iterrows(), desc=f"[Worker-{worker}] process row: "):
+        for row_idx, row in row_pandas.iterrows():
           if row_idx < offset:
             continue
           try:
@@ -1131,13 +1128,8 @@ class VllmInferenceDataset(DistributedDataset):
       kwargs.get("min_visual_tokens_per_image", 4)
     self.max_visual_tokens_per_image = \
       kwargs.get("max_visual_tokens_per_image", 512)
-    self.max_images = max_images
-    self.video_fps = kwargs.get("video_fps", 1.0)
-    self.video_nframe = kwargs.get("video_nframe", 0)
-    self.video_min_frames = kwargs.get("video_min_frames", 2)
-    self.video_max_frames = kwargs.get("video_max_frames", 60)
+    self.max_images = kwargs.get("max_images", 10)
     self.system_prompt = system_prompt
-    self.kwargs = kwargs
 
     self.input_builder = Qwen2VLInputBuilder(
       pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -1145,7 +1137,8 @@ class VllmInferenceDataset(DistributedDataset):
     )
 
   def _process(self,
-               sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+               sample: Dict[str, Any],
+               **kwargs) -> Dict[str, torch.Tensor]:
     assert "messages" in sample["json"], \
         f"sample must contain 'messages' key, but got {sample['json'].keys()}"
 
@@ -1157,9 +1150,9 @@ class VllmInferenceDataset(DistributedDataset):
         continue
       for block in content:
         if block["type"] == "image":
-          self.input_builder.fill_image_block(block, sample, **self.kwargs)
+          self.input_builder.fill_image_block(block, sample, **kwargs)
         elif block["type"] == "video":
-          self.input_builder.fill_video_block(block, sample, **self.kwargs)
+          self.input_builder.fill_video_block(block, sample, **kwargs)
         elif block["type"] == "text":
           continue
         else:
@@ -1205,7 +1198,6 @@ class VllmInferenceDataset(DistributedDataset):
       },
       "annotation": annotation,
       "source": sample["json"]["source"],
-      "meta": json.loads(sample["json"]["meta"]),
       "__key__": sample["__key__"],
       "__url__": sample["__url__"],
     }

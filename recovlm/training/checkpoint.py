@@ -387,14 +387,21 @@ class AppState(Stateful):
     state dict methods on the model and optimizer.
   """
 
-  def __init__(self, model, optimizer=None):
+  def __init__(self, model, optimizer=None, call_back=None):
     self.model = model
+    self.call_back = call_back
+
+  def set_call_back(self, cb):
+    self.call_back = cb
+    return self
 
   def state_dict(self):
     # this line automatically manages FSDP FQN's, as well as sets the 
     # default state dict type to FSDP.SHARDED_STATE_DICT
     model_state_dict = \
       get_model_state_dict(self.model)
+    if self.call_back is not None:
+      model_state_dict = self.call_back(model_state_dict)
     return {
       "model": model_state_dict
     }
