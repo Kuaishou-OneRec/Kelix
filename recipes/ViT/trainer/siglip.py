@@ -17,6 +17,7 @@ from recipes.ViT.dataset import build_dataloader
 from recipes.ViT.lr_scheduler import build_scheduler
 from recipes.ViT.optimizer import build_optimizer
 from recipes.ViT.monitor import build_monitor
+from deepspeed.ops.adam import FusedAdam
 
 
 def check_config(config):
@@ -79,6 +80,10 @@ def train(args):
     register_metrics(config, monitor)
 
     optimizer = build_optimizer(config.optimizer, model, model_name="siglip")
+    optimizer = FusedAdam(model.parameters(),
+                        lr=config.optimizer.learn_rate,
+                        betas=(0.9, 0.95),
+                        eps=1.0e-8)
     lr_scheduler = build_scheduler(config.lr_scheduler, optimizer)
 
     model, optimizer, _, lr_scheduler = deepspeed.initialize(
@@ -112,6 +117,7 @@ def train(args):
             valid_tokens_per_sec_per_gpu=10,
             valid_token_ratio=11,
         )
+        model.step()
         monitor.step(out)
 
 
