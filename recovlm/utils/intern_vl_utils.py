@@ -164,16 +164,16 @@ BOX_END_TOKEN = '</box>'
 from enum import IntEnum, auto
 from typing import Any, Dict, List, Tuple, Union
 
-def preprocess_internvl(
-        conversations:list,
-        tokenizer: transformers.PreTrainedTokenizer
-) -> Dict:
+
+def preprocess_internvl(conversations: list, tokenizer: transformers.PreTrainedTokenizer) -> Dict:
     #'你是书生·万象，英文名是InternVL，是由上海人工智能实验室、清华大学及多家合作单位联合开发的多模态大语言模型。',
     system_prompt = 'You are a helpful assistant.'
-    roles,batches = [],[]
+    roles, batches = [], []
+    
     if system_prompt is not None:
         batches.append(f'<|im_start|>system\n{system_prompt}<|im_end|>\n')
         roles.append('system')
+    
     for conversation in conversations:
         if conversation['role'] == 'user':
             batches.append(f'<|im_start|>user\n{conversation["value"]}<|im_end|>\n')
@@ -183,21 +183,23 @@ def preprocess_internvl(
             roles.append('assistant')
         else:
             raise NotImplementedError
-
+    
     add_bos_token = getattr(tokenizer, 'add_bos_token', False)
     if add_bos_token:  # for InternLM series
         batches[0] = tokenizer.bos_token + batches[0]
-
-    input_ids = tokenizer(
+    
+    tokenized_outputs = tokenizer(
         batches,
         return_tensors='np',
         padding=False,
         truncation=False,
-    ).input_ids
-
+    )
+    
+    input_ids = tokenized_outputs.input_ids
+    
     if add_bos_token:  # for InternLM series
         input_ids = [item[1:] for item in input_ids]
-
+    
     final_input_ids, final_targets = [], []
     ignore_ids = tokenizer('<|im_start|>assistant\n', return_tensors='np').input_ids[0]
     ignore_len = ignore_ids.shape[0] - 1 if add_bos_token else ignore_ids.shape[0]
@@ -213,10 +215,22 @@ def preprocess_internvl(
             final_targets.append(target)
         else:
             raise NotImplementedError
-
-    input_ids = torch.tensor(np.concatenate(final_input_ids))
-    targets = torch.tensor(np.concatenate(final_targets))
-
+    
+    # 修复连接操作
+    try:
+        # 确保final_input_ids是一个可以连接的序列
+        input_ids = torch.tensor(np.concatenate(final_input_ids))
+        targets = torch.tensor(np.concatenate(final_targets))
+    except TypeError:
+        # 如果出现类型错误，可能是因为final_input_ids只包含一个数组
+        if len(final_input_ids) == 1:
+            input_ids = torch.tensor(final_input_ids[0])
+            targets = torch.tensor(final_targets[0])
+        else:
+            # 尝试将final_input_ids和final_targets包装成list再连接
+            input_ids = torch.tensor(np.concatenate([np.array(x) for x in final_input_ids]))
+            targets = torch.tensor(np.concatenate([np.array(x) for x in final_targets]))
+    
     input_ids = input_ids.unsqueeze(0)
     targets = targets.unsqueeze(0)
     

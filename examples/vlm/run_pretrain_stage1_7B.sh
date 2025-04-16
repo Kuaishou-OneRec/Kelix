@@ -12,16 +12,16 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-DFN5B-ViT-H-14 # Pretrained model path
-MODEL_DIR=/llm_reco/penghao03/intern-vl/InternVL3-2B # Pretrained model path
-#OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage1/0.0.41 # 
-OUTPUT_DIR=/llm_reco/penghao03/intern-vl/output/pretrain_dataset
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-7B-Instruct-DFN5B-ViT-H-14 # Pretrained model path
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output2/RecoVLM/Qwen2-VL-7B-stage1/0.0.41 # 
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/all_v02 #
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
-comment="debug"
+comment="一阶段训练,20250208，instruct model, ocr"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
@@ -41,13 +41,12 @@ echo "Output: $OUTPUT_DIR"
 export PYTHONPATH=$PWD:$PYTHONPATH
 
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
-    recipes/pretrain_vl_intern_vl.py --model_dir $MODEL_DIR \
-    --model_type intern-vl\
+    recipes/pretrain_vl.py --model_dir $MODEL_DIR \
     --output_dir $OUTPUT_DIR \
     --dataset_config ./examples/vlm/configs/stage1_parquet_ocr_0207.json  \
     --monitor_datasource_loss \
     --monitor_datasource_cnt \
-    --max_length 12000 \
+    --max_length 4000 \
     --learning_rate 2e-4 \
     --min_lr 5e-6 \
     --auto_resume_local_latest \
@@ -57,6 +56,7 @@ nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --save_checkpoint_per_step 3000 \
     --use_flash_attention_2 \
     --logging_per_step 10 \
+    --freeze_llm \
     --seed 19260817 \
     --merge_checkpoint \
     --merge_checkpoint_dtype bf16 \

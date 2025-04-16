@@ -1,6 +1,3 @@
-git config --global user.email 'penghao03@kuaishou.com'
-git config --global user.name 'penghao03'
-
 email=$(git config --get user.email)
 
 # 检查 email 是否为空
@@ -15,9 +12,8 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco/penghao03/intern-vl/InternVL3-2B
-#MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2B # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/penghao03/intern-vl/output/dataset1
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2B # Pretrained/Base model path
+OUTPUT_DIR=/llm_reco/penghao03/output/intern_fsdp
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -26,7 +22,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="Intern-vl debug"
+comment="7B FSDP"
 
 
 git add --all
@@ -54,7 +50,6 @@ np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
-
 
 # debug7b_short.json
 # debug7b_fsdp_3p_v1_debug2_orids             
@@ -108,20 +103,21 @@ nohup mpirun --allow-run-as-root -np $np \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
         -x http_proxy=\
         -x https_proxy=\
-        python3 recipes/train_fsdp_debug.py --model_dir $MODEL_DIR \
+        python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config examples/vlm/configs/stage1_parquet_ocr_0207.json\
-                --max_length 3000 \
+                --dataset_config examples/vlm/configs/stage1_parquet_ocr_0207_debug.json \
+                --max_length 15000 \
                 --learning_rate 1e-6 \
+                --model_class intern-vl \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --model_type intern-vl \
                 --num_warmup_steps 500 \
                 --num_training_steps 20000 \
                 --save_checkpoint_per_step 100 \
+                --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
                 --fp32_weight true \

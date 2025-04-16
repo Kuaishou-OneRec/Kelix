@@ -29,13 +29,56 @@ from recovlm.data.prompts import PromptLoader
 
 from transformers import AutoTokenizer, AutoProcessor, AutoConfig
 from recovlm.utils.common import shell_hdfs_ls, load_parquet_file
-from recovlm.services.clients import PidInfoClient
 
 from tqdm import tqdm
 
 logger = init_logger(__name__)
 
 import json
+
+import requests
+
+class PidInfoClient:
+    """简化版PID信息服务客户端"""
+    # 
+    def __init__(self, host='10.84.241.154', port=8000, timeout=30):
+        """初始化客户端
+        
+        Args:
+            host: 服务主机地址，默认为localhost
+            port: 服务端口，默认为8000
+            timeout: 请求超时时间（秒），默认30秒
+        """
+        self.base_url = f'http://{host}:{port}/pid_info'
+        self.timeout = timeout
+    #
+    def get_pid_info(self, pid, downloader_params=None, text_params=None):
+        """获取指定PID的信息
+        
+        Args:
+            pid: 内容ID
+            downloader_params: 下载器的可选参数，如 {'verbose': True}
+            text_params: 文本检索的可选参数，如 {'cache_only': True}
+            
+        Returns:
+            包含PID信息的字典
+        """
+        # 如果有自定义参数，使用POST请求
+        if downloader_params is not None or text_params is not None:
+            data = {'pid': int(pid)}
+            if downloader_params is not None:
+                data['downloader_params'] = downloader_params
+            if text_params is not None:
+                data['text_params'] = text_params
+            #
+            response = requests.post(self.base_url, json=data, timeout=self.timeout)
+        else:
+            # 否则使用GET请求
+            response = requests.get(f'{self.base_url}?pid={pid}', timeout=self.timeout)
+        #
+        # 返回JSON响应
+        return response.json()
+
 
 DEFAULT_SYSTEM_PROMPT = \
 """You are a helpful assistant."""
@@ -76,9 +119,9 @@ class Qwen2VLInputBuilder:
     self.vision_start_token_id = self.model_config.vision_start_token_id
     self.vision_end_token_id = self.model_config.vision_end_token_id
     self.pad_token_id = self.model_config.pad_token_id
-    self.video_nframe = kwargs.get("video_nframe", 0)
-    self.video_fps = kwargs.get("video_fps", 1.0)
-    self.video_min_frames = kwargs.get("video_min_frames", 1)
+    self.video_nframe = kwargs.get("video_nframe", -1)
+    self.video_fps = kwargs.get("video_fps", 2.0)
+    self.video_min_frames = kwargs.get("video_min_frames", -1)
     self.video_max_frames = kwargs.get("video_max_frames", 120)
     self.min_visual_tokens_per_image = \
         kwargs.get("min_visual_tokens_per_image", 4)
@@ -129,16 +172,10 @@ class Qwen2VLInputBuilder:
     max_visual_tokens_per_image = \
         kwargs.get(
           "max_visual_tokens_per_image", self.max_visual_tokens_per_image)
-    print(block)
-    if isinstance(block["video"], list) and \
-        all([isinstance(image_block, str) for image_block in block["video"]]):
-      block["video"] = [
-        {
-          "type": "image",
-          "image": image_str
-        }
-        for image_str in block["video"]
-      ]
+
+    if isinstance(block["video"], list):
+      if all([isinstance(image_block, str) for image_block in block["video"]]):
+        block["video"] = [{"type": "image", "image": image_str} for image_str in block["video"]]
       for image_block in block["video"]:
         self.fill_image_block(image_block, sample, **kwargs)
 
@@ -499,7 +536,8 @@ class ParquetDataset(IterableDataset):
       }
 
       # process message or segments -> webdataset_key = json
-      sample_data = {"source": data_source, "meta": row.get("metadata", json.dumps({}))}
+      sample_data = {"source": data_source}
+
       if "chosen" in row:
         chosen = row["chosen"]
         if isinstance(chosen, str):
@@ -564,8 +602,7 @@ class ParquetDataset(IterableDataset):
     )
 
     # Add a progress bar, dd a progress bar
-    
-    for epoch_fn in tqdm(worker_files, desc=f"[Worker-{worker}] process file: "):
+    for epoch_fn in tqdm(worker_files, desc=f"[Worker-{worker}] processing: "):
       fn, epoch_idx = epoch_fn
       if (fn, epoch_idx) in finish_dict:
         logger.warning(f"[Worker-{worker}] {fn} has been processed, skip.")
@@ -574,13 +611,12 @@ class ParquetDataset(IterableDataset):
       # open parquet file
       try:
         parquet_file = load_parquet_file(fn)
-        #parquet_file = pq.read_table(fn).to_pandas()
-        #parquet_file = pq.ParquetFile(fn)
       except Exception as e:
         logger.error(
           f"ParquetDataset error, open parquet fail!!! "
           f"{fn=}, error_msg={traceback.format_exc()}")
         continue
+
       for group_idx in range(parquet_file.num_row_groups):
         offset = 0
         fn_group_key = (fn, epoch_idx, group_idx)
@@ -598,7 +634,7 @@ class ParquetDataset(IterableDataset):
           f"{fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
         row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
 
-        for row_idx, row in tqdm(row_pandas.iterrows(), desc=f"[Worker-{worker}] process row: "):
+        for row_idx, row in row_pandas.iterrows():
           if row_idx < offset:
             continue
           try:
@@ -614,6 +650,7 @@ class ParquetDataset(IterableDataset):
           except GeneratorExit:
             raise
 
+
 class DistributedDataset(IterableDataset):
   def __init__(self, 
                sources: str,
@@ -628,22 +665,22 @@ class DistributedDataset(IterableDataset):
     self.num_workers = num_workers
     self.num_epochs = num_epochs
     self.sources = sources
-    self.dataset,self.total_samples = self._build_source_dataset_build(self.sources)
+    self.dataset = self._build()
     # for data_source monitor
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
 
-  def _build_source_dataset_build(self,sources):
+  def _build(self):
     file_list = []
     files = []
     # TODO: support more file types
-    if sources.endswith(".json"):
-      with open(sources, "r") as fp:
+    if self.sources.endswith(".json"):
+      with open(self.sources, "r") as fp:
         files = json.loads(fp.read())
         files = sorted([
           fn for fn in files if fn.endswith(".parquet")])
     else:
-      folder = Path(sources)
+      folder = Path(self.sources)
       files = list(map(str, folder.rglob("*.parquet")))
 
     self.rng.shuffle(files)
@@ -1131,13 +1168,8 @@ class VllmInferenceDataset(DistributedDataset):
       kwargs.get("min_visual_tokens_per_image", 4)
     self.max_visual_tokens_per_image = \
       kwargs.get("max_visual_tokens_per_image", 512)
-    self.max_images = max_images
-    self.video_fps = kwargs.get("video_fps", 1.0)
-    self.video_nframe = kwargs.get("video_nframe", 0)
-    self.video_min_frames = kwargs.get("video_min_frames", 2)
-    self.video_max_frames = kwargs.get("video_max_frames", 60)
+    self.max_images = kwargs.get("max_images", 10)
     self.system_prompt = system_prompt
-    self.kwargs = kwargs
 
     self.input_builder = Qwen2VLInputBuilder(
       pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -1145,7 +1177,8 @@ class VllmInferenceDataset(DistributedDataset):
     )
 
   def _process(self,
-               sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+               sample: Dict[str, Any],
+               **kwargs) -> Dict[str, torch.Tensor]:
     assert "messages" in sample["json"], \
         f"sample must contain 'messages' key, but got {sample['json'].keys()}"
 
@@ -1157,9 +1190,9 @@ class VllmInferenceDataset(DistributedDataset):
         continue
       for block in content:
         if block["type"] == "image":
-          self.input_builder.fill_image_block(block, sample, **self.kwargs)
+          self.input_builder.fill_image_block(block, sample, **kwargs)
         elif block["type"] == "video":
-          self.input_builder.fill_video_block(block, sample, **self.kwargs)
+          self.input_builder.fill_video_block(block, sample, **kwargs)
         elif block["type"] == "text":
           continue
         else:
@@ -1205,7 +1238,6 @@ class VllmInferenceDataset(DistributedDataset):
       },
       "annotation": annotation,
       "source": sample["json"]["source"],
-      "meta": json.loads(sample["json"]["meta"]),
       "__key__": sample["__key__"],
       "__url__": sample["__url__"],
     }
@@ -1635,6 +1667,7 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
         迭代器，用于逐个返回处理后的样本数据。
 
     """
+
     buffer = []
     source_list = []
     cur_length = 0
@@ -1643,6 +1676,7 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
 
       sample_key = sample["__key__"] if "__key__" in sample else ""
       sample_url = sample["__url__"] if "__url__" in sample else ""
+
       try:
         source_name = sample["json"]["source"]
         # WARN: ugly code, for dirty dataset.
@@ -1664,7 +1698,7 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
         error_ratio = self.source_error_cnt[source_name] * 1.0 / \
           self.source_sample_cnt[source_name]
         logger.error(
-          f"ChatCompletionVisionDatasetV2 process sample error. "
+          f"ChatCompletionVisionDataset process sample error. "
           f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
           f"errmsg={traceback.format_exc()}")
         continue
@@ -1706,7 +1740,7 @@ class ChatCompletionVisionV2ParquetDataset(ChatCompletionVisionDatasetV2):
     self.num_epochs = num_epochs
     super().__init__(sources, num_workers=num_workers, max_length=max_length, world_size=world_size, rank=rank, num_epochs=num_epochs, **kargs)
 
-  def _build_source_dataset_build(self, sources):
+  def _build_source_dataset(self, sources):
     data_file_list = []
     if dist.get_rank() == 0:
       data_files = []

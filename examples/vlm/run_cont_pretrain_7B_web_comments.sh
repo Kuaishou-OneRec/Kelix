@@ -13,7 +13,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/penghao03/intern-vl/output
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output3/dev/RecoVLM-Base/0.3.0
 
 mkdir -p $OUTPUT_DIR
 
@@ -22,7 +22,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="debug"
+comment="站外评论数据训练，验证数据"
 
 
 git add --all

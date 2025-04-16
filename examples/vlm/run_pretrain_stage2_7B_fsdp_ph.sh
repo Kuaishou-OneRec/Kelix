@@ -1,5 +1,3 @@
-git config --global user.email 'penghao03@kuaishou.com'
-git config --global user.name 'penghao03'
 email=$(git config --get user.email)
 
 # 检查 email 是否为空
@@ -11,12 +9,12 @@ else
         echo "Git user.emal: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/penghao03/intern-vl/output/debug
-rm -rf $OUTPUT_DIR
+OUTPUT_DIR=/llm_reco/penghao03/origin/recovlm/output/debug
+
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
@@ -24,7 +22,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="debugP"
+comment="7B FSDP"
 
 
 git add --all
@@ -46,16 +44,15 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 
 source set_env.sh
 
-hostfile=/etc/mpi/hostfile_seq
+hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
-# debug7b_short.json
-# debug7b_fsdp_3p_v1_debug2_orids             
-# --enable_gradient_checkpointing \
+#                 
+
 nohup mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
         -hostfile $hostfile \
@@ -109,21 +106,23 @@ nohup mpirun --allow-run-as-root -np $np \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config examples/vlm/configs/debug7b_fsdp_3p_v1_debug.json \
-                --max_length 30000 \
-                --learning_rate 1e-6 \
-                --min_lr 0.0 \
+                --dataset_config examples/vlm/configs/stage2_parquet_ocrall_0207_1epoch.json \
+                --max_length 10000 \
+                --learning_rate 5e-5 \
+                --vision_learning_rate 5e-5 \
+                --vision_lr_layer_decay 0.95 \
+                --min_lr 1e-6 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 500 \
-                --num_training_steps 20000 \
-                --save_checkpoint_per_step 100 \
-                --sequence_parallel_size 4 \
-                --use_flash_attention_2 \
-                --logging_per_step 10 \
-                --fp32_weight true \
-                --seed 19260817 \
+                --num_training_steps 26000 \
+                --gradient_accumulation_steps 1 \
                 --enable_gradient_checkpointing \
+                --save_checkpoint_per_step 1000 \
+                --sequence_parallel_size 1 \
+                --use_flash_attention_2 \
+                --logging_per_step 1 \
+                --seed 19260817 \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \

@@ -24,7 +24,6 @@ from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
 from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
 from recovlm.data.dataloaders import get_dataloader
-#from recovlm.data.dataloaders_v2 import get_dataloader
 
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss, CrossEntropyLossReweight
@@ -151,7 +150,6 @@ def get_argument_parser():
 
   parser.add_argument("--freeze_llm", action="store_true",
                       help="Freeze LLM parameters.")
-
 
   parser.add_argument("--freeze_visual", action="store_true",
                       help="Freeze visual encoder parameters.")
@@ -442,15 +440,15 @@ def train():
       dataloader.load_state_dict(dataloader_state_dict)
 
   ##############
-  # ## TODO ’if else‘ use to verify reweight loss func
-  # if args.loss_type is not None:
-  #   loss_fn = CrossEntropyLossReweight(
-  #     ignore_index=-100, return_token_loss=True, shift_labels=False, loss_reduction=args.loss_type
-  #   )
-  # else:
+  ## TODO ’if else‘ use to verify reweight loss func
+  if args.loss_type is not None:
+    loss_fn = CrossEntropyLossReweight(
+      ignore_index=-100, return_token_loss=True, shift_labels=False, loss_reduction=args.loss_type
+    )
+  else:
     # original loss
-  loss_fn = CrossEntropyLoss(
-    ignore_index=-100, return_token_loss=True, shift_labels=False)
+    loss_fn = CrossEntropyLoss(
+      ignore_index=-100, return_token_loss=True, shift_labels=False)
 
 
   start_time = time.time()

@@ -809,6 +809,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
+
     if isinstance(block["video"], list):
         if all([isinstance(image_block, str) for image_block in block["video"]]):
           block["video"] = [
@@ -1215,6 +1216,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     for sample in self.dataset:
       sample_key = sample["__key__"] if "__key__" in sample else ""
       sample_url = sample["__url__"] if "__url__" in sample else ""
+
       try:
         source_name = sample["json"]["source"]
         # WARN: ugly code, for dirty dataset.
@@ -1355,6 +1357,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
     assert self.max_length > 0
 
     self.datasource_config = datasource_config
+    print(f"datasource_config: {self.datasource_config}")
   
   def _build_source_dataset(self, sources):
     total_samples = 0
@@ -2234,7 +2237,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                base_model_dir: Optional[str] = None,
                processor: Optional[Qwen2VLProcessor] = None,
                spatial_merge_size: int = 2,
+               image_size:int=448,
                patch_size: int = 14,
+               down_sample_ratio:float=0.5,
                image_token_id: int = 151655,
                video_token_id: int = 151656,
                vision_start_token_id: int = 151652,
@@ -2263,16 +2268,13 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if base_model_dir:
       tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
       model_config = InternVLChatConfig.from_pretrained(base_model_dir)
-      path_size = model_config.vision_config.patch_size
+      patch_size = model_config.vision_config.patch_size
       image_size = model_config.force_image_size
-      down_sample_ratio = model_config.downsample_ratio
-
+    
     self.tokenizer = tokenizer
-    self.max_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
-    self.min_visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
-    self.visual_tokens_per_image = int((image_size//path_size)** 2 * (down_sample_ratio ** 2))
-    # print("max_visual_tokens_per_image:",self.max_visual_tokens_per_image,"min_visual_tokens_per_image:",self.min_visual_tokens_per_image,
-    #     "visual_tokens_per_image :",self.visual_tokens_per_image ,"image_size:",image_size,'path_size:',patch_size,"down_sample_ratio:",down_sample_ratio)
+    self.max_visual_tokens_per_image = int((image_size//patch_size)** 2 * (down_sample_ratio ** 2))
+    self.min_visual_tokens_per_image = int((image_size//patch_size)** 2 * (down_sample_ratio ** 2))
+    self.visual_tokens_per_image = int((image_size//patch_size)** 2 * (down_sample_ratio ** 2))
     self.video_nframe = video_nframe
     self.video_fps = video_fps
     self.video_min_frames = video_min_frames
@@ -2301,7 +2303,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.img_start_token = '<img>'
     self.img_end_token = '</img>'
 
-    self.transform = self.get_transform()
 
 
     self.dataset, self.total_samples = self._build_source_dataset(sources)
@@ -2548,18 +2549,17 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       else:
         raise NotImplementedError
         
-    #如果是纯文本增加一张图片做引导
+    
     image_flag = 1 if len(images) > 0 else 0
-
+    #如果是纯文本增加一张图片做引导
     if image_flag==0:
       image = Image.new('RGB', (224, 224), (255, 255, 255))
       images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=1,
                                         image_size=self.image_size, use_thumbnail=self.use_thumbnail)
-      new_conversations[0]['value'] = f'{self.img_start_token}{self.img_context_token * self.visual_tokens_per_image}{self.img_end_token}' + new_conversations[0]['value']
 
-
+    transform = self.get_transform()
     inputs = preprocess_internvl(new_conversations,self.tokenizer)
-    pixel_values = [self.transform(image) for image in images]
+    pixel_values = [transform(image) for image in images]
     pixel_values = torch.stack(pixel_values)
     inputs["pixel_values"] = pixel_values
     inputs["image_flags"] = torch.tensor([image_flag] * len(images), dtype=torch.long)
@@ -2571,6 +2571,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if inputs["input_ids"].shape[-1] > 32768:
       raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
     
+    #2B 是qwen模型所以可以直接复用
     inputs["loss_mask"] = get_assistant_mask(
       inputs["input_ids"],
       start_pattern=[151644, 77091, 198],
@@ -2761,8 +2762,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
       packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
       cu_seqlens.append(cu_seqlens[-1] + padding_len)
-      packed_pixel_values = torch.tensor(packed_pixel_values,dtype=torch.bfloat16)
-
     inputs = {
       "input_ids": packed_input_ids,
       "position_ids": packed_position_ids,

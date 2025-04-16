@@ -17,7 +17,8 @@ from .conversation import get_conv_template
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from transformers import (AutoModel, GenerationConfig, LlamaForCausalLM,
-                          LlamaTokenizer, Qwen2ForCausalLM)
+                          LlamaTokenizer)
+from recovlm.models.qwen2 import Qwen2ForCausalLM
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.modeling_utils import PreTrainedModel
 from transformers.utils import ModelOutput, logging
@@ -107,15 +108,15 @@ class InternVLChatModel(PreTrainedModel):
         # if config.use_llm_lora:
         #     self.wrap_llm_lora(r=config.use_llm_lora, lora_alpha=2 * config.use_llm_lora)
 
-    def wrap_backbone_lora(self, r=128, lora_alpha=256, lora_dropout=0.05):
-        lora_config = LoraConfig(
-            r=r,
-            target_modules=['attn.qkv', 'attn.proj', 'mlp.fc1', 'mlp.fc2'],
-            lora_alpha=lora_alpha,
-            lora_dropout=lora_dropout,
-        )
-        self.vision_model = get_peft_model(self.vision_model, lora_config)
-        self.vision_model.print_trainable_parameters()
+    # def wrap_backbone_lora(self, r=128, lora_alpha=256, lora_dropout=0.05):
+    #     lora_config = LoraConfig(
+    #         r=r,
+    #         target_modules=['attn.qkv', 'attn.proj', 'mlp.fc1', 'mlp.fc2'],
+    #         lora_alpha=lora_alpha,
+    #         lora_dropout=lora_dropout,
+    #     )
+    #     self.vision_model = get_peft_model(self.vision_model, lora_config)
+    #     self.vision_model.print_trainable_parameters()
 
     # def wrap_llm_lora(self, r=128, lora_alpha=256, lora_dropout=0.05):
     #     # Determine the target modules based on the architecture of the language model
@@ -162,15 +163,12 @@ class InternVLChatModel(PreTrainedModel):
         image_flags = image_flags.squeeze(-1)
         input_embeds = self.language_model.get_input_embeddings()(input_ids).clone()
 
-        
+        pixel_values = pixel_values.type(self.language_model.lm_head.weight.dtype)
         vit_embeds = self.extract_feature(pixel_values)
         vit_embeds = vit_embeds[image_flags == 1]
-
+        
         vit_batch_size = pixel_values.shape[0]
 
-        print("input_embeds:",input_embeds.shape)
-        print("vit_embeds:",vit_embeds.shape)
-        print("vit_batch_size",vit_batch_size)
         B, N, C = input_embeds.shape
         input_embeds = input_embeds.reshape(B * N, C)
         
@@ -184,8 +182,7 @@ class InternVLChatModel(PreTrainedModel):
 
         input_ids = input_ids.reshape(B * N)
         selected = (input_ids == self.img_context_token_id)
-        print("selected:",selected)
-        print("image_tokem",selected.sum())
+
         try:
             input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
             ignore_flag = False
