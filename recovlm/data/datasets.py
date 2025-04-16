@@ -2761,7 +2761,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
       packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
       cu_seqlens.append(cu_seqlens[-1] + padding_len)
-      packed_pixel_values = torch.tensor(packed_pixel_values,dtype=bfloat16)
+      packed_pixel_values = torch.tensor(packed_pixel_values,dtype=torch.bfloat16)
 
     inputs = {
       "input_ids": packed_input_ids,
