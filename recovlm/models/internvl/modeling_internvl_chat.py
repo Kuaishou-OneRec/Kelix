@@ -168,7 +168,7 @@ class InternVLChatModel(PreTrainedModel):
 
         vit_batch_size = pixel_values.shape[0]
 
-        print("inputs:",inputs.shape)
+        print("input_embeds:",input_embeds.shape)
         print("vit_embeds:",vit_embeds.shape)
         print("vit_batch_size",vit_batch_size)
         B, N, C = input_embeds.shape
