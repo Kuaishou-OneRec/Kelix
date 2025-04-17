@@ -165,7 +165,7 @@ class InternVLChatModel(PreTrainedModel):
 
         pixel_values = pixel_values.type(self.language_model.lm_head.weight.dtype)
         vit_embeds = self.extract_feature(pixel_values)
-        print("origin vit_embeds shape:",vit_embeds.shape)
+        origin_shape = vit_embeds.shape
         vit_embeds = vit_embeds[image_flags == 1]
         
         
@@ -183,6 +183,7 @@ class InternVLChatModel(PreTrainedModel):
 
         input_ids = input_ids.reshape(B * N)
         selected = (input_ids == self.img_context_token_id)
+        print("origin vit embed shape:",origin_shape)
         print("input shape:",input_embeds.shape)
         print("pixel_values shape:",pixel_values.shape)
         print("vit_embeds shape:",vit_embeds.shape)
