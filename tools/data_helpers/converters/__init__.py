@@ -30,7 +30,7 @@ from .kwai_video import KwaiVideoCategoryConverter
 from .kwai_video import KwaiVideoClickAfterShow10Converter
 from .kwai_video import KwaiVideoShuffleConverter
 from .web_comment import WebCommentConverter
-from .OpenImages-Caption import OpenImagesCaptionConverter
+from .OpenImages_Caption import OpenImagesCaptionConverter
 
 def create_converter(cfg) -> ConverterBase:
     return eval(cfg.class_name)(**cfg.kwargs)
