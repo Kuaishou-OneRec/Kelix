@@ -4,7 +4,7 @@ from .vit import ViTStrategy
 
 
 def build_strategy(config, ctx, **kwargs):
-    strategy_class = eval(config.type)
+    strategy_class = eval(config.strategy.type)
 
     kwargs = filter_function_arguments(strategy_class.__init__, kwargs, new_obj=True)
     return strategy_class(config, ctx, **kwargs)

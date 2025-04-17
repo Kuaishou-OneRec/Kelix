@@ -9,12 +9,13 @@ from recipes.ViT.helpers.strategy import build_strategy
 
 class BaseMonitor(object):
 
-    def __init__(self, config, ctx, **kwargs):
-        self.strategy = build_strategy(config.strategy, ctx, **kwargs)
-        self.verbose = build_verbose(config.verbose, ctx, **kwargs)
+    def __init__(self, config, ctx, *args, **kwargs):
+        self.strategy = build_strategy(config, ctx, **kwargs)
+        self.verbose = build_verbose(config, ctx, **kwargs)
         self.config = config
         self.ctx = ctx
         self.kwargs = kwargs
+        self.args = args
 
     @abstractmethod
     def report(self, **kwargs):

@@ -25,16 +25,16 @@ logger = logging.getLogger(__name__)
 
 class MonitorDecorator(object):
 
-    def __init__(self, monitor, model, ctx):
+    def __init__(self, monitor, ctx):
         self.monitor = monitor
-        self.model = model
+        self.model = monitor.model
         self.ctx = ctx
         self.strategy = self.monitor.strategy
         self.inf = 0x3f3f3f3f
     
     def _get_default_init_buffer(self):
         return {
-            "Step": 0,
+            "step": 0,
             "elapsed": 0.0,
             "world_size": self.ctx.world_size,
             "total_num_samples": 0,
@@ -42,16 +42,17 @@ class MonitorDecorator(object):
             "total_num_valid_tokens": 0,
             "total_text_num_tokens": 0,
             "total_text_num_valid_tokens": 0,
+            "total_image_num_tokens": 0,
         }
 
     @staticmethod
     def calcul_sec_per_step(metric, other):
-        metric.buffer["Step"] += getattr(other, "Step")
+        metric.buffer["step"] += getattr(other, "step")
         metric.buffer["elapsed"] += getattr(other, "elapsed")
-        if metric.buffer["Step"] == 0:
+        if metric.buffer["step"] == 0:
             metric.value = 0.
         else:
-            metric.value = metric.buffer["elapsed"] / metric.buffer["Step"]
+            metric.value = metric.buffer["elapsed"] / metric.buffer["step"]
 
     @staticmethod
     def calcul_tokens_per_sec_per_gpu(metric, other):
@@ -78,7 +79,7 @@ class MonitorDecorator(object):
         pass
 
     @staticmethod
-    def calcul_text_valid_token_ratio(metric, other):
+    def calcul_valid_text_token_ratio(metric, other):
         metric.buffer["total_text_num_tokens"] += getattr(other, "total_text_num_tokens")
         metric.buffer["total_text_num_valid_tokens"] += getattr(other, "total_text_num_valid_tokens")
         if metric.buffer["total_text_num_tokens"] == 0:
@@ -99,9 +100,10 @@ class MonitorDecorator(object):
     def register_metrics(self, config):
         monitor = self.monitor
         monitor.register_metric(
-            name="Step",
+            name="step",
             method="add",
             init_value=0,
+            verbose_name="Step",
             report_per_step=self.inf,
             verbose_per_step=config.verbose.verbose_per_step
         )
@@ -139,6 +141,7 @@ class MonitorDecorator(object):
             monitor.register_metric(
                 name=name,
                 method=getattr(self, "calcul_{}".format(name)),
+                init_buffer=self._get_default_init_buffer(),
                 report_name="pref/{}".format(name),
                 report_per_step=config.report.report_per_step,
                 verbose_per_step=config.verbose.verbose_per_step,
@@ -166,7 +169,7 @@ class MonitorDecorator(object):
         total_text_num_valid_tokens = token_metrics[4].cpu().item()
 
         return Context(
-            Step=1,
+            step=1,
             loss=loss.detach().cpu().item(),
             learning_rate=model.lr_scheduler.get_lr()[0],
             grad_norm=model.get_global_grad_norm().detach().cpu().item(),
@@ -181,7 +184,7 @@ class MonitorDecorator(object):
 
 
 def check_config(args, config):
-    config.output = args.output_dir
+    config.output_dir = args.output_dir
     if config.dataset.num_workers != config.dataset.loader.num_workers:
         config.dataset.num_workers = config.dataset.loader.num_workers
         logger.warning(f"Divergence of 'config.dataset.num_workers' and 'config.dataset.loader.num_workers', rewrite 'config.dataset.num_workers' to {config.dataset.loader.num_workers}")
@@ -192,10 +195,10 @@ def train(args):
     deepspeed.init_distributed()
 
     config = OmegaConf.load(args.config_file)
+    print("ZDJ", config)
     check_config(args, config)
     
     ctx = DistributedContext(args=args, config=config).setup()
-    monitor = build_monitor(config, ctx)
     
     with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config, enabled=False):
         model = KimiViT(config.model, ctx)
@@ -215,10 +218,11 @@ def train(args):
 
     model.train()
 
-    decorator = MonitorDecorator(monitor, model, ctx)
-    decorator.register_metrics(config)
-
     dataloader = build_dataloader(config.dataset)
+
+    monitor = build_monitor(config, ctx, model=model, dataloader=dataloader)
+    decorator = MonitorDecorator(monitor, ctx)
+    decorator.register_metrics(config)
 
     start = time.time()
     for step, batch in enumerate(dataloader, 1):

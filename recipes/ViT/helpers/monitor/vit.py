@@ -5,15 +5,19 @@ from copy import deepcopy
 from collections import defaultdict
 from torch.utils.tensorboard import SummaryWriter
 from recipes.ViT.helpers.metric import Metric
+from recipes.ViT.helpers.context import Context
 
 
 class ViTMonitor(BaseMonitor):
 
-    def __init__(self, config, ctx, **kwargs):
+    def __init__(self, config, ctx, model, dataloader, **kwargs):
         super().__init__(config, ctx, **kwargs)
         self.op_dict = dict()
         self.metrics = dict()
         self.metrics_names = list()
+
+        self.model = model
+        self.dataloader = dataloader
 
         self.global_step = kwargs.get("start_step", 0)
         self.rank = ctx.get('rank', 0)
@@ -21,11 +25,15 @@ class ViTMonitor(BaseMonitor):
         self.local_rank = ctx.args.local_rank
 
         self.tb_writer = None
+        self.setup()
+
+    def set_global_step(self, step):
+        self.global_step = step
 
     def setup(self):
         config = self.config
         if self.rank == 0:
-            self.tb_writer = SummaryWriter(log_dir=osp.join(config.output.dir, "log"))
+            self.tb_writer = SummaryWriter(log_dir=osp.join(config.output_dir, "log"))
         else:
             self.tb_writer = None
         self.strategy.setup()
@@ -67,6 +75,8 @@ class ViTMonitor(BaseMonitor):
                 metric.reset()
 
     def report(self, name, data):
+        if data is None:
+            return
         tb_writer = self.tb_writer
         if tb_writer is not None:
             tb_writer.add_scalar(
@@ -77,7 +87,13 @@ class ViTMonitor(BaseMonitor):
             )
 
     def collect(self):
-        pass
+        ctx = Context()
+        for name in self.metrics_names:
+            metric = self.metrics[name]
+            setattr(ctx, name, metric.value)
+        setattr(ctx, "model", self.model)
+        setattr(ctx, "dataloader", self.dataloader)
+        return ctx
 
     def print(self, *args, **kwargs):
         self.verbose.print(*args, **kwargs)
@@ -93,8 +109,10 @@ class ViTMonitor(BaseMonitor):
             if self.global_step % metric.verbose_per_step == 0:
                 self.print(metric.verbose_name, ":", metric.value, rank=0)
             if self.global_step % metric.report_per_step == 0:
-                self.report(metric.verbose_name, metric.value)
-        self.verbose.step()
-        self.strategy.step()
+                self.report(metric.report_name, metric.value)
+        
+        current_state = self.collect()
+        self.verbose.step(current_state)
+        self.strategy.step(current_state)
         self.print("-" * 100, rank=0)
         self.reset()

@@ -1,6 +1,10 @@
 import os
+import random
 import os.path as osp
 from copy import deepcopy
+import numpy as np
+import torch
+from transformers import set_seed as set_transformers_seed
 from abc import ABC, abstractmethod
 
 
@@ -10,7 +14,7 @@ class BaseStrategy(object):
         self.config = config
         self.ctx = ctx
         self.kwargs = kwargs
-        self.seed = config.get("seed", 1234)
+        self.seed = config.strategy.get("seed", 1234)
 
     def set_random_seed(self, seed=None):
         seed = seed or self.seed
