@@ -217,7 +217,7 @@ def process_vision_info_internvl(messages:list,
                 if not osp.exists(path):
                     post = str(int(pid_str[-4:]))
                     path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
-                nframes,num_patches_list = load_video(path)
+                nframes,num_patches_list = load_video(path,num_segments)
 
             elif isinstance(turn["video"],list):
                 nframes,num_patches_list = [],[]
@@ -233,6 +233,7 @@ def process_vision_info_internvl(messages:list,
                 #当前帧的token数
                 num_image_tokens = visual_tokens_per_image * num_image
                 value += f'Frame{i+1}: {img_start_token}{img_context_token * num_image_tokens}{img_end_token}\n'
+            images += nframes
           elif turn["type"] == "text":
             value += turn["text"]
 
@@ -248,14 +249,12 @@ def process_vision_info_internvl(messages:list,
         new_conversations.append({"role":"assistant","value":value})
       else:
         raise NotImplementedError
-    print("process:",messages)
     image_flag = 1 if len(images) > 0 else 0
     #如果是纯文本增加一张图片做引导
     if image_flag==0:
       image = Image.new('RGB', (224, 224), (255, 255, 255))
       images = dynamic_preprocess(image, min_num=min_dynamic_patch, max_num=1,
                                         image_size=image_size, use_thumbnail=use_thumbnail)
-    print("conversations:",new_conversations)
     inputs = preprocess_internvl(new_conversations,tokenizer)
     transform = build_transform(is_train=True, input_size=image_size,normalize_type=normalize_type)
     pixel_values = [transform(image) for image in images]
