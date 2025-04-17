@@ -149,6 +149,13 @@ def build_transform(is_train, input_size, pad2square=False, normalize_type='imag
     return transform
 
 
+
+
+
+# def process_vision_info_internvl(messages):
+    
+
+
 IMG_CONTEXT_TOKEN = '<IMG_CONTEXT>'
 IMG_START_TOKEN = '<img>'
 IMG_END_TOKEN = '</img>'

@@ -2415,14 +2415,12 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
     if isinstance(block["image"], str):
       image = sample_dict[block["image"]]
+      print(image)
     else:
       image = block["image"]
     if image.mode != "RGB":
       image = image.convert("RGB")
     block["image"] = image
-    block['images'] = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=self.max_dynamic_patch,
-                                        image_size=self.image_size, use_thumbnail=self.use_thumbnail)
-    
 
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
@@ -2564,7 +2562,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           self._fill_image_block(block, sample, 
                                   conf=data_conf)
         elif block["type"] == "video":
-          print("origin block",block)
           self._fill_video_block(block, sample,
                                   conf=data_conf)
         elif block["type"] == "text":
@@ -2582,10 +2579,15 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         content = conversation["content"]
         for turn in content:
           if turn["type"] == "image":
-            images += [image for image in turn["images"]]
+
+            turn_images = dynamic_preprocess(block["image"], min_num=self.min_dynamic_patch, max_num=self.max_dynamic_patch,
+                              image_size=self.image_size, use_thumbnail=self.use_thumbnail)
+            print(turn_images)
+            images += [image for image in turn_images]
             num_image_tokens = self.visual_tokens_per_image * len(turn["images"])
             value += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
           elif turn['type'] == "video":
+
             print("turn",turn)
 
           elif turn["type"] == "text":
