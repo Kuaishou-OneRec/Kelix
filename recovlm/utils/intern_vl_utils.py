@@ -192,7 +192,7 @@ def process_vision_info_internvl(messages:list,
                                 img_context_token:str,
                                 img_end_token:str,
                                 normalize_type:str,
-                                num_segments:int = 32
+                                num_segments:int = 10
                                 ):
     images,num_image_token_list = [],[]
     iamge_tokens = ""
@@ -229,7 +229,7 @@ def process_vision_info_internvl(messages:list,
             else:
                 raise ValueError(f"process_vision_info_internvl failed,failed type {turn}")
             
-            for i,num_image in num_patches_list:
+            for i,num_image in enumerate(num_patches_list):
                 #当前帧的token数
                 num_image_tokens = visual_tokens_per_image * num_image
                 value += f'Frame{i+1}: {img_start_token}{img_context_token * num_image_tokens}{img_end_token}\n'
