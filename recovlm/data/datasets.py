@@ -2414,7 +2414,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
     if isinstance(block["image"], str):
-      print("str block:",blcok)
+      print("str block:",block)
       image = sample_dict[block["image"]]
       print("image str:",image)
     else:
