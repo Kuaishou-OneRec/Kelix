@@ -65,6 +65,47 @@ def zero_pad_sequences(sequences, side: str = "left", value=0):
   return torch.stack(padded_sequences, dim=0)
 
 # TODO: use IterableDataset
+
+class PidInfoClient:
+    """简化版PID信息服务客户端"""
+    # 
+    def __init__(self, host='10.84.241.154', port=8000, timeout=30):
+        """初始化客户端
+        
+        Args:
+            host: 服务主机地址，默认为localhost
+            port: 服务端口，默认为8000
+            timeout: 请求超时时间（秒），默认30秒
+        """
+        self.base_url = f'http://{host}:{port}/pid_info'
+        self.timeout = timeout
+    #
+    def get_pid_info(self, pid, downloader_params=None, text_params=None):
+        """获取指定PID的信息
+        
+        Args:
+            pid: 内容ID
+            downloader_params: 下载器的可选参数，如 {'verbose': True}
+            text_params: 文本检索的可选参数，如 {'cache_only': True}
+            
+        Returns:
+            包含PID信息的字典
+        """
+        # 如果有自定义参数，使用POST请求
+        if downloader_params is not None or text_params is not None:
+            data = {'pid': int(pid)}
+            if downloader_params is not None:
+                data['downloader_params'] = downloader_params
+            if text_params is not None:
+                data['text_params'] = text_params
+            #
+            response = requests.post(self.base_url, json=data, timeout=self.timeout)
+        else:
+            # 否则使用GET请求
+            response = requests.get(f'{self.base_url}?pid={pid}', timeout=self.timeout)
+        #
+        # 返回JSON响应
+        return response.json()
 class ChatCompletionDataset(Dataset):
   """Text Completion Dataset with ChatML format"""
   def __init__(self,
@@ -2280,6 +2321,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.video_min_frames = video_min_frames
     self.video_max_frames = video_max_frames
     self.down_sample_ratio=down_sample_ratio
+    self.pid_info_client = PidInfoClient(pid_info_client_host)
 
     if video_nframe > 0 and (video_fps > 0 or video_min_frames > 0 or video_max_frames > 0):
       logger.warning(
@@ -2405,6 +2447,13 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       # video in local tar, replace by video bytes
       if isinstance(block["video"], str) and block["video"] in sample_dict:
         block["video"] = sample_dict[block["video"]]
+      
+      if isinstance(block["video"], str) and not os.path.exists(block["video"]):
+        # media_path
+        pid_info = self.pid_info_client.get_pid_info(block["video"].split(".")[0].split('/')[-1])
+        if pid_info['media_type'] != 'video': raise ValueError(f"media_type={pid_info['media_type']} is not video")
+        block["video"] = pid_info["media_path"]
+
       # fill other params
       block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
           (self.spatial_merge_size ** 2)
@@ -2534,6 +2583,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
             images += [image for image in turn["images"]]
             num_image_tokens = self.visual_tokens_per_image * len(turn["images"])
             value += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
+          elif turn['type']=="video":
+            print(turn)
+            
           elif turn["type"]=="text":
             value += turn["text"]
         new_conversations.append({"role":"user","value":value})
@@ -2557,8 +2609,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=1,
                                         image_size=self.image_size, use_thumbnail=self.use_thumbnail)
 
-    transform = self.get_transform()
     inputs = preprocess_internvl(new_conversations,self.tokenizer)
+
+    transform = self.get_transform()
     pixel_values = [transform(image) for image in images]
     pixel_values = torch.stack(pixel_values)
     inputs["pixel_values"] = pixel_values
@@ -2571,7 +2624,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if inputs["input_ids"].shape[-1] > 32768:
       raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
     
-    #2B 是qwen模型所以可以直接复用
     inputs["loss_mask"] = get_assistant_mask(
       inputs["input_ids"],
       start_pattern=[151644, 77091, 198],

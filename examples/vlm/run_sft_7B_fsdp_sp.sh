@@ -107,7 +107,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config examples/vlm/configs/stage1_parquet_ocr_0207_debug.json \
+                --dataset_config examples/vlm/configs/debug7b_fsdp_3p_v1_debug_internvl.json \
                 --max_length 15000 \
                 --learning_rate 1e-6 \
                 --model_class intern-vl \
