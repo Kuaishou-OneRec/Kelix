@@ -2414,8 +2414,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
     if isinstance(block["image"], str):
+      print("str block:",blcok)
       image = sample_dict[block["image"]]
-      print(image)
+      print("image str:",image)
     else:
       image = block["image"]
     if image.mode != "RGB":
@@ -2582,13 +2583,13 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
             turn_images = dynamic_preprocess(block["image"], min_num=self.min_dynamic_patch, max_num=self.max_dynamic_patch,
                               image_size=self.image_size, use_thumbnail=self.use_thumbnail)
-            print(turn_images)
+            print("turn image deal:",turn_images)
             images += [image for image in turn_images]
             num_image_tokens = self.visual_tokens_per_image * len(turn["images"])
             value += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
           elif turn['type'] == "video":
 
-            print("turn",turn)
+            print("vedio turn",turn)
 
           elif turn["type"] == "text":
             value += turn["text"]
@@ -2604,7 +2605,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         new_conversations.append({"role":"assistant","value":value})
       else:
         raise NotImplementedError
-        
+    print("deal messages",messages)
+    print("conversations",new_conversations)
     
     image_flag = 1 if len(images) > 0 else 0
     #如果是纯文本增加一张图片做引导
