@@ -3,7 +3,7 @@ split_size: 268_435_456
 dataset:
   class_name: ParquetDataset
   kwargs:
-    path: /llm_reco/luoxinchen/dataset/GRIT/grit-20m
+    path: /llm_reco/luoxinchen/dataset/GRIT/webdataset
     columns:
       - caption
       - url
