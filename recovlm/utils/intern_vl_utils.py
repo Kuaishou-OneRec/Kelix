@@ -194,11 +194,12 @@ def process_vision_info_internvl(messages:list,
                                 normalize_type:str,
                                 num_segments:int = 10
                                 ):
-    images,num_image_token_list = [],[]
+    images = []
     iamge_tokens = ""
     new_conversations = []
 
     for conversation in messages:
+      
       if conversation['role'] == "user":
         value = ""
         content = conversation["content"]
@@ -211,7 +212,8 @@ def process_vision_info_internvl(messages:list,
             value += f'{img_start_token}{img_context_token * num_image_tokens}{img_end_token}\n'
 
           elif turn['type'] == "video":
-
+            nframes = []
+            num_patches_list = []
             if isinstance(turn["video"], str) and "480p_60s_4fps" in turn["video"]:
                 path = turn["video"]
                 pid_str = osp.basename(osp.splitext(path)[0])
@@ -227,6 +229,7 @@ def process_vision_info_internvl(messages:list,
                                     image_size=image_size, use_thumbnail=use_thumbnail)
                     num_image_token_list.append(len(imgs))
                     nframes += imgs
+                num_patches_list = num_image_token_list
             else:
                 raise ValueError(f"process_vision_info_internvl failed,failed type {turn}")
             
