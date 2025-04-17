@@ -210,7 +210,9 @@ def process_vision_info_internvl(messages:list,
             value += f'{img_start_token}{img_context_token * num_image_tokens}{img_end_token}\n'
 
           elif turn['type'] == "video":
-            #
+            print(turn['type'])
+            print(turn['video'])
+            print(isinstance(turn["video"], str))
             if isinstance(turn["video"], str) and "480p_60s_4fps_v2" in turn["video"]:
                 path = turn["video"]
                 pid_str = osp.basename(osp.splitext(path)[0])
@@ -222,18 +224,18 @@ def process_vision_info_internvl(messages:list,
             elif isinstance(turn["video"],list):
                 nframes,num_patches_list = [],[]
                 for img in turn['video']:
-                    imgs += dynamic_preprocess(img, min_num=min_dynamic_patch, max_num=max_dynamic_patch,
+                    imgs = dynamic_preprocess(img, min_num=min_dynamic_patch, max_num=max_dynamic_patch,
                                     image_size=image_size, use_thumbnail=use_thumbnail)
                     num_image_token_list.append(len(imgs))
                     nframes += imgs
             else:
-                raise ValueError(f"process_vision_info_internvl failed,failed typr {turn}")
+                raise ValueError(f"process_vision_info_internvl failed,failed type {turn}")
             
             for i,num_image in num_patches_list:
                 #当前帧的token数
                 num_image_tokens = visual_tokens_per_image * num_image
                 value += f'Frame{i+1}: {img_start_token}{img_context_token * num_image_tokens}{img_end_token}\n'
-                
+            print()
           elif turn["type"] == "text":
             value += turn["text"]
 
@@ -254,10 +256,10 @@ def process_vision_info_internvl(messages:list,
     #如果是纯文本增加一张图片做引导
     if image_flag==0:
       image = Image.new('RGB', (224, 224), (255, 255, 255))
-      images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=1,
-                                        image_size=self.image_size, use_thumbnail=self.use_thumbnail)
+      images = dynamic_preprocess(image, min_num=min_dynamic_patch, max_num=1,
+                                        image_size=image_size, use_thumbnail=use_thumbnail)
     print(new_conversations)
-    inputs = preprocess_internvl(new_conversations,self.tokenizer)
+    inputs = preprocess_internvl(new_conversations,tokenizer)
     transform = build_transform(is_train=True, input_size=image_size,normalize_type=normalize_type)
     pixel_values = [transform(image) for image in images]
     pixel_values = torch.stack(pixel_values)
