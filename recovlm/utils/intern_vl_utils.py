@@ -223,13 +223,12 @@ def process_vision_info_internvl(messages:list,
                 nframes,num_patches_list = load_video(path,num_segments = num_segments)
 
             elif isinstance(turn["video"],list):
-                nframes,num_patches_list = [],[]
                 for img in turn['video']:
                     imgs = dynamic_preprocess(img['image'], min_num=min_dynamic_patch, max_num=max_dynamic_patch,
                                     image_size=image_size, use_thumbnail=use_thumbnail)
-                    num_image_token_list.append(len(imgs))
+                    num_patches_list.append(len(imgs))
                     nframes += imgs
-                num_patches_list = num_image_token_list
+
             else:
                 raise ValueError(f"process_vision_info_internvl failed,failed type {turn}")
             
