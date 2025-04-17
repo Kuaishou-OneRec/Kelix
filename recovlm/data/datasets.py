@@ -2566,7 +2566,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     #inputs 输出 input_ids,label,attention_mask,pixel_values,image_flags
     inputs = process_vision_info_internvl(messages,self.tokenizer,self.visual_tokens_per_image,
                                           self.min_dynamic_patch,self.max_dynamic_patch,
-                                          self.use_thumbnail,self.image_size,self.image_size,self.img_start_token,
+                                          self.use_thumbnail,self.image_size,self.img_start_token,
                                           self.img_context_token,self.img_end_token,self.normalize_type)
 
     # For the Warning: (add by zzx)

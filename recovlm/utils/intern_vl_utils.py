@@ -4,6 +4,7 @@ import re
 from collections import Counter
 from typing import Dict
 import io
+import os.path as osp
 
 import cv2
 import numpy as np
@@ -209,8 +210,7 @@ def process_vision_info_internvl(messages:list,
             value += f'{img_start_token}{img_context_token * num_image_tokens}{img_end_token}\n'
 
           elif turn['type'] == "video":
-            print(turn['video'])
-            print(isinstance(turn["video"], str))
+
             if isinstance(turn["video"], str) and "480p_60s_4fps" in turn["video"]:
                 path = turn["video"]
                 pid_str = osp.basename(osp.splitext(path)[0])
@@ -248,14 +248,14 @@ def process_vision_info_internvl(messages:list,
         new_conversations.append({"role":"assistant","value":value})
       else:
         raise NotImplementedError
-    print(messages)
+    print("process:",messages)
     image_flag = 1 if len(images) > 0 else 0
     #如果是纯文本增加一张图片做引导
     if image_flag==0:
       image = Image.new('RGB', (224, 224), (255, 255, 255))
       images = dynamic_preprocess(image, min_num=min_dynamic_patch, max_num=1,
                                         image_size=image_size, use_thumbnail=use_thumbnail)
-    print(new_conversations)
+    print("conversations:",new_conversations)
     inputs = preprocess_internvl(new_conversations,tokenizer)
     transform = build_transform(is_train=True, input_size=image_size,normalize_type=normalize_type)
     pixel_values = [transform(image) for image in images]
