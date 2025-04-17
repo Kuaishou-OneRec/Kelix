@@ -1,6 +1,7 @@
 import os
 import os.path as osp
 import torch
+import numpy as np
 import deepspeed
 from PIL import Image
 import torch.nn as nn
@@ -9,6 +10,7 @@ from transformers import AutoProcessor, AutoModel
 from .siglip.modeling_siglip import SiglipPreTrainedModel, SiglipModel
 from .siglip.processing_siglip import SiglipProcessor
 import torch.nn.functional as F
+from recipes.ViT.helpers.context import Context
 
 
 class DisCoGather(torch.autograd.Function):
@@ -56,7 +58,7 @@ class KimiViT(nn.Module):
         self.ctx = ctx
         self.is_dist = self.ctx.is_dist
 
-        self.model = SiglipModel.from_pretrained(config.dir)
+        self.model = SiglipModel.from_pretrained(config.dir, ignore_mismatched_sizes=True)
         self.processor = SiglipProcessor.from_pretrained(config.dir)
         self.tokenizer = self.processor.tokenizer
 
@@ -124,13 +126,20 @@ class KimiViT(nn.Module):
         outputs = self.model(**inputs)
         loss = self.calcul_loss(outputs)
 
-        image_embeds = outputs.image_embeds
-        text_embeds = outputs.text_embeds
+        text_output = outputs.text_model_output
+        image_output = outputs.vision_model_output
+
+        text_hidden_embeds = text_output.last_hidden_state
+        image_hidden_embeds = image_output.last_hidden_state
+
+        batch_size = image_hidden_embeds.shape[0]
+        assert text_hidden_embeds.shape[0] == image_hidden_embeds.shape[0]
 
         if self.text_decoder is not None:
+            image_embeds = outputs.image_embeds
+            text_embeds = outputs.text_embeds
             image_embeds = self.image_proj(image_embeds)
             text_embeds = self.text_proj(text_embeds)
-            batch_size = image_embeds.shape[0]
             image_end_embeds = self.image_end_embed.repeat(batch_size, 1, 1)
             embeds = torch.concat((image_embeds, image_end_embeds.to(text_embeds.dtype), text_embeds), dim=1)
 
@@ -159,10 +168,11 @@ class KimiViT(nn.Module):
             embeds = self.vocab_proj(embeds)
             self.calcul_regression_loss(embeds, inputs["input_ids"], loss_mask)
             return outputs, loss
-        return outputs, {
-            "loss": loss,
-            "total_image_num_tokens": image_embeds.shape[0] * image_embeds.shape[1],
-            "total_text_num_tokens": text_embeds.shape[0] * text_embeds.shape[1],
-            "total_num_samples": image_embeds.shape[0],
-            "total_text_num_valid_tokens": (inputs["input_ids"] != self.tokenizer.pad_token_id).long().sum().item()
-        }
+
+        return outputs, Context(
+            loss=loss,
+            total_image_num_tokens=np.prod(image_hidden_embeds.shape[:2]).item(),
+            total_text_num_tokens=np.prod(text_hidden_embeds.shape[:2]).item(),
+            total_num_samples=batch_size,
+            total_text_num_valid_tokens=(inputs["input_ids"] != self.tokenizer.pad_token_id).long().sum().item()
+        )

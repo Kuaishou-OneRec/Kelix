@@ -141,7 +141,7 @@ class ParquetDataset(IterableDataset):
             sample_data = {
                 "source": data_source,
                 "task": task,
-                "texts": text
+                "texts": [text]
             }
 
             if images is not None and isinstance(images, list):
