@@ -13,6 +13,8 @@ import collections
 import pickle
 import itertools
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
+from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
+from recovlm.utils.ds_utils import print_input_info
 
 import torch
 import torch.nn as nn
@@ -28,7 +30,8 @@ from torch.utils.tensorboard import SummaryWriter
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
-from recovlm.data.dataloaders_v2 import get_dataloader
+from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
+from recovlm.data.dataloaders import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
 from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
@@ -110,6 +113,13 @@ def get_argument_parser():
   parser.add_argument("--output_dir", type=str, default=None,
                       help="The directory to write the trained model")
 
+
+  parser.add_argument("--model_class", type=str, default="Qwen2VLForConditionalGeneration",
+                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration'.")
+  
+  parser.add_argument("--model_processor", type=str, default="Qwen2VLProcessor",
+                      help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor'")
+
   ############ Dataset args ############
   parser.add_argument("--dataset_config", type=str, default=None,
                       help="The comma seperated path of indexed json file.")
@@ -148,6 +158,7 @@ def get_argument_parser():
   parser.add_argument("--min_lr", type=float, default=1e-6,
                       help="The minimum learning rate to reach after the cosine schedule.")
   
+
   ############ Optimizer Args ############
   parser.add_argument("--learning_rate", type=float, default=2e-4,
                       help="The peak learning rate for optimizer.")
@@ -280,7 +291,6 @@ def save_model_checkpoint(
                     tag=str(global_step)
                 )
 
-
         # 保存dataloader状态（如果有）
         if dataloader is not None:
             try:
@@ -378,9 +388,11 @@ def train():
   set_random_seed(args.seed)
 
   state_dict = None
+  converter = Qwen2VLCheckpointConverter(args.model_dir)
   if dist.get_rank() == 0:
     with set_default_dtype(torch.bfloat16):
       state_dict = load_hf_checkpoint(args.model_dir)
+      state_dict = converter(state_dict)
 
   dist.barrier()
 
@@ -404,7 +416,7 @@ def train():
     tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    model = Qwen2VLForConditionalGeneration.from_pretrained(
+    model = eval(args.model_class).from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",
       use_cache=False
     )
@@ -433,8 +445,9 @@ def train():
   dist.barrier()
 
   with Timer("Load state dict"):
-    load_from_full_model_state_dict(model=model, full_sd=state_dict)
-  
+    load_from_full_model_state_dict(model=model, full_sd=state_dict) # 这里应该全部转成CUDA了, meta -> CUDA
+
+
   if state_dict is not None:
     del state_dict
 
@@ -444,7 +457,7 @@ def train():
       if hasattr(m, "rope_init"):
         print_rank_0("Initialize RoPE")
         m.rope_init()
-  
+
   # 确保任何参数都被正确初始化
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
     assert not tensor.device == torch.device("meta"), \
@@ -542,7 +555,7 @@ def train():
     client_state = {}
 
     # 获取state_dict用于加载
-    state_dict = {"app": app_state}
+    state_dict = {"app": app_state.set_call_back(converter.convert)}
     
     # 使用DCP API加载分片数据
     dist_checkpointer.load_checkpoint(
@@ -583,7 +596,7 @@ def train():
 
   dist.barrier()
 
-  processor = Qwen2VLProcessor.from_pretrained(args.model_dir)
+  processor = eval(args.model_processor).from_pretrained(args.model_dir)
 
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
@@ -603,7 +616,8 @@ def train():
         dataset_config, ensure_ascii=False, indent=2) + "\n")
 
   with Timer("Build dataloader"):
-    dataloader = get_dataloader(name=dataset, **dataset_config)
+    try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
+    except: dataloader = get_dataloader(name=dataset, **dataset_config)
     if args.resume_dataloader and dataloader_state_dict is not None:
       dataloader.load_state_dict(dataloader_state_dict)
 
@@ -864,8 +878,8 @@ def train():
                         "total_data_source_tokens": total_data_source_tokens,
                     },
                     dataloader=dataloader,
-                    app_state=app_state,
-                    dist_checkpointer=dist_checkpointer,
+                    app_state=app_state.set_call_back(converter.revert),
+                    dist_checkpointer=dist_checkpointer
                 )
         try:
           dataloader_state_dict = {
@@ -900,7 +914,7 @@ def train():
                           "total_data_source_tokens": total_data_source_tokens,
                       },
                       dataloader=dataloader,
-                      app_state=app_state,
+                      app_state=app_state.set_call_back(converter.revert),
                       dist_checkpointer=dist_checkpointer,
                   )
 
