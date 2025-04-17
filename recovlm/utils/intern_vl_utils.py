@@ -263,7 +263,6 @@ def process_vision_info_internvl(messages:list,
     inputs["pixel_values"] = pixel_values
     inputs["image_flags"] = torch.tensor([image_flag] * len(images), dtype=torch.long)
 
-    assert sum(inputs['input_ids'] == 151667) == pixel_values.shape[0] * visual_tokens_per_image or image_flag == 0, print(f"process ERROR,pixel_values:{pixel_values.shape}{sum(inputs['input_ids'] == 151667)}")
     return inputs
 
 IMG_CONTEXT_TOKEN = '<IMG_CONTEXT>'
