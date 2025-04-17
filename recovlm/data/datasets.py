@@ -2314,7 +2314,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.shuffle_initial_size = shuffle_initial_size
     self.min_dynamic_patch = min_dynamic_patch
     self.max_dynamic_patch = max_dynamic_patch
-    self.sampling_method = sampling_method
     self.normalize_type = normalize_type
     self.use_thumbnail = use_thumbnail
 
