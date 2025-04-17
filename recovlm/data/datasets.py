@@ -2479,15 +2479,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       if segment["type"] == "text":
         text += segment["text"]
       elif segment["type"] == "image":
-        text += "<|vision_start|><|image_pad|><|vision_end|>"
         self._fill_image_block(segment, sample,
                                 conf=data_conf)
-        vision_infos.append(segment)
       elif segment["type"] == "video":
-        text += "<|vision_start|><|video_pad|><|vision_end|>"
         self._fill_video_block(segment, sample,
                                 conf=data_conf)
-        vision_infos.append(segment)
       else:
         logger.warning(f"!!! Unsupport {segment['type']=}, skip this segment.")
     
