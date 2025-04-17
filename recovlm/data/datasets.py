@@ -2340,6 +2340,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.sampling_method = sampling_method
     self.normalize_type = normalize_type
     self.use_thumbnail = use_thumbnail
+    self.spatial_merge_size = spatial_merge_size
 
     self.img_context_token = '<IMG_CONTEXT>'
     self.img_start_token = '<img>'
