@@ -2422,6 +2422,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if image.mode != "RGB":
       image = image.convert("RGB")
     block["image"] = image
+    print("deal block:",image)
 
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
@@ -2605,8 +2606,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         new_conversations.append({"role":"assistant","value":value})
       else:
         raise NotImplementedError
-    print("deal messages",messages)
-    print("conversations",new_conversations)
     
     image_flag = 1 if len(images) > 0 else 0
     #如果是纯文本增加一张图片做引导
