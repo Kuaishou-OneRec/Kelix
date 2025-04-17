@@ -233,6 +233,7 @@ def process_vision_info_internvl(messages:list,
                 #当前帧的token数
                 num_image_tokens = visual_tokens_per_image * num_image
                 value += f'Frame{i+1}: {img_start_token}{img_context_token * num_image_tokens}{img_end_token}\n'
+                
           elif turn["type"] == "text":
             value += turn["text"]
 
