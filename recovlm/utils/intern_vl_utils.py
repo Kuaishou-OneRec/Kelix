@@ -202,7 +202,6 @@ def process_vision_info_internvl(messages:list,
         content = conversation["content"]
         for turn in content:
           if turn["type"] == "image":
-
             turn_images = dynamic_preprocess(block["image"], min_num=min_dynamic_patch, max_num=max_dynamic_patch,
                                     image_size=image_size, use_thumbnail=use_thumbnail)
             images += [image for image in turn_images]
@@ -210,10 +209,9 @@ def process_vision_info_internvl(messages:list,
             value += f'{img_start_token}{img_context_token * num_image_tokens}{img_end_token}\n'
 
           elif turn['type'] == "video":
-            print(turn['type'])
             print(turn['video'])
             print(isinstance(turn["video"], str))
-            if isinstance(turn["video"], str) and "480p_60s_4fps_v2" in turn["video"]:
+            if isinstance(turn["video"], str) and "480p_60s_4fps" in turn["video"]:
                 path = turn["video"]
                 pid_str = osp.basename(osp.splitext(path)[0])
                 if not osp.exists(path):
@@ -224,7 +222,7 @@ def process_vision_info_internvl(messages:list,
             elif isinstance(turn["video"],list):
                 nframes,num_patches_list = [],[]
                 for img in turn['video']:
-                    imgs = dynamic_preprocess(img, min_num=min_dynamic_patch, max_num=max_dynamic_patch,
+                    imgs = dynamic_preprocess(img['image'], min_num=min_dynamic_patch, max_num=max_dynamic_patch,
                                     image_size=image_size, use_thumbnail=use_thumbnail)
                     num_image_token_list.append(len(imgs))
                     nframes += imgs
@@ -235,7 +233,6 @@ def process_vision_info_internvl(messages:list,
                 #当前帧的token数
                 num_image_tokens = visual_tokens_per_image * num_image
                 value += f'Frame{i+1}: {img_start_token}{img_context_token * num_image_tokens}{img_end_token}\n'
-            print()
           elif turn["type"] == "text":
             value += turn["text"]
 
