@@ -1,0 +1,1005 @@
+    "merge_checkpoint_dtype": "bf16",
+         6216,  7105,  9404,  9737, 11654, 11660, 11776], dtype=torch.int32),
+    'sample_idx': tensor([[ 0,  0,  0,  ..., -1, -1, -1]], dtype=torch.int32),
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18864, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4716,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21428, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5357,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(26396, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6599,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14040, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3510,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15540, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3885,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25504, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6376,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10348, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2587,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25840, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6460,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27344, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6836,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9860, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2465,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17296, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4324,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17596, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4399,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(988, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(247,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24736, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6184,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25648, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6412,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7056, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1764,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21764, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5441,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16576, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4144,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16232, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4058,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18528, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4632,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13636, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3409,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24820, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6205,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24792, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6198,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15136, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3784,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20360, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5090,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19976, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4994,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28440, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7110,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8592, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2148,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25388, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6347,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11736, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2934,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18832, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4708,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22780, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5695,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16012, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4003,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16328, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4082,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(31, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16672, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4168,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17600, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4400,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15044, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3761,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14796, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3699,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(29932, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7483,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8336, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2084,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25360, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6340,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10968, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2742,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11012, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2753,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23840, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5960,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6224, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1556,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(33752, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8438,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19728, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4932,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8080, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2020,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5904, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1476,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28476, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7119,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23048, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5762,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17432, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4358,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20256, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5064,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19720, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4930,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18572, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4643,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19556, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4889,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11392, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2848,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22168, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5542,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(30, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(29328, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7332,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6800, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1700,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19816, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4954,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15480, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3870,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(35, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15404, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3851,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25080, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6270,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7668, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1917,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(30764, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7691,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(29, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27112, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6778,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10540, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2635,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20320, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5080,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21256, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5314,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19060, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4765,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18276, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4569,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9852, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2463,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23280, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5820,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(32, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25040, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6260,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11220, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2805,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6492, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1623,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8080, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2020,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(46, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(32428, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8107,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3656, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(914,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28680, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7170,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12240, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3060,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16356, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4089,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23376, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5844,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4956, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1239,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(33416, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8354,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19428, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4857,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12920, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3230,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27760, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6940,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10716, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2679,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17956, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4489,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20656, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5164,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17588, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4397,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15900, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3975,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4624, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1156,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(29588, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7397,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22976, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5744,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14100, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3525,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(33168, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8292,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9860, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2465,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6724, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1681,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(30440, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7610,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15820, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3955,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20828, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5207,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20272, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5068,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15216, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3804,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5476, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1369,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(32832, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8208,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11596, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2899,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28152, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7038,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(29968, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7492,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7312, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1828,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3972, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(993,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(37380, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9345,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22796, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5699,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14620, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3655,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4252, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1063,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(31964, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7991,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12120, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3030,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25204, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6301,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5400, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1350,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(33320, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8330,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21228, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5307,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13080, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3270,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21324, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5331,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10540, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2635,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11340, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2835,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23376, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5844,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16500, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4125,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21252, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5313,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21944, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5486,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17256, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4314,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(34, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(32080, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8020,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6716, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1679,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18964, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4741,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19976, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4994,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(26216, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6554,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9860, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2465,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24908, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6227,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15136, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3784,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7600, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1900,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(32240, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8060,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10916, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2729,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(26868, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6717,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23820, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5955,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12920, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3230,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8764, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2191,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27116, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6779,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4596, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1149,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(30940, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7735,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27448, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6862,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9520, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2380,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24280, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6070,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17340, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4335,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(29876, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7469,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7260, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1815,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7284, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1821,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(29500, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7375,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21332, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5333,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10372, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2593,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(31836, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7959,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3400, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(850,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(48, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22116, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5529,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14968, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3742,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18144, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4536,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19556, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4889,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21224, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5306,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10200, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2550,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(29224, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7306,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10904, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2726,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28440, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7110,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15576, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3894,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21592, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5398,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6852, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1713,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(34076, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8519,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8524, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2131,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28220, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7055,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18272, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4568,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24560, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6140,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14376, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3594,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(26180, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6545,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10320, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2580,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(29660, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7415,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13336, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3334,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14484, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3621,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27876, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6969,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14880, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3720,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15272, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3818,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14368, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3592,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20724, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5181,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17940, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4485,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12256, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3064,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28724, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7181,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20060, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5015,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16068, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4017,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16904, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4226,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22532, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5633,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18484, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4621,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18428, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4607,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11712, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2928,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(30420, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7605,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(49, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(37412, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9353,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3400, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(850,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22552, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5638,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18536, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4634,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14664, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3666,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25420, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6355,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(43064, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10766,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14692, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3673,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27956, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6989,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20148, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5037,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17936, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4484,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(29, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25736, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6434,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10200, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2550,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25960, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6490,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7400, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1850,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21232, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5308,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18280, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4570,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20768, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5192,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17000, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4250,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11500, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2875,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23800, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5950,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(29632, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7408,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10200, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2550,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27900, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6975,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7056, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1764,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17628, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4407,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20328, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5082,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24648, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6162,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13600, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3400,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1992, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(498,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8840, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2210,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10768, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2692,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25720, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6430,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7064, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1766,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(30860, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7715,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23452, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5863,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11220, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2805,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10756, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2689,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24228, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6057,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20888, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5222,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18280, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4570,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9912, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2478,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(28908, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7227,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10268, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2567,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(30080, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7520,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20548, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5137,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21080, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5270,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27296, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6824,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10200, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2550,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(35760, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8940,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3400, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(850,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15596, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3899,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19720, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4930,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22924, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5731,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17768, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4442,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19048, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4762,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16160, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4040,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23984, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5996,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8080, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2020,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10780, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2695,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14112, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3528,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21148, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5287,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20316, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5079,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15884, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3971,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18020, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4505,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15268, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3817,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24504, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6126,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22636, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5659,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18276, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4569,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11448, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2862,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23116, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5779,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13828, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3457,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22696, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5674,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7004, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1751,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(26872, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6718,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12064, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3016,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24908, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6227,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19336, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4834,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20560, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5140,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(24124, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6031,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12072, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3018,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11388, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2847,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(26860, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6715,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20116, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5029,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13856, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3464,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(26880, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6720,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3316, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(829,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16228, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4057,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19116, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4779,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(10672, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2668,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22440, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5610,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9568, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2392,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16584, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4146,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20588, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5147,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3400, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(850,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2336, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(584,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(37996, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9499,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7756, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(1939,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(21760, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5440,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14104, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3526,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14880, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3720,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13908, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3477,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27456, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6864,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16884, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4221,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22356, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5589,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19252, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4813,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20900, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5225,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19932, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4983,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18708, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4677,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20904, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5226,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18956, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4739,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23124, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5781,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14968, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3742,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(22, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(29544, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7386,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11136, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2784,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(30, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20852, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5213,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(19560, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4890,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14972, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3743,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25080, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6270,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23288, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5822,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15060, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3765,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(13, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(20108, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5027,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(16156, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4039,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(17, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23640, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5910,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(12248, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3062,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(11600, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2900,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(27872, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6968,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(18, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(15104, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3776,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(25068, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(6267,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(8456, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2114,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(5, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(14876, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(3719,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(23, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(30200, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(7550,), dtype=torch.int64, device=cpu
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(4, 3), dtype=torch.int64, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(9096, 40), dtype=torch.float32, device=cuda:0
+Input to Qwen2_5_VLTransformer::forward  Tensor: shape=(2274,), dtype=torch.int64, device=cpu
