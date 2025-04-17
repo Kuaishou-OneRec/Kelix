@@ -457,23 +457,16 @@ def train():
   with Timer("Load state dict"):
     load_from_full_model_state_dict(model=model, full_sd=state_dict) # 这里应该全部转成CUDA了, meta -> CUDA
 
-  for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
-    if 'inv' in name: print(22222, name, tensor.shape, tensor.device)
-
-  print('=' * 20)
   if state_dict is not None:
     del state_dict
 
   with torch.device(torch.cuda.current_device()):
     for m in model.modules():
       # RoPE is not covered in state dict
-      print(type(m))
       if hasattr(m, "rope_init"):
         print_rank_0("Initialize RoPE")
         m.rope_init()
 
-  for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
-    if 'inv' in name: print(33333, name, tensor.shape, tensor.device)
   
   # 确保任何参数都被正确初始化
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
