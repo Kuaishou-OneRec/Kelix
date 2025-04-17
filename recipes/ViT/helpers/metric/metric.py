@@ -18,28 +18,30 @@ class Metric:
     report_per_step: int = 1
     report_name: str = ""
     verbose_name: str = ""
+    formula: str = ""
+    reset_step: int = 0x3f3f3f3f
 
-    def add_value(self, other: Any):
+    def add_value(self, other: Dict[str, Any]):
         value = getattr(other, self.name)
         self.value = self.value + value
 
-    def prod_value(self, other: Any):
+    def prod_value(self, other: Dict[str, Any]):
         value = getattr(other, self.name)
         self.value = self.value * value
 
-    def minus_value(self, other: Any):
+    def minus_value(self, other: Dict[str, Any]):
         value = getattr(other, self.name)
         self.value = self.value - value
 
-    def divide_value(self, other: Any):
+    def divide_value(self, other: Dict[str, Any]):
         value = getattr(other, self.name)
         self.value = self.value / value
 
-    def assign_value(self, other: Any):
+    def assign_value(self, other: Dict[str, Any]):
         value = getattr(other, self.name)
         self.value = deepcopy(value)
 
-    def update(self, other: Any):
+    def update(self, other: Dict[str, Any]):
         if isinstance(self.method, str):
             method = self.method
             update_method = getattr(self, "{}_value".format(method))

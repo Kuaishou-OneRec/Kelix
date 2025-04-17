@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from recipes.ViT.common import filter_function_arguments
+from recipes.ViT.helpers.common import filter_function_arguments
 from .muon import Muon
 
 

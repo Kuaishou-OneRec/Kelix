@@ -1,4 +1,4 @@
-from recipes.ViT.common import filter_function_arguments
+from recipes.ViT.helpers.common import filter_function_arguments
 from .base import BaseVerbose
 from .vit import ViTVerbose
 

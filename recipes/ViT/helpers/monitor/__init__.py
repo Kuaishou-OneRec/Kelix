@@ -1,6 +1,6 @@
 from .base import BaseMonitor
 from .vit import ViTMonitor
-from recipes.ViT.common import filter_function_arguments
+from recipes.ViT.helpers.common import filter_function_arguments
 
 
 def build_monitor(config, ctx, **kwargs):

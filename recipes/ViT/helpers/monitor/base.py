@@ -3,8 +3,8 @@ import os.path as osp
 import argparse
 from copy import deepcopy
 from abc import ABC, abstractmethod
-from recipes.ViT.verbose import build_verbose
-from recipes.ViT.strategy import build_strategy
+from recipes.ViT.helpers.verbose import build_verbose
+from recipes.ViT.helpers.strategy import build_strategy
 
 
 class BaseMonitor(object):

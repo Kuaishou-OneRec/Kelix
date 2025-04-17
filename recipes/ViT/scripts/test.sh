@@ -8,7 +8,7 @@ OUTPUT_DIR=/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/0.0.0.1
 echo $OUTPUT_DIR
 
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
-    recipes/ViT/trainer/siglip.py \
+    recipes/ViT/training/trainer/siglip.py \
     --config_file /llm_reco/zangdunju/vllm/rlhf/recovlm/recipes/ViT/configs/v1.yaml \
     --output_dir $OUTPUT_DIR \
     --deepspeed \

@@ -4,7 +4,7 @@ from . import BaseMonitor
 from copy import deepcopy
 from collections import defaultdict
 from torch.utils.tensorboard import SummaryWriter
-from recipes.ViT.metric import Metric
+from recipes.ViT.helpers.metric import Metric
 
 
 class ViTMonitor(BaseMonitor):
@@ -76,7 +76,11 @@ class ViTMonitor(BaseMonitor):
 
     def reset(self):
         for metric in self.interim_metrics.values():
-            metric.reset()
+            if self.global_step % metric.reset_step == 0:
+                metric.reset()
+        for metric in self.permanent_metrics.values():
+            if self.global_step % metric.reset_step == 0:
+                metric.reset()
 
     def report(self, name, data):
         tb_writer = self.tb_writer
@@ -109,3 +113,4 @@ class ViTMonitor(BaseMonitor):
         self.verbose.step()
         self.strategy.step()
         self.print("-" * 100, rank=0)
+        self.reset()

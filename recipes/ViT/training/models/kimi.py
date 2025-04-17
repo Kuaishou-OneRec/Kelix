@@ -123,9 +123,11 @@ class KimiViT(nn.Module):
             inputs[key] = inputs[key].cuda(torch.cuda.current_device())
         outputs = self.model(**inputs)
         loss = self.calcul_loss(outputs)
+
+        image_embeds = outputs.image_embeds
+        text_embeds = outputs.text_embeds
+
         if self.text_decoder is not None:
-            image_embeds = outputs.image_embeds
-            text_embeds = outputs.text_embeds
             image_embeds = self.image_proj(image_embeds)
             text_embeds = self.text_proj(text_embeds)
             batch_size = image_embeds.shape[0]
@@ -157,4 +159,10 @@ class KimiViT(nn.Module):
             embeds = self.vocab_proj(embeds)
             self.calcul_regression_loss(embeds, inputs["input_ids"], loss_mask)
             return outputs, loss
-        return outputs, loss
+        return outputs, {
+            "loss": loss,
+            "total_image_num_tokens": image_embeds.shape[0] * image_embeds.shape[1],
+            "total_text_num_tokens": text_embeds.shape[0] * text_embeds.shape[1],
+            "total_num_samples": image_embeds.shape[0],
+            "total_text_num_valid_tokens": (inputs["input_ids"] != self.tokenizer.pad_token_id).long().sum().item()
+        }
