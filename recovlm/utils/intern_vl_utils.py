@@ -248,8 +248,11 @@ def process_vision_info_internvl(messages:list,
         value = ""
         content = conversation["content"]
         for turn in content:
-          if turn["type"] == "text":
-            value += turn["text"]
+          if isinstance(turn,dict):
+            if turn["type"] == "text":
+                value += turn["text"]
+          else:
+            raise ValueError(f"ERROR input type (assisant) {turn}")
 
         new_conversations.append({"role":"assistant","value":value})
       else:

@@ -2431,7 +2431,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     new_conversations = []
     text = ""
     segments = sample["json"]["segments"]
-    print(segments)
     for segment in segments: 
       if segment["type"] == "image":
         self._fill_image_block(segment, sample,
