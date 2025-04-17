@@ -1,6 +1,6 @@
 hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=1200
+np=120
 
 KWS_SERVICE_REGION=HB2
 KWS_SERVICE_DC=WLF2
