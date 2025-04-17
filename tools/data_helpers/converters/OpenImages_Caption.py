@@ -4,6 +4,20 @@ import uuid
 import base64
 from typing import Dict, Optional
 from .converter import ConverterBase
+import base64
+import requests
+
+
+def image_url_to_base64(image_url):
+    try:
+        response = requests.get(image_url, stream=True)
+        response.raise_for_status()
+        image_bytes = response.content
+        base64_data = base64.b64encode(image_bytes).decode("ascii") # 转换为 Base64 字符串
+        return base64_data
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
 
 class OpenImagesCaptionConverter(ConverterBase):
 
@@ -15,19 +29,21 @@ class OpenImagesCaptionConverter(ConverterBase):
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
         text = src['caption']
-        image_bytes = src['image']['bytes']
-        image_path = src['image']['path']
-
-        images = {image_path: base64.b64encode(image_bytes).decode("ascii")}
-
+        url = src['url']
+        image_bytes = image_url_to_base64(url)
+        if image_bytes is None:
+            return None
+        
         messages = None
+
+        images = {"0.jpg": image_bytes}
         
         segments = []
 
         segments.append(
             {
                 "type": "image",
-                "image": image_path
+                "image": '0.jpg'
             }
         )
         segments.append(
