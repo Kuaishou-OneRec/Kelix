@@ -2321,7 +2321,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.video_min_frames = video_min_frames
     self.video_max_frames = video_max_frames
     self.down_sample_ratio=down_sample_ratio
-    self.pid_info_client = PidInfoClient(pid_info_client_host)
+    self.pid_info_client = PidInfoClient('10.84.241.154')
 
     if video_nframe > 0 and (video_fps > 0 or video_min_frames > 0 or video_max_frames > 0):
       logger.warning(
@@ -2585,7 +2585,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
             value += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
           elif turn['type']=="video":
             print(turn)
-            
+
           elif turn["type"]=="text":
             value += turn["text"]
         new_conversations.append({"role":"user","value":value})
