@@ -217,7 +217,7 @@ def process_vision_info_internvl(messages:list,
                 if not osp.exists(path):
                     post = str(int(pid_str[-4:]))
                     path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
-                nframes,num_patches_list = load_video(path,num_segments)
+                nframes,num_patches_list = load_video(path,num_segments = num_segments)
 
             elif isinstance(turn["video"],list):
                 nframes,num_patches_list = [],[]
