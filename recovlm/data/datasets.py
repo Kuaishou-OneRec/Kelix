@@ -36,7 +36,7 @@ from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
-from recovlm.utils.intern_vl_utils import process_vision_info_internvl
+from recovlm.utils.intern_vl_utils import process_vision_info_internvl,dynamic_preprocess,load_video,build_transform
 
 from recovlm.models.internvl import InternVLChatConfig
 
@@ -2264,33 +2264,20 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   def __init__(self,
                sources: Union[str, List[str]],
                max_length: int = 1024,
-               min_visual_tokens_per_image: int = 4,
-               max_visual_tokens_per_image: int = 512,
-               video_nframe: int = -1,
-               video_fps: float = 2.0,
-               video_min_frames: int = -1,
-               video_max_frames: int = 120,
-               shrink_ratio: float = 0.9,
-               max_retry: int = 5,
+               shrink_ratio: int = 2,
+               max_retry: int = 4,
                multiple_of: int = 8,
                shuffle_size: int = 100000,
                shuffle_initial_size: int = 20000,
                base_model_dir: Optional[str] = None,
-               processor: Optional[Qwen2VLProcessor] = None,
-               spatial_merge_size: int = 2,
                image_size:int=448,
                patch_size: int = 14,
                down_sample_ratio:float=0.5,
-               image_token_id: int = 151655,
-               video_token_id: int = 151656,
-               vision_start_token_id: int = 151652,
-               vision_end_token_id: int = 151653,
-               pad_token_id: int = 151643,
                min_dynamic_patch=1,
                max_dynamic_patch=12,
-               sampling_method='rand',  # for video data
-               normalize_type='imagenet',
-               use_thumbnail = True,
+               normalize_type:str ='imagenet',
+               use_thumbnail:bool = True,
+               num_segments:int= 10,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                **kargs):
     """
@@ -2313,21 +2300,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       image_size = model_config.force_image_size
     
     self.tokenizer = tokenizer
-    self.max_visual_tokens_per_image = int((image_size//patch_size)** 2 * (down_sample_ratio ** 2))
-    self.min_visual_tokens_per_image = int((image_size//patch_size)** 2 * (down_sample_ratio ** 2))
     self.visual_tokens_per_image = int((image_size//patch_size)** 2 * (down_sample_ratio ** 2))
-    self.video_nframe = video_nframe
-    self.video_fps = video_fps
-    self.video_min_frames = video_min_frames
-    self.video_max_frames = video_max_frames
+  
     self.down_sample_ratio=down_sample_ratio
     self.pid_info_client = PidInfoClient('10.84.241.154')
 
-    if video_nframe > 0 and (video_fps > 0 or video_min_frames > 0 or video_max_frames > 0):
-      logger.warning(
-        f"ChatCompletionVisionDataset(video_fps=...): video_fps, video_min_frames, "\
-          f"video_max_frames will be ignored when video_nframe>0 ({video_nframe=})"
-      )
     self.image_size = image_size
     self.patch_size = patch_size
     self.shrink_ratio = shrink_ratio
@@ -2340,13 +2317,14 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.sampling_method = sampling_method
     self.normalize_type = normalize_type
     self.use_thumbnail = use_thumbnail
-    self.spatial_merge_size = spatial_merge_size
 
     self.img_context_token = '<IMG_CONTEXT>'
     self.img_start_token = '<img>'
     self.img_end_token = '</img>'
 
-
+    self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
+    self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
+    self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
 
     self.dataset, self.total_samples = self._build_source_dataset(sources)
 
@@ -2356,9 +2334,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
-    # ToDo 检查这部分在intern-vl中应该设置为多少
-    image_pad_len = 6
-    self.max_length = max_length - image_pad_len
+    self.max_length = max_length
     assert self.max_length > 0
 
     self.datasource_config = datasource_config
@@ -2406,8 +2382,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                         sample_dict: Dict[str, Any],
                         conf: Dict[str, Any]):
 
-    min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
-    max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
     if isinstance(block["image"], str):
       image = sample_dict[block["image"]]
     else:
@@ -2419,9 +2393,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
                         conf: Dict[str, Any]):
-
-    min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
-    max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
 
     if isinstance(block["video"], list):
         if all([isinstance(image_block, str) for image_block in block["video"]]):
@@ -2447,21 +2418,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         if pid_info['media_type'] != 'video': raise ValueError(f"media_type={pid_info['media_type']} is not video")
         block["video"] = pid_info["media_path"]
 
-      # fill other params
-      block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
-          (self.spatial_merge_size ** 2)
-      block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
-          (self.spatial_merge_size ** 2)
-      # video split params
-      if conf["video_nframe"] > 0:
-        block["nframes"] = conf["video_nframe"]
-      else:
-        if conf["video_fps"] > 0:
-          block["fps"] = conf["video_fps"]
-        if conf["video_min_frames"] > 0:
-          block["min_frames"] = conf["video_min_frames"]
-        if conf["video_max_frames"] > 0:
-          block["max_frames"] = conf["video_max_frames"]
     else:
       raise ValueError(f"Unsupport video type. {type(block['video'])=}")
   
@@ -2469,33 +2425,77 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                     sample: Dict[str, Any],
                     data_conf: Dict[str, Any] = {}) -> Dict[str, torch.Tensor]:
     assert "segments" in sample["json"]
-    data_conf["max_visual_tokens_per_image"] = max(
-        data_conf["max_visual_tokens_per_image"], data_conf["min_visual_tokens_per_image"])
-
+    data_conf["max_dynamic_patch"] = max(
+        data_conf["max_dynamic_patch"], data_conf["min_dynamic_patch"])
+    
+    images = []
+    new_conversations = []
     text = ""
-    vision_infos = []
     segments = sample["json"]["segments"]
-    for segment in segments:
-      if segment["type"] == "text":
-        text += segment["text"]
-      elif segment["type"] == "image":
+    print(segments)
+    for segment in segments: 
+      if segment["type"] == "image":
         self._fill_image_block(segment, sample,
                                 conf=data_conf)
+        turn_images = dynamic_preprocess(segment["image"], min_num=self.min_dynamic_patch, max_num=data_conf["max_dynamic_patch"],
+                                image_size=self.image_size, use_thumbnail=self.use_thumbnail)
+        images += [image for image in turn_images]
+        num_image_tokens = self.visual_tokens_per_image * len(turn_images)
+        text += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}\n'
+
       elif segment["type"] == "video":
         self._fill_video_block(segment, sample,
                                 conf=data_conf)
+        
+        nframes = []
+        num_patches_list = []
+        if isinstance(segment["video"], str) and "480p_60s_4fps" in segment["video"]:
+            path = segment["video"]
+            pid_str = osp.basename(osp.splitext(path)[0])
+            if not osp.exists(path):
+                post = str(int(pid_str[-4:]))
+                path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
+            nframes,num_patches_list = load_video(path,num_segments = self.num_segments)
+
+        elif isinstance(segment["video"],list):
+            for img in segment["video"]:
+                imgs = dynamic_preprocess(img["image"], min_num=self.min_dynamic_patch, max_num=data_conf["max_dynamic_patch"],
+                                image_size=self.image_size, use_thumbnail=self.use_thumbnail)
+                num_patches_list.append(len(imgs))
+                nframes += imgs
+
+        else:
+            raise ValueError(f"process_vision_info_internvl failed,failed type {turn}")
+        
+        for i,num_image in enumerate(num_patches_list):
+            #当前帧的token数
+            num_image_tokens = self.visual_tokens_per_image * num_image
+            text += f"Frame{i+1}: {self.img_start_token}{self.img_context_token * num_image_tokens}{self.mg_end_token}\n"
+            
+        images += nframes
+      elif segment["type"] == "text":
+        text += segment["text"]
       else:
         logger.warning(f"!!! Unsupport {segment['type']=}, skip this segment.")
-    
+
     # append EOS token
     text += "<|endoftext|>"
-    image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos)
     inputs = self.tokenizer(
         text=text,
-        images=image_inputs,
-        videos=video_inputs,
         return_tensors="pt"
     )
+
+    image_flag = 1 if len(images) > 0 else 0
+    #如果是纯文本增加一张图片做引导
+    if image_flag==0:
+      image = Image.new('RGB', (224, 224), (255, 255, 255))
+      images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=1,
+                                        image_size=self.image_size, use_thumbnail=self.use_thumbnail)
+    transform = build_transform(is_train=True, input_size=self.image_size,normalize_type=self.normalize_type)
+    pixel_values = [transform(image) for image in images]
+    pixel_values = torch.stack(pixel_values)
+    inputs["pixel_values"] = pixel_values
+    inputs["image_flags"] = torch.tensor([image_flag] * len(images), dtype=torch.long)
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
@@ -2504,15 +2504,12 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if inputs["input_ids"].shape[-1] > 32768:
       print(f"Sample is too long. token_len={inputs['input_ids'].shape[-1]}")
     
-    # mask all vision token
-    # <|vision_start|>: 151652 , <|vision_end|>: 151653, <|image_pad|>: 151655, <|video_pad|>: 151656
     input_ids = inputs["input_ids"]
     inputs["loss_mask"] = torch.ones_like(input_ids)
     inputs["loss_mask"][
-        (input_ids == self.vision_start_token_id) | 
-        (input_ids == self.vision_end_token_id) |
-        (input_ids == self.image_token_id) |
-        (input_ids == self.video_token_id)
+        (input_ids == self.img_start_token_id) | 
+        (input_ids == self.img_end_token_id) |
+        (input_ids == self.img_context_token_id)
       ] = 0
     # mask EOS token
     inputs["loss_mask"][-1][-1] = 0
@@ -2521,15 +2518,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         f"Unable to generate sample with 0 loss_mask."
       )
 
-    inputs["position_ids"] = get_rope_index(
-      inputs["input_ids"],
-      image_grid_thw=inputs.get("image_grid_thw"),
-      video_grid_thw=inputs.get("video_grid_thw"),
-      spatial_merge_size=self.spatial_merge_size,
-      image_token_id=self.image_token_id,
-      video_token_id=self.video_token_id,
-      vision_start_token_id=self.vision_start_token_id
-    )
+    position_ids = inputs['attention_mask'].long().cumsum(-1) - 1
+    position_ids.masked_fill_(inputs['attention_mask'] == 0, 1)
+    inputs["position_ids"] = position_ids
     inputs.pop("attention_mask")
     return inputs
     
@@ -2538,8 +2529,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                     sample: Dict[str, Any],
                     data_conf: Dict[str, Any] = {}) -> Dict[str, torch.Tensor]:
     assert "message" in sample["json"] or "messages" in sample["json"]
-    data_conf["max_visual_tokens_per_image"] = max(
-        data_conf["max_visual_tokens_per_image"], data_conf["min_visual_tokens_per_image"])
+    data_conf["max_dynamic_patch"] = max(
+        data_conf["max_dynamic_patch"], data_conf["min_dynamic_patch"])
     
     msg_key = "message" if "message" in sample["json"] else "messages"
     messages = sample["json"][msg_key]
@@ -2561,7 +2552,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     #inputs 输出 input_ids,label,attention_mask,pixel_values,image_flags
     inputs = process_vision_info_internvl(messages,self.tokenizer,self.visual_tokens_per_image,
-                                          self.min_dynamic_patch,self.max_dynamic_patch,
+                                          self.min_dynamic_patch,data_conf["max_dynamic_patch"],
                                           self.use_thumbnail,self.image_size,self.img_start_token,
                                           self.img_context_token,self.img_end_token,self.normalize_type)
 
@@ -2608,12 +2599,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       raise NotImplementedError(f"Unsupported dataset format.")
     
     source_conf = {
-      "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
-      "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
-      "video_nframe": self.video_nframe,
-      "video_fps": self.video_fps,
-      "video_min_frames": self.video_min_frames,
-      "video_max_frames": self.video_max_frames
+      "max_dynamic_patch":self.max_dynamic_patch,
+      "min_dynamic_patch":self.min_dynamic_patch
     }
 
     if source_name != None and source_name in self.datasource_config:
@@ -2634,8 +2621,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         raise ValueError("Empty inputs, skip")
 
       if inputs["input_ids"].shape[-1] > self.max_length:
-        source_conf["max_visual_tokens_per_image"] = (
-            source_conf["max_visual_tokens_per_image"] * self.shrink_ratio)
+        source_conf["max_dynamic_patch"] = (
+            source_conf["max_dynamic_patch"] - self.shrink_ratio)
         continue
       else:
         assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"

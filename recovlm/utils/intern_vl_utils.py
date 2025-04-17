@@ -199,13 +199,12 @@ def process_vision_info_internvl(messages:list,
     new_conversations = []
 
     for conversation in messages:
-      
       if conversation['role'] == "user":
         value = ""
         content = conversation["content"]
         for turn in content:
           if turn["type"] == "image":
-            turn_images = dynamic_preprocess(block["image"], min_num=min_dynamic_patch, max_num=max_dynamic_patch,
+            turn_images = dynamic_preprocess(turn["image"], min_num=min_dynamic_patch, max_num=max_dynamic_patch,
                                     image_size=image_size, use_thumbnail=use_thumbnail)
             images += [image for image in turn_images]
             num_image_tokens = visual_tokens_per_image * len(turn_images)
@@ -238,9 +237,10 @@ def process_vision_info_internvl(messages:list,
                 value += f'Frame{i+1}: {img_start_token}{img_context_token * num_image_tokens}{img_end_token}\n'
                 
             images += nframes
-
           elif turn["type"] == "text":
             value += turn["text"]
+          else:
+            raise ValueError(f"ERROR type {turn}")
 
         new_conversations.append({"role":"user","value":value})
 
