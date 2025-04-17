@@ -188,6 +188,7 @@ class InternVLChatModel(PreTrainedModel):
         print("pixel_values shape:",pixel_values.shape)
         print("vit_embeds shape:",vit_embeds.shape)
         print("selected",selected)
+        print("image flags:",image_flags)
 
         try:
             input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
