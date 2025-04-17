@@ -7,7 +7,7 @@
     "video_fps": 2.0,
     "video_min_frames": 4,
     "video_max_frames": 32,
-    "max_images": 1,
+    "max_images": 10,
     "base_model_dir": "/llm_reco_ssd/zhouyang12/models/InternVL3-2B",
     "pretrained_model_name_or_path": "/llm_reco_ssd/zhouyang12/models/InternVL3-2B",
     "shrink_ratio": 0.7,

@@ -2563,6 +2563,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           self._fill_image_block(block, sample, 
                                   conf=data_conf)
         elif block["type"] == "video":
+          print("origin block",block)
           self._fill_video_block(block, sample,
                                   conf=data_conf)
         elif block["type"] == "text":
@@ -2579,14 +2580,14 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         value = ""
         content = conversation["content"]
         for turn in content:
-          if turn["type"]=="image":
+          if turn["type"] == "image":
             images += [image for image in turn["images"]]
             num_image_tokens = self.visual_tokens_per_image * len(turn["images"])
             value += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
-          elif turn['type']=="video":
-            print(turn)
+          elif turn['type'] == "video":
+            print("turn",turn)
 
-          elif turn["type"]=="text":
+          elif turn["type"] == "text":
             value += turn["text"]
         new_conversations.append({"role":"user","value":value})
 
@@ -2594,7 +2595,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         value = ""
         content = conversation["content"]
         for turn in content:
-          if turn["type"]=="text":
+          if turn["type"] == "text":
             value += turn["text"]
 
         new_conversations.append({"role":"assistant","value":value})
