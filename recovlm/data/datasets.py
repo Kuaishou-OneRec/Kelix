@@ -2574,7 +2574,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
     if inputs["input_ids"].shape[-1] > 32768:
-      raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
+      raise ValueError(f"Sample is too long, token_len={inputs['input_ids'].shape[-1]}")
     
     inputs["loss_mask"] = get_assistant_mask(
       inputs["input_ids"],
@@ -2599,35 +2599,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     inputs["position_ids"] = position_ids
     inputs.pop("attention_mask")
     return inputs
-  
-  def _gen_pad_input(self, pad_len):
-    text = "<|endoftext|>" * pad_len
-    inputs = self.tokenizer(text)
-    inputs["input_ids"] = torch.tensor([inputs["input_ids"]], dtype=torch.int64) # shape=[1, N], for get_rope_index
-    inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
-    inputs["position_ids"] = get_rope_index(
-      inputs["input_ids"],
-      spatial_merge_size=self.spatial_merge_size,
-      image_token_id=self.image_token_id,
-      video_token_id=self.video_token_id,
-      vision_start_token_id=self.vision_start_token_id
-    )
-    inputs.pop("attention_mask")
-    return inputs
 
-    inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
-    inputs["position_ids"] = get_rope_index(
-        inputs["input_ids"],
-        image_grid_thw=inputs.get("image_grid_thw"),
-        video_grid_thw=inputs.get("video_grid_thw"),
-        spatial_merge_size=self.spatial_merge_size,
-        image_token_id=self.image_token_id,
-        video_token_id=self.video_token_id,
-        vision_start_token_id=self.vision_start_token_id
-    )
-
-    inputs.pop("attention_mask")
-    return inputs
 
   def _process(self, sample, source_name=None):
     # self._may_filter(sample)

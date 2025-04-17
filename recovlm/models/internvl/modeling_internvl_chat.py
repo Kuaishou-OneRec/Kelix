@@ -183,13 +183,6 @@ class InternVLChatModel(PreTrainedModel):
 
         input_ids = input_ids.reshape(B * N)
         selected = (input_ids == self.img_context_token_id)
-        print("origin vit embed shape:",origin_shape)
-        print("input shape:",input_embeds.shape)
-        print("pixel_values shape:",pixel_values.shape)
-        print("vit_embeds shape:",vit_embeds.shape)
-        print("selected",selected)
-        print("image flags:",image_flags)
-        print("sum selected:",sum(selected))
 
         try:
             input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
