@@ -16,6 +16,7 @@ from PIL import Image
 from torch.utils.data import ConcatDataset, WeightedRandomSampler
 from torchvision.transforms.functional import InterpolationMode
 import transformers
+from decord import VideoReader, cpu
 
 from transformers.trainer_pt_utils import LabelSmoother
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
@@ -148,13 +149,122 @@ def build_transform(is_train, input_size, pad2square=False, normalize_type='imag
 
     return transform
 
+def get_index(bound, fps, max_frame, first_idx=0, num_segments=32):
+    if bound:
+        start, end = bound[0], bound[1]
+    else:
+        start, end = -100000, 100000
+    start_idx = max(first_idx, round(start * fps))
+    end_idx = min(round(end * fps), max_frame)
+    seg_size = float(end_idx - start_idx) / num_segments
+    frame_indices = np.array([
+        int(start_idx + (seg_size / 2) + np.round(seg_size * idx))
+        for idx in range(num_segments)
+    ])
+    return frame_indices
 
 
+def load_video(video_path, bound=None, input_size=448, max_num=1, num_segments=32):
+    vr = VideoReader(video_path, ctx=cpu(0), num_threads=1)
+    max_frame = len(vr) - 1
+    fps = float(vr.get_avg_fps())
+
+    nframes,num_patches_list = [],[]
+    frame_indices = get_index(bound, fps, max_frame, first_idx=0, num_segments=num_segments)
+    for frame_index in frame_indices:
+        img = Image.fromarray(vr[frame_index].asnumpy()).convert('RGB')
+        img = dynamic_preprocess(img, image_size=input_size, use_thumbnail=True, max_num=max_num)
+        num_patches_list.append(len(img))
+        nframes += img
+
+    return nframes,num_patches_list
 
 
-# def process_vision_info_internvl(messages):
-    
+def process_vision_info_internvl(messages:list,
+                                tokenizer: transformers.PreTrainedTokenizer,
+                                visual_tokens_per_image:int,
+                                min_dynamic_patch:int,
+                                max_dynamic_patch:int,
+                                use_thumbnail:bool,
+                                image_size:int,
+                                img_start_token:str,
+                                img_context_token:str,
+                                img_end_token:str,
+                                normalize_type:str,
+                                num_segments:int = 32
+                                ):
+    images,num_image_token_list = [],[]
+    iamge_tokens = ""
+    new_conversations = []
+    for conversation in messages:
+      if conversation['role'] == "user":
+        value = ""
+        content = conversation["content"]
+        for turn in content:
+          if turn["type"] == "image":
 
+            turn_images = dynamic_preprocess(block["image"], min_num=min_dynamic_patch, max_num=max_dynamic_patch,
+                                    image_size=image_size, use_thumbnail=use_thumbnail)
+            images += [image for image in turn_images]
+            num_image_tokens = visual_tokens_per_image * len(turn_images)
+            value += f'{img_start_token}{img_context_token * num_image_tokens}{img_end_token}\n'
+
+          elif turn['type'] == "video":
+            #
+            if isinstance(turn["video"], str) and "480p_60s_4fps_v2" in turn["video"]:
+                path = turn["video"]
+                pid_str = osp.basename(osp.splitext(path)[0])
+                if not osp.exists(path):
+                    post = str(int(pid_str[-4:]))
+                    path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
+                nframes,num_patches_list = load_video(path)
+
+            elif isinstance(turn["video"],list):
+                nframes,num_patches_list = [],[]
+                for img in turn['video']:
+                    imgs += dynamic_preprocess(img, min_num=min_dynamic_patch, max_num=max_dynamic_patch,
+                                    image_size=image_size, use_thumbnail=use_thumbnail)
+                    num_image_token_list.append(len(imgs))
+                    nframes += imgs
+            else:
+                raise ValueError(f"process_vision_info_internvl failed,failed typr {turn}")
+            
+            for i,num_image in num_patches_list:
+                #当前帧的token数
+                num_image_tokens = visual_tokens_per_image * num_image
+                value += f'Frame{i+1}: {img_start_token}{img_context_token * num_image_tokens}{img_end_token}\n'
+          elif turn["type"] == "text":
+            value += turn["text"]
+
+        new_conversations.append({"role":"user","value":value})
+
+      elif conversation["role"] == "assistant":
+        value = ""
+        content = conversation["content"]
+        for turn in content:
+          if turn["type"] == "text":
+            value += turn["text"]
+
+        new_conversations.append({"role":"assistant","value":value})
+      else:
+        raise NotImplementedError
+    print(messages)
+    image_flag = 1 if len(images) > 0 else 0
+    #如果是纯文本增加一张图片做引导
+    if image_flag==0:
+      image = Image.new('RGB', (224, 224), (255, 255, 255))
+      images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=1,
+                                        image_size=self.image_size, use_thumbnail=self.use_thumbnail)
+    print(new_conversations)
+    inputs = preprocess_internvl(new_conversations,self.tokenizer)
+    transform = build_transform(is_train=True, input_size=image_size,normalize_type=normalize_type)
+    pixel_values = [transform(image) for image in images]
+    pixel_values = torch.stack(pixel_values)
+    inputs["pixel_values"] = pixel_values
+    inputs["image_flags"] = torch.tensor([image_flag] * len(images), dtype=torch.long)
+
+    assert sum(inputs['input_ids'] == 151667) == pixel_values.shape[0] * visual_tokens_per_image or image_flag == 0, print(f"process ERROR,pixel_values:{pixel_values.shape}{sum(inputs['input_ids'] == 151667)}")
+    return inputs
 
 IMG_CONTEXT_TOKEN = '<IMG_CONTEXT>'
 IMG_START_TOKEN = '<img>'

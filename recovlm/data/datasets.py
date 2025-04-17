@@ -36,7 +36,7 @@ from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
-from recovlm.utils.intern_vl_utils import build_transform,dynamic_preprocess,preprocess_internvl
+from recovlm.utils.intern_vl_utils import process_vision_info_internvl
 
 from recovlm.models.internvl import InternVLChatConfig
 
@@ -2362,11 +2362,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     assert self.max_length > 0
 
     self.datasource_config = datasource_config
-
-  def get_transform(self):
-      # Build transformation function
-      transform = build_transform(is_train=True, input_size=self.image_size,normalize_type=self.normalize_type)
-      return transform
   
   def _build_source_dataset(self, sources):
     total_samples = 0
@@ -2414,15 +2409,12 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
     if isinstance(block["image"], str):
-      print("str block:",block)
       image = sample_dict[block["image"]]
-      print("image str:",image)
     else:
       image = block["image"]
     if image.mode != "RGB":
       image = image.convert("RGB")
     block["image"] = image
-    print("deal block:",image)
 
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
@@ -2571,56 +2563,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         else:
           raise ValueError(f"sample process error, unsupport value type: {block['type']}")
 
-    images = []
-    num_image_token_list = []
-    image_tokens = ""
-    new_conversations = []
-    for conversation in messages:
-      if conversation['role'] == "user":
-        value = ""
-        content = conversation["content"]
-        for turn in content:
-          if turn["type"] == "image":
-
-            turn_images = dynamic_preprocess(block["image"], min_num=self.min_dynamic_patch, max_num=self.max_dynamic_patch,
-                              image_size=self.image_size, use_thumbnail=self.use_thumbnail)
-            print("turn image deal:",turn_images)
-            images += [image for image in turn_images]
-            num_image_tokens = self.visual_tokens_per_image * len(turn["images"])
-            value += f'{self.img_start_token}{self.img_context_token * num_image_tokens}{self.img_end_token}'
-          elif turn['type'] == "video":
-
-            print("vedio turn",turn)
-
-          elif turn["type"] == "text":
-            value += turn["text"]
-        new_conversations.append({"role":"user","value":value})
-
-      elif conversation["role"] == "assistant":
-        value = ""
-        content = conversation["content"]
-        for turn in content:
-          if turn["type"] == "text":
-            value += turn["text"]
-
-        new_conversations.append({"role":"assistant","value":value})
-      else:
-        raise NotImplementedError
-    
-    image_flag = 1 if len(images) > 0 else 0
-    #如果是纯文本增加一张图片做引导
-    if image_flag==0:
-      image = Image.new('RGB', (224, 224), (255, 255, 255))
-      images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=1,
-                                        image_size=self.image_size, use_thumbnail=self.use_thumbnail)
-
-    inputs = preprocess_internvl(new_conversations,self.tokenizer)
-
-    transform = self.get_transform()
-    pixel_values = [transform(image) for image in images]
-    pixel_values = torch.stack(pixel_values)
-    inputs["pixel_values"] = pixel_values
-    inputs["image_flags"] = torch.tensor([image_flag] * len(images), dtype=torch.long)
+    #inputs 输出 input_ids,label,attention_mask,pixel_values,image_flags
+    inputs = process_vision_info_internvl(messages,self.tokenizer,self.visual_tokens_per_image,
+                                          self.min_dynamic_patch,self.max_dynamic_patch,
+                                          self.use_thumbnail,image_size,self.image_size,self.img_start_token,
+                                          self.img_context_token,self.img_end_token,self.normalize_type)
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
