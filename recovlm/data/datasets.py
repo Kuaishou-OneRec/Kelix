@@ -2264,8 +2264,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   def __init__(self,
                sources: Union[str, List[str]],
                max_length: int = 1024,
-               shrink_ratio: int = 2,
-               max_retry: int = 4,
+               shrink_ratio: float = 0.9,
+               max_retry: int = 5,
                multiple_of: int = 8,
                shuffle_size: int = 100000,
                shuffle_initial_size: int = 20000,
@@ -2620,8 +2620,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         raise ValueError("Empty inputs, skip")
 
       if inputs["input_ids"].shape[-1] > self.max_length:
-        source_conf["max_dynamic_patch"] = (
-            source_conf["max_dynamic_patch"] - self.shrink_ratio)
+        source_conf["max_dynamic_patch"] = int(source_conf["max_dynamic_patch"]*self.shrink_ratio)
         continue
       else:
         assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"
