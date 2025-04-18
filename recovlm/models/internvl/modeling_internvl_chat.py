@@ -385,6 +385,7 @@ class InternVLChatModel(PreTrainedModel):
         input_ids = model_inputs['input_ids'].to(device)
         attention_mask = model_inputs['attention_mask'].to(device)
         generation_config['eos_token_id'] = eos_token_id
+
         generation_output = self.generate(
             pixel_values=pixel_values,
             input_ids=input_ids,
