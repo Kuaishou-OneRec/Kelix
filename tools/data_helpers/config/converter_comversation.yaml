@@ -1,0 +1,10 @@
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/ShareGPT4V
+split_size: 268_435_456
+dataset:
+  class_name: JsonlDataset
+  kwargs:
+    path: /llm_reco_ssd/luoxinchen/dataset/ShareGPT4V/sharegpt4v_instruct_gpt4-vision_cap100k.json
+converter:
+  class_name: OpenImagesCaptionConverter
+  kwargs:
+    source: sharegpt4v
