@@ -430,7 +430,7 @@ def train():
 
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
     model = eval(args.model_class).from_pretrained(
-      args.model_dir, _attn_implementation="flash_attention_2",use_cache = False
+      args.model_dir, _attn_implementation="flash_attention_2"
     )
   
   # check all param & buffer on meta device 
