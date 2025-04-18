@@ -1,10 +1,10 @@
-output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/ShareGPT4V
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/LVIS-Instruct4V
 split_size: 268_435_456
 dataset:
   class_name: JsonDataset
   kwargs:
-    path: /llm_reco_ssd/luoxinchen/dataset/ShareGPT4V/sharegpt4v_instruct_gpt4-vision_cap100k.json
+    path: /llm_reco_ssd/luoxinchen/dataset/LVIS-Instruct4V/LVIS-Instruct4V/lvis_instruct4v_220k.json
 converter:
   class_name: ConversationCaptionConverter
   kwargs:
-    source: sharegpt4v
+    source: lvis_instruct4v
