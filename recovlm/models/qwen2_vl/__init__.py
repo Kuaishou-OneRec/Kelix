@@ -33,6 +33,11 @@ else:
         "Qwen2VLModel",
         "Qwen2VLPreTrainedModel",
     ]
+    _import_structure["modeling_qwen2_vl_v2"] = [
+        "Qwen2VLForConditionalGenerationV2",
+        "Qwen2VLModelV2",
+        "Qwen2VLPreTrainedModelV2",
+    ]
 
 try:
     if not is_vision_available():
@@ -57,6 +62,11 @@ if TYPE_CHECKING:
             Qwen2VLForConditionalGeneration,
             Qwen2VLModel,
             Qwen2VLPreTrainedModel,
+        )
+        from .modeling_qwen2_vl_v2 import (
+            Qwen2VLForConditionalGenerationV2,
+            Qwen2VLModelV2,
+            Qwen2VLPreTrainedModelV2,
         )
 
     try:
