@@ -46,7 +46,7 @@ class InternVLChatModel(PreTrainedModel):
     _supports_flash_attn_2 = True
     supports_gradient_checkpointing = True
 
-    def __init__(self, config: InternVLChatConfig, vision_model=None, language_model=None, use_flash_attn=True):
+    def __init__(self, config: InternVLChatConfig, vision_model=None, language_model=None, use_flash_attn=True,use_cache = False):
         super().__init__(config)
 
         assert version_cmp(transformers.__version__, '4.37.0', 'ge')
