@@ -6,7 +6,7 @@ from typing import Dict, Optional
 from .converter import ConverterBase
 import base64
 import requests
-
+import os
 
 def image_key_to_base64(temp_path):
     temp_path = temp_path[4:]#remove the first 4 char
