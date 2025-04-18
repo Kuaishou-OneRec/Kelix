@@ -49,6 +49,7 @@ import glob
 from recovlm.utils.common import shell_hdfs_ls, load_parquet_file
 from .templates import get_template
 from .prompts import PromptLoader
+from services.clients import PidInfoClient
 
 logger = logging.getLogger(__name__)
 
@@ -65,47 +66,6 @@ def zero_pad_sequences(sequences, side: str = "left", value=0):
   return torch.stack(padded_sequences, dim=0)
 
 # TODO: use IterableDataset
-
-class PidInfoClient:
-    """简化版PID信息服务客户端"""
-    # 
-    def __init__(self, host='10.84.241.154', port=8000, timeout=30):
-        """初始化客户端
-        
-        Args:
-            host: 服务主机地址，默认为localhost
-            port: 服务端口，默认为8000
-            timeout: 请求超时时间（秒），默认30秒
-        """
-        self.base_url = f'http://{host}:{port}/pid_info'
-        self.timeout = timeout
-    #
-    def get_pid_info(self, pid, downloader_params=None, text_params=None):
-        """获取指定PID的信息
-        
-        Args:
-            pid: 内容ID
-            downloader_params: 下载器的可选参数，如 {'verbose': True}
-            text_params: 文本检索的可选参数，如 {'cache_only': True}
-            
-        Returns:
-            包含PID信息的字典
-        """
-        # 如果有自定义参数，使用POST请求
-        if downloader_params is not None or text_params is not None:
-            data = {'pid': int(pid)}
-            if downloader_params is not None:
-                data['downloader_params'] = downloader_params
-            if text_params is not None:
-                data['text_params'] = text_params
-            #
-            response = requests.post(self.base_url, json=data, timeout=self.timeout)
-        else:
-            # 否则使用GET请求
-            response = requests.get(f'{self.base_url}?pid={pid}', timeout=self.timeout)
-        #
-        # 返回JSON响应
-        return response.json()
 class ChatCompletionDataset(Dataset):
   """Text Completion Dataset with ChatML format"""
   def __init__(self,

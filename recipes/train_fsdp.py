@@ -13,8 +13,6 @@ import collections
 import pickle
 import itertools
 
-os.system("pip install timm")
-
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
 from recovlm.utils.ds_utils import print_input_info
@@ -400,11 +398,14 @@ def train():
   set_random_seed(args.seed)
 
   state_dict = None
-  converter = Qwen2VLCheckpointConverter(args.model_dir)
+
   if dist.get_rank() == 0:
     with set_default_dtype(torch.bfloat16):
       state_dict = load_hf_checkpoint(args.model_dir)
-      state_dict = converter(state_dict)
+      
+      if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration']:
+          converter = Qwen2VLCheckpointConverter(args.model_dir)
+          state_dict = converter(state_dict)
 
   dist.barrier()
 
@@ -575,8 +576,9 @@ def train():
     client_state = {}
 
     # 获取state_dict用于加载
-    state_dict = {"app": app_state.set_call_back(converter.convert)}
-    
+    state_dict = {"app": app_state.set_call_back(converter.convert)} if args.model_class in \
+                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else {"app": app_state.set_call_back(state_dict)}
+              
     # 使用DCP API加载分片数据
     dist_checkpointer.load_checkpoint(
         state_dict=state_dict,  # 提供state_dict参数
@@ -912,7 +914,8 @@ def train():
                         "total_data_source_tokens": total_data_source_tokens,
                     },
                     dataloader=dataloader,
-                    app_state=app_state.set_call_back(converter.revert),
+                    app_state=app_state.set_call_back(converter.revert) if args.model_class in \
+                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state.set_call_back(state_dict),
                     dist_checkpointer=dist_checkpointer
                 )
         try:
@@ -948,7 +951,8 @@ def train():
                           "total_data_source_tokens": total_data_source_tokens,
                       },
                       dataloader=dataloader,
-                      app_state=app_state.set_call_back(converter.revert),
+                      app_state=app_state.set_call_back(converter.revert) if args.model_class in \
+                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state.set_call_back(state_dict),
                       dist_checkpointer=dist_checkpointer,
                   )
 
