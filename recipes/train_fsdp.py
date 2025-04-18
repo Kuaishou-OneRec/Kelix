@@ -19,7 +19,6 @@ from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
 from recovlm.utils.ds_utils import print_input_info
 
-
 import torch
 import torch.nn as nn
 import torch.distributed as dist
@@ -171,7 +170,6 @@ def get_argument_parser():
   
   parser.add_argument("--min_lr", type=float, default=1e-6,
                       help="The minimum learning rate to reach after the cosine schedule.")
-
 
   ############ Optimizer Args ############
   parser.add_argument("--learning_rate", type=float, default=2e-4,
@@ -403,11 +401,10 @@ def train():
 
   state_dict = None
   converter = Qwen2VLCheckpointConverter(args.model_dir)
-
   if dist.get_rank() == 0:
     with set_default_dtype(torch.bfloat16):
       state_dict = load_hf_checkpoint(args.model_dir)
-      state_dict = (state_dict)
+      state_dict = converter(state_dict)
 
   dist.barrier()
 
@@ -449,11 +446,8 @@ def train():
     auto_wrap_policy_mapping = {
       "Qwen2VLForConditionalGeneration": {Qwen2VLDecoderLayer, Qwen2VLVisionBlock},
       "Qwen2_5_VLForConditionalGeneration": {Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock},
-      "InternVLChatModel":{Qwen2DecoderLayer, InternVisionEncoderLayer}
+      "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
     }
-    set_activation_checkpointing(
-      model, auto_wrap_policy=auto_wrap_policy_mapping[args.model_class]
-    )
     
   if args.fp32_weight: model = model.float()
   shard_model(
@@ -617,7 +611,6 @@ def train():
 
   dist.barrier()
 
-
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
   
   ##############
@@ -717,7 +710,6 @@ def train():
 
     with Timer("Fwd"):
       if args.model_class == "InternVLChatModel":
-          print('++++++'*100)
 
           output = model(
             input_ids = input_ids, attention_mask=attention_mask,
