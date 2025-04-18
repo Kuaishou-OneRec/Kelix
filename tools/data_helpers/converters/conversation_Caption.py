@@ -7,10 +7,9 @@ from .converter import ConverterBase
 import base64
 import requests
 import os
-
+import re
 def image_key_to_base64(temp_path):
-    temp_path = temp_path[4:]#remove the first 4 char
-    image_path = f"/llm_reco/luoxinchen/dataset/coco2017/coco2017/pic/{temp_path}"#use key's pre 5 char to find the image
+    image_path = f"/llm_reco/luoxinchen/dataset/Detailed_Caption/Detailed_Caption/{temp_path}"#use key's pre 5 char to find the image
     if not os.path.exists(image_path):
         return None
     try:
@@ -38,8 +37,8 @@ def convert_to_messages(conversation_list):
     for i, item in enumerate(conversation_list):
         content = item['value']
         tempitem = []
-        if '<image>' in content:
-            content = content.replace('<image>', '')
+        if '<img>' in content:
+            content = re.sub(r'<img>.*?</img>', '', content)
             tempitem.append({
                 "type": "image",
                 "image": "0.jpg"
@@ -55,7 +54,7 @@ def convert_to_messages(conversation_list):
                 "role": "user",
                 "content": tempitem
             })
-        elif item['from'] == 'gpt':
+        elif item['assistant'] == 'gpt':
             messages.append({
                 "role": "assistant",
                 "content": tempitem
@@ -73,7 +72,7 @@ class ConversationCaptionConverter(ConverterBase):
         self.source = source
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
-        image_path = src['image']
+        image_path = src['id']
         conversations = src['conversations']
         image_bytes = image_key_to_base64(image_path)
         if image_bytes is None:

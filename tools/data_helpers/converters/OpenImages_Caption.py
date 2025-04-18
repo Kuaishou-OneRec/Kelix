@@ -36,12 +36,10 @@ def image_url_to_base64(image_url):
         print(f"Unexpected Error: {e}")
         return None
 
-def image_key_to_base64(image_key):
-    image_path = f"/llm_reco/luoxinchen/dataset/GRIT/webdataset/{image_key[:-4]}/"#use key's pre 5 char to find the image
-    image_path = image_path + f"{image_key}.jpg"
+
+def image_key_to_base64(temp_path):
+    image_path = f"/llm_reco/luoxinchen/dataset/Detailed_Caption/Detailed_Caption/densecap_data/{temp_path}.jpg"#use key's pre 5 char to find the image
     if not os.path.exists(image_path):
-        print(image_path)
-        print(f"Error: {image_path} not exists")
         return None
     try:
         with open(image_path, 'rb') as image_file:
@@ -52,6 +50,7 @@ def image_key_to_base64(image_key):
         print(f"Error: {e}")
         return None
 
+
 class OpenImagesCaptionConverter(ConverterBase):
 
     def __init__(
@@ -61,8 +60,8 @@ class OpenImagesCaptionConverter(ConverterBase):
         self.source = source
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
-        image = src['img_url']
-        image_bytes = image_url_to_base64(image)
+        image = src['img_id']
+        image_bytes = image_key_to_base64(image)
         if image_bytes is None:
             return None
         messages = None

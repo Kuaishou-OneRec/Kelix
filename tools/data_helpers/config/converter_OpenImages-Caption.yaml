@@ -1,4 +1,4 @@
-output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/Detailed_Caption
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/Detailed_Caption_detailed_caption
 split_size: 268_435_456
 dataset:
   class_name: JsonDataset
@@ -7,4 +7,4 @@ dataset:
 converter:
   class_name: OpenImagesCaptionConverter
   kwargs:
-    source: detailed_caption
+    source: detailed_caption_detailed_caption

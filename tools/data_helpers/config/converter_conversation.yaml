@@ -1,10 +1,10 @@
-output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/LVIS-Instruct4V
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/Detailed_Caption_densecap
 split_size: 268_435_456
 dataset:
   class_name: JsonDataset
   kwargs:
-    path: /llm_reco_ssd/luoxinchen/dataset/LVIS-Instruct4V/LVIS-Instruct4V/lvis_instruct4v_220k.json
+    path: /llm_reco/luoxinchen/dataset/Detailed_Caption/Detailed_Caption/densecap.json
 converter:
   class_name: ConversationCaptionConverter
   kwargs:
-    source: lvis_instruct4v
+    source: detailed_caption_densecap
