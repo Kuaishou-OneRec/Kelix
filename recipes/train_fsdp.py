@@ -30,6 +30,9 @@ from torch.utils.tensorboard import SummaryWriter
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
+from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
+from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
+
 from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
 from recovlm.data.dataloaders import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
@@ -55,6 +58,8 @@ from recovlm.training.activations import set_activation_checkpointing
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
 
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
+
 
 # Logger 初始化
 logging.basicConfig(level=logging.INFO)  # 设置日志级别
@@ -430,9 +435,14 @@ def train():
     # 使用FSDP时，hf的gradient_checkpointing_enable()不会生效
     # model.gradient_checkpointing_enable(
     #     gradient_checkpointing_kwargs={"use_reentrant": False})
+    auto_wrap_policy_mapping = {
+      "Qwen2VLForConditionalGeneration": {Qwen2VLDecoderLayer, Qwen2VLVisionBlock},
+      "Qwen2_5_VLForConditionalGeneration": {Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock}
+    }
     set_activation_checkpointing(
-      model, auto_wrap_policy={Qwen2VLDecoderLayer, Qwen2VLVisionBlock}
+      model, auto_wrap_policy=auto_wrap_policy_mapping[args.model_class]
     )
+
   if args.fp32_weight: model = model.float()
   shard_model(
     model=model,
@@ -447,7 +457,6 @@ def train():
   with Timer("Load state dict"):
     load_from_full_model_state_dict(model=model, full_sd=state_dict) # 这里应该全部转成CUDA了, meta -> CUDA
 
-
   if state_dict is not None:
     del state_dict
 
@@ -458,6 +467,7 @@ def train():
         print_rank_0("Initialize RoPE")
         m.rope_init()
 
+  
   # 确保任何参数都被正确初始化
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
     assert not tensor.device == torch.device("meta"), \
