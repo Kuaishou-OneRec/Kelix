@@ -448,6 +448,10 @@ def train():
       "Qwen2_5_VLForConditionalGeneration": {Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock},
       "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
     }
+    set_activation_checkpointing(
+      model, auto_wrap_policy=auto_wrap_policy_mapping[args.model_class]
+    )
+
     
   if args.fp32_weight: model = model.float()
   shard_model(
