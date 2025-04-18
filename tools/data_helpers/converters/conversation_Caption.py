@@ -34,33 +34,33 @@ def convert_to_messages(conversation_list):
         List of messages in the desired format
     """
     messages = []
-    
+ 
     for i, item in enumerate(conversation_list):
         content = item['value']
-        temp_item = []
+        tempitem = []
         if '<image>' in content:
             content = content.replace('<image>', '')
-            temp_item.append({
+            tempitem.append({
                 "type": "image",
                 "image": "0.jpg"
             })
-        temp_item.append({
+        tempitem.append({
             "type": "text",
             "text": content
         })
-
+ 
         if item['from'] == 'human':
             # Replace '<image>' tag with an actual image placeholder if needed
             messages.append({
                 "role": "user",
-                "content": temp_item
+                "content": tempitem
             })
         elif item['from'] == 'gpt':
             messages.append({
                 "role": "assistant",
-                "content": temp_item
+                "content": tempitem
             })
-    
+ 
     return messages
 
 
