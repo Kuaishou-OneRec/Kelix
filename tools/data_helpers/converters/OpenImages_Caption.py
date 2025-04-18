@@ -18,6 +18,7 @@ def image_url_to_base64(image_url):
         base64_data = base64.b64encode(image_bytes).decode("ascii") # 转换为 Base64 字符串
         return base64_data
     except Exception as e:
+        print("kakkakak")
         print(f"Error: {e}")
         return None
 
