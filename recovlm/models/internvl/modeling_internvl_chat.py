@@ -156,7 +156,7 @@ class InternVLChatModel(PreTrainedModel):
             statistics: Optional[torch.LongTensor] = None,
             loss_weight: Optional[List] = None,
             loss_reduction_all_gather: Optional[bool] = False,
-            **kargs
+            **kwargs
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -1,3 +1,6 @@
+git config --global user.email 'lingzhixin@kuaishou.com'
+git config --global user.name 'lingzhixin'
+
 email=$(git config --get user.email)
 
 # 检查 email 是否为空
@@ -12,8 +15,8 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/penghao03/origin/recovlm/output/debug
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct # Pretrained/Base model path
+OUTPUT_DIR=/llm_reco/lingzhixin/output3/debug/0.0.3/debug_qwen25_7B
 
 mkdir -p $OUTPUT_DIR
 
@@ -22,11 +25,10 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="7B FSDP"
-
+comment="version:0.4.1;model_size:72B;GPU_type:H800;data:inner & outer comments"
 
 git add --all
-git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
+git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
 git_hash=$(git rev-parse --short HEAD)
 
 set -x
@@ -42,16 +44,15 @@ echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=$PWD:$PYTHONPATH
 
+
 source set_env.sh
 
-hostfile=/etc/mpi/hostfile
+hostfile=/etc/mpi/hostfile_seq
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
-
-#                 
 
 nohup mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
@@ -104,25 +105,26 @@ nohup mpirun --allow-run-as-root -np $np \
         -x https_proxy=\
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
+                --dataset_config examples/vlm/configs/debug_qwen25.json \
+                --model_processor Qwen2_5_VLProcessor \
+                --model_class Qwen2_5_VLForConditionalGeneration \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config examples/vlm/configs/stage2_parquet_ocrall_0207_1epoch.json \
-                --max_length 10000 \
-                --learning_rate 5e-5 \
-                --vision_learning_rate 5e-5 \
-                --vision_lr_layer_decay 0.95 \
-                --min_lr 1e-6 \
+                --max_length 40000 \
+                --learning_rate 1e-6 \
+                --min_lr 0.0 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 500 \
-                --num_training_steps 26000 \
-                --gradient_accumulation_steps 1 \
-                --enable_gradient_checkpointing \
-                --save_checkpoint_per_step 1000 \
-                --sequence_parallel_size 1 \
+                --num_training_steps 50000 \
+                --save_checkpoint_per_step 500 \
+                --sequence_parallel_size 4 \
                 --use_flash_attention_2 \
-                --logging_per_step 1 \
+                --reshard_after_forward false \
+                --logging_per_step 10 \
+                --fp32_weight true \
                 --seed 19260817 \
+                --enable_gradient_checkpointing \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
@@ -131,3 +133,4 @@ nohup mpirun --allow-run-as-root -np $np \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+

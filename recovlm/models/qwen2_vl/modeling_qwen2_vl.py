@@ -61,11 +61,11 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
 
-import torch.distributed as dist
-
-from recovlm.training.parallel import UlyssesAttention, get_sequence_parallel_group, \
-    get_sequence_parallel_world_size, get_sequence_parallel_rank, \
-    get_local_sequence_boundary, get_local_sequence
+from recovlm.training.parallel import UlyssesAttention, \
+    get_sequence_parallel_group, \
+    get_sequence_parallel_world_size, \
+    get_local_sequence_boundary, \
+    get_local_sequence
 
 from recovlm.training import parallel as mpu
 
@@ -291,6 +291,7 @@ class VisionRotaryEmbedding(nn.Module):
         freqs = torch.outer(seq, self.inv_freq)
         return freqs
 
+
 class PatchEmbed(nn.Module):
     def __init__(
         self,
@@ -356,7 +357,8 @@ class VisionAttention(nn.Module):
         self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
-        q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        #q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        q, k, v = self.qkv(hidden_states).reshape(seq_length, self.num_heads, 3, -1).permute(2, 0, 1, 3).unbind(0)
         q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
         k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
 
@@ -392,7 +394,9 @@ class VisionFlashAttention2(nn.Module):
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
         # q,k,v = (N/P, h, d), rotary_pos_emb = (N/P, h, d)
-        q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        # the original implementation (seq_length, 3, num_heads, -1) is not suit for tensor parallel,
+        # we rearrange to (seq_length, num_heads, 3, -1), the state_dict should modified durning initialization
+        q, k, v = self.qkv(hidden_states).reshape(seq_length, self.num_heads, 3, -1).permute(2, 0, 1, 3).unbind(0)
         q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
         k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
         if get_sequence_parallel_world_size() > 1:
@@ -404,9 +408,9 @@ class VisionFlashAttention2(nn.Module):
             ).reshape(seq_length, -1)
         else:
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
-                seq_length, -1
-            )
+            attn_output = flash_attn_varlen_func(
+                q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen
+            ).reshape(seq_length, -1)
         attn_output = self.proj(attn_output)
         return attn_output
 
@@ -422,7 +426,8 @@ class VisionSdpaAttention(nn.Module):
         self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor, rotary_pos_emb: torch.Tensor = None
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
-        q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        #q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        q, k, v = self.qkv(hidden_states).reshape(seq_length, self.num_heads, 3, -1).permute(2, 0, 1, 3).unbind(0)
         q = apply_rotary_pos_emb_vision(q.unsqueeze(0), rotary_pos_emb).squeeze(0)
         k = apply_rotary_pos_emb_vision(k.unsqueeze(0), rotary_pos_emb).squeeze(0)
 
@@ -723,7 +728,7 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         else:
             sliding_window = -1
 
-        # TODO: 暂时不考虑不packing的情况
+        # TODO: SP暂时不考虑不packing的情况
         assert cu_seqlens is not None, "Pass cu_seqlens for FA2"
         if get_sequence_parallel_world_size() > 1:
             attn_output = self._dist_attn(
@@ -1096,6 +1101,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             0
         )
         return self.merger(hidden_states)
+    
 
 @add_start_docstrings(
     "The bare Qwen2VL Model outputting raw hidden-states without any specific head on top.",
@@ -1244,7 +1250,12 @@ class Qwen2VLModel(Qwen2VLPreTrainedModel):
         next_cache = next_decoder_cache if use_cache else None
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
+            return tuple(
+                v for v in [
+                    hidden_states, next_cache,
+                    all_hidden_states, all_self_attns
+                ] if v is not None
+            )
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,

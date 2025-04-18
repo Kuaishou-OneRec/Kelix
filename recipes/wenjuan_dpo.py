@@ -824,7 +824,7 @@ def train():
         # 合并输入以提高效率
         combined_inputs, sequence_lengths = concatenate_inputs(
             chosen_inputs, rejected_inputs)
-        
+
         # Forward pass
         with torch.no_grad():
             # 参考模型的 forward pass，确保使用相同的输入格式
@@ -854,6 +854,7 @@ def train():
             video_grid_thw=combined_inputs.get("video_grid_thw", None),
             cu_seqlens=combined_inputs.get("cu_seqlens", None)
         )
+
         if torch.isnan(policy_outputs.logits).any() or torch.isinf(policy_outputs.logits).any():
             print_rank_0("====dpo==== ERROR: policy_outputs.logits contains nan or inf values!")
             raise ValueError("policy_outputs.logits contains nan or inf values")  
@@ -1064,7 +1065,7 @@ def train():
             acc_num_tokens = 0
             acc_valid_num_tokens = 0
             start_time = end_time
-    
+
     # 在训练循环结束后保存最终checkpoint
     print_rank_0("====dpo==== Saving final checkpoint...")
     model.save_checkpoint(

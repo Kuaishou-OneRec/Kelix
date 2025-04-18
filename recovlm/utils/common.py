@@ -398,7 +398,8 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
             if os.path.exists(cache_fn):
                 res = pq.ParquetFile(cache_fn)
             else:
-                res = pq.ParquetFile(fn)
+                raise Exception("File not found") # 直接用shell的方式
+                # res = pq.ParquetFile(fn)
             return res
         
         except Exception as e:          

@@ -110,7 +110,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --dataset_config examples/vlm/configs/debug7b_fsdp_3p_v1_debug_internvl.json \
                 --max_length 12000 \
                 --learning_rate 5e-6 \
-                --model_class intern-vl \
+                --model_class InternVLChatModel \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \

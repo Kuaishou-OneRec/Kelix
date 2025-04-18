@@ -16,6 +16,8 @@ import itertools
 os.system("pip install timm")
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
+from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
+from recovlm.utils.ds_utils import print_input_info
 
 
 import torch
@@ -31,6 +33,9 @@ from torch.utils.tensorboard import SummaryWriter
 from transformers import AutoTokenizer
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
+
+from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
+from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
 
 from recovlm.models.internvl import InternVLChatModel
 from recovlm.models.qwen2 import Qwen2DecoderLayer
@@ -62,6 +67,8 @@ from recovlm.training.activations import set_activation_checkpointing
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
 
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
+
 
 # Logger 初始化
 logging.basicConfig(level=logging.INFO)  # 设置日志级别
@@ -120,6 +127,13 @@ def get_argument_parser():
   parser.add_argument("--output_dir", type=str, default=None,
                       help="The directory to write the trained model")
 
+
+  parser.add_argument("--model_class", type=str, default="Qwen2VLForConditionalGeneration",
+                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','InternVLChatModel'",)
+  
+  parser.add_argument("--model_processor", type=str, default="Qwen2VLProcessor",
+                      help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor'")
+
   ############ Dataset args ############
   parser.add_argument("--dataset_config", type=str, default=None,
                       help="The comma seperated path of indexed json file.")
@@ -157,15 +171,8 @@ def get_argument_parser():
   
   parser.add_argument("--min_lr", type=float, default=1e-6,
                       help="The minimum learning rate to reach after the cosine schedule.")
-  
-  ############ model ############
-  parser.add_argument("--model_class",type=str, default='qwen2-vl',
-                      help="choose model type, one of `intern-vl`, `qwen-vl")
 
-  ########### intern-vl ##########
-  parser.add_argument("--normalize_type", type=str, default='imagenet',
-                      help="['imagenet', 'clip', 'siglip'] The normalization type for the image. Default is imagenet.")
-  
+
   ############ Optimizer Args ############
   parser.add_argument("--learning_rate", type=float, default=2e-4,
                       help="The peak learning rate for optimizer.")
@@ -298,7 +305,6 @@ def save_model_checkpoint(
                     tag=str(global_step)
                 )
 
-
         # 保存dataloader状态（如果有）
         if dataloader is not None:
             try:
@@ -396,9 +402,12 @@ def train():
   set_random_seed(args.seed)
 
   state_dict = None
+  converter = Qwen2VLCheckpointConverter(args.model_dir)
+
   if dist.get_rank() == 0:
     with set_default_dtype(torch.bfloat16):
       state_dict = load_hf_checkpoint(args.model_dir)
+      state_dict = (state_dict)
 
   dist.barrier()
 
@@ -423,16 +432,11 @@ def train():
 
 
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    if args.model_class == 'intern-vl':
-        #device_map = split_model(args.model_dir)
-        model = InternVLChatModel.from_pretrained(
-                args.model_dir, _attn_implementation="flash_attention_2")
-    else:
-        model = Qwen2VLForConditionalGeneration.from_pretrained(
-                  args.model_dir, _attn_implementation="flash_attention_2",
-                  use_cache=False
-        )
-  # check all param & buffer on meta device
+    model = eval(args.model_class).from_pretrained(
+      args.model_dir, _attn_implementation="flash_attention_2"
+    )
+  
+  # check all param & buffer on meta device 
   for tensor in itertools.chain(model.parameters(), model.buffers()):
     assert tensor.device == torch.device("meta")
 
@@ -441,15 +445,16 @@ def train():
     # 使用FSDP时，hf的gradient_checkpointing_enable()不会生效
     # model.gradient_checkpointing_enable(
     #     gradient_checkpointing_kwargs={"use_reentrant": False})
-    if args.model_class == 'intern-vl':
 
-      set_activation_checkpointing(
-        model, auto_wrap_policy={Qwen2DecoderLayer, InternVisionEncoderLayer}
-      )
-    else:
-      set_activation_checkpointing(
-        model, auto_wrap_policy={Qwen2VLDecoderLayer, Qwen2VLVisionBlock}
-      )
+    auto_wrap_policy_mapping = {
+      "Qwen2VLForConditionalGeneration": {Qwen2VLDecoderLayer, Qwen2VLVisionBlock},
+      "Qwen2_5_VLForConditionalGeneration": {Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock},
+      "InternVLChatModel":{Qwen2DecoderLayer, InternVisionEncoderLayer}
+    }
+    set_activation_checkpointing(
+      model, auto_wrap_policy=auto_wrap_policy_mapping[args.model_class]
+    )
+    
   if args.fp32_weight: model = model.float()
   shard_model(
     model=model,
@@ -462,8 +467,8 @@ def train():
   dist.barrier()
 
   with Timer("Load state dict"):
-    load_from_full_model_state_dict(model=model, full_sd=state_dict)
-  
+    load_from_full_model_state_dict(model=model, full_sd=state_dict) # 这里应该全部转成CUDA了, meta -> CUDA
+
   if state_dict is not None:
     del state_dict
 
@@ -473,6 +478,7 @@ def train():
       if hasattr(m, "rope_init"):
         print_rank_0("Initialize RoPE")
         m.rope_init()
+
   
   # 确保任何参数都被正确初始化
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
@@ -571,7 +577,7 @@ def train():
     client_state = {}
 
     # 获取state_dict用于加载
-    state_dict = {"app": app_state}
+    state_dict = {"app": app_state.set_call_back(converter.convert)}
     
     # 使用DCP API加载分片数据
     dist_checkpointer.load_checkpoint(
@@ -581,7 +587,6 @@ def train():
     )
     
     print_rank_0(f"Successfully loaded model using distributed checkpoint")
-
 
     if args.resume_dataloader:
       print_rank_0(f"resume_from={resume_from}, len={len(resume_from)}")
@@ -615,7 +620,6 @@ def train():
 
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
   
-
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
     dataset_config = json.loads(f.read())
@@ -635,8 +639,8 @@ def train():
         dataset_config, ensure_ascii=False, indent=2) + "\n")
 
   with Timer("Build dataloader"):
-    #try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
-    dataloader = get_dataloader(name=dataset, **dataset_config)
+    try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
+    except: dataloader = get_dataloader(name=dataset, **dataset_config)
     if args.resume_dataloader and dataloader_state_dict is not None:
       dataloader.load_state_dict(dataloader_state_dict)
 
@@ -667,23 +671,6 @@ def train():
         print_rank_0(
             f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
         print_rank_0(batch)
-        # 找到 loss_mask 等于 1 的位置
-        mask_positions = (batch["loss_mask"] == 1)
-        
-        # 对于每个样本（假设batch是一个包含多个样本的批次）
-        for i in range(len(batch["input_ids"])):
-            # 获取当前样本的mask positions
-            sample_mask = mask_positions[i]
-            
-            # 提取对应的input_ids
-            masked_input_ids = batch["input_ids"][i][sample_mask]
-            
-            # 解码这些token ids
-            decoded_text = tokenizer.decode(masked_input_ids)
-            
-            print(f"Sample {i}, masked tokens: {decoded_text}")
-
-        show_cnt -= 1
         
     data_source = batch.pop("data_source", None) # dataset source list cur batch
     #iteration = model.global_steps
@@ -729,13 +716,24 @@ def train():
     labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
     with Timer("Fwd"):
-      output = model(
-        input_ids = input_ids, attention_mask=attention_mask,
-        pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
-        image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-        image_flags = image_flags,
-        cu_seqlens=cu_seqlens
-      )
+      if args.model_class == "InternVLChatModel":
+          print('++++++'*100)
+
+          output = model(
+            input_ids = input_ids, attention_mask=attention_mask,
+            pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+            image_flags = image_flags,
+            cu_seqlens=cu_seqlens
+          )
+      else:
+          output = model(
+            input_ids = input_ids, attention_mask=attention_mask,
+            pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+            cu_seqlens=cu_seqlens
+          )
+
       # (b, N/P, V)
       logits = output.logits
 
@@ -918,8 +916,8 @@ def train():
                         "total_data_source_tokens": total_data_source_tokens,
                     },
                     dataloader=dataloader,
-                    app_state=app_state,
-                    dist_checkpointer=dist_checkpointer,
+                    app_state=app_state.set_call_back(converter.revert),
+                    dist_checkpointer=dist_checkpointer
                 )
         try:
           dataloader_state_dict = {
@@ -954,7 +952,7 @@ def train():
                           "total_data_source_tokens": total_data_source_tokens,
                       },
                       dataloader=dataloader,
-                      app_state=app_state,
+                      app_state=app_state.set_call_back(converter.revert),
                       dist_checkpointer=dist_checkpointer,
                   )
 
