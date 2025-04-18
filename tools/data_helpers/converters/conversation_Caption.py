@@ -54,7 +54,7 @@ def convert_to_messages(conversation_list):
                 "role": "user",
                 "content": tempitem
             })
-        elif item['assistant'] == 'gpt':
+        elif item['from'] == 'assistant':
             messages.append({
                 "role": "assistant",
                 "content": tempitem
