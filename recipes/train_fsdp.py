@@ -667,8 +667,8 @@ def train():
         print_rank_0(
             f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
         print_rank_0(batch)
-        print_rand_0(batch["input_ids"].tolist())
-        print_rand_0(batch["loss_mask"].tolist())
+        print_rank_0(batch["input_ids"].tolist())
+        print_rank_0(batch["loss_mask"].tolist())
         show_cnt -= 1
         
     data_source = batch.pop("data_source", None) # dataset source list cur batch
