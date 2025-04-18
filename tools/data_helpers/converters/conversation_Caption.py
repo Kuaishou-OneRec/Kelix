@@ -37,14 +37,14 @@ def convert_to_messages(conversation_list):
     
     for i, item in enumerate(conversation_list):
         content = item['value']
-        item = []
+        temp_item = []
         if '<image>' in content:
             content = content.replace('<image>', '')
-            item.append({
+            temp_item.append({
                 "type": "image",
                 "image": "0.jpg"
             })
-        item.append({
+        temp_item.append({
             "type": "text",
             "text": content
         })
@@ -53,12 +53,12 @@ def convert_to_messages(conversation_list):
             # Replace '<image>' tag with an actual image placeholder if needed
             messages.append({
                 "role": "user",
-                "content": item
+                "content": temp_item
             })
         elif item['from'] == 'gpt':
             messages.append({
                 "role": "assistant",
-                "content": item
+                "content": temp_item
             })
     
     return messages
@@ -79,6 +79,7 @@ class ConversationCaptionConverter(ConverterBase):
         if image_bytes is None:
             return None
         messages = convert_to_messages(conversations)
+        print(messages)
 
         images = {"0.jpg": image_bytes}
         
