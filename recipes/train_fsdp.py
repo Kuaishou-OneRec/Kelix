@@ -430,7 +430,7 @@ def train():
 
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
     model = eval(args.model_class).from_pretrained(
-      args.model_dir, _attn_implementation="flash_attention_2",use_cache = False
+      args.model_dir, _attn_implementation="flash_attention_2"
     )
   
   # check all param & buffer on meta device 
@@ -714,22 +714,21 @@ def train():
     labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
     with Timer("Fwd"):
-      # if args.model_class == "InternVLChatModel":
-
-      #     output = model(
-      #       input_ids = input_ids, attention_mask=attention_mask,
-      #       pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
-      #       image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-      #       image_flags = image_flags,
-      #       cu_seqlens=cu_seqlens
-      #     )
-      # else:
-      output = model(
-        input_ids = input_ids, attention_mask=attention_mask,
-        pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
-        image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-        cu_seqlens=cu_seqlens
-      )
+      if args.model_class == "InternVLChatModel":
+          output = model(
+            input_ids = input_ids, attention_mask=attention_mask,
+            pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+            image_flags = image_flags,
+            cu_seqlens=cu_seqlens
+          )
+      else:
+          output = model(
+            input_ids = input_ids, attention_mask=attention_mask,
+            pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+            cu_seqlens=cu_seqlens
+          )
 
       # (b, N/P, V)
       logits = output.logits
