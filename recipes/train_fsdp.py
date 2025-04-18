@@ -667,8 +667,22 @@ def train():
         print_rank_0(
             f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
         print_rank_0(batch)
-        print_rank_0(batch["input_ids"].tolist())
-        print_rank_0(batch["loss_mask"].tolist())
+        # 找到 loss_mask 等于 1 的位置
+        mask_positions = (batch["loss_mask"] == 1)
+        
+        # 对于每个样本（假设batch是一个包含多个样本的批次）
+        for i in range(len(batch["input_ids"])):
+            # 获取当前样本的mask positions
+            sample_mask = mask_positions[i]
+            
+            # 提取对应的input_ids
+            masked_input_ids = batch["input_ids"][i][sample_mask]
+            
+            # 解码这些token ids
+            decoded_text = tokenizer.decode(masked_input_ids)
+            
+            print(f"Sample {i}, masked tokens: {decoded_text}")
+
         show_cnt -= 1
         
     data_source = batch.pop("data_source", None) # dataset source list cur batch
