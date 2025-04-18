@@ -8,6 +8,21 @@ import base64
 import requests
 
 
+def image_key_to_base64(temp_path):
+    temp_path = temp_path[4:]#remove the first 4 char
+    image_path = f"/llm_reco/luoxinchen/dataset/coco2017/coco2017/pic/{temp_path}"#use key's pre 5 char to find the image
+    if not os.path.exists(image_path):
+        return None
+    try:
+        with open(image_path, 'rb') as image_file:
+            image_bytes = image_file.read()
+            base64_data = base64.b64encode(image_bytes).decode("ascii") # 转换为 Base64 字符串
+            return base64_data
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
+
+
 def convert_to_messages(conversation_list):
     """
     Convert a conversation list to messages format.
