@@ -46,18 +46,15 @@ class OpenImagesCaptionConverter(ConverterBase):
         self.source = source
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
-        text = src['caption']
-        key = src['key']
-        image_bytes = image_key_to_base64(key)
+        image = src['image_url']
+        image_bytes = image_url_to_base64(image)
         if image_bytes is None:
             return None
-        
         messages = None
-
         images = {"0.jpg": image_bytes}
         
         segments = []
-
+        text = src['capsfusion']
         segments.append(
             {
                 "type": "image",
