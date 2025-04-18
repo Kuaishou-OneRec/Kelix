@@ -79,7 +79,6 @@ class ConversationCaptionConverter(ConverterBase):
         if image_bytes is None:
             return None
         messages = convert_to_messages(conversations)
-        print(messages)
 
         images = {"0.jpg": image_bytes}
         
