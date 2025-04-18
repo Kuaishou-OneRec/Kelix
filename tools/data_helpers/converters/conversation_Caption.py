@@ -64,18 +64,7 @@ def convert_to_messages(conversation_list):
     return messages
 
 
-
-def image_to_base64(file_path):
-    try:
-        with open(file_path, 'rb') as image_file:
-            image_bytes = image_file.read()
-            base64_data = base64.b64encode(image_bytes).decode("ascii") # 转换为 Base64 字符串
-            return base64_data
-    except Exception as e:
-        print(f"Error: {e}")
-        return None
-
-class OpenImagesCaptionConverter(ConverterBase):
+class ConversationCaptionConverter(ConverterBase):
 
     def __init__(
         self,
@@ -86,30 +75,15 @@ class OpenImagesCaptionConverter(ConverterBase):
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
         image_path = src['image']
         conversations = src['conversations']
-        image_bytes = image_to_base64(image_path)
+        image_bytes = image_key_to_base64(image_path)
         if image_bytes is None:
             return None
-        
-        messages = []
-        for conversation in conversations:
-            if conversation['role'] == 'user':
+        messages = convert_to_messages(conversations)
 
         images = {"0.jpg": image_bytes}
         
         segments = None
 
-        segments.append(
-            {
-                "type": "image",
-                "image": '0.jpg'
-            }
-        )
-        segments.append(
-            {
-                "type": "text",
-                "text": text
-            }
-        )
 
 
         metadata = None

@@ -5,6 +5,6 @@ dataset:
   kwargs:
     path: /llm_reco_ssd/luoxinchen/dataset/ShareGPT4V/sharegpt4v_instruct_gpt4-vision_cap100k.json
 converter:
-  class_name: OpenImagesCaptionConverter
+  class_name: ConversationCaptionConverter
   kwargs:
     source: sharegpt4v
