@@ -9,16 +9,31 @@ import requests
 import os
 
 
+import requests
+import base64
 
 def image_url_to_base64(image_url):
     try:
-        response = requests.get(image_url, stream=True)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Referer': 'https://www.gettyimages.com/'
+        }
+        response = requests.get(image_url, headers=headers, stream=True, timeout=10)
         response.raise_for_status()
+        
+        # Check if content is actually an image
+        if 'image' not in response.headers.get('Content-Type', ''):
+            print("Error: URL does not point to an image")
+            return None
+            
         image_bytes = response.content
-        base64_data = base64.b64encode(image_bytes).decode("ascii") # 转换为 Base64 字符串
+        base64_data = base64.b64encode(image_bytes).decode("ascii")
         return base64_data
+    except requests.exceptions.RequestException as e:
+        print(f"Request Error: {e}")
+        return None
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Unexpected Error: {e}")
         return None
 
 def image_key_to_base64(image_key):
