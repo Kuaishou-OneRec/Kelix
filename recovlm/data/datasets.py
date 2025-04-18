@@ -49,7 +49,7 @@ import glob
 from recovlm.utils.common import shell_hdfs_ls, load_parquet_file
 from .templates import get_template
 from .prompts import PromptLoader
-from services.clients import PidInfoClient
+from .services import PidInfoClient
 
 logger = logging.getLogger(__name__)
 
