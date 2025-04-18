@@ -22,10 +22,10 @@ def image_url_to_base64(image_url):
         return None
 
 def image_key_to_base64(image_key):
-    image_path = f"/llm_reco/luoxinchen/dataset/GRIT/webdataset/{image_key[:-4]}"#use key's pre 5 char to find the image
+    image_path = f"/llm_reco/luoxinchen/dataset/GRIT/webdataset/{image_key[:-4]}/"#use key's pre 5 char to find the image
     image_path = image_path + f"{image_key}.jpg"
-    print(image_path)
     if not os.path.exists(image_path):
+        print(image_path)
         print(f"Error: {image_path} not exists")
         return None
     try:
