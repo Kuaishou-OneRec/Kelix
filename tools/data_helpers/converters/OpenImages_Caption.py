@@ -18,7 +18,6 @@ def image_url_to_base64(image_url):
         base64_data = base64.b64encode(image_bytes).decode("ascii") # 转换为 Base64 字符串
         return base64_data
     except Exception as e:
-        print("kakkakak")
         print(f"Error: {e}")
         return None
 
@@ -47,7 +46,7 @@ class OpenImagesCaptionConverter(ConverterBase):
         self.source = source
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
-        image = src['image_url']
+        image = src['img_url']
         image_bytes = image_url_to_base64(image)
         if image_bytes is None:
             return None
@@ -55,7 +54,7 @@ class OpenImagesCaptionConverter(ConverterBase):
         images = {"0.jpg": image_bytes}
         
         segments = []
-        text = src['capsfusion']
+        text = src['detailed_caption']
         segments.append(
             {
                 "type": "image",
