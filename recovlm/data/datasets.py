@@ -39,11 +39,6 @@ from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
 from recovlm.utils.intern_vl_utils import process_vision_info_internvl,dynamic_preprocess,load_video,build_transform
 
 from recovlm.models.internvl import InternVLChatConfig
-#InternVLChatConfig = 1
-#process_vision_info_internvl = lambda x: x
-#dynamic_preprocess = lambda x: x
-#load_video = lambda x: x
-#build_transform = lambda x: x
 
 from recovlm.training.parallel import get_sequence_parallel_group, \
   get_sequence_parallel_world_size
