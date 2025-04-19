@@ -399,6 +399,7 @@ def train():
 
   state_dict = None
 
+  converter = Qwen2VLCheckpointConverter(args.model_dir)
   if dist.get_rank() == 0:
     with set_default_dtype(torch.bfloat16):
       state_dict = load_hf_checkpoint(args.model_dir)
