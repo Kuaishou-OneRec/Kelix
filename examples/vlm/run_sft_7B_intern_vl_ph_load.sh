@@ -130,6 +130,6 @@ nohup mpirun --allow-run-as-root -np $np \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-		--resume_from /llm_reco/penghao03/output/internvl-test-1-save_load/save/ \
-		--resume_from_tag step70 \
+		--resume_from /llm_reco/penghao03/output/internvl-test-1-save_load/save/step70 \
+		--resume_from_tag global_step70 \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &

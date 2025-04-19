@@ -273,7 +273,6 @@ class DistributedCheckpointer(CheckpointerInterface):
 
     print_rank_0(f"Loading checkpoint from {checkpoint_path}")
 
-    print_input_info(state_dict)
     dcp.load(
       state_dict=state_dict,
       storage_reader=FileSystemReader(checkpoint_path),
