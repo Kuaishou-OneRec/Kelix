@@ -166,19 +166,19 @@ def get_chat_completion_vision_dataloader(sources: str,
                                           datasource_config={}
                                           ):
     dataset = ChatCompletionVisionDataset(
-    sources = sources,
-    max_length = max_length,
-    min_visual_tokens_per_image = min_visual_tokens_per_image,
-    max_visual_tokens_per_image = max_visual_tokens_per_image,
-    video_nframe=video_nframe,
-    video_fps=video_fps,
-    video_min_frames=video_min_frames,
-    video_max_frames=video_max_frames,
-    base_model_dir=base_model_dir,
-    shrink_ratio=shrink_ratio,
-    max_retry=max_retry,
-    multiple_of=multiple_of,
-    datasource_config=datasource_config)
+        sources = sources,
+        max_length = max_length,
+        min_visual_tokens_per_image = min_visual_tokens_per_image,
+        max_visual_tokens_per_image = max_visual_tokens_per_image,
+        video_nframe=video_nframe,
+        video_fps=video_fps,
+        video_min_frames=video_min_frames,
+        video_max_frames=video_max_frames,
+        base_model_dir=base_model_dir,
+        shrink_ratio=shrink_ratio,
+        max_retry=max_retry,
+        multiple_of=multiple_of,
+        datasource_config=datasource_config)
 
     ### packing, batching size=1; shuffle in dataset
     dataloader = DataLoader(

@@ -693,7 +693,21 @@ def train():
 
     num_tokens = input_ids.numel()
     num_samples = (sample_idx.max() + 1).sum()
+    num_valid_tokens = num_tokens - (sample_idx == -1).sum()
     input_ids.numel()
+
+    token_metrics = torch.tensor(
+      [num_tokens, num_samples, num_valid_tokens]).cuda()
+    dist.all_reduce(
+      token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+
+    num_tokens = token_metrics[0]
+    num_samples = token_metrics[1]
+    num_valid_tokens = token_metrics[2]
+
+    total_num_samples += num_samples.item()
+    total_num_tokens += num_tokens.item()
+    total_num_valid_tokens += num_valid_tokens.item()
 
     acc_num_samples += num_samples.item()
     acc_num_tokens += num_tokens.item()
