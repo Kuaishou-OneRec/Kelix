@@ -916,7 +916,7 @@ def train():
                     },
                     dataloader=dataloader,
                     app_state=app_state.set_call_back(converter.revert) if args.model_class in \
-                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state.set_call_back(state_dict),
+                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state, # app_state.set_call_back(state_dict), # no need to convert 
                     dist_checkpointer=dist_checkpointer
                 )
         try:
@@ -953,7 +953,7 @@ def train():
                       },
                       dataloader=dataloader,
                       app_state=app_state.set_call_back(converter.revert) if args.model_class in \
-                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state.set_call_back(state_dict),
+                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state, # app_state.set_call_back(state_dict),
                       dist_checkpointer=dist_checkpointer,
                   )
 
