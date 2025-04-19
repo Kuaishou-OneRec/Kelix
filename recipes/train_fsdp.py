@@ -575,8 +575,8 @@ def train():
     client_state = {}
 
     # 获取state_dict用于加载
-    state_dict = {"app": app_state.set_call_back(converter.convert)} if args.model_class in \
-                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state 
+    state_dict = {"app": app_state.set_call_back(converter.convert) if args.model_class in \
+                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state  }
               
     # 使用DCP API加载分片数据
     dist_checkpointer.load_checkpoint(
