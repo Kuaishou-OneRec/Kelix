@@ -316,6 +316,14 @@ class Qwen2RotaryEmbedding(nn.Module):
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
+    
+    def rope_init(self):
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(
+            self.config, device=None, **self.rope_kwargs
+        )
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
 
     @torch.no_grad()
     def forward(self, x, position_ids):
