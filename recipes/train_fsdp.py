@@ -34,10 +34,9 @@ from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
 
-from recovlm.models.internvl import InternVLChatModel
-from recovlm.models.qwen2 import Qwen2DecoderLayer
-from recovlm.models.internvl import InternVisionEncoderLayer
-
+# from recovlm.models.internvl import InternVLChatModel
+#from recovlm.models.qwen2 import Qwen2DecoderLayer
+#from recovlm.models.internvl import InternVisionEncoderLayer
 from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
 from recovlm.data.dataloaders import get_dataloader
 
@@ -66,7 +65,7 @@ from recovlm.training.common import set_default_dtype, get_global_grad_norm, cli
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
 
-
+InternVLChatModel = Qwen2DecoderLayer = InternVisionEncoderLayer = Qwen2VLDecoderLayer
 # Logger 初始化
 logging.basicConfig(level=logging.INFO)  # 设置日志级别
 logger = logging.getLogger(__name__)  # 创建 logger 实例
