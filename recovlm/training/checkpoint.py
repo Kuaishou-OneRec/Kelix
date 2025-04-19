@@ -1,6 +1,6 @@
 from typing import Dict, Any, Union, Optional, List, Protocol
 import collections
-
+from recovlm.utils.ds_utils import print_input_info
 import re
 import os
 import gc
@@ -273,6 +273,7 @@ class DistributedCheckpointer(CheckpointerInterface):
 
     print_rank_0(f"Loading checkpoint from {checkpoint_path}")
 
+    print_input_info(state_dict)
     dcp.load(
       state_dict=state_dict,
       storage_reader=FileSystemReader(checkpoint_path),
