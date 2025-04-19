@@ -165,30 +165,30 @@ def get_chat_completion_vision_dataloader(sources: str,
                                           video_max_frames=120,
                                           datasource_config={}
                                           ):
-        dataset = ChatCompletionVisionDataset(
-        sources = sources,
-        max_length = max_length,
-        min_visual_tokens_per_image = min_visual_tokens_per_image,
-        max_visual_tokens_per_image = max_visual_tokens_per_image,
-        video_nframe=video_nframe,
-        video_fps=video_fps,
-        video_min_frames=video_min_frames,
-        video_max_frames=video_max_frames,
-        base_model_dir=base_model_dir,
-        shrink_ratio=shrink_ratio,
-        max_retry=max_retry,
-        multiple_of=multiple_of,
-        datasource_config=datasource_config)
+    dataset = ChatCompletionVisionDataset(
+    sources = sources,
+    max_length = max_length,
+    min_visual_tokens_per_image = min_visual_tokens_per_image,
+    max_visual_tokens_per_image = max_visual_tokens_per_image,
+    video_nframe=video_nframe,
+    video_fps=video_fps,
+    video_min_frames=video_min_frames,
+    video_max_frames=video_max_frames,
+    base_model_dir=base_model_dir,
+    shrink_ratio=shrink_ratio,
+    max_retry=max_retry,
+    multiple_of=multiple_of,
+    datasource_config=datasource_config)
 
-        ### packing, batching size=1; shuffle in dataset
-        dataloader = DataLoader(
-            dataset=dataset,
-            shuffle=False,
-            batch_size=1,
-            num_workers=num_workers,
-            collate_fn=lambda x: x[0]
-        )
-        return dataloader
+    ### packing, batching size=1; shuffle in dataset
+    dataloader = DataLoader(
+        dataset=dataset,
+        shuffle=False,
+        batch_size=1,
+        num_workers=num_workers,
+        collate_fn=lambda x: x[0]
+    )
+    return dataloader
 
 def get_chat_completion_vision_dpo_dataloader(sources: str,
                                           max_length,

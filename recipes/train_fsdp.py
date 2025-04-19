@@ -693,7 +693,7 @@ def train():
 
     num_tokens = input_ids.numel()
     num_samples = (sample_idx.max() + 1).sum()
- input_ids.numel()
+    input_ids.numel()
 
     acc_num_samples += num_samples.item()
     acc_num_tokens += num_tokens.item()
