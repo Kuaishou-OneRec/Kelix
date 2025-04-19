@@ -1,7 +1,5 @@
 email=$(git config --get user.email)
 
-mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15" 
-
 # 检查 email 是否为空
 if [[ -z "$email" ]]; then
         echo "Please set you git email:"
