@@ -124,7 +124,8 @@ nohup mpirun --allow-run-as-root -np $np \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
                 --fp32_weight true \
-                --freeze_llm \
+                --reshard_after_forward false \
+		--freeze_llm \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
                 --merge_checkpoint \
