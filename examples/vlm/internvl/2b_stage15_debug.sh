@@ -111,7 +111,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --dataset_config /llm_reco/chuchenglong/InternVL/recovlm/examples/vlm/configs/2b_internvl_stage1.json \
-                --max_length 16384 \
+                --max_length 12288 \
                 --learning_rate 2e-4 \
                 --model_class InternVLChatModel \
                 --min_lr 0.0 \

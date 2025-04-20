@@ -398,7 +398,7 @@ def freeze_params(args, model):
     if args.freeze_llm:
       for name, param in model.named_parameters():
         if name.startswith("language_model"): 
-          print_rank_0(f"Disable InternVLChatModel visual encoder grad: {name}")
+          print_rank_0(f"Disable InternVLChatModel language_model grad: {name}")
           param.requires_grad = False
     elif args.freeze_visual:
       for name, param in model.named_parameters():
@@ -408,7 +408,7 @@ def freeze_params(args, model):
     elif args.freeze_visual_without_adapter:
       for name, param in model.named_parameters():
         if name.startswith("vision_model"):
-          print_rank_0(f"Disable InternVLChatModel visual encoder grad: {name}")
+          print_rank_0(f"Disable InternVLChatModel visual encoder(but mot adapter) grad: {name}")
           param.requires_grad = False
   else:
     raise NotImplementedError(f"freeze_params Not support model class: {args.model_class}")
