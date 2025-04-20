@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/Megred_model/2B # Pretrained/Base model path
 # MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/OpenGVLab/InternVL2_5-4B
-OUTPUT_DIR=/llm_reco/chuchenglong/output/internvl-2b/0420/stage1
+OUTPUT_DIR=/llm_reco/chuchenglong/output/internvl-2b/0420/stage1_debug
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -124,7 +124,8 @@ nohup mpirun --allow-run-as-root -np $np \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
                 --fp32_weight true \
-                --freeze_llm \
+                --reshard_after_forward \
+		--freeze_llm \
                 --freeze_visual_without_adapter \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
