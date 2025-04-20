@@ -363,6 +363,57 @@ def get_resume_info(args):
     else:
       return args.resume_from, args.resume_from_tag, False
 
+
+def freeze_params(args, model):
+
+  #### qwen
+  if args.model_class in  ["Qwen2VLForConditionalGeneration", "Qwen2_5_VLForConditionalGeneration"]:
+    if args.freeze_llm:
+      print_rank_0("Freeze LLM parameters.")
+      for name, param in model.named_parameters():
+        if not name.startswith("visual"):
+          print_rank_0(f"Disable LLM grad: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
+
+    if args.freeze_visual:
+      print_rank_0("Freeze visual encoder parameters.")
+      for name, param in model.named_parameters():
+        if name.startswith("visual"):
+          print_rank_0(f"Disable visual encoder grad: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
+
+    if args.freeze_visual_without_adapter:
+      print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
+      for name, param in model.named_parameters():
+        if name.startswith("visual") and not name.startswith("visual.merger."):
+          print_rank_0(f"Disable visual encoder grad: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
+  
+  #### InternVLChatModel
+  # 结构： language_model + ( vision_model + mlp )
+  elif args.model_class == 'InternVLChatModel':
+    if args.freeze_llm:
+      for name, param in model.named_parameters():
+        if name.startswith("language_model"): 
+          print_rank_0(f"Disable InternVLChatModel visual encoder grad: {name}")
+          param.requires_grad = False
+    elif args.freeze_visual:
+      for name, param in model.named_parameters():
+        if name.startswith("mlp") or name.startswith("vision_model"): 
+          print_rank_0(f"Disable InternVLChatModel visual encoder grad: {name}")
+          param.requires_grad = False
+    elif args.freeze_visual_without_adapter:
+      for name, param in model.named_parameters():
+        if name.startswith("vision_model"):
+          print_rank_0(f"Disable InternVLChatModel visual encoder grad: {name}")
+          param.requires_grad = False
+  else:
+    raise NotImplementedError(f"freeze_params Not support model class: {args.model_class}")
+
+
 def train():
   arg_parser = get_argument_parser()
   args = arg_parser.parse_args()
@@ -414,7 +465,7 @@ def train():
 
 
   dist.barrier()
-  
+
   if dist.get_rank() == 0:
     args_dict = vars(args)
     args_str = json.dumps(args_dict, indent=4, ensure_ascii=False)
@@ -490,29 +541,7 @@ def train():
     assert not tensor.device == torch.device("meta"), \
       f"{name} not initialized, device={tensor.device}"
 
-  if args.freeze_llm:
-    print_rank_0("Freeze LLM parameters.")
-    for name, param in model.named_parameters():
-      if not name.startswith("visual"):
-        print_rank_0(f"Disable LLM grad: {name}")
-        param.requires_grad = False
-    print_rank_0("=" * 50)
-
-  if args.freeze_visual:
-    print_rank_0("Freeze visual encoder parameters.")
-    for name, param in model.named_parameters():
-      if name.startswith("visual"):
-        print_rank_0(f"Disable visual encoder grad: {name}")
-        param.requires_grad = False
-    print_rank_0("=" * 50)
-
-  if args.freeze_visual_without_adapter:
-    print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
-    for name, param in model.named_parameters():
-      if name.startswith("visual") and not name.startswith("visual.merger."):
-        print_rank_0(f"Disable visual encoder grad: {name}")
-        param.requires_grad = False
-    print_rank_0("=" * 50)
+  freeze_params(args=args, model=model)
   
   # print train params log
   for name, param in model.named_parameters():
