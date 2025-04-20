@@ -5,7 +5,7 @@ import torch
 from recovlm.training.checkpoint import CheckpointConverter
 
 
-class InternVLCheckpointConverter:
+class InternVLCheckpointConverter(CheckpointConverter):
   def __init__(self, model_path_or_name: str = None):
     self.model_path_or_name = model_path_or_name
 
