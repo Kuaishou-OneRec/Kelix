@@ -10,6 +10,9 @@ class InternVLCheckpointConverter:
   def __init__(self, model_path_or_name: str = None):
     self.model_path_or_name = model_path_or_name
 
+  def __call__(self, state_dict):
+     return self.convert(state_dict)
+
   def convert(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     if 'language_model.model.embed_tokens.weight' not in state_dict:
         assert 'language_model.lm_head.weight' in state_dict
