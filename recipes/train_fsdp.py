@@ -15,6 +15,8 @@ import itertools
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
+from recovlm.models.internvl.checkpoint import InternVLCheckpointConverter
+
 from recovlm.utils.ds_utils import print_input_info
 
 import torch
@@ -37,6 +39,7 @@ from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
 from recovlm.models.internvl import InternVLChatModel
 from recovlm.models.qwen2 import Qwen2DecoderLayer
 from recovlm.models.internvl import InternVisionEncoderLayer
+
 from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
 from recovlm.data.dataloaders import get_dataloader
 
@@ -64,6 +67,7 @@ from recovlm.training.common import set_default_dtype, get_global_grad_norm, cli
 
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
+
 
 # Logger 初始化
 logging.basicConfig(level=logging.INFO)  # 设置日志级别
@@ -397,7 +401,6 @@ def train():
 
   state_dict = None
 
-  converter = Qwen2VLCheckpointConverter(args.model_dir)
   if dist.get_rank() == 0:
     with set_default_dtype(torch.bfloat16):
       state_dict = load_hf_checkpoint(args.model_dir)
@@ -405,9 +408,13 @@ def train():
       if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration']:
           converter = Qwen2VLCheckpointConverter(args.model_dir)
           state_dict = converter(state_dict)
+      elif args.model_class == 'InternVLChatModel':
+          converter = InternVLCheckpointConverter(args.model_dir)
+          state_dict = converter(state_dict)
+
 
   dist.barrier()
-
+  
   if dist.get_rank() == 0:
     args_dict = vars(args)
     args_str = json.dumps(args_dict, indent=4, ensure_ascii=False)
