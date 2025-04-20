@@ -3,7 +3,6 @@ import tqdm
 import re
 import torch
 from recovlm.training.checkpoint import CheckpointConverter
-from recovlm.models.internvl.configuration_internvl_chat import Qwen2VLConfig
 
 
 class InternVLCheckpointConverter:
