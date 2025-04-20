@@ -124,7 +124,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
                 --fp32_weight true \
-                --reshard_after_forward \
+                --reshard_after_forward false \
 		--freeze_llm \
                 --freeze_visual_without_adapter \
                 --seed 19260817 \
