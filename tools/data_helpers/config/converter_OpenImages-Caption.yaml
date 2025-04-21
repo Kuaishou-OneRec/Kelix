@@ -1,10 +1,14 @@
-output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/Detailed_Caption_detailed_caption
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/Capsfusion-V3
 split_size: 268_435_456
 dataset:
-  class_name: JsonDataset
+  class_name: ParquetDataset
   kwargs:
-    path: /llm_reco/luoxinchen/dataset/Detailed_Caption/Detailed_Caption/detailed_caption.json
+    path: /llm_reco/luoxinchen/dataset/Capsfusion-V3/images
+  columns:
+    - caption
+    - jpg
+    - status
 converter:
   class_name: OpenImagesCaptionConverter
   kwargs:
-    source: detailed_caption_detailed_caption
+    source: caps_fusion_v3
