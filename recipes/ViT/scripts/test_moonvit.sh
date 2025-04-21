@@ -10,7 +10,7 @@ echo $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
 nohup deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
-    recipes/ViT/training/trainer/MoonVIT.py \
+    recipes/ViT/training/trainer/MoonVIT_train.py \
     --config_file /llm_reco/maosiyang/msy_vit/recovlm/recipes/ViT/configs/v1.yaml \
     --output_dir $OUTPUT_DIR \
     --deepspeed \
