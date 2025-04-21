@@ -77,6 +77,8 @@ class KimiViViT(nn.Module):
 
         hidden_size = self.text_model.hidden_size
         vocab_size = self.text_model.vocab_size
+        self.logit_scale = self.text_model.logit_scale
+        self.logit_bias = self.text_model.logit_bias
         self.text_model = self.text_model.text_model
         
         # Add projection layer for text embeddings to match vision embedding size
@@ -122,8 +124,8 @@ class KimiViViT(nn.Module):
 
             logits_per_text = torch.matmul(gathered_text_embeds, gathered_image_pooler.t().to(device))
 
-            logit_scale = self.textmodel.logit_scale.to(device)
-            logit_bias = self.textmodel.logit_bias.to(device)
+            logit_scale = self.logit_scale.to(device)
+            logit_bias = self.logit_bias.to(device)
             logits_per_text = logits_per_text * logit_scale.exp() + logit_bias
 
             logits_per_image = logits_per_text.t()
