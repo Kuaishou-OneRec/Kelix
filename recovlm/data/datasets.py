@@ -2558,7 +2558,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   def _process(self, sample, source_name=None):
     # self._may_filter(sample)
     # get data format
-    if "messages" in sample["json"] or "message" in sample["json"]:
+    if ("messages" in sample["json"] and sample["json"]['messages'] is not None and len(sample["json"]['messages']) ) or \
+          ("message" in sample["json"] and sample["json"]['message'] is not None and len(sample["json"]['message']) ):      
       data_format = "chatml"
     elif "segments" in sample["json"]:
       data_format = "completion"
