@@ -733,6 +733,8 @@ def train():
     print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
 
     num_tokens = input_ids.numel()
+
+    print(num_samples, dist.get_rank(),  9882343333)
     num_samples = (sample_idx.max() + 1).sum()
     num_valid_tokens = num_tokens - (sample_idx == -1).sum()
     input_ids.numel()
