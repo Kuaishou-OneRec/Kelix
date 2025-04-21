@@ -127,7 +127,7 @@ class KimiViViT(nn.Module):
             return outputs.loss
 
     def forward(self, images, texts):
-        text_inputs = self.text_processor(images=None, text=texts, padding="longest", return_tensors="pt")
+        text_inputs = self.text_processor(images=images, text=texts, padding="longest", return_tensors="pt")
         text_outputs = self.textmodel(**text_inputs)
         processed_images = []
         for image in images:
