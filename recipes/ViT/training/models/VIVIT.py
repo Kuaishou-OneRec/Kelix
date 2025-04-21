@@ -63,7 +63,7 @@ class KimiViViT(nn.Module):
         self.is_dist = self.ctx.is_dist
 
         self.textmodel = SiglipModel.from_pretrained(
-            config.dir, use_cache=False
+            config.dir
         )
         self.image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
         self.image_model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
