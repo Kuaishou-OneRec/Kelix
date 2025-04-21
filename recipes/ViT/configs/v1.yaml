@@ -9,6 +9,9 @@ dataset:
     collate_fn: SingleImageTextPairCollator
 model:
   dir: /llm_reco_ssd/zhouyang12/models/SigLIP-So400M-Patch14-384/
+  packing:
+    enabled: false
+    max_length: 8192
   text_decoder:
     enabled: false
     model_dir: 234
@@ -28,7 +31,7 @@ monitor:
 strategy:
   type: ViTStrategy
   seed: 123456
-  save_per_step: 100
+  save_per_step: 1000
 verbose:
   type: ViTVerbose
   verbose_per_step: 1

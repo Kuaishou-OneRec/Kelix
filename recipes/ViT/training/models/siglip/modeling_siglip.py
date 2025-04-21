@@ -799,6 +799,7 @@ class SiglipTextTransformer(nn.Module):
         Returns:
 
         """
+        init_attention_mask = attention_mask
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -829,7 +830,14 @@ class SiglipTextTransformer(nn.Module):
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
         # Assuming "sticky" EOS tokenization, last token is always EOS.
-        pooled_output = last_hidden_state[:, -1, :]
+        if attention_mask is None:
+            pooled_output = last_hidden_state[:, -1, :]
+        else:
+            out_dim = last_hidden_state.shape[-1]
+            eos_token_indices = init_attention_mask.argmin(dim=1, keepdim=True)
+            eos_token_indices = eos_token_indices.unsqueeze(-1).repeat(1, 1, out_dim)
+            pooled_output = torch.gather(last_hidden_state, 1, eos_token_indices).squeeze(1)
+
         pooled_output = self.head(pooled_output)
 
         return BaseModelOutputWithPooling(
@@ -962,11 +970,11 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = SiglipMLP(config)
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state, key_padding_mask=None):
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
 
-        hidden_state = self.attention(probe, hidden_state, hidden_state)[0]
+        hidden_state = self.attention(probe, hidden_state, hidden_state, key_padding_mask=key_padding_mask)[0]
 
         residual = hidden_state
         hidden_state = self.layernorm(hidden_state)

@@ -29,8 +29,8 @@ class ViTStrategy(BaseStrategy):
     def resume(self):
         pass
 
-    def save(self, ctx, output_dir=None):
-        if ctx.step % self.save_per_step != 0:
+    def save(self, ctx, output_dir=None, force=False):
+        if ctx.step % self.save_per_step != 0 and (not force):
             return
         output_dir = output_dir or self.config.output_dir
         model = ctx.model

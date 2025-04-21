@@ -98,21 +98,22 @@ class ViTMonitor(BaseMonitor):
     def print(self, *args, **kwargs):
         self.verbose.print(*args, **kwargs)
 
-    def step(self, ctx):
-        self.increment()
-        for name in self.metrics_names:
-            metric = self.metrics.get(name, None)
-            assert metric is not None
-            if not metric.enabled:
-                continue
-            metric.update(ctx)
-            if self.global_step % metric.verbose_per_step == 0:
-                self.print(metric.verbose_name, ":", metric.value, rank=0)
-            if self.global_step % metric.report_per_step == 0:
-                self.report(metric.report_name, metric.value)
+    def step(self, ctx=None, force=False):
+        if ctx is not None:
+            self.increment()
+            for name in self.metrics_names:
+                metric = self.metrics.get(name, None)
+                assert metric is not None
+                if not metric.enabled:
+                    continue
+                metric.update(ctx)
+                if self.global_step % metric.verbose_per_step == 0:
+                    self.print(metric.verbose_name, ":", metric.value, rank=0)
+                if self.global_step % metric.report_per_step == 0:
+                    self.report(metric.report_name, metric.value)
         
         current_state = self.collect()
-        self.verbose.step(current_state)
-        self.strategy.step(current_state)
+        self.verbose.step(current_state, force=force)
+        self.strategy.step(current_state, force=force)
         self.print("-" * 100, rank=0)
         self.reset()

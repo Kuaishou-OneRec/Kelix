@@ -30,5 +30,5 @@ class ViTVerbose(BaseVerbose):
             else:
                 print(prompt, *args, **kwargs)
 
-    def step(self, ctx):
+    def step(self, ctx, force=False):
         pass

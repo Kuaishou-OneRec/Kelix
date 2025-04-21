@@ -6,6 +6,7 @@ import deepspeed
 from PIL import Image
 import torch.nn as nn
 import torch.distributed as dist
+import transformers
 from transformers import AutoProcessor, AutoModel
 from .siglip.modeling_siglip import SiglipPreTrainedModel, SiglipModel
 from .siglip.processing_siglip import SiglipProcessor
@@ -57,6 +58,8 @@ class KimiViT(nn.Module):
         self.config = config
         self.ctx = ctx
         self.is_dist = self.ctx.is_dist
+        self.packing = ctx.packing.enabled
+        self.packing_max_length = ctx.packing.max_length
 
         self.model = SiglipModel.from_pretrained(config.dir, ignore_mismatched_sizes=True)
         self.processor = SiglipProcessor.from_pretrained(config.dir)
@@ -119,10 +122,31 @@ class KimiViT(nn.Module):
         else:
             return outputs.loss
 
-    def forward(self, images, texts):
+    def _packing(self):
+        pass
+
+    def to_cuda(self, inputs, device):
+        if isinstance(inputs, (list, tuple)):
+            inputs = list(inputs)
+            for idx, item in enumerate(inputs):
+                inputs[idx] = self.to_cuda(item, device)
+            return inputs
+        elif isinstance(inputs, (dict, transformers.tokenization_utils_base.BatchEncoding)):
+            for key in inputs:
+                inputs[key] = self.to_cuda(inputs[key], device)
+            return inputs
+        elif isinstance(inputs, torch.Tensor):
+            return inputs.to(device)
+        return inputs
+
+    def forward(self, images, texts, use_attn_mask=True):
+        device = torch.cuda.current_device()
         inputs = self.processor(images=images, text=texts, padding="longest", return_tensors="pt")
-        for key in inputs:
-            inputs[key] = inputs[key].cuda(torch.cuda.current_device())
+        inputs = self.to_cuda(inputs, device)
+
+        if use_attn_mask:
+            attention_mask = (inputs["input_ids"] != self.processor.tokenizer.pad_token_id).long()
+            inputs["attention_mask"] = attention_mask.to(device)
         outputs = self.model(**inputs)
         loss = self.calcul_loss(outputs)
 
@@ -150,7 +174,7 @@ class KimiViT(nn.Module):
             text_mask = torch.zeros(size=(num_texts, num_tokens), dtype=torch.bool)
             mask = torch.concat([image_mask, text_mask], dim=0)
             tril_mask = torch.tril(torch.ones(size=(num_tokens, num_tokens), dtype=torch.bool), diagonal=-1)
-            attention_mask = (tril_mask | mask)
+            attention_mask = (tril_mask | mask).long()
 
             token_is_pad = (inputs["input_ids"] == self.tokenizer.pad_token_id)
             pad_start_indices = torch.where(

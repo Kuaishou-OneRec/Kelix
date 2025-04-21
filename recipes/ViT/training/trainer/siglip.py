@@ -121,7 +121,7 @@ class MonitorDecorator(object):
                 name=name,
                 method=getattr(self, "calcul_{}".format(name)),
                 init_buffer=self._get_default_init_buffer(),
-                report_name="pref/{}".format(name),
+                report_name="perf/{}".format(name),
                 report_per_step=config.report.report_per_step,
                 verbose_per_step=config.verbose.verbose_per_step,
                 reset_step=config.report.report_per_step,
@@ -142,7 +142,7 @@ class MonitorDecorator(object):
                 name=name,
                 method=getattr(self, "calcul_{}".format(name)),
                 init_buffer=self._get_default_init_buffer(),
-                report_name="pref/{}".format(name),
+                report_name="perf/{}".format(name),
                 report_per_step=config.report.report_per_step,
                 verbose_per_step=config.verbose.verbose_per_step,
                 reset_step=config.report.report_per_step,
@@ -180,6 +180,7 @@ class MonitorDecorator(object):
             total_text_num_valid_tokens=total_text_num_valid_tokens,
             total_num_samples=total_num_samples,
             total_num_tokens=total_num_tokens,
+            **kwargs
         )
 
 
@@ -240,6 +241,8 @@ def train(args):
         package = decorator.collect(outputs, rets, end - start)
         monitor.step(package)
         start = end
+    
+    monitor.step()
 
 
 if __name__ == "__main__":
