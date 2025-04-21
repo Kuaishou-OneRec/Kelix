@@ -994,3 +994,57 @@ def train():
 
 if __name__ == "__main__":
   train()
+
+
+
+
+import torch
+import torch.nn as nn
+from torch.utils.checkpoint import checkpoint
+
+
+# 定义一个简单的模型
+class SimpleModel(nn.Module):
+    def __init__(self):
+        super(SimpleModel, self).__init__()
+        # 定义上游层
+        self.upstream = nn.Parameter(torch.randn(10, 10))
+        # 定义下游层
+        self.downstream = nn.Parameter(torch.randn(10, 10))
+    #
+    def upstream_forward(self, x):
+        return torch.matmul(x, self.upstream)
+    #
+    def downstream_forward(self, x):
+        return torch.matmul(x, self.downstream)
+    #
+    def forward(self, x):
+        # 应用梯度检查点到上游层
+        x = checkpoint(self.upstream_forward, x)
+        # 应用梯度检查点到下游层
+        x = checkpoint(self.downstream_forward, x)
+        return x
+
+
+# 创建模型实例
+model = SimpleModel()
+
+# 将下游层的 requires_grad 设置为 False
+model.downstream.requires_grad = False
+
+# 创建输入张量
+input_tensor = torch.randn(1, 10)
+input_tensor.requires_grad = True
+
+# 前向传播
+output = model(input_tensor)
+
+# 定义损失函数
+loss = output.sum()
+
+# 反向传播
+loss.backward()
+
+# 检查上游层和下游层是否接收到梯度
+print(f"上游层是否接收到梯度: {model.upstream.grad is not None}")
+print(f"下游层是否接收到梯度: {model.downstream.grad is not None}")

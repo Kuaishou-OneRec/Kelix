@@ -13,7 +13,7 @@ import random
 import base64
 import pyarrow.parquet as pq
 from datetime import datetime
-
+import os.path as osp
 import webdataset as wds
 
 from io import BytesIO
@@ -2432,7 +2432,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                 nframes += imgs
 
         else:
-            raise ValueError(f"process_vision_info_internvl failed,failed type {turn}")
+            raise ValueError(f"process_vision_info_internvl failed,failed type {segment}")
         
         for i,num_image in enumerate(num_patches_list):
             #当前帧的token数
