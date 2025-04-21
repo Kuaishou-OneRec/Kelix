@@ -1,2 +1,2 @@
 from .kimi import KimiViT
-from .msy_vivit import KimiViViT
+from .VIVIT import KimiViViT
