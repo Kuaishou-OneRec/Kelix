@@ -67,9 +67,9 @@ class MoonViT(nn.Module):
         self.text_model = SiglipModel.from_pretrained(
             config.dir, ignore_mismatched_sizes=True
         )
-        self.image_processor = VivitImageProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/vivit-b-16x2-kinetics400")
-        self.image_model = VivitModel.from_pretrained(
-            "/llm_reco_ssd/zhouyang12/models/vivit-b-16x2-kinetics400",
+        self.image_processor = MoonViTImageProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/MoonViT-SO-400M")
+        self.image_model = MoonVitPretrainedModel.from_pretrained(
+            "/llm_reco_ssd/zhouyang12/models/MoonViT-SO-400M",
             ignore_mismatched_sizes=True
         )
         self.text_processor = SiglipProcessor.from_pretrained(config.dir)
@@ -82,7 +82,6 @@ class MoonViT(nn.Module):
         self.text_model = self.text_model.text_model
         
         # Add projection layer for text embeddings to match vision embedding size
-        self.text_embed_proj = nn.Linear(1152, 768, bias=False)
 
         if config.text_decoder.enabled:
             self.text_decoder = AutoModel.from_pretrained(
@@ -170,23 +169,15 @@ class MoonViT(nn.Module):
         text_embeds = self.text_embed_proj(text_embeds)
         processed_images = []
         for image in images:
-            frame = np.array(image)
-            frame = resize(frame, size=(224, 224), resample=PILImageResampling.BILINEAR)
-            processed_images.append([frame])
-
-        videos = [np.concatenate([frame[np.newaxis, ...] for frame in video],axis=0) for video in processed_images]
-        extended_videos = []
-        for video in videos:
-            indices = sample_frame_indices(clip_len=4, frame_sample_rate=4, seg_len=video.shape[0])
-            video = read_image_pil(video,indices)
-            video = list(video)
-            extended_videos.append(video)
-        image_inputs = self.image_processor(extended_videos, return_tensors="pt").to(text_inputs.input_ids.device)
-        image_inputs = self.to_cuda(image_inputs, device)
-        image_inputs = self.to_cuda(image_inputs, torch.bfloat16)
-        image_outputs = self.image_model(**image_inputs)
-        image_embeds = image_outputs.last_hidden_state
-        pooler = image_outputs.pooler_output
+            #将base64编码的图片转换为PIL.Image.Image
+            image = base64.b64decode(image)
+            image = Image.open(image)
+            processed_images.append(image)
+        images_processed = self.image_processor(processed_images, return_tensors="pt").to(dtype=self.image_model.dtype, device=self.image_model.device)
+        # image_outputs = self.image_model(images_processed.pixel_values, images_processed.image_grid_hws)
+        # image_embeds = image_outputs
+        pooler = self.image_model.get_image_embeddings(images_processed.pixel_values, images_processed.image_grid_hws)
+        
         loss = self.calcul_loss(text_embeds, pooler)
 
         text_output = text_outputs
