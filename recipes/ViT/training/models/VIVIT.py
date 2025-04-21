@@ -16,6 +16,7 @@ from recipes.ViT.training.models.vivit.vivit_utils import read_video_pyav, read_
 from PIL.Image import Resampling as PILImageResampling
 from transformers.image_transforms import resize
 import transformers
+from recipes.ViT.helpers.context import Context
 
 
 class DisCoGather(torch.autograd.Function):
