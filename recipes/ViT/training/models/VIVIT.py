@@ -114,7 +114,6 @@ class KimiViViT(nn.Module):
 
     def calcul_loss(self, text_embeds, image_pooler):
         # Project text embeddings to match image embedding dimension
-        text_embeds = self.text_embed_proj(text_embeds)
         
         if self.is_dist:
             device = text_embeds.device
@@ -168,7 +167,7 @@ class KimiViViT(nn.Module):
         )
         text_embeds = text_outputs.pooler_output
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
-
+        text_embeds = self.text_embed_proj(text_embeds)
         processed_images = []
         for image in images:
             frame = np.array(image)
