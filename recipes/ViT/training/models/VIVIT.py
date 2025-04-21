@@ -133,7 +133,7 @@ class KimiViViT(nn.Module):
             for idx, item in enumerate(inputs):
                 inputs[idx] = self.to_cuda(item, device)
             return inputs
-        elif isinstance(inputs, (dict, transformers.tokenization_utils_base.BatchEncoding)):
+        elif isinstance(inputs, (dict, transformers.tokenization_utils_base.BatchEncoding, transformers.image_processing_base.BatchFeature)):
             for key in inputs:
                 inputs[key] = self.to_cuda(inputs[key], device)
             return inputs
@@ -162,11 +162,11 @@ class KimiViViT(nn.Module):
         image_inputs = self.image_processor(extended_videos, return_tensors="pt").to(text_inputs.input_ids.device)
         image_inputs = self.to_cuda(image_inputs, device)
         image_inputs = self.to_cuda(image_inputs, torch.bfloat16)
-        if self.ctx.rank == 0:
-            for key in image_inputs:
-                print(type(image_inputs))
-                print(key, type(image_inputs[key]))
-                print(image_inputs[key].dtype)
+        # if self.ctx.rank == 0:
+        #     for key in image_inputs:
+        #         print(type(image_inputs))
+        #         print(key, type(image_inputs[key]))
+        #         print(image_inputs[key].dtype)
         image_outputs = self.image_model(**image_inputs)
         image_embeds = image_outputs.last_hidden_state
         pooler = image_outputs.pooler_output
