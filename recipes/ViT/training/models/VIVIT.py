@@ -60,7 +60,7 @@ class KimiViViT(nn.Module):
         super().__init__()
         self.config = config
         self.ctx = ctx
-        self.is_dist = self.ctx.distributed.enabled
+        self.is_dist = self.ctx.is_dist
 
         self.textmodel = SiglipModel.from_pretrained(
             config.model.dir, use_cache=False
