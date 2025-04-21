@@ -166,7 +166,6 @@ class MoonViT(nn.Module):
         )
         text_embeds = text_outputs.pooler_output
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
-        text_embeds = self.text_embed_proj(text_embeds)
         processed_images = []
         for image in images:
             #将base64编码的图片转换为PIL.Image.Image
@@ -177,9 +176,7 @@ class MoonViT(nn.Module):
         # image_outputs = self.image_model(images_processed.pixel_values, images_processed.image_grid_hws)
         # image_embeds = image_outputs
         pooler = self.image_model.get_image_embeddings(images_processed.pixel_values, images_processed.image_grid_hws)
-        
         loss = self.calcul_loss(text_embeds, pooler)
-
         text_output = text_outputs
         image_output = image_outputs
 
