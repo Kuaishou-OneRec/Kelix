@@ -64,7 +64,7 @@ class KimiViViT(nn.Module):
         self.ctx = ctx
         self.is_dist = self.ctx.is_dist
 
-        self.textmodel = SiglipModel.from_pretrained(
+        self.text_model = SiglipModel.from_pretrained(
             config.dir, ignore_mismatched_sizes=True
         )
         self.image_processor = VivitImageProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/vivit-b-16x2-kinetics400")
@@ -75,9 +75,9 @@ class KimiViViT(nn.Module):
         self.text_processor = SiglipProcessor.from_pretrained(config.dir)
         self.tokenizer = self.text_processor.tokenizer
 
-        hidden_size = self.textmodel.hidden_size
-        vocab_size = self.textmodel.vocab_size
-        self.text_model = self.textmodel.text_model
+        hidden_size = self.text_model.hidden_size
+        vocab_size = self.text_model.vocab_size
+        self.text_model = self.text_model.text_model
 
         if config.text_decoder.enabled:
             self.text_decoder = AutoModel.from_pretrained(
@@ -155,7 +155,7 @@ class KimiViViT(nn.Module):
         #     print(text_inputs[key].shape)
         #     print(text_inputs[key].dtype)
         # print('--------------------------------')
-        text_outputs = self.textmodel(
+        text_outputs = self.text_model(
             input_ids=text_inputs.input_ids
         )
         text_embeds = text_outputs.pooler_output
