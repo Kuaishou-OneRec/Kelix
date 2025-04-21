@@ -15,6 +15,7 @@ from recipes.ViT.training.models.siglip.processing_siglip import SiglipProcessor
 from recipes.ViT.training.models.vivit.vivit_utils import read_video_pyav, read_image_pil, sample_frame_indices
 from PIL.Image import Resampling as PILImageResampling
 from transformers.image_transforms import resize
+import transformers
 
 
 class DisCoGather(torch.autograd.Function):
