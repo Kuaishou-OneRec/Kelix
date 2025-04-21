@@ -230,7 +230,7 @@ def train(args):
 
         images = batch["images"]
         texts = batch["texts"]
-        outputs, rets = model(images=images, texts=texts)
+        pooler, text_embeds, rets = model(images=images, texts=texts)
         
         loss = rets.loss
 
@@ -238,7 +238,7 @@ def train(args):
 
         model.step()
         end = time.time()
-        package = decorator.collect(outputs, rets, end - start)
+        package = decorator.collect(pooler, text_embeds, rets, end - start)
         monitor.step(package)
         start = end
 

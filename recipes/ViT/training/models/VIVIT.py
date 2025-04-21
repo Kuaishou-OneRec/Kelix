@@ -175,15 +175,10 @@ class KimiViViT(nn.Module):
         image_inputs = self.image_processor(extended_videos, return_tensors="pt").to(text_inputs.input_ids.device)
         image_inputs = self.to_cuda(image_inputs, device)
         image_inputs = self.to_cuda(image_inputs, torch.bfloat16)
-        # if self.ctx.rank == 0:
-        #     for key in image_inputs:
-        #         print(type(image_inputs))
-        #         print(key, type(image_inputs[key]))
-        #         print(image_inputs[key].dtype)
         image_outputs = self.image_model(**image_inputs)
         image_embeds = image_outputs.last_hidden_state
         pooler = image_outputs.pooler_output
-        loss = self.calcul_loss(text_outputs, pooler)
+        loss = self.calcul_loss(text_embeds, pooler)
 
         text_output = text_outputs.text_model_output
         image_output = image_outputs
@@ -195,10 +190,10 @@ class KimiViViT(nn.Module):
         assert text_hidden_embeds.shape[0] == image_hidden_embeds.shape[0]
 
 
-        return outputs, Context(
+        return pooler, text_embeds, Context(
             loss=loss,
             total_image_num_tokens=np.prod(image_hidden_embeds.shape[:2]).item(),
             total_text_num_tokens=np.prod(text_hidden_embeds.shape[:2]).item(),
             total_num_samples=batch_size,
-            total_text_num_valid_tokens=(inputs["input_ids"] != self.tokenizer.pad_token_id).long().sum().item()
+            total_text_num_valid_tokens=(text_inputs.input_ids != self.tokenizer.pad_token_id).long().sum().item()
         )
