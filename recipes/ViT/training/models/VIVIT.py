@@ -160,6 +160,7 @@ class KimiViViT(nn.Module):
         )
         text_embeds = text_outputs.pooler_output
         print('--------------------------------')
+        print('kakaka')
         print(text_embeds.shape)
         print('--------------------------------')
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
@@ -173,7 +174,7 @@ class KimiViViT(nn.Module):
         videos = [np.concatenate([frame[np.newaxis, ...] for frame in video],axis=0) for video in processed_images]
         extended_videos = []
         for video in videos:
-            indices = sample_frame_indices(clip_len=32, frame_sample_rate=4, seg_len=video.shape[0])
+            indices = sample_frame_indices(clip_len=4, frame_sample_rate=4, seg_len=video.shape[0])
             video = read_image_pil(video,indices)
             video = list(video)
             extended_videos.append(video)
