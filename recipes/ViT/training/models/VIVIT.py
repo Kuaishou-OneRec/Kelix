@@ -2,9 +2,10 @@ import os
 import os.path as osp
 import torch
 import deepspeed
-from PIL import Image
+from PIL import Image, ImageOps
 import torch.nn as nn
 import torch.distributed as dist
+import numpy as np
 from transformers import AutoProcessor, AutoModel
 from recipes.ViT.training.models.vivit.image_processing_vivit import VivitImageProcessor
 from recipes.ViT.training.models.vivit.modeling_vivit import VivitModel
@@ -12,6 +13,8 @@ import torch.nn.functional as F
 from recipes.ViT.training.models.siglip.modeling_siglip import SiglipPreTrainedModel, SiglipModel
 from recipes.ViT.training.models.siglip.processing_siglip import SiglipProcessor
 from recipes.ViT.training.models.vivit.vivit_utils import read_video_pyav, read_image_pil, sample_frame_indices
+from PIL.Image import Resampling as PILImageResampling
+from transformers.image_transforms import resize
 
 
 class DisCoGather(torch.autograd.Function):
@@ -67,9 +70,8 @@ class KimiViViT(nn.Module):
         self.text_processor = SiglipProcessor.from_pretrained(config.model.dir)
         self.tokenizer = self.text_processor.tokenizer
 
-
-        hidden_size = self.model.hidden_size
-        vocab_size = self.model.vocab_size
+        hidden_size = self.textmodel.hidden_size
+        vocab_size = self.textmodel.vocab_size
 
         if config.text_decoder.enabled:
             self.text_decoder = AutoModel.from_pretrained(
@@ -140,7 +142,7 @@ class KimiViViT(nn.Module):
             video = read_image_pil(video,indices)
             video = list(video)
             extended_videos.append(video)
-        image_inputs = self.image_processor(extended_videos, return_tensors="pt")
+        image_inputs = self.image_processor(extended_videos, return_tensors="pt").to(text_inputs.input_ids.device)
         image_outputs = self.image_model(**image_inputs)
         image_embeds = image_outputs.last_hidden_state
         pooler = image_outputs.pooler_output
@@ -155,39 +157,6 @@ class KimiViViT(nn.Module):
         batch_size = image_hidden_embeds.shape[0]
         assert text_hidden_embeds.shape[0] == image_hidden_embeds.shape[0]
 
-        # if self.text_decoder is not None:
-        #     image_embeds = outputs.image_embeds
-        #     text_embeds = outputs.text_embeds
-        #     image_embeds = self.image_proj(image_embeds)
-        #     text_embeds = self.text_proj(text_embeds)
-        #     image_end_embeds = self.image_end_embed.repeat(batch_size, 1, 1)
-        #     embeds = torch.concat((image_embeds, image_end_embeds.to(text_embeds.dtype), text_embeds), dim=1)
-
-        #     num_images = image_embeds.shape[1]
-        #     num_texts = text_embeds.shape[1]
-        #     num_tokens = num_images + 1 + num_texts
-        #     image_mask = torch.ones(size=(num_images + 1, num_tokens), dtype=torch.bool)
-        #     text_mask = torch.zeros(size=(num_texts, num_tokens), dtype=torch.bool)
-        #     mask = torch.concat([image_mask, text_mask], dim=0)
-        #     tril_mask = torch.tril(torch.ones(size=(num_tokens, num_tokens), dtype=torch.bool), diagonal=-1)
-        #     attention_mask = (tril_mask | mask)
-
-        #     token_is_pad = (inputs["input_ids"] == self.tokenizer.pad_token_id)
-        #     pad_start_indices = torch.where(
-        #         token_is_pad.any(dim=1),
-        #         token_is_pad.long().argmax(dim=1),
-        #         -torch.ones(size=(batch_size, ), dtype=torch.int64)
-        #     ).unbind()
-        #     loss_mask_list = list()
-        #     for idx, start_index in enumerate(pad_start_indices):
-        #         loss_mask = torch.ones(size=(num_tokens, ), dtype=torch.int64)
-        #         loss_mask[:start_index] = 0
-        #         loss_mask_list.append(loss_mask)
-        #     loss_mask = torch.stack(loss_mask_list, dim=0)
-        #     embeds = self.text_decoder(embeds, attention_mask=attention_mask)
-        #     embeds = self.vocab_proj(embeds)
-        #     self.calcul_regression_loss(embeds, inputs["input_ids"], loss_mask)
-        #     return outputs, loss
 
         return outputs, Context(
             loss=loss,
