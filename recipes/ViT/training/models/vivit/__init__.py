@@ -21,6 +21,8 @@ if TYPE_CHECKING:
     from .configuration_vivit import *
     from .image_processing_vivit import *
     from .modeling_vivit import *
+    from .processing_vivit import *
+    from .vivit_utils import *
 else:
     import sys
 
