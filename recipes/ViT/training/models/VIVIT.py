@@ -107,9 +107,8 @@ class KimiViViT(nn.Module):
         """
         pass
 
-    def calcul_loss(self, text_outputs, image_pooler):
+    def calcul_loss(self, text_embeds, image_pooler):
         if self.is_dist:
-            text_embeds = text_outputs.text_embeds
             device = text_embeds.device
 
             gathered_image_pooler = disco_gather(image_pooler, self.ctx)
@@ -150,10 +149,16 @@ class KimiViViT(nn.Module):
         text_inputs = self.text_processor(images=images, text=texts, padding="longest", return_tensors="pt")
         device = torch.cuda.current_device()
         text_inputs = self.to_cuda(text_inputs, device)
-        print('-------------------------------- ')
-        print(text_inputs)
-        print('--------------------------------')
-        text_outputs = self.textmodel(**text_inputs)
+        text_outputs = self.textmodel(
+            input_ids=text_inputs.input_ids,
+            attention_mask=text_inputs.attention_mask,
+            position_ids=text_inputs.position_ids,
+            output_attentions=False,
+            output_hidden_states=False,
+        )
+        text_embeds = text_outputs.pooler_output
+        text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
+
         processed_images = []
         for image in images:
             frame = np.array(image)
