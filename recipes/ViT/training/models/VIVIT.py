@@ -167,10 +167,6 @@ class KimiViViT(nn.Module):
             input_ids=text_inputs.input_ids
         )
         text_embeds = text_outputs.pooler_output
-        print('--------------------------------')
-        print('kakaka')
-        print(text_embeds.shape)
-        print('--------------------------------')
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         processed_images = []
@@ -194,7 +190,7 @@ class KimiViViT(nn.Module):
         pooler = image_outputs.pooler_output
         loss = self.calcul_loss(text_embeds, pooler)
 
-        text_output = text_outputs.text_model_output
+        text_output = text_outputs
         image_output = image_outputs
 
         text_hidden_embeds = text_output.last_hidden_state
