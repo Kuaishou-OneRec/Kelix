@@ -7,8 +7,8 @@ import torch.nn as nn
 import torch.distributed as dist
 import numpy as np
 from transformers import AutoProcessor, AutoModel
-from recipes.ViT.training.models.MoonVIT.modeling_moonvit import MoonVitPretrainedModel
-from recipes.ViT.training.models.MoonVIT.image_processing_moonvit import MoonViTImageProcessor
+from recipes.ViT.training.models.MOONVIT.modeling_moonvit import MoonVitPretrainedModel
+from recipes.ViT.training.models.MOONVIT.image_processing_moonvit import MoonViTImageProcessor
 import torch.nn.functional as F
 from recipes.ViT.training.models.siglip.modeling_siglip import SiglipPreTrainedModel, SiglipModel
 from recipes.ViT.training.models.siglip.processing_siglip import SiglipProcessor
