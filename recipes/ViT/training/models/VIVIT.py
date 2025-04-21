@@ -165,7 +165,8 @@ class KimiViViT(nn.Module):
         if self.ctx.rank == 0:
             for key in image_inputs:
                 print(type(image_inputs))
-                print(key, type(image_inputs[key]), image_inputs[key].shape)
+                print(key, type(image_inputs[key]))
+                print(image_inputs[key].dtype)
         image_outputs = self.image_model(**image_inputs)
         image_embeds = image_outputs.last_hidden_state
         pooler = image_outputs.pooler_output
