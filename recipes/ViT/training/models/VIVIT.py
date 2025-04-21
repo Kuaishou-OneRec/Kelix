@@ -159,6 +159,9 @@ class KimiViViT(nn.Module):
             input_ids=text_inputs.input_ids
         )
         text_embeds = text_outputs.pooler_output
+        print('--------------------------------')
+        print(text_embeds.shape)
+        print('--------------------------------')
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         processed_images = []
