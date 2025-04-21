@@ -59,16 +59,15 @@ class KimiViViT(nn.Module):
     def __init__(self, config, ctx):
         super().__init__()
         self.config = config
-        print(self.config)
         self.ctx = ctx
         self.is_dist = self.ctx.is_dist
 
         self.textmodel = SiglipModel.from_pretrained(
-            config.model.dir, use_cache=False
+            config.dir, use_cache=False
         )
         self.image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
         self.image_model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400")
-        self.text_processor = SiglipProcessor.from_pretrained(config.model.dir)
+        self.text_processor = SiglipProcessor.from_pretrained(config.dir)
         self.tokenizer = self.text_processor.tokenizer
 
         hidden_size = self.textmodel.hidden_size
