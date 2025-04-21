@@ -192,6 +192,7 @@ def check_config(args, config):
 
 def train(args):
 
+
     deepspeed.init_distributed()
 
     config = OmegaConf.load(args.config_file)
