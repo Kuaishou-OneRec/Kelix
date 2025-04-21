@@ -162,6 +162,10 @@ class KimiViViT(nn.Module):
         image_inputs = self.image_processor(extended_videos, return_tensors="pt").to(text_inputs.input_ids.device)
         image_inputs = self.to_cuda(image_inputs, device)
         image_inputs = self.to_cuda(image_inputs, torch.bfloat16)
+        if self.ctx.rank == 0:
+            for key in image_inputs:
+                print(type(image_inputs))
+                print(key, type(image_inputs[key]), image_inputs[key].shape)
         image_outputs = self.image_model(**image_inputs)
         image_embeds = image_outputs.last_hidden_state
         pooler = image_outputs.pooler_output
