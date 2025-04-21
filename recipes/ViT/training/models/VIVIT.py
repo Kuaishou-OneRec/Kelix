@@ -6,12 +6,12 @@ from PIL import Image
 import torch.nn as nn
 import torch.distributed as dist
 from transformers import AutoProcessor, AutoModel
-from .vivit.modeling_vivit import VivitPreTrainedModel, VivitModel
-from .vivit.processing_vivit import VivitProcessor
+from recipes.ViT.training.models.vivit.modeling_vivit import VivitPreTrainedModel, VivitModel
+from recipes.ViT.training.models.vivit.processing_vivit import VivitProcessor
 import torch.nn.functional as F
-from .siglip.modeling_siglip import SiglipPreTrainedModel, SiglipModel
-from .siglip.processing_siglip import SiglipProcessor
-from .vivit.vivit_utils import read_video_pyav, read_image_pil, sample_frame_indices
+from recipes.ViT.training.models.siglip.modeling_siglip import SiglipPreTrainedModel, SiglipModel
+from recipes.ViT.training.models.siglip.processing_siglip import SiglipProcessor
+from recipes.ViT.training.models.vivit.vivit_utils import read_video_pyav, read_image_pil, sample_frame_indices
 
 
 class DisCoGather(torch.autograd.Function):

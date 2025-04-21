@@ -6,8 +6,8 @@ import os
 
 
 # 使用相对导入
-from .vivit.image_processing_vivit import VivitImageProcessor
-from .vivit.modeling_vivit import VivitModel
+from recipes.ViT.training.models.vivit.image_processing_vivit import VivitImageProcessor
+from recipes.ViT.training.models.vivit.modeling_vivit import VivitModel
 from huggingface_hub import hf_hub_download
 
 np.random.seed(0)
