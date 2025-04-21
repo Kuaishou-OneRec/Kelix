@@ -367,9 +367,6 @@ def get_resume_info(args):
 
 
 def freeze_params(args, model):
-  # freeze_llm, freeze_visual, freeze_visual_without_adapter
-  # freeze_llm, freeze_projector, freeze_visual
-
 
   #### qwen
   if args.model_class in  ["Qwen2VLForConditionalGeneration", "Qwen2_5_VLForConditionalGeneration"]:
