@@ -59,6 +59,7 @@ class KimiViViT(nn.Module):
     def __init__(self, config, ctx):
         super().__init__()
         self.config = config
+        print(self.config)
         self.ctx = ctx
         self.is_dist = self.ctx.is_dist
 
