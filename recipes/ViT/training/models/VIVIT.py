@@ -67,7 +67,10 @@ class KimiViViT(nn.Module):
             config.dir, ignore_mismatched_sizes=True
         )
         self.image_processor = VivitImageProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/vivit-b-16x2-kinetics400")
-        self.image_model = VivitModel.from_pretrained("/llm_reco_ssd/zhouyang12/models/vivit-b-16x2-kinetics400")
+        self.image_model = VivitModel.from_pretrained(
+            "/llm_reco_ssd/zhouyang12/models/vivit-b-16x2-kinetics400",
+            ignore_mismatched_sizes=True
+        )
         self.text_processor = SiglipProcessor.from_pretrained(config.dir)
         self.tokenizer = self.text_processor.tokenizer
 
