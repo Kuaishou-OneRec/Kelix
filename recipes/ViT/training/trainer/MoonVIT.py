@@ -14,7 +14,7 @@ from recipes.ViT.helpers.context import Context, DistributedContext
 import argparse
 import logging
 from omegaconf import OmegaConf
-from recipes.ViT.training.models.MoonVIT import MoonViT
+from recipes.ViT.training.models.moonvit import MoonViT
 from recipes.ViT.data.dataset import build_dataloader
 from recipes.ViT.training.lr_scheduler import build_scheduler
 from recipes.ViT.training.optimizer import build_optimizer
