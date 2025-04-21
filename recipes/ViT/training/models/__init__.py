@@ -1,3 +1,3 @@
 from recipes.ViT.training.models.kimi import KimiViT
 from recipes.ViT.training.models.VIVIT import KimiViViT
-from recipes.ViT.training.models.moonvit import MoonViT
+from .moonvit import MoonViT
