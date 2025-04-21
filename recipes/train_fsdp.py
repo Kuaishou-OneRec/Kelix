@@ -197,13 +197,15 @@ def get_argument_parser():
                       help="The gradient clip range.")
 
   parser.add_argument("--freeze_llm", action="store_true",
-                      help="Freeze LLM parameters.")
+                      help="Freeze all LLM parameters (language model weights will not be updated during training).")
 
   parser.add_argument("--freeze_visual", action="store_true",
-                      help="Freeze visual encoder parameters.")
+                      help="Freeze all visual encoder parameters except visual projector layers.")
   
-  parser.add_argument("--freeze_visual_without_adapter", action="store_true",
-                      help="Only freeze visual encoder parameters, train adapter parameters.")
+  parser.add_argument("--freeze_projector", action="store_true",
+                      help="Freeze visual projector layers.")
+
+
 
   parser.add_argument("--use_flash_attention_2", action="store_true",
                       help="Whether to use flash attention 2")
@@ -365,6 +367,9 @@ def get_resume_info(args):
 
 
 def freeze_params(args, model):
+  # freeze_llm, freeze_visual, freeze_visual_without_adapter
+  # freeze_llm, freeze_projector, freeze_visual
+
 
   #### qwen
   if args.model_class in  ["Qwen2VLForConditionalGeneration", "Qwen2_5_VLForConditionalGeneration"]:
@@ -376,15 +381,15 @@ def freeze_params(args, model):
           param.requires_grad = False
       print_rank_0("=" * 50)
 
-    if args.freeze_visual:
+    if args.freeze_projector:
       print_rank_0("Freeze visual encoder parameters.")
       for name, param in model.named_parameters():
-        if name.startswith("visual"):
+        if name.startswith("visual.merger."):
           print_rank_0(f"Disable visual encoder grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
 
-    if args.freeze_visual_without_adapter:
+    if args.freeze_visual:
       print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
       for name, param in model.named_parameters():
         if name.startswith("visual") and not name.startswith("visual.merger."):
@@ -400,12 +405,12 @@ def freeze_params(args, model):
         if name.startswith("language_model"): 
           print_rank_0(f"Disable InternVLChatModel language_model grad: {name}")
           param.requires_grad = False
-    if args.freeze_visual:
+    if args.freeze_projector:
       for name, param in model.named_parameters():
-        if name.startswith("mlp") or name.startswith("vision_model"): 
+        if name.startswith("mlp"): 
           print_rank_0(f"Disable InternVLChatModel visual encoder grad: {name}")
           param.requires_grad = False
-    if args.freeze_visual_without_adapter:
+    if args.freeze_visual:
       for name, param in model.named_parameters():
         if name.startswith("vision_model"):
           print_rank_0(f"Disable InternVLChatModel visual encoder(but mot adapter) grad: {name}")
@@ -555,12 +560,16 @@ def train():
     learning_rate=args.learning_rate,
     vision_learning_rate=args.vision_learning_rate,
     weight_decay=args.weight_decay,
-    no_decay_name_list=[
+    no_decay_name_list=
+    [
       "bias", "norm1", "norm2", "visual.merger.ln_q",
-      "input_layernorm",
-      "post_attention_layernorm",
-      "model.norm"
-    ],
+      "input_layernorm", "post_attention_layernorm", "model.norm"
+    ] if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration'] else
+    [
+      "bias", "norm1", "norm2", "mlp1.0.weight",
+      "input_layernorm", "post_attention_layernorm", "model.norm"
+    ]
+    ,
     vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
   )
 
@@ -998,53 +1007,4 @@ if __name__ == "__main__":
 
 
 
-import torch
-import torch.nn as nn
-from torch.utils.checkpoint import checkpoint
 
-
-# 定义一个简单的模型
-class SimpleModel(nn.Module):
-    def __init__(self):
-        super(SimpleModel, self).__init__()
-        # 定义上游层
-        self.upstream = nn.Parameter(torch.randn(10, 10))
-        # 定义下游层
-        self.downstream = nn.Parameter(torch.randn(10, 10))
-    #
-    def upstream_forward(self, x):
-        return torch.matmul(x, self.upstream)
-    #
-    def downstream_forward(self, x):
-        return torch.matmul(x, self.downstream)
-    #
-    def forward(self, x):
-        # 应用梯度检查点到上游层
-        x = checkpoint(self.upstream_forward, x)
-        # 应用梯度检查点到下游层
-        x = checkpoint(self.downstream_forward, x)
-        return x
-
-
-# 创建模型实例
-model = SimpleModel()
-
-# 将下游层的 requires_grad 设置为 False
-model.downstream.requires_grad = False
-
-# 创建输入张量
-input_tensor = torch.randn(1, 10)
-input_tensor.requires_grad = True
-
-# 前向传播
-output = model(input_tensor)
-
-# 定义损失函数
-loss = output.sum()
-
-# 反向传播
-loss.backward()
-
-# 检查上游层和下游层是否接收到梯度
-print(f"上游层是否接收到梯度: {model.upstream.grad is not None}")
-print(f"下游层是否接收到梯度: {model.downstream.grad is not None}")

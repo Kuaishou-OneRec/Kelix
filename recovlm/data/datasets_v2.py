@@ -644,11 +644,20 @@ class DistributedDataset(IterableDataset):
       folder = Path(self.sources)
       files = list(map(str, folder.rglob("*.parquet")))
 
-    self.rng.shuffle(files)
     total_files = len(files)
-    num_files_per_rank = round(len(files) / self.world_size)
-    files = files[
-      self.rank * num_files_per_rank: (self.rank + 1) * num_files_per_rank]
+
+    # 原来的逻辑有bug，考虑文件数量1000，world_size=64的情况，这个情况下，rank63就拿不到任何文件。同时也会导致最后一个rank的文件数量分配比较少
+    # num_files_per_rank = round(len(files) / self.world_size)
+    # files = files[
+    #   self.rank * num_files_per_rank: (self.rank + 1) * num_files_per_rank]
+
+    def get_nth_split(lst, world_size, rank):
+      if world_size <= 0 or rank < 0 or rank >= world_size:
+          raise ValueError("world_size 必须为正整数，rank 必须在 [0, world_size - 1] 范围内。")
+      quotient, remainder = divmod(len(lst), world_size)
+      start = rank * quotient + min(rank, remainder)
+      end = start + quotient + (1 if rank < remainder else 0)
+      return lst[start:end]
 
     assert len(files) > 0, f"No file found for rank{self.rank}"
 
