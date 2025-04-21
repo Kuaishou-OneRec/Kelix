@@ -148,7 +148,7 @@ class MonitorDecorator(object):
                 reset_step=config.report.report_per_step,
             )
     
-    def collect(self, outputs, rets, elapsed, **kwargs):
+    def collect(self,  rets, elapsed, **kwargs):
         model = self.model
         monitor = self.monitor
         ctx = self.ctx
@@ -238,7 +238,7 @@ def train(args):
 
         model.step()
         end = time.time()
-        package = decorator.collect(pooler, text_embeds, rets, end - start)
+        package = decorator.collect(rets, end - start)
         monitor.step(package)
         start = end
 
