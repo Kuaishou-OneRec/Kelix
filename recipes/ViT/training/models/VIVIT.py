@@ -78,6 +78,9 @@ class KimiViViT(nn.Module):
         hidden_size = self.text_model.hidden_size
         vocab_size = self.text_model.vocab_size
         self.text_model = self.text_model.text_model
+        
+        # Add projection layer for text embeddings to match vision embedding size
+        self.text_embed_proj = nn.Linear(1152, 768, bias=False)
 
         if config.text_decoder.enabled:
             self.text_decoder = AutoModel.from_pretrained(
@@ -108,6 +111,9 @@ class KimiViViT(nn.Module):
         pass
 
     def calcul_loss(self, text_embeds, image_pooler):
+        # Project text embeddings to match image embedding dimension
+        text_embeds = self.text_embed_proj(text_embeds)
+        
         if self.is_dist:
             device = text_embeds.device
 
