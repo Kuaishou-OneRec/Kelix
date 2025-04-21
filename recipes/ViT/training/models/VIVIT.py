@@ -66,7 +66,7 @@ class KimiViViT(nn.Module):
 
         self.textmodel = SiglipModel.from_pretrained(
             config.dir, ignore_mismatched_sizes=True
-        )
+        ).text_model
         self.image_processor = VivitImageProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/vivit-b-16x2-kinetics400")
         self.image_model = VivitModel.from_pretrained(
             "/llm_reco_ssd/zhouyang12/models/vivit-b-16x2-kinetics400",
@@ -149,6 +149,9 @@ class KimiViViT(nn.Module):
         text_inputs = self.text_processor(images=images, text=texts, padding="longest", return_tensors="pt")
         device = torch.cuda.current_device()
         text_inputs = self.to_cuda(text_inputs, device)
+        print('-------------------------------- ')
+        print(text_inputs)
+        print('--------------------------------')
         text_outputs = self.textmodel(**text_inputs)
         processed_images = []
         for image in images:
