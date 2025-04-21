@@ -149,18 +149,14 @@ class KimiViViT(nn.Module):
         text_inputs = self.text_processor(images=images, text=texts, padding="longest", return_tensors="pt")
         device = torch.cuda.current_device()
         text_inputs = self.to_cuda(text_inputs, device)
-        print('--------------------------------')
-        for key in text_inputs:
-            print(key, type(text_inputs[key]))
-            print(text_inputs[key].shape)
-            print(text_inputs[key].dtype)
-        print('--------------------------------')
+        # print('--------------------------------')
+        # for key in text_inputs:
+        #     print(key, type(text_inputs[key]))
+        #     print(text_inputs[key].shape)
+        #     print(text_inputs[key].dtype)
+        # print('--------------------------------')
         text_outputs = self.textmodel(
-            input_ids=text_inputs.input_ids,
-            attention_mask=text_inputs.attention_mask,
-            position_ids=text_inputs.position_ids,
-            output_attentions=False,
-            output_hidden_states=False,
+            input_ids=text_inputs.input_ids
         )
         text_embeds = text_outputs.pooler_output
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
