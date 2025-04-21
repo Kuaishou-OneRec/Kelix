@@ -126,8 +126,24 @@ class KimiViViT(nn.Module):
         else:
             return outputs.loss
 
+    def to_cuda(self, inputs, device):
+        if isinstance(inputs, (list, tuple)):
+            inputs = list(inputs)
+            for idx, item in enumerate(inputs):
+                inputs[idx] = self.to_cuda(item, device)
+            return inputs
+        elif isinstance(inputs, (dict, transformers.tokenization_utils_base.BatchEncoding)):
+            for key in inputs:
+                inputs[key] = self.to_cuda(inputs[key], device)
+            return inputs
+        elif isinstance(inputs, torch.Tensor):
+            return inputs.to(device)
+        return inputs
+
     def forward(self, images, texts):
         text_inputs = self.text_processor(images=images, text=texts, padding="longest", return_tensors="pt")
+        device = torch.cuda.current_device()
+        text_inputs = self.to_cuda(text_inputs, device)
         text_outputs = self.textmodel(**text_inputs)
         processed_images = []
         for image in images:
@@ -143,6 +159,7 @@ class KimiViViT(nn.Module):
             video = list(video)
             extended_videos.append(video)
         image_inputs = self.image_processor(extended_videos, return_tensors="pt").to(text_inputs.input_ids.device)
+        image_inputs = self.to_cuda(image_inputs, device)
         image_outputs = self.image_model(**image_inputs)
         image_embeds = image_outputs.last_hidden_state
         pooler = image_outputs.pooler_output
