@@ -185,7 +185,7 @@ class MoonViT(nn.Module):
         hidden_states = self.image_model(images_processed.pixel_values, images_processed.image_grid_hws, output_hidden_states=True)
         pooler = hidden_states['image_embedding']
         print('--------------------------------')
-        print(pooler)
+        print(pooler.shape)
         print('--------------------------------')
         loss = self.calcul_loss(text_embeds, pooler)
         text_output = text_outputs
