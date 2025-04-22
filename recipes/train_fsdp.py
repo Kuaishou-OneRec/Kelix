@@ -738,10 +738,8 @@ def train():
     input_ids.numel()
 
     token_metrics = torch.tensor(
-      [num_tokens, num_samples, num_valid_tokens]).cuda() // get_sequence_parallel_world_size()
+      [num_tokens, num_samples, num_valid_tokens]).cuda()
 
-
-    print(132333333, token_metrics, get_sequence_parallel_world_size(), dist.get_rank())
     dist.all_reduce(
       token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
