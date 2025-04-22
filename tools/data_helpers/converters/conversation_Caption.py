@@ -62,6 +62,20 @@ def convert_to_messages(conversation_list):
  
     return messages
 
+def image_key_to_base64(temp_path):
+    image_path = f"/llm_reco_ssd/luoxinchen/dataset/ArxivQA/ArxivQA/{temp_path}"#use key's pre 5 char to find the image
+    if not os.path.exists(image_path):
+        return None
+    try:
+        with open(image_path, 'rb') as image_file:
+            image_bytes = image_file.read()
+            base64_data = base64.b64encode(image_bytes).decode("ascii") # 转换为 Base64 字符串
+            return base64_data
+    except Exception as e:
+        print(f"Error: {e}")
+        return None
+
+
 
 class ConversationCaptionConverter(ConverterBase):
 
@@ -72,41 +86,37 @@ class ConversationCaptionConverter(ConverterBase):
         self.source = source
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
-        try:
-            image = src['image'][0]['bytes']
-            conversations = src['data']
-            image_bytes = base64.b64encode(image).decode('utf-8')
-            if image_bytes is None:
-                return None
-        except Exception as e:
-            return None
+        image = src['image']
+        options = src['options']
+        question = src['question']
+        answer = src['label']
+        rationale = src['rationale']
         messages = []
-        for message in conversations:
-            content = []
-            if message['modality'] == 'text':
-                content.append({
-                    "type": "text",
-                    "text": message['text']
-                })
-            elif message['modality'] == 'image':
-                content.append({
+        question = question + "\n" + options
+        messages.append({
+            "role": "user",
+            "content": [
+                {
                     "type": "image",
-                    "image": "0.jpg"
-                })
-            else:
-                return None
-            if message['role'] == 'user':
-                messages.append({
-                    "role": "user",
-                    "content": content
-                })
-            elif message['role'] == 'assistant':
-                messages.append({
-                    "role": "assistant",
-                    "content": content
-                })
-            else:
-                return None
+                    "image": image
+                },
+                {
+                    "type": "text",
+                    "text": question
+                }
+            ]
+        })
+
+        answer =  rationale + "\n so the answer is " + answer
+        messages.append({
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "text",
+                    "text": answer
+                }
+            ]
+        })
         images = {"0.jpg": image_bytes}
         
         segments = None
