@@ -678,7 +678,10 @@ def train():
 
   with Timer("Build dataloader"):
     try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
-    except: dataloader = get_dataloader(name=dataset, **dataset_config)
+    except: 
+      import traceback
+      traceback.print_exc()
+      dataloader = get_dataloader(name=dataset, **dataset_config)
     if args.resume_dataloader and dataloader_state_dict is not None:
       dataloader.load_state_dict(dataloader_state_dict)
 
