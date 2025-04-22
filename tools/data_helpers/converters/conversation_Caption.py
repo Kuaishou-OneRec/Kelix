@@ -72,13 +72,41 @@ class ConversationCaptionConverter(ConverterBase):
         self.source = source
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
-        image_path = src['id']
-        conversations = src['conversations']
-        image_bytes = image_key_to_base64(image_path)
-        if image_bytes is None:
+        try:
+            image = src['image'][0]['bytes']
+            conversations = src['data']
+            image_bytes = base64.b64encode(image).decode('utf-8')
+            if image_bytes is None:
+                return None
+        except Exception as e:
             return None
-        messages = convert_to_messages(conversations)
-
+        messages = []
+        for message in conversations:
+            content = []
+            if message['modality'] == 'text':
+                content.append({
+                    "type": "text",
+                    "text": message['text']
+                })
+            elif message['modality'] == 'image':
+                content.append({
+                    "type": "image",
+                    "image": "0.jpg"
+                })
+            else:
+                return None
+            if message['role'] == 'user':
+                messages.append({
+                    "role": "user",
+                    "content": content
+                })
+            elif message['role'] == 'assistant':
+                messages.append({
+                    "role": "assistant",
+                    "content": content
+                })
+            else:
+                return None
         images = {"0.jpg": image_bytes}
         
         segments = None
