@@ -530,6 +530,9 @@ class MoonVitPretrainedModel(PreTrainedModel):
                 "attn_implementation": config._attn_implementation,
             },
         )
+        self.proj = nn.Conv2d(
+            config.hidden_size, config.hidden_size, kernel_size=self.merge_kernel_size, stride=self.merge_kernel_size
+        )
 
     def forward(
         self, pixel_values: torch.Tensor, grid_hws: torch.Tensor, output_hidden_states: bool = False
@@ -550,9 +553,14 @@ class MoonVitPretrainedModel(PreTrainedModel):
         )
         # Extract a representative embedding for the entire image by averaging all tokens
         # This is more robust than just using the first token
-        image_embeddings = torch.stack([seq.mean(dim=1) for seq in merged_patches])
+        merged_patches_list = []
+        for merged_patch in merged_patches:
+            merged_patch = self.proj(merged_patch).view(merged_patch.size(0), -1)
+            merged_patches_list.append(merged_patch)
+            print('merged_patch.shape',merged_patch.shape)
+        image_embeddings = torch.stack(merged_patches_list)
         # Take mean across the second dimension to get shape [batch_size, hidden_dim]
-        image_embeddings = image_embeddings.mean(dim=1)
+        image_embeddings = image_embeddings.mean(dim=0)
         
         if output_hidden_states:
             return {
