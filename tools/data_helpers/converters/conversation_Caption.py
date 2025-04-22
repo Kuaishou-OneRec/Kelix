@@ -63,7 +63,7 @@ def convert_to_messages(conversation_list):
     return messages
 
 def image_key_to_base64(temp_path):
-    image_path = f"/llm_reco_ssd/luoxinchen/dataset/ArxivQA/ArxivQA/{temp_path}"#use key's pre 5 char to find the image
+    image_path = f"/llm_reco_ssd/luoxinchen/dataset/ArxivQA/ArxivQA/{temp_path}"
     if not os.path.exists(image_path):
         return None
     try:
@@ -87,6 +87,7 @@ class ConversationCaptionConverter(ConverterBase):
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
         image = src['image']
+        image_bytes = image_key_to_base64(image)
         options = src['options']
         options = "\n".join(options)
         question = src['question']
