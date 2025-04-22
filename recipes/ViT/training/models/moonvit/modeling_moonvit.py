@@ -499,247 +499,6 @@ def patch_merger(
     return outputs
 
 
-class MoonVitQFormerAttention(nn.Module):
-    """Multi-head attention module for QFormer"""
-    
-    def __init__(
-        self,
-        hidden_size: int,
-        num_heads: int,
-        dropout: float = 0.0,
-    ):
-        super().__init__()
-        self.num_heads = num_heads
-        self.hidden_size = hidden_size
-        self.head_dim = hidden_size // num_heads
-        assert self.head_dim * num_heads == hidden_size, "hidden_size must be divisible by num_heads"
-        
-        self.query = nn.Linear(hidden_size, hidden_size)
-        self.key = nn.Linear(hidden_size, hidden_size)
-        self.value = nn.Linear(hidden_size, hidden_size)
-        self.output = nn.Linear(hidden_size, hidden_size)
-        self.dropout = nn.Dropout(dropout)
-    
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states: (B, L_q, D)
-            encoder_hidden_states: (B, L_kv, D)
-            attention_mask: (B, L_q, L_kv)
-        Returns:
-            torch.Tensor: (B, L_q, D)
-        """
-        batch_size, query_length, _ = hidden_states.shape
-        
-        if encoder_hidden_states is None:
-            encoder_hidden_states = hidden_states
-        
-        key_length = encoder_hidden_states.shape[1]
-        
-        # Project query, key, value
-        query = self.query(hidden_states).reshape(batch_size, query_length, self.num_heads, self.head_dim).transpose(1, 2)
-        key = self.key(encoder_hidden_states).reshape(batch_size, key_length, self.num_heads, self.head_dim).transpose(1, 2)
-        value = self.value(encoder_hidden_states).reshape(batch_size, key_length, self.num_heads, self.head_dim).transpose(1, 2)
-        
-        # Compute attention scores
-        attention_scores = torch.matmul(query, key.transpose(-1, -2)) / math.sqrt(self.head_dim)
-        
-        if attention_mask is not None:
-            attention_scores = attention_scores + attention_mask
-        
-        attention_probs = F.softmax(attention_scores, dim=-1)
-        attention_probs = self.dropout(attention_probs)
-        
-        # Compute context
-        context = torch.matmul(attention_probs, value)
-        context = context.transpose(1, 2).reshape(batch_size, query_length, self.hidden_size)
-        
-        output = self.output(context)
-        
-        return output
-
-
-class MoonVitQFormerLayer(nn.Module):
-    """QFormer layer with self-attention and cross-attention"""
-    
-    def __init__(
-        self,
-        hidden_size: int,
-        num_heads: int,
-        intermediate_size: int,
-        activation_function=F.gelu,
-        layer_norm_eps: float = 1e-12,
-        dropout: float = 0.0,
-    ):
-        super().__init__()
-        
-        # Self-attention
-        self.self_attn = MoonVitQFormerAttention(
-            hidden_size=hidden_size,
-            num_heads=num_heads,
-            dropout=dropout,
-        )
-        self.self_attn_layer_norm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
-        
-        # Cross-attention
-        self.cross_attn = MoonVitQFormerAttention(
-            hidden_size=hidden_size,
-            num_heads=num_heads,
-            dropout=dropout,
-        )
-        self.cross_attn_layer_norm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
-        
-        # Feed forward
-        self.mlp = MLP2(
-            dims=[hidden_size, intermediate_size, hidden_size],
-            activation=activation_function,
-        )
-        self.final_layer_norm = nn.LayerNorm(hidden_size, eps=layer_norm_eps)
-        
-        self.dropout = nn.Dropout(dropout)
-    
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        encoder_hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        """
-        Args:
-            hidden_states: (B, L_q, D)
-            encoder_hidden_states: (B, L_kv, D)
-        """
-        # Self-attention
-        residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-        )
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = residual + hidden_states
-        
-        # Cross-attention
-        residual = hidden_states
-        hidden_states = self.cross_attn_layer_norm(hidden_states)
-        hidden_states = self.cross_attn(
-            hidden_states=hidden_states,
-            encoder_hidden_states=encoder_hidden_states,
-            attention_mask=encoder_attention_mask,
-        )
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = residual + hidden_states
-        
-        # Feed forward
-        residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = residual + hidden_states
-        
-        return hidden_states
-
-
-class MoonVitQFormer(nn.Module):
-    """QFormer module for extracting image embeddings"""
-    
-    def __init__(
-        self,
-        hidden_size: int,
-        num_layers: int,
-        num_heads: int,
-        intermediate_size: int,
-        num_queries: int = 32,
-        dropout: float = 0.0,
-    ):
-        super().__init__()
-        
-        self.num_queries = num_queries
-        
-        # Learnable query tokens
-        self.query_tokens = nn.Parameter(torch.zeros(1, num_queries, hidden_size))
-        nn.init.normal_(self.query_tokens, mean=0, std=0.02)
-        
-        # QFormer layers
-        self.layers = nn.ModuleList(
-            [
-                MoonVitQFormerLayer(
-                    hidden_size=hidden_size,
-                    num_heads=num_heads,
-                    intermediate_size=intermediate_size,
-                    dropout=dropout,
-                )
-                for _ in range(num_layers)
-            ]
-        )
-        
-        # Final layer norm
-        self.layer_norm = nn.LayerNorm(hidden_size)
-        
-        # Pooler for creating a single embedding
-        self.pooler = nn.Linear(hidden_size * num_queries, hidden_size)
-    
-    def forward(
-        self,
-        encoder_hidden_states: torch.Tensor,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
-        """
-        Args:
-            encoder_hidden_states: Image features from vision encoder (B, L, D)
-            encoder_attention_mask: Optional mask for encoder states
-        Returns:
-            torch.Tensor: Query features (B, num_queries, D)
-        """
-        batch_size = encoder_hidden_states.shape[0]
-        
-        # Expand query tokens to batch size
-        query_tokens = self.query_tokens.expand(batch_size, -1, -1)
-        
-        # Create cross-attention mask if needed
-        if encoder_attention_mask is not None:
-            # Expand attention mask to (B, num_queries, encoder_seq_len)
-            attention_mask = encoder_attention_mask.unsqueeze(1).expand(-1, self.num_queries, -1)
-        else:
-            attention_mask = None
-        
-        # Process through QFormer layers
-        hidden_states = query_tokens
-        for layer in self.layers:
-            hidden_states = layer(
-                hidden_states=hidden_states,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=attention_mask,
-            )
-        
-        # Apply final layer norm
-        hidden_states = self.layer_norm(hidden_states)
-        
-        return hidden_states
-    
-    def get_image_embedding(self, query_features: torch.Tensor) -> torch.Tensor:
-        """
-        Get a single embedding vector for each image from query features.
-        
-        Args:
-            query_features: Query features from QFormer (B, num_queries, D)
-        Returns:
-            torch.Tensor: Single embedding per image (B, D)
-        """
-        # Flatten the query features and project to embedding dimension
-        batch_size = query_features.shape[0]
-        flattened = query_features.reshape(batch_size, -1)
-        embedding = self.pooler(flattened)
-        
-        return embedding
-
-
 class MoonVitPretrainedModel(PreTrainedModel):
     config_class = MoonViTConfig
     model_type = "moonvit"
@@ -771,74 +530,33 @@ class MoonVitPretrainedModel(PreTrainedModel):
                 "attn_implementation": config._attn_implementation,
             },
         )
-        
-        # Add QFormer for extracting image embeddings
-        self.qformer = MoonVitQFormer(
-            hidden_size=config.hidden_size,
-            num_layers=2,  # Can be configured as needed
-            num_heads=config.num_attention_heads,
-            intermediate_size=config.intermediate_size,
-            num_queries=32,  # Can be configured as needed
-        )
 
     def forward(
-        self, pixel_values: torch.Tensor, grid_hws: torch.Tensor
-    ) -> torch.Tensor:
+        self, pixel_values: torch.Tensor, grid_hws: torch.Tensor, output_hidden_states: bool = False
+    ) -> Union[torch.Tensor, dict]:
         """
         Args:
             pixel_values (torch.Tensor): The input pixel values.
             grid_hws (torch.Tensor): The grid height and width.
+            output_hidden_states (bool, optional): Whether to return all hidden states. Defaults to False.
         Returns:
-            torch.Tensor: The output tokens.
+            torch.Tensor or dict: If output_hidden_states is False, returns a tensor with shape [batch_size, hidden_dim]
+                representing global image embeddings. Otherwise, returns a dict with merged_patches and image_embedding.
         """
         hidden_states = self.patch_embed(pixel_values, grid_hws)
         hidden_states = self.encoder(hidden_states, grid_hws)
-        hidden_states = patch_merger(
+        merged_patches = patch_merger(
             hidden_states, grid_hws, merge_kernel_size=self.merge_kernel_size
         )
-        return hidden_states
         
-    def get_image_embeddings(
-        self, pixel_values: torch.Tensor, grid_hws: torch.Tensor
-    ) -> torch.Tensor:
-        """
-        Extract a single embedding vector for each image using QFormer.
+        # Extract a representative embedding for the entire image by averaging all tokens
+        # This is more robust than just using the first token
+        image_embeddings = torch.stack([seq.mean(dim=1) for seq in merged_patches])
         
-        Args:
-            pixel_values (torch.Tensor): The input pixel values.
-            grid_hws (torch.Tensor): The grid height and width.
-        Returns:
-            torch.Tensor: Tensor of shape (batch_size, hidden_size) containing 
-                          one embedding vector per image.
-        """
-        # Get patch features from the vision encoder
-        hidden_states = self.patch_embed(pixel_values, grid_hws)
-        hidden_states = self.encoder(hidden_states, grid_hws)
-        
-        # Process image patches with QFormer
-        batch_image_indices = []
-        start_idx = 0
-        
-        # Create a batch of image features
-        image_features = []
-        for i, hw in enumerate(grid_hws.tolist()):
-            height, width = hw[0], hw[1]
-            num_patches = height * width
-            # Extract patches for this image
-            img_patches = hidden_states[start_idx:start_idx + num_patches]
-            # Add batch dimension for this single image
-            img_patches = img_patches.unsqueeze(0)
-            image_features.append(img_patches)
-            start_idx += num_patches
-        
-        # Process each image with QFormer
-        embeddings = []
-        for img_features in image_features:
-            # Process through QFormer
-            query_features = self.qformer(img_features)
-            # Get single embedding
-            embedding = self.qformer.get_image_embedding(query_features)
-            embeddings.append(embedding)
-        
-        # Stack all embeddings
-        return torch.cat(embeddings, dim=0)
+        if output_hidden_states:
+            return {
+                "merged_patches": merged_patches,
+                "image_embedding": image_embeddings
+            }
+        else:
+            return image_embeddings
