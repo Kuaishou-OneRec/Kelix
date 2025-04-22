@@ -928,6 +928,7 @@ class SiglipVisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
+        attention_mask: Optional[torch.Tensor] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -944,6 +945,7 @@ class SiglipVisionTransformer(nn.Module):
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            attention_mask=attention_mask
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -1065,6 +1067,7 @@ class SiglipModel(SiglipPreTrainedModel):
         assert not hasattr(self, "hidden_size")
         self.hidden_size = config.vision_config.hidden_size
         self.vocab_size = config.text_config.vocab_size
+        self.patch_size = config.vision_config.patch_size
 
         text_config = config.text_config
         vision_config = config.vision_config

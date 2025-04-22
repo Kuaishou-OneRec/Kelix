@@ -20,6 +20,7 @@ from transformers.image_utils import (
     IMAGENET_STANDARD_STD,
     PILImageResampling,
 )
+from transformers import AutoProcessor, BaseImageProcessorFast, AutoImageProcessor
 from transformers.utils import add_start_docstrings
 
 
@@ -27,7 +28,7 @@ from transformers.utils import add_start_docstrings
     "Constructs a fast SigLIP image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
 )
-class SiglipImageProcessorFast(BaseImageProcessorFast):
+class CustomSiglipImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -38,4 +39,5 @@ class SiglipImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
 
 
-__all__ = ["SiglipImageProcessorFast"]
+AutoImageProcessor.register("CustomSiglipImageProcessorFast", fast_image_processor_class=CustomSiglipImageProcessorFast)
+__all__ = ["CustomSiglipImageProcessorFast"]

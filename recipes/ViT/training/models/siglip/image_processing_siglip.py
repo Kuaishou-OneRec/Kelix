@@ -35,6 +35,7 @@ from transformers.image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from transformers import AutoProcessor, AutoImageProcessor
 from transformers.utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
@@ -45,7 +46,7 @@ if is_vision_available():
     import PIL
 
 
-class SiglipImageProcessor(BaseImageProcessor):
+class CustomSiglipImageProcessor(BaseImageProcessor):
     r"""
     Constructs a SigLIP image processor.
 
@@ -241,4 +242,5 @@ class SiglipImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
-__all__ = ["SiglipImageProcessor"]
+AutoImageProcessor.register("CustomSiglipImageProcessor", CustomSiglipImageProcessor)
+__all__ = ["CustomSiglipImageProcessor"]

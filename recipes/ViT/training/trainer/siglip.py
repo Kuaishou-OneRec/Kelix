@@ -2,6 +2,7 @@ import os
 import os.path as osp
 import torch
 import time
+import json
 import deepspeed
 from PIL import Image
 import torch.nn as nn
@@ -186,9 +187,17 @@ class MonitorDecorator(object):
 
 def check_config(args, config):
     config.output_dir = args.output_dir
+    config.model.packing = config.dataset.packing
+
     if config.dataset.num_workers != config.dataset.loader.num_workers:
         config.dataset.num_workers = config.dataset.loader.num_workers
         logger.warning(f"Divergence of 'config.dataset.num_workers' and 'config.dataset.loader.num_workers', rewrite 'config.dataset.num_workers' to {config.dataset.loader.num_workers}")
+
+    model_config_path = osp.join(config.model.dir, "config.json")
+    model_config = json.load(open(model_config_path, "r", encoding="utf-8"))
+    patch_size = model_config["vision_config"]["patch_size"]
+    config.dataset.packing.patch_size = patch_size
+    logger.warning(f"Set patch_size = {patch_size} from model config file {model_config_path}")
 
 
 def train(args):
@@ -242,7 +251,7 @@ def train(args):
         monitor.step(package)
         start = end
     
-    monitor.step()
+    monitor.step(force_save=True)
 
 
 if __name__ == "__main__":

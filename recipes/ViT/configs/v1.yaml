@@ -7,11 +7,12 @@ dataset:
     num_workers: 2
     batch_size: 32
     collate_fn: SingleImageTextPairCollator
+  packing:
+    enabled: true
+    max_length: 8192
+    drop_ratio: 0.
 model:
   dir: /llm_reco_ssd/zhouyang12/models/SigLIP-So400M-Patch14-384/
-  packing:
-    enabled: false
-    max_length: 8192
   text_decoder:
     enabled: false
     model_dir: 234
