@@ -88,7 +88,7 @@ class Qwen2VLInputBuilder:
     self.max_visual_tokens_per_image = \
         kwargs.get("max_visual_tokens_per_image", 512)
     self.max_images = kwargs.get("max_images", 10)
-    self.pid_info_client = PidInfoClient(pid_info_client_host)
+    # self.pid_info_client = PidInfoClient(pid_info_client_host)
 
   def fill_image_block(self,
                        block: Dict[str, Any],
@@ -146,10 +146,11 @@ class Qwen2VLInputBuilder:
         block["video"] = sample[block["video"]]
       
       if isinstance(block["video"], str) and not os.path.exists(block["video"]):
+        raise ValueError(f"video file not exists: {block['video']}")
         # media_path
-        pid_info = self.pid_info_client.get_pid_info(block["video"].split(".")[0].split('/')[-1])
-        if pid_info['media_type'] != 'video': raise ValueError(f"media_type={pid_info['media_type']} is not video")
-        block["video"] = pid_info["media_path"]
+        # pid_info = self.pid_info_client.get_pid_info(block["video"].split(".")[0].split('/')[-1])
+        # if pid_info['media_type'] != 'video': raise ValueError(f"media_type={pid_info['media_type']} is not video")
+        # block["video"] = pid_info["media_path"]
 
       # fill other params
       block["min_pixels"] = \
