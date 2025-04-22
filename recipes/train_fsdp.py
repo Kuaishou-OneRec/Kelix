@@ -734,8 +734,9 @@ def train():
 
     num_tokens = input_ids.numel()
 
-    print(num_samples, dist.get_rank(),  9882343333)
     num_samples = (sample_idx.max() + 1).sum()
+    print(num_samples, dist.get_rank(),  9882343333)
+
     num_valid_tokens = num_tokens - (sample_idx == -1).sum()
     input_ids.numel()
 
