@@ -457,7 +457,7 @@ def train():
       converter = Qwen2VLCheckpointConverter(args.model_dir)
   elif args.model_class == 'InternVLChatModel':
       converter = InternVLCheckpointConverter(args.model_dir)
-      
+
   if dist.get_rank() == 0:
     with set_default_dtype(torch.bfloat16):
       state_dict = load_hf_checkpoint(args.model_dir)
@@ -848,11 +848,11 @@ def train():
         end_time = time.time()
         sec_per_step = (end_time - start_time) / args.gradient_accumulation_steps
         tokens_per_sec_per_gpu = \
-          acc_num_tokens / dist.get_world_size() / (end_time - start_time)
+          acc_num_tokens  / (end_time - start_time)
         samples_per_sec_per_gpu = \
-          acc_num_samples / dist.get_world_size() / (end_time - start_time)
+          acc_num_samples  / (end_time - start_time)
         valid_tokens_per_sec_per_gpu = \
-          acc_valid_num_tokens / dist.get_world_size() / (end_time - start_time)
+          acc_valid_num_tokens / (end_time - start_time)
         avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
         start_time = end_time
         log_dict = {
