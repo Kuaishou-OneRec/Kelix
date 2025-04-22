@@ -1,3 +1,14 @@
+#!/bin/bash
+
+# 检查当前的 shell 是否为 bash
+if [ -z "$BASH_VERSION" ]; then
+    echo "此脚本必须使用 bash 启动，请使用 'bash script.bash' 来运行它。" >&2
+    exit 1
+fi
+
+# 以下是你的脚本主体内容
+echo "脚本正在使用 bash 正常运行。"
+
 git config --global user.email 'lingzhixin@kuaishou.com'
 git config --global user.name 'lingzhixin'
 
