@@ -1,5 +1,15 @@
 #!/bin/bash
 
+
+
+# 检查当前的 shell 是否为 bash
+if [ -z "$BASH_VERSION" ]; then
+    echo "此脚本必须使用 bash 启动，请使用 'bash script.bash' 来运行它。" >&2
+    exit 1
+fi
+
+
+
 # Get the directory of the current script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ENV_FILE="${SCRIPT_DIR}/.deepspeed_env"
