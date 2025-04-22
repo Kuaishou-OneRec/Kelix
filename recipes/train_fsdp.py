@@ -743,9 +743,9 @@ def train():
     dist.all_reduce(
       token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
-    num_tokens = token_metrics[0]
-    num_samples = token_metrics[1]
-    num_valid_tokens = token_metrics[2]
+    num_tokens = token_metrics[0] // dist.get_world_size()
+    num_samples = token_metrics[1]  // dist.get_world_size()
+    num_valid_tokens = token_metrics[2]  // dist.get_world_size()
 
     total_num_samples += num_samples.item()
     total_num_tokens += num_tokens.item()
