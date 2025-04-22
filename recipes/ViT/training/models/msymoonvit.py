@@ -179,11 +179,7 @@ class MoonViT(nn.Module):
         )
         text_embeds = text_outputs.pooler_output
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
-        processed_images = []
-        for image in images:
-            image = Image.open(image)
-            processed_images.append(image)
-        images_processed = self.image_processor(processed_images, return_tensors="pt").to(dtype=self.image_model.dtype, device=self.image_model.device)
+        images_processed = self.image_processor(images, return_tensors="pt").to(dtype=self.image_model.dtype, device=self.image_model.device)
         # image_outputs = self.image_model(images_processed.pixel_values, images_processed.image_grid_hws)
         # image_embeds = image_outputs
         pooler = self.image_model.get_image_embeddings(images_processed.pixel_values, images_processed.image_grid_hws)
