@@ -558,10 +558,11 @@ class MoonVitPretrainedModel(PreTrainedModel):
         for merged_patch in merged_patches:
             merged_patch = merged_patch.squeeze(0)
             merged_patch = self.proj(merged_patch).view(merged_patch.size(0), -1)
+            merged_patch = merged_patch.unsqueeze(0)
             merged_patches_list.append(merged_patch)
         image_embeddings = torch.stack(merged_patches_list)
-        # Take mean across the second dimension to get shape [batch_size, hidden_dim]
-        image_embeddings = image_embeddings.mean(dim=0)
+        #Take mean across the second dimension to get shape [batch_size, hidden_dim]
+        image_embeddings = image_embeddings.mean(dim=1)
         print('image_embeddings.shape',image_embeddings.shape)
         
         if output_hidden_states:
