@@ -534,6 +534,9 @@ class MoonVitPretrainedModel(PreTrainedModel):
         self.proj = nn.Conv2d(
             config.hidden_size, config.hidden_size, kernel_size=self.merge_kernel_size, stride=self.merge_kernel_size
         )
+        # 使用较小的标准差初始化投影层权重
+        nn.init.normal_(self.proj.weight, std=0.01)
+        nn.init.zeros_(self.proj.bias)
 
     def forward(
         self, pixel_values: torch.Tensor, grid_hws: torch.Tensor, output_hidden_states: bool = False
