@@ -739,7 +739,7 @@ def train():
 
     token_metrics = torch.tensor(
       [num_tokens, num_samples, num_valid_tokens]).cuda() // get_sequence_parallel_world_size()
-    print(token_metrics, 88877788871342)
+    print(token_metrics, dist.get_rank(), 88877788871342)
     dist.all_reduce(
       token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
