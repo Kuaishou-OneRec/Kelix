@@ -491,9 +491,8 @@ def patch_merger(
         )
         reshaped_seq = reshaped_seq.permute(0, 2, 1, 3, 4).contiguous()
         padded_seq = reshaped_seq.view(
-            new_height * new_width, kernel_height , kernel_width, -1
+            new_height * new_width, kernel_height * kernel_width, -1
         )
-        padded_seq = padded_seq.permute(0, 3, 1, 2)
         outputs.append(padded_seq)
         pre_sum += height * width
 
@@ -531,9 +530,6 @@ class MoonVitPretrainedModel(PreTrainedModel):
                 "attn_implementation": config._attn_implementation,
             },
         )
-        self.proj = nn.Conv2d(
-            config.hidden_size, config.hidden_size, kernel_size=self.merge_kernel_size, stride=self.merge_kernel_size
-        )
 
     def forward(
         self, pixel_values: torch.Tensor, grid_hws: torch.Tensor, output_hidden_states: bool = False
@@ -552,16 +548,11 @@ class MoonVitPretrainedModel(PreTrainedModel):
         merged_patches = patch_merger(
             hidden_states, grid_hws, merge_kernel_size=self.merge_kernel_size
         )
+        
         # Extract a representative embedding for the entire image by averaging all tokens
         # This is more robust than just using the first token
-        merged_patches_list = []
-        for merged_patch in merged_patches:
-            merged_patch = merged_patch.squeeze(0)
-            merged_patch = self.proj(merged_patch).view(merged_patch.size(0), -1)
-            merged_patch = merged_patch.mean(dim=0)
-            # L2 normalize the embedding vector
-            merged_patches_list.append(merged_patch)
-        image_embeddings = torch.stack(merged_patches_list)
+        image_embeddings = torch.stack([seq.mean(dim=1) for seq in merged_patches])
+        
         if output_hidden_states:
             return {
                 "merged_patches": merged_patches,
