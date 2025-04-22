@@ -18,6 +18,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2Bt # Pretrained/Base model path
 OUTPUT_DIR=/llm_reco/lingzhixin/output3/freeze_debug/0.0.1/debug_internvl_2B
 
+
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
