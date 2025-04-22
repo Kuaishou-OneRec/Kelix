@@ -88,6 +88,7 @@ class ConversationCaptionConverter(ConverterBase):
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
         image = src['image']
         options = src['options']
+        options = "\n".join(options)
         question = src['question']
         answer = src['label']
         rationale = src['rationale']
