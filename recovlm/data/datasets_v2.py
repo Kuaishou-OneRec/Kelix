@@ -1469,7 +1469,8 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
     # append EOS token
     text += "<|endoftext|>"
     image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos)
-    inputs = self.processor(
+
+    inputs = self.input_builder.processor(
         text=text,
         images=image_inputs,
         videos=video_inputs,
