@@ -739,13 +739,13 @@ def train():
 
     token_metrics = torch.tensor(
       [num_tokens, num_samples, num_valid_tokens]).cuda() // get_sequence_parallel_world_size()
-    print(token_metrics, dist.get_rank(), 88877788871342)
+
     dist.all_reduce(
       token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
-    num_tokens = token_metrics[0] // dist.get_world_size()
-    num_samples = token_metrics[1]  // dist.get_world_size()
-    num_valid_tokens = token_metrics[2]  // dist.get_world_size()
+    num_tokens = token_metrics[0]
+    num_samples = token_metrics[1]
+    num_valid_tokens = token_metrics[2] 
 
     total_num_samples += num_samples.item()
     total_num_tokens += num_tokens.item()
@@ -846,13 +846,13 @@ def train():
         else:
           vision_learning_rate = lr_scheduler.get_lr()[1]
         end_time = time.time()
-        sec_per_step = (end_time - start_time) / args.gradient_accumulation_steps
+        sec_per_step = (end_time - start_time) # / args.gradient_accumulation_steps
         tokens_per_sec_per_gpu = \
-          acc_num_tokens  / (end_time - start_time)
+          acc_num_tokens  / (end_time - start_time) / dist.get_world_size()
         samples_per_sec_per_gpu = \
-          acc_num_samples  / (end_time - start_time)
+          acc_num_samples  / (end_time - start_time) / dist.get_world_size()
         valid_tokens_per_sec_per_gpu = \
-          acc_valid_num_tokens / (end_time - start_time)
+          acc_valid_num_tokens / (end_time - start_time) / dist.get_world_size()
         avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
         start_time = end_time
         log_dict = {
@@ -863,10 +863,10 @@ def train():
           "perf/sec_per_step": sec_per_step,
           "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
           "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
-          "perf/total_num_tokens": total_num_tokens / args.gradient_accumulation_steps,
-          "perf/total_num_samples": total_num_samples / args.gradient_accumulation_steps,
-          "perf/valid_total_num_tokens": total_num_valid_tokens / args.gradient_accumulation_steps,
-          "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu / args.gradient_accumulation_steps,
+          "perf/total_num_tokens": total_num_tokens,
+          "perf/total_num_samples": total_num_samples,
+          "perf/valid_total_num_tokens": total_num_valid_tokens,
+          "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
           "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
         }
 
