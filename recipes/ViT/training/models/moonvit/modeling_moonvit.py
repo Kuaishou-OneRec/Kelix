@@ -552,6 +552,8 @@ class MoonVitPretrainedModel(PreTrainedModel):
         # Extract a representative embedding for the entire image by averaging all tokens
         # This is more robust than just using the first token
         image_embeddings = torch.stack([seq.mean(dim=1) for seq in merged_patches])
+        # Take mean across the second dimension to get shape [batch_size, hidden_dim]
+        image_embeddings = image_embeddings.mean(dim=1)
         
         if output_hidden_states:
             return {
