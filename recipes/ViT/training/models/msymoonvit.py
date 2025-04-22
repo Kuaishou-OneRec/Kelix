@@ -6,6 +6,7 @@ from PIL import Image, ImageOps
 import torch.nn as nn
 import torch.distributed as dist
 import numpy as np
+import base64
 from transformers import AutoProcessor, AutoModel
 from recipes.ViT.training.models.siglip.modeling_siglip import SiglipPreTrainedModel, SiglipModel
 from recipes.ViT.training.models.siglip.processing_siglip import SiglipProcessor
@@ -24,7 +25,7 @@ class DisCoGather(torch.autograd.Function):
     @staticmethod
     def forward(ctx, tensor, context):
         if not dist.is_initialized():
-            raise "torch.distributed is not initialized"
+            raise RuntimeError("torch.distributed is not initialized")
 
         world_size = context.world_size
         ctx.world_size = context.world_size
@@ -134,7 +135,20 @@ class MoonViT(nn.Module):
             loss = nll.mean()
             return loss
         else:
-            return outputs.loss
+            # Calculate loss without distributed training
+            device = text_embeds.device
+            logits_per_text = torch.matmul(text_embeds, image_pooler.t().to(device))
+            
+            logit_scale = self.logit_scale.to(device)
+            logit_bias = self.logit_bias.to(device)
+            logits_per_text = logits_per_text * logit_scale.exp() + logit_bias
+            
+            eye = torch.eye(logits_per_text.size(0), device=device)
+            m1_diag1 = -torch.ones_like(logits_per_text) + 2 * eye
+            loglik = torch.nn.functional.logsigmoid(m1_diag1 * logits_per_text)
+            nll = -torch.sum(loglik, dim=-1)
+            loss = nll.mean()
+            return loss
 
     def to_cuda(self, inputs, device):
         if isinstance(inputs, (list, tuple)):
@@ -177,19 +191,19 @@ class MoonViT(nn.Module):
         pooler = self.image_model.get_image_embeddings(images_processed.pixel_values, images_processed.image_grid_hws)
         loss = self.calcul_loss(text_embeds, pooler)
         text_output = text_outputs
-        image_output = image_outputs
+        image_output = pooler
 
-        text_hidden_embeds = text_output.last_hidden_state
-        image_hidden_embeds = image_output.last_hidden_state
+        # text_hidden_embeds = text_output.last_hidden_state
+        # image_hidden_embeds = image_output.last_hidden_state
 
-        batch_size = image_hidden_embeds.shape[0]
-        assert text_hidden_embeds.shape[0] == image_hidden_embeds.shape[0]
+        batch_size = image_output.shape[0]
+        assert text_embeds.shape[0] == image_output.shape[0]
 
 
         return pooler, text_embeds, Context(
             loss=loss,
-            total_image_num_tokens=np.prod(image_hidden_embeds.shape[:2]).item(),
-            total_text_num_tokens=np.prod(text_hidden_embeds.shape[:2]).item(),
+            total_image_num_tokens=np.prod(image_output.shape[:2]).item(),
+            total_text_num_tokens=np.prod(text_embeds.shape[:2]).item(),
             total_num_samples=batch_size,
             total_text_num_valid_tokens=(text_inputs.input_ids != self.tokenizer.pad_token_id).long().sum().item()
         )

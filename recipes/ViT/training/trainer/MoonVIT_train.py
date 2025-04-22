@@ -202,7 +202,7 @@ def train(args):
     ctx = DistributedContext(args=args, config=config).setup()
     
     with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config, enabled=False):
-        model = KimiViViT(config.model, ctx)
+        model = MoonViT(config.model, ctx)
     optimizer = build_optimizer(config.optimizer, model, model_name="siglip")
     optimizer = FusedAdam(model.parameters(),
                         lr=config.optimizer.learn_rate,
