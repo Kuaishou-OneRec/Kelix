@@ -183,6 +183,9 @@ class MoonViT(nn.Module):
         # image_outputs = self.image_model(images_processed.pixel_values, images_processed.image_grid_hws)
         # image_embeds = image_outputs
         pooler = self.image_model.get_image_embeddings(images_processed.pixel_values, images_processed.image_grid_hws)
+        print('--------------------------------')
+        print(pooler)
+        print('--------------------------------')
         loss = self.calcul_loss(text_embeds, pooler)
         text_output = text_outputs
         image_output = pooler
