@@ -453,17 +453,15 @@ def train():
   set_random_seed(args.seed)
 
   state_dict = None
-
+  if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration']:
+      converter = Qwen2VLCheckpointConverter(args.model_dir)
+  elif args.model_class == 'InternVLChatModel':
+      converter = InternVLCheckpointConverter(args.model_dir)
+      
   if dist.get_rank() == 0:
     with set_default_dtype(torch.bfloat16):
       state_dict = load_hf_checkpoint(args.model_dir)
-      
-      if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration']:
-          converter = Qwen2VLCheckpointConverter(args.model_dir)
-          state_dict = converter(state_dict)
-      elif args.model_class == 'InternVLChatModel':
-          converter = InternVLCheckpointConverter(args.model_dir)
-          state_dict = converter(state_dict)
+      state_dict = converter(state_dict)
 
 
   dist.barrier()
@@ -735,13 +733,13 @@ def train():
     num_tokens = input_ids.numel()
 
     num_samples = (sample_idx.max() + 1).sum()
-    print(num_samples, dist.get_rank(),  9882343333)
 
     num_valid_tokens = num_tokens - (sample_idx == -1).sum()
     input_ids.numel()
 
     token_metrics = torch.tensor(
-      [num_tokens, num_samples, num_valid_tokens]).cuda()
+      [num_tokens, num_samples, num_valid_tokens]).cuda() // get_sequence_parallel_world_size()
+    
     dist.all_reduce(
       token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
