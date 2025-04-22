@@ -5,7 +5,7 @@ dataset:
   num_workers: 2
   loader:
     num_workers: 2
-    batch_size: 2
+    batch_size: 1
     collate_fn: SingleImageTextPairCollator
 model:
   dir: /llm_reco_ssd/zhouyang12/models/SigLIP-So400M-Patch14-384/
