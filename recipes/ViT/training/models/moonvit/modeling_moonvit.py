@@ -491,8 +491,9 @@ def patch_merger(
         )
         reshaped_seq = reshaped_seq.permute(0, 2, 1, 3, 4).contiguous()
         padded_seq = reshaped_seq.view(
-            new_height * new_width, kernel_height * kernel_width, -1
+            new_height * new_width, kernel_height , kernel_width, -1
         )
+        padded_seq = padded_seq.permute(0, 3, 1, 2)
         outputs.append(padded_seq)
         pre_sum += height * width
 
@@ -555,7 +556,7 @@ class MoonVitPretrainedModel(PreTrainedModel):
         # This is more robust than just using the first token
         merged_patches_list = []
         for merged_patch in merged_patches:
-            merged_patch = merged_patch.unsqueeze(0)
+            merged_patch = merged_patch.squeeze(0)
             merged_patch = self.proj(merged_patch).view(merged_patch.size(0), -1)
             merged_patches_list.append(merged_patch)
             print('merged_patch.shape',merged_patch.shape)
