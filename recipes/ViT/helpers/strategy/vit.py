@@ -20,7 +20,7 @@ class ViTStrategy(BaseStrategy):
         self.save_per_step = config.strategy.save_per_step
 
     def step(self, ctx, force_save=False):
-        self.save(ctx, force=force)
+        self.save(ctx, force=force_save)
 
     def setup(self):
         self.set_random_seed()

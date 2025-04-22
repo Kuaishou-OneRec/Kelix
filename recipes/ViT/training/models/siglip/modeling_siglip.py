@@ -17,7 +17,7 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Tuple, Union, List
 
 import numpy as np
 import torch
@@ -929,6 +929,13 @@ class SiglipVisionTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
         attention_mask: Optional[torch.Tensor] = None,
+        sample_indices: Optional[torch.Tensor] = None,
+        image_indices: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        height_position_ids: Optional[torch.Tensor] = None,
+        width_position_ids: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        padding_mask: Optional[torch.Tensor] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -951,7 +958,39 @@ class SiglipVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        pooler_output = self.head(last_hidden_state) if self.use_head else None
+        if sample_indices is not None:
+            assert self.use_head is True
+            last_hidden_state_list = last_hidden_state.unbind(0)
+            dim = last_hidden_state.shape[-1]
+            sample_index_list = sample_indices.unbind(0)
+            assert len(sample_index_list) == len(last_hidden_state_list)
+            sample_hidden_state_list = list()
+
+            for hidden_state, sample_index in zip(last_hidden_state_list, sample_index_list):
+                unique_sample_index = torch.unique(sample_index).sort().values.unbind()
+                unique_sample_index = list(unique_sample_index)
+                if len(unique_sample_index) > 0 and unique_sample_index[0] == -1:
+                    unique_sample_index = unique_sample_index[1:]
+                for sample_idx in unique_sample_index:
+                    token_indices = (sample_index == sample_idx).nonzero().flatten()
+                    sample_hidden_state = torch.gather(hidden_state, 0, token_indices[:, None].repeat(1, dim))
+                    sample_hidden_state_list.append(sample_hidden_state)
+            max_length = max([_state.shape[0] for _state in sample_hidden_state_list])
+            tmp_sample_hidden_state_list = list()
+            padding_mask = list()
+            for idx, _state in enumerate(sample_hidden_state_list):
+                padding_length = max_length - _state.shape[0]
+                mask = _state.new_zeros(size=(max_length, ), dtype=torch.int64)
+                mask[-padding_length: ] = 1
+                padding_mask.append(mask)
+                padding = _state.new_zeros(size=(padding_length, dim))
+                new_state = torch.concat([_state, padding], dim=0)
+                tmp_sample_hidden_state_list.append(new_state)
+            sample_hidden_state = torch.stack(tmp_sample_hidden_state_list, dim=0)
+            padding_mask = torch.stack(padding_mask, dim=0)
+            pooler_output = self.head(last_hidden_state, key_padding_mask=padding_mask)
+        else:
+            pooler_output = self.head(last_hidden_state) if self.use_head else None
 
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -1194,6 +1233,14 @@ class SiglipModel(SiglipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        sample_indices: Optional[torch.Tensor] = None,
+        image_indices: Optional[torch.Tensor] = None,
+        image_position_ids: Optional[torch.Tensor] = None,
+        height_position_ids: Optional[torch.Tensor] = None,
+        width_position_ids: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        image_attention_mask: Optional[torch.Tensor] = None,
     ) -> SiglipOutput:
         r"""
         Returns:
@@ -1235,6 +1282,14 @@ class SiglipModel(SiglipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            sample_indices=sample_indices,
+            image_indices=image_indices,
+            position_ids=position_ids,
+            height_position_ids=height_position_ids,
+            width_position_ids=width_position_ids,
+            cu_seqlens=cu_seqlens,
+            padding_mask=padding_mask,
+            attention_mask=image_attention_mask,
         )
 
         text_outputs: BaseModelOutputWithPooling = self.text_model(

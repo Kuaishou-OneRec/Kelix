@@ -15,6 +15,7 @@ import torch.nn.functional as F
 import logging
 from torch.nn.utils.rnn import pad_sequence
 from recipes.ViT.helpers.context import Context
+
 logger = logging.getLogger(__name__)
 
 
@@ -53,6 +54,91 @@ class DisCoGather(torch.autograd.Function):
 
 def disco_gather(tensor, context):
     return DisCoGather.apply(tensor, context)
+
+
+class PackingBuffer(object):
+
+    def __init__(self, max_len, buffer_idx=-1, drop_ratio=0., patch_size=14):
+        self.buffer_idx = buffer_idx
+        self.drop_ratio = drop_ratio
+        self.patch_size = patch_size
+
+        self.max_len = max_len
+        self.cur_len = 0
+        self.images = list()
+
+        self.sample_indices = list()
+        # self.ori_indices = list()
+        self.image_indices = list()
+
+        self.height_positions = list()
+        self.width_positions = list()
+        self.positions = list()
+
+        self.cu_seqlens = [0]
+        self.texts = list()
+        self.indices = list()
+
+    def reset(self):
+        self.images = list()
+        self.cur_len = 0
+        self.sample_indices = list()
+        # self.ori_indices = list()
+        self.image_indices = list()
+        self.height_positions = list()
+        self.width_positions = list()
+        self.positions = list()
+        self.cu_seqlens = [0]
+        self.texts = list()
+        self.indices = list()
+
+    def can_append(self, n_token_after_drop):
+        return self.cur_len + n_token_after_drop <= self.max_len
+
+    def append(self, img_list, texts, n_token_after_drop):
+        # """
+        # ori_index: 原始序列索引，因为在放入图片序列的时候原始顺序可能会打乱，为了保持图片和文本顺序的一致性，使用该字段方便后续提取出
+        # """
+        """
+        sample_index:
+        """
+        sample_idx = self.buffer_idx
+        self.images.extend(img_list)
+        self.cur_len += n_token_after_drop
+        self.texts.append(texts)
+
+        image_indices = list()
+
+        total_token = 0
+        positions_list = list()
+        height_positions_list = list()
+        width_positions_list = list()
+
+        for idx, img in enumerate(img_list):
+            height, width = img.size
+            img_n_token = (height // self.patch_size) * (width // self.patch_size)
+            img_n_token_after_drop = int(img_n_token * (1. - self.drop_ratio))
+            total_token += img_n_token_after_drop
+
+            image_indices = torch.LongTensor([idx for _ in range(img_n_token_after_drop)])
+
+            positions = torch.arange(img_n_token)
+            indices = torch.randperm(img_n_token)[:img_n_token_after_drop].sort().values
+            positions = positions[indices]
+            
+            height_positions = positions // width
+            width_positions = positions % width
+
+            self.image_indices.append(image_indices)
+            self.positions.append(positions)
+            self.height_positions.append(height_positions)
+            self.width_positions.append(width_positions)
+            self.sample_indices.append(torch.LongTensor([sample_idx for _ in range(img_n_token_after_drop)]))
+            self.indices.append(sample_idx)
+
+        assert total_token == n_token_after_drop
+
+        self.cu_seqlens.append(self.cu_seqlens[-1] + total_token)
 
 
 class KimiViT(nn.Module):
@@ -156,55 +242,12 @@ class KimiViT(nn.Module):
         return images, num_token_list, texts if texts[0] is not None else None
 
     def _packing(self, images, texts):
-        class Buffer(object):
-
-            def __init__(self, max_len):
-                self.data = list()
-                self.indices = list()
-                self.max_len = max_len
-                self.cur_len = 0
-                self.height_positions = list()
-                self.width_positions = list()
-                self.positions = list()
-            
-            def reset(self):
-                self.data = list()
-                self.cur_len = 0
-                self.indices = list()
-            
-            def can_append(self, n_token_after_drop):
-                return self.cur_len + n_token_after_drop <= self.max_len
-
-            def append(self, img_list, n_token_after_drop, index=-1):
-                self.data.append(img_list)
-                self.cur_len += n_token_after_drop
-                self.indices.append(index)
-
-                total_token = 0
-                positions_list = list()
-                height_positions_list = list()
-                width_positions_list = list()
-
-                for img in img_list:
-                    height, width = img.size
-                    img_n_token = (height // self.patch_size) * (width // self.patch_size)
-                    img_n_token_after_drop = int(img_n_token * (1. - self.packing_drop_ratio))
-                    total_token += img_n_token_after_drop
-                    positions = torch.arange(img_n_token)
-                    indices = torch.randperm(img_n_token)[:img_n_token_after_drop].sort().values
-                    positions = positions[indices]
-                    height_positions = positions // weight
-                    width_positions = positions % weight
-                    positions_list.append(positions)
-                    height_positions_list.append(height_positions)
-                    width_positions_list.append(width_positions)
-                assert total_token == n_token_after_drop
-                self.positions.append(positions_list)
-                self.height_positions.append(height_positions_list)
-                self.width_positions.append(width_positions_list)
-
+        """
+        贪心调度，根据token数从大到小排序，每次从buffer队列里寻找剩余空间最大的buffer分配，如果没有，重新分配一个buffer
+        """
         assert images is not None and texts is not None
         images, num_token_list, texts = self.calcul_image_tokens(images, texts)
+
         buffers = list()
         for idx, (image_list, num_token, text) in enumerate(zip(images, num_token_list, texts)):
             num_token_after_drop = int(num_token * (1. - self.packing_drop_ratio))
@@ -215,40 +258,55 @@ class KimiViT(nn.Module):
             if can_append_buffer_list:
                 buffer = min(can_append_buffer_list, key=lambda x: x.cur_len)
             else:
-                buffer = Buffer(max_len=self.packing_max_length)
+                buffer = PackingBuffer(
+                    max_len=self.packing_max_length,
+                    buffer_idx=len(buffers),
+                    drop_ratio=self.packing_drop_ratio,
+                    patch_size=self.patch_size
+                )
                 buffers.append(buffer)
-            buffer.append(image_list, num_token, num_token_after_drop, index=idx)
-        images = list()
-        tmp_texts = texts
+            buffer.append(image_list, text, num_token_after_drop)
+
         texts = list()
+        images = list()
+
         sample_indices = list()
+        image_indices = list()
+        indices = list()
+
         position_ids = list()
         height_position_ids = list()
         width_position_ids = list()
-        for idx, buffer in enumerate(buffers):
-            for index, image_list, positions, height_positions, width_positions in zip(
-                buffer.indices, 
-                buffer.data, 
-                buffer.positions, 
-                buffer.height_positions, 
-                buffer.width_positions
-            ):
-                images.append(image_list)
-                texts.append(tmp_texts[index])
-                sample_indices.append([idx for _ in image_list])
-                position_ids.append(positions)
-                height_position_ids.append(height_positions)
-                width_position_ids.append(width_positions)
 
-        assert len(images) == len(sample_indices) == len(texts)
+        cu_seqlens = list()
 
+        for buffer in buffers:
+            images.extend(buffer.images)
+            texts.extend(buffer.texts)
+            sample_indices.extend(buffer.sample_indices)
+            image_indices.extend(buffer.image_indices)
+            position_ids.extend(buffer.positions)
+            height_position_ids.extend(buffer.height_positions)
+            width_position_ids.extend(buffer.width_positions)
+            cu_seqlens.append(buffer.cu_seqlens)
+            indices.extend(buffer.indices)
+
+        length_list = [len(images), len(texts), len(sample_indices), len(image_indices), len(position_ids), len(height_position_ids), len(width_position_ids), len(indices)]
+        assert len(set(length_list)) == 1, length_list
+
+        # for img, post in zip(images, position_ids):
+        #     height, width = img.size
+        #     assert (height // 14) * (width // 14) == post.shape[0], (img.size, post.shape)
         return {
-            "images": images, 
-            "sample_indices": sample_indices, 
+            "images": images,
+            "texts": texts,
+            "sample_indices": sample_indices,
+            "image_indices": image_indices,
             "position_ids": position_ids,
             "height_position_ids": height_position_ids,
             "width_position_ids": width_position_ids,
-            "texts": texts
+            "cu_seqlens": cu_seqlens,
+            "indices": indices
         }
 
     def to_cuda(self, inputs, device):
@@ -265,122 +323,150 @@ class KimiViT(nn.Module):
             return inputs.to(device)
         return inputs
 
-    def build_image_attn_mask(self, patches, positions, height_positions, width_positions):
-        pass
+    def build_image_mask(self, info_dict):
+        sample_indices = info_dict["sample_indices"]
+        padding_mask = (sample_indices < 0).long()
+        attn_mask = (sample_indices[:, None, :] == sample_indices[:, :, None])
+        attn_mask = attn_mask[:, None, :, :].long()
+        return attn_mask, padding_mask
 
-    def merge_images_inputs(self, images_inputs_list, sample_indices, height_position_ids, width_position_ids, position_ids):
+    def merge_images_inputs(self, images_inputs_list, packing_info_dict):
         patch_size = self.patch_size
-        sample_indices = [
-            (sample_idx, image_idx)
-            for sample_idx, sample_index_list, enumerate(sample_indices)
-            for image_idx, _ in enumerate(sample_index_list)
-        ]
-        height_position_ids = [
-            (sample_idx, height_positions)
-            for sample_idx, height_positions_list in enumerate(height_position_ids)
-            for height_positions in height_positions_list
-        ]
-        width_position_ids = [
-            (sample_idx, width_positions)
-            for sample_idx, width_positions_list in enumerate(width_position_ids)
-            for width_positions in width_positions_list
-        ]
-        position_ids = [
-            (sample_idx, positions)
-            for sample_idx, positions_list in enumerate(position_ids)
-            for positions in positions_list
-        ]
-        assert len(images_inputs_list) == len(sample_indices) == len(height_position_ids) == len(width_position_ids)
-        merged_images = dict()
-        for images_inputs, sample_image_idx, sample_height_positions, sample_width_positions, sample_positions in enumerate(
-            images_inputs_list, 
-            sample_indices, 
-            height_position_ids, 
-            width_position_ids
+        images = packing_info_dict["images"]
+        texts = packing_info_dict["texts"]
+        sample_indices = packing_info_dict["sample_indices"]
+        image_indices = packing_info_dict["image_indices"]
+        position_ids = packing_info_dict["position_ids"]
+        width_position_ids = packing_info_dict["width_position_ids"]
+        height_position_ids = packing_info_dict["height_position_ids"]
+        cu_seqlens = packing_info_dict["cu_seqlens"]
+        indices = packing_info_dict["indices"]
+
+        merged_images_dict = dict()
+
+        if self.ctx.rank == 0:
+            print("ZDJ", len(images), len(images_inputs_list))
+            for x, y in zip(images, images_inputs_list):
+                z = y["pixel_values"]
+                print("ZDJ", x.size, z.shape)
+        for processed_image, sample_idx, image_idx, positions, width_positions, height_positions, idx in zip(
+                images_inputs_list,
+                sample_indices,
+                image_indices,
+                position_ids,
+                width_position_ids,
+                height_position_ids,
+                indices
         ):
-            image = images_inputs["pixel_values"]
-            sample_idx, image_idx = sample_image_idx
-            _, height_positions = sample_height_positions
-            _, width_positions = sample_width_positions
-            _, positions = sample_positions
-            image = rearrange(image, "c (h p1) (w p2) -> (h w) c p1 p2", p1=patch_size, p2=patch_size)
+            if idx not in merged_images_dict:
+                merged_images_dict[idx] = {
+                    "pixel_values": list(),
+                    "sample_indices": list(),
+                    "image_indices": list(),
+                    "position_ids": list(),
+                    "width_position_ids": list(),
+                    "height_position_ids": list(),
+                    "cu_seqlens": cu_seqlens[idx]
+                }
+            # for processed_image in img_list:
+            image = processed_image["pixel_values"]
+            assert image.dim() in [3, 4]
+            if image.dim() == 3:
+                image = rearrange(image, "c (h p1) (w p2) -> t (h w) c p1 p2", p1=patch_size, p2=patch_size, t=1)
+            else:
+                assert image.shape[0] == 1
+                image = image.squeeze(0)
+                image = rearrange(image, "c (h p1) (w p2) -> t (h w) c p1 p2", p1=patch_size, p2=patch_size, t=1)
             patches = torch.gather(image, 0, positions[:, None, None, None].repeat(1, 3, patch_size, patch_size))
             patches = patches[positions]
-            if sample_idx not in merged_images:
-                merged_images[sample_idx] = dict(
-                    "pixel_values": list(),
-                    "positions": list(),
-                    "height_positions": list(),
-                    "width_positions": list(),
-                )
-            merged_images[sample_idx]["pixel_values"].append(patches)
-            merged_images[sample_idx]["positions"].append(positions)
-            merged_images[sample_idx]["height_positions"].append(height_positions)
-            merged_images[sample_idx]["width_positions"].append(width_positions)
-        
-        merged_patches = list()
-        merged_positions = list()
-        merged_height_positions = list()
-        merged_width_positions = list()
-        for sample_idx in sorted(merged_images.keys()):
-            merged_patches.append(torch.concat(merged_images[sample_idx]["pixel_values"], dim=0))
-            merged_positions.append(torch.concat(merged_images[sample_idx]["positions"], dim=0))
-            merged_height_positions.append(torch.concat(merged_images[sample_idx]["height_positions"], dim=0))
-            merged_width_positions.append(torch.concat(merged_images[sample_idx]["width_positions"], dim=0))
-        max_length = max([_patches.shape[0] for _patches in merged_patches])
+            merged_images_dict[idx]["pixel_values"].append(patches)
+            merged_images_dict[idx]["sample_indices"].append(sample_idx)
+            merged_images_dict[idx]["image_indices"].append(image_idx)
+            merged_images_dict[idx]["position_ids"].append(positions)
+            merged_images_dict[idx]["width_position_ids"].append(width_positions)
+            merged_images_dict[idx]["height_position_ids"].append(height_positions)
 
+        merged_patches = list()
+        merged_sample_indices = list()
+        merged_image_indices = list()
+        merged_position_ids = list()
+        merged_height_position_ids = list()
+        merged_width_position_ids = list()
+        merged_cu_seqlens = list()
+
+        for idx in sorted(merged_images_dict.keys()):
+            patches = torch.concat(merged_images_dict[idx]["pixel_values"], dim=0)
+            sample_indices = torch.concat(merged_images_dict[idx]["sample_indices"], dim=0)
+            image_indices = torch.concat(merged_images_dict[idx]["image_indices"], dim=0)
+            position_ids = torch.concat(merged_images_dict[idx]["position_ids"], dim=0)
+            width_position_ids = torch.concat(merged_images_dict[idx]["width_position_ids"], dim=0)
+            height_position_ids = torch.concat(merged_images_dict[idx]["height_position_ids"], dim=0)
+
+            merged_patches.append(patches)
+            merged_sample_indices.append(sample_indices)
+            merged_image_indices.append(image_indices)
+            merged_position_ids.append(position_ids)
+            merged_height_position_ids.append(height_position_ids)
+            merged_width_position_ids.append(width_position_ids)
+            merged_cu_seqlens.append(merged_images_dict[idx]["cu_seqlens"])
+            # merged_images_dict[idx][]
+        max_length = max([_patches.shape[0] for _patches in merged_patches])
         tmp_merged_patches = list()
         dtype = merged_patches[0].dtype
+        dim = merged_patches[0].shape[-1]
         for _patches in merged_patches:
             padding_length = max_length - _patches.shape[0]
-            padding = self.padding_image_embedding.repeat(padding_length, 1, 1, 1).to(dtype)
+            # padding = self.padding_image_embedding.repeat(padding_length, 1, 1, 1).to(dtype)
+            padding = _patches.new_zeros(size=(padding_length, 3, patch_size, patch_size))
             padding_pathes = torch.concat([_patches, padding], dim=0)
             tmp_merged_patches.append(padding_pathes)
         merged_patches = torch.stack(tmp_merged_patches, dim=0)
-        merged_positions = pad_sequence(merged_positions, batch_first=True, padding_value=-1)
-        merged_height_positions = pad_sequence(merged_height_positions, batch_first=True, padding_value=-1)
-        merged_width_positions = pad_sequence(merged_width_positions, batch_first=True, padding_value=-1)
+        merged_sample_indices = pad_sequence(merged_sample_indices, batch_first=True, padding_value=-1)
+        merged_image_indices = pad_sequence(merged_image_indices, batch_first=True, padding_value=-1)
+        merged_positions = pad_sequence(merged_position_ids, batch_first=True, padding_value=-1)
+        merged_height_positions = pad_sequence(merged_height_position_ids, batch_first=True, padding_value=-1)
+        merged_width_positions = pad_sequence(merged_width_position_ids, batch_first=True, padding_value=-1)
 
+        merged_info_dict = {
+            "pixel_values": merged_patches,
+            "sample_indices": merged_sample_indices,
+            "image_indices": merged_image_indices,
+            "image_position_ids": merged_positions,
+            "height_position_ids": merged_height_positions,
+            "width_position_ids": merged_width_positions,
+            "cu_seqlens": merged_cu_seqlens
+        }
+        attn_mask, padding_mask = self.build_image_mask(merged_info_dict)
+        merged_info_dict["image_attention_mask"] = attn_mask
+        merged_info_dict["padding_mask"] = padding_mask
 
-        return merged_patches, merged_positions, merged_height_positions, merged_width_positions, image_attn_mask
+        return merged_info_dict
 
     def forward(self, images, texts, use_attn_mask=True):
         device = torch.cuda.current_device()
         if self.use_packing:
             rets = self._packing(images, texts)
-            images = rets["images"]
-            texts = rets["texts"]
-            sample_indices = rets["sample_indices"]
-            position_ids = rets["position_ids"]
-            width_position_ids = rets["width_position_ids"]
-            height_position_ids = rets["height_position_ids"]
 
             images_inputs_list = list()
-            for images_list in images:
+            for images_list in rets["images"]:
                 processed_images = self.processor(images=images_list, return_tensors="pt", do_resize=(not self.use_packing))
                 images_inputs_list.append(processed_images)
-            merged_patches, merged_positions, merged_height_positions, merged_width_positions = self.merge_images_inputs(images_inputs, sample_indices)
-                # print("ZDJ", processed_images["pixel_values"].shape)
+            merged_info_dict = self.merge_images_inputs(images_inputs_list, rets)
+            # print("ZDJ", processed_images["pixel_values"].shape)
             inputs = self.processor(text=texts, padding="longest", return_tensors="pt")
-            inputs.update(
-                {
-                    "pixel_values": merged_patches,
-                    "positions": merged_positions,
-                    "height_positions": merged_height_positions,
-                    "width_positions": merged_width_positions,
-                }
-            )
+            inputs.update(merged_info_dict)
         else:
-            inputs = self.processor(images=images, text=texts, padding="longest", return_tensors="pt", do_resize=(not self.use_packing))
+            inputs = self.processor(images=images, text=texts, padding="longest", return_tensors="pt",
+                                    do_resize=(not self.use_packing))
         inputs = self.to_cuda(inputs, device)
 
-        if self.ctx.rank == 0:
-            print("ZDJ", inputs)
-            print("ZDJ", inputs["input_ids"][0][20:30])
-            print("ZDJ", inputs["input_ids"][1][20:30])
-            print("ZDJ", inputs["input_ids"].shape)
-            print("ZDJ", inputs["pixel_values"].shape)
-            
+        # if self.ctx.rank == 0:
+        #     print("ZDJ", inputs)
+        #     print("ZDJ", inputs["input_ids"][0][20:30])
+        #     print("ZDJ", inputs["input_ids"][1][20:30])
+        #     print("ZDJ", inputs["input_ids"].shape)
+        #     print("ZDJ", inputs["pixel_values"].shape)
+
         if use_attn_mask:
             attention_mask = (inputs["input_ids"] != self.processor.tokenizer.pad_token_id).long()
             inputs["attention_mask"] = attention_mask.to(device)
@@ -417,11 +503,11 @@ class KimiViT(nn.Module):
             pad_start_indices = torch.where(
                 token_is_pad.any(dim=1),
                 token_is_pad.long().argmax(dim=1),
-                -torch.ones(size=(batch_size, ), dtype=torch.int64)
+                -torch.ones(size=(batch_size,), dtype=torch.int64)
             ).unbind()
             loss_mask_list = list()
             for idx, start_index in enumerate(pad_start_indices):
-                loss_mask = torch.ones(size=(num_tokens, ), dtype=torch.int64)
+                loss_mask = torch.ones(size=(num_tokens,), dtype=torch.int64)
                 loss_mask[:start_index] = 0
                 loss_mask_list.append(loss_mask)
             loss_mask = torch.stack(loss_mask_list, dim=0)
