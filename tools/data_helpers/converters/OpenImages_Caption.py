@@ -60,7 +60,7 @@ class OpenImagesCaptionConverter(ConverterBase):
         self.source = source
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
-        image = src['image']
+        image = src['image']['bytes']
         caption = src['text']
         image_bytes = base64.b64encode(image).decode('utf-8')
         if image_bytes is None:
