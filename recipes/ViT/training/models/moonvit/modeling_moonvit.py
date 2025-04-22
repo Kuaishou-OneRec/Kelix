@@ -551,7 +551,7 @@ class MoonVitPretrainedModel(PreTrainedModel):
         merged_patches = patch_merger(
             hidden_states, grid_hws, merge_kernel_size=self.merge_kernel_size
         )
-        print('merged_patches.shape',merged_patches.shape)
+        print('merged_patches.shape',merged_patches[0].shape)
         # Extract a representative embedding for the entire image by averaging all tokens
         # This is more robust than just using the first token
         image_embeddings = torch.stack([seq.mean(dim=1) for seq in merged_patches])
