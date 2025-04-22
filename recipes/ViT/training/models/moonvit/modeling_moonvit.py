@@ -560,10 +560,8 @@ class MoonVitPretrainedModel(PreTrainedModel):
             merged_patch = self.proj(merged_patch).view(merged_patch.size(0), -1)
             merged_patch = merged_patch.mean(dim=0)
             # L2 normalize the embedding vector
-            merged_patch = F.normalize(merged_patch, p=2, dim=-1)
             merged_patches_list.append(merged_patch)
         image_embeddings = torch.stack(merged_patches_list)
-        print(image_embeddings)
         if output_hidden_states:
             return {
                 "merged_patches": merged_patches,
