@@ -543,15 +543,11 @@ class MoonVitPretrainedModel(PreTrainedModel):
             torch.Tensor or dict: If output_hidden_states is False, returns a tensor with shape [batch_size, hidden_dim]
                 representing global image embeddings. Otherwise, returns a dict with merged_patches and image_embedding.
         """
-        print('pixel_values.shape',pixel_values.shape)
         hidden_states = self.patch_embed(pixel_values, grid_hws)
-        print('hidden_states.shape',hidden_states.shape)
         hidden_states = self.encoder(hidden_states, grid_hws)
-        print('hidden_states.shape2',hidden_states.shape)
         merged_patches = patch_merger(
             hidden_states, grid_hws, merge_kernel_size=self.merge_kernel_size
         )
-        print('merged_patches.shape',merged_patches[0].shape)
         # Extract a representative embedding for the entire image by averaging all tokens
         # This is more robust than just using the first token
         image_embeddings = torch.stack([seq.mean(dim=1) for seq in merged_patches])
