@@ -181,8 +181,6 @@ class MoonViT(nn.Module):
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
         processed_images = []
         for image in images:
-            #将base64编码的图片转换为PIL.Image.Image
-            image = base64.b64decode(image)
             image = Image.open(image)
             processed_images.append(image)
         images_processed = self.image_processor(processed_images, return_tensors="pt").to(dtype=self.image_model.dtype, device=self.image_model.device)
