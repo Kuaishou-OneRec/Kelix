@@ -7,12 +7,12 @@ import torch.nn as nn
 import torch.distributed as dist
 import numpy as np
 from transformers import AutoProcessor, AutoModel
-from recipes.ViT.training.models.MOONVIT.modeling_moonvit import MoonVitPretrainedModel
-from recipes.ViT.training.models.MOONVIT.image_processing_moonvit import MoonViTImageProcessor
-import torch.nn.functional as F
 from recipes.ViT.training.models.siglip.modeling_siglip import SiglipPreTrainedModel, SiglipModel
 from recipes.ViT.training.models.siglip.processing_siglip import SiglipProcessor
 from recipes.ViT.training.models.vivit.vivit_utils import read_video_pyav, read_image_pil, sample_frame_indices
+from recipes.ViT.training.models.MOONVIT.modeling_moonvit import MoonVitPretrainedModel
+from recipes.ViT.training.models.MOONVIT.image_processing_moonvit import MoonViTImageProcessor
+import torch.nn.functional as F
 from PIL.Image import Resampling as PILImageResampling
 from transformers.image_transforms import resize
 import transformers
