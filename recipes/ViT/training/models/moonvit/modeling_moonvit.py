@@ -555,6 +555,7 @@ class MoonVitPretrainedModel(PreTrainedModel):
         # This is more robust than just using the first token
         merged_patches_list = []
         for merged_patch in merged_patches:
+            merged_patch = merged_patch.unsqueeze(0)
             merged_patch = self.proj(merged_patch).view(merged_patch.size(0), -1)
             merged_patches_list.append(merged_patch)
             print('merged_patch.shape',merged_patch.shape)
