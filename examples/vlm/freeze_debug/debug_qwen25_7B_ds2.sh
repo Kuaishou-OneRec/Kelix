@@ -54,6 +54,7 @@ np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
+
 nohup mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
         -hostfile $hostfile \
