@@ -41,6 +41,10 @@ class AutoShuffler(MPIBase):
             for d in [self.final_output_dir, self.prepare_output_dir]:
                 if not self.fs.exists(d):
                     self.fs.mkdir(d)
+                # 创建临时目录
+                tmp_dir = os.path.join(d, ".tmp")
+                if not self.fs.exists(tmp_dir):
+                    self.fs.mkdir(tmp_dir)
         self.comm.barrier()
 
     def _prepare_stage(self):
@@ -77,16 +81,23 @@ class AutoShuffler(MPIBase):
                 
                 # 分块写入
                 for i in range(0, len(df), 128):  # 每128个样本一组
-                    chunk = df.iloc[i:i+128]
+                    chunk = df.iloc[i:i+128].copy()  # 使用.copy()避免引用原始大DataFrame
                     buffer.append(chunk)
                     self._flush_buffer(buffer, self.prepare_output_dir)
                     buffer = []
+                    
+                # 主动清理整批数据的内存
+                del df
+                gc.collect()
             except Exception as e:
                 print(f"Error processing {fpath}: {str(e)}")
+                traceback.print_exc()
         
         # 写入剩余数据
         if buffer:
             self._flush_buffer(buffer, self.prepare_output_dir)
+            buffer = []
+            gc.collect()
 
     def _shuffle_stage(self):
         """混洗阶段：全局哈希混洗"""
@@ -104,6 +115,7 @@ class AutoShuffler(MPIBase):
 
         # 全局混洗处理
         global_buffer = []
+
         for fpath in tqdm(my_files, desc=f"Rank-{self.rank} Shuffling"):
             try:
                 df = pq.read_table(fpath).to_pandas()
@@ -114,16 +126,26 @@ class AutoShuffler(MPIBase):
                     merged = pd.concat(global_buffer)
                     merged.sort_values("_shard_hash", inplace=True)
                     self._write_shuffled(merged)
+                    
+                    # 清理内存
+                    del merged
                     global_buffer = []
+
                     gc.collect()
             except Exception as e:
                 print(f"Error shuffling {fpath}: {str(e)}")
+                traceback.print_exc()
         
         # 处理剩余数据
         if global_buffer:
             merged = pd.concat(global_buffer)
             merged.sort_values("_shard_hash", inplace=True)
             self._write_shuffled(merged)
+            
+            # 清理内存
+            del merged
+            global_buffer = []
+            gc.collect()
 
     def _flush_buffer(self, buffer, output_dir):
         """写入缓冲数据"""
@@ -138,6 +160,10 @@ class AutoShuffler(MPIBase):
         pq.write_table(pa.Table.from_pandas(combined), tmp_path)
         time.sleep(0.5)  # 防止HDFS元数据延迟
         self.fs.mv(tmp_path, final_path)
+        
+        # 清理内存
+        del combined
+        gc.collect()
 
     def _write_shuffled(self, df):
         """写入混洗后的数据"""
@@ -146,7 +172,7 @@ class AutoShuffler(MPIBase):
             len(df) // (len(df)//self.target_partition_size + 1)
         )
         for i in range(0, len(df), chunk_size):
-            chunk = df.iloc[i:i+chunk_size]
+            chunk = df.iloc[i:i+chunk_size].copy()
             filename = f"shuffle-{uuid.uuid4().hex}.parquet"
             tmp_path = os.path.join(self.final_output_dir, ".tmp", filename)
             final_path = os.path.join(self.final_output_dir, filename)
@@ -154,15 +180,21 @@ class AutoShuffler(MPIBase):
             pq.write_table(pa.Table.from_pandas(chunk), tmp_path)
             time.sleep(0.3)
             self.fs.mv(tmp_path, final_path)
+            
+            # 每写完一个分块就清理
+            del chunk
+            gc.collect()
 
     def run(self):
         # 阶段1：预处理
         self._prepare_stage()
         self.comm.barrier()  # 确保所有节点完成预处理
+        gc.collect()  # 阶段间清理内存
         
         # 阶段2：自动触发混洗
         self._shuffle_stage()
         self.comm.barrier()
+        gc.collect()  # 最终清理
 
         if self.rank == 0:
             self.fs.rm(self.prepare_output_dir, recursive=True)
