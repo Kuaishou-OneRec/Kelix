@@ -44,7 +44,7 @@ def read_hdfs_folder(data_folder, postfix):
         files = [fn for fn in fn_list if fn.endswith(postfix)]
     else:
         files = None
-
+    comm.Barrier()
     files = comm.bcast(files, root=0)
     files = files[rank::world_size]
 
