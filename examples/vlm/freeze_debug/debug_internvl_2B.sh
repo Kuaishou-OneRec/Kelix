@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2Bt # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/lingzhixin/output3/freeze_debug/0.0.1/debug_internvl_2B
+OUTPUT_DIR=/llm_reco/lingzhixin/output3/freeze_debug/0.0.1/debug_internvl_2B_2
 
 mkdir -p $OUTPUT_DIR
 
@@ -109,7 +109,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --monitor_datasource_cnt \
                 --dataset_config /llm_reco/chuchenglong/InternVL/recovlm/examples/vlm/configs/2b_internvl_stage1d.json \
                 --max_length 8192 \
-                --learning_rate 2e-4 \
+                --learning_rate 2e-6 \
                 --model_class InternVLChatModel \
                 --min_lr 0.0 \
                 --weight_decay 0.01 \
