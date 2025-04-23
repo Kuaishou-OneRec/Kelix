@@ -86,40 +86,69 @@ class ConversationCaptionConverter(ConverterBase):
         self.source = source
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
-        image = src['images'][0]['bytes']
-        data = src['data']
-        messages = []
+        image = src['image']['bytes']
+        question = src['question']
+        answer = src['answer']
         image_bytes = base64.b64encode(image).decode('utf-8')
         images = {"0.jpg": image_bytes}
-
-
-
-        for message in data:
-            content = []
-            if message['modality'] == 'text':
-                content.append({
-                    "type": "text",
-                    "text": message['data']
-                })
-            elif message['modality'] == 'image':
-                content.append({
+        messages = []
+        messages.append({
+            "role": "user",
+            "content": [
+                {
                     "type": "image",
                     "image": "0.jpg"
-                })
-            else:
-                return None
-            if message['role'] == 'user':
-                messages.append({
-                    "role": "user",
-                    "content": content
-                })
-            elif message['role'] == 'assistant':
-                messages.append({
-                    "role": "assistant",
-                    "content": content
-                })
-            else:
-                return None
+                },
+                {
+                    "type": "text",
+                    "text": question
+                }
+            ]
+        })  
+        messages.append({
+            "role": "assistant",
+            "content": [
+                {
+                    "type": "text",
+                    "text": answer
+                }
+            ]
+        })
+        
+        # image = src['images'][0]['bytes']
+        # data = src['data']
+        # messages = []
+        # image_bytes = base64.b64encode(image).decode('utf-8')
+        # images = {"0.jpg": image_bytes}
+
+
+
+        # for message in data:
+        #     content = []
+        #     if message['modality'] == 'text':
+        #         content.append({
+        #             "type": "text",
+        #             "text": message['data']
+        #         })
+        #     elif message['modality'] == 'image':
+        #         content.append({
+        #             "type": "image",
+        #             "image": "0.jpg"
+        #         })
+        #     else:
+        #         return None
+        #     if message['role'] == 'user':
+        #         messages.append({
+        #             "role": "user",
+        #             "content": content
+        #         })
+        #     elif message['role'] == 'assistant':
+        #         messages.append({
+        #             "role": "assistant",
+        #             "content": content
+        #         })
+        #     else:
+        #         return None
         
         segments = None
 
