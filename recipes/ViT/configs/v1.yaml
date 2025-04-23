@@ -10,7 +10,7 @@ dataset:
   packing:
     enabled: true
     max_length: 8192
-    drop_ratio: 0.
+    drop_ratio: 0.0
 model:
   dir: /llm_reco_ssd/zhouyang12/models/SigLIP-So400M-Patch14-384/
   text_decoder:

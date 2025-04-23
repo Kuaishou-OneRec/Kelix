@@ -19,6 +19,7 @@ import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, Tuple, Union, List
 
+from einops import rearrange
 import numpy as np
 import torch
 import torch.utils.checkpoint
@@ -261,6 +262,8 @@ class SiglipVisionEmbeddings(nn.Module):
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.packing_position_embedding = nn.Embedding(32768, self.embed_dim)
+
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -301,17 +304,37 @@ class SiglipVisionEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
-        _, _, height, width = pixel_values.shape
-        target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-        embeddings = patch_embeds.flatten(2).transpose(1, 2)
+    def forward(
+        self, 
+        pixel_values: torch.FloatTensor, 
+        position_ids: Optional[torch.Tensor] = None,
+        interpolate_pos_encoding=False
+    ) -> torch.Tensor:
+        if pixel_values.dim() == 4:
+            _, _, height, width = pixel_values.shape
+            target_dtype = self.patch_embedding.weight.dtype
+            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+            embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+            if interpolate_pos_encoding:
+                embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+            else:
+                embeddings = embeddings + self.position_embedding(self.position_ids)
+            return embeddings
+        elif pixel_values.dim() == 5:
+            assert position_ids is not None
+            batch_size, squence_len, channel, height, width = pixel_values.shape
+            target_dtype = self.patch_embedding.weight.dtype
+            pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
+            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+            embeddings = patch_embeds.flatten(-2).squeeze(-1)
+            embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=squence_len)
+
+            # todo: not dubug
+            embeddings = embeddings + self.packing_position_embedding(position_ids)
+            return embeddings
         else:
-            embeddings = embeddings + self.position_embedding(self.position_ids)
-        return embeddings
+            raise NotImplementedError
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->Siglip
@@ -740,6 +763,8 @@ class SiglipEncoder(nn.Module):
         all_attentions = () if output_attentions else None
 
         hidden_states = inputs_embeds
+        attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
+
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
@@ -946,7 +971,11 @@ class SiglipVisionTransformer(nn.Module):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.embeddings(
+            pixel_values, 
+            interpolate_pos_encoding=interpolate_pos_encoding, 
+            position_ids=position_ids
+        )
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
@@ -987,8 +1016,15 @@ class SiglipVisionTransformer(nn.Module):
                 new_state = torch.concat([_state, padding], dim=0)
                 tmp_sample_hidden_state_list.append(new_state)
             sample_hidden_state = torch.stack(tmp_sample_hidden_state_list, dim=0)
-            padding_mask = torch.stack(padding_mask, dim=0)
-            pooler_output = self.head(last_hidden_state, key_padding_mask=padding_mask)
+            padding_mask = torch.stack(padding_mask, dim=0).float().to(last_hidden_state.dtype)
+            pooler_output = self.head(sample_hidden_state, key_padding_mask=padding_mask)
+
+            return BaseModelOutputWithPooling(
+                last_hidden_state=sample_hidden_state,
+                pooler_output=pooler_output,
+                hidden_states=encoder_outputs.hidden_states,
+                attentions=encoder_outputs.attentions,
+            )
         else:
             pooler_output = self.head(last_hidden_state) if self.use_head else None
 
@@ -1052,6 +1088,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        position_ids: Optional[torch.Tensor] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -1081,6 +1118,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            position_ids=position_ids,
         )
 
 
@@ -1214,6 +1252,7 @@ class SiglipModel(SiglipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            position_ids=position_ids,
         )
 
         pooled_output = vision_outputs.pooler_output
@@ -1284,7 +1323,7 @@ class SiglipModel(SiglipPreTrainedModel):
             interpolate_pos_encoding=interpolate_pos_encoding,
             sample_indices=sample_indices,
             image_indices=image_indices,
-            position_ids=position_ids,
+            position_ids=image_position_ids,
             height_position_ids=height_position_ids,
             width_position_ids=width_position_ids,
             cu_seqlens=cu_seqlens,

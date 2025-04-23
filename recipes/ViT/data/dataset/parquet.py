@@ -219,6 +219,9 @@ class ParquetDataset(IterableDataset):
                 image = Image.open(BytesIO(data))
             else:
                 image = Image.open(image_block)
+            # todo: not debug
+            image = image.resize((378, 378), Image.Resampling.LANCZOS) 
+            # todo: not debug
             if self.use_packing:
                 image, num_token = self.smart_resize_image(image)
                 num_token_after_drop = int(num_token * (1. - self.packing_drop_ratio))

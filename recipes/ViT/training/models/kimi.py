@@ -66,9 +66,9 @@ class PackingBuffer(object):
         self.max_len = max_len
         self.cur_len = 0
         self.images = list()
+        self.sample_cnt = 0
 
         self.sample_indices = list()
-        # self.ori_indices = list()
         self.image_indices = list()
 
         self.height_positions = list()
@@ -83,7 +83,6 @@ class PackingBuffer(object):
         self.images = list()
         self.cur_len = 0
         self.sample_indices = list()
-        # self.ori_indices = list()
         self.image_indices = list()
         self.height_positions = list()
         self.width_positions = list()
@@ -91,17 +90,12 @@ class PackingBuffer(object):
         self.cu_seqlens = [0]
         self.texts = list()
         self.indices = list()
+        self.sample_cnt = 0
 
     def can_append(self, n_token_after_drop):
         return self.cur_len + n_token_after_drop <= self.max_len
 
     def append(self, img_list, texts, n_token_after_drop):
-        # """
-        # ori_index: 原始序列索引，因为在放入图片序列的时候原始顺序可能会打乱，为了保持图片和文本顺序的一致性，使用该字段方便后续提取出
-        # """
-        """
-        sample_index:
-        """
         sample_idx = self.buffer_idx
         self.images.extend(img_list)
         self.cur_len += n_token_after_drop
@@ -133,12 +127,13 @@ class PackingBuffer(object):
             self.positions.append(positions)
             self.height_positions.append(height_positions)
             self.width_positions.append(width_positions)
-            self.sample_indices.append(torch.LongTensor([sample_idx for _ in range(img_n_token_after_drop)]))
+            self.sample_indices.append(torch.LongTensor([self.sample_cnt for _ in range(img_n_token_after_drop)]))
             self.indices.append(sample_idx)
 
         assert total_token == n_token_after_drop
 
         self.cu_seqlens.append(self.cu_seqlens[-1] + total_token)
+        self.sample_cnt += 1
 
 
 class KimiViT(nn.Module):
@@ -160,11 +155,11 @@ class KimiViT(nn.Module):
         vocab_size = self.model.vocab_size
         self.patch_size = self.model.patch_size
 
-        if self.use_packing:
-            self.padding_image_embedding = nn.Parameter(
-                torch.zeros(size=(1, 3, self.patch_size, self.patch_size), dtype=torch.float32),
-                requires_grad=True
-            )
+        # if self.use_packing:
+        #     self.padding_image_embedding = nn.Parameter(
+        #         torch.zeros(size=(1, 3, self.patch_size, self.patch_size), dtype=torch.float32),
+        #         requires_grad=True
+        #     )
 
         if config.text_decoder.enabled:
             self.text_decoder = AutoModel.from_pretrained(
@@ -294,9 +289,6 @@ class KimiViT(nn.Module):
         length_list = [len(images), len(texts), len(sample_indices), len(image_indices), len(position_ids), len(height_position_ids), len(width_position_ids), len(indices)]
         assert len(set(length_list)) == 1, length_list
 
-        # for img, post in zip(images, position_ids):
-        #     height, width = img.size
-        #     assert (height // 14) * (width // 14) == post.shape[0], (img.size, post.shape)
         return {
             "images": images,
             "texts": texts,
@@ -344,11 +336,6 @@ class KimiViT(nn.Module):
 
         merged_images_dict = dict()
 
-        if self.ctx.rank == 0:
-            print("ZDJ", len(images), len(images_inputs_list))
-            for x, y in zip(images, images_inputs_list):
-                z = y["pixel_values"]
-                print("ZDJ", x.size, z.shape)
         for processed_image, sample_idx, image_idx, positions, width_positions, height_positions, idx in zip(
                 images_inputs_list,
                 sample_indices,
@@ -368,17 +355,16 @@ class KimiViT(nn.Module):
                     "height_position_ids": list(),
                     "cu_seqlens": cu_seqlens[idx]
                 }
-            # for processed_image in img_list:
             image = processed_image["pixel_values"]
             assert image.dim() in [3, 4]
             if image.dim() == 3:
-                image = rearrange(image, "c (h p1) (w p2) -> t (h w) c p1 p2", p1=patch_size, p2=patch_size, t=1)
+                image = rearrange(image, "c (h p1) (w p2) -> (h w) c p1 p2", p1=patch_size, p2=patch_size)
             else:
                 assert image.shape[0] == 1
                 image = image.squeeze(0)
-                image = rearrange(image, "c (h p1) (w p2) -> t (h w) c p1 p2", p1=patch_size, p2=patch_size, t=1)
-            patches = torch.gather(image, 0, positions[:, None, None, None].repeat(1, 3, patch_size, patch_size))
-            patches = patches[positions]
+                image = rearrange(image, "c (h p1) (w p2) -> (h w) c p1 p2", p1=patch_size, p2=patch_size)
+            # patches = torch.gather(image, 0, positions[:, None, None, None].repeat(1, 3, patch_size, patch_size))
+            patches = image[positions]
             merged_images_dict[idx]["pixel_values"].append(patches)
             merged_images_dict[idx]["sample_indices"].append(sample_idx)
             merged_images_dict[idx]["image_indices"].append(image_idx)
@@ -409,23 +395,22 @@ class KimiViT(nn.Module):
             merged_height_position_ids.append(height_position_ids)
             merged_width_position_ids.append(width_position_ids)
             merged_cu_seqlens.append(merged_images_dict[idx]["cu_seqlens"])
-            # merged_images_dict[idx][]
+
         max_length = max([_patches.shape[0] for _patches in merged_patches])
         tmp_merged_patches = list()
         dtype = merged_patches[0].dtype
         dim = merged_patches[0].shape[-1]
         for _patches in merged_patches:
             padding_length = max_length - _patches.shape[0]
-            # padding = self.padding_image_embedding.repeat(padding_length, 1, 1, 1).to(dtype)
             padding = _patches.new_zeros(size=(padding_length, 3, patch_size, patch_size))
             padding_pathes = torch.concat([_patches, padding], dim=0)
             tmp_merged_patches.append(padding_pathes)
         merged_patches = torch.stack(tmp_merged_patches, dim=0)
         merged_sample_indices = pad_sequence(merged_sample_indices, batch_first=True, padding_value=-1)
         merged_image_indices = pad_sequence(merged_image_indices, batch_first=True, padding_value=-1)
-        merged_positions = pad_sequence(merged_position_ids, batch_first=True, padding_value=-1)
-        merged_height_positions = pad_sequence(merged_height_position_ids, batch_first=True, padding_value=-1)
-        merged_width_positions = pad_sequence(merged_width_position_ids, batch_first=True, padding_value=-1)
+        merged_positions = pad_sequence(merged_position_ids, batch_first=True, padding_value=0)
+        merged_height_positions = pad_sequence(merged_height_position_ids, batch_first=True, padding_value=0)
+        merged_width_positions = pad_sequence(merged_width_position_ids, batch_first=True, padding_value=0)
 
         merged_info_dict = {
             "pixel_values": merged_patches,
@@ -437,35 +422,28 @@ class KimiViT(nn.Module):
             "cu_seqlens": merged_cu_seqlens
         }
         attn_mask, padding_mask = self.build_image_mask(merged_info_dict)
-        merged_info_dict["image_attention_mask"] = attn_mask
-        merged_info_dict["padding_mask"] = padding_mask
+        merged_info_dict["image_attention_mask"] = attn_mask.float()
+        merged_info_dict["padding_mask"] = padding_mask.float()
 
         return merged_info_dict
 
     def forward(self, images, texts, use_attn_mask=True):
         device = torch.cuda.current_device()
         if self.use_packing:
-            rets = self._packing(images, texts)
+            package = self._packing(images, texts)
 
             images_inputs_list = list()
-            for images_list in rets["images"]:
+            for images_list in package["images"]:
                 processed_images = self.processor(images=images_list, return_tensors="pt", do_resize=(not self.use_packing))
                 images_inputs_list.append(processed_images)
-            merged_info_dict = self.merge_images_inputs(images_inputs_list, rets)
-            # print("ZDJ", processed_images["pixel_values"].shape)
+            merged_info_dict = self.merge_images_inputs(images_inputs_list, package)
+
             inputs = self.processor(text=texts, padding="longest", return_tensors="pt")
             inputs.update(merged_info_dict)
         else:
             inputs = self.processor(images=images, text=texts, padding="longest", return_tensors="pt",
                                     do_resize=(not self.use_packing))
         inputs = self.to_cuda(inputs, device)
-
-        # if self.ctx.rank == 0:
-        #     print("ZDJ", inputs)
-        #     print("ZDJ", inputs["input_ids"][0][20:30])
-        #     print("ZDJ", inputs["input_ids"][1][20:30])
-        #     print("ZDJ", inputs["input_ids"].shape)
-        #     print("ZDJ", inputs["pixel_values"].shape)
 
         if use_attn_mask:
             attention_mask = (inputs["input_ids"] != self.processor.tokenizer.pad_token_id).long()
@@ -480,7 +458,7 @@ class KimiViT(nn.Module):
         image_hidden_embeds = image_output.last_hidden_state
 
         batch_size = image_hidden_embeds.shape[0]
-        assert text_hidden_embeds.shape[0] == image_hidden_embeds.shape[0]
+        assert text_hidden_embeds.shape[0] == image_hidden_embeds.shape[0], (text_hidden_embeds.shape, image_hidden_embeds.shape)
 
         if self.text_decoder is not None:
             image_embeds = outputs.image_embeds

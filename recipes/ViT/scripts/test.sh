@@ -3,7 +3,7 @@ export PYTHONPATH=$PWD:$PYTHONPATH
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
-OUTPUT_DIR=/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/0.0.0.5
+OUTPUT_DIR=/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/1.0.0.10
 
 echo $OUTPUT_DIR
 
