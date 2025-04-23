@@ -14,4 +14,4 @@ deepspeed --hostfile=/etc/mpi/hostfile_seq --num_nodes=$nnode \
     --config_file /llm_reco/liuyang76/codes/llm_rec_code_base/recovlm/recipes/ViT/configs/v1.yaml \
     --output_dir $OUTPUT_DIR \
     --deepspeed \
-    --deepspeed_config examples/vlm/configs/ds_z1_config_7B.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log
+    --deepspeed_config examples/vlm/configs/ds_stage2.json > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log
