@@ -2044,7 +2044,7 @@ class ParquetDataset(IterableDataset):
       for image_name in images:
         image_b64 = images[image_name]
         # 先检查是否是有效文件路径
-        if isinstance(image_b64, str) and os.path.exists(image_b64):
+        if isinstance(image_b64, str) and len(image_b64) < 300 and os.path.exists(image_b64):
             try:
                 image = Image.open(image_b64)
                 samples[image_name] = image
