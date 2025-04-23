@@ -439,7 +439,7 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fas
             # Try to download from HDFS
             try:
                 clean_cache_if_needed()  # Clean cache before downloading new file
-                cmd = f'home/hadoop/software/hadoop/bin/hadoop fs -get {fn} {cache_fn}'
+                cmd = f'/home/hadoop/software/hadoop/bin/hadoop fs -get {fn} {cache_fn}'
                 os.system(cmd)
                 res = pq.ParquetFile(cache_fn)  if parquet_backend == 'pyarrow' else FakeParquetFileFromFastParquetFile(cache_fn)
                 return res
