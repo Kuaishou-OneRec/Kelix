@@ -50,6 +50,8 @@ def read_hdfs_folder(data_folder, postfix):
 
     print("Has {} files to load.".format(len(files)))
 
+    if len(files) == 0:
+        return None
     df_list = list()
     for file_path in tqdm(files):
         df = read_rows_in_file(file_path)
