@@ -216,6 +216,9 @@ class KimiViT(nn.Module):
             return outputs.loss
 
     def calcul_image_tokens(self, images, texts):
+        """
+        计算图片的token数
+        """
 
         num_token_list = list()
         for image_idx, image_obj in enumerate(images):
