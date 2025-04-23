@@ -2034,15 +2034,34 @@ class ParquetDataset(IterableDataset):
       else:
         raise NotImplementedError(f"Unsupported image field type, {type(raw_row_data['images'])=}")
 
+      # for image_name in images:
+      #   image_b64 = images[image_name]
+      #   image_bytes = base64.b64decode(image_b64)
+      #   image_bytes_stream = BytesIO(image_bytes)
+      #   image = Image.open(image_bytes_stream)
+      #   samples[image_name] = image
+
       for image_name in images:
         image_b64 = images[image_name]
-        image_bytes = base64.b64decode(image_b64)
-        image_bytes_stream = BytesIO(image_bytes)
-        image = Image.open(image_bytes_stream)
-        samples[image_name] = image
+        # 先检查是否是有效文件路径
+        if isinstance(image_b64, str) and os.path.exists(image_b64):
+            try:
+                image = Image.open(image_b64)
+                samples[image_name] = image
+            except Exception as e:
+                raise ValueError(f"Failed to load image from path {image_b64}: {str(e)}")
+        # 否则按base64处理
+        else:
+            try:
+                image_bytes = base64.b64decode(image_b64)
+                image_bytes_stream = BytesIO(image_bytes)
+                image = Image.open(image_bytes_stream)
+                samples[image_name] = image
+            except Exception as e:
+                raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}")
       return samples
     except:
-      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}")
+      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}, images={images}\nsamples={samples}")
       return None
 
   def __iter__(self,):
