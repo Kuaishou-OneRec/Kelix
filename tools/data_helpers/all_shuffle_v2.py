@@ -392,9 +392,9 @@ def main():
                        help="输入目录，支持@采样率语法（如 /data@0.5）")
     parser.add_argument("--output", required=True, 
                        help="最终输出目录")
-    parser.add_argument("--buffer", type=int, default=2048,
+    parser.add_argument("--buffer", type=int, default=1024,
                        help="内存缓冲区大小（默认8GB）")
-    parser.add_argument("--partition", type=int, default=4096 * 2,
+    parser.add_argument("--partition", type=int, default=2048,
                        help="目标分块大小（行数）")
     args = parser.parse_args()
 
