@@ -144,8 +144,8 @@ def main(args):
             "task": "caption",
             "images": json.dumps([image]),
             "videos": json.dumps(list()),
-            #"text": json.loads(row["messages"])[-1]["content"][0]["text"],
-            "text": json.loads(row["segments"])[1]["text"],
+            "text": json.loads(row["messages"])[-1]["content"][0]["text"],
+            #"text": json.loads(row["segments"])[1]["text"],
             "metadata": json.dumps(None),
             "uuid": str(uuid.uuid1()),
         }
