@@ -356,12 +356,14 @@ def get_world_size_and_rank() -> Tuple[int, int]:
 
 class FakeParquetFileFromFastParquetFile:
     def __init__(self, fast_parquet_file):
+      
       self.fast_parquet_file = fast_parquet_file
       self.num_row_groups = 1
 
     def read_row_group(self, i):
       assert i == 0
-      return self.fast_parquet_file
+      from fastparquet import ParquetFile
+      return ParquetFile(self.fast_parquet_file)
 
 
 
