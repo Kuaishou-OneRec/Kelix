@@ -2075,7 +2075,7 @@ class ParquetDataset(IterableDataset):
           logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
           parquet_file = None
         
-        # process file content
+        # # process file content
         if parquet_file is not None:
           logger.warning(f"[Rank{rank}-{worker}] {fn} total row_groups: {parquet_file.num_row_groups}")
           for group_idx in range(parquet_file.num_row_groups):

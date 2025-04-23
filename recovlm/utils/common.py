@@ -350,7 +350,22 @@ def get_world_size_and_rank() -> Tuple[int, int]:
     else:
         return 1, 0
 
-def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
+
+
+
+
+class FakeParquetFileFromFastParquetFile:
+    def __init__(self, fast_parquet_file):
+      self.fast_parquet_file = fast_parquet_file
+      self.num_row_groups = 1
+
+    def read_row_group(self, i):
+      assert i == 0
+      return self.fast_parquet_file
+
+
+
+def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fast_parquet') -> pq.ParquetFile:
     """Load a parquet file, with fallback to local cache if HDFS read fails.
     
     Args:
@@ -365,6 +380,7 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
         Exception: If both HDFS and local cache loading fail
     """
     import hashlib
+    assert parquet_backend in ["fast_parquet", "pyarrow"]
 
     def calculate_text_hash(text):
         # 创建一个 SHA-256 哈希对象
@@ -396,7 +412,7 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
         print(f"retrying for fn={fn}/{cache_fn}")
         try:
             if os.path.exists(cache_fn):
-                res = pq.ParquetFile(cache_fn)
+                res = pq.ParquetFile(cache_fn) if parquet_backend == 'pyarrow' else FakeParquetFileFromFastParquetFile(cache_fn)
             else:
                 raise Exception("File not found") # 直接用shell的方式
                 # res = pq.ParquetFile(fn)
@@ -406,9 +422,9 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
             # Try to download from HDFS
             try:
                 clean_cache_if_needed()  # Clean cache before downloading new file
-                cmd = f'hadoop fs -get {fn} {cache_fn}'
+                cmd = f'home/hadoop/software/hadoop/bin/hadoop fs -get {fn} {cache_fn}'
                 os.system(cmd)
-                res = pq.ParquetFile(cache_fn)
+                res = pq.ParquetFile(cache_fn)  if parquet_backend == 'pyarrow' else FakeParquetFileFromFastParquetFile(cache_fn)
                 return res
             except Exception as e2:
                 time.sleep(2 + np.random.randint(0, 5))
