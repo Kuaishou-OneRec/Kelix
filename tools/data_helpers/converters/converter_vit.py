@@ -137,10 +137,11 @@ def main(args):
 
     samples = list()
     for _, row in tqdm(df.iterrows(), total=len(df), postfix="In rank {}".format(rank)):
+        keys = list(row["images"].keys())[0]
         sample = {
             "source": row["source"],
             "task": "caption",
-            "images": json.dumps([json.loads(row["images"])["0.jpg"]]),
+            "images": json.dumps([json.loads(row["images"])[keys]]),
             "videos": json.dumps(list()),
             #"text": json.loads(row["messages"])[-1]["content"][0]["text"],
             "text": json.loads(row["segments"])[1]["text"],
