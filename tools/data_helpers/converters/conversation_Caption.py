@@ -99,7 +99,7 @@ class ConversationCaptionConverter(ConverterBase):
             if message['modality'] == 'text':
                 content.append({
                     "type": "text",
-                    "text": message['text']
+                    "text": message['data']
                 })
             elif message['modality'] == 'image':
                 content.append({
