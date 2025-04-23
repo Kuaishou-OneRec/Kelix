@@ -220,7 +220,7 @@ class ParquetDataset(IterableDataset):
             else:
                 image = Image.open(image_block)
             # todo: not debug
-            image = image.resize((378, 378), Image.Resampling.LANCZOS) 
+            # image = image.resize((378, 378), Image.Resampling.LANCZOS) 
             # todo: not debug
             if self.use_packing:
                 image, num_token = self.smart_resize_image(image)
