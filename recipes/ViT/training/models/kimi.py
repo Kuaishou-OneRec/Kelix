@@ -109,8 +109,8 @@ class PackingBuffer(object):
         width_positions_list = list()
 
         for idx, img in enumerate(img_list):
-            height, width = img.size
-            img_n_token = (height // self.patch_size) * (width // self.patch_size)
+            width, height = img.size
+            img_n_token = (width // self.patch_size) * (height // self.patch_size)
             img_n_token_after_drop = int(img_n_token * (1. - self.drop_ratio))
             total_token += img_n_token_after_drop
 
@@ -226,9 +226,9 @@ class KimiViT(nn.Module):
                 image_obj = [image_obj]
             num_token = 0
             for image in image_obj:
-                height, weight = image.size
-                assert height % self.patch_size == 0 and weight % self.patch_size == 0, image.size
-                num_token += (height // self.patch_size) * (weight // self.patch_size)
+                width, height = image.size
+                assert width % self.patch_size == 0 and height % self.patch_size == 0, image.size
+                num_token += (width // self.patch_size) * (height // self.patch_size)
 
             num_token_list.append(num_token)
             images[image_idx] = image_obj

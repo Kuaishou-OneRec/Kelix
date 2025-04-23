@@ -204,11 +204,11 @@ class ParquetDataset(IterableDataset):
         round_multiple_of = lambda x, y: round(x / y) * y
 
         if isinstance(image, Image.Image):
-            height, weight = image.size
+            width, height = image.size
+            neww = round_multiple_of(width, patch_size)
             newh = round_multiple_of(height, patch_size)
-            neww = round_multiple_of(weight, patch_size)
-            image = image.resize((newh, neww))
-            return image, (newh // patch_size) * (neww // patch_size)
+            image = image.resize((neww, newh))
+            return image, (neww // patch_size) * (newh // patch_size)
         raise NotImplementedError
 
     def _process_image_block(self, image_block):
