@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/lingzhixin/output3/freeze_debug/0.0.1/debug_qwen25_7B
+OUTPUT_DIR=/llm_reco/lingzhixin/output3/freeze_debug/0.0.1/debug_qwen25_7B_ds2
 
 mkdir -p $OUTPUT_DIR
 
@@ -53,6 +53,7 @@ np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
+
 
 nohup mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
@@ -105,7 +106,7 @@ nohup mpirun --allow-run-as-root -np $np \
         -x https_proxy=\
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config /llm_reco/chuchenglong/InternVL/recovlm/examples/vlm/configs/2b_qwen_stage1d.json \
+                --dataset_config /llm_reco/chuchenglong/InternVL/recovlm/examples/vlm/configs/2b_qwen_stage1d_ds2.json \
                 --model_processor Qwen2_5_VLProcessor \
                 --model_class Qwen2_5_VLForConditionalGeneration \
                 --monitor_datasource_loss \

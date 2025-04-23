@@ -1,0 +1,20 @@
+{
+    "auto_map": {
+      "AutoConfig": "configuration_moonvit.MoonViTConfig",
+      "AutoModel": "modeling_moonvit.MoonVitPretrainedModel"
+    },
+    "model_type": "moonvit",
+    "patch_size": 14,
+    "num_attention_heads": 16,
+    "num_hidden_layers": 27,
+    "hidden_size": 1152,
+    "intermediate_size": 4304,
+    "init_pos_emb_height": 64,
+    "init_pos_emb_width": 64,
+    "merge_kernel_size": [
+        2,
+        2
+    ],
+    "torch_dtype": "bfloat16",
+    "transformers_version": "4.50.3"
+  }
