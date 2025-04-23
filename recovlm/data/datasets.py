@@ -2042,7 +2042,7 @@ class ParquetDataset(IterableDataset):
         samples[image_name] = image
       return samples
     except:
-      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}")
+      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}, images={images}\nsamples={samples}")
       return None
 
   def __iter__(self,):
