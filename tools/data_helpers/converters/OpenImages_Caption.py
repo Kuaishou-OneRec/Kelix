@@ -37,8 +37,8 @@ def image_url_to_base64(image_url):
         return None
 
 
-def image_key_to_base64(temp_path):
-    image_path = f"/llm_reco/luoxinchen/dataset/Detailed_Caption/Detailed_Caption/densecap_data/{temp_path}.jpg"#use key's pre 5 char to find the image
+def image_key_to_base64(key):
+    image_path = f"/llm_reco/luoxinchen/dataset/GRIT/webdataset/{key[:5]}/{key}.jpg"#use key's pre 5 char to find the image
     if not os.path.exists(image_path):
         return None
     try:
@@ -60,9 +60,9 @@ class OpenImagesCaptionConverter(ConverterBase):
         self.source = source
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
-        image = src['image']['bytes']
-        caption = src['text']
-        image_bytes = base64.b64encode(image).decode('utf-8')
+        key = src['key']
+        caption = src['caption']
+        image_bytes = image_key_to_base64(key)
         if image_bytes is None:
             return None
         messages = None

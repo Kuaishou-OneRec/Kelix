@@ -1,13 +1,13 @@
-output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/PlotQA
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/GRIT
 split_size: 268_435_456
 dataset:
   class_name: ParquetDataset
   kwargs:
-    path: /llm_reco_ssd/luoxinchen/dataset/PlotQA/plot_qa/data
+    path: /llm_reco/luoxinchen/dataset/GRIT/webdataset
   columns:
-    - text
-    - image
+    - key
+    - caption
 converter:
   class_name: OpenImagesCaptionConverter
   kwargs:
-    source: plot_qa
+    source: grit
