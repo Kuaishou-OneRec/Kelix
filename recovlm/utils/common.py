@@ -351,23 +351,38 @@ def get_world_size_and_rank() -> Tuple[int, int]:
         return 1, 0
 
 
-
-
-
 class FakeParquetFileFromFastParquetFile:
     def __init__(self, fast_parquet_file):
-      
-      self.fast_parquet_file = fast_parquet_file
-      self.num_row_groups = 1
+        # 包的版本： mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install fastparquet==2024.2.0"
+        from fastparquet import ParquetFile
+        self.fast_parquet_file = fast_parquet_filee
+
+        # 把打开文件逻辑放在前面，防止文件被删除而打开失败
+        self.res = ParquetFile(self.fast_parquet_file)
+        self.res.num_rows = len(self.res.to_pandas())
+        self.num_row_groups = 1
 
     def read_row_group(self, i):
-      assert i == 0
-      from fastparquet import ParquetFile
-      return ParquetFile(self.fast_parquet_file)
-
+        assert i == 0
+        return self.res
 
 
 def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fast_parquet') -> pq.ParquetFile:
+    """
+    加载 Parquet 文件，如果 HDFS 读取失败，则回退到本地缓存。
+
+    Args:
+        fn (str): Parquet 文件的路径，可以是 HDFS 路径
+        retry (int): 重试次数
+        max_cache_files (int): 缓存中保留的最大文件数
+        parquet_backend (str): Parquet 后端，可选 'fast_parquet' 或 'pyarrow'
+
+    Returns:
+        pq.ParquetFile: 加载的 Parquet 文件对象
+
+    Raises:
+        Exception: 如果 HDFS 和本地缓存加载都失败，则抛出异常
+    """
     """Load a parquet file, with fallback to local cache if HDFS read fails.
     
     Args:
