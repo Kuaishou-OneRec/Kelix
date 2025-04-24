@@ -107,7 +107,7 @@ class MonitorDecorator(object):
             report_per_step=self.inf,
             verbose_per_step=config.verbose.verbose_per_step
         )
-        for name in ["loss", "learning_rate", "grad_norm"]:
+        for name in ["loss", "learning_rate", "grad_norm", 'AR_loss', 'Contrastive_loss']:
             monitor.register_metric(
                 name=name,
                 method="assign",
@@ -153,6 +153,10 @@ class MonitorDecorator(object):
         monitor = self.monitor
         ctx = self.ctx
         loss = rets.loss
+        AR_loss = rets.AR_loss
+        Contrastive_loss = rets.Contrastive_loss
+
+
         total_image_num_tokens = rets.total_image_num_tokens
         total_text_num_tokens = rets.total_text_num_tokens
         total_num_tokens = total_image_num_tokens + total_text_num_tokens
@@ -171,6 +175,8 @@ class MonitorDecorator(object):
         return Context(
             step=1,
             loss=loss.detach().cpu().item(),
+            AR_loss=AR_loss.detach().cpu().item(),
+            Contrastive_loss=Contrastive_loss.detach().cpu().item(),
             learning_rate=model.lr_scheduler.get_lr()[0],
             grad_norm=model.get_global_grad_norm().detach().cpu().item(),
             elapsed=elapsed,
