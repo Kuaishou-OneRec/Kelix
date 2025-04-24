@@ -22,10 +22,13 @@ class OvitConverter(ConverterBase):
         self.source = source
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
-        key = list(src['images'].keys())[0]
-        image = src['images'][key]
-        text = src['messages'][-1]["content"][0]["text"]
-        #"text": src['segments'][1]["text"]
+        images = json.loads(src['images'])
+        image = list(images.keys())[0]
+        image = images[image]
+        messages = json.loads(src['messages'])
+        text = messages[-1]["content"][0]["text"]
+        # segments = json.loads(src['segments'])
+        # text = segments[1]["text"]
         sample = {
                 "source": self.source,
                 "task": "vit",
