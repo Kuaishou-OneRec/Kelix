@@ -13,9 +13,12 @@ from tqdm import tqdm
 
 
 def read_rows_in_file(fn):
-    parquet_file = pq.ParquetFile(fn)
-    df = parquet_file.read().to_pandas()
-
+    try:
+        parquet_file = pq.ParquetFile(fn)
+        df = parquet_file.read().to_pandas()
+    except Exception as e:
+        print(f"Error reading file {fn}: {e}")
+        return None
     return df
 
 
@@ -54,6 +57,8 @@ def read_hdfs_folder(data_folder, postfix, output):
         return None
     for file_path in tqdm(files):
         df = read_rows_in_file(file_path)
+        if df is None:
+            continue
         samples = list()
         for _, row in tqdm(df.iterrows(), total=len(df), postfix="In rank {}".format(rank)):
             keys = list(json.loads(row["images"]).keys())[0]
