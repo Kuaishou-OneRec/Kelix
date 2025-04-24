@@ -10,4 +10,4 @@ dataset:
 converter:
   class_name: OvitConverter
   kwargs:
-    source: InternVL_SAM_1B_single_en
+    source: MMInstruct-Caption-EN
