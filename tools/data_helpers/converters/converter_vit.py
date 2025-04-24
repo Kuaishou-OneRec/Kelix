@@ -10,6 +10,7 @@ import pandas as pd
 import pyarrow.parquet as pq
 from mpi4py import MPI
 from tqdm import tqdm
+import time
 
 
 def read_rows_in_file(fn):
@@ -107,9 +108,11 @@ def flush(fs, buffer, temp_dir, output_dir):
 
     df = pd.DataFrame(buffer)
     pq.write_table(pa.Table.from_pandas(df, nthreads=1), tempfile)
-
     if fs is not None:
-        fs.mv(tempfile, filename)
+        try:
+            fs.mv(tempfile, filename)
+        except Exception as e:
+            print(os.path.exists(tempfile))
     else:
         command = "mv {} {}".format(tempfile, filename)
         subprocess.run(command, shell=True, check=True)
