@@ -1,13 +1,13 @@
-output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/vit/MMInstruct-Caption-ZH
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/vit/MMInstruct-QA
 split_size: 268_435_456
 dataset:
   class_name: ParquetDataset
   kwargs:
-    path: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/MMInstruct-Caption-ZH
+    path: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/MMInstruct-QA
   columns:
     - images
     - messages
 converter:
   class_name: OvitConverter
   kwargs:
-    source: MMInstruct-Caption-ZH
+    source: MMInstruct-QA
