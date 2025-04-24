@@ -1,13 +1,13 @@
-output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/vit/Laion_Coco
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/vit/InternVL_SAM_1B_single_en
 split_size: 268_435_456
 dataset:
   class_name: ParquetDataset
   kwargs:
-    path: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/Laion_Coco
+    path: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/InternVL_SAM_1B_single_en
   columns:
     - images
     - messages
 converter:
   class_name: OvitConverter
   kwargs:
-    source: Laion_Coco
+    source: InternVL_SAM_1B_single_en
