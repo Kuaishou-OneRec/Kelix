@@ -34,7 +34,7 @@ def shell_hdfs_ls(source_dir):
         return list()
 
 
-def read_hdfs_folder(data_folder, postfix):
+def read_hdfs_folder(data_folder, postfix, output):
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     world_size = comm.Get_size()
@@ -70,7 +70,7 @@ def read_hdfs_folder(data_folder, postfix):
             }
             samples.append(sample)
         processed_df = pd.DataFrame(samples)
-        save(processed_df, args.output)
+        save(processed_df, output)
     return None
 
 
@@ -146,7 +146,7 @@ def main(args):
     rank = comm.Get_rank()
     world_size = comm.Get_size()
 
-    df = read_hdfs_folder(args.folder, args.postfix)
+    df = read_hdfs_folder(args.folder, args.postfix, args.output)
     df = build_empty_df(df)
 
     # samples = list()
