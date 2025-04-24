@@ -146,8 +146,7 @@ def main(args):
     rank = comm.Get_rank()
     world_size = comm.Get_size()
 
-    df = read_hdfs_folder(args.folder, args.postfix, args.output)
-    df = build_empty_df(df)
+    read_hdfs_folder(args.folder, args.postfix, args.output)
 
     # samples = list()
     # for _, row in tqdm(df.iterrows(), total=len(df), postfix="In rank {}".format(rank)):
