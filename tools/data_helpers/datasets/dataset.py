@@ -65,7 +65,11 @@ class ParquetDataset(DistDataset):
     
     def __iter__(self):
         for fn, sid, shard_size in self.shard_files:
-            df = pq.read_table(fn, columns=self.columns).to_pandas()
+            try:
+                df = pq.read_table(fn, columns=self.columns).to_pandas()
+            except Exception as e:
+                print(f"msy Error reading file {fn}: {e}")
+                continue
             if sid == 0:
                 # self.mpi_print(f"====ParquetDataset====\nRead {fn}, total rows {len(df)}")
                 pass
