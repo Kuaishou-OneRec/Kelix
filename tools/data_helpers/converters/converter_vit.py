@@ -52,12 +52,26 @@ def read_hdfs_folder(data_folder, postfix):
 
     if len(files) == 0:
         return None
-    df_list = list()
     for file_path in tqdm(files):
         df = read_rows_in_file(file_path)
-        df_list.append(df)
-    df = pd.concat(df_list, axis=0, ignore_index=True)
-    return df
+        samples = list()
+        for _, row in tqdm(df.iterrows(), total=len(df), postfix="In rank {}".format(rank)):
+            keys = list(json.loads(row["images"]).keys())[0]
+            image = json.loads(row["images"])[keys]
+            sample = {
+                "source": row["source"],
+                "task": "caption",
+                "images": json.dumps([image]),
+                "videos": json.dumps(list()),
+                "text": json.loads(row["messages"])[-1]["content"][0]["text"],
+                #"text": json.loads(row["segments"])[1]["text"],
+                "metadata": json.dumps(None),
+                "uuid": str(uuid.uuid1()),
+            }
+            samples.append(sample)
+        processed_df = pd.DataFrame(samples)
+        save(processed_df, args.output)
+    return None
 
 
 def build_empty_df(df):
@@ -135,23 +149,23 @@ def main(args):
     df = read_hdfs_folder(args.folder, args.postfix)
     df = build_empty_df(df)
 
-    samples = list()
-    for _, row in tqdm(df.iterrows(), total=len(df), postfix="In rank {}".format(rank)):
-        keys = list(json.loads(row["images"]).keys())[0]
-        image = json.loads(row["images"])[keys]
-        sample = {
-            "source": row["source"],
-            "task": "caption",
-            "images": json.dumps([image]),
-            "videos": json.dumps(list()),
-            "text": json.loads(row["messages"])[-1]["content"][0]["text"],
-            #"text": json.loads(row["segments"])[1]["text"],
-            "metadata": json.dumps(None),
-            "uuid": str(uuid.uuid1()),
-        }
-        samples.append(sample)
-    df = pd.DataFrame(samples)
-    save(df, args.output)
+    # samples = list()
+    # for _, row in tqdm(df.iterrows(), total=len(df), postfix="In rank {}".format(rank)):
+    #     keys = list(json.loads(row["images"]).keys())[0]
+    #     image = json.loads(row["images"])[keys]
+    #     sample = {
+    #         "source": row["source"],
+    #         "task": "caption",
+    #         "images": json.dumps([image]),
+    #         "videos": json.dumps(list()),
+    #         "text": json.loads(row["messages"])[-1]["content"][0]["text"],
+    #         #"text": json.loads(row["segments"])[1]["text"],
+    #         "metadata": json.dumps(None),
+    #         "uuid": str(uuid.uuid1()),
+    #     }
+    #     samples.append(sample)
+    # df = pd.DataFrame(samples)
+    # save(df, args.output)
 
 
 if __name__ == "__main__":
