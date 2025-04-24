@@ -135,6 +135,8 @@ class ParquetDataset(IterableDataset):
 
     def _parser(self, raw_row_data, file_url):
         try:
+            for hook in self.before_hook:
+                raw_row_data = hook(raw_row_data, file_url)
             images = None
             videos = None
 

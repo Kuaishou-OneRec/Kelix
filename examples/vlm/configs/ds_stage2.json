@@ -1,0 +1,37 @@
+{
+    "gradient_accumulation_steps": 1,
+    "train_micro_batch_size_per_gpu": 1,
+    "prescale_gradients": false,
+    "zero_allow_untested_optimizer": true,
+    "zero_optimization": {
+        "stage": 2,
+        "overlap_comm": true,
+        "contiguous_gradients": true,
+        "sub_group_size": 1e9,
+        "reduce_bucket_size": 5e8,
+        "reduce_scatter":false
+    },
+    "steps_per_print": 10,
+    "gradient_clipping": 1.0,
+    "wall_clock_breakdown": false,
+    "bf16": {
+      "enabled": true
+    },
+    "compile": {
+      "disable": false
+    },
+    "flops_profiler": {
+    "enabled": true,
+    "profile_step": 1,
+    "module_depth": -1,
+    "top_modules": 1,
+    "detailed": true,
+    "output_file": "/llm_reco/liuyang76/codes/llm_rec_code_base/performance_ana/test.json"
+}
+}
+
+
+
+
+
+

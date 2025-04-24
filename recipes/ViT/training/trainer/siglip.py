@@ -108,7 +108,7 @@ class MonitorDecorator(object):
             report_per_step=self.inf,
             verbose_per_step=config.verbose.verbose_per_step
         )
-        for name in ["loss", "learning_rate", "grad_norm"]:
+        for name in ["loss", "learning_rate", "grad_norm", 'AR_loss', 'Contrastive_loss']:
             monitor.register_metric(
                 name=name,
                 method="assign",
@@ -154,6 +154,10 @@ class MonitorDecorator(object):
         monitor = self.monitor
         ctx = self.ctx
         loss = rets.loss
+        AR_loss = rets.AR_loss
+        Contrastive_loss = rets.Contrastive_loss
+
+
         total_image_num_tokens = rets.total_image_num_tokens
         total_text_num_tokens = rets.total_text_num_tokens
         total_num_tokens = total_image_num_tokens + total_text_num_tokens
@@ -172,6 +176,8 @@ class MonitorDecorator(object):
         return Context(
             step=1,
             loss=loss.detach().cpu().item(),
+            AR_loss=AR_loss.detach().cpu().item(),
+            Contrastive_loss=Contrastive_loss.detach().cpu().item(),
             learning_rate=model.lr_scheduler.get_lr()[0],
             grad_norm=model.get_global_grad_norm().detach().cpu().item(),
             elapsed=elapsed,
@@ -193,7 +199,7 @@ def check_config(args, config):
         config.dataset.num_workers = config.dataset.loader.num_workers
         logger.warning(f"Divergence of 'config.dataset.num_workers' and 'config.dataset.loader.num_workers', rewrite 'config.dataset.num_workers' to {config.dataset.loader.num_workers}")
 
-    model_config_path = osp.join(config.model.dir, "config.json")
+    model_config_path = osp.join(config.model.siglip_dir, "config.json")
     model_config = json.load(open(model_config_path, "r", encoding="utf-8"))
     patch_size = model_config["vision_config"]["patch_size"]
     config.dataset.packing.patch_size = patch_size

@@ -350,7 +350,39 @@ def get_world_size_and_rank() -> Tuple[int, int]:
     else:
         return 1, 0
 
-def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
+
+class FakeParquetFileFromFastParquetFile:
+    def __init__(self, fast_parquet_file):
+        # 包的版本： mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install fastparquet==2024.2.0"
+        from fastparquet import ParquetFile
+        self.fast_parquet_file = fast_parquet_file
+
+        # 把打开文件逻辑放在前面，防止文件被删除而打开失败
+        self.res = ParquetFile(self.fast_parquet_file)
+        self.res.num_rows = len(self.res.to_pandas())
+        self.num_row_groups = 1
+
+    def read_row_group(self, i):
+        assert i == 0
+        return self.res
+
+
+def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fast_parquet') -> pq.ParquetFile:
+    """
+    加载 Parquet 文件，如果 HDFS 读取失败，则回退到本地缓存。
+
+    Args:
+        fn (str): Parquet 文件的路径，可以是 HDFS 路径
+        retry (int): 重试次数
+        max_cache_files (int): 缓存中保留的最大文件数
+        parquet_backend (str): Parquet 后端，可选 'fast_parquet' 或 'pyarrow'
+
+    Returns:
+        pq.ParquetFile: 加载的 Parquet 文件对象
+
+    Raises:
+        Exception: 如果 HDFS 和本地缓存加载都失败，则抛出异常
+    """
     """Load a parquet file, with fallback to local cache if HDFS read fails.
     
     Args:
@@ -365,6 +397,7 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
         Exception: If both HDFS and local cache loading fail
     """
     import hashlib
+    assert parquet_backend in ["fast_parquet", "pyarrow"]
 
     def calculate_text_hash(text):
         # 创建一个 SHA-256 哈希对象
@@ -396,7 +429,7 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
         print(f"retrying for fn={fn}/{cache_fn}")
         try:
             if os.path.exists(cache_fn):
-                res = pq.ParquetFile(cache_fn)
+                res = pq.ParquetFile(cache_fn) if parquet_backend == 'pyarrow' else FakeParquetFileFromFastParquetFile(cache_fn)
             else:
                 raise Exception("File not found") # 直接用shell的方式
                 # res = pq.ParquetFile(fn)
@@ -406,9 +439,9 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10) -> pq.ParquetFile:
             # Try to download from HDFS
             try:
                 clean_cache_if_needed()  # Clean cache before downloading new file
-                cmd = f'hadoop fs -get {fn} {cache_fn}'
+                cmd = f'/home/hadoop/software/hadoop/bin/hadoop fs -get {fn} {cache_fn}'
                 os.system(cmd)
-                res = pq.ParquetFile(cache_fn)
+                res = pq.ParquetFile(cache_fn)  if parquet_backend == 'pyarrow' else FakeParquetFileFromFastParquetFile(cache_fn)
                 return res
             except Exception as e2:
                 time.sleep(2 + np.random.randint(0, 5))

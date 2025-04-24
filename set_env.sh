@@ -18,3 +18,7 @@ set +a  # disable auto-export
 # Print loaded variables (optional)
 echo "Loaded environment variables from ${ENV_FILE}:"
 cat "${ENV_FILE}"
+
+
+mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15"
+mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install fastparquet==2024.2.0"

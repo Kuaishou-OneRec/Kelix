@@ -88,7 +88,7 @@ class Qwen2VLInputBuilder:
     self.max_visual_tokens_per_image = \
         kwargs.get("max_visual_tokens_per_image", 512)
     self.max_images = kwargs.get("max_images", 10)
-    self.pid_info_client = PidInfoClient(pid_info_client_host)
+    # self.pid_info_client = PidInfoClient(pid_info_client_host)
 
   def fill_image_block(self,
                        block: Dict[str, Any],
@@ -146,10 +146,11 @@ class Qwen2VLInputBuilder:
         block["video"] = sample[block["video"]]
       
       if isinstance(block["video"], str) and not os.path.exists(block["video"]):
+        raise ValueError(f"video file not exists: {block['video']}")
         # media_path
-        pid_info = self.pid_info_client.get_pid_info(block["video"].split(".")[0].split('/')[-1])
-        if pid_info['media_type'] != 'video': raise ValueError(f"media_type={pid_info['media_type']} is not video")
-        block["video"] = pid_info["media_path"]
+        # pid_info = self.pid_info_client.get_pid_info(block["video"].split(".")[0].split('/')[-1])
+        # if pid_info['media_type'] != 'video': raise ValueError(f"media_type={pid_info['media_type']} is not video")
+        # block["video"] = pid_info["media_path"]
 
       # fill other params
       block["min_pixels"] = \
@@ -644,11 +645,19 @@ class DistributedDataset(IterableDataset):
       folder = Path(self.sources)
       files = list(map(str, folder.rglob("*.parquet")))
 
-    self.rng.shuffle(files)
     total_files = len(files)
-    num_files_per_rank = round(len(files) / self.world_size)
-    files = files[
-      self.rank * num_files_per_rank: (self.rank + 1) * num_files_per_rank]
+
+
+    def get_nth_split(lst, world_size, rank):
+      if world_size <= 0 or rank < 0 or rank >= world_size:
+          raise ValueError("world_size 必须为正整数，rank 必须在 [0, world_size - 1] 范围内。")
+      quotient, remainder = divmod(len(lst), world_size)
+      start = rank * quotient + min(rank, remainder)
+      end = start + quotient + (1 if rank < remainder else 0)
+      return lst[start:end]
+
+    files = get_nth_split(files, self.world_size, self.rank)
+
 
     assert len(files) > 0, f"No file found for rank{self.rank}"
 
@@ -1460,7 +1469,8 @@ class ChatCompletionVisionDatasetV2(DistributedDataset):
     # append EOS token
     text += "<|endoftext|>"
     image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos)
-    inputs = self.processor(
+
+    inputs = self.input_builder.processor(
         text=text,
         images=image_inputs,
         videos=video_inputs,

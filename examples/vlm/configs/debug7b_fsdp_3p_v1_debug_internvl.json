@@ -14,6 +14,6 @@
     "max_retry": 10,
     "multiple_of": 8,
     "num_workers": 2,
-    "num_epochs": 1
+    "num_epochs": 10000
 }
 

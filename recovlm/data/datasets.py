@@ -13,7 +13,7 @@ import random
 import base64
 import pyarrow.parquet as pq
 from datetime import datetime
-
+import os.path as osp
 import webdataset as wds
 
 from io import BytesIO
@@ -39,7 +39,6 @@ from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
 from recovlm.utils.intern_vl_utils import process_vision_info_internvl,dynamic_preprocess,load_video,build_transform
 
 from recovlm.models.internvl import InternVLChatConfig
-
 
 from recovlm.training.parallel import get_sequence_parallel_group, \
   get_sequence_parallel_world_size
@@ -2043,7 +2042,7 @@ class ParquetDataset(IterableDataset):
         samples[image_name] = image
       return samples
     except:
-      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}")
+      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}, images={images}\nsamples={samples}")
       return None
 
   def __iter__(self,):
@@ -2076,7 +2075,7 @@ class ParquetDataset(IterableDataset):
           logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
           parquet_file = None
         
-        # process file content
+        # # process file content
         if parquet_file is not None:
           logger.warning(f"[Rank{rank}-{worker}] {fn} total row_groups: {parquet_file.num_row_groups}")
           for group_idx in range(parquet_file.num_row_groups):
@@ -2433,7 +2432,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                 nframes += imgs
 
         else:
-            raise ValueError(f"process_vision_info_internvl failed,failed type {turn}")
+            raise ValueError(f"process_vision_info_internvl failed,failed type {segment}")
         
         for i,num_image in enumerate(num_patches_list):
             #当前帧的token数
@@ -2559,7 +2558,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   def _process(self, sample, source_name=None):
     # self._may_filter(sample)
     # get data format
-    if "messages" in sample["json"] or "message" in sample["json"]:
+    if ("messages" in sample["json"] and sample["json"]['messages'] is not None and len(sample["json"]['messages']) ) or \
+          ("message" in sample["json"] and sample["json"]['message'] is not None and len(sample["json"]['message']) ):      
       data_format = "chatml"
     elif "segments" in sample["json"]:
       data_format = "completion"

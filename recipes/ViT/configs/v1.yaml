@@ -7,6 +7,13 @@ dataset:
     num_workers: 2
     batch_size: 4
     collate_fn: VisionPackingCollator
+  vision:
+    images:
+      max_token_per_image: 4096
+      force_size: null
+    videos:
+      nframes: 10
+    multiple_of: 28
   packing:
     enabled: true
     max_length: 8192
@@ -16,15 +23,15 @@ dataset:
     - type: ImageProcessorHook
       position: after
 model:
-  dir: /llm_reco_ssd/zhouyang12/models/SigLIP-So400M-Patch14-384/
+  siglip_dir: /llm_reco_ssd/zhouyang12/models/SigLIP-So400M-Patch14-384/
   text_decoder:
-    enabled: false
-    model_dir: 234
+    enabled: true
+    model_dir: /llm_reco/liuyang76/Models/Qwen2.5-0.5B-Instruct
 optimizer:
   type: muon
   beta1: 0.9
   bata2: 0.95
-  learn_rate: 1e-6
+  learn_rate: 1e-5
   weight_decay: 0.01
 lr_scheduler:
   type: cosine
@@ -42,4 +49,5 @@ verbose:
   verbose_per_step: 1
 report:
   report_per_step: 1
-
+gradient_checkpointing:
+  enabled: true

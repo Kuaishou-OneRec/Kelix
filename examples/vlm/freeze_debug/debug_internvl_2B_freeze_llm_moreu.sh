@@ -15,8 +15,8 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/lingzhixin/output3/debug/0.0.30/debug_qwen25_7B
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2Bt # Pretrained/Base model path
+OUTPUT_DIR=/llm_reco/lingzhixin/output3/freeze_debug/0.0.1/debug_internvl_2B_freeze_llm_moreu
 
 mkdir -p $OUTPUT_DIR
 
@@ -105,24 +105,24 @@ nohup mpirun --allow-run-as-root -np $np \
         -x https_proxy=\
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/configs/debug_qwen25.json \
-                --model_processor Qwen2_5_VLProcessor \
-                --model_class Qwen2_5_VLForConditionalGeneration \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 40000 \
-                --learning_rate 1e-6 \
+                --dataset_config /llm_reco/chuchenglong/InternVL/recovlm/examples/vlm/configs/2b_internvl_stage1d.json \
+                --max_length 8192 \
+                --learning_rate 2e-4 \
+                --model_class InternVLChatModel \
                 --min_lr 0.0 \
-                --weight_decay 0.1 \
+                --weight_decay 0.01 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 500 \
-                --num_training_steps 50000 \
+                --num_training_steps 100000 \
                 --save_checkpoint_per_step 500 \
-                --sequence_parallel_size 4 \
+                --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
-                --reshard_after_forward false \
                 --logging_per_step 10 \
                 --fp32_weight true \
+                --freeze_llm \
+                --reshard_after_forward false \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
                 --merge_checkpoint \
