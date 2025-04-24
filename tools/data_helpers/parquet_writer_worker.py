@@ -28,6 +28,16 @@ SCHEMA_DICT = {
     "uuid": str,
 }
 
+def write_df_to_hdfs(df, file_path):
+    from fastparquet import write
+
+    # table = convert_pandas_to_table(df)
+    tmp_fn = f"/code/{file_path.split('/')[-1]}"
+    write(tmp_fn, df)
+    # pq.write_table(table, tmp_fn, row_group_size=2048)
+    os.system(f"/home/hadoop/software/hadoop/bin/hadoop fs -put {tmp_fn} {file_path}")
+    os.remove(tmp_fn)
+
 class MPIParquetWriterWorker(MPIBase):
 
     def __init__(self, config):
@@ -104,13 +114,11 @@ class MPIParquetWriterWorker(MPIBase):
 
     def flush(self):
         if self._buffer_size > 0:
-            tempfile = os.path.join(self.temp_dir, f"rank-{self.rank}-{str(uuid.uuid1())}.parquet")
             filename = os.path.join(self.output_dir, f"rank-{self.rank}-{str(uuid.uuid1())}.parquet")
             df = pd.DataFrame(self._buffer)
             self._buffer = []
             self._buffer_size = 0
-            pq.write_table(pa.Table.from_pandas(df, nthreads=1), tempfile)
-            self.fs.mv(tempfile, filename)
+            write_df_to_hdfs(df, filename)
             self.mpi_print(f"write to {filename} success, total filtered_cnt {self._filtered_cnt} success_cnt {self._success_cnt}")
             self.mpi_print(f"filter_reason {self._filter_reason}")
         gc.collect()

@@ -22,6 +22,52 @@ def lcm(a: int, b: int):
 class DistDataset(IterableDataset, MPIBase):
     def __init__(self):
         super().__init__()
+
+def pq2pd_v2(x, rank=0):
+    '''
+    x =pq2pd_v2('viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/ASV2/rank-180-6ccefc5c-1cf8-11f0-a4bf-946daee90af8.parquet')
+    '''
+    import uuid
+    import os
+    import pyarrow.parquet as pq
+    import time
+    import subprocess
+    from fastparquet import ParquetFile
+
+    # global tmp_pd
+    # if tmp_pd is not None:
+    #     return tmp_pd.copy(deep=True)
+
+    os.makedirs("/code/.pq_cache", exist_ok=True)
+    tmp_fn = f"/code/.pq_cache/{uuid.uuid4()}_{rank}.parquet"
+    for t in range(5):
+        cmd = f"/home/hadoop/software/hadoop/bin/hadoop fs -get {x} {tmp_fn}"
+        os.system(cmd)
+        # result = subprocess.run(['bash', '-lc', cmd], capture_output=True, text=True)
+        # print(result.stderr)
+        if not os.path.exists(tmp_fn):
+            print(f"Retrying{rank} the {t} time to get {x} -> {tmp_fn}...")
+            time.sleep(np.random.rand() * 10)
+            continue
+        df = ParquetFile(tmp_fn).to_pandas()
+        # df = pq.read_table(tmp_fn).to_pandas()
+        break
+    if not os.path.exists(tmp_fn):
+        try:
+            print("fall back to pq.read_table")
+            return pq.read_table(x).to_pandas()
+        except Exception as e:
+            print(traceback.format_exc())
+            raise FileNotFoundError(f"Failed to get {x} from HDFS. cmd={cmd}")
+    os.remove(tmp_fn)
+    # tmp_pd = df.copy(deep=True)
+    return df.copy(deep=True)
+
+
+def get_memory_usage():
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss  # 当前进程的 Resident Set Size (RSS)
+    return humanize.naturalsize(mem, binary=True)  # 转换为易读格式（如GB/MB）
     
 class ParquetDataset(DistDataset):
 
@@ -66,9 +112,10 @@ class ParquetDataset(DistDataset):
     def __iter__(self):
         for fn, sid, shard_size in self.shard_files:
             try:
-                df = pq.read_table(fn, columns=self.columns).to_pandas()
+                df = pq2pd_v2(fn, self.rank)
+                # df = pq.read_table(fn, columns=self.columns).to_pandas()
             except Exception as e:
-                print(f"msy Error reading file {fn}: {e}")
+                print(f"Error reading file {fn}: {e}")
                 continue
             if sid == 0:
                 # self.mpi_print(f"====ParquetDataset====\nRead {fn}, total rows {len(df)}")
