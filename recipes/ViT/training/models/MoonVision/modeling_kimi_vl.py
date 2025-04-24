@@ -2391,13 +2391,15 @@ class KimiVLMultiModalProjector(nn.Module):
         )
 
     def forward(self, image_features: list[torch.Tensor]) -> torch.Tensor:
-        image_features = torch.cat(image_features, dim=0)
-        hidden_states = self.pre_norm(image_features).view(-1, self.hidden_size)
-        hidden_states = self.linear_1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
+        rocessed_features = []
+        for image_feature in image_features:
+            hidden_states = self.pre_norm(image_feature).view(-1, self.hidden_size)
+            hidden_states = self.linear_1(hidden_states)
+            hidden_states = self.act(hidden_states)
+            hidden_states = self.linear_2(hidden_states)
+            rocessed_features.append(hidden_states)
 
-        return hidden_states
+        return rocessed_features
 
 class KimiVLMultiModalProjector_Contrastive(nn.Module):
     def __init__(self, config: KimiVLConfig):

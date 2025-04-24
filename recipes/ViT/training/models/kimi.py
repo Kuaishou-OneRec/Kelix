@@ -72,8 +72,12 @@ class KimiViT(nn.Module):
         MoonViT_config._attn_implementation = 'flash_attention_2'
 
         self.MoonVIT_processor = KimiVLImageProcessor()
-        self.MoonVIT = MoonVitPretrainedModel(MoonViT_config).cuda()
-        
+        self.MoonVIT = MoonVitPretrainedModel(MoonViT_config)
+
+        state_dict = torch.load(config.VitParam_dir)
+        self.MoonVIT.load_state_dict(state_dict)
+        self.MoonVIT.cuda()
+
         self.loss_lambda = 2
 
         # LLM for capation AR loss
@@ -142,8 +146,10 @@ class KimiViT(nn.Module):
         image_features: list[torch.Tensor] = self.MoonVIT(
             pixel_values, image_grid_hws
         )
-        # (image_token_nums_0 + image_token_nums_1 + ..., image_feature_dim)
+        # [(image_token_nums_0, qwen_hidden_dim), (image_token_nums_1, qwen_hidden_dim), ...]
         image_features_for_AR: torch.Tensor = self.mlp_AR(image_features)
+
+        # (B, T5 dim)
         image_features: torch.Tensor = self.mlp(image_features)
 
         return image_features, image_features_for_AR
@@ -151,65 +157,74 @@ class KimiViT(nn.Module):
     def _merge_with_image_features(
             self,
             inputs_embeds: torch.Tensor,
-            image_features: torch.Tensor,
+            image_features: list[torch.Tensor],
         ):
-            """
-            Args:
-                inputs_embeds (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length, input_embed_dim)`):
-                    The input embeddings.
-                image_features (:obj:`torch.Tensor` of shape :obj:`(image_token_nums, image_feature_dim)`):
-                    The image features to prepend to the input embeddings.
-            """
-            batch_size, sequence_length, input_embed_dim = inputs_embeds.shape
-            image_feature_nums, image_feature_dim = image_features.shape
-            
-            assert image_feature_dim == input_embed_dim
-            
-            # Create new embeddings tensor with expanded sequence length
-            new_sequence_length = sequence_length + image_feature_nums
-            new_inputs_embeds = torch.zeros(
-                (batch_size, new_sequence_length, input_embed_dim),
-                device=inputs_embeds.device,
-                dtype=inputs_embeds.dtype
-            )
-            
-            # Prepend image features to each sequence in the batch
-            new_inputs_embeds[:, :image_feature_nums, :] = image_features.unsqueeze(0).expand(batch_size, -1, -1)
-            
-            # Copy original text embeddings after the image features
-            new_inputs_embeds[:, image_feature_nums:, :] = inputs_embeds
-            
-            return new_inputs_embeds
+        """
+        Args:
+            inputs_embeds (torch.Tensor of shape (batch_size, sequence_length, input_embed_dim)):
+                The input embeddings.
+            image_features (list[torch.Tensor]): A list where each element is a tensor of shape 
+                (image_token_nums_i, image_feature_dim) corresponding to the i-th sample in the batch.
+                The image_feature_dim should match input_embed_dim.
+        """
+        batch_size, sequence_length, input_embed_dim = inputs_embeds.shape
+        
+        # Validate input dimensions
+        assert len(image_features) == batch_size, "Number of image features must match batch size"
+        for img_feat in image_features:
+            assert img_feat.shape[-1] == input_embed_dim, "Image feature dimension must match input embedding dimension"
+        
+        image_token_nums = [img_feat.shape[0] for img_feat in image_features]
+        max_image_tokens = max(image_token_nums) if image_token_nums else 0
+        new_sequence_length = sequence_length + max_image_tokens
+        
+        new_inputs_embeds = torch.zeros(
+            (batch_size, new_sequence_length, input_embed_dim),
+            device=inputs_embeds.device,
+            dtype=inputs_embeds.dtype
+        )
+        
+        for i in range(batch_size):
+            img_feat = image_features[i]
+            img_token_num = img_feat.shape[0]
+            new_inputs_embeds[i, :img_token_num, :] = img_feat
+            new_inputs_embeds[i, img_token_num:img_token_num+sequence_length, :] = inputs_embeds[i]
+        
+        return new_inputs_embeds
 
     def compute_loss_with_image_features(
             self,
             inputs_embeds: torch.Tensor,
-            image_features: torch.Tensor,
+            image_features: list[torch.Tensor],
             labels: torch.LongTensor,
         ):
         """
         Args:
             inputs_embeds (torch.Tensor of shape (batch_size, sequence_length, input_embed_dim)):
                 The input text embeddings.
-            image_features (torch.Tensor of shape (image_token_nums, image_feature_dim)):
-                The image features to prepend.
+            image_features (list[torch.Tensor]): A list where each element is a tensor of shape
+                (image_token_nums_i, image_feature_dim) corresponding to the i-th sample in the batch.
             labels (torch.LongTensor of shape (batch_size, sequence_length)):
                 Labels for language modeling loss. Will be extended with -100 for image positions.
         """
         batch_size = inputs_embeds.size(0)
-        image_feature_nums = image_features.size(0)
         
+        # Merge text and image embeddings
         combined_embeds = self._merge_with_image_features(inputs_embeds, image_features)
         
         if labels is not None:
-            new_labels = torch.full(
-                (batch_size, combined_embeds.size(1)),
+            new_labels = torch.full_like(
+                combined_embeds[:, :, 0],  
                 -100,
                 dtype=labels.dtype,
                 device=labels.device
             )
-            new_labels[:, image_feature_nums:] = labels
+            for i in range(batch_size):
+                img_token_num = image_features[i].size(0)
+                new_labels[i, img_token_num:img_token_num+labels.size(1)] = labels[i]
+            
             labels = new_labels
+        
         outputs = self.text_decoder(inputs_embeds=combined_embeds, labels=labels)
         
         return outputs.loss

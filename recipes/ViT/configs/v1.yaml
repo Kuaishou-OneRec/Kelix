@@ -8,7 +8,8 @@ dataset:
     batch_size: 4
     collate_fn: SingleImageTextPairCollator
 model:
-  siglip_dir: /llm_reco_ssd/zhouyang12/models/SigLIP-So400M-Patch14-384/
+  siglip_dir: /llm_reco/liuyang76/Models/siglip2-so400m-patch14-384
+  VitParam_dir: /llm_reco/liuyang76/Models/MoonVitParam/MoonVit.pt
   text_decoder:
     enabled: True
     model_dir: /llm_reco/liuyang76/Models/Qwen2.5-0.5B-Instruct
