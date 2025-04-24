@@ -1,16 +1,20 @@
 dataset:
   type: ViTParquetDataset
   sources: /llm_reco_ssd/zangdunju/dataset/hdfs_data/vit/test.json
-  num_epochs: 2
+  num_epochs: 1
   num_workers: 2
   loader:
     num_workers: 2
-    batch_size: 1
-    collate_fn: SingleImageTextPairCollator
+    batch_size: 32
+    collate_fn: VisionPackingCollator
   packing:
     enabled: true
     max_length: 8192
     drop_ratio: 0.0
+    add_cls_token: false
+  hooks:
+    - type: ImageProcessorHook
+      position: after
 model:
   dir: /llm_reco_ssd/zhouyang12/models/SigLIP-So400M-Patch14-384/
   text_decoder:
@@ -24,8 +28,8 @@ optimizer:
   weight_decay: 0.01
 lr_scheduler:
   type: cosine
-  num_warmup_steps: 500
-  num_training_steps: 10000
+  num_warmup_steps: 200
+  num_training_steps: 2000
   min_lr: 0.0
 monitor:
   type: ViTMonitor

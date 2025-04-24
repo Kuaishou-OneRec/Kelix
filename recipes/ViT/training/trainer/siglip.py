@@ -228,7 +228,7 @@ def train(args):
 
     model.train()
 
-    dataloader = build_dataloader(config.dataset)
+    dataloader = build_dataloader(config.dataset, model=model)
 
     monitor = build_monitor(config, ctx, model=model, dataloader=dataloader)
     decorator = MonitorDecorator(monitor, ctx)
@@ -236,10 +236,10 @@ def train(args):
 
     start = time.time()
     for step, batch in enumerate(dataloader, 1):
-
+        
         images = batch["images"]
         texts = batch["texts"]
-        outputs, rets = model(images=images, texts=texts)
+        outputs, rets = model(package=batch, images=images, texts=texts)
         
         loss = rets.loss
 

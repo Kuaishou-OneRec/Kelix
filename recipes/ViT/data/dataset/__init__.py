@@ -8,12 +8,12 @@ from .parquet import ParquetDataset
 from .vit import ViTParquetDataset
 
 
-def build_dataloader(config):
+def build_dataloader(config, model=None):
 
     dataset_class = eval(config.type)
     init_kwargs = filter_function_arguments(dataset_class.__init__, config, new_obj=True, exclude_keys=["type"])
 
-    dataset = dataset_class(**init_kwargs)
+    dataset = dataset_class(model=model, **init_kwargs)
     loader_kwargs = filter_function_arguments(
         DataLoader.__init__,
         config.loader,

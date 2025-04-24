@@ -430,42 +430,24 @@ class KimiViT(nn.Module):
 
         return merged_info_dict
 
-    def forward(self, images, texts, package=None, use_attn_mask=True):
+    def forward(self, images, texts, use_attn_mask=True):
         device = torch.cuda.current_device()
+        if self.use_packing:
+            package = self._packing(images, texts)
 
-        if package is None:
+            images_inputs_list = list()
+            for images_list in package["images"]:
+                processed_images = self.processor(images=images_list, return_tensors="pt", do_resize=(not self.use_packing))
+                images_inputs_list.append(processed_images)
+            merged_info_dict = self.merge_images_inputs(images_inputs_list, package)
 
-            if self.use_packing:
-                package = self._packing(images, texts)
-
-                images_inputs_list = list()
-                for images_list in package["images"]:
-                    processed_images = self.processor(images=images_list, return_tensors="pt", do_resize=(not self.use_packing))
-                    images_inputs_list.append(processed_images)
-                merged_info_dict = self.merge_images_inputs(images_inputs_list, package)
-
-                inputs = self.processor(text=texts, padding="longest", return_tensors="pt")
-                inputs.update(merged_info_dict)
-            else:
-                inputs = self.processor(images=images, text=texts, padding="longest", return_tensors="pt",
-                                        do_resize=(not self.use_packing))
+            inputs = self.processor(text=texts, padding="longest", return_tensors="pt")
+            inputs.update(merged_info_dict)
         else:
-            inputs = package
-            if "input_ids" not in inputs:
-                text_inputs = self.processor(text=inputs.pop("texts"), padding="longest", return_tensors="pt")
-            inputs.update(text_inputs)
-            # sample_indices
-            # position_ids
-            # height_position_ids
-            # width_position_ids
-            # pixel_values
-            # image_indices
-            # image_attention_mask
-            # cu_seqlens
-            for name in ["images", "texts", "source", "task", "image_indices", "height_position_ids", "width_position_ids"]:
-                inputs.pop(name, None)
-
+            inputs = self.processor(images=images, text=texts, padding="longest", return_tensors="pt",
+                                    do_resize=(not self.use_packing))
         inputs = self.to_cuda(inputs, device)
+
         if use_attn_mask:
             attention_mask = (inputs["input_ids"] != self.processor.tokenizer.pad_token_id).long()
             inputs["attention_mask"] = attention_mask.to(device)

@@ -10,6 +10,7 @@ import logging
 import traceback
 import numpy as np
 import pandas as pd
+from copy import deepcopy
 import pyarrow as pa
 import torch.nn as nn
 import os.path as osp
@@ -18,6 +19,7 @@ import multiprocessing
 from io import BytesIO
 import pyarrow.parquet as pq
 from torch.utils.data import Dataset, IterableDataset, DataLoader
+from recipes.ViT.helpers.hook import build_hook
 from typing import Union, Iterable, Optional, List, Dict, Tuple, Any
 logger = logging.getLogger(__name__)
 
@@ -26,11 +28,25 @@ class ParquetDataset(IterableDataset):
     def __init__(self, data_files, num_workers, **kwargs):
         self.data_files = data_files
         self.num_workers = num_workers
+        model = kwargs.pop("model")
+        self.batch_size = kwargs.get("loader")["batch_size"]
         packing_kwargs = kwargs.get("packing")
         self.use_packing = packing_kwargs.enabled
-        self.packing_max_length = packing_kwargs.max_length
-        self.packing_drop_ratio = packing_kwargs.drop_ratio
         self.patch_size = packing_kwargs.patch_size
+        self.packing_drop_ratio = packing_kwargs.drop_ratio
+        self.packing_max_length = packing_kwargs.max_length
+        self.after_hook = list()
+        self.before_hook = list()
+
+        for hook_info in kwargs.get("hooks"):
+            position = hook_info.get("position")
+            if position == "after":
+                hook_list = self.after_hook
+            else:
+                hook_list = self.before_hook
+            hook = build_hook(processor=model.processor, type=hook_info["type"], **kwargs)
+
+            hook_list.append(hook)
 
         manager = multiprocessing.Manager()
 
@@ -319,6 +335,8 @@ class ParquetDataset(IterableDataset):
                                 offset_dict[fn_group_key] = row_idx
                                 sample = self._parser(row, fn)
                                 if sample is not None:
+                                    for hook in self.after_hook:
+                                        sample = hook(sample)
                                     yield sample
                             except GeneratorExit:
                                 # 正确处理生成器退出

@@ -27,6 +27,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
+from transformers.utils import is_flash_attn_2_available
 from transformers.activations import ACT2FN
 from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
@@ -41,6 +42,11 @@ from transformers.utils import (
     torch_int,
 )
 from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
+
+if is_flash_attn_2_available():
+    from flash_attn import flash_attn_varlen_func
+else:
+    flash_attn_varlen_func = None
 
 
 logger = logging.get_logger(__name__)
@@ -989,21 +995,20 @@ class SiglipVisionTransformer(nn.Module):
 
         if sample_indices is not None:
             assert self.use_head is True
-            last_hidden_state_list = last_hidden_state.unbind(0)
             dim = last_hidden_state.shape[-1]
-            sample_index_list = sample_indices.unbind(0)
-            assert len(sample_index_list) == len(last_hidden_state_list)
             sample_hidden_state_list = list()
 
-            for hidden_state, sample_index in zip(last_hidden_state_list, sample_index_list):
-                unique_sample_index = torch.unique(sample_index).sort().values.unbind()
-                unique_sample_index = list(unique_sample_index)
-                if len(unique_sample_index) > 0 and unique_sample_index[0] == -1:
-                    unique_sample_index = unique_sample_index[1:]
-                for sample_idx in unique_sample_index:
-                    token_indices = (sample_index == sample_idx).nonzero().flatten()
-                    sample_hidden_state = torch.gather(hidden_state, 0, token_indices[:, None].repeat(1, dim))
-                    sample_hidden_state_list.append(sample_hidden_state)
+            hidden_state = last_hidden_state.squeeze(0)
+            sample_index = sample_indices
+            # for hidden_state, sample_index in zip(last_hidden_state_list, sample_index_list):
+            unique_sample_index = torch.unique(sample_index).sort().values.unbind(0)
+            unique_sample_index = list(unique_sample_index)
+            if len(unique_sample_index) > 0 and unique_sample_index[0] == -1:
+                unique_sample_index = unique_sample_index[1:]
+            for sample_idx in unique_sample_index:
+                token_indices = (sample_index == sample_idx).nonzero().flatten()
+                sample_hidden_state = hidden_state[token_indices]
+                sample_hidden_state_list.append(sample_hidden_state)
             max_length = max([_state.shape[0] for _state in sample_hidden_state_list])
             tmp_sample_hidden_state_list = list()
             padding_mask = list()
