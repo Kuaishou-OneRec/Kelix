@@ -31,4 +31,4 @@ mpirun --allow-run-as-root -np $np \
         -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
         -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
         -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        python3 tools/data_helpers/converters/converter_vit.py --folder viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/InternVL_SAM_1B_single_en --postfix parquet --output viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/vit/InternVL_SAM_1B_single_en
+        python3 tools/data_helpers/converters/converter_vit.py --folder viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/Laion_Coco --postfix parquet --output viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/vit/Laion_Coco
