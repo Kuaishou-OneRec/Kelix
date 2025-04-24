@@ -197,13 +197,15 @@ def get_argument_parser():
                       help="The gradient clip range.")
 
   parser.add_argument("--freeze_llm", action="store_true",
-                      help="Freeze LLM parameters.")
+                      help="Freeze all LLM parameters (language model weights will not be updated during training).")
 
   parser.add_argument("--freeze_visual", action="store_true",
-                      help="Freeze visual encoder parameters.")
+                      help="Freeze all visual encoder parameters except visual projector layers.")
   
-  parser.add_argument("--freeze_visual_without_adapter", action="store_true",
-                      help="Only freeze visual encoder parameters, train adapter parameters.")
+  parser.add_argument("--freeze_projector", action="store_true",
+                      help="Freeze visual projector layers.")
+
+
 
   parser.add_argument("--use_flash_attention_2", action="store_true",
                       help="Whether to use flash attention 2")
@@ -376,15 +378,15 @@ def freeze_params(args, model):
           param.requires_grad = False
       print_rank_0("=" * 50)
 
-    if args.freeze_visual:
+    if args.freeze_projector:
       print_rank_0("Freeze visual encoder parameters.")
       for name, param in model.named_parameters():
-        if name.startswith("visual"):
+        if name.startswith("visual.merger."):
           print_rank_0(f"Disable visual encoder grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
 
-    if args.freeze_visual_without_adapter:
+    if args.freeze_visual:
       print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
       for name, param in model.named_parameters():
         if name.startswith("visual") and not name.startswith("visual.merger."):
@@ -400,12 +402,12 @@ def freeze_params(args, model):
         if name.startswith("language_model"): 
           print_rank_0(f"Disable InternVLChatModel language_model grad: {name}")
           param.requires_grad = False
-    if args.freeze_visual:
+    if args.freeze_projector:
       for name, param in model.named_parameters():
-        if name.startswith("mlp") or name.startswith("vision_model"): 
+        if name.startswith("mlp"): 
           print_rank_0(f"Disable InternVLChatModel visual encoder grad: {name}")
           param.requires_grad = False
-    if args.freeze_visual_without_adapter:
+    if args.freeze_visual:
       for name, param in model.named_parameters():
         if name.startswith("vision_model"):
           print_rank_0(f"Disable InternVLChatModel visual encoder(but mot adapter) grad: {name}")
@@ -451,17 +453,15 @@ def train():
   set_random_seed(args.seed)
 
   state_dict = None
+  if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration']:
+      converter = Qwen2VLCheckpointConverter(args.model_dir)
+  elif args.model_class == 'InternVLChatModel':
+      converter = InternVLCheckpointConverter(args.model_dir)
 
   if dist.get_rank() == 0:
     with set_default_dtype(torch.bfloat16):
       state_dict = load_hf_checkpoint(args.model_dir)
-      
-      if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration']:
-          converter = Qwen2VLCheckpointConverter(args.model_dir)
-          state_dict = converter(state_dict)
-      elif args.model_class == 'InternVLChatModel':
-          converter = InternVLCheckpointConverter(args.model_dir)
-          state_dict = converter(state_dict)
+      state_dict = converter(state_dict)
 
 
   dist.barrier()
@@ -555,12 +555,16 @@ def train():
     learning_rate=args.learning_rate,
     vision_learning_rate=args.vision_learning_rate,
     weight_decay=args.weight_decay,
-    no_decay_name_list=[
+    no_decay_name_list=
+    [
       "bias", "norm1", "norm2", "visual.merger.ln_q",
-      "input_layernorm",
-      "post_attention_layernorm",
-      "model.norm"
-    ],
+      "input_layernorm", "post_attention_layernorm", "model.norm"
+    ] if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration'] else
+    [
+      "bias", "norm1", "norm2", "mlp1.0.weight",
+      "input_layernorm", "post_attention_layernorm", "model.norm"
+    ]
+    ,
     vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
   )
 
@@ -674,7 +678,10 @@ def train():
 
   with Timer("Build dataloader"):
     try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
-    except: dataloader = get_dataloader(name=dataset, **dataset_config)
+    except: 
+      import traceback
+      traceback.print_exc()
+      dataloader = get_dataloader(name=dataset, **dataset_config)
     if args.resume_dataloader and dataloader_state_dict is not None:
       dataloader.load_state_dict(dataloader_state_dict)
 
@@ -727,18 +734,21 @@ def train():
     print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
 
     num_tokens = input_ids.numel()
+
     num_samples = (sample_idx.max() + 1).sum()
+
     num_valid_tokens = num_tokens - (sample_idx == -1).sum()
     input_ids.numel()
 
     token_metrics = torch.tensor(
       [num_tokens, num_samples, num_valid_tokens]).cuda()
+
     dist.all_reduce(
       token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
     num_tokens = token_metrics[0]
     num_samples = token_metrics[1]
-    num_valid_tokens = token_metrics[2]
+    num_valid_tokens = token_metrics[2] 
 
     total_num_samples += num_samples.item()
     total_num_tokens += num_tokens.item()
@@ -839,13 +849,13 @@ def train():
         else:
           vision_learning_rate = lr_scheduler.get_lr()[1]
         end_time = time.time()
-        sec_per_step = (end_time - start_time) / args.gradient_accumulation_steps
+        sec_per_step = (end_time - start_time) # / args.gradient_accumulation_steps
         tokens_per_sec_per_gpu = \
-          acc_num_tokens / dist.get_world_size() / (end_time - start_time)
+          acc_num_tokens  / (end_time - start_time) / dist.get_world_size()
         samples_per_sec_per_gpu = \
-          acc_num_samples / dist.get_world_size() / (end_time - start_time)
+          acc_num_samples  / (end_time - start_time) / dist.get_world_size()
         valid_tokens_per_sec_per_gpu = \
-          acc_valid_num_tokens / dist.get_world_size() / (end_time - start_time)
+          acc_valid_num_tokens / (end_time - start_time) / dist.get_world_size()
         avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
         start_time = end_time
         log_dict = {
@@ -856,10 +866,10 @@ def train():
           "perf/sec_per_step": sec_per_step,
           "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
           "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
-          "perf/total_num_tokens": total_num_tokens / args.gradient_accumulation_steps,
-          "perf/total_num_samples": total_num_samples / args.gradient_accumulation_steps,
-          "perf/valid_total_num_tokens": total_num_valid_tokens / args.gradient_accumulation_steps,
-          "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu / args.gradient_accumulation_steps,
+          "perf/total_num_tokens": total_num_tokens,
+          "perf/total_num_samples": total_num_samples,
+          "perf/valid_total_num_tokens": total_num_valid_tokens,
+          "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
           "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
         }
 
@@ -994,3 +1004,8 @@ def train():
 
 if __name__ == "__main__":
   train()
+
+
+
+
+
