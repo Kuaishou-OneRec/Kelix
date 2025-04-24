@@ -113,7 +113,7 @@ def flush(fs, buffer, temp_dir, output_dir):
             fs.mv(tempfile, filename)
         except Exception as e:
             print(e)
-            print(os.path.exists(tempfile))
+            print('msy',tempfile)
     else:
         command = "mv {} {}".format(tempfile, filename)
         subprocess.run(command, shell=True, check=True)
