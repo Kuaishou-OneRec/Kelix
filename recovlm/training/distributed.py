@@ -217,6 +217,7 @@ def shard_model(
     # lowest-level modules first
     num_layers_sharded = 0
     # prev = None
+    print(f'{type(model)}')
     if dist.get_rank() == 0:
         print(list(model.named_modules()))
     layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
@@ -272,7 +273,7 @@ def shard_model(
         #        layer.set_modules_to_forward_prefetch([prev])
         #prev = layer
 
-    model.vision_model.set_modules_to_forward_prefetch([prev])
+    model.vision_model.embeddings.patch_embedding.set_modules_to_forward_prefetch([prev])
     #if prev is not None and hasattr(model, 'set_modules_to_forward_prefetch'):
     #    print(f"{model} set_modules_to_forward_prefetch {prev}")
     #    model.set_modules_to_forward_prefetch([prev])
