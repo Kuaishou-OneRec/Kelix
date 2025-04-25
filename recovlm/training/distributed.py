@@ -255,12 +255,14 @@ def shard_model(
         
     prev = None
     # for _, layer in reversed(list(model.named_modules())):
-    for _, layer in reversed(list(traverse_modules(model))):
+    for i_layer, layer in reversed(list(traverse_modules(model))):
+        print(f"traverse layer {i_layer}: {layer}")
         if prev is not None: 
             if hasattr(layer, 'set_modules_to_forward_prefetch'):
                 print(f"{layer} set_modules_to_forward_prefetch {prev}")
                 layer.set_modules_to_forward_prefetch([prev])
         prev = layer
+        
     if prev is not None and hasattr(model, 'set_modules_to_forward_prefetch'):
         print(f"{model} set_modules_to_forward_prefetch {prev}")
         model.set_modules_to_forward_prefetch([prev])
