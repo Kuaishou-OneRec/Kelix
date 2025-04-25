@@ -260,9 +260,11 @@ def get_argument_parser():
 
 
 
-def _init_profiler(self, **kwargs: Any) -> None:
+def _init_profiler(**kwargs: Any) -> None:
     import tempfile
     import torch.distributed as D
+    import recovlm.profiler as P
+
     P.enable_dist_aggregation()
     output_dir = kwargs.get("output_dir", None)
 
@@ -287,7 +289,7 @@ def _init_profiler(self, **kwargs: Any) -> None:
                     os.path.join(output_dir, str(prof.step_num) + ".json")
                 )
 
-        self.torch_profiler = torch.profiler.profile(
+        torch_profiler = torch.profiler.profile(
             activities=[
                 torch.profiler.ProfilerActivity.CPU,
                 torch.profiler.ProfilerActivity.CUDA,
@@ -300,6 +302,7 @@ def _init_profiler(self, **kwargs: Any) -> None:
             ),
             on_trace_ready=trace_handler,
         )
+        return torch_profiler
 
 def save_model_checkpoint(
     model,
