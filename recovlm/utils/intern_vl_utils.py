@@ -203,7 +203,9 @@ def process_vision_info_internvl(messages:list,
         value = ""
         content = conversation["content"]
         for turn in content:
-          if turn["type"] == "image":
+          if isinstance(turn, str):
+            value += turn
+          elif turn["type"] == "image":
             turn_images = dynamic_preprocess(turn["image"], min_num=min_dynamic_patch, max_num=max_dynamic_patch,
                                     image_size=image_size, use_thumbnail=use_thumbnail)
             images += [image for image in turn_images]
@@ -248,7 +250,9 @@ def process_vision_info_internvl(messages:list,
         value = ""
         content = conversation["content"]
         for turn in content:
-          if isinstance(turn,dict):
+          if isinstance(turn, str):
+            value += turn
+          elif isinstance(turn,dict):
             if turn["type"] == "text":
                 value += turn["text"]
           else:
