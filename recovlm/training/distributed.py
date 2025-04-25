@@ -159,20 +159,14 @@ def get_shard_conditions(
         >>> print(matches)
         >>> ["layers.0", "decoder.layers.1", "embedding"]
     """
-    return True
-    print('=' * 40)
-    print(f"shard condition()", name)
     if names_to_match and name in names_to_match:
-        print(True)
         return True
 
     name_list = name.split(".")
     if len(name_list) >= 2:
         res = name_list[-2] == "layers" and str.isdigit(name_list[-1])
-        print("shard condition", res)
         return res
 
-    print(False)
     return False
 
 
@@ -216,15 +210,16 @@ def shard_model(
     # Shard the model with FSDP, iterating in reverse to start with
     # lowest-level modules first
     num_layers_sharded = 0
-    # prev = None
-    if dist.get_rank() == 0:
-        print(list(model.named_modules()))
+
     layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
     for n, m in reversed(list(model.named_modules())):
         if m in layers:
+            if dist.get_rank() == 0:
+                print(n)
             fully_shard(m, **fsdp_kwargs)
             num_layers_sharded += 1
 
+    print('=' * 40)
     if num_layers_sharded == 0:
         raise ValueError(
             "No layer modules were sharded. Please check if shard conditions are working as expected."
