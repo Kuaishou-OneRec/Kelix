@@ -260,49 +260,28 @@ def get_argument_parser():
 
 
 
-def _init_profiler(**kwargs: Any) -> None:
-    import tempfile
+def _init_profiler(output_dir, start_step=5, end_step=10) -> None:
     import torch.distributed as D
-    import recovlm.profiler as P
+    def trace_handler(prof):
+        if D.rank() == 0:
+            prof.export_chrome_trace(
+                os.path.join(output_dir, str(prof.step_num) + ".json")
+            )
 
-    P.enable_dist_aggregation()
-    output_dir = kwargs.get("output_dir", None)
-
-    if D.rank() == 0:
-        if not output_dir:
-            output_dir = tempfile.mktemp(prefix="profiler_", dir="./")
-
-        if not os.path.exists(output_dir):
-            os.mkdir(output_dir)
-        elif not os.path.isdir(output_dir):
-            raise ValueError(f"profiler path:{output_dir} is not directory")
-
-        P.set_report_file_path(os.path.join(output_dir, "metrics.txt"))
-
-    start_step = kwargs.pop("start_step", None)
-    end_step = kwargs.pop("end_step", None)
-    if start_step and end_step:
-
-        def trace_handler(prof):
-            if D.rank() == 0:
-                prof.export_chrome_trace(
-                    os.path.join(output_dir, str(prof.step_num) + ".json")
-                )
-
-        torch_profiler = torch.profiler.profile(
-            activities=[
-                torch.profiler.ProfilerActivity.CPU,
-                torch.profiler.ProfilerActivity.CUDA,
-            ],
-            schedule=torch.profiler.schedule(
-                wait=1,
-                warmup=start_step - 1,
-                active=end_step - start_step,
-                repeat=1,
-            ),
-            on_trace_ready=trace_handler,
-        )
-        return torch_profiler
+    torch_profiler = torch.profiler.profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ],
+        schedule=torch.profiler.schedule(
+            wait=1,
+            warmup=start_step - 1,
+            active=end_step - start_step,
+            repeat=1,
+        ),
+        on_trace_ready=trace_handler,
+    )
+    return torch_profiler
 
 def save_model_checkpoint(
     model,
@@ -744,7 +723,7 @@ def train():
       dataloader.load_state_dict(dataloader_state_dict)
 
   ##############
-  torch_profiler = _init_profiler(output_dir=os.path.join(args.output_dir, "torch_profile"), start_step=0, end_step=99999)
+  torch_profiler = _init_profiler(output_dir=os.path.join(args.output_dir, "torch_profile"))
 
   loss_fn = CrossEntropyLoss(
     ignore_index=-100, return_token_loss=True, shift_labels=False)
