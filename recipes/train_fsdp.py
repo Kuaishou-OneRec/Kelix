@@ -12,6 +12,7 @@ import logging
 import collections
 import pickle
 import itertools
+import contextlib
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
@@ -231,6 +232,9 @@ def get_argument_parser():
   parser.add_argument("--seed", type=int, default=123,
                       help="Manual seed for RNG")
 
+  parser.add_argument("--debug_dataset", type=bool, default=False,
+                      help="invetigate dataset for debugging")
+  
   parser.add_argument("--monitor_datasource_loss", action="store_true",
                       help="Whether to monitor loss of each datasource")
 
@@ -241,6 +245,9 @@ def get_argument_parser():
 
   parser.add_argument("--kml_id", type=str, default=None,
                       help="KML_ID")
+
+  parser.add_argument("--enable_profile", type=bool, default=True,
+                      help="init torch profile")
 
   parser.add_argument("--kml_task_id", type=str, default=None,
                       help="KML_TASK_ID")
@@ -416,6 +423,10 @@ def freeze_params(args, model):
     raise NotImplementedError(f"freeze_params Not support model class: {args.model_class}")
 
 
+def setup_profile(args):
+  pass
+
+
 def train():
   arg_parser = get_argument_parser()
   args = arg_parser.parse_args()
@@ -441,6 +452,7 @@ def train():
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+
   # torch init
   torch.cuda.set_device(local_rank)
   torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
@@ -706,6 +718,9 @@ def train():
   global_step = 0
   # get_sequence_parallel_group("gloo")
   for micro_step, batch in enumerate(gather_by_group(dataloader, get_sequence_parallel_group())):
+    if args.debug_dataset: 
+      continue
+
     if show_cnt > 0 and dist.get_rank() == 0:
       with Timer("Show data"):
         input_text = tokenizer.decode(batch['input_ids'][0])

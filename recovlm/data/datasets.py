@@ -555,9 +555,35 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
         assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"
         return inputs
     else:
-      raise ValueError(
-        f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
+      raise SampleTooLongError(
+          sample=sample,
+          max_length=self.max_length,
+          retry=retry
       )
+
+
+class SampleTooLongError(Exception):
+    """Exception raised when a sample exceeds maximum allowed length."""
+    
+    def __init__(self, sample, max_length, retry):
+        self.sample = sample
+        self.max_length = max_length
+        self.retry = retry
+        message = (f"Unable to generate sample within max_length={max_length} "
+                  f"after {retry} retries. Sample length: {len(sample)}")
+        super().__init__(message)
+        
+    def get_sample(self):
+        """Get the problematic sample."""
+        return self.sample
+        
+    def get_max_length(self):
+        """Get the maximum allowed length."""
+        return self.max_length
+        
+    def get_retry_count(self):
+        """Get the number of retries attempted."""
+        return self.retry
   
   def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
     packed_input_ids = []
@@ -927,20 +953,24 @@ class ChatCompletionVisionDataset(IterableDataset):
     msg_key = "message" if "message" in sample["json"] else "messages"
     messages = sample["json"][msg_key]
     for turn in messages:
-      content = turn["content"]
-      if isinstance(content, str):
-        continue
-      for block in content:
-        if block["type"] == "image":
-          self._fill_image_block(block, sample, 
-                                  conf=data_conf)
-        elif block["type"] == "video":
-          self._fill_video_block(block, sample,
-                                  conf=data_conf)
-        elif block["type"] == "text":
+      try:
+        content = turn["content"]
+        if isinstance(content, str):
           continue
-        else:
-          raise ValueError(f"sample process error, unsupport value type: {block['type']}")
+        for block in content:
+          if block["type"] == "image":
+            self._fill_image_block(block, sample, 
+                                    conf=data_conf)
+          elif block["type"] == "video":
+            self._fill_video_block(block, sample,
+                                    conf=data_conf)
+          elif block["type"] == "text":
+            continue
+          else:
+            raise ValueError(f"sample process error, unsupport value type: {block['type']}")
+      except Exception as e:
+        print(f"sample process error, messages={messages}\n, sample={sample}")
+        raise e
 
     text = self.processor.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
@@ -1952,7 +1982,7 @@ class ParquetDataset(IterableDataset):
       elif isinstance(k, tuple) and len(k) == 2:
         tmp_finish_dict[k] = v
       else:
-        raise NotImplementedError(f"Unsupported dataloader checkpoint format.") 
+        raise NotImplementedError(f"Unsupported dataloader checkpoint format. {tmp_finish_dict}") 
     
     for k, v in offset_dict.items():
       if isinstance(k, str):
@@ -1962,7 +1992,7 @@ class ParquetDataset(IterableDataset):
       elif isinstance(k, tuple) and len(k) == 3:
         tmp_offset_dict[k] = v
       else:
-        raise NotImplementedError(f"Unsupported dataloader checkpoint format.") 
+        raise NotImplementedError(f"Unsupported dataloader checkpoint format. {tmp_offset_dict}") 
 
     # clear cur state
     self.finish_dict_all[worker].clear()
@@ -2024,6 +2054,7 @@ class ParquetDataset(IterableDataset):
         sample_data["messages"] = messages.tolist()
       else:
         raise NotImplementedError(f"Unsupported sample, message type is {type(messages)}, message={messages}, segments type is {type(segments)}, segments={segments}")
+
       samples["json"] = sample_data
 
       # process images
@@ -2752,7 +2783,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, {sample=}"
           f"errmsg={traceback.format_exc()}")
         continue
 
@@ -2827,3 +2858,6 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
   
   def load_state_dict(self, state_dict):
     self.dataset.load_state_dict(state_dict)
+
+
+
