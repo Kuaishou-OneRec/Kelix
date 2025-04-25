@@ -867,7 +867,7 @@ def train():
           optimizer.zero_grad()
           global_step += 1
 
-        ticker.tick("optimizer.step")
+        ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
 
       ########## dataset source monitor ###############
       if args.monitor_datasource_loss:
@@ -897,6 +897,7 @@ def train():
       acc_avg_loss += avg_loss
 
       ticker.tick("monitor_datasource_cnt")
+      log_acc_step = args.logging_per_step * args.gradient_accumulation_steps
       if global_step % args.logging_per_step == 0 and \
               (micro_step + 1) % args.gradient_accumulation_steps == 0:
 
@@ -943,7 +944,7 @@ def train():
             "perf/image_token_pre_iter_per_gpu":total_num_image_tokens / total_num_samples
           }
 
-          ticker.tick("log_dict")
+          ticker.tick(f"log_dict*{log_acc_step}")
 
           for name, data in log_dict.items():
             if data is not None and tb_writer:
@@ -988,7 +989,7 @@ def train():
                   global_step=global_step,
                   new_style=True)
               
-          ticker.tick("tb_writer.add_scalar")
+          ticker.tick(f"tb_writer.add_scalar*{log_acc_step}")
           print_rank_0(
             f"Step: {global_step}, Loss: {avg_loss}, "
             f"Learning Rate: {learning_rate}, "
@@ -1061,9 +1062,9 @@ def train():
                 dataloader_path,
                 f"rank{dist.get_rank()}_global_step{global_step}.pth")
               )
-        ticker.tick("save_ckpt")
-        iter_ticker.tick("iter_ticker")
+        ticker.tick(f"save_ckpt*{args.save_checkpoint_per_step * args.gradient_accumulation_steps}") 
 
+      iter_ticker.tick("iter_ticker")
       if torch_profiler: torch_profiler.step()
 
 
