@@ -62,7 +62,6 @@ class InternVLChatModel(PreTrainedModel):
         # Enable Flash Attention if supported, otherwise fall back to eager attention.
         use_flash_attn = use_flash_attn if has_flash_attn else False
         config.vision_config.use_flash_attn = True if use_flash_attn else False
-
         config.llm_config.attn_implementation = 'flash_attention_2' if use_flash_attn else 'eager'
 
         logger.info(f'num_image_token: {self.num_image_token}')
@@ -195,6 +194,11 @@ class InternVLChatModel(PreTrainedModel):
 
         input_embeds = input_embeds.reshape(B, N, C)
 
+        cu_seqlens = kwargs.get("cu_seqlens"),
+        assert cu_seqlens is not None, "cu_seqlens"
+        # max_seqlen = None
+        # if cu_seqlens:
+        #     max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
         outputs = self.language_model(
             inputs_embeds=input_embeds,
             attention_mask=attention_mask,
@@ -204,6 +208,7 @@ class InternVLChatModel(PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cu_seqlens=kwargs.get("cu_seqlens"),
         )
         logits = outputs.logits
 

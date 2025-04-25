@@ -555,7 +555,7 @@ def train():
     model=model,
     shard_conditions=[get_shard_conditions],
     cpu_offload=False,
-    reshard_after_forward=False, # args.reshard_after_forward,
+    reshard_after_forward=args.reshard_after_forward,
     dp_mesh=device_mesh,
     fp32_weight=args.fp32_weight
   )
@@ -792,22 +792,25 @@ def train():
 
       num_samples = (sample_idx.max() + 1).sum()
 
+      num_image_tokens = pixel_values.shape[0] * 1024 if args.model_class == "InternVLChatModel" else 0
       num_valid_tokens = num_tokens - (sample_idx == -1).sum()
       input_ids.numel()
 
       token_metrics = torch.tensor(
-        [num_tokens, num_samples, num_valid_tokens]).cuda()
+        [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda()
 
       dist.all_reduce(
         token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
       num_tokens = token_metrics[0]
       num_samples = token_metrics[1]
-      num_valid_tokens = token_metrics[2] 
+      num_valid_tokens = token_metrics[2]
+      num_image_tokens = token_metrics[3]
 
       total_num_samples += num_samples.item()
       total_num_tokens += num_tokens.item()
       total_num_valid_tokens += num_valid_tokens.item()
+      total_num_image_tokens += num_image_tokens.item()
 
       acc_num_samples += num_samples.item()
       acc_num_tokens += num_tokens.item()
@@ -926,6 +929,7 @@ def train():
             "perf/valid_total_num_tokens": total_num_valid_tokens,
             "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
+            "perf/image_token_pre_iter_per_gpu":total_num_image_tokens / total_num_samples
           }
 
           for name, data in log_dict.items():
@@ -981,8 +985,10 @@ def train():
             f"total_num_tokens: {total_num_tokens}, "
             f"total_num_samples: {total_num_samples}, "
             f"total_num_valid_tokens: {total_num_valid_tokens}, "
-            f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, "
-          )
+            f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, ",
+            f"image_token_per_sample_per_gpu : {total_num_image_tokens/total_num_samples }"
+        )
+        
 
           # upload heart_beat to remote
           if args.heartbeat_monitor:

@@ -2057,43 +2057,40 @@ class ParquetDataset(IterableDataset):
 
       samples["json"] = sample_data
 
-      # process images
-      if isinstance(images, str):
-        images = json.loads(images)
-      elif isinstance(images, dict):
-        pass
-      else:
-        raise NotImplementedError(f"Unsupported image field type, {type(raw_row_data['images'])=}")
+      self._load_images_to_samples(images, samples, raw_row_data)
 
-      # for image_name in images:
-      #   image_b64 = images[image_name]
-      #   image_bytes = base64.b64decode(image_b64)
-      #   image_bytes_stream = BytesIO(image_bytes)
-      #   image = Image.open(image_bytes_stream)
-      #   samples[image_name] = image
-
-      for image_name in images:
-        image_b64 = images[image_name]
-        # 先检查是否是有效文件路径
-        if isinstance(image_b64, str) and len(image_b64) < 300 and os.path.exists(image_b64):
-            try:
-                image = Image.open(image_b64)
-                samples[image_name] = image
-            except Exception as e:
-                raise ValueError(f"Failed to load image from path {image_b64}: {str(e)}")
-        # 否则按base64处理
-        else:
-            try:
-                image_bytes = base64.b64decode(image_b64)
-                image_bytes_stream = BytesIO(image_bytes)
-                image = Image.open(image_bytes_stream)
-                samples[image_name] = image
-            except Exception as e:
-                raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}")
       return samples
     except:
       logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}, images={images}\nsamples={samples}")
       return None
+
+  def _load_images_to_samples(self, images, samples, raw_row_data):
+    # process images
+    if isinstance(images, str):
+      images = json.loads(images)
+    elif isinstance(images, dict):
+      pass
+    else:
+      raise NotImplementedError(f"Unsupported image field type, {type(raw_row_data['images'])=}")
+
+    for image_name in images:
+      image_b64 = images[image_name]
+      # 先检查是否是有效文件路径
+      if isinstance(image_b64, str) and os.path.exists(image_b64):
+          try:
+              image = Image.open(image_b64)
+              samples[image_name] = image
+          except Exception as e:
+              raise ValueError(f"Failed to load image from path {image_b64}: {str(e)}")
+      # 否则按base64处理
+      else:
+          try:
+              image_bytes = base64.b64decode(image_b64)
+              image_bytes_stream = BytesIO(image_bytes)
+              image = Image.open(image_bytes_stream)
+              samples[image_name] = image
+          except Exception as e:
+              raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}")
 
   def __iter__(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
