@@ -219,7 +219,7 @@ def shard_model(
     # prev = None
     if dist.get_rank() == 0:
         print(list(model.named_modules()))
-    layers = list(model.encoder.layers) + list(model.language_model.model.layers)
+    layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
     for n, m in reversed(list(model.named_modules())):
         #if any([shard_condition(n, m) for shard_condition in shard_conditions]):
         #    if hasattr(m, 'forward') and not isinstance(m, nn.ModuleList):
