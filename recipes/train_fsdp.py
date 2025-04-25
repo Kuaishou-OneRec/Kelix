@@ -207,8 +207,6 @@ def get_argument_parser():
   parser.add_argument("--freeze_projector", action="store_true",
                       help="Freeze visual projector layers.")
 
-
-
   parser.add_argument("--use_flash_attention_2", action="store_true",
                       help="Whether to use flash attention 2")
 
