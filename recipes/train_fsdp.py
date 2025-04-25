@@ -233,7 +233,7 @@ def get_argument_parser():
   parser.add_argument("--seed", type=int, default=123,
                       help="Manual seed for RNG")
 
-  parser.add_argument("--debug_dataset", type=bool, default=False,
+  parser.add_argument("--debug_dataset", action="store_true",
                       help="invetigate dataset for debugging")
   
   parser.add_argument("--monitor_datasource_loss", action="store_true",
@@ -247,7 +247,7 @@ def get_argument_parser():
   parser.add_argument("--kml_id", type=str, default=None,
                       help="KML_ID")
 
-  parser.add_argument("--enable_profile", type=bool, default=False,
+  parser.add_argument("--enable_profile", action="store_true",
                       help="init torch profile")
 
   parser.add_argument("--kml_task_id", type=str, default=None,
