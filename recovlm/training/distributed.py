@@ -219,7 +219,7 @@ def shard_model(
     # prev = None
     for n, m in reversed(list(model.named_modules())):
         if any([shard_condition(n, m) for shard_condition in shard_conditions]):
-            if hasattr(m, 'forward'):
+            if hasattr(m, 'forward') and not isinstance(m, nn.ModuleList):
                 fully_shard(m, **fsdp_kwargs)
             # if prev is not None: 
             #     # print(f"{m} set_modules_to_forward_prefetch {prev}")
@@ -258,7 +258,7 @@ def shard_model(
     # for _, layer in reversed(list(model.named_modules())):
     # for i_layer, layer in reversed(list(traverse_modules(model))):
     for _, layer in reversed(list(model.named_modules())):
-        print(f"traverse layer {i_layer}: {layer}")
+        print(f"traverse layer {_}: {layer}")
         if prev is not None: 
             if hasattr(layer, 'set_modules_to_forward_prefetch'):
                 print(f"{layer} set_modules_to_forward_prefetch {prev}")
