@@ -12,6 +12,8 @@ import logging
 import collections
 import pickle
 import itertools
+import contextlib
+
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
@@ -95,10 +97,10 @@ def get_argument_parser():
                             "the --resume_dataloader switch will be turned on, " \
                             "while the --load_weights_only option will be turned off.")
   
-  parser.add_argument("--fp32_weight", type=bool, default=True,
+  parser.add_argument("--fp32_weight", action="store_true",
                       help="Whether use fp32 for model weight updating")
   
-  parser.add_argument("--reshard_after_forward", type=bool, default=True,
+  parser.add_argument("--reshard_after_forward", action="store_true",
                       help="enable reshard_after_forward to enable Zero3 (default)")
 
   parser.add_argument("--save_checkpoint_per_step", type=int, default=1000,
@@ -205,8 +207,6 @@ def get_argument_parser():
   parser.add_argument("--freeze_projector", action="store_true",
                       help="Freeze visual projector layers.")
 
-
-
   parser.add_argument("--use_flash_attention_2", action="store_true",
                       help="Whether to use flash attention 2")
 
@@ -231,6 +231,9 @@ def get_argument_parser():
   parser.add_argument("--seed", type=int, default=123,
                       help="Manual seed for RNG")
 
+  parser.add_argument("--debug_dataset", action="store_true",
+                      help="invetigate dataset for debugging")
+  
   parser.add_argument("--monitor_datasource_loss", action="store_true",
                       help="Whether to monitor loss of each datasource")
 
@@ -242,6 +245,9 @@ def get_argument_parser():
   parser.add_argument("--kml_id", type=str, default=None,
                       help="KML_ID")
 
+  parser.add_argument("--enable_profile", action="store_true",
+                      help="init torch profile")
+
   parser.add_argument("--kml_task_id", type=str, default=None,
                       help="KML_TASK_ID")
   
@@ -250,6 +256,34 @@ def get_argument_parser():
   
   return parser
 
+
+
+def _init_profiler(output_dir, start_step=5, end_step=10) -> None:
+    import torch.distributed as D
+    import os
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    def trace_handler(prof):
+        if D.get_rank() == 0:
+            prof.export_chrome_trace(
+                os.path.join(output_dir, str(prof.step_num) + ".json")
+            )
+
+    torch_profiler = torch.profiler.profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ],
+        schedule=torch.profiler.schedule(
+            wait=1,
+            warmup=start_step - 1,
+            active=end_step - start_step,
+            repeat=1,
+        ),
+        on_trace_ready=trace_handler,
+    )
+    return torch_profiler
 
 def save_model_checkpoint(
     model,
@@ -416,6 +450,10 @@ def freeze_params(args, model):
     raise NotImplementedError(f"freeze_params Not support model class: {args.model_class}")
 
 
+def setup_profile(args):
+  pass
+
+
 def train():
   arg_parser = get_argument_parser()
   args = arg_parser.parse_args()
@@ -441,6 +479,7 @@ def train():
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+
   # torch init
   torch.cuda.set_device(local_rank)
   torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
@@ -686,6 +725,7 @@ def train():
       dataloader.load_state_dict(dataloader_state_dict)
 
   ##############
+  torch_profiler = _init_profiler(output_dir=os.path.join(args.output_dir, "torch_profile"))
 
   loss_fn = CrossEntropyLoss(
     ignore_index=-100, return_token_loss=True, shift_labels=False)
@@ -705,284 +745,307 @@ def train():
   grad_norm = 0.0
   global_step = 0
   # get_sequence_parallel_group("gloo")
-  for micro_step, batch in enumerate(gather_by_group(dataloader, get_sequence_parallel_group())):
-    if show_cnt > 0 and dist.get_rank() == 0:
-      with Timer("Show data"):
-        input_text = tokenizer.decode(batch['input_ids'][0])
-        print_rank_0(
-            f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
-        print_rank_0(batch)
-        show_cnt -= 1
-        
-    data_source = batch.pop("data_source", None) # dataset source list cur batch
-    #iteration = model.global_steps
-    to_cuda(batch)
-    input_ids = batch["input_ids"]
-    loss_mask = batch["loss_mask"]
-    attention_mask = batch.get("attention_mask", None)
-    pixel_values = batch.get("pixel_values", None)
-    pixel_values_videos = batch.get("pixel_values_videos", None)
-    image_grid_thw = batch.get("image_grid_thw", None)
-    video_grid_thw = batch.get("video_grid_thw", None)
-    cu_seqlens = batch.get("cu_seqlens", None)
-    sample_idx = batch["sample_idx"]
-    position_ids = batch.get("position_ids", None)
-    image_flags = batch.get("image_flags", None)
+  data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
+  micro_step = 0
+  while True:
+    with contextlib.ExitStack() as ctx:
 
-    # 打印 token 数量
-    token_count = input_ids.numel()  # 计算 token 数量
-    print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
+      if torch_profiler: ctx.enter_context(torch_profiler)
 
-    num_tokens = input_ids.numel()
+      try:
+          batch = next(data_iter)
+      except StopIteration:
+          break
+      
+      micro_step += 1
 
-    num_samples = (sample_idx.max() + 1).sum()
+      # if args.debug_dataset:  continue
 
-    num_valid_tokens = num_tokens - (sample_idx == -1).sum()
-    input_ids.numel()
+      if show_cnt > 0 and dist.get_rank() == 0:
+        with Timer("Show data"):
+          input_text = tokenizer.decode(batch['input_ids'][0])
+          print_rank_0(
+              f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
+          print_rank_0(batch)
+          show_cnt -= 1
+          
+      data_source = batch.pop("data_source", None) # dataset source list cur batch
+      #iteration = model.global_steps
+      to_cuda(batch)
+      input_ids = batch["input_ids"]
+      loss_mask = batch["loss_mask"]
+      attention_mask = batch.get("attention_mask", None)
+      pixel_values = batch.get("pixel_values", None)
+      pixel_values_videos = batch.get("pixel_values_videos", None)
+      image_grid_thw = batch.get("image_grid_thw", None)
+      video_grid_thw = batch.get("video_grid_thw", None)
+      cu_seqlens = batch.get("cu_seqlens", None)
+      sample_idx = batch["sample_idx"]
+      position_ids = batch.get("position_ids", None)
+      image_flags = batch.get("image_flags", None)
 
-    token_metrics = torch.tensor(
-      [num_tokens, num_samples, num_valid_tokens]).cuda()
+      # 打印 token 数量
+      token_count = input_ids.numel()  # 计算 token 数量
+      print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
 
-    dist.all_reduce(
-      token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+      num_tokens = input_ids.numel()
 
-    num_tokens = token_metrics[0]
-    num_samples = token_metrics[1]
-    num_valid_tokens = token_metrics[2] 
+      num_samples = (sample_idx.max() + 1).sum()
 
-    total_num_samples += num_samples.item()
-    total_num_tokens += num_tokens.item()
-    total_num_valid_tokens += num_valid_tokens.item()
+      num_image_tokens = pixel_values.shape[0] * 1024 if args.model_class == "InternVLChatModel" else 0
+      num_valid_tokens = num_tokens - (sample_idx == -1).sum()
+      input_ids.numel()
 
-    acc_num_samples += num_samples.item()
-    acc_num_tokens += num_tokens.item()
-    acc_valid_num_tokens += num_valid_tokens.item()
+      token_metrics = torch.tensor(
+        [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda()
 
-    input_ids = input_ids * (input_ids > 0).to(torch.int64)
-    labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
+      dist.all_reduce(
+        token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
-    with Timer("Fwd"):
-      if args.model_class == "InternVLChatModel":
-          output = model(
-            input_ids = input_ids, attention_mask=attention_mask,
-            pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-            image_flags = image_flags,
-            cu_seqlens=cu_seqlens
-          )
-      else:
-          output = model(
-            input_ids = input_ids, attention_mask=attention_mask,
-            pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-            cu_seqlens=cu_seqlens
-          )
+      num_tokens = token_metrics[0]
+      num_samples = token_metrics[1]
+      num_valid_tokens = token_metrics[2]
+      num_image_tokens = token_metrics[3]
 
-      # (b, N/P, V)
-      logits = output.logits
+      total_num_samples += num_samples.item()
+      total_num_tokens += num_tokens.item()
+      total_num_valid_tokens += num_valid_tokens.item()
+      total_num_image_tokens += num_image_tokens.item()
 
-      # 提前shift logits & labels
-      pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
-          dtype=labels.dtype).to(device=labels.device)
-      labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
-      local_labels = get_local_sequence(labels, seq_idx=1)
-      loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
+      acc_num_samples += num_samples.item()
+      acc_num_tokens += num_tokens.item()
+      acc_valid_num_tokens += num_valid_tokens.item()
 
-      # del logits
-      # del labels
-      # del local_labels
+      input_ids = input_ids * (input_ids > 0).to(torch.int64)
+      labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
 
-    with Timer("bwd"):
-      loss.backward(loss)
-      clip_grad_by_value(model, args.clip_range)
-      if (micro_step + 1) % args.gradient_accumulation_steps == 0:
-        optimizer.step()
-        lr_scheduler.step()
-        optimizer.zero_grad()
-        global_step += 1
-
-    ########## dataset source monitor ###############
-    if args.monitor_datasource_loss:
-      # WARN: assume batch_size = 1
-      local_sample_idx = get_local_sequence(sample_idx).squeeze()
-      unique_sample_idx = local_sample_idx.unique()
-
-      for s_idx in unique_sample_idx:
-        if s_idx < 0:
-          continue
-        mask = local_sample_idx == s_idx
-        sum_loss = per_token_loss[mask].sum()
-
-        key = data_source[int(s_idx.item())]
-        batch_data_source_loss[key] += sum_loss.item()
-        batch_data_source_tokens[key] += mask.sum().item()
-        valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
-
-    if args.monitor_datasource_cnt:
-      for data_source_name in data_source:
-        local_acc_data_source_samples[data_source_name] += 1
-  
-    #########################################
-    avg_loss = torch.tensor(loss.item()).cuda()
-    dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
-    avg_loss = avg_loss.item() / dist.get_world_size()
-    acc_avg_loss += avg_loss
-
-    if global_step % args.logging_per_step == 0 and \
-            (micro_step + 1) % args.gradient_accumulation_steps == 0:
-
-      with Timer("reduce data source metrics"):
-        batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
-        batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
-        valid_data_source_tokens = dist_reduce_dict(valid_data_source_tokens)
-        total_data_source_samples = dist_reduce_dict(
-          local_acc_data_source_samples, group=get_data_parallel_group())
-        for ds_key, ds_num_tokens in batch_data_source_tokens.items():
-          total_data_source_tokens[ds_key] += ds_num_tokens
-        
-
-      if dist.get_rank() == 0:
-        model_lrs = lr_scheduler.get_last_lr()
-        learning_rate = model_lrs[0]
-        if len(model_lrs) > 2:
-          vision_learning_rate = lr_scheduler.get_lr()[2]
+      with Timer("Fwd"):
+        if args.model_class == "InternVLChatModel":
+            output = model(
+              input_ids = input_ids, attention_mask=attention_mask,
+              pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+              image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+              image_flags = image_flags,
+              cu_seqlens=cu_seqlens
+            )
         else:
-          vision_learning_rate = lr_scheduler.get_lr()[1]
-        end_time = time.time()
-        sec_per_step = (end_time - start_time) # / args.gradient_accumulation_steps
-        tokens_per_sec_per_gpu = \
-          acc_num_tokens  / (end_time - start_time) / dist.get_world_size()
-        samples_per_sec_per_gpu = \
-          acc_num_samples  / (end_time - start_time) / dist.get_world_size()
-        valid_tokens_per_sec_per_gpu = \
-          acc_valid_num_tokens / (end_time - start_time) / dist.get_world_size()
-        avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
-        start_time = end_time
-        log_dict = {
-          "training/loss": avg_loss,
-          f"training/grad_norm": get_global_grad_norm(model).detach().cpu().item(),
-          "training/learning_rate": learning_rate,
-          "training/vision_learning_rate": vision_learning_rate,
-          "perf/sec_per_step": sec_per_step,
-          "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
-          "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
-          "perf/total_num_tokens": total_num_tokens,
-          "perf/total_num_samples": total_num_samples,
-          "perf/valid_total_num_tokens": total_num_valid_tokens,
-          "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
-          "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
-        }
+            output = model(
+              input_ids = input_ids, attention_mask=attention_mask,
+              pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+              image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+              cu_seqlens=cu_seqlens
+            )
 
-        for name, data in log_dict.items():
-          if data is not None and tb_writer:
-            tb_writer.add_scalar(
-                name,
-                data,
-                global_step=global_step,
-                new_style=True)
+        # (b, N/P, V)
+        logits = output.logits
 
-            # log metric by valid tokens
-            if name.startswith("training/"):
+        # 提前shift logits & labels
+        pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
+            dtype=labels.dtype).to(device=labels.device)
+        labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
+        local_labels = get_local_sequence(labels, seq_idx=1)
+        loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
+
+        # del logits
+        # del labels
+        # del local_labels
+
+      with Timer("bwd"):
+        loss.backward(loss)
+        clip_grad_by_value(model, args.clip_range)
+        if (micro_step + 1) % args.gradient_accumulation_steps == 0:
+          optimizer.step()
+          lr_scheduler.step()
+          optimizer.zero_grad()
+          global_step += 1
+
+      ########## dataset source monitor ###############
+      if args.monitor_datasource_loss:
+        # WARN: assume batch_size = 1
+        local_sample_idx = get_local_sequence(sample_idx).squeeze()
+        unique_sample_idx = local_sample_idx.unique()
+
+        for s_idx in unique_sample_idx:
+          if s_idx < 0:
+            continue
+          mask = local_sample_idx == s_idx
+          sum_loss = per_token_loss[mask].sum()
+
+          key = data_source[int(s_idx.item())]
+          batch_data_source_loss[key] += sum_loss.item()
+          batch_data_source_tokens[key] += mask.sum().item()
+          valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
+
+      if args.monitor_datasource_cnt:
+        for data_source_name in data_source:
+          local_acc_data_source_samples[data_source_name] += 1
+    
+      #########################################
+      avg_loss = torch.tensor(loss.item()).cuda()
+      dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
+      avg_loss = avg_loss.item() / dist.get_world_size()
+      acc_avg_loss += avg_loss
+
+      if global_step % args.logging_per_step == 0 and \
+              (micro_step + 1) % args.gradient_accumulation_steps == 0:
+
+        with Timer("reduce data source metrics"):
+          batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
+          batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
+          valid_data_source_tokens = dist_reduce_dict(valid_data_source_tokens)
+          total_data_source_samples = dist_reduce_dict(
+            local_acc_data_source_samples, group=get_data_parallel_group())
+          for ds_key, ds_num_tokens in batch_data_source_tokens.items():
+            total_data_source_tokens[ds_key] += ds_num_tokens
+          
+
+        if dist.get_rank() == 0:
+          model_lrs = lr_scheduler.get_last_lr()
+          learning_rate = model_lrs[0]
+          if len(model_lrs) > 2:
+            vision_learning_rate = lr_scheduler.get_lr()[2]
+          else:
+            vision_learning_rate = lr_scheduler.get_lr()[1]
+          end_time = time.time()
+          sec_per_step = (end_time - start_time) # / args.gradient_accumulation_steps
+          tokens_per_sec_per_gpu = \
+            acc_num_tokens  / (end_time - start_time) / dist.get_world_size()
+          samples_per_sec_per_gpu = \
+            acc_num_samples  / (end_time - start_time) / dist.get_world_size()
+          valid_tokens_per_sec_per_gpu = \
+            acc_valid_num_tokens / (end_time - start_time) / dist.get_world_size()
+          avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
+          start_time = end_time
+          log_dict = {
+            "training/loss": avg_loss,
+            f"training/grad_norm": get_global_grad_norm(model).detach().cpu().item(),
+            "training/learning_rate": learning_rate,
+            "training/vision_learning_rate": vision_learning_rate,
+            "perf/sec_per_step": sec_per_step,
+            "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
+            "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
+            "perf/total_num_tokens": total_num_tokens,
+            "perf/total_num_samples": total_num_samples,
+            "perf/valid_total_num_tokens": total_num_valid_tokens,
+            "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
+            "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
+            "perf/image_token_pre_iter_per_gpu":total_num_image_tokens / total_num_samples
+          }
+
+          for name, data in log_dict.items():
+            if data is not None and tb_writer:
               tb_writer.add_scalar(
-                f"x_token_{name}",
-                data,
-                global_step=total_num_valid_tokens / args.gradient_accumulation_steps,
-                new_style=True
-              )
-
-        if args.monitor_datasource_loss and tb_writer:
-          for key, loss_sum in batch_data_source_loss.items():
-            tb_writer.add_scalar(
-                  f"data_source_loss/{key}",
-                  loss_sum / valid_data_source_tokens[key],
+                  name,
+                  data,
                   global_step=global_step,
                   new_style=True)
 
-        if args.monitor_datasource_cnt and tb_writer:
-          for key, samples in total_data_source_samples.items():
-            tb_writer.add_scalar(
-                f"data_source_sample_ratio/{key}",
-                1.0 * samples / total_num_samples,
-                global_step=global_step,
-                new_style=True)
-
-          for key, num_tokens in total_data_source_tokens.items():
-            tb_writer.add_scalar(
-                f"data_source_token_ratio/{key}",
-                1.0 * num_tokens / total_num_valid_tokens,
-                global_step=global_step,
-                new_style=True)
-
-        print_rank_0(
-          f"Step: {global_step}, Loss: {avg_loss}, "
-          f"Learning Rate: {learning_rate}, "
-          f"Grad Norm: {get_global_grad_norm(model).detach().cpu().item()}, "
-          f"Sec per Step: {sec_per_step}",
-          f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
-          f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
-          f"total_num_tokens: {total_num_tokens}",
-          f"total_num_samples: {total_num_samples}",
-          f"valid_tokens_per_sec_per_gpu: {valid_tokens_per_sec_per_gpu}, "
-          f"total_num_tokens: {total_num_tokens}, "
-          f"total_num_samples: {total_num_samples}, "
-          f"total_num_valid_tokens: {total_num_valid_tokens}, "
-          f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, "
-        )
-
-        # upload heart_beat to remote
-        if args.heartbeat_monitor:
-          heart_beat(int(acc_num_tokens))
-
-      acc_avg_loss = 0.0
-      acc_num_samples = 0
-      acc_num_tokens = 0
-      acc_valid_num_tokens = 0
-      batch_data_source_loss = collections.defaultdict(float)
-      batch_data_source_tokens = collections.defaultdict(int)
-      valid_data_source_tokens = collections.defaultdict(int)
-
-    if global_step % args.save_checkpoint_per_step == 0 and \
-        global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
-      
-      torch.cuda.empty_cache()
-
-      with Timer("save checkpoint"):
-        save_model_checkpoint(
-                    model=model,
-                    save_dir=args.output_dir,
-                    tag=f"step{global_step}",
-                    global_step=global_step,
-                    client_state={
-                        "total_num_valid_tokens": total_num_valid_tokens,
-                        "total_num_tokens": total_num_tokens,
-                        "total_num_samples": total_num_samples,
-                        "total_data_source_samples": total_data_source_samples,
-                        "total_data_source_tokens": total_data_source_tokens,
-                    },
-                    dataloader=dataloader,
-                    app_state=app_state.set_call_back(converter.revert) if args.model_class in \
-                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state, # app_state.set_call_back(state_dict), # no need to convert 
-                    dist_checkpointer=dist_checkpointer
+              # log metric by valid tokens
+              if name.startswith("training/"):
+                tb_writer.add_scalar(
+                  f"x_token_{name}",
+                  data,
+                  global_step=total_num_valid_tokens / args.gradient_accumulation_steps,
+                  new_style=True
                 )
-        try:
-          dataloader_state_dict = {
-            "dataloader_state_dict": dataloader.state_dict()
-          }
-        except:
-          dataloader_state_dict = None
-          logging.error(f"Dataloader cannot dump state_dict!!!!!!!!")
-        if dataloader_state_dict is not None:
-          # dataloader ckpt
-          dataloader_path = os.path.join(args.output_dir, "dataloader_ckpt")
-          if dist.get_rank() == 0:
-            os.makedirs(dataloader_path, exist_ok=True)
-          dist.barrier()
-          torch.save(
-            dataloader_state_dict,
-            os.path.join(
-              dataloader_path,
-              f"rank{dist.get_rank()}_global_step{global_step}.pth")
-            )
+
+          if args.monitor_datasource_loss and tb_writer:
+            for key, loss_sum in batch_data_source_loss.items():
+              tb_writer.add_scalar(
+                    f"data_source_loss/{key}",
+                    loss_sum / valid_data_source_tokens[key],
+                    global_step=global_step,
+                    new_style=True)
+
+          if args.monitor_datasource_cnt and tb_writer:
+            for key, samples in total_data_source_samples.items():
+              tb_writer.add_scalar(
+                  f"data_source_sample_ratio/{key}",
+                  1.0 * samples / total_num_samples,
+                  global_step=global_step,
+                  new_style=True)
+
+            for key, num_tokens in total_data_source_tokens.items():
+              tb_writer.add_scalar(
+                  f"data_source_token_ratio/{key}",
+                  1.0 * num_tokens / total_num_valid_tokens,
+                  global_step=global_step,
+                  new_style=True)
+
+          print_rank_0(
+            f"Step: {global_step}, Loss: {avg_loss}, "
+            f"Learning Rate: {learning_rate}, "
+            f"Grad Norm: {get_global_grad_norm(model).detach().cpu().item()}, "
+            f"Sec per Step: {sec_per_step}",
+            f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
+            f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
+            f"total_num_tokens: {total_num_tokens}",
+            f"total_num_samples: {total_num_samples}",
+            f"valid_tokens_per_sec_per_gpu: {valid_tokens_per_sec_per_gpu}, "
+            f"total_num_tokens: {total_num_tokens}, "
+            f"total_num_samples: {total_num_samples}, "
+            f"total_num_valid_tokens: {total_num_valid_tokens}, "
+            f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, ",
+            f"image_token_per_sample_per_gpu : {total_num_image_tokens/total_num_samples }"
+        )
+        
+
+          # upload heart_beat to remote
+          if args.heartbeat_monitor:
+            heart_beat(int(acc_num_tokens))
+
+        acc_avg_loss = 0.0
+        acc_num_samples = 0
+        acc_num_tokens = 0
+        acc_valid_num_tokens = 0
+        batch_data_source_loss = collections.defaultdict(float)
+        batch_data_source_tokens = collections.defaultdict(int)
+        valid_data_source_tokens = collections.defaultdict(int)
+
+      if global_step % args.save_checkpoint_per_step == 0 and \
+          global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
+        
+        torch.cuda.empty_cache()
+
+        with Timer("save checkpoint"):
+          save_model_checkpoint(
+                      model=model,
+                      save_dir=args.output_dir,
+                      tag=f"step{global_step}",
+                      global_step=global_step,
+                      client_state={
+                          "total_num_valid_tokens": total_num_valid_tokens,
+                          "total_num_tokens": total_num_tokens,
+                          "total_num_samples": total_num_samples,
+                          "total_data_source_samples": total_data_source_samples,
+                          "total_data_source_tokens": total_data_source_tokens,
+                      },
+                      dataloader=dataloader,
+                      app_state=app_state.set_call_back(converter.revert) if args.model_class in \
+                                  ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state, # app_state.set_call_back(state_dict), # no need to convert 
+                      dist_checkpointer=dist_checkpointer
+                  )
+          try:
+            dataloader_state_dict = {
+              "dataloader_state_dict": dataloader.state_dict()
+            }
+          except:
+            dataloader_state_dict = None
+            logging.error(f"Dataloader cannot dump state_dict!!!!!!!!")
+          if dataloader_state_dict is not None:
+            # dataloader ckpt
+            dataloader_path = os.path.join(args.output_dir, "dataloader_ckpt")
+            if dist.get_rank() == 0:
+              os.makedirs(dataloader_path, exist_ok=True)
+            dist.barrier()
+            torch.save(
+              dataloader_state_dict,
+              os.path.join(
+                dataloader_path,
+                f"rank{dist.get_rank()}_global_step{global_step}.pth")
+              )
+      if torch_profiler: torch_profiler.step()
+
 
   save_model_checkpoint(
                       model=model,

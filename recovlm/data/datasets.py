@@ -555,71 +555,97 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
         assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"
         return inputs
     else:
-      raise ValueError(
-        f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
+      raise SampleTooLongError(
+          sample=sample,
+          max_length=self.max_length,
+          retry=retry
       )
-  
-  def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
-    packed_input_ids = []
-    packed_position_ids = []
-    packed_loss_mask = []
-    packed_pixel_values = []
-    packed_image_gird_thw = []
-    cu_seqlens = [0]
 
-    for inputs in buffer:
-      packed_input_ids.append(inputs["input_ids"].flatten())
-      packed_loss_mask.append(inputs["loss_mask"].flatten())
-      packed_position_ids.append(inputs["position_ids"])
-      packed_pixel_values.append(inputs["pixel_values"])
-      packed_image_gird_thw.append(inputs["image_grid_thw"])
-      cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
 
-    packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
-    packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
-    packed_position_ids = torch.cat(packed_position_ids, dim=-1)
-    packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
-    packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
+class SampleTooLongError(Exception):
+    """Exception raised when a sample exceeds maximum allowed length."""
     
-    # pad to multiple of, necessary for sequence parallel
-    if (
-      self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
-    ):  # not divisible by multiple_of; here we align for grouping
-      padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
-      packed_input_ids = F.pad(
-        packed_input_ids, (0, padding_len), value=self.processor.tokenizer.pad_token_id)
-      packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
-      packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
-      cu_seqlens.append(cu_seqlens[-1] + padding_len)
- 
-    inputs = {
-      "input_ids": packed_input_ids,
-      "position_ids": packed_position_ids,
-      "loss_mask": packed_loss_mask,
-      "pixel_values": packed_pixel_values,
-      "image_grid_thw": packed_image_gird_thw,
-      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32)
-    }
-    return inputs
+    def __init__(self, sample, max_length, retry):
+        self.sample = sample
+        self.max_length = max_length
+        self.retry = retry
+        message = (f"Unable to generate sample within max_length={max_length} "
+                  f"after {retry} retries. Sample length: {len(sample)}")
+        super().__init__(message)
+        
+    def get_sample(self):
+        """Get the problematic sample."""
+        return self.sample
+        
+    def get_max_length(self):
+        """Get the maximum allowed length."""
+        return self.max_length
+        
+    def get_retry_count(self):
+        """Get the number of retries attempted."""
+        return self.retry
+  
+    def _packing(self, buffer: List[Dict[str, torch.Tensor]] ):
+      packed_input_ids = []
+      packed_position_ids = []
+      packed_loss_mask = []
+      packed_pixel_values = []
+      packed_image_gird_thw = []
+      cu_seqlens = [0]
 
-  def __iter__(self):
-    buffer = []
-    cur_length = 0
-    for sample in self.dataset:
-      try:
-        inputs = self._process(sample)
-      except:
-        print(traceback.format_exc())
-        continue
-      sample_length = inputs["input_ids"].shape[-1]
-      if cur_length + sample_length > self.max_length:
-        packed_inputs = self._packing(buffer)
-        yield packed_inputs
-        buffer = [inputs]
-        cur_length = sample_length
-      else:
-        buffer.append(inputs)
-        cur_length += sample_length
+      for inputs in buffer:
+        packed_input_ids.append(inputs["input_ids"].flatten())
+        packed_loss_mask.append(inputs["loss_mask"].flatten())
+        packed_position_ids.append(inputs["position_ids"])
+        packed_pixel_values.append(inputs["pixel_values"])
+        packed_image_gird_thw.append(inputs["image_grid_thw"])
+        cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
+
+      packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
+      packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
+      packed_position_ids = torch.cat(packed_position_ids, dim=-1)
+      packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
+      packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
+      
+      # pad to multiple of, necessary for sequence parallel
+      if (
+        self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
+      ):  # not divisible by multiple_of; here we align for grouping
+        padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+        packed_input_ids = F.pad(
+          packed_input_ids, (0, padding_len), value=self.processor.tokenizer.pad_token_id)
+        packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
+        packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
+        cu_seqlens.append(cu_seqlens[-1] + padding_len)
+  
+      inputs = {
+        "input_ids": packed_input_ids,
+        "position_ids": packed_position_ids,
+        "loss_mask": packed_loss_mask,
+        "pixel_values": packed_pixel_values,
+        "image_grid_thw": packed_image_gird_thw,
+        "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32)
+      }
+      return inputs
+
+    def __iter__(self):
+      buffer = []
+      cur_length = 0
+      for sample in self.dataset:
+        try:
+          inputs = self._process(sample)
+        except:
+          print(traceback.format_exc())
+          continue
+        sample_length = inputs["input_ids"].shape[-1]
+        if cur_length + sample_length > self.max_length:
+          packed_inputs = self._packing(buffer)
+          yield packed_inputs
+          buffer = [inputs]
+          cur_length = sample_length
+        else:
+          buffer.append(inputs)
+          cur_length += sample_length
 
 def get_assistant_mask(batch_input_ids: torch.Tensor,
                        start_pattern: Optional[List[int]],
@@ -927,20 +953,24 @@ class ChatCompletionVisionDataset(IterableDataset):
     msg_key = "message" if "message" in sample["json"] else "messages"
     messages = sample["json"][msg_key]
     for turn in messages:
-      content = turn["content"]
-      if isinstance(content, str):
-        continue
-      for block in content:
-        if block["type"] == "image":
-          self._fill_image_block(block, sample, 
-                                  conf=data_conf)
-        elif block["type"] == "video":
-          self._fill_video_block(block, sample,
-                                  conf=data_conf)
-        elif block["type"] == "text":
+      try:
+        content = turn["content"]
+        if isinstance(content, str):
           continue
-        else:
-          raise ValueError(f"sample process error, unsupport value type: {block['type']}")
+        for block in content:
+          if block["type"] == "image":
+            self._fill_image_block(block, sample, 
+                                    conf=data_conf)
+          elif block["type"] == "video":
+            self._fill_video_block(block, sample,
+                                    conf=data_conf)
+          elif block["type"] == "text":
+            continue
+          else:
+            raise ValueError(f"sample process error, unsupport value type: {block['type']}")
+      except Exception as e:
+        print(f"sample process error, messages={messages}\n, sample={sample}")
+        raise e
 
     text = self.processor.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
@@ -1239,7 +1269,7 @@ class ChatCompletionVisionDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, {sample=}"
           f"errmsg={traceback.format_exc()}")
         continue
 
@@ -1875,7 +1905,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, {sample=}"
           f"errmsg={traceback.format_exc()}")
         continue
 
@@ -1952,7 +1982,7 @@ class ParquetDataset(IterableDataset):
       elif isinstance(k, tuple) and len(k) == 2:
         tmp_finish_dict[k] = v
       else:
-        raise NotImplementedError(f"Unsupported dataloader checkpoint format.") 
+        raise NotImplementedError(f"Unsupported dataloader checkpoint format. {tmp_finish_dict}") 
     
     for k, v in offset_dict.items():
       if isinstance(k, str):
@@ -1962,7 +1992,7 @@ class ParquetDataset(IterableDataset):
       elif isinstance(k, tuple) and len(k) == 3:
         tmp_offset_dict[k] = v
       else:
-        raise NotImplementedError(f"Unsupported dataloader checkpoint format.") 
+        raise NotImplementedError(f"Unsupported dataloader checkpoint format. {tmp_offset_dict}") 
 
     # clear cur state
     self.finish_dict_all[worker].clear()
@@ -2016,53 +2046,51 @@ class ParquetDataset(IterableDataset):
           rejected = json.loads(rejected)
         sample_data["rejected"] = rejected
 
-      if messages is not None and isinstance(messages, list):
+      if messages is not None and isinstance(messages, list) and len(messages) > 0:
         sample_data["messages"] = messages
-      elif segments is not None and isinstance(segments, list):
+      elif segments is not None and isinstance(segments, list) and len(segments) > 0:
         sample_data["segments"] = segments
       elif messages is not None and isinstance(messages, np.ndarray):
         sample_data["messages"] = messages.tolist()
       else:
         raise NotImplementedError(f"Unsupported sample, message type is {type(messages)}, message={messages}, segments type is {type(segments)}, segments={segments}")
+
       samples["json"] = sample_data
 
-      # process images
-      if isinstance(images, str):
-        images = json.loads(images)
-      elif isinstance(images, dict):
-        pass
-      else:
-        raise NotImplementedError(f"Unsupported image field type, {type(raw_row_data['images'])=}")
+      self._load_images_to_samples(images, samples, raw_row_data)
 
-      # for image_name in images:
-      #   image_b64 = images[image_name]
-      #   image_bytes = base64.b64decode(image_b64)
-      #   image_bytes_stream = BytesIO(image_bytes)
-      #   image = Image.open(image_bytes_stream)
-      #   samples[image_name] = image
-
-      for image_name in images:
-        image_b64 = images[image_name]
-        # 先检查是否是有效文件路径
-        if isinstance(image_b64, str) and len(image_b64) < 300 and os.path.exists(image_b64):
-            try:
-                image = Image.open(image_b64)
-                samples[image_name] = image
-            except Exception as e:
-                raise ValueError(f"Failed to load image from path {image_b64}: {str(e)}")
-        # 否则按base64处理
-        else:
-            try:
-                image_bytes = base64.b64decode(image_b64)
-                image_bytes_stream = BytesIO(image_bytes)
-                image = Image.open(image_bytes_stream)
-                samples[image_name] = image
-            except Exception as e:
-                raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}")
       return samples
     except:
       logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}, images={images}\nsamples={samples}")
       return None
+
+  def _load_images_to_samples(self, images, samples, raw_row_data):
+    # process images
+    if isinstance(images, str):
+      images = json.loads(images)
+    elif isinstance(images, dict):
+      pass
+    else:
+      raise NotImplementedError(f"Unsupported image field type, {type(raw_row_data['images'])=}")
+
+    for image_name in images:
+      image_b64 = images[image_name]
+      # 先检查是否是有效文件路径
+      if isinstance(image_b64, str) and os.path.exists(image_b64):
+          try:
+              image = Image.open(image_b64)
+              samples[image_name] = image
+          except Exception as e:
+              raise ValueError(f"Failed to load image from path {image_b64}: {str(e)}")
+      # 否则按base64处理
+      else:
+          try:
+              image_bytes = base64.b64decode(image_b64)
+              image_bytes_stream = BytesIO(image_bytes)
+              image = Image.open(image_bytes_stream)
+              samples[image_name] = image
+          except Exception as e:
+              raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}")
 
   def __iter__(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
@@ -2752,7 +2780,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, {sample=}"
           f"errmsg={traceback.format_exc()}")
         continue
 
@@ -2827,3 +2855,6 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
   
   def load_state_dict(self, state_dict):
     self.dataset.load_state_dict(state_dict)
+
+
+

@@ -203,7 +203,9 @@ def process_vision_info_internvl(messages:list,
         value = ""
         content = conversation["content"]
         for turn in content:
-          if turn["type"] == "image":
+          if isinstance(turn, str):
+            value += turn
+          elif turn["type"] == "image":
             turn_images = dynamic_preprocess(turn["image"], min_num=min_dynamic_patch, max_num=max_dynamic_patch,
                                     image_size=image_size, use_thumbnail=use_thumbnail)
             images += [image for image in turn_images]
@@ -213,13 +215,17 @@ def process_vision_info_internvl(messages:list,
           elif turn['type'] == "video":
             nframes = []
             num_patches_list = []
-            if isinstance(turn["video"], str) and "480p_60s_4fps" in turn["video"]:
-                path = turn["video"]
-                pid_str = osp.basename(osp.splitext(path)[0])
-                if not osp.exists(path):
-                    post = str(int(pid_str[-4:]))
-                    path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
-                nframes,num_patches_list = load_video(path,num_segments = num_segments)
+            if isinstance(turn["video"], str):
+                if "480p_60s_4fps" in turn["video"]:
+                    path = turn["video"]
+                    pid_str = osp.basename(osp.splitext(path)[0])
+                    if not osp.exists(path):
+                        post = str(int(pid_str[-4:]))
+                        path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
+                    nframes,num_patches_list = load_video(path,num_segments = num_segments)
+                else:
+                    path = turn["video"]
+                    nframes,num_patches_list = load_video(path,num_segments = num_segments)
 
             elif isinstance(turn["video"],list):
                 for img in turn['video']:
@@ -248,7 +254,9 @@ def process_vision_info_internvl(messages:list,
         value = ""
         content = conversation["content"]
         for turn in content:
-          if isinstance(turn,dict):
+          if isinstance(turn, str):
+            value += turn
+          elif isinstance(turn,dict):
             if turn["type"] == "text":
                 value += turn["text"]
           else:

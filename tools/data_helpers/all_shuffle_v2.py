@@ -50,11 +50,9 @@ def pq2pd_v2(x, rank=0):
     import time
     import subprocess
     from fastparquet import ParquetFile
-
     # global tmp_pd
     # if tmp_pd is not None:
     #     return tmp_pd.copy(deep=True)
-
     os.makedirs("/code/.pq_cache", exist_ok=True)
     tmp_fn = f"/code/.pq_cache/{uuid.uuid4()}_{rank}.parquet"
     for t in range(5):

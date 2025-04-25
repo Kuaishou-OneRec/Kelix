@@ -159,13 +159,19 @@ def get_shard_conditions(
         >>> print(matches)
         >>> ["layers.0", "decoder.layers.1", "embedding"]
     """
+    print('=' * 40)
+    print(f"shard condition()", name)
     if names_to_match and name in names_to_match:
+        print(True)
         return True
 
     name_list = name.split(".")
     if len(name_list) >= 2:
-        return name_list[-2] == "layers" and str.isdigit(name_list[-1])
+        res = name_list[-2] == "layers" and str.isdigit(name_list[-1])
+        print("shard condition", res)
+        return res
 
+    print(False)
     return False
 
 
@@ -209,9 +215,15 @@ def shard_model(
     # Shard the model with FSDP, iterating in reverse to start with
     # lowest-level modules first
     num_layers_sharded = 0
+    # prev = None
     for n, m in reversed(list(model.named_modules())):
         if any([shard_condition(n, m) for shard_condition in shard_conditions]):
             fully_shard(m, **fsdp_kwargs)
+            # if prev is not None: 
+            #     # print(f"{m} set_modules_to_forward_prefetch {prev}")
+            #     #m.set_modules_to_forward_prefetch([prev])
+            #     # prev.set_modules_to_forward_prefetch([m])
+            # prev = m
             num_layers_sharded += 1
 
     if num_layers_sharded == 0:
@@ -221,6 +233,19 @@ def shard_model(
 
     # Finally shard the entire model to account for any stragglers
     fully_shard(model, **fsdp_kwargs)
+
+
+    prev = None
+    for _, layer in reversed(list(model.named_modules())):
+        if prev is not None: 
+            if hasattr(layer, 'set_modules_to_forward_prefetch'):
+                print(f"{layer} set_modules_to_forward_prefetch {prev}")
+                layer.set_modules_to_forward_prefetch([prev])
+        prev = layer
+    if prev is not None and hasattr(model, 'set_modules_to_forward_prefetch'):
+        print(f"{model} set_modules_to_forward_prefetch {prev}")
+        model.set_modules_to_forward_prefetch([prev])
+
 
 
 def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]):
