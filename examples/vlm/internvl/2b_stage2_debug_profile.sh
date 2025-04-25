@@ -123,7 +123,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
-                --debug_dataset true \
+                --debug_dataset false \
                 --fp32_weight true \
                 --enable_profile true \
                 --reshard_after_forward false \
