@@ -111,7 +111,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --dataset_config /llm_reco/chuchenglong/work_space/recovlm/examples/vlm/configs/Internvl/2b_internvl_stage2.json \
-                --max_length 16000 \
+                --max_length 12288 \
                 --learning_rate 2e-4 \
                 --model_class InternVLChatModel \
                 --min_lr 0.0 \
@@ -123,9 +123,9 @@ nohup mpirun --allow-run-as-root -np $np \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
-                --fp32_weight true \
+                --fp32_weight=true \
                 --enable_profile \
-                --reshard_after_forward false \
+                --reshard_after_forward=false \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
                 --merge_checkpoint \
