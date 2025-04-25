@@ -739,6 +739,7 @@ def train():
   acc_num_tokens = 0
   acc_num_samples = 0
   acc_valid_num_tokens = 0
+  total_num_image_tokens = 0
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
