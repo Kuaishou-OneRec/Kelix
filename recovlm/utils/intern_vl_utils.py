@@ -215,12 +215,13 @@ def process_vision_info_internvl(messages:list,
           elif turn['type'] == "video":
             nframes = []
             num_patches_list = []
-            if isinstance(turn["video"], str) and "480p_60s_4fps" in turn["video"]:
-                path = turn["video"]
-                pid_str = osp.basename(osp.splitext(path)[0])
-                if not osp.exists(path):
-                    post = str(int(pid_str[-4:]))
-                    path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
+            if isinstance(turn["video"], str):
+                if "480p_60s_4fps" in turn["video"]:
+                    path = turn["video"]
+                    pid_str = osp.basename(osp.splitext(path)[0])
+                    if not osp.exists(path):
+                        post = str(int(pid_str[-4:]))
+                        path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
                 nframes,num_patches_list = load_video(path,num_segments = num_segments)
 
             elif isinstance(turn["video"],list):
