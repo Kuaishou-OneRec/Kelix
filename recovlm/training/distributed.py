@@ -235,9 +235,27 @@ def shard_model(
     # Finally shard the entire model to account for any stragglers
     fully_shard(model, **fsdp_kwargs)
 
+    def traverse_modules(model, prefix=''):
+        """
+        递归遍历模型的所有模块，遇到 nn.ModuleList 会深入遍历其元素。
 
+        :param model: 输入的 PyTorch 模型
+        :param prefix: 当前模块的名称前缀
+        :yield: 模块的名称和模块本身
+        """
+        for name, module in model.named_children():
+            full_name = f"{prefix}.{name}" if prefix else name
+            if isinstance(module, nn.ModuleList):
+                for i, sub_module in enumerate(module):
+                    sub_name = f"{full_name}.{i}"
+                    yield from traverse_modules(sub_module, sub_name)
+            else:
+                yield full_name, module
+                yield from traverse_modules(module, full_name)
+        
     prev = None
-    for _, layer in reversed(list(model.named_modules())):
+    # for _, layer in reversed(list(model.named_modules())):
+    for _, layer in reversed(list(traverse_modules(model))):
         if prev is not None: 
             if hasattr(layer, 'set_modules_to_forward_prefetch'):
                 print(f"{layer} set_modules_to_forward_prefetch {prev}")
