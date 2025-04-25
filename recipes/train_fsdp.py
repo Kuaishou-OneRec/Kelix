@@ -754,8 +754,7 @@ def train():
       except StopIteration:
           break
 
-      if args.debug_dataset: 
-        continue
+      # if args.debug_dataset:  continue
 
       if show_cnt > 0 and dist.get_rank() == 0:
         with Timer("Show data"):
