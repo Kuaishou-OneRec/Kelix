@@ -70,7 +70,7 @@ from recovlm.training.common import set_default_dtype, get_global_grad_norm, cli
 
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
-
+from recovlm.utils.time_tracker import TimeTracker
 
 # Logger 初始化
 logging.basicConfig(level=logging.INFO)  # 设置日志级别
@@ -749,19 +749,20 @@ def train():
   # get_sequence_parallel_group("gloo")
   data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
   micro_step = 0
+  ticker = TimeTracker(n=args.logging_per_step)
+  iter_ticker = TimeTracker(n=args.logging_per_step)
   while True:
+    ticker.tick("while_True")
     with contextlib.ExitStack() as ctx:
 
       if torch_profiler: ctx.enter_context(torch_profiler)
 
-      try:
-          t1 = time.perf_counter()
-          batch = next(data_iter)
-          t2 = time.perf_counter()
-          print(f"next_batch: {t2-t1}")
-      except StopIteration:
-          break
+      ticker.tick("enter_context(torch_profiler)")
+      try: batch = next(data_iter)
+      except StopIteration: break
+      ticker.tick("next(data_iter)")
       
+
       micro_step += 1
 
       # if args.debug_dataset:  continue
@@ -775,8 +776,9 @@ def train():
           show_cnt -= 1
           
       data_source = batch.pop("data_source", None) # dataset source list cur batch
-      #iteration = model.global_steps
       to_cuda(batch)
+      ticker.tick("to_cuda(batch)")
+
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
       attention_mask = batch.get("attention_mask", None)
@@ -789,24 +791,23 @@ def train():
       position_ids = batch.get("position_ids", None)
       image_flags = batch.get("image_flags", None)
 
+      
+
+
+
       # 打印 token 数量
       token_count = input_ids.numel()  # 计算 token 数量
       print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
-
       num_tokens = input_ids.numel()
-
       num_samples = (sample_idx.max() + 1).sum()
-
       num_image_tokens = pixel_values.shape[0] * 1024 if args.model_class == "InternVLChatModel" else 0
       num_valid_tokens = num_tokens - (sample_idx == -1).sum()
-      input_ids.numel()
-
       token_metrics = torch.tensor(
         [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda()
-
+      ticker.tick("token_metrics_init")
       dist.all_reduce(
         token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-
+      ticker.tick("token_metrics_reduce")
       num_tokens = token_metrics[0]
       num_samples = token_metrics[1]
       num_valid_tokens = token_metrics[2]
@@ -823,7 +824,7 @@ def train():
 
       input_ids = input_ids * (input_ids > 0).to(torch.int64)
       labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
-
+      ticker.tick("metrics_accumulate")
       with Timer("Fwd"):
         if args.model_class == "InternVLChatModel":
             output = model(
@@ -840,6 +841,7 @@ def train():
               image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
               cu_seqlens=cu_seqlens
             )
+        ticker.tick("model.forward")
 
         # (b, N/P, V)
         logits = output.logits
@@ -851,18 +853,21 @@ def train():
         local_labels = get_local_sequence(labels, seq_idx=1)
         loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
 
-        # del logits
-        # del labels
-        # del local_labels
+        ticker.tick("loss_fn")
+
 
       with Timer("bwd"):
         loss.backward(loss)
         clip_grad_by_value(model, args.clip_range)
+        ticker.tick("loss.backward")
+
         if (micro_step + 1) % args.gradient_accumulation_steps == 0:
           optimizer.step()
           lr_scheduler.step()
           optimizer.zero_grad()
           global_step += 1
+
+        ticker.tick("optimizer.step")
 
       ########## dataset source monitor ###############
       if args.monitor_datasource_loss:
@@ -880,7 +885,7 @@ def train():
           batch_data_source_loss[key] += sum_loss.item()
           batch_data_source_tokens[key] += mask.sum().item()
           valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
-
+      ticker.tick("monitor_datasource_loss")
       if args.monitor_datasource_cnt:
         for data_source_name in data_source:
           local_acc_data_source_samples[data_source_name] += 1
@@ -891,6 +896,7 @@ def train():
       avg_loss = avg_loss.item() / dist.get_world_size()
       acc_avg_loss += avg_loss
 
+      ticker.tick("monitor_datasource_cnt")
       if global_step % args.logging_per_step == 0 and \
               (micro_step + 1) % args.gradient_accumulation_steps == 0:
 
@@ -937,6 +943,8 @@ def train():
             "perf/image_token_pre_iter_per_gpu":total_num_image_tokens / total_num_samples
           }
 
+          ticker.tick("log_dict")
+
           for name, data in log_dict.items():
             if data is not None and tb_writer:
               tb_writer.add_scalar(
@@ -953,6 +961,9 @@ def train():
                   global_step=total_num_valid_tokens / args.gradient_accumulation_steps,
                   new_style=True
                 )
+          for t in [ticker, iter_ticker]:
+            for name, data in t.stat():
+              tb_writer.add_scalar(f"ticker/{name}", data, global_step=global_step, new_style=True)
 
           if args.monitor_datasource_loss and tb_writer:
             for key, loss_sum in batch_data_source_loss.items():
@@ -976,7 +987,8 @@ def train():
                   1.0 * num_tokens / total_num_valid_tokens,
                   global_step=global_step,
                   new_style=True)
-
+              
+          ticker.tick("tb_writer.add_scalar")
           print_rank_0(
             f"Step: {global_step}, Loss: {avg_loss}, "
             f"Learning Rate: {learning_rate}, "
@@ -1049,6 +1061,9 @@ def train():
                 dataloader_path,
                 f"rank{dist.get_rank()}_global_step{global_step}.pth")
               )
+        ticker.tick("save_ckpt")
+        iter_ticker.tick("iter_ticker")
+
       if torch_profiler: torch_profiler.step()
 
 
