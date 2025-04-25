@@ -247,7 +247,7 @@ def get_argument_parser():
   parser.add_argument("--kml_id", type=str, default=None,
                       help="KML_ID")
 
-  parser.add_argument("--enable_profile", type=bool, default=True,
+  parser.add_argument("--enable_profile", type=bool, default=False,
                       help="init torch profile")
 
   parser.add_argument("--kml_task_id", type=str, default=None,
