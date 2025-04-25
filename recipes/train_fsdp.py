@@ -867,7 +867,7 @@ def train():
           optimizer.zero_grad()
           global_step += 1
 
-        ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
+          ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
 
       ########## dataset source monitor ###############
       if args.monitor_datasource_loss:
@@ -885,10 +885,12 @@ def train():
           batch_data_source_loss[key] += sum_loss.item()
           batch_data_source_tokens[key] += mask.sum().item()
           valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
-      ticker.tick("monitor_datasource_loss")
+        ticker.tick("monitor_datasource_loss")
+
       if args.monitor_datasource_cnt:
         for data_source_name in data_source:
           local_acc_data_source_samples[data_source_name] += 1
+        ticker.tick("monitor_datasource_cnt")
     
       #########################################
       avg_loss = torch.tensor(loss.item()).cuda()
@@ -896,7 +898,7 @@ def train():
       avg_loss = avg_loss.item() / dist.get_world_size()
       acc_avg_loss += avg_loss
 
-      ticker.tick("monitor_datasource_cnt")
+      ticker.tick("reduce_acc_avg_loss")
       log_acc_step = args.logging_per_step * args.gradient_accumulation_steps
       if global_step % args.logging_per_step == 0 and \
               (micro_step + 1) % args.gradient_accumulation_steps == 0:
