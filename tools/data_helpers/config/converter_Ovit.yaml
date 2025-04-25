@@ -3,7 +3,7 @@ split_size: 268_435_456
 dataset:
   class_name: ParquetDataset
   kwargs:
-    path: vviewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/Detailed_Caption_detailed_caption
+    path: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/Detailed_Caption_detailed_caption
   columns:
     - images
     - segments
