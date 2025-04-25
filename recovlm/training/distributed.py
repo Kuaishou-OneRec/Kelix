@@ -218,19 +218,20 @@ def shard_model(
     num_layers_sharded = 0
     # prev = None
     if dist.get_rank() == 0:
-        for n, m in list(model.named_modeuls()):
-            print(f"{n} : {m}")
-        #print(list(model.named_modules()))
+        print(list(model.named_modules()))
+    layers = list(model.encoder.layers) + list(model.language_model.model.layers)
     for n, m in reversed(list(model.named_modules())):
-        if any([shard_condition(n, m) for shard_condition in shard_conditions]):
-            if hasattr(m, 'forward') and not isinstance(m, nn.ModuleList):
-                fully_shard(m, **fsdp_kwargs)
-            # if prev is not None: 
-            #     # print(f"{m} set_modules_to_forward_prefetch {prev}")
-            #     #m.set_modules_to_forward_prefetch([prev])
-            #     # prev.set_modules_to_forward_prefetch([m])
-            # prev = m
-            num_layers_sharded += 1
+        #if any([shard_condition(n, m) for shard_condition in shard_conditions]):
+        #    if hasattr(m, 'forward') and not isinstance(m, nn.ModuleList):
+        #        fully_shard(m, **fsdp_kwargs)
+        #    # if prev is not None: 
+        #    #     # print(f"{m} set_modules_to_forward_prefetch {prev}")
+        #    #     #m.set_modules_to_forward_prefetch([prev])
+        #    #     # prev.set_modules_to_forward_prefetch([m])
+        #    # prev = m
+        #    num_layers_sharded += 1
+        if m in layers:
+            fully_shard(m, **fsdp_kwargs)
 
     if num_layers_sharded == 0:
         raise ValueError(
@@ -260,13 +261,10 @@ def shard_model(
         
     prev = None
     #for i_layer, layer in reversed(list(traverse_modules(model))):
-    for i_layer, layer in reversed(list(model.named_modules())):
-        print(f"traverse layer {i_layer}: {layer}")
-        if any([shard_condition(n, m) for shard_condition in shard_conditions]):
-            if hasattr(m, 'forward') and not isinstance(m, nn.ModuleList):
-                if prev is not None:
-                    layer.set_modules_to_forward_prefetch([prev])
-                prev = layer
+    for layer in reversed(layers):
+        if prev is not None:
+            layer.set_modules_to_forward_prefetch([prev])
+        prev = layer
         #if prev is not None: 
         #    if hasattr(layer, 'set_modules_to_forward_prefetch'):
         #        print(f"{layer} set_modules_to_forward_prefetch {prev}")
