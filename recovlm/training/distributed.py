@@ -217,20 +217,10 @@ def shard_model(
     # lowest-level modules first
     num_layers_sharded = 0
     # prev = None
-    print(f'{type(model)}')
     if dist.get_rank() == 0:
         print(list(model.named_modules()))
     layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
     for n, m in reversed(list(model.named_modules())):
-        #if any([shard_condition(n, m) for shard_condition in shard_conditions]):
-        #    if hasattr(m, 'forward') and not isinstance(m, nn.ModuleList):
-        #        fully_shard(m, **fsdp_kwargs)
-        #    # if prev is not None: 
-        #    #     # print(f"{m} set_modules_to_forward_prefetch {prev}")
-        #    #     #m.set_modules_to_forward_prefetch([prev])
-        #    #     # prev.set_modules_to_forward_prefetch([m])
-        #    # prev = m
-        #    num_layers_sharded += 1
         if m in layers:
             fully_shard(m, **fsdp_kwargs)
             num_layers_sharded += 1
@@ -243,40 +233,14 @@ def shard_model(
     # Finally shard the entire model to account for any stragglers
     fully_shard(model, **fsdp_kwargs)
 
-    #def traverse_modules(model, prefix=''):
-    #    """
-    #    递归遍历模型的所有模块，遇到 nn.ModuleList 会深入遍历其元素。
-
-    #    :param model: 输入的 PyTorch 模型
-    #    :param prefix: 当前模块的名称前缀
-    #    :yield: 模块的名称和模块本身
-    #    """
-    #    for name, module in model.named_children():
-    #        full_name = f"{prefix}.{name}" if prefix else name
-    #        if isinstance(module, nn.ModuleList):
-    #            for i, sub_module in enumerate(module):
-    #                sub_name = f"{full_name}.{i}"
-    #                yield from traverse_modules(sub_module, sub_name)
-    #        else:
-    #            yield full_name, module
-    #            yield from traverse_modules(module, full_name)
-        
     prev = None
     #for i_layer, layer in reversed(list(traverse_modules(model))):
     for layer in reversed(layers):
         if prev is not None:
             layer.set_modules_to_forward_prefetch([prev])
         prev = layer
-        #if prev is not None: 
-        #    if hasattr(layer, 'set_modules_to_forward_prefetch'):
-        #        print(f"{layer} set_modules_to_forward_prefetch {prev}")
-        #        layer.set_modules_to_forward_prefetch([prev])
-        #prev = layer
 
     model.set_modules_to_forward_prefetch([prev])
-    #if prev is not None and hasattr(model, 'set_modules_to_forward_prefetch'):
-    #    print(f"{model} set_modules_to_forward_prefetch {prev}")
-    #    model.set_modules_to_forward_prefetch([prev])
 
 
 

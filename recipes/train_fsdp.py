@@ -754,7 +754,10 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       try:
+          t1 = time.perf_counter()
           batch = next(data_iter)
+          t2 = time.perf_counter()
+          print(f"next_batch: {t2-t1}")
       except StopIteration:
           break
       
