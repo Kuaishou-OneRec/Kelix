@@ -237,10 +237,15 @@ def shard_model(
 
     prev = None
     for _, layer in reversed(list(model.named_modules())):
-        if prev is not None: layer.set_modules_to_forward_prefetch([prev])
+        if prev is not None: 
+            if hasattr(layer, 'set_modules_to_forward_prefetch'):
+                print(f"{layer} set_modules_to_forward_prefetch {prev}")
+                layer.set_modules_to_forward_prefetch([prev])
         prev = layer
-    model.set_modules_to_forward_prefetch([prev])
-    
+    if prev is not None and hasattr(model, 'set_modules_to_forward_prefetch'):
+        print(f"{model} set_modules_to_forward_prefetch {prev}")
+        model.set_modules_to_forward_prefetch([prev])
+
 
 
 def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]):
