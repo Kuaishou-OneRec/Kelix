@@ -744,7 +744,7 @@ def train():
   global_step = 0
   # get_sequence_parallel_group("gloo")
   data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
-  for micro_step in range(len(dataloader)):
+  while True:
     with contextlib.ExitStack() as ctx:
 
       if torch_profiler: ctx.enter_context(torch_profiler)
