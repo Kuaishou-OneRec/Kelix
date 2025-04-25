@@ -2016,9 +2016,9 @@ class ParquetDataset(IterableDataset):
           rejected = json.loads(rejected)
         sample_data["rejected"] = rejected
 
-      if messages is not None and isinstance(messages, list):
+      if messages is not None and isinstance(messages, list) and len(messages) > 0:
         sample_data["messages"] = messages
-      elif segments is not None and isinstance(segments, list):
+      elif segments is not None and isinstance(segments, list) and len(segments) > 0:
         sample_data["segments"] = segments
       elif messages is not None and isinstance(messages, np.ndarray):
         sample_data["messages"] = messages.tolist()
