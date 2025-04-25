@@ -557,7 +557,7 @@ def train():
     model=model,
     shard_conditions=[get_shard_conditions],
     cpu_offload=False,
-    reshard_after_forward=args.reshard_after_forward,
+    reshard_after_forward=False, # args.reshard_after_forward,
     dp_mesh=device_mesh,
     fp32_weight=args.fp32_weight
   )
