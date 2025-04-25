@@ -215,9 +215,12 @@ def shard_model(
     # Shard the model with FSDP, iterating in reverse to start with
     # lowest-level modules first
     num_layers_sharded = 0
+    prev = None
     for n, m in reversed(list(model.named_modules())):
         if any([shard_condition(n, m) for shard_condition in shard_conditions]):
             fully_shard(m, **fsdp_kwargs)
+            if prev is not None: m.set_modules_to_forward_prefetch([prev])
+            prev = m
             num_layers_sharded += 1
 
     if num_layers_sharded == 0:
