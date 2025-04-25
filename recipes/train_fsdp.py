@@ -746,8 +746,6 @@ def train():
   ##############
   torch_profiler = _init_profiler(output_dir=os.path.join(args.output_dir, "torch_profile"), start_step=0, end_step=99999)
 
-
-
   loss_fn = CrossEntropyLoss(
     ignore_index=-100, return_token_loss=True, shift_labels=False)
 
