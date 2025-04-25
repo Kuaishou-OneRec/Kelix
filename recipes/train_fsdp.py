@@ -962,7 +962,7 @@ def train():
                   new_style=True
                 )
           for t in [ticker, iter_ticker]:
-            for name, data in t.stat():
+            for name, data in t.stat().items():
               tb_writer.add_scalar(f"ticker/{name}", data, global_step=global_step, new_style=True)
 
           if args.monitor_datasource_loss and tb_writer:
