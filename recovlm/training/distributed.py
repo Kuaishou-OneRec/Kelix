@@ -215,15 +215,15 @@ def shard_model(
     # Shard the model with FSDP, iterating in reverse to start with
     # lowest-level modules first
     num_layers_sharded = 0
-    prev = None
+    # prev = None
     for n, m in reversed(list(model.named_modules())):
         if any([shard_condition(n, m) for shard_condition in shard_conditions]):
             fully_shard(m, **fsdp_kwargs)
-            if prev is not None: 
-                # print(f"{m} set_modules_to_forward_prefetch {prev}")
-                # m.set_modules_to_forward_prefetch([prev])
-                prev.set_modules_to_forward_prefetch([m])
-            prev = m
+            # if prev is not None: 
+            #     # print(f"{m} set_modules_to_forward_prefetch {prev}")
+            #     #m.set_modules_to_forward_prefetch([prev])
+            #     # prev.set_modules_to_forward_prefetch([m])
+            # prev = m
             num_layers_sharded += 1
 
     if num_layers_sharded == 0:
@@ -233,6 +233,14 @@ def shard_model(
 
     # Finally shard the entire model to account for any stragglers
     fully_shard(model, **fsdp_kwargs)
+
+
+    prev = None
+    for _, layer in reversed(list(model.named_modules())):
+        if prev is not None: layer.set_modules_to_forward_prefetch([prev])
+        prev = layer
+    model.set_modules_to_forward_prefetch([prev])
+    
 
 
 def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]):
