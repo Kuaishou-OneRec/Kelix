@@ -125,6 +125,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --logging_per_step 10 \
                 --debug_dataset true \
                 --fp32_weight true \
+                --enable_profile true \
                 --reshard_after_forward false \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
