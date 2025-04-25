@@ -585,67 +585,67 @@ class SampleTooLongError(Exception):
         """Get the number of retries attempted."""
         return self.retry
   
-  def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
-    packed_input_ids = []
-    packed_position_ids = []
-    packed_loss_mask = []
-    packed_pixel_values = []
-    packed_image_gird_thw = []
-    cu_seqlens = [0]
+    def _packing(self, buffer: List[Dict[str, torch.Tensor]] ):
+      packed_input_ids = []
+      packed_position_ids = []
+      packed_loss_mask = []
+      packed_pixel_values = []
+      packed_image_gird_thw = []
+      cu_seqlens = [0]
 
-    for inputs in buffer:
-      packed_input_ids.append(inputs["input_ids"].flatten())
-      packed_loss_mask.append(inputs["loss_mask"].flatten())
-      packed_position_ids.append(inputs["position_ids"])
-      packed_pixel_values.append(inputs["pixel_values"])
-      packed_image_gird_thw.append(inputs["image_grid_thw"])
-      cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
+      for inputs in buffer:
+        packed_input_ids.append(inputs["input_ids"].flatten())
+        packed_loss_mask.append(inputs["loss_mask"].flatten())
+        packed_position_ids.append(inputs["position_ids"])
+        packed_pixel_values.append(inputs["pixel_values"])
+        packed_image_gird_thw.append(inputs["image_grid_thw"])
+        cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
 
-    packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
-    packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
-    packed_position_ids = torch.cat(packed_position_ids, dim=-1)
-    packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
-    packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
-    
-    # pad to multiple of, necessary for sequence parallel
-    if (
-      self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
-    ):  # not divisible by multiple_of; here we align for grouping
-      padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
-      packed_input_ids = F.pad(
-        packed_input_ids, (0, padding_len), value=self.processor.tokenizer.pad_token_id)
-      packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
-      packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
-      cu_seqlens.append(cu_seqlens[-1] + padding_len)
- 
-    inputs = {
-      "input_ids": packed_input_ids,
-      "position_ids": packed_position_ids,
-      "loss_mask": packed_loss_mask,
-      "pixel_values": packed_pixel_values,
-      "image_grid_thw": packed_image_gird_thw,
-      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32)
-    }
-    return inputs
+      packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
+      packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
+      packed_position_ids = torch.cat(packed_position_ids, dim=-1)
+      packed_pixel_values = torch.cat(packed_pixel_values, dim=0)
+      packed_image_gird_thw = torch.cat(packed_image_gird_thw, dim=0)
+      
+      # pad to multiple of, necessary for sequence parallel
+      if (
+        self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
+      ):  # not divisible by multiple_of; here we align for grouping
+        padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+        packed_input_ids = F.pad(
+          packed_input_ids, (0, padding_len), value=self.processor.tokenizer.pad_token_id)
+        packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
+        packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
+        cu_seqlens.append(cu_seqlens[-1] + padding_len)
+  
+      inputs = {
+        "input_ids": packed_input_ids,
+        "position_ids": packed_position_ids,
+        "loss_mask": packed_loss_mask,
+        "pixel_values": packed_pixel_values,
+        "image_grid_thw": packed_image_gird_thw,
+        "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32)
+      }
+      return inputs
 
-  def __iter__(self):
-    buffer = []
-    cur_length = 0
-    for sample in self.dataset:
-      try:
-        inputs = self._process(sample)
-      except:
-        print(traceback.format_exc())
-        continue
-      sample_length = inputs["input_ids"].shape[-1]
-      if cur_length + sample_length > self.max_length:
-        packed_inputs = self._packing(buffer)
-        yield packed_inputs
-        buffer = [inputs]
-        cur_length = sample_length
-      else:
-        buffer.append(inputs)
-        cur_length += sample_length
+    def __iter__(self):
+      buffer = []
+      cur_length = 0
+      for sample in self.dataset:
+        try:
+          inputs = self._process(sample)
+        except:
+          print(traceback.format_exc())
+          continue
+        sample_length = inputs["input_ids"].shape[-1]
+        if cur_length + sample_length > self.max_length:
+          packed_inputs = self._packing(buffer)
+          yield packed_inputs
+          buffer = [inputs]
+          cur_length = sample_length
+        else:
+          buffer.append(inputs)
+          cur_length += sample_length
 
 def get_assistant_mask(batch_input_ids: torch.Tensor,
                        start_pattern: Optional[List[int]],
