@@ -241,7 +241,7 @@ def shard_model(
         )
 
     # Finally shard the entire model to account for any stragglers
-    # fully_shard(model, **fsdp_kwargs)
+    fully_shard(model, **fsdp_kwargs)
 
     #def traverse_modules(model, prefix=''):
     #    """
@@ -273,7 +273,7 @@ def shard_model(
         #        layer.set_modules_to_forward_prefetch([prev])
         #prev = layer
 
-    model.vision_model.embeddings.patch_embedding.set_modules_to_forward_prefetch([prev])
+    model.set_modules_to_forward_prefetch([prev])
     #if prev is not None and hasattr(model, 'set_modules_to_forward_prefetch'):
     #    print(f"{model} set_modules_to_forward_prefetch {prev}")
     #    model.set_modules_to_forward_prefetch([prev])
