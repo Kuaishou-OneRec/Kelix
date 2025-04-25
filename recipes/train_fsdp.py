@@ -97,10 +97,10 @@ def get_argument_parser():
                             "the --resume_dataloader switch will be turned on, " \
                             "while the --load_weights_only option will be turned off.")
   
-  parser.add_argument("--fp32_weight", type=bool, default=True,
+  parser.add_argument("--fp32_weight", action="store_true",
                       help="Whether use fp32 for model weight updating")
   
-  parser.add_argument("--reshard_after_forward", type=bool, default=True,
+  parser.add_argument("--reshard_after_forward", action="store_true",
                       help="enable reshard_after_forward to enable Zero3 (default)")
 
   parser.add_argument("--save_checkpoint_per_step", type=int, default=1000,
@@ -265,7 +265,7 @@ def _init_profiler(output_dir, start_step=5, end_step=10) -> None:
     import os
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-        
+
     def trace_handler(prof):
         if D.get_rank() == 0:
             prof.export_chrome_trace(
