@@ -13,7 +13,6 @@ import collections
 import pickle
 import itertools
 import contextlib
-from recovlm import profiler as P
 
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
