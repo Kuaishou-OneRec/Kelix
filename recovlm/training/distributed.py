@@ -272,7 +272,7 @@ def shard_model(
         #        layer.set_modules_to_forward_prefetch([prev])
         #prev = layer
 
-    model.set_modules_to_forward_prefetch([prev])
+    model.vision_model.set_modules_to_forward_prefetch([prev])
     #if prev is not None and hasattr(model, 'set_modules_to_forward_prefetch'):
     #    print(f"{model} set_modules_to_forward_prefetch {prev}")
     #    model.set_modules_to_forward_prefetch([prev])
