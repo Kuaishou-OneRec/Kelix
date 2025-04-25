@@ -1269,7 +1269,7 @@ class ChatCompletionVisionDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, {sample=}"
           f"errmsg={traceback.format_exc()}")
         continue
 
@@ -1905,7 +1905,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, {sample=}"
           f"errmsg={traceback.format_exc()}")
         continue
 
