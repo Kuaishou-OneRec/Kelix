@@ -263,7 +263,7 @@ def get_argument_parser():
 def _init_profiler(output_dir, start_step=5, end_step=10) -> None:
     import torch.distributed as D
     def trace_handler(prof):
-        if D.rank() == 0:
+        if D.get_rank() == 0:
             prof.export_chrome_trace(
                 os.path.join(output_dir, str(prof.step_num) + ".json")
             )
