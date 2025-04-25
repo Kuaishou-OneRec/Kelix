@@ -80,6 +80,7 @@ def get_memory_usage():
     mem = process.memory_info().rss  # 当前进程的 Resident Set Size (RSS)
     return humanize.naturalsize(mem, binary=True)  # 转换为易读格式（如GB/MB）
 
+
 class AutoShuffler(MPIBase):
     def __init__(
         self,
@@ -364,11 +365,7 @@ class AutoShuffler(MPIBase):
         """收集指定目录下的所有Parquet文件"""
         print(f"_collect_output_files ...")
         if self.shard_output_by_rank:
-            all_files = []
-            for rank in tqdm(range(self.world_size)):
-                rank_dir = os.path.join(directory, str(rank))
-                # if self.fs.exists(rank_dir):
-                all_files += self.ls(rank_dir)
+            all_files = self.get_all_files(directory)
         else:
             all_files = self.ls(directory)
         
@@ -380,8 +377,28 @@ class AutoShuffler(MPIBase):
         dump_path = '/code/__all_shuffle_v2_all_files.json'
         with open(dump_path, 'w') as json_file: json.dump(all_files, json_file, indent=4)
         os.system(f"/home/hadoop/software/hadoop/bin/hadoop fs -put {dump_path} {directory}")
+        print(f"all files are written successfully {dump_path} -> {directory}")
         print("=" * 30)
 
+    def get_files_for_rank(self, rank, directory):
+        rank_dir = os.path.join(directory, str(rank))
+        return self.ls(rank_dir)
+    # 在类的方法中使用以下代码
+    def get_all_files(self, directory):
+        all_files = []
+        with concurrent.futures.ThreadPoolExecutor(64) as executor:
+            futures = []
+            for rank in tqdm(range(self.world_size)):
+                future = executor.submit(self.get_files_for_rank, rank, directory)
+                futures.append(future)
+
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    files = future.result()
+                    all_files += files
+                except Exception as e:
+                    print(f"Error getting files for rank: {e}")
+        return all_files
 
     def run(self, stages=[1,2]):
         if 1 in stages:
