@@ -80,13 +80,13 @@ class OpenImagesCaptionConverter(ConverterBase):
             }
         )
 
-
+        messages = None
         metadata = None
         result = {
             "images": json.dumps(images),
             "videos": json.dumps(None),
             "source": self.source,
-            "messages": json.dumps(messages),
+            "messages": None,
             "segments": json.dumps(segments),
             "metadata": json.dumps(metadata),
             "uuid": str(uuid.uuid1()),
