@@ -740,7 +740,7 @@ def train():
   acc_num_tokens = 0
   acc_num_samples = 0
   acc_valid_num_tokens = 0
-  acc_num_image_tokens = 0
+  total_num_image_tokens = 0
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
@@ -816,7 +816,7 @@ def train():
       total_num_samples += num_samples.item()
       total_num_tokens += num_tokens.item()
       total_num_valid_tokens += num_valid_tokens.item()
-      acc_num_image_tokens += num_image_tokens.item()
+      total_num_image_tokens += num_image_tokens.item()
 
       acc_num_samples += num_samples.item()
       acc_num_tokens += num_tokens.item()
@@ -943,7 +943,7 @@ def train():
             "perf/valid_total_num_tokens": total_num_valid_tokens,
             "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
-            "perf/image_token_pre_iter_per_gpu":acc_num_image_tokens / total_num_samples
+            "perf/image_token_pre_iter_per_gpu":total_num_image_tokens / total_num_samples
           }
 
           ticker.tick(f"log_dict*{log_acc_step}")
@@ -1006,7 +1006,7 @@ def train():
             f"total_num_samples: {total_num_samples}, "
             f"total_num_valid_tokens: {total_num_valid_tokens}, "
             f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, ",
-            f"image_token_per_sample_per_gpu : {acc_num_image_tokens/total_num_samples }"
+            f"image_token_per_sample_per_gpu : {total_num_image_tokens/total_num_samples }"
         )
         
 
@@ -1018,7 +1018,6 @@ def train():
         acc_num_samples = 0
         acc_num_tokens = 0
         acc_valid_num_tokens = 0
-        acc_num_image_tokens = 0
         batch_data_source_loss = collections.defaultdict(float)
         batch_data_source_tokens = collections.defaultdict(int)
         valid_data_source_tokens = collections.defaultdict(int)
