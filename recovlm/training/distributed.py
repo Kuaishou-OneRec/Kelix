@@ -159,13 +159,18 @@ def get_shard_conditions(
         >>> print(matches)
         >>> ["layers.0", "decoder.layers.1", "embedding"]
     """
+    print(f"shard condition({len(names_to_match)}, {list(names_to_match.items())[:4]})", name)
     if names_to_match and name in names_to_match:
+        print(True)
         return True
 
     name_list = name.split(".")
     if len(name_list) >= 2:
-        return name_list[-2] == "layers" and str.isdigit(name_list[-1])
+        res = name_list[-2] == "layers" and str.isdigit(name_list[-1])
+        print("shard condition", res)
+        return res
 
+    print(False)
     return False
 
 
