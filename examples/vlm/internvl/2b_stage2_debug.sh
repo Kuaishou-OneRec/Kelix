@@ -123,6 +123,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
+                --debug_dataset true \
                 --fp32_weight true \
                 --reshard_after_forward false \
                 --seed 19260817 \
