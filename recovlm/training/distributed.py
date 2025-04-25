@@ -217,7 +217,8 @@ def shard_model(
     # lowest-level modules first
     num_layers_sharded = 0
     # prev = None
-    print(list(model.named_modules()))
+    if dist.get_rank() == 0:
+        print(list(model.named_modules()))
     for n, m in reversed(list(model.named_modules())):
         if any([shard_condition(n, m) for shard_condition in shard_conditions]):
             if hasattr(m, 'forward') and not isinstance(m, nn.ModuleList):
