@@ -114,6 +114,15 @@ class AutoShuffler(MPIBase):
         if self.rank == 0:
             for d in [self.final_output_dir, self.prepare_output_dir]:
                 self.mkdir(d)
+
+        if self.shard_output_by_rank:
+            time.sleep(np.random.rand() * 100)
+            self.mkdir(self.final_output_dir, str(self.rank))
+
+            time.sleep(np.random.rand() * 100)
+            self.mkdir(self.prepare_output_dir, str(self.rank))
+
+            print(f"Rank-{self.rank} initialized: {self.final_output_dir}, {self.prepare_output_dir}")
                 
         self.comm.barrier()
         # 调试：打印当前rank的初始化信息
