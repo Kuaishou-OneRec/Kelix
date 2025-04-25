@@ -232,6 +232,9 @@ def train(args):
         lr_scheduler=lr_scheduler
     )
 
+    # freeze LLN
+    model.text_decoder.requires_grad_(False)
+
     model.train()
 
     dataloader = build_dataloader(config.dataset, model=model)

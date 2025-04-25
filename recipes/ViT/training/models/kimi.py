@@ -4,25 +4,18 @@ import torch
 import numpy as np
 import deepspeed
 from PIL import Image
-from einops import rearrange
 import torch.nn as nn
 import torch.distributed as dist
-import transformers
-from transformers import AutoProcessor, AutoModelForCausalLM, AutoTokenizer, AutoConfig, AutoModel
+from transformers import AutoProcessor, AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from .siglip.modeling_siglip import SiglipPreTrainedModel, SiglipModel
 from .siglip.processing_siglip import SiglipProcessor
 import torch.nn.functional as F
-import logging
-from torch.nn.utils.rnn import pad_sequence
 from recipes.ViT.helpers.context import Context
 
 from .MoonVision.modeling_kimi_vl import MoonVitPretrainedModel
 from .MoonVision.image_processing_kimi_vl import KimiVLImageProcessor
 from .MoonVision.configuration_kimi_vl import MoonViTConfig, KimiVLConfig
 from .MoonVision.modeling_kimi_vl import KimiVLMultiModalProjector, KimiVLMultiModalProjector_Contrastive
-
-logger = logging.getLogger(__name__)
-
 
 class DisCoGather(torch.autograd.Function):
     """An autograd function that performs allgather on a tensor."""
@@ -68,18 +61,10 @@ class KimiViT(nn.Module):
         self.config = config
         self.ctx = ctx
         self.is_dist = self.ctx.is_dist
-        self.use_packing = config.packing.enabled
-        self.packing_max_length = config.packing.max_length
-        self.packing_drop_ratio = config.packing.drop_ratio
-        self.use_decoder = config.text_decoder.enabled
 
         # T5 text model for Contrastive loss
-        self.siglip = SiglipModel.from_pretrained(config.siglip_dir, ignore_mismatched_sizes=True)
+        self.siglip = SiglipModel.from_pretrained(config.siglip_dir, ignore_mismatched_sizes=True).cuda()
         self.processor = SiglipProcessor.from_pretrained(config.siglip_dir)
-
-        self.hidden_size = self.siglip.hidden_size
-        self.vocab_size = self.siglip.vocab_size
-        self.patch_size = self.siglip.patch_size
 
         MoonViT_config = MoonViTConfig()
         KimiVL_Config_AR = KimiVLConfig()
@@ -88,21 +73,25 @@ class KimiViT(nn.Module):
 
         self.MoonVIT_processor = KimiVLImageProcessor()
         self.MoonVIT = MoonVitPretrainedModel(MoonViT_config)
-        
-        self.loss_lambda = 2.0
+
+        state_dict = torch.load(config.VitParam_dir)
+        self.MoonVIT.load_state_dict(state_dict)
+        self.MoonVIT.cuda()
+
+        self.loss_lambda = 2
 
         # LLM for capation AR loss
         if config.text_decoder.enabled:
             self.text_decoder = AutoModelForCausalLM.from_pretrained(
                 config.text_decoder.model_dir,
                 use_cache=False
-            )
+            ).cuda()
             self.text_decoder_tokenizer = AutoTokenizer.from_pretrained(config.text_decoder.model_dir)
             KimiVL_Config_AR.text_config.hidden_size = AutoConfig.from_pretrained(config.text_decoder.model_dir).hidden_size
             KimiVL_Config.text_config.hidden_size = self.siglip.hidden_size
 
-            self.mlp = KimiVLMultiModalProjector_Contrastive(KimiVL_Config)
-            self.mlp_AR = KimiVLMultiModalProjector(KimiVL_Config_AR)
+            self.mlp = KimiVLMultiModalProjector_Contrastive(KimiVL_Config).cuda()
+            self.mlp_AR = KimiVLMultiModalProjector(KimiVL_Config_AR).cuda()
 
         else:
             self.text_decoder = None
@@ -121,11 +110,8 @@ class KimiViT(nn.Module):
         """
         pass
 
-    def calcul_loss(self, outputs):
+    def calcul_loss(self, text_embeds, image_embeds):
         if self.is_dist:
-            image_embeds = outputs.image_embeds
-            text_embeds = outputs.text_embeds
-
             device = text_embeds.device
 
             gathered_image_embeds = disco_gather(image_embeds, self.ctx)
@@ -211,6 +197,7 @@ class KimiViT(nn.Module):
             inputs_embeds: torch.Tensor,
             image_features: list[torch.Tensor],
             labels: torch.LongTensor,
+            pad_token_id: int,
         ):
         """
         Args:
@@ -238,107 +225,69 @@ class KimiViT(nn.Module):
                 new_labels[i, img_token_num:img_token_num+labels.size(1)] = labels[i]
             
             labels = new_labels
+            labels[labels == pad_token_id] = -100
         
         outputs = self.text_decoder(inputs_embeds=combined_embeds, labels=labels)
         
         return outputs.loss
 
-    def to_cuda(self, inputs, device):
-        if isinstance(inputs, (list, tuple)):
-            inputs = list(inputs)
-            for idx, item in enumerate(inputs):
-                inputs[idx] = self.to_cuda(item, device)
-            return inputs
-        elif isinstance(inputs, (dict, transformers.tokenization_utils_base.BatchEncoding)):
-            for key in inputs:
-                inputs[key] = self.to_cuda(inputs[key], device)
-            return inputs
-        elif isinstance(inputs, torch.Tensor):
-            return inputs.to(device)
-        return inputs
+    def forward(self, images, texts, package=None):
+        if package is not None:
+            images = package["images"]
+            texts = package["texts"]
+            if isinstance(images[0], list):
+                images = [x[0] for x in images]
+        vit_inputs = self.MoonVIT_processor(images=images, return_tensors="pt")
+        inputs = self.processor(images=images, text=texts, padding="longest", return_tensors="pt")
+        input_ids = self.text_decoder_tokenizer(texts, return_tensors="pt", padding=True, truncation=True)
 
-    def forward(self, images, texts, package=None, use_attn_mask=True):
-        device = torch.cuda.current_device()
+        pad_token_id = self.text_decoder_tokenizer.pad_token_id
+        for key in vit_inputs:
+            vit_inputs[key] = vit_inputs[key].cuda()
 
-        assert package is not None
-        inputs = package
-        images = inputs.get("images")
-        texts = inputs.get("texts")
-        if "input_ids" not in inputs:
-            text_inputs = self.processor(text=texts, padding="longest", return_tensors="pt")
-            # text_inputs = self.text_decoder_tokenizer(texts, return_tensors="pt", padding="longest")
-        inputs.update(text_inputs)
-            # sample_indices
-            # position_ids
-            # height_position_ids
-            # width_position_ids
-            # pixel_values
-            # image_indices
-            # image_attention_mask
-            # cu_seqlens
-        for name in ["images", "texts", "source", "task", "image_indices", "height_position_ids", "width_position_ids"]:
-            inputs.pop(name, None)
+        vit_inputs['pixel_values'] = vit_inputs['pixel_values'].to(torch.bfloat16)
 
-        inputs = self.to_cuda(inputs, device)
-        if use_attn_mask:
-            attention_mask = (inputs["input_ids"] != self.processor.tokenizer.pad_token_id).long()
-            inputs["attention_mask"] = self.to_cuda(attention_mask, device)
+        for key in inputs:
+            inputs[key] = inputs[key].cuda()
+
+        for key in input_ids:
+            if self.ctx.rank == 0:
+                print(key, input_ids[key].shape)
+            input_ids[key] = input_ids[key].cuda()
+
         outputs = self.siglip(**inputs)
-        Contrastive_loss = self.calcul_loss(outputs)
 
-        vision_output = outputs.vision_model_output
-        vision_embeds = vision_output.last_hidden_state
+        image_features, image_features_for_AR = self._extract_image_features(**vit_inputs)
+        inputs_embeds = self.text_decoder.get_input_embeddings()(input_ids.input_ids)
+
+        # Autoregression loss
+        AR_loss = self.compute_loss_with_image_features(
+            inputs_embeds=inputs_embeds, 
+            image_features=image_features_for_AR, 
+            labels=input_ids.input_ids, 
+            pad_token_id=pad_token_id
+        )
+
+        # Contrastive loss
+        Contrastive_loss = self.calcul_loss(outputs.text_embeds, image_features)
+
+        loss = Contrastive_loss + self.loss_lambda * AR_loss
+
         text_output = outputs.text_model_output
-        siglip_text_embeds = text_output.last_hidden_state
+        image_output = outputs.vision_model_output
 
-        batch_size = siglip_text_embeds.shape[0]
+        text_hidden_embeds = text_output.last_hidden_state
+        image_hidden_embeds = image_output.last_hidden_state
 
-        ViTOutputs = type("ViTOutputs", (Context, ), {})
+        batch_size = image_hidden_embeds.shape[0]
+        assert text_hidden_embeds.shape[0] == image_hidden_embeds.shape[0]
 
-        if self.use_decoder:
-            text_inputs = self.text_decoder_tokenizer(texts, return_tensors="pt", padding="longest")
-            input_ids = self.to_cuda(text_inputs["input_ids"], device)
-
-            text_embeds = self.text_decoder.get_input_embeddings()(input_ids)
-
-            text_embeds = self.to_cuda(text_embeds, device)
-
-            pad_token_id = self.text_decoder_tokenizer.pad_token_id
-
-            if isinstance(vision_embeds, (list, tuple)):
-                vision_embeds = list(vision_embeds)
-                vision_seqlens = [0] + [emb.shape[0] for emb in vision_embeds]
-                vision_cu_seqlens = list(np.cumsum(vision_seqlens))
-                raise NotImplementedError
-            else:
-                vision_embeds = self.mlp_AR(vision_embeds)
-                decoder_inputs_embeds = torch.concat([vision_embeds, text_embeds], dim=1)
-                vision_labels = decoder_inputs_embeds.new_full(vision_embeds.shape[:2], -100, dtype=torch.int64)
-                # text_labels = decoder_inputs_embeds.new_full(text_embeds.shape[:2], -100, dtype=torch.int64)
-                text_labels = input_ids.clone()
-                text_labels[input_ids == pad_token_id] == -100
-                labels = torch.concat([vision_labels, text_labels], dim=1)
-                decoder_outputs = self.text_decoder(inputs_embeds=decoder_inputs_embeds, labels=labels)
-
-                AR_loss = decoder_outputs.loss
-                loss = Contrastive_loss + self.loss_lambda * AR_loss
-            
-            return outputs, ViTOutputs(
-                Contrastive_loss=Contrastive_loss,
-                AR_loss=AR_loss,
-                loss=loss,
-                total_image_num_tokens=np.prod(vision_embeds.shape[:2]).item(),
-                total_text_num_tokens=np.prod(siglip_text_embeds.shape[:2]).item(),
-                total_num_samples=batch_size,
-                total_text_num_valid_tokens=(input_ids != pad_token_id).long().detach().cpu().sum().item()
-            )
-
-        return outputs, ViTOutputs(
-            Contrastive_loss=loss,
-            AR_loss=torch.FloatTensor(0),
+        return outputs, Context(
+            Contrastive_loss=Contrastive_loss,
+            AR_loss=AR_loss,
             loss=loss,
-            total_image_num_tokens=np.prod(vision_embeds.shape[:2]).item(),
-            total_text_num_tokens=np.prod(siglip_text_embeds.shape[:2]).item(),
+            total_image_num_tokens=np.prod(image_hidden_embeds.shape[:2]).item(),
+            total_text_num_tokens=np.prod(text_hidden_embeds.shape[:2]).item(),
             total_num_samples=batch_size,
-            total_text_num_valid_tokens=(input_ids != pad_token_id).long().sum().item()
+            total_text_num_valid_tokens=(inputs["input_ids"] != pad_token_id).long().sum().item()
         )

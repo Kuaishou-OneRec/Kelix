@@ -2376,13 +2376,14 @@ class KimiVLMultiModalProjector(nn.Module):
 
     def __init__(self, config: KimiVLConfig):
         super().__init__()
+        self.config = config
 
         self.hidden_size = (
             config.vision_config.hidden_size
             * config.vision_config.merge_kernel_size[0]
             * config.vision_config.merge_kernel_size[1]
         )
-        self.hidden_size = config.vision_config.hidden_size
+        # self.hidden_size = config.vision_config.hidden_size
 
         self.pre_norm = torch.nn.LayerNorm(config.vision_config.hidden_size, eps=1e-05)
         self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
@@ -2392,7 +2393,21 @@ class KimiVLMultiModalProjector(nn.Module):
         )
 
     def forward(self, image_features: torch.Tensor) -> torch.Tensor:
-        # image_features = torch.cat(image_features, dim=0)
+        config = self.config
+        if isinstance(image_features, (list, tuple)):
+            processed_features = list()
+            for image_feature in image_features:
+                hidden_states = self.pre_norm(image_feature).view(-1, self.hidden_size)
+                from einops import rearrange
+                p = config.vision_config.merge_kernel_size[0] * config.vision_config.merge_kernel_size[1]
+                image_feature = rearrange(image_feature, "n p d -> n (p d)", p=p)
+                hidden_states = self.linear_1(hidden_states)
+                hidden_states = self.act(hidden_states)
+                hidden_states = self.linear_2(hidden_states)
+                processed_features.append(hidden_states)
+
+            return processed_features
+
         dims = image_features.shape[:-1]
         dim = image_features.shape[-1]
         image_features = image_features.view(np.prod(dims), dim)
@@ -2402,6 +2417,7 @@ class KimiVLMultiModalProjector(nn.Module):
         hidden_states = self.linear_2(hidden_states)
 
         return hidden_states.view(*dims, -1)
+
 
 class KimiVLMultiModalProjector_Contrastive(nn.Module):
     def __init__(self, config: KimiVLConfig):

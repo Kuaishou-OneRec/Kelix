@@ -5,7 +5,7 @@ dataset:
   num_workers: 2
   loader:
     num_workers: 2
-    batch_size: 4
+    batch_size: 8
     collate_fn: VisionPackingCollator
   vision:
     images:
@@ -23,7 +23,8 @@ dataset:
     - type: ImageProcessorHook
       position: after
 model:
-  siglip_dir: /llm_reco_ssd/zhouyang12/models/SigLIP-So400M-Patch14-384/
+  siglip_dir: /llm_reco/liuyang76/Models/siglip2-so400m-patch14-384
+  VitParam_dir: /llm_reco/liuyang76/Models/MoonVitParam/MoonVit.pt
   text_decoder:
     enabled: true
     model_dir: /llm_reco/liuyang76/Models/Qwen2.5-0.5B-Instruct
@@ -35,8 +36,8 @@ optimizer:
   weight_decay: 0.01
 lr_scheduler:
   type: cosine
-  num_warmup_steps: 200
-  num_training_steps: 2000
+  num_warmup_steps: 400
+  num_training_steps: 12000
   min_lr: 0.0
 monitor:
   type: ViTMonitor
