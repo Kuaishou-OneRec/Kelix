@@ -13,6 +13,7 @@ import collections
 import pickle
 import itertools
 import contextlib
+from functools import partial
 
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
@@ -553,7 +554,7 @@ def train():
   if args.fp32_weight: model = model.float()
   shard_model(
     model=model,
-    shard_conditions=[get_shard_conditions],
+    shard_conditions=[partial(get_shard_conditions, model_class=args.model_class)],
     cpu_offload=False,
     reshard_after_forward=args.reshard_after_forward,
     dp_mesh=device_mesh,

@@ -124,6 +124,7 @@ def get_shard_conditions(
     name: str,
     module: nn.Module,
     names_to_match: Optional[List[str]] = None,
+    model_class=None,
     *args,
     **kwargs,
 ) -> bool:
@@ -159,15 +160,25 @@ def get_shard_conditions(
         >>> print(matches)
         >>> ["layers.0", "decoder.layers.1", "embedding"]
     """
-    if names_to_match and name in names_to_match:
-        return True
 
-    name_list = name.split(".")
-    if len(name_list) >= 2:
-        res = name_list[-2] == "layers" and str.isdigit(name_list[-1])
-        return res
+    # 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration'
+    if model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration']:
+        if names_to_match and name in names_to_match:
+            return True
 
-    return False
+        name_list = name.split(".")
+        if len(name_list) >= 2:
+            res = name_list[-2] == "layers" and str.isdigit(name_list[-1])
+            return res
+
+        return False
+    elif model_class in ['InternVLChatModel']:
+        name_list = name.split(".")
+        if len(name_list) >= 2:
+            res = name_list[-2] == "layers" and str.isdigit(name_list[-1])
+            return res
+    else:
+        raise NotImplementedError(f"Model class {model_class} not supported.")
 
 
 def shard_model(
