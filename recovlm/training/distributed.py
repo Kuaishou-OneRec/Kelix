@@ -232,6 +232,7 @@ def shard_model(
         #    num_layers_sharded += 1
         if m in layers:
             fully_shard(m, **fsdp_kwargs)
+            num_layers_sharded += 1
 
     if num_layers_sharded == 0:
         raise ValueError(
