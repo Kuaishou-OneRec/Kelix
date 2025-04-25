@@ -223,6 +223,9 @@ def process_vision_info_internvl(messages:list,
                         post = str(int(pid_str[-4:]))
                         path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
                     nframes,num_patches_list = load_video(path,num_segments = num_segments)
+                else:
+                    path = turn["video"]
+                    nframes,num_patches_list = load_video(path,num_segments = num_segments)
 
             elif isinstance(turn["video"],list):
                 for img in turn['video']:
