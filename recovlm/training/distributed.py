@@ -234,7 +234,7 @@ def shard_model(
         )
 
     # Finally shard the entire model to account for any stragglers
-    fully_shard(model, **fsdp_kwargs)
+    # fully_shard(model, **fsdp_kwargs)
 
     def traverse_modules(model, prefix=''):
         """
