@@ -1,13 +1,13 @@
-output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/vit/Coyo
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/vit/SyntheticOCR_EN_HW
 split_size: 268_435_456
 dataset:
   class_name: ParquetDataset
   kwargs:
-    path: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/Coyo
+    path: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/SyntheticOCR_EN_HW
   columns:
     - images
     - messages
 converter:
   class_name: OvitConverter
   kwargs:
-    source: Coyo
+    source: SyntheticOCR_EN_HW
