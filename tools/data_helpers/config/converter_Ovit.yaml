@@ -1,13 +1,13 @@
-output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/vit/Detailed_Caption_densecap_new
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/vit/Detailed_Caption_detailed_caption
 split_size: 268_435_456
 dataset:
   class_name: ParquetDataset
   kwargs:
-    path: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/Detailed_Caption_densecap_new
+    path: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/Detailed_Caption_detailed_caption
   columns:
     - images
     - segments
 converter:
   class_name: OvitConverter
   kwargs:
-    source: Detailed_Caption_densecap
+    source: Detailed_Caption_detailed_caption
