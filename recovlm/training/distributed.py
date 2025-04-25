@@ -220,8 +220,9 @@ def shard_model(
         if any([shard_condition(n, m) for shard_condition in shard_conditions]):
             fully_shard(m, **fsdp_kwargs)
             if prev is not None: 
-                print(f"{m} set_modules_to_forward_prefetch {prev}")
-                m.set_modules_to_forward_prefetch([prev])
+                # print(f"{m} set_modules_to_forward_prefetch {prev}")
+                # m.set_modules_to_forward_prefetch([prev])
+                prev.set_modules_to_forward_prefetch([m])
             prev = m
             num_layers_sharded += 1
 
