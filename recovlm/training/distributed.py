@@ -159,6 +159,7 @@ def get_shard_conditions(
         >>> print(matches)
         >>> ["layers.0", "decoder.layers.1", "embedding"]
     """
+    return True
     print('=' * 40)
     print(f"shard condition()", name)
     if names_to_match and name in names_to_match:
