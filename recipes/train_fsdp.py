@@ -744,6 +744,7 @@ def train():
   global_step = 0
   # get_sequence_parallel_group("gloo")
   data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
+  micro_step = 0
   while True:
     with contextlib.ExitStack() as ctx:
 
@@ -753,6 +754,8 @@ def train():
           batch = next(data_iter)
       except StopIteration:
           break
+      
+      micro_step += 1
 
       # if args.debug_dataset:  continue
 
