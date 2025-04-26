@@ -461,6 +461,7 @@ def main():
         )
         json_maker._collect_output_files(json_maker.prepare_output_dir)
     else:
+        exit()
         shuffler = AutoShuffler(
             input_dir=args.input,
             output_dir=args.output,
