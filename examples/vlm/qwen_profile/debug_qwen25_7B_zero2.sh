@@ -105,7 +105,7 @@ nohup mpirun --allow-run-as-root -np $np \
         -x https_proxy=\
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config /llm_reco/chuchenglong/work_space/recovlm/examples/vlm/configs/internvl/2b_internvl_stage2.json \
+                --dataset_config examples/vlm/configs/qwen/qwen_stage2.json \
                 --model_processor Qwen2_5_VLProcessor \
                 --model_class Qwen2_5_VLForConditionalGeneration \
                 --monitor_datasource_loss \
