@@ -229,31 +229,31 @@ def shard_model(
             fully_shard(m, **fsdp_kwargs)
             num_layers_sharded += 1
 
-    # layers = []
-    # for n, m in reversed(list(model.named_modules())):
-    #     if any([shard_condition(n, m) for shard_condition in shard_conditions]):
-    #         fully_shard(m, **fsdp_kwargs)
-    #         num_layers_sharded += 1
-    #         layers.append(m)
+    layers = []
+    for n, m in reversed(list(model.named_modules())):
+        if any([shard_condition(n, m) for shard_condition in shard_conditions]):
+            fully_shard(m, **fsdp_kwargs)
+            num_layers_sharded += 1
+            layers.append(m)
 
 
-    print('=' * 40)
-    if num_layers_sharded == 0:
-        raise ValueError(
-            "No layer modules were sharded. Please check if shard conditions are working as expected."
-        )
+    # print('=' * 40)
+    # if num_layers_sharded == 0:
+    #     raise ValueError(
+    #         "No layer modules were sharded. Please check if shard conditions are working as expected."
+    #     )
 
     # Finally shard the entire model to account for any stragglers
     fully_shard(model, **fsdp_kwargs)
 
-    prev = None
-    #for i_layer, layer in reversed(list(traverse_modules(model))):
-    for layer in reversed(layers):
-        if prev is not None:
-            layer.set_modules_to_forward_prefetch([prev])
-        prev = layer
+    # prev = None
+    # #for i_layer, layer in reversed(list(traverse_modules(model))):
+    # for layer in reversed(layers):
+    #     if prev is not None:
+    #         layer.set_modules_to_forward_prefetch([prev])
+    #     prev = layer
 
-    model.set_modules_to_forward_prefetch([prev])
+    # model.set_modules_to_forward_prefetch([prev])
 
 
 
