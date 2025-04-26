@@ -213,7 +213,10 @@ def get_argument_parser():
 
   parser.add_argument("--enable_gradient_checkpointing", action="store_true",
                       help="Enable gradient checkpointing during training")
-  
+
+  parser.add_argument("--prefetch_parameters", action="store_true",
+                      help="prefetch fsdp parameters")
+
   parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
                       help="Gradient accumulation steps.")
   
@@ -550,7 +553,8 @@ def train():
     cpu_offload=False,
     reshard_after_forward=args.reshard_after_forward,
     dp_mesh=device_mesh,
-    fp32_weight=args.fp32_weight
+    fp32_weight=args.fp32_weight,
+    prefetch_parameters=args.prefetch_parameters,
   )
   dist.barrier()
 

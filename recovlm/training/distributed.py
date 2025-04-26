@@ -188,7 +188,8 @@ def shard_model(
     cpu_offload: bool,
     reshard_after_forward: bool = True,
     dp_mesh: Optional[DeviceMesh] = None,
-    fp32_weight=True
+    fp32_weight=True,
+    prefetch_parameters=False
     ) -> None:
     """
     Utility to shard a model with FSDP using the PyTorch Distributed fully_shard API.
@@ -246,14 +247,15 @@ def shard_model(
     # Finally shard the entire model to account for any stragglers
     fully_shard(model, **fsdp_kwargs)
 
-    prev = None
-    #for i_layer, layer in reversed(list(traverse_modules(model))):
-    for layer in reversed(layers):
-        if prev is not None:
-            layer.set_modules_to_forward_prefetch([prev])
-        prev = layer
+    if prefetch_parameters:
+        prev = None
+        #for i_layer, layer in reversed(list(traverse_modules(model))):
+        for layer in reversed(layers):
+            if prev is not None:
+                layer.set_modules_to_forward_prefetch([prev])
+            prev = layer
 
-    model.set_modules_to_forward_prefetch([prev])
+        model.set_modules_to_forward_prefetch([prev])
 
 
 
