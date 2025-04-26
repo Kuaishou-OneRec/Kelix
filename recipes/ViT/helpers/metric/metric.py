@@ -43,17 +43,15 @@ class Metric:
         self.value = deepcopy(value)
 
     def update(self, other: Dict[str, Any]):
+        if self.can_skip_update and (self.name not in other.keys()):
+            return
         if isinstance(self.method, str):
             method = self.method
             update_method = getattr(self, "{}_value".format(method))
-            if self.can_skip_update and getattr(other, self.name, None) is None:
-                return
             update_method(other)
         else:
             assert isinstance(self.method, Callable)
             update_method: Callable = self.method
-            if self.can_skip_update and getattr(other, self.name, None) is None:
-                return
             update_method(self, other)
 
     def reset(self):

@@ -237,6 +237,7 @@ class KimiViT(nn.Module):
             texts = package["texts"]
             if isinstance(images[0], list):
                 images = [x[0] for x in images]
+            source = package["source"]
         vit_inputs = self.MoonVIT_processor(images=images, return_tensors="pt")
         inputs = self.processor(images=images, text=texts, padding="longest", return_tensors="pt")
         input_ids = self.text_decoder_tokenizer(texts, return_tensors="pt", padding=True, truncation=True)
@@ -280,12 +281,14 @@ class KimiViT(nn.Module):
         batch_size = image_hidden_embeds.shape[0]
         assert text_hidden_embeds.shape[0] == image_hidden_embeds.shape[0]
 
-        return outputs, Context(
+        return Context(
             Contrastive_loss=Contrastive_loss,
             AR_loss=AR_loss,
             loss=loss,
             total_image_num_tokens=np.prod(image_hidden_embeds.shape[:2]).item(),
             total_text_num_tokens=np.prod(text_hidden_embeds.shape[:2]).item(),
             total_num_samples=batch_size,
-            total_text_num_valid_tokens=(input_ids["input_ids"] != pad_token_id).long().sum().item()
+            total_text_num_valid_tokens=(input_ids["input_ids"] != pad_token_id).long().sum().item(),
+            source=source,
+            outputs=outputs
         )

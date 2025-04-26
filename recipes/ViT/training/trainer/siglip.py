@@ -149,7 +149,36 @@ class MonitorDecorator(object):
                 reset_step=config.report.report_per_step,
             )
     
-    def collect(self, outputs, rets, elapsed, **kwargs):
+    def montior_dataset(self, config, rets):
+
+        monitor = self.monitor
+        if "source" in rets:
+            count_format = "source/{}"
+            sources = [count_format.format(src) for src in rets.source]
+            sources_list = [None for _ in range(self.ctx.world_size)]
+            dist.all_gather_object(sources_list, sources)
+            tmp_sources = list()
+            for iter_sources in sources_list:
+                tmp_sources.extend(iter_sources)
+            sources = tmp_sources
+
+            source_dict = dict(Counter(sources))
+            for source_name in source_dict:
+                dataset_name = source_name
+                if dataset_name not in monitor.metrics_names:
+                    monitor.register_metric(
+                        name=dataset_name,
+                        init_value=0,
+                        method="add",
+                        report_per_step=config.report.report_per_step,
+                        verbose_per_step=self.inf,
+                        can_skip_update=True
+                    )
+            return source_dict
+
+        return dict()
+
+    def collect(self, config, rets, elapsed, **kwargs):
         model = self.model
         monitor = self.monitor
         ctx = self.ctx
@@ -187,7 +216,8 @@ class MonitorDecorator(object):
             total_text_num_valid_tokens=total_text_num_valid_tokens,
             total_num_samples=total_num_samples,
             total_num_tokens=total_num_tokens,
-            **kwargs
+            **kwargs,
+            **self.montior_dataset(config, rets)
         )
 
 
@@ -248,7 +278,7 @@ def train(args):
         
         images = batch["images"]
         texts = batch["texts"]
-        outputs, rets = model(package=batch, images=images, texts=texts)
+        rets = model(package=batch, images=images, texts=texts)
         
         loss = rets.loss
 
@@ -256,10 +286,10 @@ def train(args):
 
         model.step()
         end = time.time()
-        package = decorator.collect(outputs, rets, end - start)
+        package = decorator.collect(config, rets, end - start)
         monitor.step(package)
         start = end
-    
+
     monitor.step(force_save=True)
 
 

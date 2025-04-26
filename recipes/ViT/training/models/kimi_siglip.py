@@ -368,17 +368,19 @@ class KimiViT(nn.Module):
                 AR_loss = decoder_outputs.loss
                 loss = Contrastive_loss + self.loss_lambda * AR_loss
             
-            return outputs, ViTOutputs(
+            return ViTOutputs(
                 Contrastive_loss=Contrastive_loss,
                 AR_loss=AR_loss,
                 loss=loss,
                 total_image_num_tokens=np.prod(vision_embeds.shape[:2]).item(),
                 total_text_num_tokens=np.prod(siglip_text_embeds.shape[:2]).item(),
                 total_num_samples=batch_size,
-                total_text_num_valid_tokens=(input_ids != pad_token_id).long().detach().cpu().sum().item()
+                total_text_num_valid_tokens=(input_ids != pad_token_id).long().detach().cpu().sum().item(),
+                source=source,
+                outputs=outputs
             )
 
-        return outputs, ViTOutputs(
+        return ViTOutputs(
             Contrastive_loss=loss,
             AR_loss=torch.FloatTensor(0),
             loss=loss,
@@ -386,5 +388,6 @@ class KimiViT(nn.Module):
             total_text_num_tokens=np.prod(siglip_text_embeds.shape[:2]).item(),
             total_num_samples=batch_size,
             total_text_num_valid_tokens=(input_ids != pad_token_id).long().sum().item(),
-            source=source
+            source=source,
+            outputs=outputs
         )

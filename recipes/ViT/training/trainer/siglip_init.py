@@ -150,14 +150,14 @@ class MonitorDecorator(object):
                 reset_step=config.report.report_per_step,
             )
 
-    def montior_dataset(self, rets):
+    def montior_dataset(self, config, rets):
 
         monitor = self.monitor
         if "source" in rets:
             count_format = "source/{}"
             sources = [count_format.format(src) for src in rets.source]
             sources_list = [None for _ in range(self.ctx.world_size)]
-            torch.all_gather_object(sources_list, sources)
+            dist.all_gather_object(sources_list, sources)
             tmp_sources = list()
             for iter_sources in sources_list:
                 tmp_sources.extend(iter_sources)
@@ -179,7 +179,7 @@ class MonitorDecorator(object):
 
         return dict()
 
-    def collect(self, outputs, rets, elapsed, **kwargs):
+    def collect(self, config, rets, elapsed, **kwargs):
         model = self.model
         monitor = self.monitor
         ctx = self.ctx
@@ -217,7 +217,7 @@ class MonitorDecorator(object):
             total_num_samples=total_num_samples,
             total_num_tokens=total_num_tokens,
             **kwargs,
-            **self.montior_dataset(rets),
+            **self.montior_dataset(config, rets),
         )
 
 
@@ -278,7 +278,7 @@ def train(args):
         
         images = batch["images"]
         texts = batch["texts"]
-        outputs, rets = model(package=batch, images=images, texts=texts)
+        rets = model(package=batch, images=images, texts=texts)
         
         loss = rets.loss
 
@@ -286,7 +286,7 @@ def train(args):
 
         model.step()
         end = time.time()
-        package = decorator.collect(outputs, rets, end - start)
+        package = decorator.collect(config, rets, end - start)
         monitor.step(package)
         start = end
     
