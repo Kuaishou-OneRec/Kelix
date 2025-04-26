@@ -776,10 +776,11 @@ def train():
           show_cnt -= 1
           
       data_source = batch.pop("data_source", None) # dataset source list cur batch
-      to_cuda(batch)
+      to_cuda(batch, non_blocking=True)
       ticker.tick("to_cuda(batch)")
 
       input_ids = batch["input_ids"]
+      input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
       loss_mask = batch["loss_mask"]
       attention_mask = batch.get("attention_mask", None)
       pixel_values = batch.get("pixel_values", None)
@@ -791,39 +792,35 @@ def train():
       position_ids = batch.get("position_ids", None)
       image_flags = batch.get("image_flags", None)
 
-      
-
-
 
       # 打印 token 数量
       token_count = input_ids.numel()  # 计算 token 数量
       print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
-      num_tokens = input_ids.numel()
+      num_tokens = token_count
       num_samples = (sample_idx.max() + 1).sum()
       num_image_tokens = pixel_values.shape[0] * 1024 if args.model_class == "InternVLChatModel" else 0
       num_valid_tokens = num_tokens - (sample_idx == -1).sum()
       token_metrics = torch.tensor(
-        [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda()
+        [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda(non_blocking=True)
       ticker.tick("token_metrics_init")
       dist.all_reduce(
         token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
       ticker.tick("token_metrics_reduce")
-      num_tokens = token_metrics[0]
-      num_samples = token_metrics[1]
-      num_valid_tokens = token_metrics[2]
-      num_image_tokens = token_metrics[3]
 
-      total_num_samples += num_samples.item()
-      total_num_tokens += num_tokens.item()
-      total_num_valid_tokens += num_valid_tokens.item()
-      total_num_image_tokens += num_image_tokens.item()
-
-      acc_num_samples += num_samples.item()
-      acc_num_tokens += num_tokens.item()
-      acc_valid_num_tokens += num_valid_tokens.item()
-
-      input_ids = input_ids * (input_ids > 0).to(torch.int64)
+      
       labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
+
+      num_tokens, num_samples, num_valid_tokens, num_image_tokens = token_metrics.detach().cpu().numpy()
+
+      total_num_samples += num_samples
+      total_num_tokens += num_tokens
+      total_num_valid_tokens += num_valid_tokens
+      total_num_image_tokens += num_image_tokens
+
+      acc_num_samples += num_samples
+      acc_num_tokens += num_tokens
+      acc_valid_num_tokens += num_valid_tokens
+
       ticker.tick("metrics_accumulate")
       with Timer("Fwd"):
         if args.model_class == "InternVLChatModel":
@@ -848,7 +845,7 @@ def train():
 
         # 提前shift logits & labels
         pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
-            dtype=labels.dtype).to(device=labels.device)
+            dtype=labels.dtype).to(device=labels.device, non_blocking=True)
         labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
         local_labels = get_local_sequence(labels, seq_idx=1)
         loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
@@ -893,7 +890,7 @@ def train():
         ticker.tick("monitor_datasource_cnt")
     
       #########################################
-      avg_loss = torch.tensor(loss.item()).cuda()
+      avg_loss = loss.detach() # torch.tensor(loss.item()).cuda()
       dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
       avg_loss = avg_loss.item() / dist.get_world_size()
       acc_avg_loss += avg_loss
