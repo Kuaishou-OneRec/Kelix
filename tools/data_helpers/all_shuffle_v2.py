@@ -442,7 +442,7 @@ def main():
     parser = argparse.ArgumentParser(description="Auto Two-Stage Shuffler")
     parser.add_argument("--input", required=True, nargs="+", 
                        help="输入目录，支持@采样率语法（如 /data@0.5）")
-    parser.add_argument("--output", type=True, 
+    parser.add_argument("--output", required=True, 
                        help="最终输出目录")
     parser.add_argument("--buffer", type=int, default=512,
                        help="内存缓冲区大小（默认8GB）")
@@ -476,5 +476,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
 
 
