@@ -428,36 +428,47 @@ class AutoShuffler(MPIBase):
         if self.rank == 0:
             all_files = self._collect_output_files(self.final_output_dir)
 
-        # if self.rank == 0 and 0:
-        #     self.rm(self.prepare_output_dir)
-        #     all_files = self.ls(self.final_output_dir)
-        #     print(f"Rank-0 completed. Total files: {len(all_files)}. Memory: {get_memory_usage()}")
-        #     dump_path = '/code/AutoShuffler_v2/run_tmp.json'
-        #     print(f"Rank-0 dumping {len(all_files)} files to {dump_path}. Memory: {get_memory_usage()}")
-        #     import json
-        #     with open(self.mkdir(dump_path, drop_last=True), 'w') as json_file:
-        #         json.dump(all_files, json_file, indent=4)
+
+class AutoShufflerJsonMaker(AutoShuffler):
+    def __init__(self, input_dir, output_dir, rank, world_size):
+        self.fs = pa.hdfs.connect(user="mpi")
+        self.input_dir = input_dir
+        self.output_dir = output_dir
+        self.world_size = world_size
+        self.rank = rank
+    
 
 def main():
     parser = argparse.ArgumentParser(description="Auto Two-Stage Shuffler")
     parser.add_argument("--input", required=True, nargs="+", 
                        help="输入目录，支持@采样率语法（如 /data@0.5）")
-    parser.add_argument("--output", required=True, 
+    parser.add_argument("--output", type=True, 
                        help="最终输出目录")
     parser.add_argument("--buffer", type=int, default=512,
                        help="内存缓冲区大小（默认8GB）")
     parser.add_argument("--partition", type=int, default=2048,
                        help="目标分块大小（行数）")
+    parser.add_argument("--make_json", action="store_true",
+                       help="只生成json")
     args = parser.parse_args()
 
-    shuffler = AutoShuffler(
-        input_dir=args.input,
-        output_dir=args.output,
-        buffer_mem_size=args.buffer,
-        target_partition_size=args.partition
-    )
-    print(f"Main process initialized for Rank-{shuffler.rank}. Memory: {get_memory_usage()}")
-    shuffler.run([1,2])
+    if args.make_json:
+        json_maker = AutoShufflerJsonMaker(
+            input_dir=args.input,
+            output_dir=args.output,
+            rank=0,
+            world_size=1
+        )
+        json_maker._collect_output_files(json_maker.prepare_output_dir)
+    else:
+        shuffler = AutoShuffler(
+            input_dir=args.input,
+            output_dir=args.output,
+            buffer_mem_size=args.buffer,
+            target_partition_size=args.partition
+        )
+        print(f"Main process initialized for Rank-{shuffler.rank}. Memory: {get_memory_usage()}")
+        shuffler.run([1,2])
 
 
 if __name__ == "__main__":
