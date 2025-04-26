@@ -430,8 +430,9 @@ class AutoShuffler(MPIBase):
 
 
 class AutoShufflerJsonMaker(AutoShuffler):
-    def __init__(self, input_dir, output_dir, world_size):
+    def __init__(self, input_dir, output_dir, world_size, shard_output_by_rank=True):
         self.fs = pa.hdfs.connect(user="mpi")
+        self.shard_output_by_rank = shard_output_by_rank
         self.input_dir = input_dir
         self.output_dir = output_dir
         self.world_size = world_size
