@@ -2397,10 +2397,13 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                         sample_dict: Dict[str, Any],
                         conf: Dict[str, Any]):
 
-    if isinstance(block["image"], str):
+    if isinstance(block["image"], str) and os.path.exists(block["image"]):
+      image = Image.open(block["image"])
+    elif isinstance(block["image"], str):
       image = sample_dict[block["image"]]
     else:
       image = block["image"]
+
     if image.mode != "RGB":
       image = image.convert("RGB")
     block["image"] = image
