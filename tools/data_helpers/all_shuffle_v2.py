@@ -436,6 +436,10 @@ class AutoShufflerJsonMaker(AutoShuffler):
         self.output_dir = output_dir
         self.world_size = world_size
         self.rank = 0
+        self.final_output_dir = output_dir
+        self.prepare_output_dir = os.path.join(output_dir, "_prepared")
+        self._collect_output_files(self.prepare_output_dir)
+        self._collect_output_files(self.final_output_dir)
     
 
 def main():
@@ -460,7 +464,7 @@ def main():
             output_dir=args.output,
             world_size=args.world_size
         )
-        json_maker._collect_output_files(json_maker.prepare_output_dir)
+        
     else:
         exit()
         shuffler = AutoShuffler(
