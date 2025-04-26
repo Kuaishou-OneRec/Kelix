@@ -5,14 +5,14 @@ dataset:
   num_workers: 2
   loader:
     num_workers: 2
-    batch_size: 8
-    collate_fn: SingleImageTextPairCollator
+    batch_size: 4
+    collate_fn: VisionPackingCollator
   vision:
     resized_height: null
     resized_width: null
-    multiple_of: 28
+    multiple_of: 14
     min_pixels: 784
-    max_pixels: 3211264
+    max_pixels: 802816
     video_min_pixels: 25088
     video_max_pixels: 150528
     video_total_pixels: 4816896
@@ -28,7 +28,7 @@ dataset:
   hooks:
     - type: VisionEncoderDataProcessorHook
       position: before
-    - type: NaiveHook
+    - type: ImageProcessorHook
       position: after
 model:
   siglip_dir: /llm_reco/liuyang76/Models/siglip2-so400m-patch14-384
@@ -44,8 +44,8 @@ optimizer:
   weight_decay: 0.01
 lr_scheduler:
   type: cosine
-  num_warmup_steps: 3600
-  num_training_steps: 120000
+  num_warmup_steps: 30000
+  num_training_steps: 1000000
   min_lr: 0.0
 monitor:
   type: ViTMonitor

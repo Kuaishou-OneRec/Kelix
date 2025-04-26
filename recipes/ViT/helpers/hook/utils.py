@@ -95,7 +95,7 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
         image_obj = Image.open(requests.get(image, stream=True).raw)
     elif image.startswith("file://"):
         image_obj = Image.open(image[7:])
-    elif len(image) > 200:
+    elif not image.startswith("/llm_ssd"):
         base64_data = image
         data = base64.b64decode(base64_data)
         image_obj = Image.open(BytesIO(data))
@@ -280,7 +280,10 @@ def get_video_reader_backend() -> str:
 
 def fetch_video(
     ele: dict, 
-    image_factor: int = IMAGE_FACTOR) -> torch.Tensor | list[Image.Image]:
+    image_factor: int = IMAGE_FACTOR,
+    image_min_pixel: int = MIN_PIXELS,
+    image_max_pixel: int = MAX_PIXELS,
+) -> torch.Tensor | list[Image.Image]:
     if isinstance(ele["video"], str) or isinstance(ele["video"], bytes): 
         video_reader_backend = get_video_reader_backend()
         video = VIDEO_READER_BACKENDS[video_reader_backend](ele)
@@ -295,6 +298,8 @@ def fetch_video(
                 ele["resized_height"],
                 ele["resized_width"],
                 factor=image_factor,
+                min_pixels=min_pixels,
+                max_pixels=max_pixels,
             )
         else:
             resized_height, resized_width = smart_resize(
@@ -310,7 +315,7 @@ def fetch_video(
             interpolation=InterpolationMode.BICUBIC,
             antialias=True,
         ).float()
-        return video
+        return list(video.unbind(0))
     else:
         assert isinstance(ele["video"], (list, tuple))
         process_info = ele.copy()
@@ -320,54 +325,33 @@ def fetch_video(
         for video_element in ele["video"]:
             # preprocess images
             if isinstance(video_element, dict):
-                images.append(fetch_image(video_element, size_factor=image_factor))
+                images.append(fetch_image(video_element, size_factor=image_factor, min_pixels=image_min_pixels, max_pixels=image_max_pixels))
             else:
                 images.append(
-                    fetch_image({"image": video_element, **process_info}, size_factor=image_factor)
+                    fetch_image({"image": video_element, **process_info}, size_factor=image_factor, min_pixels=image_min_pixels, max_pixels=image_max_pixels)
                 )
         nframes = ceil_by_factor(len(images), FRAME_FACTOR)
         if len(images) < nframes:
             images.extend([images[-1]] * (nframes - len(images)))
         return images
 
-def extract_vision_info(conversations: list[dict] | list[list[dict]]) -> list[dict]:
-    vision_infos = []
-    if isinstance(conversations[0], dict):
-        conversations = [conversations]
-    for conversation in conversations:
-        for message in conversation:
-            if isinstance(message["content"], list):
-                for ele in message["content"]:
-                    if (
-                        "image" in ele
-                        or "image_url" in ele
-                        or "video" in ele
-                        or ele["type"] in ("image", "image_url", "video")
-                    ):
-                        vision_infos.append(ele)
-    return vision_infos
-
 
 def process_vision_info(
     vision_infos, 
     multiple_of,
     min_pixels,
-    max_pixels,
-    video_min_pixels,
-    video_max_pixels,
-    video_total_pixels
+    max_pixels
 ):
     assert vision_infos is not None
 
     ## Read images or videos
-    image_inputs = []
-    video_inputs = []
+    images = list()
     for vision_info in vision_infos:
         if "image" in vision_info or "image_url" in vision_info:
-            image_inputs.append(
+            images.append(
                 fetch_image(
                     vision_info, 
-                    image_factor=multiple_of,
+                    size_factor=multiple_of,
                     min_pixels=min_pixels,
                     max_pixels=max_pixels
                 )
@@ -380,12 +364,15 @@ def process_vision_info(
                     post = str(int(pid_str[-4:]))
                     path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
                 vision_info["video"] = path
-            video_inputs.append(fetch_video(vision_info))
-
+            images.extend(
+                fetch_video(
+                    vision_info, 
+                    image_factor=multiple_of, 
+                    image_min_pixels=min_pixels, 
+                    image_max_pixels=max_pixels
+                )
+            )
         else:
             raise ValueError("image, image_url or video should in content.")
-    if len(image_inputs) == 0:
-        image_inputs = None
-    if len(video_inputs) == 0:
-        video_inputs = None
-    return image_inputs, video_inputs
+
+    return images

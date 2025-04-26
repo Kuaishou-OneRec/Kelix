@@ -1,6 +1,7 @@
 from .base import BaseHook
 from .image_processor import ImageProcessorHook
 from .naive import NaiveHook
+from .vision_encoder import VisionEncoderDataProcessorHook
 from recipes.ViT.helpers.common import filter_function_arguments
 
 

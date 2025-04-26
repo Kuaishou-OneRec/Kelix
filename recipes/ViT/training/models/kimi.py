@@ -251,8 +251,6 @@ class KimiViT(nn.Module):
             inputs[key] = inputs[key].cuda()
 
         for key in input_ids:
-            if self.ctx.rank == 0:
-                print(key, input_ids[key].shape)
             input_ids[key] = input_ids[key].cuda()
 
         outputs = self.siglip(**inputs)
@@ -289,5 +287,5 @@ class KimiViT(nn.Module):
             total_image_num_tokens=np.prod(image_hidden_embeds.shape[:2]).item(),
             total_text_num_tokens=np.prod(text_hidden_embeds.shape[:2]).item(),
             total_num_samples=batch_size,
-            total_text_num_valid_tokens=(inputs["input_ids"] != pad_token_id).long().sum().item()
+            total_text_num_valid_tokens=(input_ids["input_ids"] != pad_token_id).long().sum().item()
         )

@@ -1,3 +1,4 @@
+
 import io
 import os
 import torch
@@ -35,7 +36,6 @@ class ParquetDataset(IterableDataset):
         self.patch_size = packing_kwargs.patch_size
         self.packing_drop_ratio = packing_kwargs.drop_ratio
         self.packing_max_length = packing_kwargs.max_length
-
         self.after_hook = list()
         self.before_hook = list()
 
@@ -134,19 +134,153 @@ class ParquetDataset(IterableDataset):
         self.offset_dict_all[worker].update(tmp_offset_dict)
         logger.warning(f"[rank{rank}-worker{worker}] load checkpoint success.")
 
-    def _parser(self, sample, url):
+    def _parser(self, raw_row_data, file_url):
         try:
-            key = sample["uuid"]
-            processed_sample = {
-                "__key__": key,
-                "__url__": url,
-                "json": sample
-            }
-            return processed_sample
+            for hook in self.before_hook:
+                raw_row_data = hook(raw_row_data, file_url)
+            images = None
+            videos = None
 
+            if "images" in raw_row_data:
+                images = raw_row_data["images"]
+                if isinstance(images, str):
+                    images = json.loads(images)
+
+            if "videos" in raw_row_data:
+                videos = raw_row_data["videos"]
+                if isinstance(videos, str):
+                    videos = json.loads(videos)
+
+            data_source = raw_row_data["source"]
+            key = raw_row_data["uuid"]
+            task = raw_row_data["task"]
+            text = raw_row_data["text"]
+            if isinstance(text, str):
+                text = [text]
+
+            samples = {
+                "__key__": key,
+                "__url__": file_url,
+            }
+
+            # process message or segments -> webdataset_key = json
+            sample_data = {
+                "source": data_source,
+                "task": task,
+                "texts": text
+            }
+
+            if images is not None:
+                if isinstance(images, list):
+                    pass
+                elif isinstance(images, np.ndarray):
+                    images = images.tolist()
+                else:
+                    raise NotImplementedError(f"Unsupported sample, images type is {type(images)}, images={images}")
+
+                for image_idx, image_block in enumerate(images):
+                    image_obj = self._process_image_block(image_block)
+                    if image_obj is None:
+                        return None
+                    images[image_idx] = image_obj
+
+            if videos is not None:
+                if isinstance(videos, list):
+                    pass
+                elif isinstance(videos, np.ndarray):
+                    videos = videos.tolist()
+                else:
+                    raise NotImplementedError(f"Unsupported sample, videos type is {type(videos)}, videos={videos}")
+
+                for video_idx, video_block in enumerate(videos):
+                    video_obj = self._process_video_block(video_block)
+                    if video_obj is None:
+                        return None
+                    videos[video_idx] = video_obj
+
+            if images is not None and isinstance(images, list):
+                sample_data["images"] = images
+            elif videos is not None and isinstance(videos, list):
+                sample_data["videos"] = videos
+            elif images is not None and isinstance(images, np.ndarray):
+                sample_data["images"] = images.tolist()
+            elif videos is not None and isinstance(videos, np.ndarray):
+                sample_data["videos"] = videos.tolist()
+            else:
+                raise NotImplementedError(
+                    f"Unsupported sample, images type is {type(images)}, images={images}, videos type is {type(videos)}, videos={videos}")
+            samples["json"] = sample_data
+
+            return samples
         except:
             logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}")
             return None
+
+    def smart_resize_image(self, image):
+
+        patch_size = self.patch_size * 2
+
+        round_multiple_of = lambda x, y: max(round(x / y) * y, y)
+
+        if isinstance(image, Image.Image):
+            width, height = image.size
+            neww = round_multiple_of(width, patch_size)
+            newh = round_multiple_of(height, patch_size)
+            image = image.resize((neww, newh))
+            return image, (neww // patch_size) * (newh // patch_size)
+        raise NotImplementedError
+
+    def _process_image_block(self, image_block):
+        if isinstance(image_block, str):
+            if not image_block.startswith("/llm_reco"):
+                base64_data = image_block
+                data = base64.b64decode(base64_data)
+                image = Image.open(BytesIO(data))
+            else:
+                image = Image.open(image_block)
+            image = image.convert("RGB")
+            # todo: not debug
+            # image = image.resize((378, 378), Image.Resampling.LANCZOS)
+            # todo: not debug
+            if self.use_packing:
+                image, num_token = self.smart_resize_image(image)
+                num_token_after_drop = int(num_token * (1. - self.packing_drop_ratio))
+
+                if num_token_after_drop > self.packing_max_length:
+                    logger.error(f"Sample image (size {image.size}) num token after drop '{num_token_after_drop}' beyond max length '{self.packing_max_length}'")
+                    return None
+
+            return image
+        elif isinstance(image_block, dict):
+            image_obj = image_block.pop("image")
+            image_obj = self._process_image_block(image_obj)
+            return self._process_image(image_obj, **image_block)
+        else:
+            raise TypeError("Unsupported image_block type '{}'".format(image_block.__class__.__name__))
+
+    def _process_image(self, image, **kwargs):
+        if len(kwargs) == 0:
+            return image
+        raise NotImplementedError
+
+    def _process_video(self, video_path, nframes=10, **kwargs):
+        if len(kwargs) == 0:
+            vr = decord.VideoReader(video_path)
+            total_frames, video_fps = len(vr), vr.get_avg_fps()
+            idx = torch.linspace(0, total_frames - 1, nframes).round().long().tolist()
+            video = vr.get_batch(idx).asnumpy()
+            video = torch.tensor(video)
+            return video
+        raise NotImplementedError
+
+    def _process_video_block(self, video_block):
+        if isinstance(video_block, str):
+            return self._process_video(video_block)
+        elif isinstance(video_block, dict):
+            video_path = video_block.pop("video")
+            return self._process_video(video_path, **video_block)
+        else:
+            TypeError("Unsupported video_block type '{}'".format(video_block.__class__.__name__))
 
     def __iter__(self, ):
         rank, world_size, worker, num_workers = self.pytorch_worker_info()
@@ -203,12 +337,7 @@ class ParquetDataset(IterableDataset):
 
                             try:
                                 offset_dict[fn_group_key] = row_idx
-                                sample = row.to_dict()
-                                for hook in self.before_hook:
-                                    sample = hook(sample)
-
-                                sample = self._parser(sample, fn)
-
+                                sample = self._parser(row, fn)
                                 if sample is not None:
                                     for hook in self.after_hook:
                                         sample = hook(sample)

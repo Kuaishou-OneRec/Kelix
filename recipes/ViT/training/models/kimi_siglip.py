@@ -8,6 +8,7 @@ from einops import rearrange
 import torch.nn as nn
 import torch.distributed as dist
 import transformers
+from transformers.activations import GELUActivation, ACT2FN, PytorchGELUTanh
 from transformers import AutoProcessor, AutoModelForCausalLM, AutoTokenizer, AutoConfig, AutoModel
 from .siglip.modeling_siglip import SiglipPreTrainedModel, SiglipModel
 from .siglip.processing_siglip import SiglipProcessor
@@ -19,7 +20,7 @@ from recipes.ViT.helpers.context import Context
 from .MoonVision.modeling_kimi_vl import MoonVitPretrainedModel
 from .MoonVision.image_processing_kimi_vl import KimiVLImageProcessor
 from .MoonVision.configuration_kimi_vl import MoonViTConfig, KimiVLConfig
-from .MoonVision.modeling_kimi_vl import KimiVLMultiModalProjector, KimiVLMultiModalProjector_Contrastive
+from .MoonVision.modeling_kimi_vl import KimiVLMultiModalProjector_Contrastive
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,48 @@ class DisCoGather(torch.autograd.Function):
 
 def disco_gather(tensor, context):
     return DisCoGather.apply(tensor, context)
+
+
+class KimiVLMultiModalProjector(nn.Module):
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        self.hidden_size = config.vision_config.hidden_size
+
+        self.pre_norm = torch.nn.LayerNorm(config.vision_config.hidden_size, eps=1e-05)
+        self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
+        self.act = GELUActivation()
+        self.linear_2 = nn.Linear(
+            self.hidden_size, config.text_config.hidden_size, bias=True
+        )
+
+    def forward(self, image_features: torch.Tensor) -> torch.Tensor:
+        config = self.config
+        if isinstance(image_features, (list, tuple)):
+            processed_features = list()
+            for image_feature in image_features:
+                hidden_states = self.pre_norm(image_feature).view(-1, self.hidden_size)
+                from einops import rearrange
+                p = config.vision_config.merge_kernel_size[0] * config.vision_config.merge_kernel_size[1]
+                image_feature = rearrange(image_feature, "n p d -> n (p d)", p=p)
+                hidden_states = self.linear_1(hidden_states)
+                hidden_states = self.act(hidden_states)
+                hidden_states = self.linear_2(hidden_states)
+                processed_features.append(hidden_states)
+
+            return processed_features
+
+        dims = image_features.shape[:-1]
+        dim = image_features.shape[-1]
+        image_features = image_features.view(np.prod(dims), dim)
+        hidden_states = self.pre_norm(image_features).view(-1, self.hidden_size)
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+
+        return hidden_states.view(*dims, -1)
 
 
 class KimiViT(nn.Module):
