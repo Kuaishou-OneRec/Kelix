@@ -458,7 +458,6 @@ def main():
         json_maker = AutoShufflerJsonMaker(
             input_dir=args.input,
             output_dir=args.output,
-            rank=0,
             world_size=args.world_size
         )
         json_maker._collect_output_files(json_maker.prepare_output_dir)
