@@ -222,13 +222,18 @@ def shard_model(
     # lowest-level modules first
     num_layers_sharded = 0
 
-    layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
+    # layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
+    # for n, m in reversed(list(model.named_modules())):
+    #     if m in layers:
+    #         if dist.get_rank() == 0: print("sharding", n)
+    #         fully_shard(m, **fsdp_kwargs)
+    #         num_layers_sharded += 1
+
     for n, m in reversed(list(model.named_modules())):
-        if m in layers:
-            if dist.get_rank() == 0:
-                print(n)
+        if any([shard_condition(n, m) for shard_condition in shard_conditions]):
             fully_shard(m, **fsdp_kwargs)
             num_layers_sharded += 1
+
 
     print('=' * 40)
     if num_layers_sharded == 0:
