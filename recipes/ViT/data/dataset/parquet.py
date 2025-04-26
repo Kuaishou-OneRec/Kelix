@@ -136,7 +136,7 @@ class ParquetDataset(IterableDataset):
 
     def _parser(self, sample, url):
         try:
-            key = sample["uuid"]
+            key = sample.pop("uuid")
             processed_sample = {
                 "__key__": key,
                 "__url__": url,

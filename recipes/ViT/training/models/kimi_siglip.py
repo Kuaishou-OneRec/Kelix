@@ -3,6 +3,7 @@ import os.path as osp
 import torch
 import numpy as np
 import deepspeed
+from collections import Counter
 from PIL import Image
 from einops import rearrange
 import torch.nn as nn
@@ -307,6 +308,7 @@ class KimiViT(nn.Module):
         inputs = package
         images = inputs.get("images")
         texts = inputs.get("texts")
+        source = inputs.get("source", list())
         if "input_ids" not in inputs:
             text_inputs = self.processor(text=texts, padding="longest", return_tensors="pt")
             # text_inputs = self.text_decoder_tokenizer(texts, return_tensors="pt", padding="longest")
@@ -383,5 +385,6 @@ class KimiViT(nn.Module):
             total_image_num_tokens=np.prod(vision_embeds.shape[:2]).item(),
             total_text_num_tokens=np.prod(siglip_text_embeds.shape[:2]).item(),
             total_num_samples=batch_size,
-            total_text_num_valid_tokens=(input_ids != pad_token_id).long().sum().item()
+            total_text_num_valid_tokens=(input_ids != pad_token_id).long().sum().item(),
+            source=source
         )

@@ -20,6 +20,7 @@ class Metric:
     verbose_name: str = ""
     formula: str = ""
     reset_step: int = 0x3f3f3f3f
+    can_skip_update: bool = False
 
     def add_value(self, other: Dict[str, Any]):
         value = getattr(other, self.name)
@@ -45,10 +46,14 @@ class Metric:
         if isinstance(self.method, str):
             method = self.method
             update_method = getattr(self, "{}_value".format(method))
+            if self.can_skip_update and getattr(other, self.name, None) is None:
+                return
             update_method(other)
         else:
             assert isinstance(self.method, Callable)
             update_method: Callable = self.method
+            if self.can_skip_update and getattr(other, self.name, None) is None:
+                return
             update_method(self, other)
 
     def reset(self):

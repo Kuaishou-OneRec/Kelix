@@ -6,6 +6,7 @@ import json
 import deepspeed
 from PIL import Image
 import torch.nn as nn
+from collections import Counter
 import torch.distributed as dist
 from transformers import AutoProcessor, AutoModel
 import torch.nn.functional as F
@@ -148,7 +149,36 @@ class MonitorDecorator(object):
                 verbose_per_step=config.verbose.verbose_per_step,
                 reset_step=config.report.report_per_step,
             )
-    
+
+    def montior_dataset(self, rets):
+
+        monitor = self.monitor
+        if "source" in rets:
+            count_format = "source/{}"
+            sources = [count_format.format(src) for src in rets.source]
+            sources_list = [None for _ in range(self.ctx.world_size)]
+            torch.all_gather_object(sources_list, sources)
+            tmp_sources = list()
+            for iter_sources in sources_list:
+                tmp_sources.extend(iter_sources)
+            sources = tmp_sources
+
+            source_dict = dict(Counter(sources))
+            for source_name in source_dict:
+                dataset_name = source_name
+                if dataset_name not in monitor.metrics_names:
+                    monitor.register_metric(
+                        name=dataset_name,
+                        init_value=0,
+                        method="add",
+                        report_per_step=config.report.report_per_step,
+                        verbose_per_step=self.inf,
+                        can_skip_update=True
+                    )
+            return source_dict
+
+        return dict()
+
     def collect(self, outputs, rets, elapsed, **kwargs):
         model = self.model
         monitor = self.monitor
@@ -156,7 +186,6 @@ class MonitorDecorator(object):
         loss = rets.loss
         AR_loss = rets.AR_loss
         Contrastive_loss = rets.Contrastive_loss
-
 
         total_image_num_tokens = rets.total_image_num_tokens
         total_text_num_tokens = rets.total_text_num_tokens
@@ -187,7 +216,8 @@ class MonitorDecorator(object):
             total_text_num_valid_tokens=total_text_num_valid_tokens,
             total_num_samples=total_num_samples,
             total_num_tokens=total_num_tokens,
-            **kwargs
+            **kwargs,
+            **self.montior_dataset(rets),
         )
 
 
