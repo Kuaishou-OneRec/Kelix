@@ -229,10 +229,12 @@ def shard_model(
     #         fully_shard(m, **fsdp_kwargs)
     #         num_layers_sharded += 1
 
+    layers = []
     for n, m in reversed(list(model.named_modules())):
         if any([shard_condition(n, m) for shard_condition in shard_conditions]):
             fully_shard(m, **fsdp_kwargs)
             num_layers_sharded += 1
+            layers.append(m)
 
 
     print('=' * 40)
