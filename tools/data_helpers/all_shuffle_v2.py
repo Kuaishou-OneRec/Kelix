@@ -430,12 +430,12 @@ class AutoShuffler(MPIBase):
 
 
 class AutoShufflerJsonMaker(AutoShuffler):
-    def __init__(self, input_dir, output_dir, rank, world_size):
+    def __init__(self, input_dir, output_dir, world_size):
         self.fs = pa.hdfs.connect(user="mpi")
         self.input_dir = input_dir
         self.output_dir = output_dir
         self.world_size = world_size
-        self.rank = rank
+        self.rank = 0
     
 
 def main():
@@ -450,6 +450,8 @@ def main():
                        help="目标分块大小（行数）")
     parser.add_argument("--make_json", action="store_true",
                        help="只生成json")
+    parser.add_argument("--world_size", type="store_true",
+                       help="只生成json")
     args = parser.parse_args()
 
     if args.make_json:
@@ -457,7 +459,7 @@ def main():
             input_dir=args.input,
             output_dir=args.output,
             rank=0,
-            world_size=1
+            world_size=args.world_size
         )
         json_maker._collect_output_files(json_maker.prepare_output_dir)
     else:
