@@ -244,7 +244,7 @@ def shard_model(
     #     )
 
     # Finally shard the entire model to account for any stragglers
-    # fully_shard(model, **fsdp_kwargs)
+    fully_shard(model, **fsdp_kwargs)
 
     # prev = None
     # #for i_layer, layer in reversed(list(traverse_modules(model))):
