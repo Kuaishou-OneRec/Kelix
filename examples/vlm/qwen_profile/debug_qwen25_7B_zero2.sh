@@ -120,7 +120,6 @@ nohup mpirun --allow-run-as-root -np $np \
                 --save_checkpoint_per_step 500 \
                 --sequence_parallel_size 4 \
                 --use_flash_attention_2 \
-                --reshard_after_forward false \
                 --logging_per_step 10 \
                 --fp32_weight \
                 --seed 19260817 \
