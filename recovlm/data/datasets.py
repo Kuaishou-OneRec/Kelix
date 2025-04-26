@@ -1909,6 +1909,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
           f"errmsg={traceback.format_exc()}")
         continue
 
+
       sample_length_chosen = inputs["chosen_input"]["input_ids"].shape[-1]
       sample_length_rejected = inputs["rejected_input"]["input_ids"].shape[-1]
       if cur_length_chosen + sample_length_chosen > self.max_length or cur_length_rejected + sample_length_rejected > self.max_length:
