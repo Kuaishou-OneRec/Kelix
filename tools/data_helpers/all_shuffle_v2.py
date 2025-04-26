@@ -450,7 +450,7 @@ def main():
                        help="目标分块大小（行数）")
     parser.add_argument("--make_json", action="store_true",
                        help="只生成json")
-    parser.add_argument("--world_size", type="store_true",
+    parser.add_argument("--world_size", type=int, default=1,
                        help="只生成json")
     args = parser.parse_args()
 
