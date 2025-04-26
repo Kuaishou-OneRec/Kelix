@@ -1905,10 +1905,9 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:500]}"
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=},  sample=\n{str(sample)[:500]}"
           f"errmsg={traceback.format_exc()}")
         continue
-
 
       sample_length_chosen = inputs["chosen_input"]["input_ids"].shape[-1]
       sample_length_rejected = inputs["rejected_input"]["input_ids"].shape[-1]
