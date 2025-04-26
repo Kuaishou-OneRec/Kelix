@@ -16,8 +16,13 @@ class SingleImageTextPairCollator(object):
                 if key not in samples:
                     samples[key] = list()
                 content = sample["json"][key]
-                if key == "images":
-                    assert len(content) == 1, "Multi-Images not supported yet."
-                samples[key].append(content[0])
+                if isinstance(content, str):
+                    samples[key].append(content)
+                elif isinstance(content, (list, tuple)):
+                    if key == "images":
+                        assert len(content) == 1, "Multi-Images not supported yet."
+                    samples[key].append(content[0])
+                else:
+                    samples[key].append(content)
 
         return samples
