@@ -13,6 +13,7 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, IterableDataset
 from recipes.ViT.helpers.context import Context, DistributedContext
 import argparse
+from collections import Counter
 import logging
 from omegaconf import OmegaConf
 from recipes.ViT.training.models import KimiViT, KimiViTSigLIP
@@ -221,7 +222,7 @@ class MonitorDecorator(object):
         )
 
 
-def check_config(args, config):
+def check_config(args, ctx, config):
     config.output_dir = args.output_dir
     config.model.packing = config.dataset.packing
 
@@ -235,6 +236,10 @@ def check_config(args, config):
     config.dataset.packing.patch_size = patch_size
     logger.warning(f"Set patch_size = {patch_size} from model config file {model_config_path}")
 
+    if ctx.rank == 0:
+        tmp_config = OmegaConf.to_container(config, resolve=True)
+        json.dump(tmp_config, open(osp.join(config.output_dir, "train_config.json"), "w"), indent=4)
+
 
 def train(args):
 
@@ -242,9 +247,9 @@ def train(args):
 
     config = OmegaConf.load(args.config_file)
     print("ZDJ", config)
-    check_config(args, config)
     
     ctx = DistributedContext(args=args, config=config).setup()
+    check_config(args, ctx, config)
     
     with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config, enabled=False):
         model = KimiViT(config.model, ctx)

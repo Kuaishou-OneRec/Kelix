@@ -44,8 +44,8 @@ optimizer:
   weight_decay: 0.01
 lr_scheduler:
   type: cosine
-  num_warmup_steps: 30000
-  num_training_steps: 1000000
+  num_warmup_steps: 450
+  num_training_steps: 15000
   min_lr: 0.0
 monitor:
   type: ViTMonitor
