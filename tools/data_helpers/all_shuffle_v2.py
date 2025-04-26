@@ -460,14 +460,12 @@ def main():
     args = parser.parse_args()
 
     if args.make_json:
-        json_maker = AutoShufflerJsonMaker(
+        AutoShufflerJsonMaker(
             input_dir=args.input,
             output_dir=args.output,
             world_size=args.world_size
         )
-        
     else:
-        exit()
         shuffler = AutoShuffler(
             input_dir=args.input,
             output_dir=args.output,
