@@ -614,7 +614,7 @@ def train():
           model,
           mode='max-autotune',  # 推荐FSDP兼容模式
           fullgraph=False,
-          dynamic=False
+          dynamic=True
       )
       print_rank_0("Model compilation completed")
 
