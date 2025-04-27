@@ -2694,22 +2694,18 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                              ):
     if self.cut_to_pad:
       '''
-      可能存在只有图片的情况，这里暂不特别处理
-    self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
-    self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
-    self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
-
-    inputs: Dict: keys=5
-    inputs: 'input_ids':
-    inputs:   Tensor: shape=(1, 3369), dtype=torch.int64, device=cpu, data=tensor([151665, 151667, 151667, 151667])...tensor([ 45436,   3589,     13, 151643])
-    inputs: 'pixel_values':
-    inputs:   Tensor: shape=(13, 3, 448, 448), dtype=torch.float32, device=cpu, data=tensor([0.1451, 0.1608, 0.1843, 0.2078])...tensor([0.2549, 0.2627, 0.2627, 0.2627])
-    inputs: 'image_flags':
-    inputs:   Tensor: shape=(13,), dtype=torch.int64, device=cpu, data=tensor([1, 1, 1, 1])...tensor([1, 1, 1, 1])
-    inputs: 'loss_mask':
-    inputs:   Tensor: shape=(1, 3369), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([1, 1, 1, 0])
-    inputs: 'position_ids':
-    inputs:   Tensor: shape=(1, 3369), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([3365, 3366, 3367, 3368])
+      input_ids格式如下：
+      inputs: Dict: keys=5
+      inputs: 'input_ids':
+      inputs:   Tensor: shape=(1, 3369), dtype=torch.int64, device=cpu, data=tensor([151665, 151667, 151667, 151667])...tensor([ 45436,   3589,     13, 151643])
+      inputs: 'pixel_values':
+      inputs:   Tensor: shape=(13, 3, 448, 448), dtype=torch.float32, device=cpu, data=tensor([0.1451, 0.1608, 0.1843, 0.2078])...tensor([0.2549, 0.2627, 0.2627, 0.2627])
+      inputs: 'image_flags':
+      inputs:   Tensor: shape=(13,), dtype=torch.int64, device=cpu, data=tensor([1, 1, 1, 1])...tensor([1, 1, 1, 1])
+      inputs: 'loss_mask':
+      inputs:   Tensor: shape=(1, 3369), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([1, 1, 1, 0])
+      inputs: 'position_ids':
+      inputs:   Tensor: shape=(1, 3369), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([3365, 3366, 3367, 3368])
       '''
       packable_length = self.max_length - cu_seqlens[-1]
 
@@ -2741,6 +2737,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         if dist.get_rank() == 0:
           print_input_info(inputs, prefix="inputs_cut_im: ")
 
+        if inputs["loss_mask"].sum().item() == 0: return 0 # 如果这个样本没有loss，放弃
 
     assert inputs["input_ids"].shape ==  inputs["loss_mask"].shape == inputs["position_ids"].shape and inputs["input_ids"].ndim == 2, f'inputs: {inputs["input_ids"].shape} ==  {inputs["loss_mask"].shape} == {inputs["position_ids"].shape}'
     assert inputs["image_flags"].size(0) == inputs["pixel_values"].size(0), f'inputs: {inputs["image_flags"].shape}, {inputs["pixel_values"].shape}'
