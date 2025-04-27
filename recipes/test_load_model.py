@@ -37,5 +37,7 @@ image = Image.fromarray(image.numpy())
 images =[image]
 texts = ["hello world"]
 data = processor(images=images, text=texts)
-rets = model(data)
+input_ids = data["input_ids"]
+print(data.keys())
+rets = model(input_ids=input_ids)
 print(rets)
