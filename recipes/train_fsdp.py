@@ -574,17 +574,6 @@ def train():
       if hasattr(m, "rope_init"):
         print_rank_0("Initialize RoPE")
         m.rope_init()
-
-    # 添加torch.compile
-    if args.compile:
-        print_rank_0("Compiling model with torch.compile...")
-        model.language_model = torch.compile(
-            model.language_model,
-            mode='max-autotune',  # 推荐FSDP兼容模式
-            fullgraph=False,
-            dynamic=False
-        )
-        print_rank_0("Model compilation completed")
   
   # 确保任何参数都被正确初始化
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
@@ -617,6 +606,17 @@ def train():
     ,
     vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
   )
+
+  # 添加torch.compile
+  if args.compile:
+      print_rank_0("Compiling model with torch.compile...")
+      model.language_model = torch.compile(
+          model.language_model,
+          mode='max-autotune',  # 推荐FSDP兼容模式
+          fullgraph=False,
+          dynamic=False
+      )
+      print_rank_0("Model compilation completed")
 
   # prepare optimizer
   optimizer = torch.optim.AdamW(
