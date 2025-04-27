@@ -2688,7 +2688,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                              sample_idx: Optional[int] = None,
                              ):
     if 1:
-      packable_length = self.max_length - packed_input_ids["input_ids"].shape[-1]
+      packable_length = self.max_length - cu_seqlens[-1]
       if packable_length < len(inputs["input_ids"][1]): # 1 x len
         inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
 
