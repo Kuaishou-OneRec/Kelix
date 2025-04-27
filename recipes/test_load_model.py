@@ -32,7 +32,7 @@ processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(
 )
 
 
-image = torch.randint(0, 255, ( 3, 224, 224))
+image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
 image = Image.fromarray(image.numpy())
 images =[image]
 texts = ["hello world"]
