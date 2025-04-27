@@ -200,19 +200,28 @@ class ParquetDataset(IterableDataset):
                         for row_idx, row in row_pandas.iterrows():
                             if row_idx < offset:
                                 continue
+                            
+                            row_info_str = f"{fn}-epoch{epoch_idx}-group{group_idx}-offset{row_idx}"
 
                             try:
                                 offset_dict[fn_group_key] = row_idx
                                 sample = row.to_dict()
                                 for hook in self.before_hook:
-                                    sample = hook(sample)
+                                    if sample is not None:
+                                        sample = hook(sample, row_info_str)
+                                
+                                if sample is None:
+                                    continue
 
                                 sample = self._parser(sample, fn)
 
                                 if sample is not None:
                                     for hook in self.after_hook:
-                                        sample = hook(sample)
-                                    yield sample
+                                        if sample is not None:
+                                            sample = hook(sample, row_info_str)
+                                    
+                                    if sample is not None:
+                                        yield sample
                             except GeneratorExit:
                                 # 正确处理生成器退出
                                 logger.warning(

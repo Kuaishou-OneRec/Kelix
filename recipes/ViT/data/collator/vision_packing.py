@@ -18,9 +18,18 @@ class VisionPackingCollator(object):
                 if key not in samples:
                     samples[key] = list()
                 content = sample["json"][key]
-                if key == "texts":
-                    content = content[0]
-                samples[key].append(content)
+                if isinstance(key, str):
+                    samples[key].append(content)
+                elif isinstance(key, (list, tuple)):
+                    if key == "images":
+                        assert len(content) == 1, "Multi-Images not supported yet."
+                        content = content[0]
+                    if key == "texts":
+                        assert len(content) == 1, "Multi-Texts not supported yet."
+                        content = content[0]
+                    samples[key].append(content)
+                else:
+                    samples[key].append(content)
         samples["image_indices"] = torch.concat(samples["image_indices"], dim=0)
         
         samples["image_position_ids"] = torch.concat(samples.pop("position_ids"), dim=0)

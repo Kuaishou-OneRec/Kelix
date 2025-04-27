@@ -21,7 +21,11 @@ class SingleImageTextPairCollator(object):
                 elif isinstance(content, (list, tuple)):
                     if key == "images":
                         assert len(content) == 1, "Multi-Images not supported yet."
-                    samples[key].append(content[0])
+                        content = content[0]
+                    if key == "texts":
+                        assert len(content) == 1, "Multi-Texts not supported yet."
+                        content = content[0]
+                    samples[key].append(content)
                 else:
                     samples[key].append(content)
 

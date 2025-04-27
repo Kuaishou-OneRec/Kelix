@@ -234,6 +234,8 @@ class KimiViT(nn.Module):
     def forward(self, images, texts, package=None):
         if package is not None:
             images = package["images"]
+            if self.ctx.rank == 0:
+                print(images, texts, "ZDJ")
             texts = package["texts"]
             if isinstance(images[0], list):
                 images = [x[0] for x in images]

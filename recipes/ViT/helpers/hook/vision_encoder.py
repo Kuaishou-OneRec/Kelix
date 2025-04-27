@@ -24,7 +24,7 @@ class VisionEncoderDataProcessorHook(BaseHook):
         self.fps_min_frames = kwargs["vision"].fps_min_frames
         self.fps_max_frames = kwargs["vision"].fps_max_frames
 
-    def __call__(self, sample):
+    def __call__(self, sample, row_info_str):
         images = None
         videos = None
 

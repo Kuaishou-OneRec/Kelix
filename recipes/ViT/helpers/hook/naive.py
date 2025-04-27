@@ -11,5 +11,5 @@ class NaiveHook(BaseHook):
         super().__init__(processor, **kwargs)
         self.processor = processor
 
-    def __call__(self, sample):
+    def __call__(self, sample, row_info_str):
         return sample

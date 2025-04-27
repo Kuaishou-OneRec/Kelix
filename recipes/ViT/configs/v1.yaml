@@ -26,10 +26,13 @@ dataset:
     drop_ratio: 0.0
     add_cls_token: false
   hooks:
+    - type: TextLengthCheckHook
+      position: before
     - type: VisionEncoderDataProcessorHook
       position: before
     - type: NaiveHook
       position: after
+  truncate_text_length: 64
 model:
   siglip_dir: /llm_reco/liuyang76/Models/siglip2-so400m-patch14-384
   VitParam_dir: /llm_reco/liuyang76/Models/MoonVitParam/MoonVit.pt
@@ -44,8 +47,8 @@ optimizer:
   weight_decay: 0.01
 lr_scheduler:
   type: cosine
-  num_warmup_steps: 200
-  num_training_steps: 2100
+  num_warmup_steps: 2700
+  num_training_steps: 90000
   min_lr: 0.0
 monitor:
   type: ViTMonitor

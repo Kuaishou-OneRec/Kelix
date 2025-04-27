@@ -14,6 +14,7 @@ class ImageProcessorHook(BaseHook):
         self.add_cls_token = packing_kwargs.get('add_cls_token', False)
         self.drop_ratio = packing_kwargs.get('drop_ratio', 0.0)
         self.patch_size = packing_kwargs.get('patch_size')
+        self.truncate_text_length = kwargs.get("truncate_text_length", -1)
 
     def calcul_image_tokens(self, image_or_image_list):
         """
@@ -33,7 +34,7 @@ class ImageProcessorHook(BaseHook):
             num_token_list.append(num_token)
         return num_token_list
 
-    def __call__(self, sample):
+    def __call__(self, sample, row_info_str):
         images = sample["json"]['images']
         patch_size = self.patch_size
 
@@ -96,6 +97,7 @@ class ImageProcessorHook(BaseHook):
         height_position_ids = torch.LongTensor(height_position_ids)
         width_position_ids = torch.LongTensor(width_position_ids)
         pixel_values = torch.concat(pixel_values, dim=0)
+
         sample["json"].update(
             dict(
                 image_indices=image_indices,
@@ -107,4 +109,5 @@ class ImageProcessorHook(BaseHook):
                 seqlen=total_token
             )
         )
+
         return sample
