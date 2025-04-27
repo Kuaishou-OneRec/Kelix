@@ -41,5 +41,14 @@ input_ids = data["input_ids"]
 pixel_values = data["pixel_values"]
 image_grid_thw = data["image_grid_thw"]
 print(data.keys())
+
+# Convert inputs to tensors if they're not already
+if not isinstance(input_ids, torch.Tensor):
+    input_ids = torch.tensor(input_ids)
+if not isinstance(pixel_values, torch.Tensor):
+    pixel_values = torch.tensor(pixel_values)
+if not isinstance(image_grid_thw, torch.Tensor):
+    image_grid_thw = torch.tensor(image_grid_thw)
+
 rets = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
 print(rets)
