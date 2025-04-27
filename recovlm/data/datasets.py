@@ -2742,8 +2742,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if (
       self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
     ):
-      padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
-      
+      # padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+      assert self.max_length % self.multiple_of == 0
+      padding_len = self.max_length - packed_input_ids.numel()
 
       packed_input_ids = F.pad(
         packed_input_ids, (0, padding_len),
