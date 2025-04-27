@@ -342,7 +342,6 @@ class Qwen2_5_VLProcessor_moonvit(ProcessorMixin):
             text = [text]
 
         if image_grid_thw is not None:
-            merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
                 while self.image_token in text[i]:
@@ -355,13 +354,12 @@ class Qwen2_5_VLProcessor_moonvit(ProcessorMixin):
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
         if video_grid_thw is not None:
-            merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
                     text[i] = text[i].replace(
                         self.video_token,
-                        "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length),
+                        "<|placeholder|>" * (video_grid_thw[index].prod()),
                         1,
                     )
                     index += 1
