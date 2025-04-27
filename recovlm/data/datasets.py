@@ -2685,7 +2685,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                              packed_sample_idx: List[torch.Tensor],
                              packed_image_flags:List[torch.Tensor],
                              cu_seqlens: List[int],
-                             sample_idx: Optional[int] = None):
+                             sample_idx: Optional[int] = None,
+                             max_length: Optional[int] = None,
+                             ):
 
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
