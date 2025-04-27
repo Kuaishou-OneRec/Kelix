@@ -532,7 +532,11 @@ class Qwen2VLFlashAttention2(Qwen2VLAttention):
         else:
             if cu_seqlens is not None:
                 # Sample packing with FA2
-                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                try:
+                    max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                except Exception as e:
+                    print(f"cu_seqlens={cu_seqlens}")
+                    raise e
                 cu_seqlens = cu_seqlens.to(torch.int32)
                 # remove batch_dim first: q.squeeze(0)
                 attn_output = flash_attn_varlen_func(
