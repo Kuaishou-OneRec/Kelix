@@ -2572,8 +2572,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       if isinstance(content, str):
         continue
       for block in content:
-
-        if _DATASET_SKIP_MM == "SKIP_MM" and block["type"] != "text": continue
+        if _DATASET_SKIP_MM == "SKIP_MM" and block["type"] != "text": 
+          print_rank_0("skip message of type {}".format(block["type"]))
+          continue
 
         if block["type"] == "image":
           self._fill_image_block(block, sample, 
