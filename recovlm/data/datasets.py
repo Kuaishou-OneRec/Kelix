@@ -2724,7 +2724,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
         # if inputs["input_ids"][0, -1] in [self.img_start_token_id, self.img_context_token_id]:
         last_start_index = torch.nonzero(inputs["input_ids"][0] == self.img_start_token_id)
-        if len(last_start_index): last_start_index = packable_length # 这里没有图片
+        if len(last_start_index) == 0: last_start_index = packable_length # 这里没有图片
         else: last_start_index = last_start_index[-1].item()
 
         inputs["input_ids"][:, last_start_index:] = 0 # 随便一个id, 反正不要图片id
