@@ -2716,32 +2716,35 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       # print_input_info(inputs, prefix="inputs2: ")
       # print(cu_seqlens, packable_length,)
       if packable_length < inputs["input_ids"].size(1): # 1 x len
+        if dist.get_rank() == 0:
+          print_input_info(inputs, prefix="inputs_cut_before: ")
         inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
         inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
         inputs["position_ids"] = inputs["position_ids"][:, :packable_length]
 
-        if inputs["input_ids"][0, -1] in [self.img_start_token_id, self.img_context_token_id]:
-          last_start_index = torch.nonzero(inputs["input_ids"][0] == self.img_start_token_id)[-1].item()
+        # if inputs["input_ids"][0, -1] in [self.img_start_token_id, self.img_context_token_id]:
+        last_start_index = torch.nonzero(inputs["input_ids"][0] == self.img_start_token_id)
+        if len(last_start_index): last_start_index = packable_length # 这里没有图片
+        else: last_start_index = last_start_index[-1].item()
 
-          inputs["input_ids"][:, last_start_index:] = 0 # 随便一个id, 反正不要图片id
-          inputs["loss_mask"][:, last_start_index:] = 0 # 不要计算loss
+        inputs["input_ids"][:, last_start_index:] = 0 # 随便一个id, 反正不要图片id
+        inputs["loss_mask"][:, last_start_index:] = 0 # 不要计算loss
 
-          num_tiles_ids = torch.nonzero(inputs["input_ids"][0] == self.img_context_token_id).size(0)
-          assert num_tiles_ids % 256 == 0, f"num_tiles_ids should be multiple of 256, get {num_tiles_ids}"
-          num_tiles = num_tiles_ids // 256
-          # cu_seqlens
-          inputs["pixel_values"] = inputs["pixel_values"][:num_tiles]
-          inputs["image_flags"] = inputs["image_flags"][:num_tiles]
-          # print("cut image", cu_seqlens)
-          # print_input_info(inputs, prefix="inputs_cut_im: ")
-        else:
-          pass
-          # print("cut text", cu_seqlens)
-          # print_input_info(inputs, prefix="inputs_cut_te: ")
-        
+        num_tiles_ids = torch.nonzero(inputs["input_ids"][0] == self.img_context_token_id).size(0) # 计算留下多少tile
+        assert num_tiles_ids % 256 == 0, f"num_tiles_ids should be multiple of 256, get {num_tiles_ids}"
+        num_tiles = num_tiles_ids // 256
+        # cu_seqlens
+        inputs["pixel_values"] = inputs["pixel_values"][:num_tiles]
+        inputs["image_flags"] = inputs["image_flags"][:num_tiles]
+        # print("cut image", cu_seqlens)
+
+        if dist.get_rank() == 0:
+          print_input_info(inputs, prefix="inputs_cut_im: ")
+
 
     assert inputs["input_ids"].shape ==  inputs["loss_mask"].shape == inputs["position_ids"].shape and inputs["input_ids"].ndim == 2, f'inputs: {inputs["input_ids"].shape} ==  {inputs["loss_mask"].shape} == {inputs["position_ids"].shape}'
     assert inputs["image_flags"].size(0) == inputs["pixel_values"].size(0), f'inputs: {inputs["image_flags"].shape}, {inputs["pixel_values"].shape}'
+    assert 
 
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
@@ -2854,7 +2857,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32)
     }
-    # print_input_info(inputs, prefix="inputs_last: ")
+    if dist.get_rank() == 0:
+      print_input_info(inputs, prefix="inputs_last: ")
     return inputs
 
   def __iter__(self):
