@@ -823,7 +823,9 @@ class ChatCompletionVisionDataset(IterableDataset):
     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
 
-    if isinstance(block["image"], str):
+    if isinstance(block["image"], str) and os.path.exists(block["image"]):
+      image = Image.open(block["image"])
+    elif isinstance(block["image"], str):
       image = sample_dict[block["image"]]
     else:
       image = block["image"]
