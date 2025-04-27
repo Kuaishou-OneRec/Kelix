@@ -1,5 +1,28 @@
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit 
+import torch
+
+
+
+# from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
+# import json
+
+
+# #config = json.load(open("/llm_reco_ssd/zhouyang12/models/Qwen2.5-7B-Instruct/config.json", "r"))
+# #model = Qwen2_5_VLForConditionalGeneration_moonvit(config)
+# model = \
+# Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen2.5-7B-Instruct/",
+#          ignore_mismatched_sizes=True)
+# for key, value in model.named_parameters():
+#     print(key, value.shape)
+
+
+
+
+
+
+
+
 model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
   "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
 )
