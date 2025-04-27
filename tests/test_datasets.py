@@ -315,7 +315,7 @@ def test_InternVLParquetDataset():
     init_processes(0, 1)
     from transformers import AutoTokenizer, AutoProcessor
     from recovlm.data.datasets import InternVLChatCompletionVisionParquetDataset
-    processor = AutoProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/InternVL3-2B")
+    processor = AutoProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/InternVL3-2B", trust_remote_code=True)
     path = "/llm_reco/chuchenglong/work_space/recovlm/examples/vlm/configs/internvl/2b_internvl_stage2.json"
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
@@ -324,9 +324,10 @@ def test_InternVLParquetDataset():
     dataset_config["shuffle_seed"] = int(time.time())
 
     dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/pt/0421/stage2_ccl_v3_0425/_prepared/0/prep-0-5f8467a5aa2c472d9c31bbb81356540f.parquet"]
+    # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
+    dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
 
-
-    dataset = InternVLChatCompletionVisionParquetDataset(**dataset_config)
+    dataset = InternVLChatCompletionVisionParquetDataset(cut_to_pad=True, **dataset_config)
     ans = 0
     def collate_fn(samples):
         return samples[0]
@@ -345,10 +346,29 @@ def test_InternVLParquetDataset():
             except:
                 print(k, v)
             print("=" * 10)
+        if iteration == 20: break
         
-        break
         
-
+'''
+    {
+      "id": 151665,
+      "content": "<img>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+        {
+      "id": 151667,
+      "content": "<IMG_CONTEXT>",
+      "single_word": false,
+      "lstrip": false,
+      "rstrip": false,
+      "normalized": false,
+      "special": true
+    },
+'''
 
 if __name__ == "__main__":
     test_InternVLParquetDataset()

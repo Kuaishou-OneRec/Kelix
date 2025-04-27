@@ -2310,6 +2310,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                use_thumbnail:bool = True,
                num_segments:int= 10,
                datasource_config:Dict[str, Dict[str, Any]] = {},
+               cut_to_pad:bool = False,
                **kargs):
     """
     datasource_config: 默认覆盖全局配置
@@ -2325,14 +2326,16 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
 
     if base_model_dir:
-      tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
+      tokenizer = AutoTokenizer.from_pretrained(base_model_dir, trust_remote_code=True)
+      print(tokenizer, base_model_dir, 234)
       model_config = InternVLChatConfig.from_pretrained(base_model_dir)
       patch_size = model_config.vision_config.patch_size
       image_size = model_config.force_image_size
     
     self.tokenizer = tokenizer
     self.visual_tokens_per_image = int((image_size//patch_size)** 2 * (down_sample_ratio ** 2))
-  
+    self.cut_to_pad = cut_to_pad
+
     self.down_sample_ratio=down_sample_ratio
     self.pid_info_client = PidInfoClient('10.84.241.154')
 
@@ -2355,6 +2358,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
     self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
     self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
+
+    self.end_of_text_id = self.tokenizer.encode('<|endoftext|>')[0]
 
     self.dataset, self.total_samples = self._build_source_dataset(sources)
 
@@ -2687,15 +2692,57 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                              cu_seqlens: List[int],
                              sample_idx: Optional[int] = None,
                              ):
-    if 1:
+    if self.cut_to_pad:
+      '''
+      可能存在只有图片的情况，这里暂不特别处理
+    self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
+    self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
+    self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
+
+    inputs: Dict: keys=5
+    inputs: 'input_ids':
+    inputs:   Tensor: shape=(1, 3369), dtype=torch.int64, device=cpu, data=tensor([151665, 151667, 151667, 151667])...tensor([ 45436,   3589,     13, 151643])
+    inputs: 'pixel_values':
+    inputs:   Tensor: shape=(13, 3, 448, 448), dtype=torch.float32, device=cpu, data=tensor([0.1451, 0.1608, 0.1843, 0.2078])...tensor([0.2549, 0.2627, 0.2627, 0.2627])
+    inputs: 'image_flags':
+    inputs:   Tensor: shape=(13,), dtype=torch.int64, device=cpu, data=tensor([1, 1, 1, 1])...tensor([1, 1, 1, 1])
+    inputs: 'loss_mask':
+    inputs:   Tensor: shape=(1, 3369), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([1, 1, 1, 0])
+    inputs: 'position_ids':
+    inputs:   Tensor: shape=(1, 3369), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([3365, 3366, 3367, 3368])
+      '''
       packable_length = self.max_length - cu_seqlens[-1]
-      print(inputs["input_ids"].shape)
-      print(packable_length < inputs["input_ids"].size(1), packable_length)
+
+      # print_input_info(inputs, prefix="inputs2: ")
+      # print(cu_seqlens, packable_length,)
       if packable_length < inputs["input_ids"].size(1): # 1 x len
-        inputs["input_ids"] = inputs["input_ids"][ :packable_length]
+        inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
+        inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
+        inputs["position_ids"] = inputs["position_ids"][:, :packable_length]
 
+        if inputs["input_ids"][0, -1] in [self.img_start_token_id, self.img_context_token_id]:
+          last_start_index = torch.nonzero(inputs["input_ids"][0] == self.img_start_token_id)[-1].item()
 
-    
+          inputs["input_ids"][:, last_start_index:] = 0 # 随便一个id, 反正不要图片id
+          inputs["loss_mask"][:, last_start_index:] = 0 # 不要计算loss
+
+          num_tiles_ids = torch.nonzero(inputs["input_ids"][0] == self.img_context_token_id).size(0)
+          assert num_tiles_ids % 256 == 0, f"num_tiles_ids should be multiple of 256, get {num_tiles_ids}"
+          num_tiles = num_tiles_ids // 256
+          # cu_seqlens
+          inputs["pixel_values"] = inputs["pixel_values"][:num_tiles]
+          inputs["image_flags"] = inputs["image_flags"][:num_tiles]
+          # print("cut image", cu_seqlens)
+          # print_input_info(inputs, prefix="inputs_cut_im: ")
+        else:
+          pass
+          # print("cut text", cu_seqlens)
+          # print_input_info(inputs, prefix="inputs_cut_te: ")
+        
+
+    assert inputs["input_ids"].shape ==  inputs["loss_mask"].shape == inputs["position_ids"].shape and inputs["input_ids"].ndim == 2, f'inputs: {inputs["input_ids"].shape} ==  {inputs["loss_mask"].shape} == {inputs["position_ids"].shape}'
+    assert inputs["image_flags"].size(0) == inputs["pixel_values"].size(0), f'inputs: {inputs["image_flags"].shape}, {inputs["pixel_values"].shape}'
+
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
     packed_position_ids.append(inputs["position_ids"])
@@ -2711,6 +2758,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     packed_image_flags.append(inputs["image_flags"])
+
+
     return len(inputs["input_ids"][0])
 
   def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
@@ -2740,8 +2789,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       cu_seqlens)
       if dist.get_rank() == 0 and 0:
         print_input_info(
+          inputs,
+          prefix="inputs: "
+        )
+        print_input_info(
           {
-            "inputs": inputs,
             "packed_input_ids": packed_input_ids,
             "packed_position_ids": packed_position_ids,
             "packed_loss_mask": packed_loss_mask,
@@ -2753,7 +2805,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
             "packed_image_flags": packed_image_flags,
             "cu_seqlens": cu_seqlens
           },
-          prefix="_append_sample_packing"
+          prefix="_append_sample_packing: "
         )
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
@@ -2778,10 +2830,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if (
       self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
     ):
-      # if 1:
       padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
-      # assert self.max_length % self.multiple_of == 0
-      padding_len = self.max_length - packed_input_ids.numel()
+      assert self.max_length % self.multiple_of == 0
+      # padding_len = self.max_length - packed_input_ids.numel()
 
       packed_input_ids = F.pad(
         packed_input_ids, (0, padding_len),
@@ -2803,6 +2854,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32)
     }
+    # print_input_info(inputs, prefix="inputs_last: ")
     return inputs
 
   def __iter__(self):
@@ -2827,6 +2879,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       self.source_sample_cnt.setdefault(source_name, 0)
       self.source_sample_cnt[source_name] += 1
 
+      print("sample=", sample)
       try:
         inputs = self._process(sample, source_name)
       except:
@@ -2842,11 +2895,20 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
       sample_length = inputs["input_ids"].shape[-1]
       if cur_length + sample_length > self.max_length:
-        packed_inputs = self._packing(buffer)
-        packed_inputs["data_source"] = source_list
-        buffer = [inputs]
-        source_list = [source_name]
-        cur_length = sample_length
+
+        if self.cut_to_pad:
+          buffer.append(inputs)
+          source_list.append(source_name)
+          packed_inputs = self._packing(buffer)
+          packed_inputs["data_source"] = source_list
+          buffer = []
+          source_list = []
+          cur_length = 0
+        else:
+          packed_inputs = self._packing(buffer)
+          packed_inputs["data_source"] = source_list
+          buffer = [inputs]
+          source_list = [source_name]
 
         # skip pure text sample
         # 有pad image，原则上不会出现纯文本输入

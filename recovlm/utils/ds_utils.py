@@ -27,6 +27,10 @@ def print_input_info(data: Any, prefix: str = "", max_str_len: int = 50, return_
         >>> print(result)
     """
     lines = []
+    try:
+        data = dict(data)
+    except:
+        pass
     
     def add_line(text: str):
         if return_str:
@@ -79,7 +83,7 @@ def print_input_info(data: Any, prefix: str = "", max_str_len: int = 50, return_
     elif isinstance(data, (int, float)):
         add_line(f"{prefix}{type(data).__name__}: {data}")
     else:
-        add_line(f"{prefix}Other type ({type(data).__name__}): {str(data)}")
+        add_line(f"{prefix}Other type ({type(data).__name__}): {str(data)[:60]}...{str(data)[-60:]}")
         
     return "\n".join(lines) if return_str else None
 
