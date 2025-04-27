@@ -133,7 +133,7 @@ class KimiViT(nn.Module):
         self.MoonVIT_processor = KimiVLImageProcessor()
         self.MoonVIT = MoonVitPretrainedModel(MoonViT_config)
         
-        self.loss_lambda = 2.0
+        self.loss_lambda = config.text_decoder.loss_lambda
 
         # LLM for capation AR loss
         if config.text_decoder.enabled:

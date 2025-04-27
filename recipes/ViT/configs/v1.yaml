@@ -38,6 +38,7 @@ model:
   VitParam_dir: /llm_reco/liuyang76/Models/MoonVitParam/MoonVit.pt
   text_decoder:
     enabled: true
+    loss_lambda: 2.0
     model_dir: /llm_reco/liuyang76/Models/Qwen2.5-0.5B-Instruct
 optimizer:
   type: muon
@@ -47,8 +48,8 @@ optimizer:
   weight_decay: 0.01
 lr_scheduler:
   type: cosine
-  num_warmup_steps: 2700
-  num_training_steps: 90000
+  num_warmup_steps: 8400
+  num_training_steps: 280000
   min_lr: 0.0
 monitor:
   type: ViTMonitor

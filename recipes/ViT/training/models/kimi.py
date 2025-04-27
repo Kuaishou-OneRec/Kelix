@@ -78,7 +78,7 @@ class KimiViT(nn.Module):
         self.MoonVIT.load_state_dict(state_dict)
         self.MoonVIT.cuda()
 
-        self.loss_lambda = 2
+        self.loss_lambda = config.text_decoder.loss_lambda
 
         # LLM for capation AR loss
         if config.text_decoder.enabled:
@@ -116,16 +116,22 @@ class KimiViT(nn.Module):
 
             gathered_image_embeds = disco_gather(image_embeds, self.ctx)
             gathered_text_embeds = disco_gather(text_embeds, self.ctx)
+            # if self.ctx.rank == 0:
+            #     print(gathered_image_embeds.shape, gathered_text_embeds.shape)
 
             logits_per_text = torch.matmul(gathered_text_embeds, gathered_image_embeds.t().to(device))
 
             logit_scale = self.siglip.logit_scale.to(device)
             logit_bias = self.siglip.logit_bias.to(device)
+
             logits_per_text = logits_per_text * logit_scale.exp() + logit_bias
 
             eye = torch.eye(logits_per_text.size(0), device=device)
             m1_diag1 = -torch.ones_like(logits_per_text) + 2 * eye
+            # if self.ctx.rank == 0:
+            #     print(logits_per_text.shape, torch.isnan(logits_per_text).any())
             loglik = torch.nn.functional.logsigmoid(m1_diag1 * logits_per_text)
+
             nll = -torch.sum(loglik, dim=-1)
             loss = nll.mean()
             return loss
@@ -234,8 +240,6 @@ class KimiViT(nn.Module):
     def forward(self, images, texts, package=None):
         if package is not None:
             images = package["images"]
-            if self.ctx.rank == 0:
-                print(images, texts, "ZDJ")
             texts = package["texts"]
             if isinstance(images[0], list):
                 images = [x[0] for x in images]
@@ -260,7 +264,7 @@ class KimiViT(nn.Module):
 
         image_features, image_features_for_AR = self._extract_image_features(**vit_inputs)
         inputs_embeds = self.text_decoder.get_input_embeddings()(input_ids.input_ids)
-
+        
         # Autoregression loss
         AR_loss = self.compute_loss_with_image_features(
             inputs_embeds=inputs_embeds, 
@@ -268,7 +272,7 @@ class KimiViT(nn.Module):
             labels=input_ids.input_ids, 
             pad_token_id=pad_token_id
         )
-
+        
         # Contrastive loss
         Contrastive_loss = self.calcul_loss(outputs.text_embeds, image_features)
 
