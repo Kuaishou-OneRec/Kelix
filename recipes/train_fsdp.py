@@ -983,7 +983,7 @@ def train():
             for key, loss_sum in batch_data_source_loss.items():
               tb_writer.add_scalar(
                     f"data_source_loss/{key}",
-                    loss_sum / valid_data_source_tokens[key],
+                    loss_sum / (valid_data_source_tokens[key] + 1e-6) ,
                     global_step=global_step,
                     new_style=True)
 
