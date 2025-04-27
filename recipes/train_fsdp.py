@@ -809,7 +809,7 @@ def train():
       num_tokens = token_count
       num_samples = (sample_idx.max() + 1).sum()
       num_image_tokens = pixel_values.shape[0] * 256 if args.model_class == "InternVLChatModel" else 0
-      print(f"rank{dist.get_rank()} num_image_tokens={num_image_tokens}")
+      print(f"rank{dist.get_rank()} num_image_tokens={num_image_tokens}/{num_tokens}")
       num_valid_tokens = num_tokens - (sample_idx == -1).sum()
       token_metrics = torch.tensor(
         [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda(non_blocking=True)
