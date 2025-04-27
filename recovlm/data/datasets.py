@@ -2686,9 +2686,12 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                              packed_image_flags:List[torch.Tensor],
                              cu_seqlens: List[int],
                              sample_idx: Optional[int] = None,
-                             max_length: Optional[int] = None,
+                             max_length: Optional[int] = None, # 还能pad多长
                              ):
-
+    if max_length is not None and inputs["input_ids"].shape[-1] > max_length:
+      
+      return 0
+    
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
     packed_position_ids.append(inputs["position_ids"])
@@ -2699,10 +2702,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     if "pixel_values" in inputs:
       packed_pixel_values.append(inputs["pixel_values"])
-      #packed_image_gird_thw.append(inputs["image_grid_thw"])
     if "pixel_values_videos" in inputs:
       packed_pixel_values_videos.append(inputs["pixel_values_videos"])
-      #packed_video_grid_thw.append(inputs["video_grid_thw"])
+
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     packed_image_flags.append(inputs["image_flags"])
     return len(inputs["input_ids"][0])
