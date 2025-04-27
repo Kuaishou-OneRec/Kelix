@@ -15,6 +15,7 @@ import pyarrow.parquet as pq
 from datetime import datetime
 import os.path as osp
 import webdataset as wds
+from recovlm.utils.ds_utils import print_input_info
 
 from io import BytesIO
 from PIL import Image
@@ -2729,6 +2730,23 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       packed_sample_idx,
                                       packed_image_flags,
                                       cu_seqlens)
+      if dist.get_rank() == 0:
+        print_input_info(
+          {
+            "inputs": inputs,
+            "packed_input_ids": packed_input_ids,
+            "packed_position_ids": packed_position_ids,
+            "packed_loss_mask": packed_loss_mask,
+            "packed_pixel_values": packed_pixel_values,
+            "packed_pixel_values_videos": packed_pixel_values_videos,
+            "packed_image_gird_thw": packed_image_gird_thw,
+            "packed_video_grid_thw": packed_video_grid_thw,
+            "packed_sample_idx": packed_sample_idx,
+            "packed_image_flags": packed_image_flags,
+            "cu_seqlens": cu_seqlens
+          },
+          prefix="_append_sample_packing"
+        )
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
