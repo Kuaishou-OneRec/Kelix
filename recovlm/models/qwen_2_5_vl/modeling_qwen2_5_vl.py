@@ -2233,6 +2233,7 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
 
     def __init__(self, config):
         super().__init__(config)
+        MoonViT_config = MoonViTConfig()
         KimiVL_Config_AR = KimiVLConfig()
         KimiVL_Config = KimiVLConfig()
         MoonViT_config._attn_implementation = 'flash_attention_2'
