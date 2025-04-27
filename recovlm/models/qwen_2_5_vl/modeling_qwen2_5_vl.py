@@ -249,7 +249,6 @@ class Qwen2_5_VLVisionFlashAttention2(nn.Module):
                 cu_seqlens=cu_seqlens
             ).reshape(seq_length, -1)
         else:
-            print("vision flash_attn_varlen_func")
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
                 seq_length, -1
@@ -574,9 +573,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
         window_index, cu_window_seqlens = self.get_window_index(grid_thw)
 
-
-        
-        # print(f"config.fullatt_block_indexes={self.config.fullatt_block_indexes}") # [7, 15, 23, 31]
 
         cu_window_seqlens = torch.tensor(
             cu_window_seqlens,
@@ -1015,7 +1011,6 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
             )
         else:
             if cu_seqlens is not None:
-                print("Qwen2_5_VLFlashAttention2 flash_attn_varlen_func...")
                 # Sample packing with FA2
                 max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
                 cu_seqlens = cu_seqlens.to(torch.int32)
@@ -1163,7 +1158,6 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
                 "unexpected results may be encountered."
             )
         self.self_attn = QWEN2_5_VL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
-        print(9776586876876, config, type(self.self_attn)) # ; exit()
         self.mlp = Qwen2MLP(config)
         self.input_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
