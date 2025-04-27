@@ -340,7 +340,10 @@ def test_InternVLParquetDataset():
     )
     for iteration, batch in enumerate(dataloader):
         for k, v in batch.items():
-            print(k, v.shape)
+            try:
+                print(k, v.shape, v.dtype, str(v)[:100])
+            except:
+                print(k, v)
             print("=" * 10)
         
 
