@@ -249,6 +249,7 @@ class Qwen2_5_VLVisionFlashAttention2(nn.Module):
                 cu_seqlens=cu_seqlens
             ).reshape(seq_length, -1)
         else:
+            print("vision flash_attn_varlen_func")
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
                 seq_length, -1
@@ -1014,6 +1015,7 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
             )
         else:
             if cu_seqlens is not None:
+                print("Qwen2_5_VLFlashAttention2 flash_attn_varlen_func...")
                 # Sample packing with FA2
                 max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
                 cu_seqlens = cu_seqlens.to(torch.int32)
