@@ -610,8 +610,8 @@ def train():
   # 添加torch.compile
   if args.compile:
       print_rank_0("Compiling model with torch.compile...")
-      model.language_model = torch.compile(
-          model.language_model,
+      model = torch.compile(
+          model,
           mode='max-autotune',  # 推荐FSDP兼容模式
           fullgraph=False,
           dynamic=False
