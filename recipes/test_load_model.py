@@ -50,6 +50,7 @@ print(data.keys())
 input_ids = data["input_ids"]
 pixel_values = data["pixel_values"]
 image_grid_thw = data["image_grid_thw"]
+print(image_grid_thw)
 # Correctly format image_grid_thw - assuming patch size is 16 for both H and W
 
 # Convert inputs to tensors if they're not already
