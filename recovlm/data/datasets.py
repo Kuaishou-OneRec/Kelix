@@ -2464,8 +2464,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     new_conversations = []
     text = ""
     segments = sample["json"]["segments"]
+
+    if _DATASET_SKIP_MM == "SKIP_MM": 
+      segments = sample["json"]["segments"] = [x for x in segments if x["type"] == "text"]
+
     for segment in segments: 
-      if _DATASET_SKIP_MM == "SKIP_MM" and segment["type"] != "text": continue
 
       if segment["type"] == "image":
         self._fill_image_block(segment, sample,
@@ -2571,11 +2574,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       content = turn["content"]
       if isinstance(content, str):
         continue
-      for block in content:
-        if _DATASET_SKIP_MM == "SKIP_MM" and block["type"] != "text": 
-          print_rank_0("skip message of type {}".format(block["type"]))
-          continue
 
+      if _DATASET_SKIP_MM == "SKIP_MM":
+        content = turn["content"] = [x for x in content if x["type"] == "text"]
+
+      for block in content:
         if block["type"] == "image":
           self._fill_image_block(block, sample, 
                                   conf=data_conf)
