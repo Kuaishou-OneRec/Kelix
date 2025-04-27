@@ -274,6 +274,7 @@ class Learnable2DInterpPosEmb(nn.Module):
                     .flatten(end_dim=1)
                 )
         print([y.shape for y in pos_embs])
+        print(x.shape)
         out = x + torch.cat(pos_embs)
         return out
 
