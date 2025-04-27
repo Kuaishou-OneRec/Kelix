@@ -121,7 +121,7 @@ nohup mpirun --allow-run-as-root \
                 --monitor_datasource_cnt \
                 --dataset_config examples/vlm/configs/2b_internvl_stage2_cut.json \
                 --max_length 24000 \
-                --learning_rate 2e-4 \
+                --learning_rate 4e-7 \
                 --model_class InternVLChatModel \
                 --min_lr 0.0 \
                 --weight_decay 0.01 \
