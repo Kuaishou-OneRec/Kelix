@@ -1514,6 +1514,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
     vision_infos = []
     segments = sample["json"]["segments"]
     for segment in segments:
+
       if segment["type"] == "text":
         text += segment["text"]
       elif segment["type"] == "image":
@@ -2464,6 +2465,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     text = ""
     segments = sample["json"]["segments"]
     for segment in segments: 
+      if _DATASET_SKIP_MM == "SKIP_MM" and segment["type"] != "text": continue
+
       if segment["type"] == "image":
         self._fill_image_block(segment, sample,
                                 conf=data_conf)
@@ -2569,6 +2572,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       if isinstance(content, str):
         continue
       for block in content:
+
+        if _DATASET_SKIP_MM == "SKIP_MM" and block["type"] != "text": continue
+
         if block["type"] == "image":
           self._fill_image_block(block, sample, 
                                   conf=data_conf)
