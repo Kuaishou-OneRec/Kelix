@@ -27,6 +27,11 @@ model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
   "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
 )
 model.eval()
+
+# Set device - use CUDA if available, otherwise CPU
+device = "cuda" if torch.cuda.is_available() else "cpu"
+model = model.to(device)
+
 processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(
   "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct"
 )
@@ -49,6 +54,11 @@ if not isinstance(pixel_values, torch.Tensor):
     pixel_values = torch.tensor(pixel_values)
 if not isinstance(image_grid_thw, torch.Tensor):
     image_grid_thw = torch.tensor(image_grid_thw)
+
+# Move tensors to the same device as the model
+input_ids = input_ids.to(device)
+pixel_values = pixel_values.to(device)
+image_grid_thw = image_grid_thw.to(device)
 
 rets = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
 print(rets)
