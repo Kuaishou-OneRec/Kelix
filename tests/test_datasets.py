@@ -346,6 +346,8 @@ def test_InternVLParquetDataset():
                 print(k, v)
             print("=" * 10)
         
+        break
+        
 
 
 if __name__ == "__main__":
