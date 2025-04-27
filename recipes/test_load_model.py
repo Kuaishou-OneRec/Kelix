@@ -33,7 +33,7 @@ processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(
 
 
 
-images = torch.randn(1, 3, 224, 224)
+images =[torch.randn(1, 3, 224, 224)]
 texts = ["hello world"]
 data = processor(images=images, text=texts)
 rets = model(data)
