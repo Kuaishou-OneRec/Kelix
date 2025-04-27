@@ -42,10 +42,15 @@ image = Image.fromarray(image.numpy())
 images =[image]
 texts = ["hello world"]
 data = processor(images=images, text=texts)
+print(data.keys())
+
+# Create a properly formatted image_grid_thw tensor
+# It should contain time, height, width dimensions for each image
+# For a single image without time dimension, we use [1, H/patch_size, W/patch_size]
 input_ids = data["input_ids"]
 pixel_values = data["pixel_values"]
 image_grid_thw = data["image_grid_thw"]
-print(data.keys())
+# Correctly format image_grid_thw - assuming patch size is 16 for both H and W
 
 # Convert inputs to tensors if they're not already
 if not isinstance(input_ids, torch.Tensor):
