@@ -801,10 +801,8 @@ def train():
         token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
       ticker.tick("token_metrics_reduce")
 
-      
-      
-
       num_tokens, num_samples, num_valid_tokens, num_image_tokens = token_metrics.detach().cpu().numpy()
+      ticker.tick("token_metrics.detach().cpu().numpy()")
 
       total_num_samples += num_samples
       total_num_tokens += num_tokens
@@ -814,10 +812,11 @@ def train():
       acc_num_samples += num_samples
       acc_num_tokens += num_tokens
       acc_valid_num_tokens += num_valid_tokens
+      ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
 
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
       labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
-      ticker.tick("metrics_accumulate")
+      ticker.tick("labels=...")
       with Timer("Fwd"):
         if args.model_class == "InternVLChatModel":
             output = model(
