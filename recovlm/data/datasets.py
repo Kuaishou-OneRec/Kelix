@@ -2712,6 +2712,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       # print_input_info(inputs, prefix="inputs2: ")
       # print(cu_seqlens, packable_length,)
       if packable_length < inputs["input_ids"].size(1): # 1 x len
+        # 这里会修改最后一个样本
         if dist.get_rank() == 0:
           print_input_info(inputs, prefix="inputs_cut_before: ")
         inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
@@ -2775,7 +2776,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     valid_seq_len = 0
     for _, inputs in enumerate(buffer):
-      valid_seq_len += self._append_sample_packing(inputs,
+      packed_len = self._append_sample_packing(inputs,
                                       packed_input_ids,
                                       packed_position_ids,
                                       packed_loss_mask,
@@ -2786,6 +2787,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       packed_sample_idx,
                                       packed_image_flags,
                                       cu_seqlens)
+      if packed_len == 0 and valid_seq_len == 0: return None # packing 失败，没有找到有效样本
+      valid_seq_len += packed_len
       if dist.get_rank() == 0 and 0:
         print_input_info(
           inputs,
@@ -2904,6 +2907,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           buffer = []
           source_list = []
           cur_length = 0
+          if packed_inputs is None: continue # packing失败，这种情况通常是只有一个样本，而且这个样本以图片开头，而且图片占满了所有有效token
         else:
           packed_inputs = self._packing(buffer)
           packed_inputs["data_source"] = source_list
