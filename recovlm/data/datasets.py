@@ -50,6 +50,12 @@ from .templates import get_template
 from .prompts import PromptLoader
 from recovlm.services.clients import PidInfoClient
 
+
+_DATASET_SKIP_MM = os.environ.get("_DATASET_SKIP_MM", "")
+assert _DATASET_SKIP_MM in ["", "SKIP_MM"]
+print(f"_DATASET_SKIP_MM={_DATASET_SKIP_MM}")
+
+
 logger = logging.getLogger(__name__)
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
@@ -881,7 +887,10 @@ class ChatCompletionVisionDataset(IterableDataset):
     text = ""
     vision_infos = []
     segments = sample["json"]["segments"]
+    
     for segment in segments:
+      if _DATASET_SKIP_MM == "SKIP_MM" and segment["type"] != "text": continue
+
       if segment["type"] == "text":
         text += segment["text"]
       elif segment["type"] == "image":
@@ -958,6 +967,8 @@ class ChatCompletionVisionDataset(IterableDataset):
         if isinstance(content, str):
           continue
         for block in content:
+          if _DATASET_SKIP_MM == "SKIP_MM" and block["type"] != "text": continue
+
           if block["type"] == "image":
             self._fill_image_block(block, sample, 
                                     conf=data_conf)
