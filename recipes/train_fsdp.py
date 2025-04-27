@@ -113,6 +113,9 @@ def get_argument_parser():
   parser.add_argument("--load_weights_only", action="store_true",
                       help="Only load model weights.")
 
+  parser.add_argument("--compile", action="store_true",
+                      help="compile model.")
+
   parser.add_argument("--merge_checkpoint", action="store_true",
                       help="Merge the checkpoint files into a single file")
 
@@ -240,6 +243,7 @@ def get_argument_parser():
 
   parser.add_argument("--monitor_datasource_cnt", action="store_true",
                       help="Whether to monitor cnt of each datasource")
+
 
   ############ System Vars ############
 
@@ -571,6 +575,16 @@ def train():
         print_rank_0("Initialize RoPE")
         m.rope_init()
 
+    # 添加torch.compile
+    if args.compile:
+        print_rank_0("Compiling model with torch.compile...")
+        model = torch.compile(
+            model,
+            mode='reduce-overhead',  # 推荐FSDP兼容模式
+            fullgraph=False,
+            dynamic=False
+        )
+        print_rank_0("Model compilation completed")
   
   # 确保任何参数都被正确初始化
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
@@ -795,6 +809,7 @@ def train():
       num_tokens = token_count
       num_samples = (sample_idx.max() + 1).sum()
       num_image_tokens = pixel_values.shape[0] * 1024 if args.model_class == "InternVLChatModel" else 0
+      print(f"rank{dist.get_rank()} num_image_tokens")
       num_valid_tokens = num_tokens - (sample_idx == -1).sum()
       token_metrics = torch.tensor(
         [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda(non_blocking=True)

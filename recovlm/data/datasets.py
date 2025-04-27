@@ -2743,6 +2743,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
     ):
       padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+      
+
       packed_input_ids = F.pad(
         packed_input_ids, (0, padding_len),
         value=self.tokenizer.pad_token_id)

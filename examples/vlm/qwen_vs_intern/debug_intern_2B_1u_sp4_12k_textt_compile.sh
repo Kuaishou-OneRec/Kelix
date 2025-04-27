@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/Megred_model/2B # Pretrained/Base model path
 # MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/OpenGVLab/InternVL2_5-4B
-OUTPUT_DIR=/llm_reco/lingzhixin/output/internvl-2b/qwen_vs_intern/debug_intern_2B_1u_sp4_12k
+OUTPUT_DIR=/llm_reco/lingzhixin/output/internvl-2b/qwen_vs_intern/debug_intern_2B_1u_sp4_12k_textt_compile
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -104,6 +104,7 @@ nohup mpirun --allow-run-as-root -np $np \
         -x KAI_FLAG_FILE \
         -x KML_ID \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
+        -x _DATASET_SKIP_MM=SKIP_MM \
         -x http_proxy=\
         -x https_proxy=\
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
@@ -116,6 +117,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --model_class InternVLChatModel \
                 --min_lr 0.0 \
                 --weight_decay 0.01 \
+                --compile \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 500 \
                 --num_training_steps 100000 \
