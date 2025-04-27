@@ -2680,17 +2680,19 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                              packed_loss_mask: List[torch.Tensor],
                              packed_pixel_values: List[torch.Tensor],
                              packed_pixel_values_videos: List[torch.Tensor],
-                             packed_image_gird_thw: List[torch.Tensor],
-                             packed_video_grid_thw: List[torch.Tensor],
+                             packed_image_gird_thw: List[torch.Tensor], # dont care
+                             packed_video_grid_thw: List[torch.Tensor], # dont care
                              packed_sample_idx: List[torch.Tensor],
                              packed_image_flags:List[torch.Tensor],
                              cu_seqlens: List[int],
                              sample_idx: Optional[int] = None,
-                             max_length: Optional[int] = None, # 还能pad多长
                              ):
-    if max_length is not None and inputs["input_ids"].shape[-1] > max_length:
-      
-      return 0
+    if 1:
+      packable_length = self.max_length - packed_input_ids["input_ids"].shape[-1]
+      if packable_length < len(inputs["input_ids"][1]): # 1 x len
+        inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
+
+
     
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
@@ -2734,7 +2736,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       packed_sample_idx,
                                       packed_image_flags,
                                       cu_seqlens)
-      if dist.get_rank() == 0:
+      if dist.get_rank() == 0 and 0:
         print_input_info(
           {
             "inputs": inputs,
@@ -2771,12 +2773,12 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
 
     # pad seq len to multiple_of
-    # if (
-    #   self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
-    # ):
-    if 1:
-      # padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
-      assert self.max_length % self.multiple_of == 0
+    if (
+      self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
+    ):
+      # if 1:
+      padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+      # assert self.max_length % self.multiple_of == 0
       padding_len = self.max_length - packed_input_ids.numel()
 
       packed_input_ids = F.pad(

@@ -310,6 +310,57 @@ def gather_batches(buffer, group):
     print_rank_0(f"Num batches: {len(gathered_batches)}")
     return gathered_batches
 
+
+def test_InternVLParquetDataset():
+    init_processes(0, 1)
+    from transformers import AutoTokenizer, AutoProcessor
+    from recovlm.data.datasets import InternVLParquetDataset
+    processor = AutoProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/InternVL3-2B")
+    path = "/llm_reco/chuchenglong/work_space/recovlm/examples/vlm/configs/internvl/2b_internvl_stage2.json"
+    with open(path, encoding="utf-8") as f:
+        dataset_config = json.loads(f.read())
+    dataset_config.pop("name")
+    dataset_config["num_workers"] = 8
+    dataset_config["shuffle_seed"] = int(time.time())
+
+    dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/pt/0421/stage2_ccl_v3_0425/_prepared/0/prep-0-5f8467a5aa2c472d9c31bbb81356540f.parquet"]
+
+    dataset = InternVLParquetDataset(**dataset_config)
+    ans = 0
+    def collate_fn(samples):
+        return samples[0]
+
+    dataloader = DataLoader(
+        dataset=dataset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=8,
+        collate_fn=collate_fn
+    )
+    for iteration, batch in enumerate(dataloader):
+        # pass
+        chosen_inputs, rejected_inputs = batch
+        input_ids = chosen_inputs["input_ids"].squeeze()
+        loss_mask = chosen_inputs["loss_mask"].squeeze()
+        decode_char = processor.tokenizer.convert_ids_to_tokens(input_ids)
+
+        decode_char = [f"\"{word}\"" for word in decode_char]
+
+        assert len(decode_char) == len(loss_mask)
+        output = "=======start======="
+        for i in range(len(decode_char)):
+            output+= f"{decode_char[i]}:{loss_mask[i].item()}"
+            if i % 8 == 0:
+                output += "\n"
+            else:
+                output += "\t"
+        
+        print(output)
+        print(chosen_inputs["data_source"])
+        print("==========================")
+        
+
+
 if __name__ == "__main__":
-    test_ChatCompletionVisionParquetDataset()
+    test_InternVLParquetDataset()
 
