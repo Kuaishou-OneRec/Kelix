@@ -716,6 +716,8 @@ def train():
     try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
     except: 
       import traceback
+      print_rank_0(f"get_dataloader_v2 error: {traceback.format_exc()}")
+      print_rank_0(f"get_dataloader_v2 retry for get_dataloader")
       traceback.print_exc()
       dataloader = get_dataloader(name=dataset, **dataset_config)
     if args.resume_dataloader and dataloader_state_dict is not None:
