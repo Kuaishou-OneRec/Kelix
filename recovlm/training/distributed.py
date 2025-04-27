@@ -245,17 +245,17 @@ def shard_model(
     #     )
 
     # Finally shard the entire model to account for any stragglers
-    fully_shard(model, **fsdp_kwargs)
+    # fully_shard(model, **fsdp_kwargs)
 
-    if prefetch_parameters:
-        prev = None
-        #for i_layer, layer in reversed(list(traverse_modules(model))):
-        for layer in reversed(layers):
-            if prev is not None:
-                layer.set_modules_to_forward_prefetch([prev])
-            prev = layer
+    # if prefetch_parameters:
+    #     prev = None
+    #     #for i_layer, layer in reversed(list(traverse_modules(model))):
+    #     for layer in reversed(layers):
+    #         if prev is not None:
+    #             layer.set_modules_to_forward_prefetch([prev])
+    #         prev = layer
 
-        model.set_modules_to_forward_prefetch([prev])
+    #     model.set_modules_to_forward_prefetch([prev])
 
 
 
