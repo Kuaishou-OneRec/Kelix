@@ -62,7 +62,7 @@ def pq2pd_v2(x, rank=0):
             break
         else:
             df = ParquetFile(x).to_pandas()
-            break
+            return df
     if not os.path.exists(tmp_fn):
         try:
             print("fall back to pq.read_table")
