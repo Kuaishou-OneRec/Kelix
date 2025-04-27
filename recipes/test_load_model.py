@@ -1,7 +1,7 @@
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit 
 import torch
-
+from PIL import Image
 
 
 # from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
@@ -32,8 +32,9 @@ processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(
 )
 
 
-
-images =[torch.randn(1, 3, 224, 224)]
+image = torch.randint(0, 255, (1, 3, 224, 224))
+image = Image.fromarray(image.numpy())
+images =[image]
 texts = ["hello world"]
 data = processor(images=images, text=texts)
 rets = model(data)
