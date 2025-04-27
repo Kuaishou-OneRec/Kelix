@@ -38,6 +38,8 @@ images =[image]
 texts = ["hello world"]
 data = processor(images=images, text=texts)
 input_ids = data["input_ids"]
+pixel_values = data["pixel_values"]
+image_grid_thw = data["image_grid_thw"]
 print(data.keys())
-rets = model(input_ids=input_ids)
+rets = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
 print(rets)
