@@ -2738,7 +2738,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         if dist.get_rank() == 0:
           print_input_info(inputs, prefix="inputs_cut_im: ")
 
-        if inputs["loss_mask"].sum().item() == 0: return 0 # 如果这个样本没有loss，放弃
+        # if inputs["loss_mask"].sum().item() == 0:  return 0 # 如果这个样本没有loss，放弃
 
     assert inputs["input_ids"].shape ==  inputs["loss_mask"].shape == inputs["position_ids"].shape and inputs["input_ids"].ndim == 2, f'inputs: {inputs["input_ids"].shape} ==  {inputs["loss_mask"].shape} == {inputs["position_ids"].shape}'
     assert inputs["image_flags"].size(0) == inputs["pixel_values"].size(0), f'inputs: {inputs["image_flags"].shape}, {inputs["pixel_values"].shape}'
@@ -2758,7 +2758,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     packed_image_flags.append(inputs["image_flags"])
-
 
     return len(inputs["input_ids"][0])
 
@@ -2787,7 +2786,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       packed_sample_idx,
                                       packed_image_flags,
                                       cu_seqlens)
-      if packed_len == 0 and valid_seq_len == 0: return None # packing 失败，没有找到有效样本
+      if packed_len == 0 and valid_seq_len == 0: 
+        print("_append_sample_packing", skip)
+        return None # packing 失败，没有找到有效样本
       valid_seq_len += packed_len
       if dist.get_rank() == 0 and 0:
         print_input_info(
@@ -2835,6 +2836,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
       assert self.max_length % self.multiple_of == 0
       # padding_len = self.max_length - packed_input_ids.numel()
+      if self.cut_to_pad: assert padding_len == 0
 
       packed_input_ids = F.pad(
         packed_input_ids, (0, padding_len),
@@ -2903,11 +2905,15 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           buffer.append(inputs)
           source_list.append(source_name)
           packed_inputs = self._packing(buffer)
+
           packed_inputs["data_source"] = source_list
           buffer = []
           source_list = []
           cur_length = 0
-          if packed_inputs is None: continue # packing失败，这种情况通常是只有一个样本，而且这个样本以图片开头，而且图片占满了所有有效token
+          # print(3444444442, packed_inputs["loss_mask"].sum().item())
+          if packed_inputs["loss_mask"].sum().item() == 0:
+            print(f"skip no loss")
+            continue # packing失败，这种情况通常是只有一个样本，而且这个样本以图片开头，而且图片占满了所有有效token
         else:
           packed_inputs = self._packing(buffer)
           packed_inputs["data_source"] = source_list
