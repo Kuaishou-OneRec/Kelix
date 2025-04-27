@@ -579,7 +579,7 @@ def train():
     if args.compile:
         print_rank_0("Compiling model with torch.compile...")
         model = torch.compile(
-            model,
+            model.language_model,
             mode='reduce-overhead',  # 推荐FSDP兼容模式
             fullgraph=False,
             dynamic=False
