@@ -38,7 +38,7 @@ def print_input_info(data: Any, prefix: str = "", max_str_len: int = 50, return_
         add_line(f"{prefix}None")
         return "\n".join(lines) if return_str else None
     if isinstance(data, torch.Tensor):
-        base_info = f"{prefix}Tensor: shape={tuple(data.shape)}, dtype={data.dtype}, device={data.device}"
+        base_info = f"{prefix}Tensor: shape={tuple(data.shape)}, dtype={data.dtype}, device={data.device}, data={data.flatten()[:4]}...{data.flatten()[-4:]}"
         
         if data.dtype == torch.bool:
             total_elements = data.numel()
