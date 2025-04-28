@@ -17,6 +17,17 @@ import json
 # for key, value in model.named_parameters():
 #     print(key, value.shape)
 
+
+import os
+os.environ["MASTER_ADDR"] = "localhost"
+os.environ["MASTER_PORT"] = "12355"
+os.environ["WORLD_SIZE"] = "1"
+os.environ["RANK"] = "0"
+
+import torch.distributed as dist
+dist.init_process_group(backend="nccl" if torch.cuda.is_available() else "gloo", rank=0, world_size=1)
+
+
 model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
   "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
 )
