@@ -479,7 +479,7 @@ class TokenStats:
       min_image_tokens = min(all_image_tokens)
       mean_image_tokens = sum(all_image_tokens) / world_size
       std_image_tokens = (sum((x - mean_image_tokens)**2 for x in all_image_tokens) / world_size)**0.5
-
+      print(2354555655, max_image_tokens, all_image_tokens)
       self.max_image_tokens.append(max_image_tokens)
       self.min_image_tokens.append(min_image_tokens)
       self.mean_image_tokens.append(mean_image_tokens)
