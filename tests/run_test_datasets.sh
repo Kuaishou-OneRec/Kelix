@@ -1,1 +1,1 @@
-python3 /llm_reco/maosiyang/msy_vit/recovlm/tests/test_datasets.py /llm_reco/maosiyang/msy_vit/recovlm/tests/files.txt
+python3 /llm_reco/maosiyang/msy_internvl_premerge/recovlm/tests/test_datasets.py /llm_reco/maosiyang/msy_internvl_premerge/recovlm/tests/files.txt
