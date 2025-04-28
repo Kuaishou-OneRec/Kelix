@@ -1583,6 +1583,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
       inputs,
       "_process_completion",
     )
+    print(9543554, inputs["input_ids"].shape[1], inputs["pixel_values"].shape[0] * 256)
     if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
       print("baddddddd")
       print_input_info(
@@ -1682,7 +1683,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
       vision_start_token_id=self.vision_start_token_id
     )
     inputs.pop("attention_mask")
-
+    print(9543554, inputs["input_ids"].shape[1], inputs["pixel_values"].shape[0] * 256)
     if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
       print("baddddddd")
       print_input_info(
@@ -2774,7 +2775,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     packed_image_flags.append(inputs["image_flags"])
-
+      
     return len(inputs["input_ids"][0])
 
   def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
@@ -2851,6 +2852,12 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       "sample_idx": packed_sample_idx.to(torch.int32)
     }
 
+    print(88988, input_ids.flatten().shape[0], pixel_values.shape[0] * 256, pixel_values.shape)
+    if input_ids.flatten().shape[0] < pixel_values.shape[0] * 256:
+      print_input_info(
+        inputs,
+        "inputs111: "
+      )
     return inputs
 
   def __iter__(self):
