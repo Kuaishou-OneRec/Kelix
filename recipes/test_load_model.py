@@ -18,7 +18,8 @@ import json
 #     print(key, value.shape)
 
 model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
-  "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
+  "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True,
+  use_sequence_parallel=False
 )
 model.eval()
 
