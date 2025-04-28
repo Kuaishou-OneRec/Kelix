@@ -240,7 +240,7 @@ class KimiVLImageProcessor_for_qwen2_5_vl(BaseImageProcessor):
         images: ImageInput,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ) -> BatchFeature:
-        images = make_list_of_images(images)
+        #images = make_list_of_images(images)
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
