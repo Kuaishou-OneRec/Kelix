@@ -41,7 +41,7 @@ import tqdm
 没有cut
 """
 
-def generate_test_dataframe(num_samples_perfile=4000, num_files=30, n_texts=250, fake_dir="/llm_reco/lingzhixin/recovlm_0427compile/recovlm/tests/test_fake_datasets/generate_test_dataframe/buffer/"):
+def generate_test_dataframe(num_samples_perfile=400, num_files=3000, n_texts=250, fake_dir="/llm_reco/lingzhixin/recovlm_0427compile/recovlm/tests/test_fake_datasets/generate_test_dataframe/buffer/"):
     """
     生成测试用DataFrame，结构如下：
     - images: {"0.jpg": base64编码的1x1像素图片}
@@ -115,7 +115,7 @@ def test_InternVLParquetDataset():
     
     exp_config_fn = "/llm_reco/lingzhixin/recovlm_0427compile/recovlm/tests/test_fake_datasets/generate_test_dataframe/exp_config.json"
     with open(exp_config_fn, 'w') as f:
-        json.dump(_exp_config, f)
+        json.dump(_exp_config, f, indent=4)
     
     with open(exp_config_fn, 'r') as f:
         exp_config = json.loads(f.read())
