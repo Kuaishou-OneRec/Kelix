@@ -321,7 +321,7 @@ def test_InternVLParquetDataset(sources):
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
     dataset_config.pop("name")
-    dataset_config["num_workers"] = 100
+    dataset_config["num_workers"] = 5
     dataset_config["shuffle_seed"] = int(time.time())
     dataset_config["max_length"] = 999999999
     dataset_config["sources"] = sources
