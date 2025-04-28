@@ -4,7 +4,7 @@ import torch
 # from PIL import Image
 from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
 
-
+from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitPretrainedModel
 # # from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
 import json
 
@@ -73,15 +73,18 @@ import json
 from PIL import Image
 from transformers import AutoModel, AutoImageProcessor
 
-model_path = "moonshotai/MoonViT-SO-400M"
+#model_path = "moonshotai/MoonViT-SO-400M"
 # 指定单一设备
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-model = AutoModel.from_pretrained(
-    model_path,
-    torch_dtype="auto",
-    device_map={"": device},  # 强制使用同一设备
-    trust_remote_code=True,
-)
+MoonViT_config = MoonViTConfig()
+MoonViT_config._attn_implementation = 'flash_attention_2'
+model = MoonVitPretrainedModel(MoonViT_config).to(device)
+# model = AutoModel.from_pretrained(
+#     model_path,
+#     torch_dtype="auto",
+#     device_map={"": device},  # 强制使用同一设备
+#     trust_remote_code=True,
+# )
 processor = KimiVLImageProcessor_for_qwen2_5_vl.from_pretrained(model_path, trust_remote_code=True)
 
 image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
