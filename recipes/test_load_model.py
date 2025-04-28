@@ -78,7 +78,7 @@ model_path = "moonshotai/MoonViT-SO-400M"
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 MoonViT_config = MoonViTConfig()
 MoonViT_config._attn_implementation = 'flash_attention_2'
-model = MoonVitPretrainedModel(MoonViT_config).to(device)
+model = MoonVitPretrainedModel(MoonViT_config).to(device,dtype=torch.bfloat16)
 # model = AutoModel.from_pretrained(
 #     model_path,
 #     torch_dtype="auto",
@@ -96,5 +96,5 @@ image_grid_hws = [(data.image_grid_thw[0][1],data.image_grid_thw[0][2])]
 image_grid_hws = torch.tensor(image_grid_hws, dtype=torch.int32, device=model.device)
 image_features: list = model(data.pixel_values, image_grid_hws)
 
-print(f"dtype: {image_features[0].dtype}, shape: {image_features[0].shape}")
+print(f"allalaladtype: {image_features[0].dtype}, shape: {image_features[0].shape}")
 # dtype: torch.bfloat16, shape: torch.Size([1092, 4, 1152])
