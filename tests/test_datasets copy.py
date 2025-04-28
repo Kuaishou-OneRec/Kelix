@@ -326,7 +326,7 @@ def test_InternVLParquetDataset():
     dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/pt/0421/stage2_ccl_v3_0425/_prepared/0/prep-0-5f8467a5aa2c472d9c31bbb81356540f.parquet"]
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
-
+    logger = logging.getLogger(__name__)
     dataset = InternVLChatCompletionVisionParquetDataset(cut_to_pad=True, **dataset_config)
     ans = 0
     def collate_fn(samples):
@@ -342,10 +342,10 @@ def test_InternVLParquetDataset():
     for iteration, batch in enumerate(dataloader):
         for k, v in batch.items():
             try:
-                print(k, v.shape, v.dtype, str(v)[:100])
+                logger.error(f"{k}: {v.shape}, {v.dtype}, {str(v)[:100]}")
             except:
-                print(k, v)
-            print("=" * 10)
+                logger.error(f"{k}: {v}")
+            logger.error("=" * 10)
         if iteration == 20: break
         
         
