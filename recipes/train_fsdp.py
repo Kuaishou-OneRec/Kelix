@@ -742,6 +742,7 @@ def train():
   acc_num_tokens = 0
   acc_num_samples = 0
   acc_valid_num_tokens = 0
+  acc_num_image_tokens = 0
   total_num_image_tokens = 0
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
@@ -820,6 +821,7 @@ def train():
       acc_num_samples += num_samples
       acc_num_tokens += num_tokens
       acc_valid_num_tokens += num_valid_tokens
+      acc_num_image_tokens += num_image_tokens
       ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
 
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
