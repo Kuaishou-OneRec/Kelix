@@ -31,33 +31,14 @@ processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(
 )
 
 processor2 = KimiVLImageProcessor_for_qwen2_5_vl()
-# image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
-# image = Image.fromarray(image.numpy())
-# images =[image]
-# texts = ["hello world<|image_pad|>"]
-messages = [
-    {
-        "role": "user",
-        "content": [
-            {
-                "type": "image",
-                "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
-            },
-            {"type": "text", "text": "Describe this image."},
-        ],
-    }
-]
-text = processor.apply_chat_template(
-    messages, tokenize=False, add_generation_prompt=True
-)
-image_inputs, video_inputs = process_vision_info(messages)
-
-
+image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
+image = Image.fromarray(image.numpy())
+images =[image]
+texts = ["hello world"]
 
 # data2 = processor2(images,return_tensors="pt")
-data = processor(text=[text],images=image_inputs,padding=True,return_tensors="pt",)
+data = processor(images=images, text=texts)
 print(data.keys())
-data = data.to("cuda")
 
 
 # Create a properly formatted image_grid_thw tensor
@@ -80,7 +61,7 @@ if not isinstance(image_grid_thw, torch.Tensor):
 
 # Move tensors to the same device as the model
 input_ids = input_ids.to(device)
-pixel_values = pixel_values.to(device, dtype=torch.bfloat16)  # 明确指定为 bfloat16
+pixel_values = pixel_values.to(device)
 image_grid_thw = image_grid_thw.to(device)
 # image_grid_thw = data2.image_grid_thw.to(device)
 # pixel_values = data2.pixel_values.to(device)
