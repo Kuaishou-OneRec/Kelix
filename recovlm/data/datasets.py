@@ -1127,6 +1127,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         inputs = self._process_chat(sample, source_conf)
       elif data_format == "completion":
         inputs = self._process_completion(sample, source_conf)
+
       else:
         raise NotImplementedError(
             f"Unsupported dataset format `{data_format}`")
@@ -1578,6 +1579,16 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
       vision_start_token_id=self.vision_start_token_id
     )
     inputs.pop("attention_mask")
+    print_input_info(
+      inputs
+      "_process_completion",
+    )
+    if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
+      print("baddddddd")
+      print_input_info(
+        inputs
+        "_process_completion",
+      )
     return inputs
 
   def _process_chat(self,
@@ -1671,6 +1682,14 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
       vision_start_token_id=self.vision_start_token_id
     )
     inputs.pop("attention_mask")
+
+    if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
+      print("baddddddd")
+      print_input_info(
+        inputs
+        "_process_chat",
+      )
+
     return inputs
   
   def _gen_pad_input(self, pad_len):
