@@ -468,7 +468,7 @@ class TokenStats:
   def collect_image_token_stats(self, num_image_tokens):
       # 收集所有rank的image tokens统计信息
       world_size = dist.get_world_size()
-      all_image_tokens = torch.zeros(world_size, dtype=torch.long).chunk(world_size) 
+      all_image_tokens = torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) 
       dist.all_gather(all_image_tokens, torch.tensor(num_image_tokens, dtype=torch.long).cuda())
       all_image_tokens = [x.item() for x in all_image_tokens]
       
