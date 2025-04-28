@@ -71,6 +71,8 @@ from recovlm.training.common import set_default_dtype, get_global_grad_norm, cli
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
 from recovlm.utils.time_tracker import TimeTracker
+from recovlm.utils.ds_utils import format_dict_or_list
+
 
 # Logger 初始化
 logging.basicConfig(level=logging.INFO)  # 设置日志级别
@@ -1068,9 +1070,7 @@ def train():
             f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, ",
             f"image_token_per_sample_per_gpu : {total_num_image_tokens/total_num_samples }"
         )
-          print_rank_0(
-            json.dumps(log_dict, indent=4)
-          )
+          format_dict_or_list(log_dict)
         
 
           # upload heart_beat to remote

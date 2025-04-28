@@ -111,6 +111,31 @@ def debug_inputs(inputs: Any, name: str = "inputs", return_str: bool = False) ->
         return None
 
 
+def format_dict_or_list(obj, indent_level=0, indent_size=2):
+    """
+    格式化打印dict/list，用来替代json.dumps
+    """
+    def format_value(value, indent_level=0, indent_size=2):
+        if isinstance(value, (dict, list)):
+            return format_dict_or_list(value, indent_level, indent_size)
+        elif isinstance(value, str):
+            return f'"{value}"'
+        else:
+            return str(value)
+
+    if isinstance(obj, dict):
+        items = [f": {format_value(v, indent_level + 1)}" for k, v in obj.items()]
+        keys = [f'"{k}"' for k in obj.keys()]
+        formatted_items = ',\n'.join(f'{(" " * indent_size * (indent_level + 1))}{k}{v}' for k, v in zip(keys, items))
+        return '{\n' + formatted_items + '\n' + (' ' * indent_size * indent_level) + '}'
+    elif isinstance(obj, list):
+        items = [format_value(item, indent_level + 1) for item in obj]
+        formatted_items = ',\n'.join(' ' * indent_size * (indent_level + 1) + item for item in items)
+        return '[\n' + formatted_items + '\n' + (' ' * indent_size * indent_level) + ']'
+    else:
+        return obj
+    
+    
 # 测试代码
 if __name__ == "__main__":
     test_data = {
