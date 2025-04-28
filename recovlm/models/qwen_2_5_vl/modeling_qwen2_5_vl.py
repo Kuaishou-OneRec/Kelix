@@ -2524,10 +2524,10 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 #image_embeds is a list of tensor, each tensor is a image feature,I want to concat them all into a tensor
                 image_embeds = torch.cat(image_embeds,dim=0)
-                n_image_features = [image_embed.shape for image_embed in image_embeds]
+                n_image_features = image_embeds.shape[0]
                 print(f"n_image_features: {n_image_features}")
                 print(f"n_image_tokens: {n_image_tokens}")
-                if n_image_tokens != sum(n_image_features):
+                if n_image_tokens != n_image_features:
                     raise ValueError(
                         f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                     )
