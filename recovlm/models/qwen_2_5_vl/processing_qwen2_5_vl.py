@@ -347,7 +347,7 @@ class Qwen2_5_VLProcessor_moonvit(ProcessorMixin):
                 while self.image_token in text[i]:
                     text[i] = text[i].replace(
                         self.image_token,
-                        "<|placeholder|>" * (image_grid_thw[index].prod()),
+                        "<|placeholder|>" * (image_grid_thw[index].prod()//self.image_processor.merge_kernel_size[0]//self.image_processor.merge_kernel_size[1]),
                         1,
                     )
                     index += 1
