@@ -223,19 +223,19 @@ def shard_model(
     # lowest-level modules first
     num_layers_sharded = 0
 
-    # layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
+    layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
+    for m in layers:
+        # if m in layers:
+        #     if dist.get_rank() == 0: print("sharding", n)
+        fully_shard(m, **fsdp_kwargs)
+        num_layers_sharded += 1
+
+    # layers = []
     # for n, m in reversed(list(model.named_modules())):
-    #     if m in layers:
-    #         if dist.get_rank() == 0: print("sharding", n)
+    #     if any([shard_condition(n, m) for shard_condition in shard_conditions]):
     #         fully_shard(m, **fsdp_kwargs)
     #         num_layers_sharded += 1
-
-    layers = []
-    for n, m in reversed(list(model.named_modules())):
-        if any([shard_condition(n, m) for shard_condition in shard_conditions]):
-            fully_shard(m, **fsdp_kwargs)
-            num_layers_sharded += 1
-            layers.append(m)
+    #         layers.append(m)
 
 
     # print('=' * 40)
@@ -247,7 +247,7 @@ def shard_model(
     # Finally shard the entire model to account for any stragglers
     fully_shard(model, **fsdp_kwargs)
 
-    if prefetch_parameters:
+    if True
         prev = None
         #for i_layer, layer in reversed(list(traverse_modules(model))):
         for layer in reversed(layers):
