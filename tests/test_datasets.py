@@ -328,18 +328,9 @@ def test_InternVLParquetDataset(sources):
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
 
-    dataset = get_chat_completion_vision_parquet_dataloader(cut_to_pad=True, **dataset_config,model_class="InternVLChatModel")
+    dataloader = get_chat_completion_vision_parquet_dataloader(cut_to_pad=True, **dataset_config,model_class="InternVLChatModel")
     ans = 0
-    def collate_fn(samples):
-        return samples[0]
 
-    dataloader = DataLoader(
-        dataset=dataset,
-        batch_size=1,
-        shuffle=False,
-        num_workers=1,
-        collate_fn=collate_fn
-    )
     for iteration, batch in enumerate(dataloader):
         for k, v in batch.items():
             try:
