@@ -189,7 +189,8 @@ def shard_model(
     reshard_after_forward: bool = True,
     dp_mesh: Optional[DeviceMesh] = None,
     fp32_weight=True,
-    prefetch_parameters=False
+    prefetch_parameters=False,
+    model_class='InternVLChatModel'
     ) -> None:
     """
     Utility to shard a model with FSDP using the PyTorch Distributed fully_shard API.
@@ -223,19 +224,21 @@ def shard_model(
     # lowest-level modules first
     num_layers_sharded = 0
 
-    layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
-    for m in layers:
-        # if m in layers:
-        #     if dist.get_rank() == 0: print("sharding", n)
-        fully_shard(m, **fsdp_kwargs)
-        num_layers_sharded += 1
-
-    # layers = []
-    # for n, m in reversed(list(model.named_modules())):
-    #     if any([shard_condition(n, m) for shard_condition in shard_conditions]):
-    #         fully_shard(m, **fsdp_kwargs)
-    #         num_layers_sharded += 1
-    #         layers.append(m)
+    if model_class == 'InternVLChatModel':
+        layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
+        for m in layers:
+            # if m in layers:
+            #     if dist.get_rank() == 0: print("sharding", n)
+            fully_shard(m, **fsdp_kwargs)
+            num_layers_sharded += 1
+    else: 
+        assert model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration']:
+        layers = []
+        for n, m in reversed(list(model.named_modules())):
+            if any([shard_condition(n, m) for shard_condition in shard_conditions]):
+                fully_shard(m, **fsdp_kwargs)
+                num_layers_sharded += 1
+                layers.append(m)
 
 
     # print('=' * 40)

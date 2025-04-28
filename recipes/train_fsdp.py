@@ -559,6 +559,7 @@ def train():
     dp_mesh=device_mesh,
     fp32_weight=args.fp32_weight,
     prefetch_parameters=args.prefetch_parameters,
+    model_class=args.model_class
   )
   dist.barrier()
 
