@@ -321,16 +321,25 @@ def test_InternVLParquetDataset(sources):
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
     dataset_config.pop("name")
-    dataset_config["num_workers"] = 1
+    dataset_config["num_workers"] = 100
     dataset_config["shuffle_seed"] = int(time.time())
     dataset_config["max_length"] = 999999999
     dataset_config["sources"] = sources
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
 
-    dataloader = get_chat_completion_vision_parquet_dataloader(cut_to_pad=True, **dataset_config,model_class="InternVLChatModel")
+    dataset = InternVLChatCompletionVisionParquetDataset(cut_to_pad=True, **dataset_config)
     ans = 0
+    def collate_fn(samples):
+        return samples[0]
 
+    dataloader = DataLoader(
+        dataset=dataset,
+        batch_size=1,
+        shuffle=False,
+        num_workers=100,
+        collate_fn=collate_fn
+    )
     for iteration, batch in enumerate(dataloader):
         for k, v in batch.items():
             try:
