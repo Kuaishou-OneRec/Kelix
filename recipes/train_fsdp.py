@@ -976,9 +976,10 @@ def train():
             "perf/image_token_ratio_by_valid": image_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
             "perf/max_image_tokens": max_image_tokens,
             "perf/min_image_tokens": min_image_tokens,
+            "perf/mean_image_tokens": mean_image_tokens,
             "perf/std_image_tokens": std_image_tokens,
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
-            "perf/image_token_pre_iter_per_gpu":total_num_image_tokens / total_num_samples
+            "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples
           }
 
           ticker.tick(f"log_dict*{log_acc_step}")
