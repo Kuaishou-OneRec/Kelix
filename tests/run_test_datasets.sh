@@ -1,1 +1,1 @@
-nohup python3 /llm_reco/maosiyang/msy_internvl_premerge/recovlm/tests/test_datasets.py /llm_reco/maosiyang/msy_internvl_premerge/recovlm/tests/files.txt > /llm_reco/maosiyang/msy_internvl_premerge/recovlm/tests/std.log 2> /llm_reco/maosiyang/msy_internvl_premerge/recovlm/tests/err.log &
+python3 /llm_reco/maosiyang/msy_internvl_premerge/recovlm/tests/test_datasets.py /llm_reco/maosiyang/msy_internvl_premerge/recovlm/tests/files.txt
