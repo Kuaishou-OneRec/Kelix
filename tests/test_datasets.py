@@ -323,12 +323,12 @@ def test_InternVLParquetDataset(sources):
     dataset_config.pop("name")
     dataset_config["num_workers"] = 1
     dataset_config["shuffle_seed"] = int(time.time())
-    dataset_config["max_length"] = 16000
+    dataset_config["max_length"] = 999999999
     dataset_config["sources"] = sources
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
 
-    dataset = InternVLChatCompletionVisionParquetDataset(cut_to_pad=True, **dataset_config)
+    dataset = get_chat_completion_vision_parquet_dataloader(cut_to_pad=True, **dataset_config,model_class="InternVLChatModel")
     ans = 0
     def collate_fn(samples):
         return samples[0]

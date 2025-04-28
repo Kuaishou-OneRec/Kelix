@@ -248,6 +248,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           datasource_config={},
                                           **kwargs):
     model_type = kwargs.get('model_class','Qwen2VLForConditionalGeneration')
+    cut_to_pad = kwargs.get('cut_to_pad',False)
     ModelDataset = {'Qwen2VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
@@ -267,6 +268,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
         shrink_ratio=shrink_ratio,
         max_retry=max_retry,
         multiple_of=multiple_of,
+        cut_to_pad=cut_to_pad,
         datasource_config=datasource_config)
 
     ### packing, batching size=1; shuffle in dataset
