@@ -11,7 +11,7 @@ else
         echo "Git user.emal: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1  > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1999  > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/Megred_model/2B # Pretrained/Base model path
