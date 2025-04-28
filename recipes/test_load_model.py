@@ -89,7 +89,7 @@ image = Image.fromarray(image.numpy())
 images = [image]
 
 data = processor(images, return_tensors="pt").to(device=model.device, dtype=model.dtype)
-image_grid_hws = (data.image_grid_thw[1],data.image_grid_thw[2])
+image_grid_hws = [(data.image_grid_thw[0][1],data.image_grid_thw[0][2])]
 image_features: list = model(data.pixel_values, image_grid_hws)
 
 print(f"dtype: {image_features[0].dtype}, shape: {image_features[0].shape}")
