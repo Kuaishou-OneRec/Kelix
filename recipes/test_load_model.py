@@ -41,7 +41,7 @@ processor2 = KimiVLImageProcessor_for_qwen2_5_vl()
 image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
 image = Image.fromarray(image.numpy())
 image2 = processor2.preprocess(image)
-images =image2
+images =[image2]
 
 texts = ["hello world"]
 data = processor(images=images, text=texts)
