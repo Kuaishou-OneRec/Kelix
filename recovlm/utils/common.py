@@ -398,6 +398,8 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fas
     """
     import hashlib
     assert parquet_backend in ["fast_parquet", "pyarrow"]
+    if os.path.exists(fn):
+      return  pq.ParquetFile(fn) if parquet_backend == 'pyarrow' else FakeParquetFileFromFastParquetFile(fn)
 
     def calculate_text_hash(text):
         # 创建一个 SHA-256 哈希对象
