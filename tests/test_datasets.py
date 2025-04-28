@@ -336,7 +336,7 @@ def test_InternVLParquetDataset(sources):
         dataset=dataset,
         batch_size=1,
         shuffle=False,
-        num_workers=100,
+        num_workers=5,
         collate_fn=collate_fn
     )
     for iteration, batch in enumerate(dataloader):
