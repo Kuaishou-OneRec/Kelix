@@ -17,7 +17,7 @@ import json
 # for key, value in model.named_parameters():
 #     print(key, value.shape)
 
-model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
+model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
   "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True,
   use_sequence_parallel=False
 )
