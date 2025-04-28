@@ -1060,19 +1060,8 @@ def train():
             f"Learning Rate: {learning_rate}, "
             f"Grad Norm: {get_global_grad_norm(model).detach().cpu().item()}, "
             f"Sec per Step: {sec_per_step}",
-            f"tokens_per_sec_per_gpu: {tokens_per_sec_per_gpu}",
-            f"samples_per_sec_per_gpu: {samples_per_sec_per_gpu}",
-            f"total_num_tokens: {total_num_tokens}",
-            f"total_num_samples: {total_num_samples}",
-            f"valid_tokens_per_sec_per_gpu: {valid_tokens_per_sec_per_gpu}, "
-            f"total_num_tokens: {total_num_tokens}, "
-            f"total_num_samples: {total_num_samples}, "
-            f"total_num_valid_tokens: {total_num_valid_tokens}, "
-            f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, ",
-            f"image_token_per_sample_per_gpu : {total_num_image_tokens/total_num_samples }"
-        )
-          format_dict_or_list(log_dict)
-        
+            format_dict_or_list(log_dict)
+        )        
 
           # upload heart_beat to remote
           if args.heartbeat_monitor:
