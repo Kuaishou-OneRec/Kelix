@@ -72,7 +72,7 @@ import json
 
 from PIL import Image
 from transformers import AutoModel, AutoImageProcessor
-
+from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig, KimiVLConfig
 #model_path = "moonshotai/MoonViT-SO-400M"
 # 指定单一设备
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
