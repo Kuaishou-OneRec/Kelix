@@ -40,10 +40,10 @@ processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(
 processor2 = KimiVLImageProcessor_for_qwen2_5_vl()
 image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
 image = Image.fromarray(image.numpy())
-image2 = processor2.preprocess(image)
-images =[image2]
-
+images =[image]
 texts = ["hello world"]
+
+data2 = processor2(images,return_tensors="pt")
 data = processor(images=images, text=texts)
 print(data.keys())
 
@@ -69,8 +69,8 @@ if not isinstance(image_grid_thw, torch.Tensor):
 input_ids = input_ids.to(device)
 pixel_values = pixel_values.to(device)
 image_grid_thw = image_grid_thw.to(device)
-image_grid_thw = image2.image_grid_thw.to(device)
-pixel_values = image2.pixel_values.to(device)
+image_grid_thw = data2.image_grid_thw.to(device)
+pixel_values = data2.pixel_values.to(device)
 
 rets = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
 print(rets)
