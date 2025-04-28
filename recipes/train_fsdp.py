@@ -930,6 +930,8 @@ def train():
             acc_num_samples  / (end_time - start_time) / dist.get_world_size()
           valid_tokens_per_sec_per_gpu = \
             acc_valid_num_tokens / (end_time - start_time) / dist.get_world_size()
+          image_tokens_per_sec_per_gpu = \
+            acc_num_image_tokens / (end_time - start_time) / dist.get_world_size()
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
           start_time = end_time
           log_dict = {
@@ -944,6 +946,8 @@ def train():
             "perf/total_num_samples": total_num_samples,
             "perf/valid_total_num_tokens": total_num_valid_tokens,
             "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
+            "perf/image_tokens_per_sec_per_gpu": image_tokens_per_sec_per_gpu,
+            "perf/image_token_ratio_by_valid": image_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
             "perf/image_token_pre_iter_per_gpu":total_num_image_tokens / total_num_samples
           }
@@ -1021,6 +1025,7 @@ def train():
         acc_num_samples = 0
         acc_num_tokens = 0
         acc_valid_num_tokens = 0
+        acc_num_image_tokens = 0
         batch_data_source_loss = collections.defaultdict(float)
         batch_data_source_tokens = collections.defaultdict(int)
         valid_data_source_tokens = collections.defaultdict(int)
