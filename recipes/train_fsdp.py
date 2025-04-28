@@ -463,8 +463,9 @@ class TokenStats:
     self.min_image_tokens = []
     self.mean_image_tokens = []
     self.std_image_tokens = []
+
   
-  def collect_image_token_stats(self, num_image_tokens, num_tokens, args, global_step):
+  def collect_image_token_stats(self, num_image_tokens):
       # 收集所有rank的image tokens统计信息
       world_size = dist.get_world_size()
       all_image_tokens = torch.zeros(world_size, dtype=torch.long).chunk(world_size) 
@@ -476,11 +477,6 @@ class TokenStats:
       min_image_tokens = min(all_image_tokens)
       mean_image_tokens = sum(all_image_tokens) / world_size
       std_image_tokens = (sum((x - mean_image_tokens)**2 for x in all_image_tokens) / world_size)**0.5
-      
-      if dist.get_rank() == 0 and global_step % args.logging_per_step == 0:
-          print(f"rank{dist.get_rank()} num_image_tokens={num_image_tokens}/{num_tokens}")
-          print_rank_0(f"Image Tokens Stats - Max: {max_image_tokens}, Min: {min_image_tokens}, "
-                      f"Mean: {mean_image_tokens:.1f}, Std: {std_image_tokens:.1f}")
 
       self.max_image_tokens.append(max_image_tokens)
       self.min_image_tokens.append(min_image_tokens)
@@ -1072,6 +1068,9 @@ def train():
             f"valid_tokens_ratio: {1.0 * total_num_valid_tokens / total_num_tokens}, ",
             f"image_token_per_sample_per_gpu : {total_num_image_tokens/total_num_samples }"
         )
+          print_rank_0(
+            json.dumps(log_dict, indent=4)
+          )
         
 
           # upload heart_beat to remote
