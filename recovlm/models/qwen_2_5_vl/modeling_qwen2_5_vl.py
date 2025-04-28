@@ -2238,7 +2238,7 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
         KimiVL_Config = KimiVLConfig()
         MoonViT_config._attn_implementation = 'flash_attention_2'
         self.mlp_AR = KimiVLMultiModalProjector(KimiVL_Config_AR)
-        self.visual = MoonVitPretrainedModel(MoonViT_config)
+        self.visual = MoonVitPretrainedModel(MoonViT_config).to(dtype=torch.bfloat16)
         self.model = Qwen2_5_VLModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
