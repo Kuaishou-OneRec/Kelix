@@ -2518,6 +2518,7 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
                 image_grid_hws = []
                 for thw in image_grid_thw:
                     image_grid_hws.append((thw[1],thw[2]))
+                image_grid_hws = torch.tensor(image_grid_hws)
                 image_embeds = self.visual(pixel_values, image_grid_hws)
                 image_embeds = self.mlp_AR(image_embeds)
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
