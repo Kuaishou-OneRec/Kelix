@@ -2,6 +2,7 @@ from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditio
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit 
 import torch
 from PIL import Image
+from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
 
 
 # from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
@@ -36,13 +37,16 @@ processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(
   "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct"
 )
 
-
+processor2 = KimiVLImageProcessor_for_qwen2_5_vl()
 image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
 image = Image.fromarray(image.numpy())
-images =[image]
+image2 = processor2.preprocess(image)
+images =[image2]
+
 texts = ["hello world"]
 data = processor(images=images, text=texts)
 print(data.keys())
+
 
 # Create a properly formatted image_grid_thw tensor
 # It should contain time, height, width dimensions for each image
@@ -65,6 +69,8 @@ if not isinstance(image_grid_thw, torch.Tensor):
 input_ids = input_ids.to(device)
 pixel_values = pixel_values.to(device)
 image_grid_thw = image_grid_thw.to(device)
+image_grid_thw = image2.image_grid_thw.to(device)
+pixel_values = image2.pixel_values.to(device)
 
 rets = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
 print(rets)
