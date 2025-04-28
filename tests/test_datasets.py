@@ -1,6 +1,6 @@
 import os
 import torch
-
+import sys
 import wids
 import logging
 import json
@@ -311,10 +311,11 @@ def gather_batches(buffer, group):
     return gathered_batches
 
 
-def test_InternVLParquetDataset():
+def test_InternVLParquetDataset(sources):
     init_processes(0, 1)
     from transformers import AutoTokenizer, AutoProcessor
     from recovlm.data.datasets import InternVLChatCompletionVisionParquetDataset
+    from recovlm.data.dataloaders import get_chat_completion_vision_parquet_dataloader
     processor = AutoProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/InternVL3-2B", trust_remote_code=True)
     path = "/llm_reco/chuchenglong/work_space/recovlm/examples/vlm/configs/internvl/2b_internvl_stage2.json"
     with open(path, encoding="utf-8") as f:
@@ -322,12 +323,12 @@ def test_InternVLParquetDataset():
     dataset_config.pop("name")
     dataset_config["num_workers"] = 1
     dataset_config["shuffle_seed"] = int(time.time())
-    dataset_config["max_length"] = 16000
-    dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/pt/0421/stage2_ccl_v3_0425/_prepared/0/prep-0-5f8467a5aa2c472d9c31bbb81356540f.parquet"]
+    dataset_config["max_length"] = 999999999
+    dataset_config["sources"] = sources
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
 
-    dataset = InternVLChatCompletionVisionParquetDataset(cut_to_pad=True, **dataset_config)
+    dataset = get_chat_completion_vision_parquet_dataloader(cut_to_pad=True, **dataset_config,model_class="InternVLChatModel")
     ans = 0
     def collate_fn(samples):
         return samples[0]
@@ -346,7 +347,6 @@ def test_InternVLParquetDataset():
             except:
                 print(k, v)
             print("=" * 10)
-        if iteration == 20: break
         
         
 '''
@@ -371,5 +371,18 @@ def test_InternVLParquetDataset():
 '''
 
 if __name__ == "__main__":
-    test_InternVLParquetDataset()
+    data_file = sys.argv[1]
+    output_file = sys.argv[2] if len(sys.argv) > 2 else "results.txt"
+    hdfs_dirs = []
+    with open(data_file) as fp:
+        for line in fp:
+            if line.strip() != "":
+                hdfs_dirs.append(line.strip())
+    test_files = []
+    for fn in hdfs_dirs:
+        fn_list = shell_hdfs_ls(fn)
+        all_files = [fn for fn in fn_list if fn.endswith(".parquet")]
+        test_files.extend(all_files[:1])
+    print(test_files)
+    test_InternVLParquetDataset(test_files)
 
