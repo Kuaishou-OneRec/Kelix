@@ -314,9 +314,7 @@ class UlyssesAttention(torch.nn.Module):
         sliding_window = kwargs.get("sliding_window", -1)
         
         cu_seqlens = kwargs.get("cu_seqlens")
-        try: max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-        except:
-            print(f'rank{torch.distributed.get_rank()}_max_seqlen error', 'cu_seqlens=',cu_seqlens)
+        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
 
         cu_seqlens = cu_seqlens.to(torch.int32)
 

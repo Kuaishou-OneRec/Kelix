@@ -608,17 +608,6 @@ def train():
     vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
   )
 
-  # 添加torch.compile
-  if args.compile:
-      print_rank_0("Compiling model with torch.compile...")
-      model = torch.compile(
-          model,
-          mode='max-autotune',  # 推荐FSDP兼容模式
-          fullgraph=False,
-          dynamic=True
-      )
-      print_rank_0("Model compilation completed")
-
   # prepare optimizer
   optimizer = torch.optim.AdamW(
     optimizer_grouped_parameters,
