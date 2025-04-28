@@ -3,7 +3,7 @@ from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
 import torch
 from PIL import Image
 from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
-
+from qwen_vl_utils import process_vision_info
 from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitPretrainedModel
 # # from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
 import json
@@ -30,14 +30,52 @@ processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(
   "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct"
 )
 
-processor2 = KimiVLImageProcessor_for_qwen2_5_vl()
-image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
-image = Image.fromarray(image.numpy())
-images =[image]
-texts = ["hello world"]
+# processor2 = KimiVLImageProcessor_for_qwen2_5_vl()
+# image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
+# image = Image.fromarray(image.numpy())
+# images =[image]
+# texts = ["hello world"]
+
+
+
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "image": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen-VL/assets/demo.jpeg",
+            },
+            {"type": "text", "text": "Describe this image."},
+        ],
+    }
+]
+
+# Preparation for inference
+text = processor.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True
+)
+image_inputs, video_inputs = process_vision_info(messages)
+
+
+
+
+
+
+
+
+
+
 
 # data2 = processor2(images,return_tensors="pt")
-data = processor(images=images, text=texts)
+data = processor(
+    text=[text],
+    images=image_inputs,
+    videos=video_inputs,
+    padding=True,
+    return_tensors="pt",
+)
 print(data.keys())
 
 
