@@ -384,6 +384,5 @@ if __name__ == "__main__":
         assert len(all_files) > 0
         n = len(all_files)
         test_files.extend(all_files[:max(1, n//3)])
-    print(test_files)
     test_InternVLParquetDataset(test_files)
 
