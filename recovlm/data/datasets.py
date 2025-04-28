@@ -2542,7 +2542,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 32768:
+    if inputs["input_ids"].shape[-1] > 999999999:
       print(f"Sample is too long. token_len={inputs['input_ids'].shape[-1]}")
     
     input_ids = inputs["input_ids"]
