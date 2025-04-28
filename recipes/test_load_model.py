@@ -23,21 +23,12 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 )
 model.eval()
 
-# Set device - use CUDA if available, otherwise CPU
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model = model.to(device,dtype=torch.bfloat16)
 
 processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(
   "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct"
 )
-
-# processor2 = KimiVLImageProcessor_for_qwen2_5_vl()
-# image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
-# image = Image.fromarray(image.numpy())
-# images =[image]
-# texts = ["hello world"]
-
-
 
 
 messages = [
@@ -58,14 +49,6 @@ text = processor.apply_chat_template(
     messages, tokenize=False, add_generation_prompt=True
 )
 image_inputs, video_inputs = process_vision_info(messages)
-
-
-
-
-
-
-
-
 
 
 
@@ -107,34 +90,3 @@ image_grid_thw = image_grid_thw.to(device)
 
 rets = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
 print(rets)
-
-
-
-# from PIL import Image
-# from transformers import AutoModel, AutoImageProcessor
-# from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig, KimiVLConfig
-# model_path = "moonshotai/MoonViT-SO-400M"
-# # 指定单一设备
-# device = "cuda:0" if torch.cuda.is_available() else "cpu"
-# MoonViT_config = MoonViTConfig()
-# MoonViT_config._attn_implementation = 'flash_attention_2'
-# model = MoonVitPretrainedModel(MoonViT_config).to(device,dtype=torch.bfloat16)
-# # model = AutoModel.from_pretrained(
-# #     model_path,
-# #     torch_dtype="auto",
-# #     device_map={"": device},  # 强制使用同一设备
-# #     trust_remote_code=True,
-# # )
-# processor = KimiVLImageProcessor_for_qwen2_5_vl.from_pretrained(model_path, trust_remote_code=True)
-
-# image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
-# image = Image.fromarray(image.numpy())
-# images = [image]
-
-# data = processor(images, return_tensors="pt").to(device=model.device, dtype=model.dtype)
-# image_grid_hws = [(data.image_grid_thw[0][1],data.image_grid_thw[0][2])]
-# image_grid_hws = torch.tensor(image_grid_hws, dtype=torch.int32, device=model.device)
-# image_features: list = model(data.pixel_values, image_grid_hws)
-
-# print(f"allalaladtype: {image_features[0].dtype}, shape: {image_features[0].shape}")
-# # dtype: torch.bfloat16, shape: torch.Size([1092, 4, 1152])
