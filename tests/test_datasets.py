@@ -325,10 +325,8 @@ def test_InternVLParquetDataset(sources):
     dataset_config["shuffle_seed"] = int(time.time())
     dataset_config["max_length"] = 999999999
     dataset_config["sources"] = sources
-    assert sources[0][:4] == 'view' and isinstance(sources, list)
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
-    print(3333, sources)
     dataset = InternVLChatCompletionVisionParquetDataset(cut_to_pad=True, **dataset_config)
     ans = 0
     def collate_fn(samples):
@@ -383,7 +381,9 @@ if __name__ == "__main__":
     for fn in hdfs_dirs:
         fn_list = shell_hdfs_ls(fn)
         all_files = [fn for fn in fn_list if fn.endswith(".parquet")]
-        test_files.extend(all_files[:1])
+        assert len(all_files) > 0
+        n = len(all_files)
+        test_files.extend(all_files[:n//3])
     print(test_files)
     test_InternVLParquetDataset(test_files)
 
