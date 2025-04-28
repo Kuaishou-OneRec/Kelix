@@ -383,7 +383,7 @@ if __name__ == "__main__":
         all_files = [fn for fn in fn_list if fn.endswith(".parquet")]
         assert len(all_files) > 0
         n = len(all_files)
-        test_files.extend(all_files[:n//3])
+        test_files.extend(all_files[:max(1, n//3)])
     print(test_files)
     test_InternVLParquetDataset(test_files)
 
