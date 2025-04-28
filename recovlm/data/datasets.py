@@ -481,6 +481,7 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
         vision_start_token_id=self.vision_start_token_id
     )
     inputs.pop("attention_mask")
+    
     return inputs
 
   def _process_completion(self,
@@ -1683,13 +1684,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
       vision_start_token_id=self.vision_start_token_id
     )
     inputs.pop("attention_mask")
-    print(9543554, inputs["input_ids"].shape[1], inputs["pixel_values"].shape[0] * 256)
-    if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
-      print("baddddddd")
-      print_input_info(
-        inputs,
-        "_process_chat",
-      )
+
 
     return inputs
   
@@ -2586,6 +2581,13 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     position_ids.masked_fill_(inputs['attention_mask'] == 0, 1)
     inputs["position_ids"] = position_ids
     inputs.pop("attention_mask")
+    print(9543554, inputs["input_ids"].shape[1], inputs["pixel_values"].shape[0] * 256)
+    if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
+      print("baddddddd")
+      print_input_info(
+        inputs,
+        "_process_completion",
+      )
     return inputs
     
 
@@ -2623,6 +2625,14 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                           self.min_dynamic_patch,data_conf["max_dynamic_patch"],
                                           self.use_thumbnail,self.image_size,self.img_start_token,
                                           self.img_context_token,self.img_end_token,self.normalize_type)
+
+    print(9543554, inputs["input_ids"].shape[1], inputs["pixel_values"].shape[0] * 256)
+    if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
+      print("baddddddd")
+      print_input_info(
+        inputs,
+        "_process_chat",
+      )
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
@@ -2775,7 +2785,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     packed_image_flags.append(inputs["image_flags"])
-      
+    
+
+
     return len(inputs["input_ids"][0])
 
   def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
