@@ -487,8 +487,9 @@ class TokenStats:
       return max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
 
   def stats(self):
-      res = np.mean(self.max_image_tokens), np.mean(self.min_image_tokens),\
+      res = np.max(self.max_image_tokens), np.min(self.min_image_tokens),\
              np.mean(self.mean_image_tokens), np.mean(self.std_image_tokens)
+      print(134323, self.max_image_tokens, res)
       res = {
         "perf/max_image_tokens": res[0],
         "perf/min_image_tokens": res[1],
