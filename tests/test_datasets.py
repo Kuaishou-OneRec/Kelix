@@ -320,12 +320,13 @@ def test_InternVLParquetDataset():
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
     dataset_config.pop("name")
-    dataset_config["num_workers"] = 10
+    dataset_config["num_workers"] = 1
     dataset_config["shuffle_seed"] = int(time.time())
     dataset_config["max_length"] = 16000
     dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/pt/0421/stage2_ccl_v3_0425/_prepared/0/prep-0-5f8467a5aa2c472d9c31bbb81356540f.parquet"]
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v3/rank-11-4ef695ac-2336-11f0-b166-946daee9184a.parquet
-    dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v3/rank-11-4ef695ac-2336-11f0-b166-946daee9184a.parquet","viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-code/train_v1/rank-12-2a107142-2438-11f0-ba28-946daee91688.parquet"]
+    dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v3/rank-11-4ef695ac-2336-11f0-b166-946daee9184a.parquet","viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-code/train_v1/rank-12-2a107142-2438-11f0-ba28-946daee91688.parquet"][1:]
+    
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
 
@@ -338,7 +339,7 @@ def test_InternVLParquetDataset():
         dataset=dataset,
         batch_size=1,
         shuffle=False,
-        num_workers=10,
+        num_workers=1,
         collate_fn=collate_fn
     )
     for iteration, batch in enumerate(dataloader):
