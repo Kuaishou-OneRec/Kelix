@@ -323,7 +323,7 @@ def test_InternVLParquetDataset(sources):
     dataset_config.pop("name")
     dataset_config["num_workers"] = 5
     dataset_config["shuffle_seed"] = int(time.time())
-    dataset_config["max_length"] = 999999999
+    dataset_config["max_length"] = 16000
     dataset_config["sources"] = sources
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
