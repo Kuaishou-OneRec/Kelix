@@ -74,22 +74,21 @@ from PIL import Image
 from transformers import AutoModel, AutoImageProcessor
 
 model_path = "moonshotai/MoonViT-SO-400M"
+# 指定单一设备
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 model = AutoModel.from_pretrained(
     model_path,
     torch_dtype="auto",
-    device_map="auto",
+    device_map={"": device},  # 强制使用同一设备
     trust_remote_code=True,
 )
 processor = AutoImageProcessor.from_pretrained(model_path, trust_remote_code=True)
 
-
 image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
 image = Image.fromarray(image.numpy())
-images =[image]
-# image_path = "./figures/demo.png"
-# image = Image.open(image_path)
+images = [image]
 
-data = processor(images, return_tensors="pt").to(dtype=model.dtype, device=model.device)
+data = processor(images, return_tensors="pt").to(device=model.device, dtype=model.dtype)
 image_features: list = model(data.pixel_values, data.image_grid_hws)
 
 print(f"dtype: {image_features[0].dtype}, shape: {image_features[0].shape}")
