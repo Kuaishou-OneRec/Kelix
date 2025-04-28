@@ -6,12 +6,16 @@ import deepspeed
 from PIL import Image
 import torch.nn as nn
 import torch.distributed as dist
-from transformers import AutoProcessor, AutoModel
+from transformers import AutoProcessor, AutoModelForCausalLM, AutoTokenizer, AutoConfig
 from .siglip.modeling_siglip import SiglipPreTrainedModel, SiglipModel
 from .siglip.processing_siglip import SiglipProcessor
 import torch.nn.functional as F
 from recipes.ViT.helpers.context import Context
 
+from .MoonVision.modeling_kimi_vl import MoonVitPretrainedModel
+from .MoonVision.image_processing_kimi_vl import KimiVLImageProcessor
+from .MoonVision.configuration_kimi_vl import MoonViTConfig, KimiVLConfig
+from .MoonVision.modeling_kimi_vl import KimiVLMultiModalProjector, KimiVLMultiModalProjector_Contrastive
 
 class DisCoGather(torch.autograd.Function):
     """An autograd function that performs allgather on a tensor."""
@@ -58,34 +62,43 @@ class KimiViT(nn.Module):
         self.ctx = ctx
         self.is_dist = self.ctx.is_dist
 
-        self.model = SiglipModel.from_pretrained(config.dir, ignore_mismatched_sizes=True)
-        self.processor = SiglipProcessor.from_pretrained(config.dir)
-        self.tokenizer = self.processor.tokenizer
+        # T5 text model for Contrastive loss
+        self.siglip = SiglipModel.from_pretrained(config.siglip_dir, ignore_mismatched_sizes=True).cuda()
+        self.siglip_processor = SiglipProcessor.from_pretrained(config.siglip_dir)
 
-        hidden_size = self.model.hidden_size
-        vocab_size = self.model.vocab_size
+        MoonViT_config = MoonViTConfig()
+        KimiVL_Config_AR = KimiVLConfig()
+        KimiVL_Config = KimiVLConfig()
+        MoonViT_config._attn_implementation = 'flash_attention_2'
 
+        self.MoonVIT_processor = KimiVLImageProcessor()
+        self.MoonVIT = MoonVitPretrainedModel(MoonViT_config).cuda()
+        
+        self.loss_lambda = 2
+
+        # LLM for capation AR loss
         if config.text_decoder.enabled:
-            self.text_decoder = AutoModel.from_pretrained(
+            self.text_decoder = AutoModelForCausalLM.from_pretrained(
                 config.text_decoder.model_dir,
                 use_cache=False
-            )
-            self.image_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-            self.image_end_embed = nn.Parameter(
-                torch.zeros(size=(1, 1, hidden_size), dtype=torch.float32),
-                requires_grad=True
-            )
-            self.text_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-            self.vocab_proj = nn.Linear(hidden_size, vocab_size, bias=False)
-            self.regression_loss_fn = nn.CrossEntropyLoss()
-            raise NotImplementedError("Not finish yet.")
+            ).cuda()
+            self.text_decoder_tokenizer = AutoTokenizer.from_pretrained(config.text_decoder.model_dir)
+            KimiVL_Config_AR.text_config.hidden_size = AutoConfig.from_pretrained(config.text_decoder.model_dir).hidden_size
+            KimiVL_Config.text_config.hidden_size = self.siglip.hidden_size
+
+            self.mlp = KimiVLMultiModalProjector_Contrastive(KimiVL_Config).cuda()
+            self.mlp_AR = KimiVLMultiModalProjector(KimiVL_Config_AR).cuda()
+
         else:
             self.text_decoder = None
             self.image_proj = None
             self.text_proj = None
             self.regression_loss_fn = None
 
-    def calcul_regression_loss(self, logits, labels, loss_mask):
+        self.siglip.gradient_checkpointing_enable()
+        self.text_decoder.gradient_checkpointing_enable()
+
+    def calcul_regression_loss(self, input_ids, image_feature, loss_mask):
         """
         logits: B * L * D
         labels: B * L
@@ -93,10 +106,8 @@ class KimiViT(nn.Module):
         """
         pass
 
-    def calcul_loss(self, outputs):
+    def calcul_loss(self, text_embeds, image_embeds):
         if self.is_dist:
-            image_embeds = outputs.image_embeds
-            text_embeds = outputs.text_embeds
             device = text_embeds.device
 
             gathered_image_embeds = disco_gather(image_embeds, self.ctx)
@@ -104,11 +115,9 @@ class KimiViT(nn.Module):
 
             logits_per_text = torch.matmul(gathered_text_embeds, gathered_image_embeds.t().to(device))
 
-            logit_scale = self.model.logit_scale.to(device)
-            logit_bias = self.model.logit_bias.to(device)
+            logit_scale = self.siglip.logit_scale.to(device)
+            logit_bias = self.siglip.logit_bias.to(device)
             logits_per_text = logits_per_text * logit_scale.exp() + logit_bias
-
-            logits_per_image = logits_per_text.t()
 
             eye = torch.eye(logits_per_text.size(0), device=device)
             m1_diag1 = -torch.ones_like(logits_per_text) + 2 * eye
@@ -116,15 +125,123 @@ class KimiViT(nn.Module):
             nll = -torch.sum(loglik, dim=-1)
             loss = nll.mean()
             return loss
-        else:
-            return outputs.loss
+        
+    def _extract_image_features(
+        self, pixel_values: torch.FloatTensor, image_grid_hws: torch.LongTensor
+    ):
+        """
+        Args:
+            pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(image_token_nums, 3, patch_size, patch_size)`):
+                The pixel values of the images processed by image processor.
+
+        Returns:
+            image_features (:obj:`torch.FloatTensor` of shape :obj:`(image_token_nums, image_feature_dim)`):
+                The selected image features to use as input to the projector head.
+        """
+        # [(image_token_nums_0, image_feature_dim), (image_token_nums_1, image_feature_dim), ...]
+        image_features: list[torch.Tensor] = self.MoonVIT(
+            pixel_values, image_grid_hws
+        )
+        # (image_token_nums_0 + image_token_nums_1 + ..., image_feature_dim)
+        image_features_for_AR: torch.Tensor = self.mlp_AR(image_features)
+        image_features: torch.Tensor = self.mlp(image_features)
+
+        return image_features, image_features_for_AR
+
+    def _merge_with_image_features(
+            self,
+            inputs_embeds: torch.Tensor,
+            image_features: torch.Tensor,
+        ):
+            """
+            Args:
+                inputs_embeds (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length, input_embed_dim)`):
+                    The input embeddings.
+                image_features (:obj:`torch.Tensor` of shape :obj:`(image_token_nums, image_feature_dim)`):
+                    The image features to prepend to the input embeddings.
+            """
+            batch_size, sequence_length, input_embed_dim = inputs_embeds.shape
+            image_feature_nums, image_feature_dim = image_features.shape
+            
+            assert image_feature_dim == input_embed_dim
+            
+            # Create new embeddings tensor with expanded sequence length
+            new_sequence_length = sequence_length + image_feature_nums
+            new_inputs_embeds = torch.zeros(
+                (batch_size, new_sequence_length, input_embed_dim),
+                device=inputs_embeds.device,
+                dtype=inputs_embeds.dtype
+            )
+            
+            # Prepend image features to each sequence in the batch
+            new_inputs_embeds[:, :image_feature_nums, :] = image_features.unsqueeze(0).expand(batch_size, -1, -1)
+            
+            # Copy original text embeddings after the image features
+            new_inputs_embeds[:, image_feature_nums:, :] = inputs_embeds
+            
+            return new_inputs_embeds
+
+    def compute_loss_with_image_features(
+            self,
+            inputs_embeds: torch.Tensor,
+            image_features: torch.Tensor,
+            labels: torch.LongTensor,
+        ):
+        """
+        Args:
+            inputs_embeds (torch.Tensor of shape (batch_size, sequence_length, input_embed_dim)):
+                The input text embeddings.
+            image_features (torch.Tensor of shape (image_token_nums, image_feature_dim)):
+                The image features to prepend.
+            labels (torch.LongTensor of shape (batch_size, sequence_length)):
+                Labels for language modeling loss. Will be extended with -100 for image positions.
+        """
+        batch_size = inputs_embeds.size(0)
+        image_feature_nums = image_features.size(0)
+        
+        combined_embeds = self._merge_with_image_features(inputs_embeds, image_features)
+        
+        if labels is not None:
+            new_labels = torch.full(
+                (batch_size, combined_embeds.size(1)),
+                -100,
+                dtype=labels.dtype,
+                device=labels.device
+            )
+            new_labels[:, image_feature_nums:] = labels
+            labels = new_labels
+        outputs = self.text_decoder(inputs_embeds=combined_embeds, labels=labels)
+        
+        return outputs.loss
 
     def forward(self, images, texts):
-        inputs = self.processor(images=images, text=texts, padding="longest", return_tensors="pt")
+        vit_inputs = self.MoonVIT_processor(images=images, return_tensors="pt")
+        inputs = self.siglip_processor(images=images, text=texts, padding="longest", return_tensors="pt")
+        input_ids = self.text_decoder_tokenizer(texts, return_tensors="pt", padding=True, truncation=True)
+
+        for key in vit_inputs:
+            vit_inputs[key] = vit_inputs[key].cuda()
+
+        vit_inputs['pixel_values'] = vit_inputs['pixel_values'].to(torch.bfloat16)
+
         for key in inputs:
-            inputs[key] = inputs[key].cuda(torch.cuda.current_device())
-        outputs = self.model(**inputs)
-        loss = self.calcul_loss(outputs)
+            inputs[key] = inputs[key].cuda()
+
+        for key in input_ids:
+            input_ids[key] = input_ids[key].cuda()
+
+        outputs = self.siglip(**inputs)
+
+        image_features, image_features_for_AR = self._extract_image_features(**vit_inputs)
+        inputs_embeds = self.text_decoder.get_input_embeddings()(input_ids.input_ids)
+
+        # Autoregression loss
+        AR_loss = self.compute_loss_with_image_features(inputs_embeds=inputs_embeds, image_features=image_features_for_AR, labels=input_ids.input_ids)
+
+        # Contrastive loss
+        Contrastive_loss = self.calcul_loss(outputs.text_embeds, image_features)
+
+        loss = Contrastive_loss + self.loss_lambda * AR_loss
 
         text_output = outputs.text_model_output
         image_output = outputs.vision_model_output
@@ -135,44 +252,12 @@ class KimiViT(nn.Module):
         batch_size = image_hidden_embeds.shape[0]
         assert text_hidden_embeds.shape[0] == image_hidden_embeds.shape[0]
 
-        if self.text_decoder is not None:
-            image_embeds = outputs.image_embeds
-            text_embeds = outputs.text_embeds
-            image_embeds = self.image_proj(image_embeds)
-            text_embeds = self.text_proj(text_embeds)
-            image_end_embeds = self.image_end_embed.repeat(batch_size, 1, 1)
-            embeds = torch.concat((image_embeds, image_end_embeds.to(text_embeds.dtype), text_embeds), dim=1)
-
-            num_images = image_embeds.shape[1]
-            num_texts = text_embeds.shape[1]
-            num_tokens = num_images + 1 + num_texts
-            image_mask = torch.ones(size=(num_images + 1, num_tokens), dtype=torch.bool)
-            text_mask = torch.zeros(size=(num_texts, num_tokens), dtype=torch.bool)
-            mask = torch.concat([image_mask, text_mask], dim=0)
-            tril_mask = torch.tril(torch.ones(size=(num_tokens, num_tokens), dtype=torch.bool), diagonal=-1)
-            attention_mask = (tril_mask | mask)
-
-            token_is_pad = (inputs["input_ids"] == self.tokenizer.pad_token_id)
-            pad_start_indices = torch.where(
-                token_is_pad.any(dim=1),
-                token_is_pad.long().argmax(dim=1),
-                -torch.ones(size=(batch_size, ), dtype=torch.int64)
-            ).unbind()
-            loss_mask_list = list()
-            for idx, start_index in enumerate(pad_start_indices):
-                loss_mask = torch.ones(size=(num_tokens, ), dtype=torch.int64)
-                loss_mask[:start_index] = 0
-                loss_mask_list.append(loss_mask)
-            loss_mask = torch.stack(loss_mask_list, dim=0)
-            embeds = self.text_decoder(embeds, attention_mask=attention_mask)
-            embeds = self.vocab_proj(embeds)
-            self.calcul_regression_loss(embeds, inputs["input_ids"], loss_mask)
-            return outputs, loss
-
         return outputs, Context(
+            Contrastive_loss=Contrastive_loss,
+            AR_loss=AR_loss,
             loss=loss,
             total_image_num_tokens=np.prod(image_hidden_embeds.shape[:2]).item(),
             total_text_num_tokens=np.prod(text_hidden_embeds.shape[:2]).item(),
             total_num_samples=batch_size,
-            total_text_num_valid_tokens=(inputs["input_ids"] != self.tokenizer.pad_token_id).long().sum().item()
+            total_text_num_valid_tokens=(inputs["input_ids"] != self.text_decoder_tokenizer.pad_token_id).long().sum().item()
         )

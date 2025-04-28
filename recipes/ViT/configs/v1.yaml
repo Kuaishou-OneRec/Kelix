@@ -5,18 +5,18 @@ dataset:
   num_workers: 2
   loader:
     num_workers: 2
-    batch_size: 1
+    batch_size: 4
     collate_fn: SingleImageTextPairCollator
 model:
-  dir: /llm_reco_ssd/zhouyang12/models/SigLIP-So400M-Patch14-384/
+  siglip_dir: /llm_reco_ssd/zhouyang12/models/SigLIP-So400M-Patch14-384/
   text_decoder:
-    enabled: false
-    model_dir: 234
+    enabled: True
+    model_dir: /llm_reco/liuyang76/Models/Qwen2.5-0.5B-Instruct
 optimizer:
   type: muon
   beta1: 0.9
   bata2: 0.95
-  learn_rate: 1e-6
+  learn_rate: 1e-3
   weight_decay: 0.01
 lr_scheduler:
   type: cosine
@@ -34,4 +34,5 @@ verbose:
   verbose_per_step: 1
 report:
   report_per_step: 1
-
+gradient_checkpointing:
+  enabled: True

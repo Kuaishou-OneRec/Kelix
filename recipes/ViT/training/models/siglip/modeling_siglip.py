@@ -34,7 +34,7 @@ from transformers.utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    can_return_tuple,
+    # can_return_tuple,
     logging,
     replace_return_docstrings,
     torch_int,
@@ -701,7 +701,7 @@ class SiglipEncoder(nn.Module):
         self.gradient_checkpointing = False
 
     # Ignore copy
-    @can_return_tuple
+    # @can_return_tuple
     def forward(
         self,
         inputs_embeds,
@@ -784,7 +784,7 @@ class SiglipTextTransformer(nn.Module):
         self.head = nn.Linear(embed_dim, config.projection_size)
         self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
 
-    @can_return_tuple
+    # @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=SiglipTextConfig)
     def forward(
@@ -859,7 +859,7 @@ class SiglipTextModel(SiglipPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.embeddings.token_embedding = value
 
-    @can_return_tuple
+    # @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=SiglipTextConfig)
     def forward(
@@ -911,7 +911,7 @@ class SiglipVisionTransformer(nn.Module):
         if self.use_head:
             self.head = SiglipMultiheadAttentionPoolingHead(config)
 
-    @can_return_tuple
+    # @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=SiglipVisionConfig)
     def forward(
@@ -994,7 +994,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @can_return_tuple
+    # @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=SiglipVisionConfig)
     def forward(
@@ -1170,7 +1170,7 @@ class SiglipModel(SiglipPreTrainedModel):
 
         return pooled_output
 
-    @can_return_tuple
+    # @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=SiglipOutput, config_class=SiglipConfig)
     def forward(
@@ -1297,7 +1297,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
+    # @can_return_tuple
     @add_start_docstrings_to_model_forward(SIGLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(

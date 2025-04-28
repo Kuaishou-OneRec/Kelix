@@ -1,0 +1,20 @@
+{
+    "auto_map": {
+        "AutoImageProcessor": "image_processing_kimi_vl.KimiVLImageProcessor",
+        "AutoProcessor": "processing_kimi_vl.KimiVLProcessor"
+    },
+    "in_token_limit": 4096,
+    "patch_size": 14,
+    "num_pooled_tokens": 1024,
+    "image_mean": [
+        0.5,
+        0.5,
+        0.5
+    ],
+    "image_std": [
+        0.5,
+        0.5,
+        0.5
+    ],
+    "pad_input": true
+}
