@@ -854,7 +854,7 @@ def train():
       token_metrics = torch.tensor(
         [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda(non_blocking=True)
 
-      token_stasts.collect_image_token_stats(num_image_tokens, num_tokens, global_step)
+      token_stasts.collect_image_token_stats(num_image_tokens)
 
       ticker.tick("token_metrics_init")
       dist.all_reduce(
