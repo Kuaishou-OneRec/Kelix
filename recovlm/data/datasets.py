@@ -1580,13 +1580,13 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
     )
     inputs.pop("attention_mask")
     print_input_info(
-      inputs
+      inputs,
       "_process_completion",
     )
     if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
       print("baddddddd")
       print_input_info(
-        inputs
+        inputs,
         "_process_completion",
       )
     return inputs
@@ -1686,7 +1686,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
     if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
       print("baddddddd")
       print_input_info(
-        inputs
+        inputs,
         "_process_chat",
       )
 
