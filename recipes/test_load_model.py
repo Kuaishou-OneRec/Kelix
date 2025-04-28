@@ -36,7 +36,7 @@ image = Image.fromarray(image.numpy())
 images =[image]
 texts = ["hello world"]
 
-data2 = processor2(images,return_tensors="pt")
+# data2 = processor2(images,return_tensors="pt")
 data = processor(images=images, text=texts)
 print(data.keys())
 
@@ -62,8 +62,8 @@ if not isinstance(image_grid_thw, torch.Tensor):
 input_ids = input_ids.to(device)
 pixel_values = pixel_values.to(device)
 image_grid_thw = image_grid_thw.to(device)
-image_grid_thw = data2.image_grid_thw.to(device)
-pixel_values = data2.pixel_values.to(device)
+# image_grid_thw = data2.image_grid_thw.to(device)
+# pixel_values = data2.pixel_values.to(device)
 
 rets = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
 print(rets)
