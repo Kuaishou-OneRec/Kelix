@@ -383,5 +383,6 @@ if __name__ == "__main__":
         fn_list = shell_hdfs_ls(fn)
         all_files = [fn for fn in fn_list if fn.endswith(".parquet")]
         test_files.extend(all_files[:1])
+    print(test_files)
     test_InternVLParquetDataset(test_files)
 
