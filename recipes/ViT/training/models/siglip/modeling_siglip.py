@@ -317,6 +317,7 @@ class SiglipVisionEmbeddings(nn.Module):
         interpolate_pos_encoding=False
     ) -> torch.Tensor:
         if pixel_values.dim() == 4:
+            # raise NotImplementedError
             _, _, height, width = pixel_values.shape
             target_dtype = self.patch_embedding.weight.dtype
             patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
@@ -976,7 +977,6 @@ class SiglipVisionTransformer(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-
         hidden_states = self.embeddings(
             pixel_values, 
             interpolate_pos_encoding=interpolate_pos_encoding, 
