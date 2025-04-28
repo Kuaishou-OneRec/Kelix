@@ -2,7 +2,7 @@
 # from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit 
 import torch
 # from PIL import Image
-# from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
+from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
 
 
 # # from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
@@ -82,7 +82,7 @@ model = AutoModel.from_pretrained(
     device_map={"": device},  # 强制使用同一设备
     trust_remote_code=True,
 )
-processor = AutoImageProcessor.from_pretrained(model_path, trust_remote_code=True)
+processor = KimiVLImageProcessor_for_qwen2_5_vl.from_pretrained(model_path, trust_remote_code=True)
 
 image = torch.randint(0, 255, (224, 224, 3), dtype=torch.uint8)
 image = Image.fromarray(image.numpy())
