@@ -2371,6 +2371,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
     self.max_length = max_length
+    print('msymax_length', self.max_length)
     assert self.max_length > 0
 
     self.datasource_config = datasource_config
