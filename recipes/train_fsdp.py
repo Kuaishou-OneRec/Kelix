@@ -455,6 +455,27 @@ def freeze_params(args, model):
     raise NotImplementedError(f"freeze_params Not support model class: {args.model_class}")
 
 
+def collect_image_token_stats(num_image_tokens, num_tokens, args, global_step):
+    # 收集所有rank的image tokens统计信息
+    world_size = dist.get_world_size()
+    all_image_tokens = [torch.zeros(1, dtype=torch.long).cuda() for _ in range(world_size)]
+    dist.all_gather(all_image_tokens, torch.tensor(num_image_tokens, dtype=torch.long).cuda())
+    all_image_tokens = [x.item() for x in all_image_tokens]
+    
+    # 计算统计指标
+    max_image_tokens = max(all_image_tokens)
+    min_image_tokens = min(all_image_tokens)
+    mean_image_tokens = sum(all_image_tokens) / world_size
+    std_image_tokens = (sum((x - mean_image_tokens)**2 for x in all_image_tokens) / world_size)**0.5
+    
+    if dist.get_rank() == 0 and global_step % args.logging_per_step == 0:
+        print(f"rank{dist.get_rank()} num_image_tokens={num_image_tokens}/{num_tokens}")
+        print_rank_0(f"Image Tokens Stats - Max: {max_image_tokens}, Min: {min_image_tokens}, "
+                    f"Mean: {mean_image_tokens:.1f}, Std: {std_image_tokens:.1f}")
+
+    return max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
+
+
 def train():
   arg_parser = get_argument_parser()
   args = arg_parser.parse_args()
@@ -781,7 +802,6 @@ def train():
       ticker.tick("to_cuda(batch)")
 
       input_ids = batch["input_ids"]
-      
       loss_mask = batch["loss_mask"]
       attention_mask = batch.get("attention_mask", None)
       pixel_values = batch.get("pixel_values", None)
@@ -800,11 +820,16 @@ def train():
       num_tokens = token_count
       num_samples = (sample_idx.max() + 1).sum()
       num_image_tokens = pixel_values.shape[0] * 256 if args.model_class == "InternVLChatModel" else 0
-      print(f"rank{dist.get_rank()} num_image_tokens={num_image_tokens}/{num_tokens}")
+
+
+          
       # num_tokens - (sample_idx == -1).sum()
       num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
       token_metrics = torch.tensor(
         [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda(non_blocking=True)
+
+      max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens = collect_image_token_stats(num_image_tokens, num_tokens, args, global_step)
+
       ticker.tick("token_metrics_init")
       dist.all_reduce(
         token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
@@ -935,6 +960,7 @@ def train():
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
           start_time = end_time
           log_dict = {
+            # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
             "training/loss": avg_loss,
             f"training/grad_norm": get_global_grad_norm(model).detach().cpu().item(),
             "training/learning_rate": learning_rate,
@@ -948,6 +974,9 @@ def train():
             "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
             "perf/image_tokens_per_sec_per_gpu": image_tokens_per_sec_per_gpu,
             "perf/image_token_ratio_by_valid": image_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
+            "perf/max_image_tokens": max_image_tokens,
+            "perf/min_image_tokens": min_image_tokens,
+            "perf/std_image_tokens": std_image_tokens,
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
             "perf/image_token_pre_iter_per_gpu":total_num_image_tokens / total_num_samples
           }
