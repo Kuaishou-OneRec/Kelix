@@ -1256,25 +1256,27 @@ class ChatCompletionVisionDataset(IterableDataset):
     buffer = []
     source_list = []
     cur_length = 0
-
-    for sample in self.dataset:
-      sample_key = sample["__key__"] if "__key__" in sample else ""
-      sample_url = sample["__url__"] if "__url__" in sample else ""
-
+    ds_iter = iter(self.dataset)
+    while True:
+      #for sample in self.dataset:
       try:
-        source_name = sample["json"]["source"]
-        # WARN: ugly code, for dirty dataset.
-        if source_name.startswith("PDFA"):
-          source_name = "PDFA"
-        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-          source_name = source_name.split("/")[4]
-      except:
-        source_name = "None"
+        sample = next(ds_iter)
+        sample_key = sample["__key__"] if "__key__" in sample else ""
+        sample_url = sample["__url__"] if "__url__" in sample else ""
 
-      self.source_sample_cnt.setdefault(source_name, 0)
-      self.source_sample_cnt[source_name] += 1
+        try:
+          source_name = sample["json"]["source"]
+          # WARN: ugly code, for dirty dataset.
+          if source_name.startswith("PDFA"):
+            source_name = "PDFA"
+          elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+            source_name = source_name.split("/")[4]
+        except:
+          source_name = "None"
 
-      try:
+        self.source_sample_cnt.setdefault(source_name, 0)
+        self.source_sample_cnt[source_name] += 1
+      
         inputs = self._process(sample, source_name)
       except:
         self.source_error_cnt.setdefault(source_name, 0)
@@ -2605,7 +2607,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 32768:
+    if inputs["input_ids"].shape[-1] > 999999999:
       raise ValueError(f"Sample is too long, token_len={inputs['input_ids'].shape[-1]}")
     
     inputs["loss_mask"] = get_assistant_mask(
