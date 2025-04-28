@@ -455,26 +455,55 @@ def freeze_params(args, model):
     raise NotImplementedError(f"freeze_params Not support model class: {args.model_class}")
 
 
-def collect_image_token_stats(num_image_tokens, num_tokens, args, global_step):
-    # 收集所有rank的image tokens统计信息
-    world_size = dist.get_world_size()
-    all_image_tokens = [torch.zeros(1, dtype=torch.long).cuda() for _ in range(world_size)]
-    dist.all_gather(all_image_tokens, torch.tensor(num_image_tokens, dtype=torch.long).cuda())
-    all_image_tokens = [x.item() for x in all_image_tokens]
-    
-    # 计算统计指标
-    max_image_tokens = max(all_image_tokens)
-    min_image_tokens = min(all_image_tokens)
-    mean_image_tokens = sum(all_image_tokens) / world_size
-    std_image_tokens = (sum((x - mean_image_tokens)**2 for x in all_image_tokens) / world_size)**0.5
-    
-    if dist.get_rank() == 0 and global_step % args.logging_per_step == 0:
-        print(f"rank{dist.get_rank()} num_image_tokens={num_image_tokens}/{num_tokens}")
-        print_rank_0(f"Image Tokens Stats - Max: {max_image_tokens}, Min: {min_image_tokens}, "
-                    f"Mean: {mean_image_tokens:.1f}, Std: {std_image_tokens:.1f}")
 
-    return max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
 
+class TokenStats:
+  def __init__(self):
+    self.max_image_tokens = []
+    self.min_image_tokens = []
+    self.mean_image_tokens = []
+    self.std_image_tokens = []
+  
+  def collect_image_token_stats(self, num_image_tokens, num_tokens, args, global_step):
+      # 收集所有rank的image tokens统计信息
+      world_size = dist.get_world_size()
+      all_image_tokens = torch.zeros(world_size, dtype=torch.long).chunk(world_size) 
+      dist.all_gather(all_image_tokens, torch.tensor(num_image_tokens, dtype=torch.long).cuda())
+      all_image_tokens = [x.item() for x in all_image_tokens]
+      
+      # 计算统计指标
+      max_image_tokens = max(all_image_tokens)
+      min_image_tokens = min(all_image_tokens)
+      mean_image_tokens = sum(all_image_tokens) / world_size
+      std_image_tokens = (sum((x - mean_image_tokens)**2 for x in all_image_tokens) / world_size)**0.5
+      
+      if dist.get_rank() == 0 and global_step % args.logging_per_step == 0:
+          print(f"rank{dist.get_rank()} num_image_tokens={num_image_tokens}/{num_tokens}")
+          print_rank_0(f"Image Tokens Stats - Max: {max_image_tokens}, Min: {min_image_tokens}, "
+                      f"Mean: {mean_image_tokens:.1f}, Std: {std_image_tokens:.1f}")
+
+      self.max_image_tokens.append(max_image_tokens)
+      self.min_image_tokens.append(min_image_tokens)
+      self.mean_image_tokens.append(mean_image_tokens)
+      self.std_image_tokens.append(std_image_tokens)
+      return max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
+
+  def stats(self):
+      res = np.mean(self.max_image_tokens), np.mean(self.min_image_tokens),\
+             np.mean(self.mean_image_tokens), np.mean(self.std_image_tokens)
+      res = {
+        "perf/max_image_tokens": res[0],
+        "perf/min_image_tokens": res[1],
+        "perf/mean_image_tokens": res[2],
+        "perf/std_image_tokens": res[3]
+      }
+      self.max_image_tokens.clear()
+      self.min_image_tokens.clear()
+      self.mean_image_tokens.clear()
+      self.std_image_tokens.clear()
+      return res
+
+  
 
 def train():
   arg_parser = get_argument_parser()
@@ -775,6 +804,7 @@ def train():
   micro_step = 0
   ticker = TimeTracker(n=args.logging_per_step)
   iter_ticker = TimeTracker(n=args.logging_per_step)
+  token_stasts = TokenStats()
   while True:
     ticker.tick("while_True")
     with contextlib.ExitStack() as ctx:
@@ -828,7 +858,7 @@ def train():
       token_metrics = torch.tensor(
         [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda(non_blocking=True)
 
-      max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens = collect_image_token_stats(num_image_tokens, num_tokens, args, global_step)
+      token_stasts.collect_image_token_stats(num_image_tokens, num_tokens, args, global_step)
 
       ticker.tick("token_metrics_init")
       dist.all_reduce(
@@ -974,13 +1004,10 @@ def train():
             "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
             "perf/image_tokens_per_sec_per_gpu": image_tokens_per_sec_per_gpu,
             "perf/image_token_ratio_by_valid": image_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
-            "perf/max_image_tokens": max_image_tokens,
-            "perf/min_image_tokens": min_image_tokens,
-            "perf/mean_image_tokens": mean_image_tokens,
-            "perf/std_image_tokens": std_image_tokens,
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
             "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples
           }
+          log_dict.update(token_stasts.stats())
 
           ticker.tick(f"log_dict*{log_acc_step}")
 
