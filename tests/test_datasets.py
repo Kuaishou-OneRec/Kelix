@@ -346,7 +346,7 @@ def test_InternVLParquetDataset(sources):
             except:
                 print(k, v)
             print("=" * 10)
-        if iteration == 100: break
+        if iteration == 10: break
          
         
 '''
