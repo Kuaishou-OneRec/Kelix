@@ -14,9 +14,8 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/Megred_model/2B # Pretrained/Base model path
-# MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/OpenGVLab/InternVL2_5-4B
-OUTPUT_DIR=/llm_reco/chuchenglong/output/internvl-2b/0420/stage15_debug
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2B # Pretrained/Base model path
+OUTPUT_DIR=/llm_reco/lingzhixin/output3/freeze_debug/0.0.1/debug_internvl_2B_fromph2
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -25,7 +24,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="run internvl 2b stage1 by ccl"
+comment="debug vedio"
 
 
 git add --all
@@ -110,22 +109,20 @@ nohup mpirun --allow-run-as-root -np $np \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config /llm_reco/chuchenglong/InternVL/recovlm/examples/vlm/configs/2b_internvl_stage1.json \
-                --max_length 12288 \
-                --learning_rate 2e-4 \
+                --dataset_config examples/vlm/configs/debug7b_fsdp_3p_v1_debug_internvl.json \
+                --max_length 12000 \
+                --learning_rate 5e-6 \
                 --model_class InternVLChatModel \
                 --min_lr 0.0 \
-                --weight_decay 0.01 \
+                --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 500 \
-                --num_training_steps 100000 \
-                --save_checkpoint_per_step 500 \
+                --num_training_steps 2000000 \
+                --save_checkpoint_per_step 4000 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
                 --fp32_weight true \
-                --reshard_after_forward false \
-		--freeze_llm \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
                 --merge_checkpoint \

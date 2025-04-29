@@ -29,11 +29,8 @@ import concurrent
 
 def write_df_to_hdfs(df, file_path):
     from fastparquet import write
-
-    # table = convert_pandas_to_table(df)
     tmp_fn = f"/code/{file_path.split('/')[-1]}"
     write(tmp_fn, df)
-    # pq.write_table(table, tmp_fn, row_group_size=2048)
     os.system(f"/home/hadoop/software/hadoop/bin/hadoop fs -put {tmp_fn} {file_path}")
     os.remove(tmp_fn)
 
@@ -51,24 +48,21 @@ def pq2pd_v2(x, rank=0):
     import subprocess
     from fastparquet import ParquetFile
 
-    # global tmp_pd
-    # if tmp_pd is not None:
-    #     return tmp_pd.copy(deep=True)
-
     os.makedirs("/code/.pq_cache", exist_ok=True)
     tmp_fn = f"/code/.pq_cache/{uuid.uuid4()}_{rank}.parquet"
     for t in range(5):
-        cmd = f"/home/hadoop/software/hadoop/bin/hadoop fs -get {x} {tmp_fn}"
-        os.system(cmd)
-        # result = subprocess.run(['bash', '-lc', cmd], capture_output=True, text=True)
-        # print(result.stderr)
-        if not os.path.exists(tmp_fn):
-            print(f"Retrying{rank} the {t} time to get {x} -> {tmp_fn}...")
-            time.sleep(np.random.rand() * 10)
-            continue
-        df = ParquetFile(tmp_fn).to_pandas()
-        # df = pq.read_table(tmp_fn).to_pandas()
-        break
+        if x.startswith("viewfs://"):
+            cmd = f"/home/hadoop/software/hadoop/bin/hadoop fs -get {x} {tmp_fn}"
+            os.system(cmd)
+            if not os.path.exists(tmp_fn):
+                print(f"Retrying{rank} the {t} time to get {x} -> {tmp_fn}...")
+                time.sleep(np.random.rand() * 10)
+                continue
+            df = ParquetFile(tmp_fn).to_pandas()
+            break
+        else:
+            df = ParquetFile(x).to_pandas()
+            return df
     if not os.path.exists(tmp_fn):
         try:
             print("fall back to pq.read_table")
@@ -76,15 +70,16 @@ def pq2pd_v2(x, rank=0):
         except Exception as e:
             print(traceback.format_exc())
             raise FileNotFoundError(f"Failed to get {x} from HDFS. cmd={cmd}")
-    os.remove(tmp_fn)
-    # tmp_pd = df.copy(deep=True)
-    return df.copy(deep=True)
+    if x.startswith("viewfs://"): os.remove(tmp_fn)
+    return df
+
 
 
 def get_memory_usage():
     process = psutil.Process(os.getpid())
     mem = process.memory_info().rss  # 当前进程的 Resident Set Size (RSS)
     return humanize.naturalsize(mem, binary=True)  # 转换为易读格式（如GB/MB）
+
 
 class AutoShuffler(MPIBase):
     def __init__(
@@ -93,12 +88,14 @@ class AutoShuffler(MPIBase):
         output_dir,
         buffer_mem_size=2*1024,
         target_partition_size=30,
+        shard_output_by_rank=True,
     ):
         super().__init__()
         # 输入输出配置
         self.raw_input_dir = input_dir
         self.final_output_dir = output_dir
         self.prepare_output_dir = os.path.join(output_dir, "_prepared")
+        self.shard_output_by_rank = shard_output_by_rank
         
         # 内存管理
         self.buffer_mem_size = buffer_mem_size
@@ -117,6 +114,16 @@ class AutoShuffler(MPIBase):
         if self.rank == 0:
             for d in [self.final_output_dir, self.prepare_output_dir]:
                 self.mkdir(d)
+
+        if self.shard_output_by_rank:
+            time.sleep(np.random.rand() * 100)
+            final_output_dir = self.mkdir(self.final_output_dir, str(self.rank))
+
+            time.sleep(np.random.rand() * 100)
+            prepare_output_dir = self.mkdir(self.prepare_output_dir, str(self.rank))
+
+            print(f"Rank-{self.rank} initialized: {final_output_dir}, {prepare_output_dir}")
+                
         self.comm.barrier()
         # 调试：打印当前rank的初始化信息
         print(f"Rank-{self.rank} initialized. Memory usage: {get_memory_usage()}")
@@ -235,7 +242,6 @@ class AutoShuffler(MPIBase):
 
                 # 读取并采样
                 dirname = os.path.dirname(fpath)
-                # df = pq.read_table(fpath).to_pandas()
                 df = pq2pd_v2(fpath, self.rank)
                 df = df.sample(frac=self.sample_rate_dict.get(dirname, 1.0))
                 
@@ -328,10 +334,10 @@ class AutoShuffler(MPIBase):
         combined = pd.concat(buffer, copy=False)
         filename = f"prep-{self.rank}-{uuid.uuid4().hex}.parquet"
         # tmp_path = os.path.join(self.mkdir(output_dir, ".tmp"), filename)
-        final_path = os.path.join(output_dir, filename)
+        final_path = os.path.join(output_dir, str(self.rank), filename) if self.shard_output_by_rank else os.path.join(output_dir, filename)
         
         # 调试：写入缓冲日志
-        print(f"Rank-{self.rank} flushing {len(combined)} rows to {final_path}. Memory: {get_memory_usage()}")
+        # print(f"Rank-{self.rank} flushing {len(combined)} rows to {final_path}. Memory: {get_memory_usage()}")
         
         # 保证原子写入
         # t = convert_pandas_to_table(combined)
@@ -341,13 +347,13 @@ class AutoShuffler(MPIBase):
         write_df_to_hdfs(combined, final_path)
 
         print(f"Rank-{self.rank} flushing {len(combined)} rows to {final_path} after. Memory: {get_memory_usage()}")
-        gc.collect()
-        print(f"Rank-{self.rank} after garbage collection. Memory: {get_memory_usage()}")
+        # gc.collect()
+        # print(f"Rank-{self.rank} after garbage collection. Memory: {get_memory_usage()}")
 
         time.sleep(0.5)  # 防止HDFS元数据延迟
         # self.mv(tmp_path, final_path)
         # pa.default_memory_pool().release_unused()
-        print(f"Rank-{self.rank} after release_unused. Memory: {get_memory_usage()}")
+        # print(f"Rank-{self.rank} after release_unused. Memory: {get_memory_usage()}")
 
     def _write_shuffled(self, df):
         """写入混洗后的数据"""
@@ -361,8 +367,47 @@ class AutoShuffler(MPIBase):
             print(f"Rank-{self.rank} writing {i}-th chunk ({len(chunk)}/{len(df)}) to {final_path}. Memory: {get_memory_usage()}")
             
             # pq.write_table(convert_pandas_to_table(chunk), final_path)
-            write_df_to_hdfs(chunk, final_path)
+            write_df_to_hdfs(chunk, str(self.rank), final_path) if self.shard_output_by_rank else write_df_to_hdfs(chunk, final_path)
             time.sleep(0.3)
+
+    def _collect_output_files(self, directory):
+        """收集指定目录下的所有Parquet文件"""
+        print(f"_collect_output_files ...")
+        if self.shard_output_by_rank:
+            all_files = self.get_all_files(directory)
+        else:
+            all_files = self.ls(directory)
+        
+        all_files = [x for x in all_files if x.endswith(".parquet")]
+        
+        print("=" * 30)
+        import json
+        print(json.dumps(all_files, indent=4))
+        dump_path = '/code/__all_shuffle_v2_all_files.json'
+        with open(dump_path, 'w') as json_file: json.dump(all_files, json_file, indent=4)
+        os.system(f"/home/hadoop/software/hadoop/bin/hadoop fs -put {dump_path} {directory}")
+        print(f"all files are written successfully {dump_path} -> {directory}")
+        print("=" * 30)
+
+    def get_files_for_rank(self, rank, directory):
+        rank_dir = os.path.join(directory, str(rank))
+        return self.ls(rank_dir)
+    # 在类的方法中使用以下代码
+    def get_all_files(self, directory):
+        all_files = []
+        with concurrent.futures.ThreadPoolExecutor(64) as executor:
+            futures = []
+            for rank in tqdm(range(self.world_size)):
+                future = executor.submit(self.get_files_for_rank, rank, directory)
+                futures.append(future)
+
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    files = future.result()
+                    all_files += files
+                except Exception as e:
+                    print(f"Error getting files for rank: {e}")
+        return all_files
 
     def run(self, stages=[1,2]):
         if 1 in stages:
@@ -370,21 +415,33 @@ class AutoShuffler(MPIBase):
             print(f"Rank-{self.rank} starting run. Memory: {get_memory_usage()}")
             self._prepare_stage()
             self.comm.barrier()  # 确保所有节点完成预处理
-        
+            
+        if self.rank == 0:
+            all_files = self._collect_output_files(self.prepare_output_dir)
+
+        all_files = self.comm.bcast(all_files, root=0)
         if 2 in stages:
             # 阶段2：自动触发混洗
             self._shuffle_stage()
             self.comm.barrier()
+        
+        if self.rank == 0:
+            all_files = self._collect_output_files(self.final_output_dir)
 
-        # if self.rank == 0 and 0:
-        #     self.rm(self.prepare_output_dir)
-        #     all_files = self.ls(self.final_output_dir)
-        #     print(f"Rank-0 completed. Total files: {len(all_files)}. Memory: {get_memory_usage()}")
-        #     dump_path = '/code/AutoShuffler_v2/run_tmp.json'
-        #     print(f"Rank-0 dumping {len(all_files)} files to {dump_path}. Memory: {get_memory_usage()}")
-        #     import json
-        #     with open(self.mkdir(dump_path, drop_last=True), 'w') as json_file:
-        #         json.dump(all_files, json_file, indent=4)
+
+class AutoShufflerJsonMaker(AutoShuffler):
+    def __init__(self, input_dir, output_dir, world_size, shard_output_by_rank=True):
+        self.fs = pa.hdfs.connect(user="mpi")
+        self.shard_output_by_rank = shard_output_by_rank
+        self.input_dir = input_dir
+        self.output_dir = output_dir
+        self.world_size = world_size
+        self.rank = 0
+        self.final_output_dir = output_dir
+        self.prepare_output_dir = os.path.join(output_dir, "_prepared")
+        self._collect_output_files(self.prepare_output_dir)
+        self._collect_output_files(self.final_output_dir)
+    
 
 def main():
     parser = argparse.ArgumentParser(description="Auto Two-Stage Shuffler")
@@ -392,23 +449,39 @@ def main():
                        help="输入目录，支持@采样率语法（如 /data@0.5）")
     parser.add_argument("--output", required=True, 
                        help="最终输出目录")
-    parser.add_argument("--buffer", type=int, default=1024,
+    parser.add_argument("--buffer", type=int, default=128,
                        help="内存缓冲区大小（默认8GB）")
     parser.add_argument("--partition", type=int, default=2048,
                        help="目标分块大小（行数）")
+    parser.add_argument("--make_json", action="store_true",
+                       help="只生成json")
+    parser.add_argument("--world_size", type=int, default=1,
+                       help="只生成json")
     args = parser.parse_args()
 
-    shuffler = AutoShuffler(
-        input_dir=args.input,
-        output_dir=args.output,
-        buffer_mem_size=args.buffer,
-        target_partition_size=args.partition
-    )
-    print(f"Main process initialized for Rank-{shuffler.rank}. Memory: {get_memory_usage()}")
-    shuffler.run([1,2])
+    if args.make_json:
+        AutoShufflerJsonMaker(
+            input_dir=args.input,
+            output_dir=args.output,
+            world_size=args.world_size
+        )
+    else:
+        shuffler = AutoShuffler(
+            input_dir=args.input,
+            output_dir=args.output,
+            buffer_mem_size=args.buffer,
+            target_partition_size=args.partition
+        )
+        print(f"Main process initialized for Rank-{shuffler.rank}. Memory: {get_memory_usage()}")
+        shuffler.run([1,2])
 
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
 
 

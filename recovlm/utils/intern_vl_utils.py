@@ -203,7 +203,9 @@ def process_vision_info_internvl(messages:list,
         value = ""
         content = conversation["content"]
         for turn in content:
-          if turn["type"] == "image":
+          if isinstance(turn, str):
+            value += turn # readme有这个格式，支持下
+          elif turn["type"] == "image":
             turn_images = dynamic_preprocess(turn["image"], min_num=min_dynamic_patch, max_num=max_dynamic_patch,
                                     image_size=image_size, use_thumbnail=use_thumbnail)
             images += [image for image in turn_images]
@@ -220,7 +222,9 @@ def process_vision_info_internvl(messages:list,
                     post = str(int(pid_str[-4:]))
                     path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
                 nframes,num_patches_list = load_video(path,num_segments = num_segments)
-
+            if isinstance(turn["video"], str):
+                path = turn["video"]
+                nframes,num_patches_list = load_video(path,num_segments = num_segments)
             elif isinstance(turn["video"],list):
                 for img in turn['video']:
                     imgs = dynamic_preprocess(img['image'], min_num=min_dynamic_patch, max_num=max_dynamic_patch,
@@ -244,11 +248,26 @@ def process_vision_info_internvl(messages:list,
 
         new_conversations.append({"role":"user","value":value})
 
+      elif conversation['role'] == "system":
+        value = ""
+        content = conversation["content"]
+        for turn in content:
+          if isinstance(turn, str):
+            value += turn
+          elif isinstance(turn,dict):
+            if turn["type"] == "text":
+                value += turn["text"]
+          else:
+            raise ValueError(f"ERROR input type (system) {turn}")
+        new_conversations.append({"role":"system","value":value})
+
       elif conversation["role"] == "assistant":
         value = ""
         content = conversation["content"]
         for turn in content:
-          if isinstance(turn,dict):
+          if isinstance(turn, str):
+            value += turn
+          elif isinstance(turn,dict):
             if turn["type"] == "text":
                 value += turn["text"]
           else:
@@ -304,6 +323,9 @@ def preprocess_internvl(conversations: list, tokenizer: transformers.PreTrainedT
         elif conversation['role'] == 'assistant':
             batches.append(f'<|im_start|>assistant\n{conversation["value"]}<|im_end|>\n')
             roles.append('assistant')
+        elif conversation['role'] == 'system':
+            batches.append(f'<|im_start|>system\n{conversation["value"]}<|im_end|>\n')
+            roles.append('system')
         else:
             raise NotImplementedError
     

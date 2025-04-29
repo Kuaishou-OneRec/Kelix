@@ -141,14 +141,14 @@ def get_optimizer_grouped_parameters(model,
       final_optimizer_grouped_parameters.append(group)
   return final_optimizer_grouped_parameters
 
-def to_device(batch, device):
+def to_device(batch, device, non_blocking=True):
   for key in list(batch.keys()):
     if isinstance(batch[key], torch.Tensor):
-      batch[key] = batch[key].to(device=device)
+      batch[key] = batch[key].to(device=device, non_blocking=non_blocking)
   return batch
 
-def to_cuda(batch):
-  to_device(batch, device=torch.cuda.current_device())
+def to_cuda(batch, non_blocking=True):
+  to_device(batch, device=torch.cuda.current_device(), non_blocking=non_blocking)
 
 def set_random_seed(seed):
   if seed is not None:
