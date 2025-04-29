@@ -30,8 +30,10 @@ processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(
   "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct"
 )
 
+print('--------------------------------')
 for name, param in model.named_parameters():
     print(name, param.shape)
+print('--------------------------------')
 
 
 
