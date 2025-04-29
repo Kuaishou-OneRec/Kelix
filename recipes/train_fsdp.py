@@ -492,7 +492,7 @@ class TokenStats:
   def stats(self):
       res = np.max(self.max_image_tokens), np.min(self.min_image_tokens),\
              np.mean(self.mean_image_tokens), np.mean(self.std_image_tokens)
-
+      print("sttttssss", dist.get_rank(), res)
       res = {
         "perf/max_image_tokens": res[0],
         "perf/min_image_tokens": res[1],
@@ -962,7 +962,9 @@ def train():
       if global_step % args.logging_per_step == 0 and \
               (micro_step + 1) % args.gradient_accumulation_steps == 0:
 
-        if args.monitor_image_tokens: token_stasts.collect_image_token_stats(num_image_tokens)
+
+        print(9988999881341, dist.get_rank(), 334333412, num_image_tokens2)
+        if args.monitor_image_tokens: token_stasts.collect_image_token_stats(num_image_tokens2)
 
 
         with Timer("reduce data source metrics"):
