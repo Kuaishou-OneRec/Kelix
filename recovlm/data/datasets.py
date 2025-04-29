@@ -369,6 +369,7 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
       video_token_id = model_config.video_token_id
       vision_start_token_id = model_config.vision_start_token_id
 
+    self.tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
     self.processor = processor
     self.max_length = max_length
     self.min_visual_tokens = min_visual_tokens
