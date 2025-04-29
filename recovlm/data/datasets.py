@@ -1161,10 +1161,9 @@ class ChatCompletionVisionDataset(IterableDataset):
                              cu_seqlens: List[int],
                              sample_idx: Optional[int] = None):
     print("cut_to_text", self.cut_to_text)
-    print_rank_0(
-      print_input_info(inputs, prefix="_append_sample_packing_inputs: ", return_str=True)
-    )
-    print_rank_0(
+    if dist.get_rank() == 0:
+      print_input_info(inputs, prefix="_append_sample_packing_inputs: ")
+    
       print_input_info(
         {
           "packed_input_ids": packed_input_ids,
@@ -1177,8 +1176,8 @@ class ChatCompletionVisionDataset(IterableDataset):
           "packed_sample_idx": packed_sample_idx,
           "cu_seqlens": cu_seqlens,
         }
-        , prefix="_append_sample_packing_packed: ", return_str=True)
-    )
+        , prefix="_append_sample_packing_packed: ")
+    
 
 
     packed_input_ids.append(inputs["input_ids"].flatten())
