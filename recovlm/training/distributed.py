@@ -124,6 +124,7 @@ def get_shard_conditions(
     name: str,
     module: nn.Module,
     names_to_match: Optional[List[str]] = None,
+    model_class=None,
     *args,
     **kwargs,
 ) -> bool:
@@ -159,14 +160,25 @@ def get_shard_conditions(
         >>> print(matches)
         >>> ["layers.0", "decoder.layers.1", "embedding"]
     """
-    if names_to_match and name in names_to_match:
-        return True
 
-    name_list = name.split(".")
-    if len(name_list) >= 2:
-        return name_list[-2] == "layers" and str.isdigit(name_list[-1])
+    # 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration'
+    if model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration']:
+        if names_to_match and name in names_to_match:
+            return True
 
-    return False
+        name_list = name.split(".")
+        if len(name_list) >= 2:
+            res = name_list[-2] == "layers" and str.isdigit(name_list[-1])
+            return res
+
+        return False
+    elif model_class in ['InternVLChatModel']:
+        name_list = name.split(".")
+        if len(name_list) >= 2:
+            res = name_list[-2] == "layers" and str.isdigit(name_list[-1])
+            return res
+    else:
+        raise NotImplementedError(f"Model class {model_class} not supported.")
 
 
 def shard_model(
@@ -176,7 +188,9 @@ def shard_model(
     cpu_offload: bool,
     reshard_after_forward: bool = True,
     dp_mesh: Optional[DeviceMesh] = None,
-    fp32_weight=True
+    fp32_weight=True,
+    prefetch_parameters=False,
+    model_class='InternVLChatModel'
     ) -> None:
     """
     Utility to shard a model with FSDP using the PyTorch Distributed fully_shard API.
@@ -209,18 +223,43 @@ def shard_model(
     # Shard the model with FSDP, iterating in reverse to start with
     # lowest-level modules first
     num_layers_sharded = 0
-    for n, m in reversed(list(model.named_modules())):
-        if any([shard_condition(n, m) for shard_condition in shard_conditions]):
+
+    if model_class == 'InternVLChatModel':
+        layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
+        for m in layers:
+            # if m in layers:
+            #     if dist.get_rank() == 0: print("sharding", n)
             fully_shard(m, **fsdp_kwargs)
             num_layers_sharded += 1
+    else: 
+        assert model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration']
+        layers = []
+        for n, m in reversed(list(model.named_modules())):
+            if any([shard_condition(n, m) for shard_condition in shard_conditions]):
+                fully_shard(m, **fsdp_kwargs)
+                num_layers_sharded += 1
+                layers.append(m)
 
-    if num_layers_sharded == 0:
-        raise ValueError(
-            "No layer modules were sharded. Please check if shard conditions are working as expected."
-        )
+
+    # print('=' * 40)
+    # if num_layers_sharded == 0:
+    #     raise ValueError(
+    #         "No layer modules were sharded. Please check if shard conditions are working as expected."
+    #     )
 
     # Finally shard the entire model to account for any stragglers
     fully_shard(model, **fsdp_kwargs)
+
+    if True:
+        prev = None
+        #for i_layer, layer in reversed(list(traverse_modules(model))):
+        for layer in reversed(layers):
+            if prev is not None:
+                layer.set_modules_to_forward_prefetch([prev])
+            prev = layer
+
+        model.set_modules_to_forward_prefetch([prev])
+
 
 
 def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]):

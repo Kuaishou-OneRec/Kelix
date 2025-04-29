@@ -1,18 +1,6 @@
-#!/bin/bash
-
-# 检查当前的 shell 是否为 bash
-if [ -z "$BASH_VERSION" ]; then
-    echo "此脚本必须使用 bash 启动，请使用 'bash script.bash' 来运行它。" >&2
-    exit 1
-fi
-
-# 以下是你的脚本主体内容
-echo "脚本正在使用 bash 正常运行。"
-
-git config --global user.email 'lingzhixin@kuaishou.com'
-git config --global user.name 'lingzhixin'
-
 email=$(git config --get user.email)
+
+mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15" 
 
 # 检查 email 是否为空
 if [[ -z "$email" ]]; then
@@ -23,12 +11,12 @@ else
         echo "Git user.emal: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/lingzhixin/output3/freeze_debug/0.0.1/debug_qwen25_7B_freeze_llm
-
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2B # Pretrained/Base model path
+OUTPUT_DIR=/llm_reco/penghao03/output/debug/no_sp_length_8000_debug_loss_baseline_lzx2
+rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
@@ -36,10 +24,11 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.4.1;model_size:72B;GPU_type:H800;data:inner & outer comments"
+comment="debug vedio"
+
 
 git add --all
-git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
+git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
 git_hash=$(git rev-parse --short HEAD)
 
 set -x
@@ -55,7 +44,6 @@ echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=$PWD:$PYTHONPATH
 
-
 source set_env.sh
 
 hostfile=/etc/mpi/hostfile_seq
@@ -65,6 +53,9 @@ np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
+# debug7b_short.json
+# debug7b_fsdp_3p_v1_debug2_orids             
+# --enable_gradient_checkpointing \
 nohup mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
         -hostfile $hostfile \
@@ -116,23 +107,20 @@ nohup mpirun --allow-run-as-root -np $np \
         -x https_proxy=\
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --freeze_llm \
-                --dataset_config /llm_reco/chuchenglong/InternVL/recovlm/examples/vlm/configs/2b_qwen_stage1d.json \
-                --model_processor Qwen2_5_VLProcessor \
-                --model_class Qwen2_5_VLForConditionalGeneration \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 36000 \
-                --learning_rate 1e-6 \
+                --dataset_config /llm_reco/penghao03/code/internvl_flash/recovlm/examples/vlm/configs/debug7b_fsdp_3p_v1_debug_internvl.json \
+                --max_length 8000 \
+                --learning_rate 5e-6 \
+                --model_class InternVLChatModel \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 500 \
-                --num_training_steps 50000 \
-                --save_checkpoint_per_step 500 \
-                --sequence_parallel_size 4 \
+                --num_training_steps 2000000 \
+                --save_checkpoint_per_step 4000 \
+                --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
-                --reshard_after_forward false \
                 --logging_per_step 10 \
                 --fp32_weight true \
                 --seed 19260817 \
@@ -145,4 +133,3 @@ nohup mpirun --allow-run-as-root -np $np \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
-
