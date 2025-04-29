@@ -923,7 +923,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 999999999:
+    if inputs["input_ids"].shape[-1] > 32768:
       print(f"Sample is too long. token_len={inputs['input_ids'].shape[-1]}")
     
     # mask all vision token
@@ -1004,7 +1004,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 999999999:
+    if inputs["input_ids"].shape[-1] > 32768:
       raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
     
     inputs["loss_mask"] = get_assistant_mask(
@@ -1257,26 +1257,25 @@ class ChatCompletionVisionDataset(IterableDataset):
     source_list = []
     cur_length = 0
     ds_iter = iter(self.dataset)
-    while True:
-      #for sample in self.dataset:
+    
+    for sample in self.dataset:
+      sample_key = sample["__key__"] if "__key__" in sample else ""
+      sample_url = sample["__url__"] if "__url__" in sample else ""
+
       try:
-        sample = next(ds_iter)
-        sample_key = sample["__key__"] if "__key__" in sample else ""
-        sample_url = sample["__url__"] if "__url__" in sample else ""
+        source_name = sample["json"]["source"]
+        # # WARN: ugly code, for dirty dataset.
+        # if source_name.startswith("PDFA"):
+        #   source_name = "PDFA"
+        # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+        #   source_name = source_name.split("/")[4]
+      except:
+        source_name = "None"
 
-        try:
-          source_name = sample["json"]["source"]
-          # WARN: ugly code, for dirty dataset.
-          if source_name.startswith("PDFA"):
-            source_name = "PDFA"
-          elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-            source_name = source_name.split("/")[4]
-        except:
-          source_name = "None"
+      self.source_sample_cnt.setdefault(source_name, 0)
+      self.source_sample_cnt[source_name] += 1
 
-        self.source_sample_cnt.setdefault(source_name, 0)
-        self.source_sample_cnt[source_name] += 1
-      
+      try:
         inputs = self._process(sample, source_name)
       except:
         self.source_error_cnt.setdefault(source_name, 0)
@@ -1315,6 +1314,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         buffer.append(inputs)
         source_list.append(source_name)
         cur_length += sample_length
+
 
 class ChatCompletionVisionDpoDataset(IterableDataset):
   def __init__(self,
@@ -1547,7 +1547,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 999999999:
+    if inputs["input_ids"].shape[-1] > 32768:
       raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
     
     # mask all vision token
@@ -1638,7 +1638,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 999999999:
+    if inputs["input_ids"].shape[-1] > 32768:
       raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
     
     inputs["loss_mask"] = get_assistant_mask(
@@ -2545,7 +2545,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 999999999:
+    if inputs["input_ids"].shape[-1] > 32768:
       print(f"Sample is too long. token_len={inputs['input_ids'].shape[-1]}")
     
     input_ids = inputs["input_ids"]
@@ -2608,7 +2608,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 999999999:
+    if inputs["input_ids"].shape[-1] > 32768:
       raise ValueError(f"Sample is too long, token_len={inputs['input_ids'].shape[-1]}")
     
     inputs["loss_mask"] = get_assistant_mask(
@@ -2845,11 +2845,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
       try:
         source_name = sample["json"]["source"]
-        # WARN: ugly code, for dirty dataset.
-        if source_name.startswith("PDFA"):
-          source_name = "PDFA"
-        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-          source_name = source_name.split("/")[4]
+        # # WARN: ugly code, for dirty dataset.
+        # if source_name.startswith("PDFA"):
+        #   source_name = "PDFA"
+        # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+        #   source_name = source_name.split("/")[4]
       except:
         source_name = "None"
 
