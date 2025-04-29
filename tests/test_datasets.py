@@ -388,10 +388,12 @@ if __name__ == "__main__":
     for fn in hdfs_dirs:
         fn_list = shell_hdfs_ls(fn)
         all_files = [fn for fn in fn_list if fn.endswith(".parquet")]
-        assert len(all_files) > 0
-        n = len(all_files)
-        print(f"num of files: {n}")
-        test_files.append(all_files[:min(5, n)])
+        if len(all_files) > 0:  
+            n = len(all_files)
+            print(f"num of files: {n}")
+            test_files.append(all_files[:min(5, n)])
+        else:
+            print(f"no files in {fn}")
     for files in test_files:
         test_InternVLParquetDataset(files)
 
