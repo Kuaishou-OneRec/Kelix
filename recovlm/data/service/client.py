@@ -33,7 +33,7 @@ def balance_sequence(
     client_id: str,
     value: int,
     server_addr: str = "localhost:50051",
-    timeout: float = 10.0
+    timeout: float = 600.0
 ) -> dict:
     result_template = {
         "success": False,
