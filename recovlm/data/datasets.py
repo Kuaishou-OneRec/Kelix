@@ -1160,6 +1160,26 @@ class ChatCompletionVisionDataset(IterableDataset):
                              packed_sample_idx: List[torch.Tensor],
                              cu_seqlens: List[int],
                              sample_idx: Optional[int] = None):
+    print("cut_to_text", self.cut_to_text)
+    print_rank_0(
+      print_input_info(inputs, prefix="_append_sample_packing_inputs: ", return_str=True)
+    )
+    print_rank_0(
+      print_input_info(
+        {
+          "packed_input_ids": packed_input_ids,
+          "packed_position_ids": packed_position_ids,
+          "packed_loss_mask": packed_loss_mask,
+          "packed_pixel_values": packed_pixel_values,
+          "packed_pixel_values_videos": packed_pixel_values_videos,
+          "packed_image_gird_thw": packed_image_gird_thw,
+          "packed_video_grid_thw": packed_video_grid_thw,
+          "packed_sample_idx": packed_sample_idx,
+          "cu_seqlens": cu_seqlens,
+        }
+        , prefix="_append_sample_packing_packed: ", return_str=True)
+    )
+
 
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
@@ -2217,11 +2237,14 @@ class ParquetDataset(IterableDataset):
     except Exception as e:
       logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
       raise
+
+
 class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
   def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
     self.rng = random.Random(shuffle_seed)
     self.num_workers = num_workers
     self.num_epochs = num_epochs
+    self.cut_to_text = kargs.get("cut_to_text", True)
     super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
