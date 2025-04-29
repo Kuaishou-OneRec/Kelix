@@ -369,7 +369,6 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
       video_token_id = model_config.video_token_id
       vision_start_token_id = model_config.vision_start_token_id
 
-    self.tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
     self.processor = processor
     self.max_length = max_length
     self.min_visual_tokens = min_visual_tokens
@@ -775,12 +774,12 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
 
-    self.img_start_token = "<|im_start|>"
-    self.img_start_token = "<|image_pad|>"
-    self.img_start_token = "<|im_end|>"
+    self.tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
+    self.img_start_token = "<|vision_start|>"
+    self.img_end_token = "<|vision_end|>"
     self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
     self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
-    self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
+    # self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
 
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
