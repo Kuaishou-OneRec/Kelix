@@ -3060,8 +3060,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         candidates = self._find_in_range(input_ids_len, self.max_length, delta, target_count)
         input_ids_len = [sum(buffer[idx]["input_ids"].shape[-1] for idx in candidate) for candidate in candidates]
         image_len = [sum(buffer[idx]["pixel_values"].size(0) * 256 for idx in candidate) for candidate in candidates]
-        if dist.get_rank() == 0:
-          print(f"selected_candidates: {candidates}, input_ids: {input_ids_len}, images: {image_len}")
+        #if dist.get_rank() == 0:
+        print(f"[rank={dist.get_rank()}]  selected_candidates: {candidates}, input_ids: {input_ids_len}, images: {image_len}")
         t2 = time.perf_counter()
         response = balance_sequence(dist.get_rank(), image_len, self.server_addr)
         selected_len = response["result"]
