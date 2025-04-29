@@ -268,7 +268,7 @@ def get_argument_parser():
 
 
 
-def _init_profiler(output_dir, start_step=5, end_step=100) -> None:
+def _init_profiler(output_dir, start_step=5, end_step=10) -> None:
     import torch.distributed as D
     import os
     if not os.path.exists(output_dir):
@@ -875,11 +875,9 @@ def train():
 
       ticker.tick("token_metrics_init")
       
-      if 0:
-        dist.all_reduce(
-          token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-      else:
-        token_metrics *= dist.get_world_size()
+      dist.all_reduce(
+        token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+
 
       ticker.tick("token_metrics_reduce")
 
