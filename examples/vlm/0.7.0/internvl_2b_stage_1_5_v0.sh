@@ -14,9 +14,9 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1999  > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2Bt # Pretrained/Base model path
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2Bt/ # Pretrained/Base model path
 # MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/OpenGVLab/InternVL2_5-4B
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.7.0/stage1
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.7.0/2b/stage1.5_v0
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -119,7 +119,7 @@ nohup mpirun --allow-run-as-root \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config  \
+                --dataset_config  examples/vlm/configs/internvl/0.7.0/2b_internvl_stage2.json \
                 --max_length 21000 \
                 --learning_rate 2e-4 \
                 --model_class InternVLChatModel \
