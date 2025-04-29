@@ -86,35 +86,20 @@ class ConversationCaptionConverter(ConverterBase):
         self.source = source
 
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
-        image = src['image']['bytes']
-        question = src['question']
-        answer = src['answer']
-        image_bytes = base64.b64encode(image).decode('utf-8')
-        images = {"0.jpg": image_bytes}
-        messages = []
-        messages.append({
-            "role": "user",
-            "content": [
-                {
-                    "type": "image",
-                    "image": "0.jpg"
-                },
-                {
-                    "type": "text",
-                    "text": question
-                }
-            ]
-        })  
-        messages.append({
-            "role": "assistant",
-            "content": [
-                {
-                    "type": "text",
-                    "text": answer
-                }
-            ]
-        })
-        
+        messages = src['messages']
+        images = json.loads(src['images'])
+        videos = json.loads(src['videos'])
+        source = src['source']
+        segments = json.loads(src['segments'])
+        metadata = json.loads(src['metadata'])
+        uuid = src['uuid']
+        messages = json.loads(messages)
+        new_messages = []
+        for message in messages:
+            if message['content'][0]['type'] == 'image':
+                message['content'][0]['image'] = '0.jpg'
+            new_messages.append(message)
+        messages = new_messages
         # image = src['images'][0]['bytes']
         # data = src['data']
         # messages = []
@@ -149,11 +134,7 @@ class ConversationCaptionConverter(ConverterBase):
         #         })
         #     else:
         #         return None
-        
         segments = None
-
-
-
         metadata = None
         result = {
             "images": json.dumps(images),
