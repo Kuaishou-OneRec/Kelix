@@ -968,6 +968,7 @@ class SiglipVisionTransformer(nn.Module):
         width_position_ids: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         padding_mask: Optional[torch.Tensor] = None,
+        vision_return_embed_list: Optional[bool] = False,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -1009,20 +1010,29 @@ class SiglipVisionTransformer(nn.Module):
                 token_indices = (sample_index == sample_idx).nonzero().flatten()
                 sample_hidden_state = hidden_state[token_indices]
                 sample_hidden_state_list.append(sample_hidden_state)
-            max_length = max([_state.shape[0] for _state in sample_hidden_state_list])
-            tmp_sample_hidden_state_list = list()
-            padding_mask = list()
-            for idx, _state in enumerate(sample_hidden_state_list):
-                padding_length = max_length - _state.shape[0]
-                mask = _state.new_zeros(size=(max_length, ), dtype=torch.int64)
-                mask[-padding_length: ] = 1
-                padding_mask.append(mask)
-                padding = _state.new_zeros(size=(padding_length, dim))
-                new_state = torch.concat([_state, padding], dim=0)
-                tmp_sample_hidden_state_list.append(new_state)
-            sample_hidden_state = torch.stack(tmp_sample_hidden_state_list, dim=0)
-            padding_mask = torch.stack(padding_mask, dim=0).float().to(last_hidden_state.dtype)
-            pooler_output = self.head(sample_hidden_state, key_padding_mask=padding_mask)
+            
+            if not vision_return_embed_list:
+                max_length = max([_state.shape[0] for _state in sample_hidden_state_list])
+                tmp_sample_hidden_state_list = list()
+                padding_mask = list()
+                for idx, _state in enumerate(sample_hidden_state_list):
+                    padding_length = max_length - _state.shape[0]
+                    mask = _state.new_zeros(size=(max_length, ), dtype=torch.int64)
+                    mask[-padding_length: ] = 1
+                    padding_mask.append(mask)
+                    padding = _state.new_zeros(size=(padding_length, dim))
+                    new_state = torch.concat([_state, padding], dim=0)
+                    tmp_sample_hidden_state_list.append(new_state)
+                sample_hidden_state = torch.stack(tmp_sample_hidden_state_list, dim=0)
+                padding_mask = torch.stack(padding_mask, dim=0).float().to(last_hidden_state.dtype)
+                pooler_output = self.head(sample_hidden_state, key_padding_mask=padding_mask)
+            else:
+                pooler_output = list()
+                for state in sample_hidden_state_list:
+                    sample_pooler_output = self.head(state.unsqueeze(0))
+                    pooler_output.append(sample_pooler_output)
+                pooler_output = torch.concat(pooler_output, dim=0)
+                sample_hidden_state = sample_hidden_state_list
 
             return BaseModelOutputWithPooling(
                 last_hidden_state=sample_hidden_state,
@@ -1094,6 +1104,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         position_ids: Optional[torch.Tensor] = None,
+        vision_return_embed_list: Optional[bool] = False,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -1124,6 +1135,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
             position_ids=position_ids,
+            vision_return_embed_list=vision_return_embed_list
         )
 
 
@@ -1302,6 +1314,7 @@ class SiglipModel(SiglipPreTrainedModel):
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         padding_mask: Optional[torch.Tensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
+        vision_return_embed_list: Optional[bool] = False,
     ) -> SiglipOutput:
         r"""
         Returns:
@@ -1352,6 +1365,7 @@ class SiglipModel(SiglipPreTrainedModel):
             cu_seqlens=cu_seqlens,
             padding_mask=padding_mask,
             attention_mask=image_attention_mask,
+            vision_return_embed_list=vision_return_embed_list
         )
 
         text_outputs: BaseModelOutputWithPooling = self.text_model(

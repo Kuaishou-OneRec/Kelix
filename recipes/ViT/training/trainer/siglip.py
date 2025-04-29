@@ -236,6 +236,8 @@ def check_config(args, ctx, config):
     config.dataset.packing.patch_size = patch_size
     logger.warning(f"Set patch_size = {patch_size} from model config file {model_config_path}")
 
+    config.dataset.cache_dir = osp.join("/code/data/zdj/cache", osp.basename(osp.dirname(args.output_dir)), osp.basename(args.output_dir))
+
     if ctx.rank == 0:
         tmp_config = OmegaConf.to_container(config, resolve=True)
         json.dump(tmp_config, open(osp.join(config.output_dir, "train_config.json"), "w"), indent=4)

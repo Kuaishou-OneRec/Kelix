@@ -36,6 +36,7 @@ dataset:
 model:
   siglip_dir: /llm_reco/liuyang76/Models/siglip2-so400m-patch14-384
   VitParam_dir: /llm_reco/liuyang76/Models/MoonVitParam/MoonVit.pt
+  vision_return_embed_list: true
   text_decoder:
     enabled: true
     loss_lambda: 2.0
@@ -48,8 +49,8 @@ optimizer:
   weight_decay: 0.01
 lr_scheduler:
   type: cosine
-  num_warmup_steps: 5400
-  num_training_steps: 180000
+  num_warmup_steps: 18500
+  num_training_steps: 370000
   min_lr: 0.0
 monitor:
   type: ViTMonitor
