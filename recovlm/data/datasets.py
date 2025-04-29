@@ -1253,6 +1253,7 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
         inputs["input_ids"][:, vision_starts[-1]:] = 0
         inputs["loss_mask"][:, vision_starts[-1]:] = 0
         inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
+        
 
 
 
