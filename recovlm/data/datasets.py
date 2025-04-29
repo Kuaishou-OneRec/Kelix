@@ -1255,7 +1255,8 @@ _append_sample_packing_inputs: 'position_ids':
 _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([70, 71, 72, 73])
       """
       
-      print_input_info(inputs, "0000inputs:", max_show=99)
+      print_input_info(inputs, "0000inputs:", max_show=999)
+      print(9989843242, 000, inputs["input_ids"].flatten().tolist())
       inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
       inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
 
@@ -1268,8 +1269,9 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
         inputs["input_ids"][:, vision_starts[-1]:] = 0
         inputs["loss_mask"][:, vision_starts[-1]:] = 0
         n_tokens_hw = inputs["image_grid_thw"][len(vision_ends)]
-        if dist.get_rank() == 0: print(99898432423, n_tokens_hw)
         n_tokens = n_tokens_hw[1] * n_tokens_hw[2]
+        if dist.get_rank() == 0: print(99898432423, n_tokens_hw, n_tokens)
+        
         inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
         inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
       
@@ -1277,7 +1279,8 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
         # for i in range(vision_starts[-1], packable_length):
         #   inputs["position_ids"][i] = pre_position_id + i - vision_starts[-1] + 1 # fake 一些position id
 
-      if dist.get_rank() == 0: print_input_info(inputs, "1111inputs:", max_show=99)
+        print(99898432423, 111, inputs["input_ids"].flatten().tolist())
+      if dist.get_rank() == 0: print_input_info(inputs, "1111inputs:", max_show=999)
       # print_input_info(inputs, prefix="_append_sample_packing_inputs_after: ")
 
 
@@ -1415,7 +1418,7 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
         continue
 
       sample_length = inputs["input_ids"].shape[-1]
-      if cur_length + sample_length > self.max_length:
+      if cur_length + sample_length >= self.max_length:
         # packed_inputs = self._packing(buffer)
         # packed_inputs["data_source"] = source_list
         # buffer = [inputs]
@@ -3092,7 +3095,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         continue
 
       sample_length = inputs["input_ids"].shape[-1]
-      if cur_length + sample_length > self.max_length - self.image_pad_len:
+      if cur_length + sample_length >= self.max_length - self.image_pad_len:
 
         if self.cut_to_pad:
           buffer.append(inputs)
