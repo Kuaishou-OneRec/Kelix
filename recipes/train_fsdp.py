@@ -939,6 +939,9 @@ def train():
           mask = local_sample_idx == s_idx
           sum_loss = per_token_loss[mask].sum()
 
+          if dist.get_rank() == 0:
+            print(23433, local_sample_idx, unique_sample_idx, s_idx)
+
           key = data_source[int(s_idx.item())]
           batch_data_source_loss[key] += sum_loss.item()
           batch_data_source_tokens[key] += mask.sum().item()
