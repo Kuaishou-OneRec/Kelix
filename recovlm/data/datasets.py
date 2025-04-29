@@ -931,12 +931,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
-    if dist.get_rank() == 0: # and len(text) < 50:
-      print('=' * 100)
-      print(1111)
-      print_input_info(text, "134_text:", max_show=9999)
-      print_input_info(inputs, "134_inputs:", max_show=9999)
-      print('=' * 100)
+
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
@@ -1017,12 +1012,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
-    if dist.get_rank() == 0: # and len(text) < 50:
-      print('=' * 100)
-      print(1111)
-      print_input_info(text, "1331114_text:", max_show=9999)
-      print_input_info(inputs, "1331114_inputs:", max_show=9999)
-      print('=' * 100)
+
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
@@ -1179,113 +1169,6 @@ class ChatCompletionVisionDataset(IterableDataset):
                              packed_sample_idx: List[torch.Tensor],
                              cu_seqlens: List[int],
                              sample_idx: Optional[int] = None):
-    print("cut_to_pad", self.cut_to_pad)
-    if dist.get_rank() == 0:
-      print_input_info(inputs, prefix="_append_sample_packing_inputs: ")
-    
-      print_input_info(
-        {
-          "packed_input_ids": packed_input_ids,
-          "packed_position_ids": packed_position_ids,
-          "packed_loss_mask": packed_loss_mask,
-          "packed_pixel_values": packed_pixel_values,
-          "packed_pixel_values_videos": packed_pixel_values_videos,
-          "packed_image_gird_thw": packed_image_gird_thw,
-          "packed_video_grid_thw": packed_video_grid_thw,
-          "packed_sample_idx": packed_sample_idx,
-          "cu_seqlens": cu_seqlens,
-        }
-        , prefix="_append_sample_packing_packed: ")
-    
-    packable_length = self.max_length - cu_seqlens[-1]
-    if self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
-      print("enter11342 ..,", inputs['input_ids'].shape, packable_length, self.max_length, cu_seqlens[-1])
-      """
-Qwen2TokenizerFast(name_or_path='/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct/', vocab_size=151643, model_max_length=131072, is_fast=True, padding_side='right', truncation_side='right', special_tokens={'eos_token': '<|im_end|>', 'pad_token': '<|endoftext|>', 'additional_special_tokens': ['<|im_start|>', '<|im_end|>', '<|object_ref_start|>', '<|object_ref_end|>', '<|box_start|>', '<|box_end|>', '<|quad_start|>', '<|quad_end|>', '<|vision_start|>', '<|vision_end|>', '<|vision_pad|>', '<|image_pad|>', '<|video_pad|>']}, clean_up_tokenization_spaces=False, added_tokens_decoder={
-        151643: AddedToken("<|endoftext|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-
-        151644: AddedToken("<|im_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-        151645: AddedToken("<|im_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-        151646: AddedToken("<|object_ref_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-        151647: AddedToken("<|object_ref_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-        151648: AddedToken("<|box_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-        151649: AddedToken("<|box_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-        151650: AddedToken("<|quad_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-        151651: AddedToken("<|quad_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-
-        151652: AddedToken("<|vision_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-        151653: AddedToken("<|vision_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-        151654: AddedToken("<|vision_pad|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-        151655: AddedToken("<|image_pad|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-        151656: AddedToken("<|video_pad|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
-
-        151657: AddedToken("<tool_call>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
-        151658: AddedToken("</tool_call>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
-        151659: AddedToken("<|fim_prefix|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
-        151660: AddedToken("<|fim_middle|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
-        151661: AddedToken("<|fim_suffix|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
-        151662: AddedToken("<|fim_pad|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
-        151663: AddedToken("<|repo_name|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
-        151664: AddedToken("<|file_sep|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
-}
-)
-
-_append_sample_packing_inputs
-_append_sample_packing_inputs: 'input_ids':
-_append_sample_packing_inputs:   Tensor: shape=(1, 6), dtype=torch.int64, device=cpu, data=tensor([151652, 151655, 151655, 151655])...tensor([151655, 151655, 151655, 151653])
-_append_sample_packing_inputs: 'pixel_values':
-_append_sample_packing_inputs:   Tensor: shape=(16, 1176), dtype=torch.float32, device=cpu, data=tensor([1.9303, 1.9303, 1.9303, 1.9303])...tensor([2.1459, 2.1459, 2.1459, 2.1459])
-_append_sample_packing_inputs: 'image_grid_thw':
-_append_sample_packing_inputs:   Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([1, 4, 4])...tensor([1, 4, 4])
-_append_sample_packing_inputs: 'loss_mask':
-_append_sample_packing_inputs:   Tensor: shape=(1, 6), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([0, 0, 0, 0])
-_append_sample_packing_inputs: 'position_ids':
-_append_sample_packing_inputs:   Tensor: shape=(3, 1, 6), dtype=torch.int64, device=cpu, data=tensor([0, 1, 1, 1])...tensor([2, 1, 2, 3])
-
-_append_sample_packing_inputs: Dict: keys=5
-_append_sample_packing_inputs: 'input_ids':
-_append_sample_packing_inputs:   Tensor: shape=(1, 92), dtype=torch.int64, device=cpu, data=tensor([151644,   8948,    198,   2610])...tensor([    13, 151645,    198, 151643])
-_append_sample_packing_inputs: 'pixel_values':
-_append_sample_packing_inputs:   Tensor: shape=(96, 1176), dtype=torch.float32, device=cpu, data=tensor([-1.2521, -1.2521, -1.2521, -1.2521])...tensor([-1.4802, -1.4802, -1.4802, -1.4802])
-_append_sample_packing_inputs: 'image_grid_thw':
-_append_sample_packing_inputs:   Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([ 1,  8, 12])...tensor([ 1,  8, 12])
-_append_sample_packing_inputs: 'loss_mask':
-_append_sample_packing_inputs:   Tensor: shape=(1, 92), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([1, 1, 1, 0])
-_append_sample_packing_inputs: 'position_ids':
-_append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([70, 71, 72, 73])
-      """
-      
-      print_input_info(inputs, "0000inputs:", max_show=999)
-      if dist.get_rank() == 0: print(9989843242, 000, inputs["input_ids"].flatten().tolist())
-      inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
-      inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
-
-      inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
-
-      vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
-      vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
-      if dist.get_rank() == 0: print(inputs["input_ids"], vision_starts, vision_ends, 999999, self.vision_start_token_id, self.vision_end_token_id)
-      if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
-        inputs["input_ids"][:, vision_starts[-1]:] = 0
-        inputs["loss_mask"][:, vision_starts[-1]:] = 0
-        n_tokens_hw = inputs["image_grid_thw"][len(vision_ends)]
-        n_tokens = n_tokens_hw[1] * n_tokens_hw[2]
-        if dist.get_rank() == 0: print(99898432423, n_tokens_hw, n_tokens)
-        
-        inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
-        inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
-      
-        # pre_position_id = inputs["position_ids"][vision_starts[-1]]
-        # for i in range(vision_starts[-1], packable_length):
-        #   inputs["position_ids"][i] = pre_position_id + i - vision_starts[-1] + 1 # fake 一些position id
-
-        if dist.get_rank() == 0: print(99898432423, 111, inputs["input_ids"].flatten().tolist())
-      if dist.get_rank() == 0: print_input_info(inputs, "1111inputs:", max_show=999)
-      # print_input_info(inputs, prefix="_append_sample_packing_inputs_after: ")
-
-
-
-
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
     packed_position_ids.append(inputs["position_ids"])
@@ -2755,12 +2638,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     inputs["position_ids"] = position_ids
     inputs.pop("attention_mask")
 
-    if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
-      print("baddddddd")
-      print_input_info(
-        inputs,
-        "_process_completion",
-      )
     return inputs
     
 
@@ -2802,14 +2679,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if "pixel_values" not in inputs:
       inputs["pixel_values"] = self.image_pad["pixel_values"][:0]
       inputs["image_flags"] = self.image_pad["image_flags"][:0]
-
-
-    if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
-      print("baddddddd")
-      print_input_info(
-        inputs,
-        "_process_chat",
-      )
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
