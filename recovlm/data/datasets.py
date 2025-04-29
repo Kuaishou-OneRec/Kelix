@@ -1749,7 +1749,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
-    )
+    
     if dist.get_rank() == 0 and len(text) < 50:
       print('=' * 100)
       print(1111)
