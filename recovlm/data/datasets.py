@@ -931,7 +931,12 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
-
+    if dist.get_rank() == 0: # and len(text) < 50:
+      print('=' * 100)
+      print(1111)
+      print_input_info(text, "134_text:", max_show=9999)
+      print_input_info(inputs, "134_inputs:", max_show=9999)
+      print('=' * 100)
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
@@ -1012,7 +1017,12 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
-
+    if dist.get_rank() == 0: # and len(text) < 50:
+      print('=' * 100)
+      print(1111)
+      print_input_info(text, "1331114_text:", max_show=9999)
+      print_input_info(inputs, "1331114_inputs:", max_show=9999)
+      print('=' * 100)
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
@@ -1689,16 +1699,6 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
       vision_start_token_id=self.vision_start_token_id
     )
     inputs.pop("attention_mask")
-    print_input_info(
-      inputs,
-      "_process_completion",
-    )
-    if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
-      print("baddddddd")
-      print_input_info(
-        inputs,
-        "_process_completion",
-      )
     return inputs
 
   def _process_chat(self,
@@ -1756,12 +1756,6 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
         return_tensors="pt"
     )
     
-    if dist.get_rank() == 0: # and len(text) < 50:
-      print('=' * 100)
-      print(1111)
-      print_input_info(text, "134_text:", max_show=9999)
-      print_input_info(inputs, "134_inputs:", max_show=9999)
-      print('=' * 100)
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
