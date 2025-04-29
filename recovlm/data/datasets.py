@@ -2453,6 +2453,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           "uuid": "23333333333112432536"
       }
     fake_sample["json"] = fake_sample
+    fake_sample.update(fake_sample["images"])
     inputs = self._process_completion(fake_sample, data_conf={"min_dynamic_patch": 1, "max_dynamic_patch":1})
     return inputs
     
@@ -2509,8 +2510,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     assert "segments" in sample["json"]
     data_conf["max_dynamic_patch"] = max(
         data_conf["max_dynamic_patch"], data_conf["min_dynamic_patch"])
-
-    print(200009323233, data_conf["max_dynamic_patch"])
     
     images = []
     new_conversations = []
