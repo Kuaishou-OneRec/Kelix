@@ -23,6 +23,12 @@ model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
 )
 model.eval()
 
+model2 = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+  "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
+)
+model2.eval()
+
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model = model.to(device,dtype=torch.bfloat16)
 
@@ -35,7 +41,7 @@ for name, param in model.named_parameters():
     print(name, param.shape)
 print('--------------------------------')
 
-for name,param in model.visual.named_parameters():
+for name,param in model2.named_parameters():
     print(name, param.shape)
 print('--------------------------------') 
 
