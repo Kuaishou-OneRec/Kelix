@@ -246,6 +246,9 @@ def get_argument_parser():
   parser.add_argument("--monitor_datasource_cnt", action="store_true",
                       help="Whether to monitor cnt of each datasource")
 
+  parser.add_argument("--monitor_image_tokens", action="store_true",
+                      help="Whether to monitor image tokens. Note that this involves with an all_gather operation, which is time-consuming")
+
 
   ############ System Vars ############
 
@@ -959,6 +962,9 @@ def train():
       if global_step % args.logging_per_step == 0 and \
               (micro_step + 1) % args.gradient_accumulation_steps == 0:
 
+        if args.monitor_image_tokens: token_stasts.collect_image_token_stats(num_image_tokens)
+
+
         with Timer("reduce data source metrics"):
           batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
           batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
@@ -1006,11 +1012,11 @@ def train():
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
             "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples
           }
-
-          # token_stasts.collect_image_token_stats(num_image_tokens)
-          # log_dict.update(token_stasts.stats())
-
           ticker.tick(f"log_dict*{log_acc_step}")
+
+          if args.monitor_image_tokens: log_dict.update(token_stasts.stats())            
+          ticker.tick(f"token_stasts*{log_acc_step}")
+          
 
           for name, data in log_dict.items():
             if data is not None and tb_writer:
