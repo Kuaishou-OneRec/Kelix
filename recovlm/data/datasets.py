@@ -2381,6 +2381,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.end_of_text_id = self.tokenizer.encode('<|endoftext|>')[0]
 
     self.dataset, self.total_samples = self._build_source_dataset(sources)
+    self.dataset_iter = iter(self.dataset)
 
     # for data_source monitor
     self.source_sample_cnt = {}
@@ -2968,7 +2969,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     buffer = []
     source_list = []
     while True:
-      sample = next(self.dataset)
+      sample = next(self.dataset_iter)
       sample_key = sample["__key__"] if "__key__" in sample else ""
       sample_url = sample["__url__"] if "__url__" in sample else ""
       
