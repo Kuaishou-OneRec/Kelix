@@ -277,11 +277,11 @@ def process_vision_info_internvl(messages:list,
       else:
         raise NotImplementedError
     image_flag = 1 if len(images) > 0 else 0
-    #如果是纯文本增加一张图片做引导
-    if image_flag==0:
-      image = Image.new('RGB', (224, 224), (255, 255, 255))
-      images = dynamic_preprocess(image, min_num=min_dynamic_patch, max_num=1,
-                                        image_size=image_size, use_thumbnail=use_thumbnail)
+    # #如果是纯文本增加一张图片做引导
+    # if image_flag==0:
+    #   image = Image.new('RGB', (224, 224), (255, 255, 255))
+    #   images = dynamic_preprocess(image, min_num=min_dynamic_patch, max_num=1,
+    #                                     image_size=image_size, use_thumbnail=use_thumbnail)
     inputs = preprocess_internvl(new_conversations,tokenizer)
     transform = build_transform(is_train=True, input_size=image_size,normalize_type=normalize_type)
     pixel_values = [transform(image) for image in images]

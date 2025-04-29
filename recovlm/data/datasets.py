@@ -2385,8 +2385,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.source_error_cnt = {}
 
     # append image_pad for each packing
-    # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
-    self.max_length = max_length
+    self.image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
+    self.max_length = max_length - self.image_pad_len
     assert self.max_length > 0
 
     self.datasource_config = datasource_config
@@ -2430,6 +2430,32 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       
     return dataset, total_samples
 
+  def _gen_img_pad(self):
+    """
+    append an image, to trigger vit for pure text sample
+    return 6 token: vstart, 4 * image_token, vend
+    """
+    def generate_base64_image():
+        img = Image.fromarray(np.zeros((50,50, 3), dtype=np.uint8))
+        buffered = BytesIO()
+        img.save(buffered, format="JPEG")
+        return base64.b64encode(buffered.getvalue()).decode()
+      
+    fake_sample = {
+          "images": {"0.jpg": generate_base64_image()},
+          "videos": None,
+          "source": "__image_pad__",
+          "messages": None,
+          "segments": [
+              {"type": "image", "image": "0.jpg"},
+          ],
+          "metadata": None,
+          "uuid": "23333333333112432536"
+      }
+    fake_sample["json"] = fake_sample
+    inputs = self._process_completion(fake_sample)
+    return inputs
+    
   def _fill_image_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
                         conf: Dict[str, Any]):
@@ -2447,7 +2473,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
   def _fill_video_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
-                        conf: Dict[str, Any]):
+                        conf: Dict[str, Any]
+                        ):
 
     if isinstance(block["video"], list):
         if all([isinstance(image_block, str) for image_block in block["video"]]):
@@ -2475,7 +2502,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     else:
       raise ValueError(f"Unsupport video type. {type(block['video'])=}")
-  
+      
   def _process_completion(self,
                     sample: Dict[str, Any],
                     data_conf: Dict[str, Any] = {}) -> Dict[str, torch.Tensor]:
@@ -2544,12 +2571,13 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         return_tensors="pt"
     )
 
-    image_flag = 1 if len(images) > 0 else 0
-    #如果是纯文本增加一张图片做引导
-    if image_flag==0:
-      image = Image.new('RGB', (224, 224), (255, 255, 255))
-      images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=1,
-                                        image_size=self.image_size, use_thumbnail=self.use_thumbnail)
+    # image_flag = 1 if len(images) > 0 else 0
+    # 如果是纯文本增加一张图片做引导
+    # if image_flag==0:
+    #   image = Image.new('RGB', (224, 224), (255, 255, 255))
+    #   images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=1,
+    #                                     image_size=self.image_size, use_thumbnail=self.use_thumbnail)
+
     transform = build_transform(is_train=True, input_size=self.image_size,normalize_type=self.normalize_type)
     pixel_values = [transform(image) for image in images]
     pixel_values = torch.stack(pixel_values)
@@ -2638,8 +2666,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 32768:
-      raise ValueError(f"Sample is too long, token_len={inputs['input_ids'].shape[-1]}")
+    # if inputs["input_ids"].shape[-1] > 32768:
+    #   raise ValueError(f"Sample is too long, token_len={inputs['input_ids'].shape[-1]}")
     
     inputs["loss_mask"] = get_assistant_mask(
       inputs["input_ids"],
@@ -2815,6 +2843,18 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       packed_sample_idx,
                                       packed_image_flags,
                                       cu_seqlens)
+    # image_pad = self._gen_img_pad()
+    self._append_sample_packing(self._gen_img_pad(),
+                                packed_input_ids,
+                                packed_position_ids,
+                                packed_loss_mask,
+                                packed_pixel_values,
+                                packed_pixel_values_videos,
+                                packed_image_gird_thw,
+                                packed_video_grid_thw,
+                                packed_sample_idx,
+                                packed_image_flags,
+                                cu_seqlens)
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
@@ -2839,9 +2879,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
     ):
       padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
-      assert self.max_length % self.multiple_of == 0
+      # assert self.max_length % self.multiple_of == 0
 
-      if self.cut_to_pad: assert padding_len == 0, "padding_len={padding_len}, not equal to 0"
+      if self.cut_to_pad: assert padding_len == 0, f"padding_len={padding_len}, not equal to 0"
 
       packed_input_ids = F.pad(
         packed_input_ids, (0, padding_len),
