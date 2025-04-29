@@ -1178,6 +1178,37 @@ class ChatCompletionVisionDataset(IterableDataset):
         }
         , prefix="_append_sample_packing_packed: ")
     
+    if self.cut_to_pad:
+      """
+_append_sample_packing_inputs
+_append_sample_packing_inputs: 'input_ids':
+_append_sample_packing_inputs:   Tensor: shape=(1, 6), dtype=torch.int64, device=cpu, data=tensor([151652, 151655, 151655, 151655])...tensor([151655, 151655, 151655, 151653])
+_append_sample_packing_inputs: 'pixel_values':
+_append_sample_packing_inputs:   Tensor: shape=(16, 1176), dtype=torch.float32, device=cpu, data=tensor([1.9303, 1.9303, 1.9303, 1.9303])...tensor([2.1459, 2.1459, 2.1459, 2.1459])
+_append_sample_packing_inputs: 'image_grid_thw':
+_append_sample_packing_inputs:   Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([1, 4, 4])...tensor([1, 4, 4])
+_append_sample_packing_inputs: 'loss_mask':
+_append_sample_packing_inputs:   Tensor: shape=(1, 6), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([0, 0, 0, 0])
+_append_sample_packing_inputs: 'position_ids':
+_append_sample_packing_inputs:   Tensor: shape=(3, 1, 6), dtype=torch.int64, device=cpu, data=tensor([0, 1, 1, 1])...tensor([2, 1, 2, 3])
+
+_append_sample_packing_inputs: Dict: keys=5
+_append_sample_packing_inputs: 'input_ids':
+_append_sample_packing_inputs:   Tensor: shape=(1, 92), dtype=torch.int64, device=cpu, data=tensor([151644,   8948,    198,   2610])...tensor([    13, 151645,    198, 151643])
+_append_sample_packing_inputs: 'pixel_values':
+_append_sample_packing_inputs:   Tensor: shape=(96, 1176), dtype=torch.float32, device=cpu, data=tensor([-1.2521, -1.2521, -1.2521, -1.2521])...tensor([-1.4802, -1.4802, -1.4802, -1.4802])
+_append_sample_packing_inputs: 'image_grid_thw':
+_append_sample_packing_inputs:   Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([ 1,  8, 12])...tensor([ 1,  8, 12])
+_append_sample_packing_inputs: 'loss_mask':
+_append_sample_packing_inputs:   Tensor: shape=(1, 92), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([1, 1, 1, 0])
+_append_sample_packing_inputs: 'position_ids':
+_append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([70, 71, 72, 73])
+      """
+      packable_length = self.max_length - cu_seqlens[-1]
+      inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
+      inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
+      inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
+
 
 
     packed_input_ids.append(inputs["input_ids"].flatten())
