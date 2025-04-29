@@ -2852,7 +2852,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       packed_video_grid_thw,
                                       packed_sample_idx,
                                       packed_image_flags,
-                                      cu_seqlens)
+                                      cu_seqlens,
+                                      sample_idx=-1)
     for _, inputs in enumerate(buffer):
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
