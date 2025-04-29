@@ -1254,11 +1254,12 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
 
       vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
       vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
+      print(inputs["input_ids"], vision_starts, vision_ends, 999999, self.vision_start_token_id, self.vision_end_token_id)
       if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
         inputs["input_ids"][:, vision_starts[-1]:] = 0
         inputs["loss_mask"][:, vision_starts[-1]:] = 0
-        inputs["image_grid_thw"] = inputs["image_grid_thw"][..., :len(vision_ends)]
-        inputs["position_ids"] = inputs["position_ids"][..., :len(vision_ends)]
+        inputs["image_grid_thw"] = inputs["image_grid_thw"][len(vision_ends)]
+        # inputs["position_ids"] = inputs["position_ids"][..., :len(vision_ends)]
 
       if dist.get_rank() == 0: print_input_info(inputs, "1111inputs:")
 
