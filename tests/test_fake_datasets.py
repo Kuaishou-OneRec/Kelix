@@ -41,7 +41,7 @@ import tqdm
 没有cut
 """
 
-def generate_test_dataframe(num_samples_perfile=400, num_files=30, n_texts=450, fake_dir="/llm_reco/lingzhixin/recovlm_0427compile/recovlm/tests/test_fake_datasets/generate_test_dataframe/buffer/"):
+def generate_test_dataframe(num_samples_perfile=400, num_files=30, n_texts=400, fake_dir="/llm_reco/lingzhixin/recovlm_0427compile/recovlm/tests/test_fake_datasets/generate_test_dataframe/buffer/"):
     """
     生成测试用DataFrame，结构如下：
     - images: {"0.jpg": base64编码的1x1像素图片}
