@@ -3009,7 +3009,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         if dist.get_rank() == 0:
           print(f"selected_candidates: {candidates}, input_ids: {input_ids_len}, images: {image_len}")
         t2 = time.perf_counter()
-        selected_len = balance_sequence(dist.get_rank(), image_len, self.server_addr)
+        response = balance_sequence(dist.get_rank(), image_len, self.server_addr)
+        selected_len = response["result"]
         t3 = time.perf_counter()
         print(f"[rank={dist.get_rank()}]find_input_ids={t2-t1}, balance_imgae={t3-t2}, selected={selected_len}")
         selected_index = candidates[image_len.index(selected_len)]
