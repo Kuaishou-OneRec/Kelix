@@ -83,7 +83,7 @@ def print_input_info(data: Any, prefix: str = "", max_str_len: int = 50, return_
     elif isinstance(data, (int, float)):
         add_line(f"{prefix}{type(data).__name__}: {data}")
     else:
-        add_line(f"{prefix}Other type ({type(data).__name__}): {str(data)[:60]}...{str(data)[-60:]}")
+        add_line(f"{prefix}Other type ({type(data).__name__}): {str(data)[:max_show]}...{str(data)[-max_show:]}")
         
     return "\n".join(lines) if return_str else None
 
