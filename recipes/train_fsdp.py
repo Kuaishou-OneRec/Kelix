@@ -272,7 +272,8 @@ def _init_profiler(output_dir, start_step=5, end_step=10) -> None:
     import torch.distributed as D
     import os
     if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+        if D.get_rank() == 0:
+            os.makedirs(output_dir, exist_ok=True)
 
     def trace_handler(prof):
         if D.get_rank() == 0:
