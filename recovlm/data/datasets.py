@@ -1259,7 +1259,6 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
       inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
       inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
 
-      next_position_id = inputs["position_ids"][packable_length]
       inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
 
       vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
@@ -1274,9 +1273,9 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
         inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
         inputs["pixel_values"] = inputs["pixel_values"][-n_tokens:]
       
-        pre_position_id = inputs["position_ids"][vision_starts[-1]]
-        for i in range(vision_starts[-1], packable_length):
-          inputs["position_ids"][i] = pre_position_id + i - vision_starts[-1] + 1 # fake 一些position id
+        # pre_position_id = inputs["position_ids"][vision_starts[-1]]
+        # for i in range(vision_starts[-1], packable_length):
+        #   inputs["position_ids"][i] = pre_position_id + i - vision_starts[-1] + 1 # fake 一些position id
 
       print_input_info(inputs, "1111inputs:")
       # print_input_info(inputs, prefix="_append_sample_packing_inputs_after: ")
