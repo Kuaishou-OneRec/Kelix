@@ -2449,6 +2449,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           "source": "__image_pad__",
           "messages": None,
           "segments": [
+              {"type": "text", "text": "0"},
               {"type": "image", "image": "0.jpg"},
           ],
           "metadata": None,
@@ -2457,6 +2458,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     fake_sample["json"] = fake_sample
     fake_sample.update(fake_sample["images"])
     inputs = self._process_completion(fake_sample, data_conf={"min_dynamic_patch": 1, "max_dynamic_patch":1})
+    inputs["loss_mask"] *= 0
     return inputs
     
   def _fill_image_block(self, block: Dict[str, Any],
@@ -2615,7 +2617,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     position_ids.masked_fill_(inputs['attention_mask'] == 0, 1)
     inputs["position_ids"] = position_ids
     inputs.pop("attention_mask")
-    print(9543554, inputs["input_ids"].shape[1], inputs["pixel_values"].shape[0] * 256)
+
     if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
       print("baddddddd")
       print_input_info(
@@ -2665,7 +2667,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       inputs["image_flags"] = self.image_pad["image_flags"][:0]
 
 
-    print(9543554, inputs["input_ids"].shape[1], inputs["pixel_values"].shape[0] * 256)
     if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
       print("baddddddd")
       print_input_info(
