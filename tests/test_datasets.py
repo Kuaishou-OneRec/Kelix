@@ -383,6 +383,7 @@ if __name__ == "__main__":
         for line in fp:
             if line.strip() != "":
                 hdfs_dirs.append(line.strip())
+    print(f"num of hdfs dirs: {len(hdfs_dirs)}")
     test_files = []
     for fn in hdfs_dirs:
         fn_list = shell_hdfs_ls(fn)
