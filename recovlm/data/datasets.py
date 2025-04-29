@@ -1256,7 +1256,7 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
       """
       
       print_input_info(inputs, "0000inputs:", max_show=999)
-      print(9989843242, 000, inputs["input_ids"].flatten().tolist())
+      if dist.get_rank() == 0: print(9989843242, 000, inputs["input_ids"].flatten().tolist())
       inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
       inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
 
@@ -1279,7 +1279,7 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
         # for i in range(vision_starts[-1], packable_length):
         #   inputs["position_ids"][i] = pre_position_id + i - vision_starts[-1] + 1 # fake 一些position id
 
-        print(99898432423, 111, inputs["input_ids"].flatten().tolist())
+        if dist.get_rank() == 0: print(99898432423, 111, inputs["input_ids"].flatten().tolist())
       if dist.get_rank() == 0: print_input_info(inputs, "1111inputs:", max_show=999)
       # print_input_info(inputs, prefix="_append_sample_packing_inputs_after: ")
 
