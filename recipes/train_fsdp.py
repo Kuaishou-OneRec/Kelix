@@ -470,32 +470,32 @@ class TokenStats:
     self.std_image_tokens = []
 
   
-    def collect_image_token_stats(self, num_image_tokens):
-        # 收集所有rank的image tokens统计信息
-        world_size = dist.get_world_size()
-        rank = dist.get_rank()
+  def collect_image_token_stats(self, num_image_tokens):
+      # 收集所有rank的image tokens统计信息
+      world_size = dist.get_world_size()
+      rank = dist.get_rank()
 
-        all_image_tokens = list(torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) if rank == 0 else None
-        dist.gather(torch.tensor(num_image_tokens, dtype=torch.long).cuda(), gather_list=all_image_tokens, dst=0)
+      all_image_tokens = list(torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) if rank == 0 else None
+      dist.gather(torch.tensor(num_image_tokens, dtype=torch.long).cuda(), gather_list=all_image_tokens, dst=0)
 
-        if rank == 0:
-            all_image_tokens = [x.item() for x in all_image_tokens]
-            # 计算统计指标
-            max_image_tokens = max(all_image_tokens)
-            min_image_tokens = min(all_image_tokens)
-            mean_image_tokens = sum(all_image_tokens) / world_size
-            std_image_tokens = (sum((x - mean_image_tokens)**2 for x in all_image_tokens) / world_size)**0.5
-        else:
-            max_image_tokens = 0
-            min_image_tokens = 0
-            mean_image_tokens = 0
-            std_image_tokens = 0
+      if rank == 0:
+          all_image_tokens = [x.item() for x in all_image_tokens]
+          # 计算统计指标
+          max_image_tokens = max(all_image_tokens)
+          min_image_tokens = min(all_image_tokens)
+          mean_image_tokens = sum(all_image_tokens) / world_size
+          std_image_tokens = (sum((x - mean_image_tokens)**2 for x in all_image_tokens) / world_size)**0.5
+      else:
+          max_image_tokens = 0
+          min_image_tokens = 0
+          mean_image_tokens = 0
+          std_image_tokens = 0
 
-        self.max_image_tokens.append(max_image_tokens)
-        self.min_image_tokens.append(min_image_tokens)
-        self.mean_image_tokens.append(mean_image_tokens)
-        self.std_image_tokens.append(std_image_tokens)
-        return max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
+      self.max_image_tokens.append(max_image_tokens)
+      self.min_image_tokens.append(min_image_tokens)
+      self.mean_image_tokens.append(mean_image_tokens)
+      self.std_image_tokens.append(std_image_tokens)
+      return max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
 
   def stats(self):
       res = np.max(self.max_image_tokens), np.min(self.min_image_tokens),\
@@ -757,7 +757,10 @@ def train():
   dist.barrier()
 
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
-  
+  print_rank_0("tokenizertokenizertokenizertokenizer")
+  print_rank_0(tokenizer)
+
+
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
     dataset_config = json.loads(f.read())
