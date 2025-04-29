@@ -2129,7 +2129,7 @@ class ParquetDataset(IterableDataset):
 
   def __iter__(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
-    assert num_workers == self.num_workers
+    assert num_workers == self.num_workers, f"{num_workers} : {self.num_workers}"
 
     finish_dict = self.finish_dict_all[worker]
     offset_dict = self.offset_dict_all[worker]
