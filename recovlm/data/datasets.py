@@ -2841,7 +2841,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     packed_sample_idx: List[torch.Tensor] = []
     packed_image_flags:List[torch.Tensor] = []
     cu_seqlens: List[int] = [0]
-
+    valid_seq_len = 0
 
     for _, inputs in enumerate(buffer):
       valid_seq_len += self._append_sample_packing(inputs,
@@ -2856,7 +2856,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       packed_image_flags,
                                       cu_seqlens)
 
-    valid_seq_len = self._append_sample_packing(self._gen_img_pad(),
+    valid_seq_len += self._append_sample_packing(self._gen_img_pad(),
                                       packed_input_ids,
                                       packed_position_ids,
                                       packed_loss_mask,
@@ -2869,6 +2869,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       cu_seqlens,
                                       sample_idx=-1)
 
+    if self.cut_to_pad: assert valid_seq_len == self.max_length, f"set cut_to_pad={cut_to_pad}, then require valid_seq_len/{valid_seq_len} == self.max_length/{self.max_length}"
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
