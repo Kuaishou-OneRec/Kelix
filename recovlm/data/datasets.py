@@ -1266,11 +1266,11 @@ class ChatCompletionVisionDataset(IterableDataset):
 
         try:
           source_name = sample["json"]["source"]
-          # WARN: ugly code, for dirty dataset.
-          if source_name.startswith("PDFA"):
-            source_name = "PDFA"
-          elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-            source_name = source_name.split("/")[4]
+          # # WARN: ugly code, for dirty dataset.
+          # if source_name.startswith("PDFA"):
+          #   source_name = "PDFA"
+          # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          #   source_name = source_name.split("/")[4]
         except:
           source_name = "None"
 
@@ -1903,10 +1903,10 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
       try:
         source_name = sample["json"]["source"]
         # WARN: ugly code, for dirty dataset.
-        if source_name.startswith("PDFA"):
-          source_name = "PDFA"
-        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-          source_name = source_name.split("/")[4]
+        # if source_name.startswith("PDFA"):
+        #   source_name = "PDFA"
+        # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+        #   source_name = source_name.split("/")[4]
       except:
         source_name = "None"
 
@@ -2371,7 +2371,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
     self.max_length = max_length
-    print('msymax_length', self.max_length)
+
     assert self.max_length > 0
 
     self.datasource_config = datasource_config
