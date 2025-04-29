@@ -1274,9 +1274,9 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
         inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
         inputs["pixel_values"] = inputs["pixel_values"][-n_tokens:]
       
-      pre_position_id = inputs["position_ids"][vision_starts[-1]]
-      for i in range(vision_starts[-1], packable_length):
-        inputs["position_ids"][i] = pre_position_id + i - vision_starts[-1] + 1 # fake 一些position id
+        pre_position_id = inputs["position_ids"][vision_starts[-1]]
+        for i in range(vision_starts[-1], packable_length):
+          inputs["position_ids"][i] = pre_position_id + i - vision_starts[-1] + 1 # fake 一些position id
 
       print_input_info(inputs, "1111inputs:")
       # print_input_info(inputs, prefix="_append_sample_packing_inputs_after: ")
