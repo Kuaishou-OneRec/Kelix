@@ -1902,7 +1902,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
       try:
         source_name = sample["json"]["source"]
-        # WARN: ugly code, for dirty dataset.
+        # # WARN: ugly code, for dirty dataset.
         # if source_name.startswith("PDFA"):
         #   source_name = "PDFA"
         # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
@@ -2371,7 +2371,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
     self.max_length = max_length
-
     assert self.max_length > 0
 
     self.datasource_config = datasource_config
