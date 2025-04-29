@@ -2417,7 +2417,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.end_of_text_id = self.tokenizer.encode('<|endoftext|>')[0]
 
     self.dataset, self.total_samples = self._build_source_dataset(sources)
-    self.dataset_iter = iter(self.dataset)
 
     # for data_source monitor
     self.source_sample_cnt = {}
@@ -2440,12 +2439,22 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     delta_ratio = kargs.get("input_ids_len_delta_ratio", 0.02)
     buffer_size = kargs.get("balance_buffer_size", 1000)
     target_count = kargs.get("balance_candidate_count", 100)
+
+    self.sample_queue = queue.Queue(32)
+    def reader_task():
+        dataset_iter = iter(self.dataset)
+        while True:
+            sample = next(dataset_iter)
+            self.sample_queue.put(sample)
+    self.reader_thread = threading.Thread(target=reader_task, daemon=True)
+    self.reader_thread.start()
+
     self.processed_buffer = queue.Queue(buffer_size)
     self.process_threads = [threading.Thread(target=self._process_task, daemon=True) for _ in range(16)]
     for t in self.process_threads:
       t.start()
-    self.backgroud_worker = threading.Thread(target=self._prefetched_task, args=(delta_ratio, buffer_size, target_count), daemon=True)
-    self.backgroud_worker.start()
+    self.prefetch_thread = threading.Thread(target=self._prefetched_task, args=(delta_ratio, buffer_size, target_count), daemon=True)
+    self.prefetch_thread.start()
   
   def _build_source_dataset(self, sources):
     total_samples = 0
@@ -3006,7 +3015,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   
   def _process_task(self):
     while True:
-      sample = next(self.dataset_iter)
+      sample = next(self.sample_queue)
       sample_key = sample["__key__"] if "__key__" in sample else ""
       sample_url = sample["__url__"] if "__url__" in sample else ""
       
