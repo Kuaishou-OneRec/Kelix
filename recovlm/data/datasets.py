@@ -2917,16 +2917,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32)
     }
-    print_input_info(
-        inputs,
-        "inputs111000: "
-      )
-    print(88988, packed_input_ids.flatten().shape[0], packed_pixel_values.shape[0] * 256, packed_pixel_values.shape)
     if packed_input_ids.flatten().shape[0] < packed_pixel_values.shape[0] * 256:
-      print_input_info(
-        inputs,
-        "inputs111: "
-      )
+      print_input_info(inputs, "inputs111: ")
+      raise Exception("!!!!!! Error occurs in image padding. input ids are shorted than image tokens")
     return inputs
 
   def __iter__(self):

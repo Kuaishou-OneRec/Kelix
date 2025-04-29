@@ -479,7 +479,7 @@ class TokenStats:
       min_image_tokens = min(all_image_tokens)
       mean_image_tokens = sum(all_image_tokens) / world_size
       std_image_tokens = (sum((x - mean_image_tokens)**2 for x in all_image_tokens) / world_size)**0.5
-      print(2354555655, max_image_tokens, all_image_tokens)
+
       self.max_image_tokens.append(max_image_tokens)
       self.min_image_tokens.append(min_image_tokens)
       self.mean_image_tokens.append(mean_image_tokens)
@@ -489,7 +489,7 @@ class TokenStats:
   def stats(self):
       res = np.max(self.max_image_tokens), np.min(self.min_image_tokens),\
              np.mean(self.mean_image_tokens), np.mean(self.std_image_tokens)
-      print(134323, self.max_image_tokens, res)
+
       res = {
         "perf/max_image_tokens": res[0],
         "perf/min_image_tokens": res[1],
@@ -857,8 +857,7 @@ def train():
       token_metrics = torch.tensor(
         [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda(non_blocking=True)
 
-      print(dist.get_rank(), 112333, pixel_values.shape, num_image_tokens, 88877 ,num_image_tokens2, input_ids.shape)
-      token_stasts.collect_image_token_stats(num_image_tokens)
+      
 
       ticker.tick("token_metrics_init")
       dist.all_reduce(
@@ -932,15 +931,11 @@ def train():
         local_sample_idx = get_local_sequence(sample_idx).squeeze()
 
         unique_sample_idx = local_sample_idx.unique()
-        print(23433, local_sample_idx, unique_sample_idx)
         for s_idx in unique_sample_idx:
           if s_idx < 0:
             continue
           mask = local_sample_idx == s_idx
           sum_loss = per_token_loss[mask].sum()
-
-          if dist.get_rank() == 0:
-            print(23433111111, local_sample_idx, unique_sample_idx, s_idx, data_source, len(data_source))
 
           key = data_source[int(s_idx.item())]
           batch_data_source_loss[key] += sum_loss.item()
@@ -1011,7 +1006,9 @@ def train():
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
             "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples
           }
-          log_dict.update(token_stasts.stats())
+
+          # token_stasts.collect_image_token_stats(num_image_tokens)
+          # log_dict.update(token_stasts.stats())
 
           ticker.tick(f"log_dict*{log_acc_step}")
 
