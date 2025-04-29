@@ -875,8 +875,11 @@ def train():
 
       ticker.tick("token_metrics_init")
       
-      dist.all_reduce(
-        token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+      if 0:
+        dist.all_reduce(
+          token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+      else:
+        token_metrics *= dist.get_world_size()
 
       ticker.tick("token_metrics_reduce")
 
@@ -975,8 +978,6 @@ def train():
       if global_step % args.logging_per_step == 0 and \
               (micro_step + 1) % args.gradient_accumulation_steps == 0:
 
-
-        print(9988999881341, dist.get_rank(), 334333412, num_image_tokens2)
         if args.monitor_image_tokens: 
           token_stasts.collect_image_token_stats(num_image_tokens2)
           colleced_token_stasts = token_stasts.stats()         
