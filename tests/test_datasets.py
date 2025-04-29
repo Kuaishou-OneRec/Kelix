@@ -341,12 +341,13 @@ def test_InternVLParquetDataset(sources):
     )
     cnt = 0
     for iteration, batch in enumerate(dataloader):
+        
         for k, v in batch.items():
             try:
                 print(k, v.shape, v.dtype, str(v)[:100])
             except:
                 print(k, v)
-            print("=" * 10, cnt)
+        print("=" * 10, cnt)
         cnt += 1
         
         if cnt == 100: break
