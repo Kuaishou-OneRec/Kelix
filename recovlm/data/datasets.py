@@ -2914,7 +2914,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32)
     }
-      print_input_info(
+    print_input_info(
         inputs,
         "inputs111000: "
       )
