@@ -72,4 +72,3 @@ viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helper
 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-web-pro/train_v1
 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/text/General_QA/infinity_instruct_7m
 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/liangyiming/instruct_data
-viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/pt/0421/stage1_5_ccl_v3/_prepared
