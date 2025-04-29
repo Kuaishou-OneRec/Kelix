@@ -774,10 +774,13 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
 
+    self.img_start_token = "<|im_start|>"
+    self.img_start_token = "<|image_pad|>"
+    self.img_start_token = "<|im_end|>"
     self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
     self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
     self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
-    
+
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
     image_pad_len = 6
@@ -1184,6 +1187,32 @@ class ChatCompletionVisionDataset(IterableDataset):
     
     if self.cut_to_pad:
       """
+Qwen2TokenizerFast(name_or_path='/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct/', vocab_size=151643, model_max_length=131072, is_fast=True, padding_side='right', truncation_side='right', special_tokens={'eos_token': '<|im_end|>', 'pad_token': '<|endoftext|>', 'additional_special_tokens': ['<|im_start|>', '<|im_end|>', '<|object_ref_start|>', '<|object_ref_end|>', '<|box_start|>', '<|box_end|>', '<|quad_start|>', '<|quad_end|>', '<|vision_start|>', '<|vision_end|>', '<|vision_pad|>', '<|image_pad|>', '<|video_pad|>']}, clean_up_tokenization_spaces=False, added_tokens_decoder={
+        151643: AddedToken("<|endoftext|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151644: AddedToken("<|im_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151645: AddedToken("<|im_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151646: AddedToken("<|object_ref_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151647: AddedToken("<|object_ref_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151648: AddedToken("<|box_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151649: AddedToken("<|box_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151650: AddedToken("<|quad_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151651: AddedToken("<|quad_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151652: AddedToken("<|vision_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151653: AddedToken("<|vision_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151654: AddedToken("<|vision_pad|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151655: AddedToken("<|image_pad|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151656: AddedToken("<|video_pad|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+        151657: AddedToken("<tool_call>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+        151658: AddedToken("</tool_call>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+        151659: AddedToken("<|fim_prefix|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+        151660: AddedToken("<|fim_middle|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+        151661: AddedToken("<|fim_suffix|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+        151662: AddedToken("<|fim_pad|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+        151663: AddedToken("<|repo_name|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+        151664: AddedToken("<|file_sep|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+}
+)
+
 _append_sample_packing_inputs
 _append_sample_packing_inputs: 'input_ids':
 _append_sample_packing_inputs:   Tensor: shape=(1, 6), dtype=torch.int64, device=cpu, data=tensor([151652, 151655, 151655, 151655])...tensor([151655, 151655, 151655, 151653])
@@ -1213,7 +1242,7 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
       inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
       inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
 
-        last_start_index = torch.nonzero(inputs["input_ids"][0] == self.img_start_token_id)
+      last_start_index = torch.nonzero(inputs["input_ids"][0] == self.img_start_token_id)
 
 
 
