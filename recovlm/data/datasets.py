@@ -1257,25 +1257,26 @@ class ChatCompletionVisionDataset(IterableDataset):
     source_list = []
     cur_length = 0
     ds_iter = iter(self.dataset)
-    
-    for sample in self.dataset:
-      sample_key = sample["__key__"] if "__key__" in sample else ""
-      sample_url = sample["__url__"] if "__url__" in sample else ""
-
+    while True:
+      #for sample in self.dataset:
       try:
-        source_name = sample["json"]["source"]
-        # # WARN: ugly code, for dirty dataset.
-        # if source_name.startswith("PDFA"):
-        #   source_name = "PDFA"
-        # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-        #   source_name = source_name.split("/")[4]
-      except:
-        source_name = "None"
+        sample = next(ds_iter)
+        sample_key = sample["__key__"] if "__key__" in sample else ""
+        sample_url = sample["__url__"] if "__url__" in sample else ""
 
-      self.source_sample_cnt.setdefault(source_name, 0)
-      self.source_sample_cnt[source_name] += 1
+        try:
+          source_name = sample["json"]["source"]
+          # WARN: ugly code, for dirty dataset.
+          if source_name.startswith("PDFA"):
+            source_name = "PDFA"
+          elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+            source_name = source_name.split("/")[4]
+        except:
+          source_name = "None"
 
-      try:
+        self.source_sample_cnt.setdefault(source_name, 0)
+        self.source_sample_cnt[source_name] += 1
+      
         inputs = self._process(sample, source_name)
       except:
         self.source_error_cnt.setdefault(source_name, 0)
@@ -1314,7 +1315,6 @@ class ChatCompletionVisionDataset(IterableDataset):
         buffer.append(inputs)
         source_list.append(source_name)
         cur_length += sample_length
-
 
 class ChatCompletionVisionDpoDataset(IterableDataset):
   def __init__(self,
