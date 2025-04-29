@@ -16,6 +16,8 @@ import itertools
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
 from recovlm.models.internvl.checkpoint import InternVLCheckpointConverter
+from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VLCheckpointConverter
+
 
 from recovlm.utils.ds_utils import print_input_info
 
@@ -35,6 +37,10 @@ from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
 from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration
+from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit 
+
+
 
 from recovlm.models.internvl import InternVLChatModel
 from recovlm.models.qwen2 import Qwen2DecoderLayer
@@ -128,10 +134,10 @@ def get_argument_parser():
 
 
   parser.add_argument("--model_class", type=str, default="Qwen2VLForConditionalGeneration",
-                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','InternVLChatModel'",)
+                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','InternVLChatModel'",)
   
   parser.add_argument("--model_processor", type=str, default="Qwen2VLProcessor",
-                      help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor'")
+                      help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit'")
 
   ############ Dataset args ############
   parser.add_argument("--dataset_config", type=str, default=None,
@@ -369,7 +375,7 @@ def get_resume_info(args):
 def freeze_params(args, model):
 
   #### qwen
-  if args.model_class in  ["Qwen2VLForConditionalGeneration", "Qwen2_5_VLForConditionalGeneration"]:
+  if args.model_class in  ["Qwen2VLForConditionalGeneration", "Qwen2_5_VLForConditionalGeneration","Qwen2_5_VLForConditionalGeneration_moonvit"]:
     if args.freeze_llm:
       print_rank_0("Freeze LLM parameters.")
       for name, param in model.named_parameters():
@@ -453,7 +459,7 @@ def train():
   set_random_seed(args.seed)
 
   state_dict = None
-  if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration']:
+  if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit']:
       converter = Qwen2VLCheckpointConverter(args.model_dir)
   elif args.model_class == 'InternVLChatModel':
       converter = InternVLCheckpointConverter(args.model_dir)
@@ -504,6 +510,7 @@ def train():
     auto_wrap_policy_mapping = {
       "Qwen2VLForConditionalGeneration": {Qwen2VLDecoderLayer, Qwen2VLVisionBlock},
       "Qwen2_5_VLForConditionalGeneration": {Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock},
+      "Qwen2_5_VLForConditionalGeneration_moonvit": {Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock},
       "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
     }
     set_activation_checkpointing(
@@ -559,7 +566,7 @@ def train():
     [
       "bias", "norm1", "norm2", "visual.merger.ln_q",
       "input_layernorm", "post_attention_layernorm", "model.norm"
-    ] if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration'] else
+    ] if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit'] else
     [
       "bias", "norm1", "norm2", "mlp1.0.weight",
       "input_layernorm", "post_attention_layernorm", "model.norm"
@@ -616,7 +623,7 @@ def train():
 
     # 获取state_dict用于加载
     state_dict = {"app": app_state.set_call_back(converter.convert) if args.model_class in \
-                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state  }
+                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration_moonvit'] else app_state  }
               
     # 使用DCP API加载分片数据
     dist_checkpointer.load_checkpoint(
@@ -961,7 +968,7 @@ def train():
                     },
                     dataloader=dataloader,
                     app_state=app_state.set_call_back(converter.revert) if args.model_class in \
-                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state, # app_state.set_call_back(state_dict), # no need to convert 
+                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration_moonvit'] else app_state, # app_state.set_call_back(state_dict), # no need to convert 
                     dist_checkpointer=dist_checkpointer
                 )
         try:
@@ -998,7 +1005,7 @@ def train():
                       },
                       dataloader=dataloader,
                       app_state=app_state.set_call_back(converter.revert) if args.model_class in \
-                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state, # app_state.set_call_back(state_dict),
+                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration_moonvit'] else app_state, # app_state.set_call_back(state_dict),
                       dist_checkpointer=dist_checkpointer,
                   )
 

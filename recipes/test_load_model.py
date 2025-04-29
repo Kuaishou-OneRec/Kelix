@@ -18,7 +18,7 @@ import json
 #     print(key, value.shape)
 
 
-model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
   "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
 )
 model.eval()
@@ -34,6 +34,13 @@ print('--------------------------------')
 for name, param in model.named_parameters():
     print(name, param.shape)
 print('--------------------------------')
+
+for name,param in model.visual.named_parameters():
+    print(name, param.shape)
+print('--------------------------------') 
+
+
+
 
 
 
