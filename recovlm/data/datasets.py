@@ -2442,7 +2442,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         return base64.b64encode(buffered.getvalue()).decode()
       
     fake_sample = {
-          "images": {"0.jpg": generate_base64_image()},
+          "images": {"0.jpg":Image.fromarray(np.zeros((50,50, 3), dtype=np.uint8))
+           #generate_base64_image()
+           },
           "videos": None,
           "source": "__image_pad__",
           "messages": None,
