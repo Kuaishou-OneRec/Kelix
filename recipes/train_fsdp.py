@@ -268,7 +268,7 @@ def get_argument_parser():
 
 
 
-def _init_profiler(output_dir, start_step=5, end_step=10) -> None:
+def _init_profiler(output_dir, start_step=5, end_step=100) -> None:
     import torch.distributed as D
     import os
     if not os.path.exists(output_dir):
