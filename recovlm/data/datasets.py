@@ -1417,11 +1417,30 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
 
       sample_length = inputs["input_ids"].shape[-1]
       if cur_length + sample_length > self.max_length:
-        packed_inputs = self._packing(buffer)
-        packed_inputs["data_source"] = source_list
-        buffer = [inputs]
-        source_list = [source_name]
-        cur_length = sample_length
+        # packed_inputs = self._packing(buffer)
+        # packed_inputs["data_source"] = source_list
+        # buffer = [inputs]
+        # source_list = [source_name]
+        # cur_length = sample_length
+
+        if self.cut_to_pad:
+          buffer.append(inputs)
+          source_list.append(source_name)
+          packed_inputs = self._packing(buffer)
+
+          packed_inputs["data_source"] = source_list
+          buffer = []
+          source_list = []
+          cur_length = 0
+          if packed_inputs["loss_mask"].sum().item() == 0:
+            continue # packing失败，这种情况通常是只有一个样本，而且这个样本以图片开头，而且图片占满了所有有效token
+        else:
+          packed_inputs = self._packing(buffer)
+          packed_inputs["data_source"] = source_list
+          buffer = [inputs]
+          source_list = [source_name]
+          cur_length = sample_length
+
 
         # skip pure text sample
         # 有pad image，原则上不会出现纯文本输入
