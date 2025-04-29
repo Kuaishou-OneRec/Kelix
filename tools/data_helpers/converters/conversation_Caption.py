@@ -88,10 +88,7 @@ class ConversationCaptionConverter(ConverterBase):
     def __call__(self, src: Dict[str, any]) -> Optional[Dict[str, any]]:
         messages = src['messages']
         images = json.loads(src['images'])
-        videos = json.loads(src['videos'])
         source = src['source']
-        segments = json.loads(src['segments'])
-        metadata = json.loads(src['metadata'])
         uuid = src['uuid']
         messages = json.loads(messages)
         new_messages = []
@@ -142,7 +139,7 @@ class ConversationCaptionConverter(ConverterBase):
             "source": self.source,
             "messages": json.dumps(messages),
             "segments": None,
-            "metadata": json.dumps(metadata),
-            "uuid": str(uuid.uuid1()),
+            "metadata": None,
+            "uuid": uuid,
         }
         return result
