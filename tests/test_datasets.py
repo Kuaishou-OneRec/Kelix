@@ -349,7 +349,7 @@ def test_InternVLParquetDataset(sources):
                 print(k, v)
         print("=" * 10, cnt)
         cnt += 1
-        if cnt == 10: 
+        if cnt == 200: 
             print('data_source-----------------------------------------------------------------', batch["data_source"])
             break
          
