@@ -268,7 +268,8 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
         max_retry=max_retry,
         multiple_of=multiple_of,
         datasource_config=datasource_config,
-        **kwargs)
+        **kwargs
+        )
 
     ### packing, batching size=1; shuffle in dataset
     dataloader = StatefulDataLoader(
