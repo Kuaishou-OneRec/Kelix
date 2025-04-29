@@ -1,0 +1,1 @@
+nohup python3 tests/test_datasets.py tests/files.txt > tests/std.log 2>&1 &

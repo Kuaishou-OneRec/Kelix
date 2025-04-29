@@ -985,7 +985,7 @@ class ChatCompletionVisionDataset(IterableDataset):
           else:
             raise ValueError(f"sample process error, unsupport value type: {block['type']}")
       except Exception as e:
-        print(f"sample process error, messages={str(messages)[:500]}\n, sample=\n{str(sample)[:500]}")
+        print(f"sample process error, messages={str(messages)[:50]}\n, sample=\n{str(sample)[:50]}")
         raise e
 
     text = self.processor.apply_chat_template(
@@ -1258,25 +1258,27 @@ class ChatCompletionVisionDataset(IterableDataset):
     buffer = []
     source_list = []
     cur_length = 0
-
-    for sample in self.dataset:
-      sample_key = sample["__key__"] if "__key__" in sample else ""
-      sample_url = sample["__url__"] if "__url__" in sample else ""
-
+    ds_iter = iter(self.dataset)
+    while True:
+      #for sample in self.dataset:
       try:
-        source_name = sample["json"]["source"]
-        # WARN: ugly code, for dirty dataset.
-        if source_name.startswith("PDFA"):
-          source_name = "PDFA"
-        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-          source_name = source_name.split("/")[4]
-      except:
-        source_name = "None"
+        sample = next(ds_iter)
+        sample_key = sample["__key__"] if "__key__" in sample else ""
+        sample_url = sample["__url__"] if "__url__" in sample else ""
 
-      self.source_sample_cnt.setdefault(source_name, 0)
-      self.source_sample_cnt[source_name] += 1
+        try:
+          source_name = sample["json"]["source"]
+          # # WARN: ugly code, for dirty dataset.
+          # if source_name.startswith("PDFA"):
+          #   source_name = "PDFA"
+          # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          #   source_name = source_name.split("/")[4]
+        except:
+          source_name = "None"
 
-      try:
+        self.source_sample_cnt.setdefault(source_name, 0)
+        self.source_sample_cnt[source_name] += 1
+      
         inputs = self._process(sample, source_name)
       except:
         self.source_error_cnt.setdefault(source_name, 0)
@@ -1285,7 +1287,7 @@ class ChatCompletionVisionDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:500]}"
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:50]}"
           f"errmsg={traceback.format_exc()}")
         continue
 
@@ -1902,11 +1904,11 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
       try:
         source_name = sample["json"]["source"]
-        # WARN: ugly code, for dirty dataset.
-        if source_name.startswith("PDFA"):
-          source_name = "PDFA"
-        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-          source_name = source_name.split("/")[4]
+        # # WARN: ugly code, for dirty dataset.
+        # if source_name.startswith("PDFA"):
+        #   source_name = "PDFA"
+        # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+        #   source_name = source_name.split("/")[4]
       except:
         source_name = "None"
 
@@ -1922,7 +1924,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=},  sample=\n{str(sample)[:500]}"
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=},  sample=\n{str(sample)[:50]}"
           f"errmsg={traceback.format_exc()}")
         continue
 
@@ -2078,7 +2080,7 @@ class ParquetDataset(IterableDataset):
 
       return samples
     except:
-      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}, images={str(images)[:500]}\nsamples={str(samples)[:500]}")
+      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}, images={str(images)[:50]}\nsamples={str(samples)[:50]}")
       return None
 
   def _load_images_to_samples(self, images, samples, raw_row_data):
@@ -2844,11 +2846,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
       try:
         source_name = sample["json"]["source"]
-        # WARN: ugly code, for dirty dataset.
-        if source_name.startswith("PDFA"):
-          source_name = "PDFA"
-        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-          source_name = source_name.split("/")[4]
+        # # WARN: ugly code, for dirty dataset.
+        # if source_name.startswith("PDFA"):
+        #   source_name = "PDFA"
+        # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+        #   source_name = source_name.split("/")[4]
       except:
         source_name = "None"
 
@@ -2864,7 +2866,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:500]}"
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:50]}"
           f"errmsg={traceback.format_exc()}")
         continue
 
