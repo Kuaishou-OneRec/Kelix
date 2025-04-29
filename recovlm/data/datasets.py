@@ -1584,7 +1584,6 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
       inputs,
       "_process_completion",
     )
-    print(9543554, inputs["input_ids"].shape[1], inputs["pixel_values"].shape[0] * 256)
     if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
       print("baddddddd")
       print_input_info(
@@ -2386,8 +2385,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     # append image_pad for each packing
     self.image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
-    self.max_length = max_length - self.image_pad_len
-    assert self.max_length > 0
+    self.max_length = max_length
+    self.image_pad = self._gen_img_pad()
+    assert self.max_length - self.image_pad_len > 0
 
     self.datasource_config = datasource_config
   
@@ -2574,19 +2574,22 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         return_tensors="pt"
     )
 
-    # image_flag = 1 if len(images) > 0 else 0
+    image_flag = 1 if len(images) > 0 else 0
     # 如果是纯文本增加一张图片做引导
     # if image_flag==0:
     #   image = Image.new('RGB', (224, 224), (255, 255, 255))
     #   images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=1,
     #                                     image_size=self.image_size, use_thumbnail=self.use_thumbnail)
 
-    transform = build_transform(is_train=True, input_size=self.image_size,normalize_type=self.normalize_type)
-    pixel_values = [transform(image) for image in images]
-    pixel_values = torch.stack(pixel_values)
-    inputs["pixel_values"] = pixel_values
-    inputs["image_flags"] = torch.tensor([image_flag] * len(images), dtype=torch.long)
-
+    if image_flag:
+      transform = build_transform(is_train=True, input_size=self.image_size,normalize_type=self.normalize_type)
+      pixel_values = [transform(image) for image in images]
+      pixel_values = torch.stack(pixel_values)
+      inputs["pixel_values"] = pixel_values
+      inputs["image_flags"] = torch.tensor([image_flag] * len(images), dtype=torch.long)
+    else:
+      inputs["pixel_values"] = self.image_pad["pixel_values"][:0]
+      inputs["image_flags"] = self.image_pad["image_flags"][:0]
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
@@ -2656,6 +2659,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                           self.min_dynamic_patch,data_conf["max_dynamic_patch"],
                                           self.use_thumbnail,self.image_size,self.img_start_token,
                                           self.img_context_token,self.img_end_token,self.normalize_type)
+
+    if "pixel_values" not in inputs:
+      inputs["pixel_values"] = self.image_pad["pixel_values"][:0]
+      inputs["image_flags"] = self.image_pad["image_flags"][:0]
+
 
     print(9543554, inputs["input_ids"].shape[1], inputs["pixel_values"].shape[0] * 256)
     if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
@@ -2730,15 +2738,15 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       if not inputs:
         raise ValueError("Empty inputs, skip")
 
-      if inputs["input_ids"].shape[-1] > self.max_length:
+      if inputs["input_ids"].shape[-1] > self.max_length - self.image_pad_len:
         source_conf["max_dynamic_patch"] = int(source_conf["max_dynamic_patch"]*self.shrink_ratio)
         continue
       else:
-        assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"
+        assert inputs["input_ids"].shape[-1] <= self.max_length - self.image_pad_len, "inputs too long"
         return inputs
     else:
       raise ValueError(
-          f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
+          f"Unable to generate sample within max_length={self.max_length - self.image_pad_len} after {retry} retrys"
       )
   
   def _append_sample_packing(self,
@@ -2833,7 +2841,17 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     packed_image_flags:List[torch.Tensor] = []
     cu_seqlens: List[int] = [0]
 
-    valid_seq_len = 0
+    valid_seq_len = self._append_sample_packing(self._gen_img_pad(),
+                                      packed_input_ids,
+                                      packed_position_ids,
+                                      packed_loss_mask,
+                                      packed_pixel_values,
+                                      packed_pixel_values_videos,
+                                      packed_image_gird_thw,
+                                      packed_video_grid_thw,
+                                      packed_sample_idx,
+                                      packed_image_flags,
+                                      cu_seqlens)
     for _, inputs in enumerate(buffer):
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
@@ -2846,18 +2864,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       packed_sample_idx,
                                       packed_image_flags,
                                       cu_seqlens)
-    # image_pad = self._gen_img_pad()
-    self._append_sample_packing(self._gen_img_pad(),
-                                packed_input_ids,
-                                packed_position_ids,
-                                packed_loss_mask,
-                                packed_pixel_values,
-                                packed_pixel_values_videos,
-                                packed_image_gird_thw,
-                                packed_video_grid_thw,
-                                packed_sample_idx,
-                                packed_image_flags,
-                                cu_seqlens)
+
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)

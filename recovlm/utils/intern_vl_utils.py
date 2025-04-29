@@ -284,10 +284,12 @@ def process_vision_info_internvl(messages:list,
     #                                     image_size=image_size, use_thumbnail=use_thumbnail)
     inputs = preprocess_internvl(new_conversations,tokenizer)
     transform = build_transform(is_train=True, input_size=image_size,normalize_type=normalize_type)
-    pixel_values = [transform(image) for image in images]
-    pixel_values = torch.stack(pixel_values)
-    inputs["pixel_values"] = pixel_values
-    inputs["image_flags"] = torch.tensor([image_flag] * len(images), dtype=torch.long)
+
+    if image_flag:
+        pixel_values = [transform(image) for image in images]
+        pixel_values = torch.stack(pixel_values)
+        inputs["pixel_values"] = pixel_values
+        inputs["image_flags"] = torch.tensor([image_flag] * len(images), dtype=torch.long)
 
     return inputs
 
