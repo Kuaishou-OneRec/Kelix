@@ -875,7 +875,7 @@ def train():
 
       ticker.tick("token_metrics_init")
       
-      if 0:
+      if 1:
         dist.all_reduce(
           token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
       else:
