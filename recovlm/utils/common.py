@@ -425,7 +425,11 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fas
         if len(files) > max_cache_files:
             files.sort(key=os.path.getctime)
             for fn in files[:max_cache_files//2]:
-                print(f"Removing old cached file: {fn}")
+                try: 
+                  print(f"Removing old cached file: {fn}")
+                  os.remove(fn)
+                except: 
+                  print(f"Failed to remove old cached file: {fn}")
 
     for r in range(retry):
         print(f"retrying for fn={fn}/{cache_fn}")
