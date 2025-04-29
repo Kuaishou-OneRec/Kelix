@@ -1984,6 +1984,9 @@ class ParquetDataset(IterableDataset):
   def __init__(self, data_files, num_workers):
     self.data_files = data_files
     self.num_workers = num_workers
+    self.num_readers = 8
+    self.sample_queue = queue.Queue(1024)
+    self.lock = threading.Lock()
 
     manager = multiprocessing.Manager()
 
@@ -2126,23 +2129,15 @@ class ParquetDataset(IterableDataset):
               samples[image_name] = image
           except Exception as e:
               raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}")
-
-  def __iter__(self,):
+            
+  def read_parquet_runner(self, fn_list, tid):
     rank, world_size, worker, num_workers = pytorch_worker_info()
-    assert num_workers == self.num_workers, f"{num_workers} : {self.num_workers}"
-
     finish_dict = self.finish_dict_all[worker]
     offset_dict = self.offset_dict_all[worker]
-
-    total_num_workers = num_workers * world_size
-    local_worker_idx = rank * num_workers + worker
-    fn_list = [fn for idx, fn in enumerate(self.data_files) if idx % total_num_workers == local_worker_idx]
-    logger.warning(
-      f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
-    )
-    
     try:
-      for epoch_fn in fn_list:
+      for i, epoch_fn in enumerate(fn_list):
+        if i % self.num_readers != tid:
+          continue
         fn, epoch_idx = epoch_fn
         if (fn, epoch_idx) in finish_dict:
           logger.warning(f"[Rank{rank}-{worker}] skip {fn}")
@@ -2184,7 +2179,8 @@ class ParquetDataset(IterableDataset):
                 try:
                   sample = self._parser(row, fn)
                   if sample is not None:
-                    yield sample
+                    # yield sample
+                    self.sample_queue.put(sample)
                   offset_dict[fn_group_key] = row_idx
                 except GeneratorExit:
                   # 正确处理生成器退出
@@ -2220,6 +2216,46 @@ class ParquetDataset(IterableDataset):
     except Exception as e:
       logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
       raise
+    
+  def shuffle_runner(self, window):
+    buffer = []
+    while True:
+      buffer.append(self.sample_queue.get())
+      if len(buffer) == window:
+        random.shuffle(buffer)
+      for sample in buffer:
+        self.shuffled_queue.put(sample)
+
+  def __iter__(self,):
+    rank, world_size, worker, num_workers = pytorch_worker_info()
+    assert num_workers == self.num_workers, f"{num_workers} : {self.num_workers}"
+
+    finish_dict = self.finish_dict_all[worker]
+    offset_dict = self.offset_dict_all[worker]
+
+    total_num_workers = num_workers * world_size
+    local_worker_idx = rank * num_workers + worker
+    fn_list = [fn for idx, fn in enumerate(self.data_files) if idx % total_num_workers == local_worker_idx]
+    logger.warning(
+      f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
+    )
+    
+    self.readers = []
+    for i in range(self.num_readers):
+      reader = threading.Thread(target=self.read_parquet_runner, args=(self, fn_list, i), daemon=True)
+      reader.start()
+      self.readers.append(reader)
+      
+    shuffle_window = 10240
+    self.shuffled_queue = queue.Queue(shuffle_window * 2)
+    self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(self, shuffle_window), daemon=True)
+    self.shuffle_task.start()
+    
+    while True:
+      sample = self.shuffled_queue.get()
+      yield sample
+
+  
 class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
   def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
     self.rng = random.Random(shuffle_seed)
@@ -2404,7 +2440,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     delta_ratio = kargs.get("input_ids_len_delta_ratio", 0.02)
     buffer_size = kargs.get("balance_buffer_size", 1000)
     target_count = kargs.get("balance_candidate_count", 100)
-    self.backgroud_worker = threading.Thread(target=self._prefetched_task, args=(delta_ratio, buffer_size, target_count), daemon=True)
+    self.processed_buffer = queue.Queue(buffer_size)
+    self.process_threads = [threading.Thread(target=self._process_task, args=(self,), daemon=True) for _ in range(16)]
+    for t in self.process_threads:
+      t.start()
+    self.backgroud_worker = threading.Thread(target=self._prefetched_task, args=(self, delta_ratio, buffer_size, target_count), daemon=True)
     self.backgroud_worker.start()
   
   def _build_source_dataset(self, sources):
@@ -2964,10 +3004,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     print(f"Found {len(results)} valid subsets in {trials} trials")
     return [list(subset) for subset in results]
   
-  def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 100):
-    delta = int(self.max_length * delta_ratio)
-    buffer = []
-    source_list = []
+  def _process_task(self):
     while True:
       sample = next(self.dataset_iter)
       sample_key = sample["__key__"] if "__key__" in sample else ""
@@ -2988,6 +3025,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       
       try:
         inputs = self._process(sample, source_name)
+        self.processed_buffer.put((inputs, source_name))
       except:
         self.source_error_cnt.setdefault(source_name, 0)
         self.source_error_cnt[source_name] += 1
@@ -2998,6 +3036,13 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
           f"errmsg={traceback.format_exc()}")
         continue
+  
+  def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 100):
+    delta = int(self.max_length * delta_ratio)
+    buffer = []
+    source_list = []
+    while True:
+      inputs, source_name = self.processed_buffer.get()
       buffer.append(inputs)
       source_list.append(source_name)
       if len(buffer) == buffer_size:
@@ -3012,9 +3057,10 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         response = balance_sequence(dist.get_rank(), image_len, self.server_addr)
         selected_len = response["result"]
         t3 = time.perf_counter()
-        print(f"[rank={dist.get_rank()}]find_input_ids={t2-t1}, balance_imgae={t3-t2}, selected={selected_len}")
         selected_index = candidates[image_len.index(selected_len)]
         packed_inputs = self._packing([buffer[idx] for idx in selected_index])
+        t4 = time.perf_counter()
+        print(f"[rank={dist.get_rank()}]find_input_ids={t2-t1}, balance_imgae={t3-t2}, packing={t4-t3},selected={selected_len}")
         packed_inputs["data_source"] = [source_list[idx] for idx in selected_index]
         self.cache.put(packed_inputs)
         
