@@ -34,24 +34,21 @@ def pq2pd_v2(x, rank=0):
     import subprocess
     from fastparquet import ParquetFile
 
-    # global tmp_pd
-    # if tmp_pd is not None:
-    #     return tmp_pd.copy(deep=True)
-
     os.makedirs("/code/.pq_cache", exist_ok=True)
     tmp_fn = f"/code/.pq_cache/{uuid.uuid4()}_{rank}.parquet"
     for t in range(5):
-        cmd = f"/home/hadoop/software/hadoop/bin/hadoop fs -get {x} {tmp_fn}"
-        os.system(cmd)
-        # result = subprocess.run(['bash', '-lc', cmd], capture_output=True, text=True)
-        # print(result.stderr)
-        if not os.path.exists(tmp_fn):
-            print(f"Retrying{rank} the {t} time to get {x} -> {tmp_fn}...")
-            time.sleep(np.random.rand() * 10)
-            continue
-        df = ParquetFile(tmp_fn).to_pandas()
-        # df = pq.read_table(tmp_fn).to_pandas()
-        break
+        if x.startswith("viewfs://"):
+            cmd = f"/home/hadoop/software/hadoop/bin/hadoop fs -get {x} {tmp_fn}"
+            os.system(cmd)
+            if not os.path.exists(tmp_fn):
+                print(f"Retrying{rank} the {t} time to get {x} -> {tmp_fn}...")
+                time.sleep(np.random.rand() * 10)
+                continue
+            df = ParquetFile(tmp_fn).to_pandas()
+            break
+        else:
+            df = ParquetFile(x).to_pandas()
+            return df
     if not os.path.exists(tmp_fn):
         try:
             print("fall back to pq.read_table")
@@ -59,9 +56,9 @@ def pq2pd_v2(x, rank=0):
         except Exception as e:
             print(traceback.format_exc())
             raise FileNotFoundError(f"Failed to get {x} from HDFS. cmd={cmd}")
-    os.remove(tmp_fn)
-    # tmp_pd = df.copy(deep=True)
-    return df.copy(deep=True)
+    if x.startswith("viewfs://"): os.remove(tmp_fn)
+    return df
+
 
 
 def get_memory_usage():
