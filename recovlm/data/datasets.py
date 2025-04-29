@@ -2242,13 +2242,13 @@ class ParquetDataset(IterableDataset):
     
     self.readers = []
     for i in range(self.num_readers):
-      reader = threading.Thread(target=self.read_parquet_runner, args=(self, fn_list, i), daemon=True)
+      reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
       reader.start()
       self.readers.append(reader)
       
     shuffle_window = 10240
     self.shuffled_queue = queue.Queue(shuffle_window * 2)
-    self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(self, shuffle_window), daemon=True)
+    self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
     self.shuffle_task.start()
     
     while True:
@@ -2441,10 +2441,10 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     buffer_size = kargs.get("balance_buffer_size", 1000)
     target_count = kargs.get("balance_candidate_count", 100)
     self.processed_buffer = queue.Queue(buffer_size)
-    self.process_threads = [threading.Thread(target=self._process_task, args=(self,), daemon=True) for _ in range(16)]
+    self.process_threads = [threading.Thread(target=self._process_task, daemon=True) for _ in range(16)]
     for t in self.process_threads:
       t.start()
-    self.backgroud_worker = threading.Thread(target=self._prefetched_task, args=(self, delta_ratio, buffer_size, target_count), daemon=True)
+    self.backgroud_worker = threading.Thread(target=self._prefetched_task, args=(delta_ratio, buffer_size, target_count), daemon=True)
     self.backgroud_worker.start()
   
   def _build_source_dataset(self, sources):
