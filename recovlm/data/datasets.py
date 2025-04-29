@@ -2779,9 +2779,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       inputs: 'position_ids':
       inputs:   Tensor: shape=(1, 3369), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([3365, 3366, 3367, 3368])
       '''
-      packable_length = self.max_length - cu_seqlens[-1]
+      packable_length = self.max_length - self.image_pad_len - cu_seqlens[-1]
 
-      if packable_length < inputs["input_ids"].size(1): # 1 x len
+      if sample_idx is None and packable_length < inputs["input_ids"].size(1): # 1 x len, 不是image padding才有这个逻辑
         # if dist.get_rank() == 0:
         #   print_input_info(inputs, prefix="inputs_cut_before: ")
         inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
@@ -2807,8 +2807,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         #   print_input_info(inputs, prefix="inputs_cut_im: ")
 
 
-    assert inputs["input_ids"].shape ==  inputs["loss_mask"].shape == inputs["position_ids"].shape and inputs["input_ids"].ndim == 2, f'inputs: {inputs["input_ids"].shape} ==  {inputs["loss_mask"].shape} == {inputs["position_ids"].shape}'
-    assert inputs["image_flags"].size(0) == inputs["pixel_values"].size(0), f'inputs: {inputs["image_flags"].shape}, {inputs["pixel_values"].shape}'
+        assert inputs["input_ids"].shape ==  inputs["loss_mask"].shape == inputs["position_ids"].shape and inputs["input_ids"].ndim == 2, f'inputs: {inputs["input_ids"].shape} ==  {inputs["loss_mask"].shape} == {inputs["position_ids"].shape}'
+        assert inputs["image_flags"].size(0) == inputs["pixel_values"].size(0), f'inputs: {inputs["image_flags"].shape}, {inputs["pixel_values"].shape}'
 
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
@@ -2842,18 +2842,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     packed_image_flags:List[torch.Tensor] = []
     cu_seqlens: List[int] = [0]
 
-    valid_seq_len = self._append_sample_packing(self._gen_img_pad(),
-                                      packed_input_ids,
-                                      packed_position_ids,
-                                      packed_loss_mask,
-                                      packed_pixel_values,
-                                      packed_pixel_values_videos,
-                                      packed_image_gird_thw,
-                                      packed_video_grid_thw,
-                                      packed_sample_idx,
-                                      packed_image_flags,
-                                      cu_seqlens,
-                                      sample_idx=-1)
+
     for _, inputs in enumerate(buffer):
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
@@ -2867,6 +2856,18 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       packed_image_flags,
                                       cu_seqlens)
 
+    valid_seq_len = self._append_sample_packing(self._gen_img_pad(),
+                                      packed_input_ids,
+                                      packed_position_ids,
+                                      packed_loss_mask,
+                                      packed_pixel_values,
+                                      packed_pixel_values_videos,
+                                      packed_image_gird_thw,
+                                      packed_video_grid_thw,
+                                      packed_sample_idx,
+                                      packed_image_flags,
+                                      cu_seqlens,
+                                      sample_idx=-1)
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
@@ -2963,7 +2964,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         continue
 
       sample_length = inputs["input_ids"].shape[-1]
-      if cur_length + sample_length > self.max_length:
+      if cur_length + sample_length > self.max_length - self.image_pad_len:
 
         if self.cut_to_pad:
           buffer.append(inputs)
