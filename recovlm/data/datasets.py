@@ -3046,7 +3046,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           f"errmsg={traceback.format_exc()}")
         continue
   
-  def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 100):
+  def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 1000):
     delta = int(self.max_length * delta_ratio)
     buffer = []
     source_list = []
