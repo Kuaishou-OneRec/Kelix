@@ -61,6 +61,7 @@ class DataCollector:
         if len(self.data) == self.world_size:
             values = [self.data[i] for i in sorted(self.data)]
             result_index = find_closest_numbers(values)
+            print(f'collector: {values}, index: {result_index}')
             self.result = {cid: index for cid, index in zip(
                 sorted(self.data), result_index)}
             self.event.set()

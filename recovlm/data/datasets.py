@@ -2964,7 +2964,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     print(f"Found {len(results)} valid subsets in {trials} trials")
     return [list(subset) for subset in results]
   
-  def _prefetched_task(self, delta_ratio: int = 0.02, buffer_size: int = 1000, target_count: int = 100):
+  def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 100):
     delta = int(self.max_length * delta_ratio)
     buffer = []
     source_list = []
