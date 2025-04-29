@@ -2403,7 +2403,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     delta_ratio = kargs.get("input_ids_len_delta_ratio", 0.02)
     buffer_size = kargs.get("balance_buffer_size", 1000)
     target_count = kargs.get("balance_candidate_count", 100)
-    self.backgroud_worker = threading.Thread(self._prefetched_task, args=(delta_ratio, buffer_size, target_count), daemon=True)
+    self.backgroud_worker = threading.Thread(target=self._prefetched_task, args=(delta_ratio, buffer_size, target_count), daemon=True)
     self.backgroud_worker.start()
   
   def _build_source_dataset(self, sources):
