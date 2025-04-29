@@ -475,12 +475,8 @@ class TokenStats:
       world_size = dist.get_world_size()
       rank = dist.get_rank()
 
-      input_tensor = torch.tensor(num_image_tokens, dtype=torch.long).cuda()
-      if rank == 0:
-          all_image_tokens = [torch.empty(1, dtype=torch.long).cuda() for _ in range(world_size)]
-      else:
-          all_image_tokens = None
-
+      input_tensor = torch.tensor([num_image_tokens], dtype=torch.long).cuda()
+      all_image_tokens = list(torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) if rank == 0 else None
       dist.gather(input_tensor, gather_list=all_image_tokens, dst=0)
 
       if rank == 0:
