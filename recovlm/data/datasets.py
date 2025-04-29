@@ -1255,7 +1255,7 @@ _append_sample_packing_inputs: 'position_ids':
 _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([70, 71, 72, 73])
       """
       
-      print_input_info(inputs, "0000inputs:")
+      print_input_info(inputs, "0000inputs:", max_show=99)
       inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
       inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
 
@@ -1263,12 +1263,12 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
 
       vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
       vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
-      print(inputs["input_ids"], vision_starts, vision_ends, 999999, self.vision_start_token_id, self.vision_end_token_id)
+      if dist.get_rank() == 0: print(inputs["input_ids"], vision_starts, vision_ends, 999999, self.vision_start_token_id, self.vision_end_token_id)
       if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
         inputs["input_ids"][:, vision_starts[-1]:] = 0
         inputs["loss_mask"][:, vision_starts[-1]:] = 0
         n_tokens_hw = inputs["image_grid_thw"][len(vision_ends)]
-        print(99898432423, n_tokens_hw)
+        if dist.get_rank() == 0: print(99898432423, n_tokens_hw)
         n_tokens = n_tokens_hw[1] * n_tokens_hw[2]
         inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
         inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
@@ -1277,7 +1277,7 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
         # for i in range(vision_starts[-1], packable_length):
         #   inputs["position_ids"][i] = pre_position_id + i - vision_starts[-1] + 1 # fake 一些position id
 
-      print_input_info(inputs, "1111inputs:")
+      if dist.get_rank() == 0: print_input_info(inputs, "1111inputs:", max_show=99)
       # print_input_info(inputs, prefix="_append_sample_packing_inputs_after: ")
 
 
