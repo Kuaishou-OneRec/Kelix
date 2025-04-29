@@ -501,7 +501,6 @@ class TokenStats:
   def stats(self):
       res = np.max(self.max_image_tokens), np.min(self.min_image_tokens),\
              np.mean(self.mean_image_tokens), np.mean(self.std_image_tokens)
-      print("sttttssss", dist.get_rank(), res)
       res = {
         "perf/max_image_tokens": res[0],
         "perf/min_image_tokens": res[1],
@@ -875,9 +874,10 @@ def train():
       
 
       ticker.tick("token_metrics_init")
-      # dist.all_reduce(
-      #   token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-      token_metrics *= dist.get_world_size()
+      
+      dist.all_reduce(
+        token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+
       ticker.tick("token_metrics_reduce")
 
       num_tokens, num_samples, num_valid_tokens, num_image_tokens = token_metrics.detach().cpu().numpy()
