@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1999  > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2Bt/ # Pretrained/Base model path
 # MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/OpenGVLab/InternVL2_5-4B
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.7.0/2b/stage1.5_v0
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.7.0/2b/stage1_v0
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="run internvl 2b stage1 by ccl"
+comment="run internvl 2b 0.7.0 stage1 by lzx, use stage2-0.6.0 data"
 
 
 git add --all
@@ -134,6 +134,7 @@ nohup mpirun --allow-run-as-root \
                 --logging_per_step 10 \
                 --fp32_weight \
 		--freeze_llm \
+		--freeze_visual \
                 --enable_profile \
                 --seed 19260817 \
 		--monitor_image_tokens \
