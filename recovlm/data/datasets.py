@@ -1169,7 +1169,7 @@ class ChatCompletionVisionDataset(IterableDataset):
                              packed_sample_idx: List[torch.Tensor],
                              cu_seqlens: List[int],
                              sample_idx: Optional[int] = None):
-    print("cut_to_text", self.cut_to_text)
+    print("cut_to_pad", self.cut_to_pad)
     if dist.get_rank() == 0:
       print_input_info(inputs, prefix="_append_sample_packing_inputs: ")
     
@@ -1189,6 +1189,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     
     packable_length = self.max_length - cu_seqlens[-1]
     if self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
+      print("enter11342 ..,", inputs['input_ids'].shape, packable_length, self.max_length, cu_seqlens[-1])
       """
 Qwen2TokenizerFast(name_or_path='/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct/', vocab_size=151643, model_max_length=131072, is_fast=True, padding_side='right', truncation_side='right', special_tokens={'eos_token': '<|im_end|>', 'pad_token': '<|endoftext|>', 'additional_special_tokens': ['<|im_start|>', '<|im_end|>', '<|object_ref_start|>', '<|object_ref_end|>', '<|box_start|>', '<|box_end|>', '<|quad_start|>', '<|quad_end|>', '<|vision_start|>', '<|vision_end|>', '<|vision_pad|>', '<|image_pad|>', '<|video_pad|>']}, clean_up_tokenization_spaces=False, added_tokens_decoder={
         151643: AddedToken("<|endoftext|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
@@ -1244,10 +1245,11 @@ _append_sample_packing_inputs: 'position_ids':
 _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([70, 71, 72, 73])
       """
       
+      if dist.get_rank() == 0: print_input_info(inputs, "0000inputs:")
       inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
       inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
 
-      next_position_id = inputs["position_ids"][packable_length]
+      # next_position_id = inputs["position_ids"][packable_length]
       inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
 
       vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
@@ -1258,7 +1260,7 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
         inputs["image_grid_thw"] = inputs["image_grid_thw"][..., :len(vision_ends)]
         inputs["position_ids"] = inputs["position_ids"][..., :len(vision_ends)]
 
-
+      if dist.get_rank() == 0: print_input_info(inputs, "1111inputs:")
 
 
 
@@ -1750,7 +1752,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
         return_tensors="pt"
     )
     
-    if dist.get_rank() == 0 and len(text) < 50:
+    if dist.get_rank() == 0: # and len(text) < 50:
       print('=' * 100)
       print(1111)
       print_input_info(text, "134_text:", max_show=9999)
@@ -2333,7 +2335,7 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
     self.rng = random.Random(shuffle_seed)
     self.num_workers = num_workers
     self.num_epochs = num_epochs
-    self.cut_to_text = kargs.get("cut_to_text", True)
+    self.cut_to_pad = kargs.get("cut_to_pad", True)
     super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
