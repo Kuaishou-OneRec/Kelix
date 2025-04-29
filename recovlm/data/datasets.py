@@ -24,6 +24,8 @@ from collections import defaultdict
 
 import multiprocessing
 import numpy as np
+import queue
+import threading
 
 import torch
 import torch.distributed as dist
@@ -49,6 +51,7 @@ import glob
 from recovlm.utils.common import shell_hdfs_ls, load_parquet_file
 from .templates import get_template
 from .prompts import PromptLoader
+from .service import balance_sequence, DatasetServer
 from recovlm.services.clients import PidInfoClient
 
 
@@ -927,7 +930,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 32768:
+    if inputs["input_ids"].shape[-1] > self.max_length:
       print(f"Sample is too long. token_len={inputs['input_ids'].shape[-1]}")
     
     # mask all vision token
@@ -1008,7 +1011,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 32768:
+    if inputs["input_ids"].shape[-1] > self.max_length:
       raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
     
     inputs["loss_mask"] = get_assistant_mask(
@@ -2390,6 +2393,18 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     assert self.max_length - self.image_pad_len > 0
 
     self.datasource_config = datasource_config
+    self.cache = queue.Queue(maxsize=1)
+    self.port = kargs.get("dataset_service_port", 53545)
+    if dist.get_rank() == 0:
+        self.server = DatasetServer(dist.get_world_size())
+        self.server.start(port=self.port)
+    self.server_addr = f"{os.environ['MASTER_ADDR']}:{self.port}"
+    dist.barrier()
+    delta_ratio = kargs.get("input_ids_len_delta_ratio", 0.02)
+    buffer_size = kargs.get("balance_buffer_size", 1000)
+    target_count = kargs.get("balance_candidate_count", 100)
+    self.backgroud_worker = threading.Thread(self._prefetched_task, args=(delta_ratio, buffer_size, target_count), daemon=True)
+    self.backgroud_worker.start()
   
   def _build_source_dataset(self, sources):
     total_samples = 0
@@ -2922,7 +2937,96 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       raise Exception("!!!!!! Error occurs in image padding. input ids are shorted than image tokens")
     return inputs
 
+  def _find_in_range(self, seq_lens, max_len, delta, target_count, max_trials=100000):
+    results = set()
+    trials = 0 
+
+    while len(results) < target_count and trials < max_trials:
+        trials += 1
+
+        # Randomly shuffle indices
+        indices = list(range(len(seq_lens)))
+        random.shuffle(indices)
+
+        current_sum = 0 
+        current_indices = []
+
+        for idx in indices:
+            if current_sum + seq_lens[idx] <= max_len:
+                current_sum += seq_lens[idx]
+                current_indices.append(idx)
+
+            if max_len - delta <= current_sum <= max_len:
+                results.add(tuple(sorted(current_indices)))  # use tuple to be hashable
+                break  # once one valid subset found, restart next trial
+
+    print(f"Found {len(results)} valid subsets in {trials} trials")
+    return [list(subset) for subset in results]
+  
+  def _prefetched_task(self, delta_ratio: int = 0.02, buffer_size: int = 1000, target_count: int = 100):
+    delta = int(self.max_length * delta_ratio)
+    buffer = []
+    source_list = []
+    while True:
+      sample = next(self.dataset)
+      sample_key = sample["__key__"] if "__key__" in sample else ""
+      sample_url = sample["__url__"] if "__url__" in sample else ""
+      
+      try:
+        source_name = sample["json"]["source"]
+        # WARN: ugly code, for dirty dataset.
+        if source_name.startswith("PDFA"):
+          source_name = "PDFA"
+        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          source_name = source_name.split("/")[4]
+      except:
+        source_name = "None"
+
+      self.source_sample_cnt.setdefault(source_name, 0)
+      self.source_sample_cnt[source_name] += 1
+      
+      try:
+        inputs = self._process(sample, source_name)
+      except:
+        self.source_error_cnt.setdefault(source_name, 0)
+        self.source_error_cnt[source_name] += 1
+        error_ratio = self.source_error_cnt[source_name] * 1.0 / \
+          self.source_sample_cnt[source_name]
+        logger.error(
+          f"ChatCompletionVisionDataset process sample error. "
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
+          f"errmsg={traceback.format_exc()}")
+        continue
+      buffer.append(inputs)
+      source_list.append(source_name)
+      if len(buffer) == buffer_size:
+        input_ids_len = [data["input_ids"].shape[-1] for data in buffer]
+        t1 = time.perf_counter()
+        candidates = self._find_in_range(input_ids_len, self.max_length, delta, target_count)
+        input_ids_len = [sum(buffer[idx]["input_ids"].shape[-1] for idx in candidate) for candidate in candidates]
+        image_len = [sum(buffer[idx]["pixel_values"].size(0) * 256 for idx in candidate) for candidate in candidates]
+        if dist.get_rank() == 0:
+          print(f"selected_candidates: {candidates}, input_ids: {input_ids_len}, images: {image_len}")
+        t2 = time.perf_counter()
+        selected_len = balance_sequence(dist.get_rank(), image_len, self.server_addr)
+        t3 = time.perf_counter()
+        print(f"[rank={dist.get_rank()}]find_input_ids={t2-t1}, balance_imgae={t3-t2}, selected={selected_len}")
+        selected_index = candidates[image_len.index(selected_len)]
+        packed_inputs = self._packing([buffer[idx] for idx in selected_index])
+        packed_inputs["data_source"] = [source_list[idx] for idx in selected_index]
+        self.cache.put(packed_inputs)
+        
+        buffer = [x for i, x in enumerate(buffer) if i not in selected_index]
+        source_list = [x for i, x in enumerate(source_list) if i not in selected_index]
+
   def __iter__(self):
+    t1 = time.perf_counter()
+    result = self.cache.get()
+    t2 = time.perf_counter()
+    print(f'next_batch[{dist.get_rank()}]={t2-t1}')
+    return result
+
+  def __iter_v2__(self):
     buffer = []
     source_list = []
     cur_length = 0
