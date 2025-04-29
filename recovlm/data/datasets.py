@@ -774,6 +774,10 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
 
+    self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
+    self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
+    self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
+    
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
     image_pad_len = 6
@@ -1208,6 +1212,9 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
       inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
       inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
       inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
+
+        last_start_index = torch.nonzero(inputs["input_ids"][0] == self.img_start_token_id)
+
 
 
 
