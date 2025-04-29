@@ -133,6 +133,8 @@ nohup mpirun --allow-run-as-root \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
                 --fp32_weight \
+		--freeze_llm \
+		--freeze_visual \
                 --enable_profile \
                 --seed 19260817 \
 		--monitor_image_tokens \
