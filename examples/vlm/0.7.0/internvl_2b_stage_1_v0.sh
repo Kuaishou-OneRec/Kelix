@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="run internvl 2b 0.7.0 stage1 by lzx, use stage2-0.6.0 data"
+comment="run internvl 2b 0.7.0 stage1 by lzx, use stage1.5-0.6.0 data"
 
 
 git add --all
@@ -119,7 +119,7 @@ nohup mpirun --allow-run-as-root \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config  examples/vlm/configs/internvl/0.7.0/2b_internvl_stage2.json \
+                --dataset_config examples/vlm/configs/0.7.0/2b_v0_6_0_internvl_stage1_5.json  \
                 --max_length 21000 \
                 --learning_rate 2e-4 \
                 --model_class InternVLChatModel \
