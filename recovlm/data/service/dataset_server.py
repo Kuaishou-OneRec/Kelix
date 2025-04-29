@@ -8,8 +8,8 @@ import heapq
 from typing import Any, Dict, List, Optional
 
 from grpc import aio
-from dataset_pb2 import BatchSequenceInfo, SelectedValue
-from dataset_pb2_grpc import DatasetServiceServicer, add_DatasetServiceServicer_to_server
+from .dataset_pb2 import BatchSequenceInfo, SelectedValue
+from .dataset_pb2_grpc import DatasetServiceServicer, add_DatasetServiceServicer_to_server
 
 
 def find_closest_numbers(lists: List[List[int]]) -> List[int]:

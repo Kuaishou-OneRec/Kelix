@@ -1,6 +1,6 @@
 import grpc
-from dataset_pb2 import BatchSequenceInfo
-from dataset_pb2_grpc import DatasetServiceStub
+from .dataset_pb2 import BatchSequenceInfo
+from .dataset_pb2_grpc import DatasetServiceStub
 import argparse
 import random
 import asyncio
