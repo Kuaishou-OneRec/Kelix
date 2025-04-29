@@ -717,6 +717,7 @@ class ChatCompletionVisionDataset(IterableDataset):
                vision_end_token_id: int = 151653,
                pad_token_id: int = 151643,
                datasource_config:Dict[str, Dict[str, Any]] = {},
+               cut_to_pad=True,
                **kargs
                ):
     """
@@ -741,6 +742,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
+    self.cut_to_pad = cut_to_pad
     self.processor = processor
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
@@ -769,7 +771,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.shuffle_initial_size = shuffle_initial_size
     
     self.dataset, self.total_samples = self._build_source_dataset(sources)
-
+    
     # for data_source monitor
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
@@ -1245,7 +1247,12 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
       inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
       inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
 
-      last_start_index = torch.nonzero(inputs["input_ids"][0] == self.img_start_token_id)
+      vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
+      vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
+      if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
+        inputs["input_ids"][:, vision_starts[-1]:] = 0
+        inputs["loss_mask"][:, vision_starts[-1]:] = 0
+        inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
 
 
 
