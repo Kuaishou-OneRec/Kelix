@@ -2440,7 +2440,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     buffer_size = kargs.get("balance_buffer_size", 1000)
     target_count = kargs.get("balance_candidate_count", 100)
 
-    self.sample_queue = queue.Queue(32)
+    self.sample_queue = queue.Queue(maxsize=32)
     def reader_task():
         dataset_iter = iter(self.dataset)
         while True:
@@ -3015,7 +3015,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   
   def _process_task(self):
     while True:
-      sample = next(self.sample_queue)
+      sample = self.sample_queue.get()
       sample_key = sample["__key__"] if "__key__" in sample else ""
       sample_url = sample["__url__"] if "__url__" in sample else ""
       
