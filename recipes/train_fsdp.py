@@ -930,8 +930,9 @@ def train():
       if args.monitor_datasource_loss:
         # WARN: assume batch_size = 1
         local_sample_idx = get_local_sequence(sample_idx).squeeze()
-        unique_sample_idx = local_sample_idx.unique()
 
+        unique_sample_idx = local_sample_idx.unique()
+        print(23433, local_sample_idx, unique_sample_idx)
         for s_idx in unique_sample_idx:
           if s_idx < 0:
             continue

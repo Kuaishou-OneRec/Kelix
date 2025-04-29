@@ -2449,7 +2449,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           "source": "__image_pad__",
           "messages": None,
           "segments": [
-              {"type": "text", "text": "0"},
+              # {"type": "text", "text": "0"},
               {"type": "image", "image": "0.jpg"},
           ],
           "metadata": None,
@@ -2914,7 +2914,10 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32)
     }
-
+      print_input_info(
+        inputs,
+        "inputs111000: "
+      )
     print(88988, packed_input_ids.flatten().shape[0], packed_pixel_values.shape[0] * 256, packed_pixel_values.shape)
     if packed_input_ids.flatten().shape[0] < packed_pixel_values.shape[0] * 256:
       print_input_info(
