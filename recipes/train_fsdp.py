@@ -940,7 +940,7 @@ def train():
           sum_loss = per_token_loss[mask].sum()
 
           if dist.get_rank() == 0:
-            print(23433, local_sample_idx, unique_sample_idx, s_idx)
+            print(23433111111, local_sample_idx, unique_sample_idx, s_idx, data_source, len(data_source))
 
           key = data_source[int(s_idx.item())]
           batch_data_source_loss[key] += sum_loss.item()
