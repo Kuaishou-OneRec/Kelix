@@ -1253,7 +1253,7 @@ _append_sample_packing_inputs:   Tensor: shape=(3, 1, 92), dtype=torch.int64, de
         inputs["input_ids"][:, vision_starts[-1]:] = 0
         inputs["loss_mask"][:, vision_starts[-1]:] = 0
         inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
-        
+
 
 
 
@@ -1641,13 +1641,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
         images=image_inputs,
         videos=video_inputs,
         return_tensors="pt"
-    )
-    if dist.get_rank() == 0:
-      print('=' * 100)
-      print(1111)
-      print_input_info(text, "134_text:")
-      print_input_info(inputs, "134_inputs:")
-      print('=' * 100)
+
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
@@ -1749,7 +1743,13 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
-
+    )
+    if dist.get_rank() == 0:
+      print('=' * 100)
+      print(1111)
+      print_input_info(text, "134_text:", max_show=999)
+      print_input_info(inputs, "134_inputs:", max_show=999)
+      print('=' * 100)
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
