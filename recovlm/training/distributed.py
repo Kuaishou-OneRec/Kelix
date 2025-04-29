@@ -223,7 +223,7 @@ def shard_model(
     # Shard the model with FSDP, iterating in reverse to start with
     # lowest-level modules first
     num_layers_sharded = 0
-    print(f"model_info: {model.named_modules()}")
+    print(f"model_info: {list(model.named_modules())}")
 
     if model_class == 'InternVLChatModel':
         layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
