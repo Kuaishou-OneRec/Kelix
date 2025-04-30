@@ -1,5 +1,5 @@
-git config --global user.email 'lingzhixin@kuaishou.com'
-git config --global user.name 'lingzhixin'
+git config --global user.email 'maosiyang@kuaishou.com'
+git config --global user.name 'maosiyang'
 
 email=$(git config --get user.email)
 
@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/lingzhixin/output3/freeze_debug/0.0.1/debug_qwen25_7B
+OUTPUT_DIR=/llm_reco/maosiyang/output/freeze_debug/0.0.1/debug_qwen25_7B
 
 mkdir -p $OUTPUT_DIR
 
@@ -105,9 +105,9 @@ nohup mpirun --allow-run-as-root -np $np \
         -x https_proxy=\
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/configs/debug_qwen25.json \
-                --model_processor Qwen2_5_VLProcessor \
-                --model_class Qwen2_5_VLForConditionalGeneration \
+                --dataset_config /llm_reco/chuchenglong/InternVL/recovlm/examples/vlm/configs/2b_qwen_stage1d.json \
+                --model_processor Qwen2_5_VLProcessor_moonvit \
+                --model_class Qwen2_5_VLForConditionalGeneration_moonvit \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --max_length 36000 \

@@ -17,6 +17,7 @@ from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
 from recovlm.models.internvl.checkpoint import InternVLCheckpointConverter
 from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VLCheckpointConverter
+from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VL_moonvitCheckpointConverter
 
 
 from recovlm.utils.ds_utils import print_input_info
@@ -375,7 +376,7 @@ def get_resume_info(args):
 def freeze_params(args, model):
 
   #### qwen
-  if args.model_class in  ["Qwen2VLForConditionalGeneration", "Qwen2_5_VLForConditionalGeneration","Qwen2_5_VLForConditionalGeneration_moonvit"]:
+  if args.model_class in  ["Qwen2VLForConditionalGeneration", "Qwen2_5_VLForConditionalGeneration"]:
     if args.freeze_llm:
       print_rank_0("Freeze LLM parameters.")
       for name, param in model.named_parameters():
@@ -399,7 +400,29 @@ def freeze_params(args, model):
           print_rank_0(f"Disable visual encoder grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
-  
+    
+  elif args.model_class == 'Qwen2_5_VLForConditionalGeneration_moonvit':
+    if args.freeze_llm:
+      print_rank_0("Freeze LLM parameters.")
+      for name, param in model.named_parameters():
+        if not (name.startswith("visual") or name.startswith("mlp_AR")):
+          print_rank_0(f"Disable LLM grad: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
+    if args.freeze_projector:
+      print_rank_0("Freeze visual encoder parameters.")
+      for name, param in model.named_parameters():
+        if name.startswith("mlp_AR"):
+          print_rank_0(f"Disable visual encoder grad: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
+    if args.freeze_visual:
+      print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
+      for name, param in model.named_parameters():
+        if name.startswith("visual") and not name.startswith("mlp_AR"):
+          print_rank_0(f"Disable visual encoder grad: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
   #### InternVLChatModel
   # 结构： language_model + ( vision_model + mlp )
   elif args.model_class == 'InternVLChatModel':
@@ -459,8 +482,10 @@ def train():
   set_random_seed(args.seed)
 
   state_dict = None
-  if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit']:
+  if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration']:
       converter = Qwen2VLCheckpointConverter(args.model_dir)
+  elif args.model_class == 'Qwen2_5_VLForConditionalGeneration_moonvit':
+      converter = Qwen2_5_VL_moonvitCheckpointConverter(args.model_dir)
   elif args.model_class == 'InternVLChatModel':
       converter = InternVLCheckpointConverter(args.model_dir)
 
@@ -510,7 +535,7 @@ def train():
     auto_wrap_policy_mapping = {
       "Qwen2VLForConditionalGeneration": {Qwen2VLDecoderLayer, Qwen2VLVisionBlock},
       "Qwen2_5_VLForConditionalGeneration": {Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock},
-      "Qwen2_5_VLForConditionalGeneration_moonvit": {Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock},
+      "Qwen2_5_VLForConditionalGeneration_moonvit": {Qwen2_5_VLDecoderLayer, MoonVitEncoderLayer},
       "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
     }
     set_activation_checkpointing(
@@ -562,16 +587,16 @@ def train():
     learning_rate=args.learning_rate,
     vision_learning_rate=args.vision_learning_rate,
     weight_decay=args.weight_decay,
-    no_decay_name_list=
-    [
-      "bias", "norm1", "norm2", "visual.merger.ln_q",
-      "input_layernorm", "post_attention_layernorm", "model.norm"
-    ] if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit'] else
-    [
-      "bias", "norm1", "norm2", "mlp1.0.weight",
-      "input_layernorm", "post_attention_layernorm", "model.norm"
-    ]
-    ,
+    # no_decay_name_list=
+    # [
+    #   "bias", "norm1", "norm2", "visual.merger.ln_q",
+    #   "input_layernorm", "post_attention_layernorm", "model.norm"
+    # ] if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit'] else
+    # [
+    #   "bias", "norm1", "norm2", "mlp1.0.weight",
+    #   "input_layernorm", "post_attention_layernorm", "model.norm"
+    # ]
+    # ,
     vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
   )
 
