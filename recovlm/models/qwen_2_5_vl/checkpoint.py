@@ -172,14 +172,14 @@ class Qwen2_5_VL_moonvitCheckpointConverter(CheckpointConverter):
       print(f"Reverting weights to original format for {self.model_path_or_name}")
       
       for k, v in tqdm.tqdm(state_dict.items()):
-          if re.match(r"visual\.blocks\.\d+\.attn\.qkv\.weight", k):
+          if re.match(r"visual\.encoder\.blocks\.\d+\.wqkv\.weight", k):
               # 逆向操作：将[heads*3*head_dim, hidden_size]转回[3*hidden_size, hidden_size]
               state_dict[k] = v.reshape(
                   num_heads, 3, hidden_size // num_heads, hidden_size
               ).permute(1, 0, 2, 3).reshape(3 * hidden_size, hidden_size)
               print(f"Reverted: {k}")
               
-          elif re.match(r"visual\.blocks\.\d+\.attn\.qkv\.bias", k):
+          elif re.match(r"visual\.encoder\.blocks\.\d+\.wqkv\.bias", k):
               # 逆向操作：将[heads*3*head_dim]转回[3*hidden_size]
               state_dict[k] = v.reshape(
                   num_heads, 3, hidden_size // num_heads
@@ -193,14 +193,17 @@ class Qwen2_5_VL_moonvitCheckpointConverter(CheckpointConverter):
 def _test_convert():
     from recovlm.training.checkpoint import load_hf_checkpoint
     model_dir = "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct/"
-    state_dict = load_hf_checkpoint(model_dir)
-    converter = Qwen2VLCheckpointConverter(model_dir)
+    model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
+    "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
+    )
+    state_dict = model.state_dict()
+    converter = Qwen2_5_VL_moonvitCheckpointConverter(model_dir)
     
     # 1. 测试单个权重张量的转换可逆性
     print("\n=== 测试单个张量转换的可逆性 ===")
     test_key = None
     for k in state_dict.keys():
-        if re.match(r"visual\.blocks\.0\.attn\.qkv\.weight", k):
+        if re.match(r"visual\.encoder\.blocks\.0\.wqkv\.weight", k):
             test_key = k
             break
     
@@ -247,8 +250,8 @@ def _test_convert():
     
     # 3. 验证转换后的权重是否可用于模型初始化
     print("\n=== 验证转换后权重的可用性 ===")
-    from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLForConditionalGeneration
-    model = Qwen2VLForConditionalGeneration.from_pretrained(model_dir)
+    from recovlm.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
+    model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(model_dir)
     
     try:
         model.load_state_dict(converted_dict, strict=False)
