@@ -2307,9 +2307,9 @@ class ParquetDataset(IterableDataset):
         while True:
             for i, (_, row) in enumerate(all_rows.iterrows()):
                 sample = self._parser(row, 'tmp')
-                print(row)
-                print('=' * 20)
-                print(sample)
+                #print(row)
+                #print('=' * 20)
+                #print(sample)
                 yield sample
                 rows_processed += 1
                 # 当处理的行数达到当前文件的行数且还有文件未处理
@@ -2334,7 +2334,7 @@ class ParquetDataset(IterableDataset):
 
   def __iter__(self,):
     for sample in self.__iter__local_shuffle():
-      yield from sample
+      yield sample
 
 
 class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
