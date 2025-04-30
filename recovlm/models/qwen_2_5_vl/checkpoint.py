@@ -241,6 +241,9 @@ def _test_convert_moonvit():
     mismatch_count = 0
     for k in original_dict:
         if not torch.allclose(original_dict[k], reverted_dict[k], atol=1e-6):
+            print('--------------------------------')
+            print(original_dict[k].shape)
+            print(reverted_dict[k].shape)
             print(f"数值不匹配: {k}")
             mismatch_count += 1
     
