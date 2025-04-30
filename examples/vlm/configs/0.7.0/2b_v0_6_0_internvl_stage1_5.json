@@ -13,6 +13,6 @@
     "shrink_ratio": 0.7,
     "max_retry": 10,
     "multiple_of": 8,
-    "num_workers": 8,
+    "num_workers": 4,
     "num_epochs": 1
 }
