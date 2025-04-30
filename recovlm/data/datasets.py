@@ -3127,7 +3127,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.cache = queue.Queue(maxsize=1)
     delta_ratio = self.kargs.get("input_ids_len_delta_ratio", 0.02)
     buffer_size = self.kargs.get("balance_buffer_size", 1000)
-    target_count = self.kargs.get("balance_candidate_count", 1000)
+    target_count = self.kargs.get("balance_candidate_count", 100)
 
     self.sample_queue = queue.Queue(maxsize=32)
     def reader_task():
