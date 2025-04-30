@@ -3,7 +3,7 @@ import tqdm
 import re
 import torch
 from recovlm.training.checkpoint import CheckpointConverter
-from recovlm.models.qwen_2_5_vl.configuration_qwen_2_5_vl import Qwen2_5_VLVisionConfig
+from recovlm.models.qwen_2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig
 
 class Qwen2VLCheckpointConverter(CheckpointConverter):
