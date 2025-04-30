@@ -1987,7 +1987,7 @@ class ParquetDataset(IterableDataset):
     self.num_workers = num_workers
     self.num_readers = 8
     self.sample_queue = queue.Queue(1024)
-    self.lock = threading.Lock()
+    # self.lock = threading.Lock()
 
     # manager = multiprocessing.Manager()
 
