@@ -2273,7 +2273,7 @@ class ParquetDataset(IterableDataset):
 
         while True:
             for i, (_, row) in enumerate(all_rows.iterrows()):
-                print(row)
+                sample = self._parser(row, 'tmp')
                 yield row
                 rows_processed += 1
                 # 当处理的行数达到当前文件的行数且还有文件未处理
