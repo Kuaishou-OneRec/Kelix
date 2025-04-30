@@ -2329,7 +2329,7 @@ class ParquetDataset(IterableDataset):
             if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
                 break
     
-    for sample in shuffle_parquet_rows(fn_list, 40):
+    for sample in shuffle_parquet_rows(fn_list, 20):
       yield sample
 
   def __iter__(self,):
