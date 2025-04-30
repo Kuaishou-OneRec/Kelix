@@ -1,13 +1,13 @@
-output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/vit/LatexOCR_Rendered
+output_dir: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/vit/laion_zh
 split_size: 268_435_456
 dataset:
   class_name: ParquetDataset
   kwargs:
-    path: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/LatexOCR_Rendered
+    path: viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_cleaned/laion_zh_20250124
   columns:
     - images
-    - messages
+    - segments
 converter:
   class_name: OvitConverter
   kwargs:
-    source: LatexOCR_Rendered
+    source: laion_zh

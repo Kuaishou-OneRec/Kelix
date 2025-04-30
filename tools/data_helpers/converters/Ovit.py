@@ -25,10 +25,10 @@ class OvitConverter(ConverterBase):
         images = json.loads(src['images'])
         image = list(images.keys())[0]
         image = images[image]
-        messages = json.loads(src['messages'])
-        text = messages[-1]["content"][0]["text"]
-        # segments = json.loads(src['segments'])
-        # text = segments[1]["text"]
+        # messages = json.loads(src['messages'])
+        # text = messages[-1]["content"][0]["text"]
+        segments = json.loads(src['segments'])
+        text = segments[-1]["text"]
         sample = {
                 "source": self.source,
                 "task": "vit",
