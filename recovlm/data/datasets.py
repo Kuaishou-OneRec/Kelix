@@ -2311,14 +2311,14 @@ class ParquetDataset(IterableDataset):
                   if sample is not None:
                     yield sample
 
-                  offset_dict[fn_group_key] = row_idx
                 except GeneratorExit:
                   # 正确处理生成器退出
-                  logger.warning(f"Generator exited at {fn}-epoch{epoch_idx}-group{group_idx}-row{row_idx}")
+                  logger.warning(f"Generator exited")
                   return
                 except Exception as e:
-                  logger.error(f"Error processing row {row_idx}: {str(e)}")
+                  logger.error(f"Error processing row : {str(e)}")
                   continue
+                
                 rows_processed += 1
 
                 # 当处理的行数达到当前文件的行数且还有文件未处理
