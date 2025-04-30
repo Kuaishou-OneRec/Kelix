@@ -2261,7 +2261,7 @@ class ParquetDataset(IterableDataset):
         while file_index < n_buffer_files and file_index < len(parquet_files_list):
             fn, epoch_idx = parquet_files_list[file_index]
             logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
-            df = load_parquet_file(fn)
+            df = load_parquet_file(fn).read_row_group(0).to_pandas()
             row_counts.append(len(df))
             all_rows.append(df)
             file_index += 1
