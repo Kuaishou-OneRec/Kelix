@@ -2418,8 +2418,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     self.end_of_text_id = self.tokenizer.encode('<|endoftext|>')[0]
 
-    self.dataset, self.total_samples = self._build_source_dataset(sources)
-
     # for data_source monitor
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
@@ -3117,11 +3115,14 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         source_list = [x for i, x in enumerate(source_list) if i not in selected_index]
 
   def __iter__(self):
+
     rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
     world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
     if not torch.distributed.is_initialized():
         print(f'init process_group in dataset, {rank}, {world_size}, {worker_id}')
         torch.distributed.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+
+    self.dataset, self.total_samples = self._build_source_dataset(sources)
 
     self.cache = queue.Queue(maxsize=1)
     delta_ratio = self.kargs.get("input_ids_len_delta_ratio", 0.02)
