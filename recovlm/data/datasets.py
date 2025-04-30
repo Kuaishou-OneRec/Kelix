@@ -2329,11 +2329,12 @@ class ParquetDataset(IterableDataset):
             if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
                 break
     
-    for sample in shuffle_parquet_rows(fn_list, 5):
+    for sample in shuffle_parquet_rows(fn_list, 20):
       yield sample
 
   def __iter__(self,):
     for sample in self.__iter__local_shuffle():
+      if sample is None: continue
       yield sample
 
 
