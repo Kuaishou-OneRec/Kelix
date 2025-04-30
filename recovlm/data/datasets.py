@@ -2242,7 +2242,8 @@ class ParquetDataset(IterableDataset):
     import pandas as pd
     rank, world_size, worker, num_workers = pytorch_worker_info()
     assert num_workers == self.num_workers
-    from multiprocessing import Pool
+    from multiprocessing.pool import ThreadPool as Pool
+
     finish_dict = self.finish_dict_all[worker]
     offset_dict = self.offset_dict_all[worker]
 
