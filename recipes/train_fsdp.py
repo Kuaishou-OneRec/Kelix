@@ -535,6 +535,35 @@ def train():
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
       "save_checkpoint_every_epoch should be set."
 
+  ##############
+  with open(args.dataset_config, encoding="utf-8") as f:
+    dataset_config = json.loads(f.read())
+  dataset = dataset_config.pop("name")
+  dataset_config["model_class"] = args.model_class
+  if args.max_length:
+    print_rank_0(
+      f"Overwrite max_length in dataset_config: "
+      f"{dataset_config['max_length']} -> {args.max_length}")
+    dataset_config["max_length"] = args.max_length
+  
+  if dist.get_rank() == 0:
+    with open(os.path.join(args.output_dir,
+        f"dataset-{args.commit_id}-{timestamp}.json"), 'w',
+        encoding="utf-8") as f:
+      f.write(json.dumps(
+        dataset_config, ensure_ascii=False, indent=2) + "\n")
+
+  with Timer("Build dataloader"):
+    try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
+    except: 
+      import traceback
+      print_rank_0(f"get_dataloader_v2 error: {traceback.format_exc()}")
+      print_rank_0(f"get_dataloader_v2 retry for get_dataloader")
+      traceback.print_exc()
+      dataloader = get_dataloader(name=dataset, **dataset_config)
+    if args.resume_dataloader and dataloader_state_dict is not None:
+      dataloader.load_state_dict(dataloader_state_dict)
+
   # init model params
   os.environ["KML_ID"] = args.kml_id
   os.environ["KML_TASK_ID"] = args.kml_task_id
@@ -543,7 +572,7 @@ def train():
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
   # torch init
   torch.cuda.set_device(local_rank)
-  torch.distributed.init_process_group(rank=rank, world_size=world_size)
+  torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
 
   ### initialize model parallel group
@@ -759,35 +788,6 @@ def train():
 
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
 
-
-  ##############
-  with open(args.dataset_config, encoding="utf-8") as f:
-    dataset_config = json.loads(f.read())
-  dataset = dataset_config.pop("name")
-  dataset_config["model_class"] = args.model_class
-  if args.max_length:
-    print_rank_0(
-      f"Overwrite max_length in dataset_config: "
-      f"{dataset_config['max_length']} -> {args.max_length}")
-    dataset_config["max_length"] = args.max_length
-  
-  if dist.get_rank() == 0:
-    with open(os.path.join(args.output_dir,
-        f"dataset-{args.commit_id}-{timestamp}.json"), 'w',
-        encoding="utf-8") as f:
-      f.write(json.dumps(
-        dataset_config, ensure_ascii=False, indent=2) + "\n")
-
-  with Timer("Build dataloader"):
-    try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
-    except: 
-      import traceback
-      print_rank_0(f"get_dataloader_v2 error: {traceback.format_exc()}")
-      print_rank_0(f"get_dataloader_v2 retry for get_dataloader")
-      traceback.print_exc()
-      dataloader = get_dataloader(name=dataset, **dataset_config)
-    if args.resume_dataloader and dataloader_state_dict is not None:
-      dataloader.load_state_dict(dataloader_state_dict)
 
   ##############
   torch_profiler = _init_profiler(output_dir=os.path.join(args.output_dir, "torch_profile"))
