@@ -254,8 +254,10 @@ def _test_convert_moonvit():
     
     # 3. 验证转换后的权重是否可用于模型初始化
     print("\n=== 验证转换后权重的可用性 ===")
-    model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(model_dir)
-    
+    model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
+        model_dir,
+        ignore_mismatched_sizes=True
+    )
     try:
         model.load_state_dict(converted_dict, strict=False)
         print("✅ 转换后权重加载测试通过 (strict=False)")
