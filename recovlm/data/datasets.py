@@ -2286,7 +2286,7 @@ class ParquetDataset(IterableDataset):
                 file_index += 1
 
             # 使用多进程读取文件
-            with Pool(len(files_to_process)) as pool:
+            with Pool(10) as pool:
                 args = [(fn, epoch_idx, rank, worker) for (fn, epoch_idx), rank, worker in files_to_process]
                 results = pool.map(read_single_file, args)
 
@@ -2326,7 +2326,7 @@ class ParquetDataset(IterableDataset):
             if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
                 break
     
-    for sample in shuffle_parquet_rows(fn_list, 50):
+    for sample in shuffle_parquet_rows(fn_list, 10):
       yield sample
 
   def __iter__(self,):
