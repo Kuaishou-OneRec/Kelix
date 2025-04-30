@@ -2252,21 +2252,22 @@ class ParquetDataset(IterableDataset):
     fn_list = [fn for idx, fn in enumerate(self.data_files) if idx % total_num_workers == local_worker_idx]
     logger.warning(
       f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
-    )      
+    )   
+    import tqdm
 
     np.random.shuffle(fn_list)
     def shuffle_parquet_rows(parquet_files_list, n_buffer_files):
-        file_index = 0
+        # file_index = 0
         row_counts = []
         all_rows = []
         # 一开始读取 n_buffer_files 个文件
-        while file_index < n_buffer_files and file_index < len(parquet_files_list):
+        # while file_index < n_buffer_files and file_index < len(parquet_files_list):
+        for file_index in  tqdm.tqdm(range(min(n_buffer_files, len(parquet_files_list)))):
             fn, epoch_idx = parquet_files_list[file_index]
             logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
             df = load_parquet_file(fn).read_row_group(0).to_pandas()
             row_counts.append(len(df))
             all_rows.append(df)
-            file_index += 1
 
         all_rows = pd.concat(all_rows, ignore_index=True)
         all_rows = all_rows.sample(frac=1).reset_index(drop=True)
@@ -2305,7 +2306,7 @@ class ParquetDataset(IterableDataset):
               row_counts.append(len(new_df))
               rows_processed = 0
               file_index += 1
-              print(3243444, file_index, dist.get_rank())
+              # print(3243444, file_index, dist.get_rank())
             except Exception as e:
               print(e)
               print("error_1111!!!")
@@ -2314,7 +2315,7 @@ class ParquetDataset(IterableDataset):
             if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
                 break
     
-    for sample in shuffle_parquet_rows(fn_list, 5):
+    for sample in shuffle_parquet_rows(fn_list, 40):
       yield sample
 
   def __iter__(self,):
