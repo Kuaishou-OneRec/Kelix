@@ -1989,13 +1989,13 @@ class ParquetDataset(IterableDataset):
     self.sample_queue = queue.Queue(1024)
     self.lock = threading.Lock()
 
-    manager = multiprocessing.Manager()
+    # manager = multiprocessing.Manager()
 
-    self.finish_dict_all = manager.dict()
-    self.offset_dict_all = manager.dict()
+    self.finish_dict_all = {}
+    self.offset_dict_all = {}
     for i in range(self.num_workers):
-      self.finish_dict_all[i] = manager.dict()
-      self.offset_dict_all[i] = manager.dict()
+      self.finish_dict_all[i] = {}
+      self.offset_dict_all[i] = {}
 
   def state_dict(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
