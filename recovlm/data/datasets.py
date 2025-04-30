@@ -3083,25 +3083,26 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       if len(buffer) == buffer_size:
         input_ids_len = [data["input_ids"].shape[-1] for data in buffer]
         raw_image_len = [data["pixel_values"].size(0) for data in buffer]
-        print(f"[rank={dist.get_rank()}] raw_input_ids_len={input_ids_len}, raw_image_len={raw_image_len}")
+       #  print(f"[rank={dist.get_rank()}] raw_input_ids_len={input_ids_len}, raw_image_len={raw_image_len}")
         t1 = time.perf_counter()
         candidates = self._find_in_range(input_ids_len, self.max_length, delta, target_count)
         input_ids_len = [sum(buffer[idx]["input_ids"].shape[-1] for idx in candidate) for candidate in candidates]
         image_len = [sum(buffer[idx]["pixel_values"].size(0) for idx in candidate) for candidate in candidates]
         #if dist.get_rank() == 0:
-        print(f"[rank={dist.get_rank()}]  selected_candidates: {candidates}, input_ids: {input_ids_len}, images: {image_len}")
+        # print(f"[rank={dist.get_rank()}]  selected_candidates: {candidates}, input_ids: {input_ids_len}, images: {image_len}")
         sorted_image_len = sorted(image_len)
         t2 = time.perf_counter()
         all_image_lens = [None] * dist.get_world_size()
         dist.all_gather_object(all_image_lens, sorted_image_len)
-        print(f"[rank={dist.get_rank()}] all_gather_imagelens: {all_image_lens}")
+        # print(f"[rank={dist.get_rank()}] all_gather_imagelens: {all_image_lens}")
         local_found = self._select_nearest_equal(sorted_image_len, all_image_lens)
-        print(f"[rnak={dist.get_rank()}] local_found={local_found}")
+        # print(f"[rnak={dist.get_rank()}] local_found={local_found}")
         all_local_found = [None] * dist.get_world_size()
         dist.all_gather_object(all_local_found, local_found)
-        print(f"[rank={dist.get_rank()}] all_local_found={all_local_found}")
+        # print(f"[rank={dist.get_rank()}] all_local_found={all_local_found}")
         selected_len = self._select_global(all_local_found)
-        print(f"[rank={dist.get_rank()}] selected_global: {selected_len}")
+        if dist.get_rank() == 0:
+          print(f"[rank={dist.get_rank()}] selected_global: {selected_len}")
         selected_index = candidates[image_len.index(selected_len[dist.get_rank()])]
         # response = balance_sequence(dist.get_rank(), image_len, self.server_addr)
         #selected_len = response["result"]
@@ -3109,7 +3110,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         # selected_index = candidates[image_len.index(selected_len)]
         packed_inputs = self._packing([buffer[idx] for idx in selected_index])
         t4 = time.perf_counter()
-        print(f"[rank={dist.get_rank()}]find_input_ids={t2-t1}, balance_imgae={t3-t2}, packing={t4-t3},selected={selected_len}")
+        print(f"[rank={dist.get_rank()}]find_input_ids={t2-t1}, balance_image={t3-t2}, packing={t4-t3},selected={selected_len}")
         packed_inputs["data_source"] = [source_list[idx] for idx in selected_index]
         self.cache.put(packed_inputs)
         
