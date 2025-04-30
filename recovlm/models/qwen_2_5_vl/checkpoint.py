@@ -5,6 +5,7 @@ import torch
 from recovlm.training.checkpoint import CheckpointConverter
 from recovlm.models.qwen_2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration,Qwen2_5_VLForConditionalGeneration_moonvit
 
 class Qwen2VLCheckpointConverter(CheckpointConverter):
   def __init__(self, model_path_or_name: str):
