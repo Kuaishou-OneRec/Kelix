@@ -247,6 +247,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           video_max_frames=120,
                                           datasource_config={},
                                           **kwargs):
+    print(f"create vision_parquet_dataloader: num_workers={num_workers}")
     model_type = kwargs.get('model_class','Qwen2VLForConditionalGeneration')
     ModelDataset = {'Qwen2VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
@@ -276,7 +277,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
         dataset=dataset,
         shuffle=False,
         batch_size=1,
-        num_workers=num_workers,
+        num_workers=(num_workers if num_workers > 1 else 0),
         collate_fn=lambda x: x[0]
     )
     return dataloader
