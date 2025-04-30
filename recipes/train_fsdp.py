@@ -16,7 +16,7 @@ import itertools
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
 from recovlm.models.internvl.checkpoint import InternVLCheckpointConverter
-from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VLCheckpointConverter
+from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2VLCheckpointConverter
 from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VL_moonvitCheckpointConverter
 
 
