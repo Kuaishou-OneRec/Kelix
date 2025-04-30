@@ -13,6 +13,7 @@ import collections
 import pickle
 import itertools
 import contextlib
+import multiprocessing as mp
 from functools import partial
 
 
@@ -514,7 +515,37 @@ class TokenStats:
       self.std_image_tokens.clear()
       return res
 
+
+def data_func(dataset_config, model_class, max_length, batch_queue):
+  master_port = int(os.environ["MASTER_PORT"]) + 1
+  os.environ["MASTER_PORT"] = master_port
+  rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+  world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+  dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
   
+  ##############
+  with open(dataset_config, encoding="utf-8") as f:
+    dataset_config = json.loads(f.read())
+  dataset = dataset_config.pop("name")
+  dataset_config["model_class"] = model_class
+  if max_length:
+    print(
+      f"Overwrite max_length in dataset_config: "
+      f"{dataset_config['max_length']} -> {max_length}")
+    dataset_config["max_length"] = max_length
+  
+  # with Timer("Build dataloader"):
+  try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
+  except: 
+    import traceback
+    print(f"get_dataloader_v2 error: {traceback.format_exc()}")
+    print(f"get_dataloader_v2 retry for get_dataloader")
+    traceback.print_exc()
+    dataloader = get_dataloader(name=dataset, **dataset_config)
+
+  for batch in dataloader:
+    batch_queue.put(batch)
+
 
 def train():
   arg_parser = get_argument_parser()
@@ -535,27 +566,12 @@ def train():
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
       "save_checkpoint_every_epoch should be set."
 
-  ##############
-  with open(args.dataset_config, encoding="utf-8") as f:
-    dataset_config = json.loads(f.read())
-  dataset = dataset_config.pop("name")
-  dataset_config["model_class"] = args.model_class
-  if args.max_length:
-    print(
-      f"Overwrite max_length in dataset_config: "
-      f"{dataset_config['max_length']} -> {args.max_length}")
-    dataset_config["max_length"] = args.max_length
-  
-  # with Timer("Build dataloader"):
-  try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
-  except: 
-    import traceback
-    print(f"get_dataloader_v2 error: {traceback.format_exc()}")
-    print(f"get_dataloader_v2 retry for get_dataloader")
-    traceback.print_exc()
-    dataloader = get_dataloader(name=dataset, **dataset_config)
-  if args.resume_dataloader and dataloader_state_dict is not None:
-    dataloader.load_state_dict(dataloader_state_dict)
+  batch_queue = mp.Queue(2)
+  data_process = mp.Process(
+      target=data_func,
+      args=(args.dataset_config, args.model_class, args.max_length, batch_queue))
+  data_process.start()
+  print(f"data process started")
 
   # init model params
   os.environ["KML_ID"] = args.kml_id
@@ -814,7 +830,7 @@ def train():
   global_step = 0
   # get_sequence_parallel_group("gloo")
   # data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
-  data_iter = iter(dataloader)
+  # data_iter = iter(dataloader)
   micro_step = 0
   ticker = TimeTracker(n=args.logging_per_step)
   iter_ticker = TimeTracker(n=args.logging_per_step)
@@ -826,7 +842,7 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = next(data_iter)
+      try: batch = batch_queue.get()
       except StopIteration: break
       ticker.tick("next(data_iter)")
       
