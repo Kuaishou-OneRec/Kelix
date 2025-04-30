@@ -3082,8 +3082,10 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       min_var = sys.maxsize
       found = None
       for candidate in candidates:
-          if max(candidate) - min(candidate) < min_var:
+          cur_var = max(candidate) - min(candidate)
+          if cur_var < min_var:
               found = candidate
+              min_var = cur_var
       return candidate
   
   def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 100):
@@ -3113,10 +3115,10 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         print(f"[rnak={dist.get_rank()}] local_found={local_found}")
         all_local_found = [None] * dist.get_world_size()
         dist.all_gather_object(all_local_found, local_found)
-        print(f"[rnak={dist.get_rank()}] all_local_found={all_local_found}")
+        print(f"[rank={dist.get_rank()}] all_local_found={all_local_found}")
         selected_len = self._select_global(all_local_found)
         print(f"[rank={dist.get_rank()}] selected_global: {selected_len}")
-        selected_index = image_len.index(selected_len[dist.get_rank()])
+        selected_index = candidates[image_len.index(selected_len[dist.get_rank()])]
         # response = balance_sequence(dist.get_rank(), image_len, self.server_addr)
         #selected_len = response["result"]
         t3 = time.perf_counter()
