@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1999  > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2Bt/ # Pretrained/Base model path
 # MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/OpenGVLab/InternVL2_5-4B
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.7.0/2b/stage1_5_v1
+OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.7.0/2b/stage1_5_v2
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -144,6 +144,8 @@ nohup mpirun --allow-run-as-root \
                 --comment "$comment" \
                 --commit_id $git_hash \
 		--logging_per_step 10 \
+		--resume_from /llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.7.0/2b/stage1_v0/step12000 \
+		--resume_from_tag global_step12000 \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &

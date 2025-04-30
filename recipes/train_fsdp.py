@@ -279,7 +279,7 @@ def _init_profiler(output_dir, start_step=5, end_step=10) -> None:
             prof.export_chrome_trace(
                 os.path.join(output_dir, str(prof.step_num) + ".json")
             )
-
+    
     torch_profiler = torch.profiler.profile(
         activities=[
             torch.profiler.ProfilerActivity.CPU,
@@ -945,7 +945,7 @@ def train():
           ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
 
       ########## dataset source monitor ###############
-      if args.monitor_datasource_loss:
+      if args.monitor_datasource_loss and global_step % args.logging_per_step == 0:
         # WARN: assume batch_size = 1
         local_sample_idx = get_local_sequence(sample_idx).squeeze()
 
@@ -960,12 +960,12 @@ def train():
           batch_data_source_loss[key] += sum_loss.item()
           batch_data_source_tokens[key] += mask.sum().item()
           valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
-        ticker.tick("monitor_datasource_loss")
+        ticker.tick(f"monitor_datasource_loss@{args.logging_per_step}")
 
       if args.monitor_datasource_cnt:
-        for data_source_name in data_source:
+        for data_source_name in data_source and global_step % args.logging_per_step == 0:
           local_acc_data_source_samples[data_source_name] += 1
-        ticker.tick("monitor_datasource_cnt")
+        ticker.tick(f"monitor_datasource_cnt@{args.logging_per_step}")
     
       #########################################
       avg_loss = loss.detach() # torch.tensor(loss.item()).cuda()
