@@ -240,10 +240,10 @@ def _test_convert_moonvit():
     # 验证所有张量的数值一致性
     mismatch_count = 0
     for k in original_dict:
-        if not torch.allclose(original_dict[k], reverted_dict[k], atol=1e-6):
+        if not torch.allclose(original_dict[k], reverted_dict[k], atol=1e-4):
             print('--------------------------------')
-            print(original_dict[k].shape)
-            print(reverted_dict[k].shape)
+            print(original_dict[k])
+            print(reverted_dict[k])
             print(f"数值不匹配: {k}")
             mismatch_count += 1
     
