@@ -1997,10 +1997,10 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
 
 class ParquetDataset(IterableDataset):
-  def __init__(self, data_files, num_workers):
+  def __init__(self, data_files, num_workers, n_local_shuffle_files_window=20):
     self.data_files = data_files
     self.num_workers = num_workers
-
+    self.n_local_shuffle_files_window = n_local_shuffle_files_window
     manager = multiprocessing.Manager()
 
     self.finish_dict_all = manager.dict()
@@ -2306,16 +2306,15 @@ class ParquetDataset(IterableDataset):
               row_counts.append(len(new_df))
               rows_processed = 0
               file_index += 1
-              # print(3243444, file_index, dist.get_rank())
             except Exception as e:
               print(e)
-              print("error_1111!!!")
+              print("error in ParquetDataset!!!")
               print(traceback.format_exc())
             # 如果已经处理完所有文件且当前数据都已处理完，则退出循环
             if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
                 break
     
-    for sample in shuffle_parquet_rows(fn_list, 20):
+    for sample in shuffle_parquet_rows(fn_list, self.n_local_shuffle_files_window):
       yield sample
 
   def __iter__(self,):
@@ -3090,11 +3089,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
 
 class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDataset):
-  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, n_local_shuffle_files_window=20, **kargs):
     self.rng = random.Random(shuffle_seed)
     self.num_workers = num_workers
     self.num_epochs = num_epochs
-
+    self.n_local_shuffle_files_window = n_local_shuffle_files_window
     super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
@@ -3124,7 +3123,7 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
     if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
 
-    dataset = ParquetDataset(data_file_list, self.num_workers)
+    dataset = ParquetDataset(data_file_list, self.num_workers, self.n_local_shuffle_files_window)
     return dataset, -1
 
   def state_dict(self, ):
