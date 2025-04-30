@@ -2307,23 +2307,25 @@ class ParquetDataset(IterableDataset):
         while True:
             for i, (_, row) in enumerate(all_rows.iterrows()):
                 sample = self._parser(row, 'tmp')
-                #print(row)
-                #print('=' * 20)
-                #print(sample)
                 yield sample
                 rows_processed += 1
-                # 当处理的行数达到当前文件的行数且还有文件未处理
-                if rows_processed == row_counts[0] and file_index < len(parquet_files_list):
-                    fn, epoch_idx = parquet_files_list[file_index]
-                    new_df = pd.read_parquet(fn)
-                    logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
-                    all_rows = pd.concat([all_rows[i + 1:], new_df], ignore_index=True)
-                    all_rows = all_rows.sample(frac=1).reset_index(drop=True)
-                    print(all_rows)
-                    row_counts.pop(0)
-                    row_counts.append(len(new_df))
-                    rows_processed = 0
-                    file_index += 1
+                try:
+                  # 当处理的行数达到当前文件的行数且还有文件未处理
+                  if rows_processed == row_counts[0] and file_index < len(parquet_files_list):
+                      fn, epoch_idx = parquet_files_list[file_index]
+                      new_df = pd.read_parquet(fn)
+                      logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
+                      all_rows = pd.concat([all_rows[i + 1:], new_df], ignore_index=True)
+                      all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+                      row_counts.pop(0)
+                      row_counts.append(len(new_df))
+                      rows_processed = 0
+                      file_index += 1
+                      break
+                except:
+                  traceback.print_exc()
+                  print("load error")
+
 
             # 如果已经处理完所有文件且当前数据都已处理完，则退出循环
             if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
