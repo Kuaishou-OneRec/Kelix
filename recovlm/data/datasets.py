@@ -2300,14 +2300,25 @@ class ParquetDataset(IterableDataset):
 
         # all_rows = pd.concat(all_rows, ignore_index=True)
         # all_rows = all_rows.sample(frac=1).reset_index(drop=True)
-        all_rows, row_counts = read_parquet_files_multiprocess(parquet_files_list, 20)
+        all_rows, row_counts = read_parquet_files_multiprocess(parquet_files_list, n_buffer_files)
         all_rows = all_rows.sample(frac=1).reset_index(drop=True)
         rows_processed = 0
 
         while True:
             for i, (_, row) in enumerate(all_rows.iterrows()):
-                sample = self._parser(row, 'tmp')
-                yield sample
+                try:
+                  sample = self._parser(row, "tmp")
+                  if sample is not None:
+                    yield sample
+
+                  offset_dict[fn_group_key] = row_idx
+                except GeneratorExit:
+                  # 正确处理生成器退出
+                  logger.warning(f"Generator exited at {fn}-epoch{epoch_idx}-group{group_idx}-row{row_idx}")
+                  return
+                except Exception as e:
+                  logger.error(f"Error processing row {row_idx}: {str(e)}")
+                  continue
                 rows_processed += 1
 
                 # 当处理的行数达到当前文件的行数且还有文件未处理
@@ -2333,7 +2344,7 @@ class ParquetDataset(IterableDataset):
             if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
                 break
     
-    for sample in shuffle_parquet_rows(fn_list, 20):
+    for sample in shuffle_parquet_rows(fn_list, 10):
       yield sample
 
   def __iter__(self,):
