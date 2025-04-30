@@ -3081,11 +3081,19 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   def _select_global(self, candidates):
       min_var = sys.maxsize
       found = None
+      max_sum = -1
       for candidate in candidates:
           cur_var = max(candidate) - min(candidate)
           if cur_var < min_var:
               found = candidate
               min_var = cur_var
+              max_sum = sum(candidate)
+          elif cur_var == min_var:
+              cur_sum = sum(candidate)
+              if cur_sum > max_sum:
+                  max_sum = cur_sum
+                  found = candidate
+
       return candidate
   
   def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 100):
