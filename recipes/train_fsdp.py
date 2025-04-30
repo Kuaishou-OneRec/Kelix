@@ -543,7 +543,7 @@ def train():
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
   # torch init
   torch.cuda.set_device(local_rank)
-  torch.distributed.init_process_group(rank=rank, world_size=world_size)
+  torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
 
   ### initialize model parallel group

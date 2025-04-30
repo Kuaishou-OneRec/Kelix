@@ -273,12 +273,12 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
         )
 
     ### packing, batching size=1; shuffle in dataset
-    def init_fn(worker_id):
-      rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
-      world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
-      print(f'before init gloo, {rank}, {world_size}, {worker_id}')
-      if not torch.distributed.is_initialized():
-          torch.distributed.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+    # def init_fn(worker_id):
+    #   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+    #   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+    #   print(f'before init gloo, {rank}, {world_size}, {worker_id}')
+    #   if not torch.distributed.is_initialized():
+    #       torch.distributed.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
     dataloader = StatefulDataLoader(
         dataset=dataset,
@@ -286,7 +286,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
         batch_size=1,
         num_workers=num_workers,# num_workers=(num_workers if num_workers > 1 else 0),
         collate_fn=lambda x: x[0],
-        worker_init_fn=init_fn,
+        # worker_init_fn=init_fn,
     )
     return dataloader
 

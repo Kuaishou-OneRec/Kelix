@@ -3117,6 +3117,12 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         source_list = [x for i, x in enumerate(source_list) if i not in selected_index]
 
   def __iter__(self):
+    rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+    world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+    if not torch.distributed.is_initialized():
+        print(f'init gloo, {rank}, {world_size}, {worker_id}')
+        torch.distributed.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+
     self.cache = queue.Queue(maxsize=1)
     delta_ratio = self.kargs.get("input_ids_len_delta_ratio", 0.02)
     buffer_size = self.kargs.get("balance_buffer_size", 1000)
