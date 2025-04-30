@@ -5,7 +5,7 @@ import torch
 from recovlm.training.checkpoint import CheckpointConverter
 from recovlm.models.qwen_2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig
-from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration,Qwen2_5_VLForConditionalGeneration_moonvit
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration_moonvit
 
 class Qwen2VLCheckpointConverter(CheckpointConverter):
   def __init__(self, model_path_or_name: str):
@@ -118,8 +118,7 @@ def _test_convert():
     
     # 3. 验证转换后的权重是否可用于模型初始化
     print("\n=== 验证转换后权重的可用性 ===")
-    from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLForConditionalGeneration
-    model = Qwen2VLForConditionalGeneration.from_pretrained(model_dir)
+    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_dir)
     
     try:
         model.load_state_dict(converted_dict, strict=False)
@@ -191,11 +190,12 @@ class Qwen2_5_VL_moonvitCheckpointConverter(CheckpointConverter):
 
 
 
-def _test_convert():
+def _test_convert_moonvit():
     from recovlm.training.checkpoint import load_hf_checkpoint
     model_dir = "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct/"
     model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
-    "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
+        model_dir,
+        ignore_mismatched_sizes=True
     )
     state_dict = model.state_dict()
     converter = Qwen2_5_VL_moonvitCheckpointConverter(model_dir)
@@ -251,7 +251,6 @@ def _test_convert():
     
     # 3. 验证转换后的权重是否可用于模型初始化
     print("\n=== 验证转换后权重的可用性 ===")
-    from recovlm.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
     model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(model_dir)
     
     try:
@@ -266,11 +265,8 @@ def _test_convert():
     
     print("\n=== 测试完成 ===")
 
-
-
-
-
 if __name__ == "__main__":
     _test_convert()
+    _test_convert_moonvit()
 
 
