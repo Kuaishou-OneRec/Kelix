@@ -139,12 +139,14 @@ def _test_convert():
 class Qwen2_5_VL_moonvitCheckpointConverter(CheckpointConverter):
   def __init__(self, model_path_or_name: str):
     self.model_path_or_name = model_path_or_name
-    self.config = MoonViTConfig.from_pretrained(model_path_or_name)
+    self.config = MoonViTConfig()
 
   def __call__(self,
                state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     num_heads = self.config.num_attention_heads
+    print(f"num_heads: {num_heads}")
     hidden_size = self.config.hidden_size
+    print(f"hidden_size: {hidden_size}")
     print(f"Converting from {self.model_path_or_name}")
     for k, v in tqdm.tqdm(state_dict.items()):
       if re.match(r"visual\.encoder\.blocks\.\d+\.wqkv\.weight", k):
