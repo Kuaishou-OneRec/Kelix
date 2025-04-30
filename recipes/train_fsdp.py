@@ -567,9 +567,10 @@ def train():
       "save_checkpoint_every_epoch should be set."
 
   batch_queue = mp.Queue(2)
+  dataset_config = args.dataset_config
   data_process = mp.Process(
       target=data_func,
-      args=(args.dataset_config, args.model_class, args.max_length, batch_queue))
+      args=(dataset_config, args.model_class, args.max_length, batch_queue))
   data_process.start()
   print(f"data process started")
 
