@@ -2239,6 +2239,7 @@ class ParquetDataset(IterableDataset):
       raise
 
   def __iter__local_shuffle(self):
+    import pandas as pd
     rank, world_size, worker, num_workers = pytorch_worker_info()
     assert num_workers == self.num_workers
 
