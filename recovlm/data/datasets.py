@@ -2431,32 +2431,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     assert self.max_length - self.image_pad_len > 0
 
     self.datasource_config = datasource_config
-    self.cache = queue.Queue(maxsize=1)
-    self.port = kargs.get("dataset_service_port", 53545)
-    # if dist.get_rank() == 0:
-    #     self.server = DatasetServer(dist.get_world_size())
-    #     self.server.start(port=self.port)
-    self.server_addr = f"{os.environ['MASTER_ADDR']}:{self.port}"
-    dist.barrier()
-    delta_ratio = kargs.get("input_ids_len_delta_ratio", 0.02)
-    buffer_size = kargs.get("balance_buffer_size", 1000)
-    target_count = kargs.get("balance_candidate_count", 1000)
-
-    self.sample_queue = queue.Queue(maxsize=32)
-    def reader_task():
-        dataset_iter = iter(self.dataset)
-        while True:
-            sample = next(dataset_iter)
-            self.sample_queue.put(sample)
-    self.reader_thread = threading.Thread(target=reader_task, daemon=True)
-    self.reader_thread.start()
-
-    self.processed_buffer = queue.Queue(buffer_size)
-    self.process_threads = [threading.Thread(target=self._process_task, daemon=True) for _ in range(16)]
-    for t in self.process_threads:
-      t.start()
-    self.prefetch_thread = threading.Thread(target=self._prefetched_task, args=(delta_ratio, buffer_size, target_count), daemon=True)
-    self.prefetch_thread.start()
+    self.kargs = kargs
   
   def _build_source_dataset(self, sources):
     total_samples = 0
@@ -3142,6 +3117,27 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         source_list = [x for i, x in enumerate(source_list) if i not in selected_index]
 
   def __iter__(self):
+    self.cache = queue.Queue(maxsize=1)
+    delta_ratio = self.kargs.get("input_ids_len_delta_ratio", 0.02)
+    buffer_size = self.kargs.get("balance_buffer_size", 1000)
+    target_count = self.kargs.get("balance_candidate_count", 1000)
+
+    self.sample_queue = queue.Queue(maxsize=32)
+    def reader_task():
+        dataset_iter = iter(self.dataset)
+        while True:
+            sample = next(dataset_iter)
+            self.sample_queue.put(sample)
+    self.reader_thread = threading.Thread(target=reader_task, daemon=True)
+    self.reader_thread.start()
+
+    self.processed_buffer = queue.Queue(buffer_size)
+    self.process_threads = [threading.Thread(target=self._process_task, daemon=True) for _ in range(16)]
+    for t in self.process_threads:
+      t.start()
+    self.prefetch_thread = threading.Thread(target=self._prefetched_task, args=(delta_ratio, buffer_size, target_count), daemon=True)
+    self.prefetch_thread.start()
+
     while True:
         t1 = time.perf_counter()
         result = self.cache.get()
