@@ -2273,6 +2273,7 @@ class ParquetDataset(IterableDataset):
 
         while True:
             for i, (_, row) in enumerate(all_rows.iterrows()):
+                print(row)
                 yield row
                 rows_processed += 1
                 # 当处理的行数达到当前文件的行数且还有文件未处理
@@ -2282,6 +2283,7 @@ class ParquetDataset(IterableDataset):
                     logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
                     all_rows = pd.concat([all_rows[i + 1:], new_df], ignore_index=True)
                     all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+                    print(all_rows)
                     row_counts.pop(0)
                     row_counts.append(len(new_df))
                     rows_processed = 0
