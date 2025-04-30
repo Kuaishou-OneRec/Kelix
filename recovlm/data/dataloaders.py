@@ -280,7 +280,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
           print(f'init_process_group in worker_init_fn, {rank}, {world_size}, {worker_id}')
           torch.distributed.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
-    dataloader = StatefulDataLoader(
+    dataloader = DataLoader(
         dataset=dataset,
         shuffle=False,
         batch_size=1,
