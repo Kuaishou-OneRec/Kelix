@@ -996,7 +996,7 @@ class ChatCompletionVisionDataset(IterableDataset):
           else:
             raise ValueError(f"sample process error, unsupport value type: {block['type']}")
       except Exception as e:
-        print(f"sample process error, messages={str(messages)[:50]}\n, sample=\n{str(sample)[:50]}")
+        print(f"sample process error, messages={str(messages)[:500]}\n, sample=\n{str(sample)[:500]}")
         raise e
 
     text = self.processor.apply_chat_template(
@@ -1169,6 +1169,36 @@ class ChatCompletionVisionDataset(IterableDataset):
                              packed_sample_idx: List[torch.Tensor],
                              cu_seqlens: List[int],
                              sample_idx: Optional[int] = None):
+    self.rank = dist.get_rank()
+
+    
+    packable_length = self.max_length - cu_seqlens[-1]
+    if packable_length == 0: return
+    if self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
+      import copy
+      # print_input_info(inputs, "0000inputs:", max_show=999)
+      # if dist.get_rank() == 0 or True: print(9989843242, 000, inputs["input_ids"].flatten().tolist())
+      inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
+      inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
+
+      inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
+
+      vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
+      vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
+      # if dist.get_rank() == 0 or True: print(inputs["input_ids"], f"rrrr{self.rank}", vision_starts, vision_ends, 999999, self.vision_start_token_id, self.vision_end_token_id)
+      if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
+        inputs["input_ids"][:, vision_starts[-1]:] = 0 # 随便什么id都可以
+        inputs["loss_mask"][:, vision_starts[-1]:] = 0
+
+      if 'image_grid_thw' in inputs: # 如果有图片
+        n_tokens = 0
+        for i in range(len(vision_ends), len(inputs["image_grid_thw"])):
+          n_tokens_hw = inputs["image_grid_thw"][i]
+          n_tokens += n_tokens_hw[1] * n_tokens_hw[2]
+
+        if n_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
+        inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
+
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
     packed_position_ids.append(inputs["position_ids"])
@@ -1177,7 +1207,8 @@ class ChatCompletionVisionDataset(IterableDataset):
     packed_sample_idx.append(
       torch.full_like(packed_input_ids[-1], sample_idx))
 
-    if "pixel_values" in inputs:
+    if "pixel_values" in inputs and len(inputs["pixel_values"]):
+      # print(f"pacc pixelsrrr{self.rank}", inputs["pixel_values"].shape)
       packed_pixel_values.append(inputs["pixel_values"])
       packed_image_gird_thw.append(inputs["image_grid_thw"])
     if "pixel_values_videos" in inputs:
@@ -1228,6 +1259,13 @@ class ChatCompletionVisionDataset(IterableDataset):
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
     packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
+
+    try:
+      print(2142333, f"rrrr{self.rank}", [x.shape for x in packed_pixel_values], torch.cat(packed_pixel_values, dim=0).shape)
+    except Exception as e:
+      print(e, f"rrrr{self.rank}_342565445", len(buffer))
+      print(packed_pixel_values)
+
     packed_pixel_values = None if len(packed_pixel_values) == 0 else \
       torch.cat(packed_pixel_values, dim=0)
     packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else \
@@ -1263,33 +1301,32 @@ class ChatCompletionVisionDataset(IterableDataset):
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32)
     }
+    
     return inputs
 
   def __iter__(self):
     buffer = []
     source_list = []
     cur_length = 0
-    ds_iter = iter(self.dataset)
-    while True:
-      #for sample in self.dataset:
+
+    for sample in self.dataset:
+      sample_key = sample["__key__"] if "__key__" in sample else ""
+      sample_url = sample["__url__"] if "__url__" in sample else ""
+
       try:
-        sample = next(ds_iter)
-        sample_key = sample["__key__"] if "__key__" in sample else ""
-        sample_url = sample["__url__"] if "__url__" in sample else ""
+        source_name = sample["json"]["source"]
+        # WARN: ugly code, for dirty dataset.
+        if source_name.startswith("PDFA"):
+          source_name = "PDFA"
+        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          source_name = source_name.split("/")[4]
+      except:
+        source_name = "None"
 
-        try:
-          source_name = sample["json"]["source"]
-          # # WARN: ugly code, for dirty dataset.
-          # if source_name.startswith("PDFA"):
-          #   source_name = "PDFA"
-          # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-          #   source_name = source_name.split("/")[4]
-        except:
-          source_name = "None"
+      self.source_sample_cnt.setdefault(source_name, 0)
+      self.source_sample_cnt[source_name] += 1
 
-        self.source_sample_cnt.setdefault(source_name, 0)
-        self.source_sample_cnt[source_name] += 1
-      
+      try:
         inputs = self._process(sample, source_name)
       except:
         self.source_error_cnt.setdefault(source_name, 0)
@@ -1298,7 +1335,7 @@ class ChatCompletionVisionDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:50]}"
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:500]}"
           f"errmsg={traceback.format_exc()}")
         continue
 
@@ -1936,11 +1973,11 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
       try:
         source_name = sample["json"]["source"]
-        # # WARN: ugly code, for dirty dataset.
-        # if source_name.startswith("PDFA"):
-        #   source_name = "PDFA"
-        # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-        #   source_name = source_name.split("/")[4]
+        # WARN: ugly code, for dirty dataset.
+        if source_name.startswith("PDFA"):
+          source_name = "PDFA"
+        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          source_name = source_name.split("/")[4]
       except:
         source_name = "None"
 
@@ -1956,7 +1993,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=},  sample=\n{str(sample)[:50]}"
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=},  sample=\n{str(sample)[:500]}"
           f"errmsg={traceback.format_exc()}")
         continue
 
@@ -2112,7 +2149,7 @@ class ParquetDataset(IterableDataset):
 
       return samples
     except:
-      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}, images={str(images)[:50]}\nsamples={str(samples)[:50]}")
+      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}, images={str(images)[:500]}\nsamples={str(samples)[:500]}")
       return None
 
   def _load_images_to_samples(self, images, samples, raw_row_data):
@@ -2143,7 +2180,7 @@ class ParquetDataset(IterableDataset):
           except Exception as e:
               raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}")
 
-  def __iter__v1(self,):
+  def __iter__(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
     assert num_workers == self.num_workers
 
@@ -2155,8 +2192,8 @@ class ParquetDataset(IterableDataset):
     fn_list = [fn for idx, fn in enumerate(self.data_files) if idx % total_num_workers == local_worker_idx]
     logger.warning(
       f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
-    )      
-
+    )
+    
     try:
       for epoch_fn in fn_list:
         fn, epoch_idx = epoch_fn
@@ -2201,7 +2238,6 @@ class ParquetDataset(IterableDataset):
                   sample = self._parser(row, fn)
                   if sample is not None:
                     yield sample
-
                   offset_dict[fn_group_key] = row_idx
                 except GeneratorExit:
                   # 正确处理生成器退出
@@ -2237,120 +2273,6 @@ class ParquetDataset(IterableDataset):
     except Exception as e:
       logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
       raise
-
-  def __iter__local_shuffle(self):
-    import pandas as pd
-    rank, world_size, worker, num_workers = pytorch_worker_info()
-    assert num_workers == self.num_workers
-    from multiprocessing.pool import ThreadPool as Pool
-
-    finish_dict = self.finish_dict_all[worker]
-    offset_dict = self.offset_dict_all[worker]
-
-    total_num_workers = num_workers * world_size
-    local_worker_idx = rank * num_workers + worker
-    fn_list = [fn for idx, fn in enumerate(self.data_files) if idx % total_num_workers == local_worker_idx]
-    logger.warning(
-      f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
-    )      
-
-    np.random.shuffle(fn_list)
-    def shuffle_parquet_rows(parquet_files_list, n_buffer_files):
-        file_index = 0
-        row_counts = []
-        all_rows = []
-        # 一开始读取 n_buffer_files 个文件
-        # while file_index < n_buffer_files and file_index < len(parquet_files_list):
-        #     fn, epoch_idx = parquet_files_list[file_index]
-        #     logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
-        #     df = load_parquet_file(fn).read_row_group(0).to_pandas()
-        #     row_counts.append(len(df))
-        #     all_rows.append(df)
-        #     file_index += 1
-
-        def read_single_file(args):
-            fn, epoch_idx, rank, worker = args
-            logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
-            df = load_parquet_file(fn).read_row_group(0).to_pandas()
-            return df
-
-        def read_parquet_files_multiprocess(parquet_files_list, n_buffer_files):
-            file_index = 0
-            row_counts = []
-            all_rows = []
-
-            # 确定要处理的文件范围
-            files_to_process = []
-            while file_index < n_buffer_files and file_index < len(parquet_files_list):
-                files_to_process.append((parquet_files_list[file_index], rank, worker))
-                file_index += 1
-
-            # 使用多进程读取文件
-            with Pool(5) as pool:
-                args = [(fn, epoch_idx, rank, worker) for (fn, epoch_idx), rank, worker in files_to_process]
-                results = pool.map(read_single_file, args)
-
-            for df in results:
-                row_counts.append(len(df))
-                all_rows.append(df)
-
-            # 合并所有 DataFrame
-            combined_df = pd.concat(all_rows, ignore_index=True)
-            return combined_df, row_counts
-
-        # all_rows = pd.concat(all_rows, ignore_index=True)
-        # all_rows = all_rows.sample(frac=1).reset_index(drop=True)
-        all_rows, row_counts = read_parquet_files_multiprocess(parquet_files_list, n_buffer_files)
-        all_rows = all_rows.sample(frac=1).reset_index(drop=True)
-        rows_processed = 0
-
-        while True:
-            for i, (_, row) in enumerate(all_rows.iterrows()):
-                try:
-                  sample = self._parser(row, "tmp")
-                  if sample is not None:
-                    yield sample
-
-                except GeneratorExit:
-                  # 正确处理生成器退出
-                  logger.warning(f"Generator exited")
-                  return
-                except Exception as e:
-                  logger.error(f"Error processing row : {str(e)}")
-                  continue
-
-                rows_processed += 1
-
-                # 当处理的行数达到当前文件的行数且还有文件未处理
-                if rows_processed == row_counts[0] and file_index < len(parquet_files_list):
-                  break
-            
-            try:
-              fn, epoch_idx = parquet_files_list[file_index]
-              new_df = pd.read_parquet(fn)
-              logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
-              all_rows = pd.concat([all_rows[i + 1:], new_df], ignore_index=True)
-              all_rows = all_rows.sample(frac=1).reset_index(drop=True)
-              row_counts.pop(0)
-              row_counts.append(len(new_df))
-              rows_processed = 0
-              file_index += 1
-              # print(3243444, file_index)
-            except Exception as e:
-              print(e)
-              print("error!!!")
-              print(traceback.format_exc())
-            # 如果已经处理完所有文件且当前数据都已处理完，则退出循环
-            if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
-                break
-    
-    for sample in shuffle_parquet_rows(fn_list, 5):
-      yield sample
-
-  def __iter__(self,):
-    for sample in self.__iter__local_shuffle():
-      if sample is None: continue
-      yield sample
 
 
 class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
@@ -2755,6 +2677,12 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     inputs["position_ids"] = position_ids
     inputs.pop("attention_mask")
 
+    if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
+      print("baddddddd")
+      print_input_info(
+        inputs,
+        "_process_completion",
+      )
     return inputs
     
 
@@ -2796,6 +2724,14 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     if "pixel_values" not in inputs:
       inputs["pixel_values"] = self.image_pad["pixel_values"][:0]
       inputs["image_flags"] = self.image_pad["image_flags"][:0]
+
+
+    if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
+      print("baddddddd")
+      print_input_info(
+        inputs,
+        "_process_chat",
+      )
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
@@ -2929,6 +2865,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         # if dist.get_rank() == 0:
         #   print_input_info(inputs, prefix="inputs_cut_im: ")
 
+
         assert inputs["input_ids"].shape ==  inputs["loss_mask"].shape == inputs["position_ids"].shape and inputs["input_ids"].ndim == 2, f'inputs: {inputs["input_ids"].shape} ==  {inputs["loss_mask"].shape} == {inputs["position_ids"].shape}'
         assert inputs["image_flags"].size(0) == inputs["pixel_values"].size(0), f'inputs: {inputs["image_flags"].shape}, {inputs["pixel_values"].shape}'
 
@@ -2947,6 +2884,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     packed_image_flags.append(inputs["image_flags"])
+    
+
 
     return len(inputs["input_ids"][0])
 
@@ -3053,11 +2992,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
       try:
         source_name = sample["json"]["source"]
-        # # WARN: ugly code, for dirty dataset.
-        # if source_name.startswith("PDFA"):
-        #   source_name = "PDFA"
-        # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-        #   source_name = source_name.split("/")[4]
+        # WARN: ugly code, for dirty dataset.
+        if source_name.startswith("PDFA"):
+          source_name = "PDFA"
+        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          source_name = source_name.split("/")[4]
       except:
         source_name = "None"
 
@@ -3073,7 +3012,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:50]}"
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:500]}"
           f"errmsg={traceback.format_exc()}")
         continue
 
