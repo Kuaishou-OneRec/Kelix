@@ -3122,7 +3122,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         print(f'init process_group in dataset, {rank}, {world_size}, {worker_id}')
         torch.distributed.init_process_group(backend="gloo", rank=rank, world_size=world_size)
 
-    self.dataset, self.total_samples = self._build_source_dataset(sources)
+    self.dataset, self.total_samples = self._build_source_dataset(self.sources)
 
     self.cache = queue.Queue(maxsize=1)
     delta_ratio = self.kargs.get("input_ids_len_delta_ratio", 0.02)
@@ -3233,6 +3233,7 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
     self.rng = random.Random(shuffle_seed)
     self.num_workers = num_workers
     self.num_epochs = num_epochs
+    self.sources = sources
 
     super().__init__(sources, **kargs)
 
