@@ -2260,48 +2260,17 @@ class ParquetDataset(IterableDataset):
         row_counts = []
         all_rows = []
         # 一开始读取 n_buffer_files 个文件
-        # while file_index < n_buffer_files and file_index < len(parquet_files_list):
-        #     fn, epoch_idx = parquet_files_list[file_index]
-        #     logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
-        #     df = load_parquet_file(fn).read_row_group(0).to_pandas()
-        #     row_counts.append(len(df))
-        #     all_rows.append(df)
-        #     file_index += 1
-
-        def read_single_file(args):
-            fn, epoch_idx, rank, worker = args
+        while file_index < n_buffer_files and file_index < len(parquet_files_list):
+            fn, epoch_idx = parquet_files_list[file_index]
             logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
             df = load_parquet_file(fn).read_row_group(0).to_pandas()
-            return df
+            row_counts.append(len(df))
+            all_rows.append(df)
+            file_index += 1
 
-        def read_parquet_files_multiprocess(parquet_files_list, n_buffer_files):
-            file_index = 0
-            row_counts = []
-            all_rows = []
-
-            # 确定要处理的文件范围
-            files_to_process = []
-            while file_index < n_buffer_files and file_index < len(parquet_files_list):
-                files_to_process.append((parquet_files_list[file_index], rank, worker))
-                file_index += 1
-
-            # 使用多进程读取文件
-            with Pool(5) as pool:
-                args = [(fn, epoch_idx, rank, worker) for (fn, epoch_idx), rank, worker in files_to_process]
-                results = pool.map(read_single_file, args)
-
-            for df in results:
-                row_counts.append(len(df))
-                all_rows.append(df)
-
-            # 合并所有 DataFrame
-            combined_df = pd.concat(all_rows, ignore_index=True)
-            return combined_df, row_counts
-
-        # all_rows = pd.concat(all_rows, ignore_index=True)
-        # all_rows = all_rows.sample(frac=1).reset_index(drop=True)
-        all_rows, row_counts = read_parquet_files_multiprocess(parquet_files_list, n_buffer_files)
+        all_rows = pd.concat(all_rows, ignore_index=True)
         all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+
         rows_processed = 0
 
         while True:
@@ -2315,6 +2284,7 @@ class ParquetDataset(IterableDataset):
                   # 正确处理生成器退出
                   logger.warning(f"Generator exited")
                   return
+
                 except Exception as e:
                   logger.error(f"Error processing row : {str(e)}")
                   continue
@@ -2327,7 +2297,7 @@ class ParquetDataset(IterableDataset):
             
             try:
               fn, epoch_idx = parquet_files_list[file_index]
-              new_df = pd.read_parquet(fn)
+              new_df = load_parquet_file(fn).read_row_group(0).to_pandas()
               logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
               all_rows = pd.concat([all_rows[i + 1:], new_df], ignore_index=True)
               all_rows = all_rows.sample(frac=1).reset_index(drop=True)
@@ -2335,10 +2305,10 @@ class ParquetDataset(IterableDataset):
               row_counts.append(len(new_df))
               rows_processed = 0
               file_index += 1
-              # print(3243444, file_index)
+              print(3243444, file_index, dist.get_rank())
             except Exception as e:
               print(e)
-              print("error!!!")
+              print("error_1111!!!")
               print(traceback.format_exc())
             # 如果已经处理完所有文件且当前数据都已处理完，则退出循环
             if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
