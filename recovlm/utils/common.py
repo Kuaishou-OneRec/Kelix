@@ -367,7 +367,7 @@ class FakeParquetFileFromFastParquetFile:
         return self.res
 
 
-def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fast_parquet') -> pq.ParquetFile:
+def load_parquet_file(fn: str, retry=5, max_cache_files=100, parquet_backend='fast_parquet') -> pq.ParquetFile:
     """
     加载 Parquet 文件，如果 HDFS 读取失败，则回退到本地缓存。
 

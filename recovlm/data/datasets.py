@@ -2300,13 +2300,16 @@ class ParquetDataset(IterableDataset):
 
         # all_rows = pd.concat(all_rows, ignore_index=True)
         # all_rows = all_rows.sample(frac=1).reset_index(drop=True)
-        all_rows, row_counts = read_parquet_files_multiprocess(parquet_files_list, 50)
+        all_rows, row_counts = read_parquet_files_multiprocess(parquet_files_list, 20)
         all_rows = all_rows.sample(frac=1).reset_index(drop=True)
         rows_processed = 0
 
         while True:
             for i, (_, row) in enumerate(all_rows.iterrows()):
                 sample = self._parser(row, 'tmp')
+                print(row)
+                print('=' * 20)
+                print(sample)
                 yield sample
                 rows_processed += 1
                 # 当处理的行数达到当前文件的行数且还有文件未处理
