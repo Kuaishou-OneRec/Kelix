@@ -37,13 +37,8 @@ processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(
 )
 
 print('--------------------------------')
-for name, param in model.visual.named_parameters():
+for name, param in model.named_parameters():
     print(name, param.shape)
-print('--------------------------------')
-
-for name,param in model2.visual.named_parameters():
-    print(name, param.shape)
-print('--------------------------------') 
 
 
 
