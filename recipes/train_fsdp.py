@@ -518,7 +518,7 @@ class TokenStats:
 
 def data_func(dataset_config, model_class, max_length, batch_queue):
   master_port = int(os.environ["MASTER_PORT"]) + 1
-  os.environ["MASTER_PORT"] = master_port
+  os.environ["MASTER_PORT"] = str(master_port)
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
   dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
