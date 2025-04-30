@@ -757,6 +757,8 @@ def train():
   dist.barrier()
 
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
+  print_rank_0("tokenizertokenizertokenizertokenizer")
+  print_rank_0(tokenizer)
 
 
   ##############
@@ -862,6 +864,7 @@ def train():
       num_samples = (sample_idx.max() + 1).sum()
       num_image_tokens = pixel_values.shape[0] * 256 if args.model_class == "InternVLChatModel" else 0
       
+      num_image_tokens2 = (input_ids == 151667).sum().item()
           
       # num_tokens - (sample_idx == -1).sum()
       num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
@@ -872,9 +875,11 @@ def train():
 
       ticker.tick("token_metrics_init")
       
-      dist.all_reduce(
+      if 1:
+        dist.all_reduce(
           token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-
+      else:
+        token_metrics *= dist.get_world_size()
 
       ticker.tick("token_metrics_reduce")
 
@@ -974,7 +979,7 @@ def train():
               (micro_step + 1) % args.gradient_accumulation_steps == 0:
 
         if args.monitor_image_tokens: 
-          token_stasts.collect_image_token_stats(num_image_tokens)
+          token_stasts.collect_image_token_stats(num_image_tokens2)
           colleced_token_stasts = token_stasts.stats()         
         ticker.tick(f"token_stasts*{log_acc_step}")
 

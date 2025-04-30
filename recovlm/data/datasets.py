@@ -2143,7 +2143,7 @@ class ParquetDataset(IterableDataset):
           except Exception as e:
               raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}")
 
-  def __iter__(self,):
+  def __iter__v1(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
     assert num_workers == self.num_workers
 
@@ -2155,8 +2155,8 @@ class ParquetDataset(IterableDataset):
     fn_list = [fn for idx, fn in enumerate(self.data_files) if idx % total_num_workers == local_worker_idx]
     logger.warning(
       f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
-    )
-    
+    )      
+
     try:
       for epoch_fn in fn_list:
         fn, epoch_idx = epoch_fn
@@ -2201,6 +2201,7 @@ class ParquetDataset(IterableDataset):
                   sample = self._parser(row, fn)
                   if sample is not None:
                     yield sample
+
                   offset_dict[fn_group_key] = row_idx
                 except GeneratorExit:
                   # 正确处理生成器退出
@@ -2236,6 +2237,65 @@ class ParquetDataset(IterableDataset):
     except Exception as e:
       logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
       raise
+
+  def __iter__local_shuffle(self):
+    rank, world_size, worker, num_workers = pytorch_worker_info()
+    assert num_workers == self.num_workers
+
+    finish_dict = self.finish_dict_all[worker]
+    offset_dict = self.offset_dict_all[worker]
+
+    total_num_workers = num_workers * world_size
+    local_worker_idx = rank * num_workers + worker
+    fn_list = [fn for idx, fn in enumerate(self.data_files) if idx % total_num_workers == local_worker_idx]
+    logger.warning(
+      f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
+    )      
+
+    np.random.shuffle(fn_list)
+    def shuffle_parquet_rows(parquet_files_list, n_buffer_files):
+        file_index = 0
+        row_counts = []
+        all_rows = []
+        # 一开始读取 n_buffer_files 个文件
+        while file_index < n_buffer_files and file_index < len(parquet_files_list):
+            fn, epoch_idx = parquet_files_list[file_index]
+            logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
+            df = load_parquet_file(fn)
+            row_counts.append(len(df))
+            all_rows.append(df)
+            file_index += 1
+
+        all_rows = pd.concat(all_rows, ignore_index=True)
+        all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+        rows_processed = 0
+
+        while True:
+            for i, (_, row) in enumerate(all_rows.iterrows()):
+                yield row
+                rows_processed += 1
+                # 当处理的行数达到当前文件的行数且还有文件未处理
+                if rows_processed == row_counts[0] and file_index < len(parquet_files_list):
+                    fn, epoch_idx = parquet_files_list[file_index]
+                    new_df = pd.read_parquet(fn)
+                    logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
+                    all_rows = pd.concat([all_rows[i + 1:], new_df], ignore_index=True)
+                    all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+                    row_counts.pop(0)
+                    row_counts.append(len(new_df))
+                    rows_processed = 0
+                    file_index += 1
+
+            # 如果已经处理完所有文件且当前数据都已处理完，则退出循环
+            if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
+                break
+    
+    for sample in shuffle_parquet_rows(fn_list, 50):
+      yield sample
+
+  def __iter__(self,):
+    for sample in self.__iter__local_shuffle():
+      yield from sample
 
 
 class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
