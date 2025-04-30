@@ -3133,11 +3133,12 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         source_list = [x for i, x in enumerate(source_list) if i not in selected_index]
 
   def __iter__(self):
-    t1 = time.perf_counter()
-    result = self.cache.get()
-    t2 = time.perf_counter()
-    print(f'next_batch[{dist.get_rank()}]={t2-t1}')
-    return result
+    while True:
+        t1 = time.perf_counter()
+        result = self.cache.get()
+        t2 = time.perf_counter()
+        print(f'next_batch[{dist.get_rank()}]={t2-t1}')
+        yield result
 
   def __iter_v2__(self):
     buffer = []
