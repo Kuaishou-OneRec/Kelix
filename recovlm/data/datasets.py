@@ -3144,7 +3144,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   def __iter__(self):
     rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
     world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
-    torch.distributed.destroy_process_group()
     torch.distributed.init_process_group(backend="gloo", rank=rank, world_size=world_size)
     while True:
         t1 = time.perf_counter()
