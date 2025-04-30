@@ -2242,7 +2242,7 @@ class ParquetDataset(IterableDataset):
     import pandas as pd
     rank, world_size, worker, num_workers = pytorch_worker_info()
     assert num_workers == self.num_workers
-
+    from multiprocessing import Pool
     finish_dict = self.finish_dict_all[worker]
     offset_dict = self.offset_dict_all[worker]
 
@@ -2259,22 +2259,54 @@ class ParquetDataset(IterableDataset):
         row_counts = []
         all_rows = []
         # 一开始读取 n_buffer_files 个文件
-        while file_index < n_buffer_files and file_index < len(parquet_files_list):
-            fn, epoch_idx = parquet_files_list[file_index]
+        # while file_index < n_buffer_files and file_index < len(parquet_files_list):
+        #     fn, epoch_idx = parquet_files_list[file_index]
+        #     logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
+        #     df = load_parquet_file(fn).read_row_group(0).to_pandas()
+        #     row_counts.append(len(df))
+        #     all_rows.append(df)
+        #     file_index += 1
+
+        def read_single_file(args):
+            fn, epoch_idx, rank, worker = args
             logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
             df = load_parquet_file(fn).read_row_group(0).to_pandas()
-            row_counts.append(len(df))
-            all_rows.append(df)
-            file_index += 1
+            return df
 
-        all_rows = pd.concat(all_rows, ignore_index=True)
+        def read_parquet_files_multiprocess(parquet_files_list, n_buffer_files):
+            file_index = 0
+            row_counts = []
+            all_rows = []
+
+            # 确定要处理的文件范围
+            files_to_process = []
+            while file_index < n_buffer_files and file_index < len(parquet_files_list):
+                files_to_process.append((parquet_files_list[file_index], rank, worker))
+                file_index += 1
+
+            # 使用多进程读取文件
+            with Pool(len(files_to_process)) as pool:
+                args = [(fn, epoch_idx, rank, worker) for (fn, epoch_idx), rank, worker in files_to_process]
+                results = pool.map(read_single_file, args)
+
+            for df in results:
+                row_counts.append(len(df))
+                all_rows.append(df)
+
+            # 合并所有 DataFrame
+            combined_df = pd.concat(all_rows, ignore_index=True)
+            return combined_df, row_counts
+
+        # all_rows = pd.concat(all_rows, ignore_index=True)
+        # all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+        all_rows, row_counts = read_parquet_files_multiprocess(parquet_files_list, 50)
         all_rows = all_rows.sample(frac=1).reset_index(drop=True)
         rows_processed = 0
 
         while True:
             for i, (_, row) in enumerate(all_rows.iterrows()):
                 sample = self._parser(row, 'tmp')
-                yield row
+                yield sample
                 rows_processed += 1
                 # 当处理的行数达到当前文件的行数且还有文件未处理
                 if rows_processed == row_counts[0] and file_index < len(parquet_files_list):
