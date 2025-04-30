@@ -2439,7 +2439,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     dist.barrier()
     delta_ratio = kargs.get("input_ids_len_delta_ratio", 0.02)
     buffer_size = kargs.get("balance_buffer_size", 1000)
-    target_count = kargs.get("balance_candidate_count", 100)
+    target_count = kargs.get("balance_candidate_count", 1000)
 
     self.sample_queue = queue.Queue(maxsize=32)
     def reader_task():
@@ -3094,7 +3094,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                   max_sum = cur_sum
                   found = candidate
 
-      return candidate
+      return found 
   
   def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 100):
     delta = int(self.max_length * delta_ratio)
