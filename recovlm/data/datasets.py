@@ -2224,8 +2224,9 @@ class ParquetDataset(IterableDataset):
       buffer.append(self.sample_queue.get())
       if len(buffer) == window:
         random.shuffle(buffer)
-      for sample in buffer:
-        self.shuffled_queue.put(sample)
+        for sample in buffer:
+          self.shuffled_queue.put(sample)
+        buffer = []
 
   def __iter__(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
@@ -2247,7 +2248,7 @@ class ParquetDataset(IterableDataset):
       reader.start()
       self.readers.append(reader)
       
-    shuffle_window = 10240
+    shuffle_window = 50000
     self.shuffled_queue = queue.Queue(shuffle_window * 2)
     self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
     self.shuffle_task.start()
