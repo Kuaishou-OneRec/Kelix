@@ -287,7 +287,6 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
         num_workers=num_workers,# num_workers=(num_workers if num_workers > 1 else 0),
         collate_fn=lambda x: x[0],
         worker_init_fn=init_fn,
-        multiprocessing_context="spawn",
     )
     return dataloader
 
