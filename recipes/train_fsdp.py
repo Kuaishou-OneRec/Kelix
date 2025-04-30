@@ -74,6 +74,7 @@ from recovlm.training.common import set_default_dtype, get_global_grad_norm, cli
 
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
+from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitEncoderLayer
 
 
 # Logger 初始化
