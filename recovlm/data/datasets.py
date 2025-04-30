@@ -2988,6 +2988,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     return inputs
 
   def _find_in_range(self, seq_lens, max_len, delta, target_count, max_trials=100000):
+    t1 = time.perf_counter()
     results = set()
     trials = 0 
 
@@ -3010,7 +3011,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                 results.add(tuple(sorted(current_indices)))  # use tuple to be hashable
                 break  # once one valid subset found, restart next trial
 
-    print(f"Found {len(results)} valid subsets in {trials} trials")
+    t2 = time.perf_counter()
+    print(f"Found {len(results)} valid subsets in {trials} trials, dur={t2-t1}")
     return [list(subset) for subset in results]
   
   def _process_task(self):
@@ -3045,8 +3047,45 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
           f"errmsg={traceback.format_exc()}")
         continue
+
+  def _select_nearest_equal(self, local_image_lens, all_image_lens):
+      def find_nearest(arr, target):
+          pos = bisect.bisect_left(arr, target)
+          if pos == 0:
+              return arr[0]
+          if pos == len(arr):
+              return arr[-1]
+          if target == arr[pos]:
+              return target
+          before, after = arr[pos-1], arr[pos]
+          if after - target < target - before:
+              return after
+          else:
+              return before
+      found = None
+      min_var = sys.maxsize
+      for n in local_image_lens:
+          current = []
+          cur_max = -1
+          cur_min = sys.maxsize
+          for arr in all_image_lens:
+              current.append(find_nearest(arr, n))
+              cur_max = max(cur_max, current[-1])
+              cur_min = min(cur_min, current[-1])
+          if (cur_max - cur_min) < min_var:
+              found = current
+              min_var = cur_max - cur_min
+      return found
+
+  def _select_global(self, candidates):
+      min_var = sys.maxsize
+      found = None
+      for candidate in candidates:
+          if max(candidate) - min(candidate) < min_var:
+              found = candidate
+      return candidate
   
-  def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 1000):
+  def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 100):
     delta = int(self.max_length * delta_ratio)
     buffer = []
     source_list = []
@@ -3064,11 +3103,19 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         image_len = [sum(buffer[idx]["pixel_values"].size(0) for idx in candidate) for candidate in candidates]
         #if dist.get_rank() == 0:
         print(f"[rank={dist.get_rank()}]  selected_candidates: {candidates}, input_ids: {input_ids_len}, images: {image_len}")
+        sorted_image_len = sorted(image_len)
         t2 = time.perf_counter()
-        response = balance_sequence(dist.get_rank(), image_len, self.server_addr)
-        selected_len = response["result"]
+        all_image_lens = dist.all_gather_object([sorted_image_len])
+        print(f"[rank={dist.get_rank()}] all_gather_imagelens: {all_image_lens}")
+        local_found = self._select_nearest_equal(sorted_image_len, all_image_lens)
+        local_found_all = dist.all_gather_object([local_found])
+        selected_len = self._select_global(local_found_all)
+        print(f"[rank={dist.get_rank()}] selected_global: {select_len}")
+        selected_index = image_len.index(selected_len(dist.get_rank()))
+        # response = balance_sequence(dist.get_rank(), image_len, self.server_addr)
+        #selected_len = response["result"]
         t3 = time.perf_counter()
-        selected_index = candidates[image_len.index(selected_len)]
+        # selected_index = candidates[image_len.index(selected_len)]
         packed_inputs = self._packing([buffer[idx] for idx in selected_index])
         t4 = time.perf_counter()
         print(f"[rank={dist.get_rank()}]find_input_ids={t2-t1}, balance_imgae={t3-t2}, packing={t4-t3},selected={selected_len}")
