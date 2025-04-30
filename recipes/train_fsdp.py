@@ -546,16 +546,16 @@ def train():
       f"{dataset_config['max_length']} -> {args.max_length}")
     dataset_config["max_length"] = args.max_length
   
-  with Timer("Build dataloader"):
-    try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
-    except: 
-      import traceback
-      print(f"get_dataloader_v2 error: {traceback.format_exc()}")
-      print(f"get_dataloader_v2 retry for get_dataloader")
-      traceback.print_exc()
-      dataloader = get_dataloader(name=dataset, **dataset_config)
-    if args.resume_dataloader and dataloader_state_dict is not None:
-      dataloader.load_state_dict(dataloader_state_dict)
+  # with Timer("Build dataloader"):
+  try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
+  except: 
+    import traceback
+    print(f"get_dataloader_v2 error: {traceback.format_exc()}")
+    print(f"get_dataloader_v2 retry for get_dataloader")
+    traceback.print_exc()
+    dataloader = get_dataloader(name=dataset, **dataset_config)
+  if args.resume_dataloader and dataloader_state_dict is not None:
+    dataloader.load_state_dict(dataloader_state_dict)
 
   # init model params
   os.environ["KML_ID"] = args.kml_id
