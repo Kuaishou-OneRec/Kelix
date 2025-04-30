@@ -2432,9 +2432,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.datasource_config = datasource_config
     self.cache = queue.Queue(maxsize=1)
     self.port = kargs.get("dataset_service_port", 53545)
-    if dist.get_rank() == 0:
-        self.server = DatasetServer(dist.get_world_size())
-        self.server.start(port=self.port)
+    # if dist.get_rank() == 0:
+    #     self.server = DatasetServer(dist.get_world_size())
+    #     self.server.start(port=self.port)
     self.server_addr = f"{os.environ['MASTER_ADDR']}:{self.port}"
     dist.barrier()
     delta_ratio = kargs.get("input_ids_len_delta_ratio", 0.02)

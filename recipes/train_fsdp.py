@@ -812,7 +812,8 @@ def train():
   grad_norm = 0.0
   global_step = 0
   # get_sequence_parallel_group("gloo")
-  data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
+  # data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
+  data_iter = iter(dataloader)
   micro_step = 0
   ticker = TimeTracker(n=args.logging_per_step)
   iter_ticker = TimeTracker(n=args.logging_per_step)
