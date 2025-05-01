@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="run internvl 2b 0.7.0 stage1.5 by lzx, load from ckpt1k, use stage1.5-0.6.0 data"
+comment="run internvl 2b 0.7.0 stage2 by lzx, load from ckpt1k, use stage2-0.6.0 data, note there stage1.5 0.6.0 data is part of stage2 0.6.0 data"
 
 
 git add --all
