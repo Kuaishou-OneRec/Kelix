@@ -2458,6 +2458,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.tokenizer = tokenizer
     self.visual_tokens_per_image = int((image_size//patch_size)** 2 * (down_sample_ratio ** 2))
     self.cut_to_pad = cut_to_pad
+    print(f"set cut_to_pad={cut_to_pad}")
 
     self.down_sample_ratio=down_sample_ratio
     self.pid_info_client = PidInfoClient('10.84.241.154')

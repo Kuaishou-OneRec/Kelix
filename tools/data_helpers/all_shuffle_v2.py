@@ -473,7 +473,7 @@ def main():
             target_partition_size=args.partition
         )
         print(f"Main process initialized for Rank-{shuffler.rank}. Memory: {get_memory_usage()}")
-        shuffler.run([1,2])
+        shuffler.run([1,])
 
 
 if __name__ == "__main__":
