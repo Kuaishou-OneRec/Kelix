@@ -143,8 +143,8 @@ nohup mpirun --allow-run-as-root \
                 --comment "$comment" \
                 --commit_id $git_hash \
 		--logging_per_step 10 \
-		--resume_from /llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.7.0/2b/stage_2_v0/step7000 \
-		--resume_from_tag global_step7000 \
+		--resume_from /llm_reco/lingzhixin/output3/RecoVLM-Base/0.7.0/2b/stage_2_v0/step9000 \
+		--resume_from_tag global_step9000 \
 		--resume_dataloader \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
