@@ -1997,7 +1997,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
 
 class ParquetDataset(IterableDataset):
-  def __init__(self, data_files, num_workers, n_local_shuffle_files_window=20):
+  def __init__(self, data_files, num_workers, n_local_shuffle_files_window=5):
     self.data_files = data_files
     self.num_workers = num_workers
     self.n_local_shuffle_files_window = n_local_shuffle_files_window
@@ -3090,7 +3090,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
 
 class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDataset):
-  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, n_local_shuffle_files_window=20, **kargs):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, n_local_shuffle_files_window=5, **kargs):
     self.rng = random.Random(shuffle_seed)
     self.num_workers = num_workers
     self.num_epochs = num_epochs

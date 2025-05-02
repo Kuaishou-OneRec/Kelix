@@ -701,11 +701,14 @@ def train():
     args.load_weights_only = False
     print_rank_0(f"WARN: --resume_dataloader is rewrited to True \n" \
                  f"WARN: --load_weights_only is rewrited to False \n")
-    
+  global_step = 0
+
+
   if ckpt_id:
     ckpt_path = os.path.join(resume_from, ckpt_id)
+    global_step = int(ckpt_id.split("step")[-1])
     print_rank_0(
-      f"Resume from checkpoint: {ckpt_path}, "
+      f"Resume from checkpoint: {ckpt_path}, global_step={global_step}"
       f"load_weights_only={args.load_weights_only}")
 
     if not os.path.exists(ckpt_path):
@@ -811,7 +814,6 @@ def train():
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
   grad_norm = 0.0
-  global_step = 0
   # get_sequence_parallel_group("gloo")
   data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
   micro_step = 0
@@ -1030,7 +1032,7 @@ def train():
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
             "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples
           }
-          log_dict.update(colleced_token_stasts)
+          if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
           ticker.tick(f"log_dict*{log_acc_step}")
 
 
