@@ -11,7 +11,8 @@ else
         echo "Git user.emal: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1999  > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile  | head -7  > /etc/mpi/hostfile_seq
+
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2Bt/ # Pretrained/Base model path
@@ -121,13 +122,13 @@ nohup mpirun --allow-run-as-root \
                 --monitor_datasource_cnt \
                 --dataset_config examples/vlm/configs/0.7.0/2b_v0_7_0_internvl_stage3.json  \
                 --max_length 21000 \
-                --learning_rate 4e-5 \
+                --learning_rate 5e-5 \
                 --model_class InternVLChatModel \
                 --min_lr 0.0 \
                 --weight_decay 0.01 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 500 \
-                --num_training_steps 100000 \
+                --num_training_steps 10000 \
                 --save_checkpoint_per_step 1000 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
