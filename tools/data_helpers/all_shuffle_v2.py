@@ -9,6 +9,7 @@ from tqdm import tqdm
 import argparse
 import numpy as np
 import pandas as pd
+import json
 import pyarrow as pa
 import pyarrow.parquet as pq
 from utils import MPIBase
@@ -110,16 +111,19 @@ class AutoShuffler(MPIBase):
             
         self.sample_rate_dict = {}
         
+        
         # 自动创建目录结构
         if self.rank == 0:
             for d in [self.final_output_dir, self.prepare_output_dir]:
                 self.mkdir(d)
 
+
         if self.shard_output_by_rank:
-            time.sleep(np.random.rand() * 100)
+            sleep_max_time = self.world_size ** 0.35
+            time.sleep(np.random.rand() * sleep_max_time)
             final_output_dir = self.mkdir(self.final_output_dir, str(self.rank))
 
-            time.sleep(np.random.rand() * 100)
+            time.sleep(np.random.rand() * sleep_max_time)
             prepare_output_dir = self.mkdir(self.prepare_output_dir, str(self.rank))
 
             print(f"Rank-{self.rank} initialized: {final_output_dir}, {prepare_output_dir}")
@@ -127,6 +131,7 @@ class AutoShuffler(MPIBase):
         self.comm.barrier()
         # 调试：打印当前rank的初始化信息
         print(f"Rank-{self.rank} initialized. Memory usage: {get_memory_usage()}")
+
 
     def mkdir(self, *d, drop_last=False):
         # 调试：打印创建目录的rank和路径
@@ -208,6 +213,9 @@ class AutoShuffler(MPIBase):
 
         progress_bar.close()
         self.sample_rate_dict = sample_rate_dict
+        if self.rank < 10:
+            print(self.rank, "self.sample_rate_dict")
+            print(json.dumps(self.sample_rate_dict, indent=4))
         return all_files
     
     def _prepare_stage(self):
@@ -226,6 +234,8 @@ class AutoShuffler(MPIBase):
         else:
             all_files = None
         
+        self.sample_rate_dict = self.comm.bcast(self.sample_rate_dict, root=0)
+
         # 分发文件列表
         all_files = self.comm.bcast(all_files, root=0)
         my_files = all_files[self.rank::self.world_size]
@@ -237,16 +247,18 @@ class AutoShuffler(MPIBase):
         for fpath in tqdm.tqdm(my_files, desc=f"Rank-{self.rank} Preprocessing"):
             try:
                 # 内存监控：处理文件前
-                print(f"Rank-{self.rank} processing {fpath}. Memory before: {get_memory_usage()}")
+                # print(f"Rank-{self.rank} processing {fpath}. Memory before: {get_memory_usage()}")
                 
 
                 # 读取并采样
                 dirname = os.path.dirname(fpath)
-                df = pq2pd_v2(fpath, self.rank)
-                df = df.sample(frac=self.sample_rate_dict.get(dirname, 1.0))
+                df0 = pq2pd_v2(fpath, self.rank)
+                frac = self.sample_rate_dict.get(dirname, 1.0)
+                df = df0.sample(frac=frac)
                 
+
                 # 内存监控：读取文件后
-                print(f"Rank-{self.rank} read {len(df)} rows from {fpath}. Memory after read: {get_memory_usage()}")
+                print(f"Rank-{self.rank} read {len(df0)} -> {len(df)} rows from {fpath}, \nfrac={frac}, dirname={dirname}. Memory after read: {get_memory_usage()}")
                 
                 # 分块写入
                 for i in range(0, len(df), 128):  # 每128个样本一组
@@ -392,6 +404,7 @@ class AutoShuffler(MPIBase):
     def get_files_for_rank(self, rank, directory):
         rank_dir = os.path.join(directory, str(rank))
         return self.ls(rank_dir)
+
     # 在类的方法中使用以下代码
     def get_all_files(self, directory):
         all_files = []
@@ -416,8 +429,8 @@ class AutoShuffler(MPIBase):
             self._prepare_stage()
             self.comm.barrier()  # 确保所有节点完成预处理
             
-        if self.rank == 0:
-            all_files = self._collect_output_files(self.prepare_output_dir)
+            if self.rank == 0:
+                all_files = self._collect_output_files(self.prepare_output_dir)
 
         all_files = self.comm.bcast(all_files, root=0)
         if 2 in stages:
@@ -425,8 +438,8 @@ class AutoShuffler(MPIBase):
             self._shuffle_stage()
             self.comm.barrier()
         
-        if self.rank == 0:
-            all_files = self._collect_output_files(self.final_output_dir)
+            if self.rank == 0:
+                all_files = self._collect_output_files(self.final_output_dir)
 
 
 class AutoShufflerJsonMaker(AutoShuffler):

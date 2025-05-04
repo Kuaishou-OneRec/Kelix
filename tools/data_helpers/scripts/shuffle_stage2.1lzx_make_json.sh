@@ -2,7 +2,7 @@
 
 hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=5000
+np=6500
 
 mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install fastparquet==2024.2.0"
 mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install humanize"
@@ -17,29 +17,63 @@ KWS_SERVICE_PAZ=HB2AZ2
 KWS_SERVICE_STAGE=PROD
 PYTHONPATH=.:$PYTHONPATH
 
-mpirun --allow-run-as-root -np $np \
-        -mca plm_rsh_args "-p ${Port}"  \
-        -mca opal_set_max_sys_limits 1 \
-        -mca plm_rsh_num_concurrent 300 \
-        --oversubscribe \
-        -hostfile $hostfile \
-        -x PYTHONPATH=$PYTHONPATH \
-        -x JAVA_HOME=$JAVA_HOME \
-        -x HIVE_HOME=$HIVE_HOME \
-        -x CLASSPATH=$CLASSPATH \
-        -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
-        -x HADOOP_HOME=$HADOOP_HOME \
-        -x SPARK_HOME=$SPARK_HOME \
-        -x KWS_SERVICE_REGION=$KWS_SERVICE_REGION \
-        -x KWS_SERVICE_DC=$KWS_SERVICE_DC \
-        -x KWS_SERVICE_CATALOG=$KWS_SERVICE_CATALOG \
-        -x KWS_SERVICE_NAME=$KWS_SERVICE_NAME \
-        -x KWS_SERVICE_AZ=$KWS_SERVICE_AZ \
-        -x KWS_SERVICE_PAZ=$KWS_SERVICE_PAZ \
-        -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE \
-        python3 tools/data_helpers/all_shuffle_v2.py \
-        --output viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm_0427compile/recovlm3/recovlm/tools/data_helpers/scripts/shuffle_stage2lzx \
-        --input viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/Detailed_Caption_densecap_new@1 \
+python3 tools/data_helpers/all_shuffle_v2.py \
+--world_size $np \
+		--make_json \
+        --output viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm_0427compile/recovlm3/recovlm/tools/data_helpers/scripts/shuffle_stage2.1lzx \
+		--input viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/Capsfusion-V3@0.05 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/opensource_data/latex-formulas@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhangzixing/recovlm_dataset_table/gpt4o_poie_markdown@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhangzixing/recovlm_dataset_table/gpt4o_poie_html@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhangzixing/recovlm_dataset_table/gpt4o_spdocvqa_markdown@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhangzixing/recovlm_dataset_table/gpt4o_sroie_markdown@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhangzixing/recovlm_dataset_table/gpt4o_xfund_json@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/HME100K@0.1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/IAM@0.1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/EST_VQA@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/opensource_data/st-vqa@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/InfoVQA_OCR@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/SROIE@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/POIE@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhangzixing/recovlm_dataset_grounding/ArT_grounding@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/LSVT_grounding_OCR@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/RCTW@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhangzixing/recovlm_dataset_grounding/ReCTs_grounding@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/MTWI@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/TextVQA_OCR@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/CASIA@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/coco_captions@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/TextCaps@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/MMInstruct-Caption-EN@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/MMInstruct-Caption-ZH@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/InternVL_SAM_1B_multi_en@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/InternVL_SAM_1B_multi_zh@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/ShareGPT4V@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/llavar@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/OCR_VQA@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/TextOCR_fix@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/DenseFusion@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/the_cauldron_recaption_v1@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/Refcoco@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/V3Det@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/RenderedText_chat@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/SyntheticOCR_CN_HW@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/SyntheticOCR_EN_HW@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/WebSightV2_OCR@0.3 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/InternVL_SAM_1B_single_en@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/InternVL_SAM_1B_single_zh@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/ASV2@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/GRIT@0.3 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/DataComp@0.03 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/Coyo@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/Laion2B_en@0.005 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/Laion_Coco@0.005 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/COCOText@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/fintabnet@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/opensource_data/parsynth-ocr-200k@1 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/synthdog_fix@0.5 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/GRIT@0.15 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/caption/Detailed_Caption_densecap_new@1 \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage1/GQA \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/opensource_data/OK-VQA	\
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/opensource_data/A-OKVQA \
@@ -92,9 +126,9 @@ mpirun --allow-run-as-root -np $np \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/PMC_VQA \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/VQA_RAD \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/SLAKE	\
-                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/MMC4_ff_reconstruct@0.035	 \
-                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Obelisc_reconstruct@0.36 \
-                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_wanjuan3lang/wanjuan3lang/train_v1@0.25 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/MMC4_ff_reconstruct@0.02	 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Obelisc_reconstruct@0.02 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_wanjuan3lang/wanjuan3lang/train_v1@0.01 \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_wanjuan_mm_image/wanjuan_mm_image/train_v1 \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct@0.5 \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_wikihow_vgsi/wikihow_vgsi/train_v1 \
@@ -102,11 +136,13 @@ mpirun --allow-run-as-root -np $np \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Mementos \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-web/train_v1@0.5 \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-qa/train_v1@0.4 \
-                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v1@0.3 \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v1@0.005 \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-translated-code/train_v1@0.3 \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-web-pro/train_v1@0.35 \
                 viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_original/text/General_QA/infinity_instruct_7m@0.533 \
-                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/liangyiming/instruct_data 
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/liangyiming/instruct_data \
+                viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/HME100K
+
 
 
 
