@@ -28,12 +28,18 @@ def load_model_state():
         "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
         ignore_mismatched_sizes=True
     )
-    
     # 2. 加载保存的state dict
     state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_moonvit_state_dict.pth")
     
     # 3. 将state dict加载到模型中
+    print('=================================')
     loaded_model.load_state_dict(state_dict)
+    for key, value in loaded_model.named_parameters():
+        print('--------------------------------')
+        print(key, value.shape) 
+        print(value)
+        print('--------------------------------')
+    print('=================================')   
     
     return loaded_model 
 
@@ -45,8 +51,16 @@ if __name__ == "__main__":
     )
 
 
+    
+    pt = '/llm_reco/liuyang76/Models/MoonVitParam/MoonVit.pt'
+    visual_state_dict = torch.load(pt)
+    for key, value in visual_state_dict.items():
+        print('--------------------------------')
+        print(key, value.shape)
+        print(value)
+        print('--------------------------------')
+    model.visual.load_state_dict(visual_state_dict)
     dict_state = model.state_dict()
-
     save_model_state(dict_state)
     loaded_model = load_model_state()
     for key, value in model.named_parameters():
