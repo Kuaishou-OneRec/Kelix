@@ -251,7 +251,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
     cut_to_pad = kwargs.get('cut_to_pad',False)
     ModelDataset = {'Qwen2VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
-                    'Qwen2_5_VLForConditionalGeneration_moonvit':ChatCompletionVisionParquetDataset,
+                    'Qwen2_5_VLForConditionalGeneration_moonvit':ChatCompletionVisionParquetDataset_moonvit,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
     dataset = ModelDataset[model_type](
         sources = sources,
