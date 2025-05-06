@@ -3055,7 +3055,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       cu_seqlens,
                                       sample_idx=-1)
 
-    if self.cut_to_pad: assert valid_seq_len == self.max_length, f"set cut_to_pad={cut_to_pad}, then require valid_seq_len/{valid_seq_len} == self.max_length/{self.max_length}"
+    if self.cut_to_pad: assert valid_seq_len == self.max_length, f"set cut_to_pad={self.cut_to_pad}, then require valid_seq_len/{valid_seq_len} == self.max_length/{self.max_length}"
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
