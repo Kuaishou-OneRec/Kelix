@@ -44,7 +44,7 @@ if __name__ == "__main__":
       "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
     )
 
-    #save model dict state as what we can load use from pretrained 
+
     dict_state = model.state_dict()
 
     save_model_state(dict_state)
