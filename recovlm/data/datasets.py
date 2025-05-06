@@ -3102,7 +3102,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         # print(f"[rank={dist.get_rank()}] all_local_found={all_local_found}")
         selected_len = self._select_global(all_local_found)
         if dist.get_rank() == 0:
-          print(f"[rank={dist.get_rank()}] selected_global: {selected_len}")
+          print(f"[rank={dist.get_rank()}] selected_global: {selected_len}, diff={max(selected_len) - min(selected_len)}")
         selected_index = candidates[image_len.index(selected_len[dist.get_rank()])]
         # response = balance_sequence(dist.get_rank(), image_len, self.server_addr)
         #selected_len = response["result"]

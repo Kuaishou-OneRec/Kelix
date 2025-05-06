@@ -269,7 +269,7 @@ def get_argument_parser():
 
 
 
-def _init_profiler(output_dir, start_step=103, end_step=112) -> None:
+def _init_profiler(output_dir, start_step=13, end_step=22) -> None:
     import torch.distributed as D
     import os
     if not os.path.exists(output_dir):
@@ -566,7 +566,7 @@ def train():
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
       "save_checkpoint_every_epoch should be set."
 
-  batch_queue = mp.Queue(2)
+  batch_queue = mp.Queue(4)
   dataset_config = args.dataset_config
   data_process = mp.Process(
       target=data_func,
