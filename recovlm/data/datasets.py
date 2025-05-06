@@ -2028,10 +2028,12 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
 
 class ParquetDataset(IterableDataset):
-  def __init__(self, data_files, num_workers, vit_token_balance=False):
+  def __init__(self, data_files, num_workers, vit_token_balance=False, n_local_shuffle_files_window=3):
     self.data_files = data_files
     self.num_workers = num_workers
     self.vit_token_balance = vit_token_balance
+    self.n_local_shuffle_files_window = n_local_shuffle_files_window
+    print(f"set n_local_shuffle_files_window={n_local_shuffle_files_window}")
 
     manager = multiprocessing.Manager()
     self.num_readers = 8
