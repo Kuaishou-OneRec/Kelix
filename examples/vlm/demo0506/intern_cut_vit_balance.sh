@@ -120,7 +120,7 @@ nohup mpirun --allow-run-as-root \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config intern_cut_vit_balance.json \
+                --dataset_config examples/vlm/demo0506/intern_cut_vit_balance.json \
 		--max_length 21000 \
                 --learning_rate 2e-5 \
                 --model_class InternVLChatModel \
