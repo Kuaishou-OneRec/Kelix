@@ -2028,7 +2028,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
 
 class ParquetDataset(IterableDataset):
-  def __init__(self, data_files, num_workers, vit_token_balance=False, n_local_shuffle_files_window=3):
+  def __init__(self, data_files, num_workers, n_local_shuffle_files_window=3, vit_token_balance=False):
     self.data_files = data_files
     self.num_workers = num_workers
     self.vit_token_balance = vit_token_balance
