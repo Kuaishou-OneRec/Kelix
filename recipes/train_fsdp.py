@@ -650,7 +650,6 @@ def train():
     )
 
     
-  if args.fp32_weight: model = model.float()
   shard_model(
     model=model,
     shard_conditions=[partial(get_shard_conditions, model_class=args.model_class)],
@@ -662,6 +661,7 @@ def train():
     model_class=args.model_class
   )
   dist.barrier()
+  if args.fp32_weight: model = model.float()
 
   with Timer("Load state dict"):
     load_from_full_model_state_dict(model=model, full_sd=state_dict) # 这里应该全部转成CUDA了, meta -> CUDA
