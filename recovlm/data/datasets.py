@@ -1310,7 +1310,7 @@ class ChatCompletionVisionDataset(IterableDataset):
                vision_start_token_id: int = 151652,
                vision_end_token_id: int = 151653,
                pad_token_id: int = 151643,
-               datasource_config:Dict[str, Dict[str, Any]] = {}):
+               datasource_config:Dict[str, Dict[str, Any]] = {},**k):
     """
     datasource_config: 默认覆盖全局配置
                       key: datasource_name
