@@ -308,8 +308,6 @@ class Qwen2_5_VLProcessor_moonvit(ProcessorMixin):
         )
         if images is not None:
             image_inputs = self.image_processor(images=images, return_tensors="pt")
-            for key in image_inputs:
-                image_inputs[key] = image_inputs[key].cuda()
             image_inputs['pixel_values'] = image_inputs['pixel_values'].to(torch.bfloat16)
             image_grid_thw = image_inputs["image_grid_thw"]
 
