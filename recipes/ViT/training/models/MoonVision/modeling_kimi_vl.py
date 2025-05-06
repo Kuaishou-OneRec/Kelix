@@ -2365,10 +2365,16 @@ class MoonVitPretrainedModel(PreTrainedModel):
             torch.Tensor: The output tokens.
         """
         hidden_states = self.patch_embed(pixel_values, grid_hws)
+        print('msy_hidden_states',hidden_states.shape)
+        print('msy_hidden_states',hidden_states)
         hidden_states = self.encoder(hidden_states, grid_hws)
+        print('msy_hidden_states2',hidden_states.shape)
+        print('msy_hidden_states2',hidden_states)
         hidden_states = patch_merger(
             hidden_states, grid_hws, merge_kernel_size=self.merge_kernel_size
         )
+        print('msy_hidden_states3',hidden_states.shape)
+        print('msy_hidden_states3',hidden_states)
         return hidden_states
 
 

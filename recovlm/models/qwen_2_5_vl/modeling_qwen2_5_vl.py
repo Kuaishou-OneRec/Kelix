@@ -2239,7 +2239,7 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
         KimiVL_Config = KimiVLConfig()
         MoonViT_config._attn_implementation = 'flash_attention_2'
         self.mlp_AR = KimiVLMultiModalProjector(KimiVL_Config_AR)
-        self.visual = MoonVitPretrainedModel(MoonViT_config).to(dtype=torch.bfloat16)
+        self.visual = MoonVitPretrainedModel(MoonViT_config)
         self.model = Qwen2_5_VLModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
@@ -2521,7 +2521,7 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
                     image_grid_hws.append((thw[1],thw[2]))
                 image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
                 print('msy_image_grid_hws',image_grid_hws)
-                print('msy_pixel_values',pixel_values)
+                print('msy_pixel_values',pixel_values.shape)
                 image_embeds = self.visual(pixel_values, image_grid_hws)
                 # print('msy1_image_embeds',image_embeds)
                 image_embeds = self.mlp_AR(image_embeds)
