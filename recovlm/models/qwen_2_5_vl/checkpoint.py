@@ -10,7 +10,7 @@ from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditio
 class Qwen2VLCheckpointConverter(CheckpointConverter):
   def __init__(self, model_path_or_name: str):
     self.model_path_or_name = model_path_or_name
-    self.config = Qwen2_5_VLVisionConfig.from_pretrained(model_path_or_name)
+    self.config = Qwen2VLConfig.from_pretrained(model_path_or_name)
 
   def __call__(self,
                state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
@@ -118,7 +118,8 @@ def _test_convert():
     
     # 3. 验证转换后的权重是否可用于模型初始化
     print("\n=== 验证转换后权重的可用性 ===")
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(model_dir)
+    from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLForConditionalGeneration
+    model = Qwen2VLForConditionalGeneration.from_pretrained(model_dir)
     
     try:
         model.load_state_dict(converted_dict, strict=False)
