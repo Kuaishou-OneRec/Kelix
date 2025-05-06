@@ -298,6 +298,7 @@ class MoonVisionPatchEmbed(nn.Module):
         ), f"Expected patch_size to be a tuple of 2, got {patch_size}"
         self.patch_size = patch_size
 
+        #initialize the conv2d layer
         self.proj = nn.Conv2d(
             in_dim, out_dim, kernel_size=patch_size, stride=patch_size
         )
@@ -315,15 +316,12 @@ class MoonVisionPatchEmbed(nn.Module):
         Returns:
             (L, Cout) tensor
         """
-        print('msy_x',x.shape)
-        print('msy_x',x)
         x = self.proj(x).view(x.size(0), -1)
-        print('msy_x2',x.shape)
-        print('msy_x2',x)
+        print('proj',self.proj.weight)
+        print('proj',self.proj.bias)
+        
         # apply positional embedding
         x = self.pos_emb(x, grid_hws)
-        print('msy_x3',x.shape)
-        print('msy_x3',x)
         return x
 
 
