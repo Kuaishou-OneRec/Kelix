@@ -3128,7 +3128,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                 current_sum += seq_lens[idx]
                 current_indices.append(idx)
 
-            if max_len - delta <= current_sum <= max_len:
+            if max_len <= current_sum < max_len + delta:
                 results.add(tuple(sorted(current_indices)))  # use tuple to be hashable
                 break  # once one valid subset found, restart next trial
 
