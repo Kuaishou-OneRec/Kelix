@@ -319,8 +319,6 @@ class MoonVisionPatchEmbed(nn.Module):
             (L, Cout) tensor
         """
         x = self.proj(x).view(x.size(0), -1)
-        print('proj',self.proj.weight)
-        print('proj',self.proj.bias)
         
         # apply positional embedding
         x = self.pos_emb(x, grid_hws)

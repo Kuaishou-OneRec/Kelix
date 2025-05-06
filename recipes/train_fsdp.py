@@ -518,8 +518,6 @@ def train():
 
 
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    print('msy0')
-    print(eval(args.model_class))
     model = eval(args.model_class).from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",use_cache = False, ignore_mismatched_sizes=True
     )
@@ -824,7 +822,6 @@ def train():
       labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
       local_labels = get_local_sequence(labels, seq_idx=1)
       loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
-      print('msy_loss',loss)
 
       # del logits
       # del labels
