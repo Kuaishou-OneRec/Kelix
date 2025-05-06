@@ -19,14 +19,9 @@ import json
 
 
 model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
-  "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
+  "/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct",ignore_mismatched_sizes=True
 )
 model.eval()
-
-model2 = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-  "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
-)
-model2.eval()
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
