@@ -135,10 +135,10 @@ def get_argument_parser():
                       help="The directory to write the trained model")
 
 
-  parser.add_argument("--model_class", type=str, default="Qwen2VLForConditionalGeneration",
+  parser.add_argument("--model_class", type=str, default="Qwen2_5_VLForConditionalGeneration_moonvit",
                       help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','InternVLChatModel'",)
   
-  parser.add_argument("--model_processor", type=str, default="Qwen2VLProcessor",
+  parser.add_argument("--model_processor", type=str, default="Qwen2_5_VLProcessor_moonvit",
                       help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit'")
 
   ############ Dataset args ############

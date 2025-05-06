@@ -33,7 +33,7 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 model = model.to(device,dtype=torch.bfloat16)
 
 processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(
-  "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct"
+  "/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct"
 )
 
 print('--------------------------------')
