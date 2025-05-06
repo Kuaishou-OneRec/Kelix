@@ -269,18 +269,19 @@ def get_argument_parser():
 
 
 
-def _init_profiler(output_dir, start_step=5, end_step=10) -> None:
+def _init_profiler(output_dir, start_step=103, end_step=112) -> None:
     import torch.distributed as D
     import os
     if not os.path.exists(output_dir):
-        os.makedirs(output_dir, exist_ok=True)
+        if D.get_rank() == 0:
+            os.makedirs(output_dir, exist_ok=True)
 
     def trace_handler(prof):
         if D.get_rank() == 0:
             prof.export_chrome_trace(
                 os.path.join(output_dir, str(prof.step_num) + ".json")
             )
-    
+
     torch_profiler = torch.profiler.profile(
         activities=[
             torch.profiler.ProfilerActivity.CPU,
@@ -515,6 +516,36 @@ class TokenStats:
       return res
 
   
+def data_func(dataset_config, model_class, max_length, batch_queue, args):
+  master_port = int(os.environ["MASTER_PORT"]) + 1
+  os.environ["MASTER_PORT"] = str(master_port)
+  rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+  world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+  dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+  
+  ##############
+  with open(dataset_config, encoding="utf-8") as f:
+    dataset_config = json.loads(f.read())
+  dataset = dataset_config.pop("name")
+  dataset_config["model_class"] = model_class
+  if max_length:
+    print(
+      f"Overwrite max_length in dataset_config: "
+      f"{dataset_config['max_length']} -> {max_length}")
+    dataset_config["max_length"] = max_length
+  
+  # with Timer("Build dataloader"):
+  try:  dataloader = get_dataloader_v2(name=dataset, vit_token_balance=args.vit_token_balance, **dataset_config)
+  except: 
+    import traceback
+    print(f"get_dataloader_v2 error: {traceback.format_exc()}")
+    print(f"get_dataloader_v2 retry for get_dataloader")
+    traceback.print_exc()
+    dataloader = get_dataloader(name=dataset, vit_token_balance=args.vit_token_balance, **dataset_config)
+
+  for batch in dataloader:
+    batch_queue.put(batch)
+
 
 def train():
   arg_parser = get_argument_parser()
@@ -534,6 +565,15 @@ def train():
   assert any([args.save_checkpoint_per_step, args.save_checkpoint_every_epoch]), \
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
       "save_checkpoint_every_epoch should be set."
+
+  if args.vit_token_balance:
+    batch_queue = mp.Queue(4)
+    dataset_config = args.dataset_config
+    data_process = mp.Process(
+        target=data_func,
+        args=(dataset_config, args.model_class, args.max_length, batch_queue, args))
+    data_process.start()
+    print(f"data process started")
 
   # init model params
   os.environ["KML_ID"] = args.kml_id
@@ -620,7 +660,8 @@ def train():
     dp_mesh=device_mesh,
     fp32_weight=args.fp32_weight,
     prefetch_parameters=args.prefetch_parameters,
-    model_class=args.model_class
+    model_class=args.model_class,
+    fp32_reduce=args.fp32_reduce
   )
   dist.barrier()
 
@@ -761,8 +802,6 @@ def train():
   dist.barrier()
 
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
-  print_rank_0("tokenizertokenizertokenizertokenizer")
-  print_rank_0(tokenizer)
 
 
   ##############
@@ -783,16 +822,19 @@ def train():
       f.write(json.dumps(
         dataset_config, ensure_ascii=False, indent=2) + "\n")
 
-  with Timer("Build dataloader"):
-    try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
-    except: 
-      import traceback
-      print_rank_0(f"get_dataloader_v2 error: {traceback.format_exc()}")
-      print_rank_0(f"get_dataloader_v2 retry for get_dataloader")
-      traceback.print_exc()
-      dataloader = get_dataloader(name=dataset, **dataset_config)
-    if args.resume_dataloader and dataloader_state_dict is not None:
-      dataloader.load_state_dict(dataloader_state_dict)
+  if not args.vit_token_balance:
+    with Timer("Build dataloader"):
+      try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
+      except: 
+        import traceback
+        print_rank_0(f"get_dataloader_v2 error: {traceback.format_exc()}")
+        print_rank_0(f"get_dataloader_v2 retry for get_dataloader")
+        traceback.print_exc()
+        dataloader = get_dataloader(name=dataset, **dataset_config)
+      if args.resume_dataloader and dataloader_state_dict is not None:
+        dataloader.load_state_dict(dataloader_state_dict)
+  else:
+    dataloader = None
 
   ##############
   torch_profiler = _init_profiler(output_dir=os.path.join(args.output_dir, "torch_profile"))
@@ -815,8 +857,9 @@ def train():
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
   grad_norm = 0.0
+  global_step = 0
   # get_sequence_parallel_group("gloo")
-  data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
+  if not args.vit_token_balance: data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
   micro_step = 0
   ticker = TimeTracker(n=args.logging_per_step)
   iter_ticker = TimeTracker(n=args.logging_per_step)
@@ -828,7 +871,7 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = next(data_iter)
+      try: batch = batch_queue.get() if args.vit_token_balance else next(data_iter) 
       except StopIteration: break
       ticker.tick("next(data_iter)")
       
@@ -878,11 +921,8 @@ def train():
 
       ticker.tick("token_metrics_init")
       
-      if 1:
-        dist.all_reduce(
-          token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-      else:
-        token_metrics *= dist.get_world_size()
+      dist.all_reduce(
+        token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
       ticker.tick("token_metrics_reduce")
 
