@@ -135,6 +135,8 @@ def get_argument_parser():
   parser.add_argument("--output_dir", type=str, default=None,
                       help="The directory to write the trained model")
 
+  parser.add_argument("--vit_token_balance", action="store_true",
+                      help="whether adopt balanced vit tokens")
 
   parser.add_argument("--model_class", type=str, default="Qwen2VLForConditionalGeneration",
                       help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','InternVLChatModel'",)
