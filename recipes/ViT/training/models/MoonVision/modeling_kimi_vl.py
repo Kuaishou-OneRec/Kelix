@@ -302,6 +302,8 @@ class MoonVisionPatchEmbed(nn.Module):
         self.proj = nn.Conv2d(
             in_dim, out_dim, kernel_size=patch_size, stride=patch_size
         )
+        nn.init.normal_(self.proj.weight, std=0.02)
+        nn.init.zeros_(self.proj.bias)
 
         self.pos_emb = Learnable2DInterpPosEmb(
             height=pos_emb_height, width=pos_emb_width, dim=out_dim
