@@ -2521,15 +2521,14 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
                     image_grid_hws.append((thw[1],thw[2]))
                 image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
                 image_embeds = self.visual(pixel_values, image_grid_hws)
+                print('msy1_image_embeds',image_embeds)
                 image_embeds = self.mlp_AR(image_embeds)
-
+                print('msy2_image_embeds',image_embeds)
                 #64*7168
                 
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 #image_embeds is a list of tensor, each tensor is a image feature,I want to concat them all into a tensor
                 image_embeds = torch.cat(image_embeds,dim=0)
-                print('msy_image_embeds',image_embeds.shape)
-                print('msy_image_embeds',image_embeds)
                 n_image_features = image_embeds.shape[0]
                 if n_image_tokens != n_image_features:
                     raise ValueError(

@@ -526,12 +526,6 @@ def train():
     if args.model_class == "Qwen2_5_VLForConditionalGeneration_moonvit":  
       state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_moonvit_state_dict.pth")
       model.load_state_dict(state_dict)
-  print("--------------------------------")
-  print('msy')
-  for key, value in model.named_parameters():
-    print(key, value.shape)
-    print(value.device)
-  print("--------------------------------")
   
   # check all param & buffer on meta device 
   for tensor in itertools.chain(model.parameters(), model.buffers()):
