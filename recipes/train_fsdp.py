@@ -103,7 +103,10 @@ def get_argument_parser():
   
   parser.add_argument("--fp32_weight", action="store_true",
                       help="Whether use fp32 for model weight updating")
-  
+
+  parser.add_argument("--fp32_reduce", action="store_true",
+                      help="Whether use fp32 for model gradient reduction")
+                      
   parser.add_argument("--reshard_after_forward", action="store_true",
                       help="enable reshard_after_forward to enable Zero3 (default)")
 

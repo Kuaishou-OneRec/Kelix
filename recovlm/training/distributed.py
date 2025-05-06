@@ -190,7 +190,8 @@ def shard_model(
     dp_mesh: Optional[DeviceMesh] = None,
     fp32_weight=True,
     prefetch_parameters=False,
-    model_class='InternVLChatModel'
+    model_class='InternVLChatModel',
+    fp32_reduce=True
     ) -> None:
     """
     Utility to shard a model with FSDP using the PyTorch Distributed fully_shard API.
@@ -216,7 +217,8 @@ def shard_model(
         ValueError: If no layer modules were sharded, indicating that no shard_condition was triggered.
     """
     fsdp_kwargs = {"reshard_after_forward": reshard_after_forward, "mesh": dp_mesh}
-    if fp32_weight: fsdp_kwargs["mp_policy"] = MixedPrecisionPolicy(param_dtype=torch.bfloat16, reduce_dtype=torch.bfloat16)
+    fp32_reduce=True
+    if fp32_weight: fsdp_kwargs["mp_policy"] = MixedPrecisionPolicy(param_dtype=torch.bfloat16, reduce_dtype=torch.float32 if fp32_reduce else torch.bfloat16)
     if cpu_offload:
         fsdp_kwargs["offload_policy"] = CPUOffloadPolicy()
 
@@ -259,7 +261,6 @@ def shard_model(
             prev = layer
 
         model.set_modules_to_forward_prefetch([prev])
-
 
 
 def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]):
