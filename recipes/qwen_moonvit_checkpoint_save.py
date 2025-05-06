@@ -18,10 +18,39 @@ import json
 #     print(key, value.shape)
 
 
-model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
-  "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
-)
+def save_model_state(dict_state):
+    torch.save(dict_state, "/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_moonvit_state_dict.pth")
 
-#save model dict state as what we can load use from pretrained 
-dict_state = model.state_dict()
-torch.save(dict_state, "/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_moonvit_state_dict.pth") 
+# 加载模型状态的示例代码
+def load_model_state():
+    # 1. 首先初始化一个模型实例
+    loaded_model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
+        "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",
+        ignore_mismatched_sizes=True
+    )
+    
+    # 2. 加载保存的state dict
+    state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_moonvit_state_dict.pth")
+    
+    # 3. 将state dict加载到模型中
+    loaded_model.load_state_dict(state_dict)
+    
+    return loaded_model 
+
+
+if __name__ == "__main__":
+
+    model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
+      "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
+    )
+
+    #save model dict state as what we can load use from pretrained 
+    dict_state = model.state_dict()
+
+    save_model_state(dict_state)
+    loaded_model = load_model_state()
+    for key, value in model.named_parameters():
+        print(key, value.shape)
+    print("--------------------------------")
+    for key, value in loaded_model.named_parameters():
+        print(key, value.shape)
