@@ -110,7 +110,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --model_class Qwen2_5_VLForConditionalGeneration_moonvit \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 36000 \
+                --max_length 17000 \
                 --learning_rate 1e-6 \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
@@ -118,7 +118,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --num_warmup_steps 500 \
                 --num_training_steps 50000 \
                 --save_checkpoint_per_step 500 \
-                --sequence_parallel_size 4 \
+                --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --reshard_after_forward false \
                 --logging_per_step 10 \
