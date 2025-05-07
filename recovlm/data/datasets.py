@@ -2310,6 +2310,7 @@ class ParquetDataset(IterableDataset):
       print("yessssss")
       self.readers = []
       for i in range(self.num_readers):
+        print(f"ssssfwafw{i}")
         reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
         reader.start()
         self.readers.append(reader)
