@@ -538,6 +538,7 @@ class Qwen2VLImageProcessor_moonvit(BaseImageProcessor):
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size #useless
         self.merge_size = merge_size
+        self.merge_kernel_size = [merge_size, merge_size]
         self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
         self.do_convert_rgb = do_convert_rgb
 
@@ -671,7 +672,7 @@ class Qwen2VLImageProcessor_moonvit(BaseImageProcessor):
             #     image = resize(
             #         image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
             #     )
-            image = self.mvit_rescale(image, merge_kernel_size=[self.merge_size, self.merge_size])
+            image = self.mvit_rescale(image, merge_kernel_size=self.merge_kernel_size)
             image = self.to_tensor(image)
             #image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             patches, grid_thw = self.patchify(image)
