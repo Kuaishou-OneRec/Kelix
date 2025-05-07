@@ -2431,7 +2431,7 @@ class ParquetDataset(IterableDataset):
           print(f"ssssfwafw{i}")
           # for _ in  self.read_parquet_runner_v2(fn_list, i):
           #   break
-          reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
+          reader = threading.Thread(target=self.read_parquet_runner_v2, args=(fn_list, i), daemon=True)
           reader.start()
           self.readers.append(reader)
         
@@ -2446,6 +2446,7 @@ class ParquetDataset(IterableDataset):
           print("yielddd sample")
           yield sample
       except Exception as e:
+        print("error __iter__vit_token_balance")
         print(e)
 
   def __iter__local_shuffle(self):
