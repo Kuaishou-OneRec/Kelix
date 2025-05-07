@@ -2035,7 +2035,7 @@ class ParquetDataset(IterableDataset):
     self.n_local_shuffle_files_window = n_local_shuffle_files_window
     print(f"set n_local_shuffle_files_window={n_local_shuffle_files_window}")
 
-    manager = multiprocessing.Manager()
+    manager = multiprocessing.Manager() if vit_token_balance else None
     self.num_readers = 4
     self.sample_queue = queue.Queue(1024)
 
@@ -2259,21 +2259,21 @@ class ParquetDataset(IterableDataset):
 
   def read_parquet_runner(self, fn_list, tid):
     print(f"read_parquet_runner__fn_list={len(fn_list)}", )
-    # try:
-    #   for i, epoch_fn in enumerate(fn_list):
-    #     if tid != -1 and i % self.num_readers != tid: 
-    #       print(f"self.num_readers={self.num_readers}, tid={tid}, continue")
-    #       continue
-    #     for sample in self.read_fn(epoch_fn):
-    #         if self.vit_token_balance: self.sample_queue.put(sample)
-    #         else: yield sample
-    # except GeneratorExit:
-    #   # 正确处理生成器退出
-    #   logger.warning("Generator exited during file processing")
-    #   return
-    # except Exception as e:
-    #   logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
-    #   raise
+    try:
+      for i, epoch_fn in enumerate(fn_list):
+        if tid != -1 and i % self.num_readers != tid: 
+          print(f"self.num_readers={self.num_readers}, tid={tid}, continue")
+          continue
+        for sample in self.read_fn(epoch_fn):
+            if self.vit_token_balance: self.sample_queue.put(sample)
+            else: yield sample
+    except GeneratorExit:
+      # 正确处理生成器退出
+      logger.warning("Generator exited during file processing")
+      return
+    except Exception as e:
+      logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
+      raise
 
   def shuffle_runner(self, window):
     buffer = []
