@@ -339,8 +339,8 @@ def _test_convert_siglip():
     
     # 3. 验证转换后的权重是否可用于模型初始化
     print("\n=== 验证转换后权重的可用性 ===")
-    model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
-        model_dir,
+    model = SiglipVisionModel.from_pretrained(
+        "/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384",
         ignore_mismatched_sizes=True
     )
     try:
