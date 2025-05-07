@@ -78,7 +78,10 @@ class KimiVLImageProcessor(BaseImageProcessor):
 
         w, h = image.size
         if w // patch_size >= 512 or h // patch_size >= 512:
-            raise ValueError("Exceed pos emb")
+            new_h = min(patch_size * 510, h)
+            new_w = min(patch_size * 510, w)
+            image = TF.center_crop(image, (new_h, new_w))
+            # raise ValueError("Exceed pos emb")
 
         return image
 

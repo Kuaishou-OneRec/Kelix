@@ -1242,6 +1242,7 @@ class SiglipModel(SiglipPreTrainedModel):
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         padding_mask: Optional[torch.Tensor] = None,
         image_attention_mask: Optional[torch.Tensor] = None,
+        vision_return_embed_list: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1287,6 +1288,7 @@ class SiglipModel(SiglipPreTrainedModel):
             cu_seqlens=cu_seqlens,
             padding_mask=padding_mask,
             attention_mask=image_attention_mask,
+            vision_return_embed_list=vision_return_embed_list
         )
 
         pooled_output = vision_outputs.pooler_output

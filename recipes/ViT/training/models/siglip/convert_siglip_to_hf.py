@@ -421,7 +421,7 @@ def convert_siglip_checkpoint(model_name, pytorch_dump_folder_path, verify_logit
     image_2 = Image.open(requests.get(url_2, stream=True).raw).convert("RGB")
     texts = ["an apple", "a picture of an apple"]
 
-    inputs = processor(images=[image_1, image_2], text=texts, padding="max_length", max_length=64, return_tensors="pt")
+    inputs = processor(images=[image_1, image_2], text=texts, padding="max_length", max_length=4096, return_tensors="pt")
     with torch.no_grad():
         outputs = model(**inputs)
 

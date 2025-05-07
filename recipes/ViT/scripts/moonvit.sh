@@ -5,7 +5,7 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 CONFIG_FILE=/llm_reco/zangdunju/vllm/vit/recovlm/recipes/ViT/configs/v1.yaml
 
-OUTPUT_DIR=/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/3.0.0.2
+OUTPUT_DIR=/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/3.0.0.3
 
 echo $OUTPUT_DIR
 

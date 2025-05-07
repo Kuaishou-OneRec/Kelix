@@ -79,7 +79,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
 
             - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
               BPE-dropout.
-        model_max_length (`int`, *optional*, defaults to 64):
+        model_max_length (`int`, *optional*, defaults to 4096):
             The maximum length (in number of tokens) for model inputs.
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
@@ -96,7 +96,7 @@ class SiglipTokenizer(PreTrainedTokenizer):
         pad_token="</s>",
         additional_special_tokens=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        model_max_length=64,
+        model_max_length=4096,
         do_lower_case=True,
         **kwargs,
     ) -> None:

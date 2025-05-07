@@ -1,4 +1,4 @@
-sed 's/=1/=8/g' /etc/mpi/hostfile  | grep -v "10.82.123.16" | head -100 > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile | head -100 > /etc/mpi/hostfile_seq
 
 mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile_seq --pernode bash -c "pip install -U torchao"
 mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile_seq --pernode bash -c "pip install omegaconf"

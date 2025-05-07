@@ -43,7 +43,7 @@ class SiglipTextConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        max_position_embeddings (`int`, *optional*, defaults to 64):
+        max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
@@ -87,7 +87,7 @@ class SiglipTextConfig(PretrainedConfig):
         intermediate_size=3072,
         num_hidden_layers=12,
         num_attention_heads=12,
-        max_position_embeddings=64,
+        max_position_embeddings=4096,
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,

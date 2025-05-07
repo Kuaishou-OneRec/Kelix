@@ -16,7 +16,7 @@ import argparse
 from collections import Counter
 import logging
 from omegaconf import OmegaConf
-from recipes.ViT.training.models import KimiViT, KimiViTSigLIP
+from recipes.ViT.training.models import KimiViT, KimiViTSigLIP, KimiViTMoonViT
 from recipes.ViT.data.dataset import build_dataloader
 from recipes.ViT.training.lr_scheduler import build_scheduler
 from recipes.ViT.training.optimizer import build_optimizer
@@ -254,7 +254,7 @@ def train(args):
     check_config(args, ctx, config)
     
     with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config, enabled=False):
-        model = KimiViT(config.model, ctx)
+        model = KimiViTMoonViT(config.model, ctx)
     optimizer = build_optimizer(config.optimizer, model, model_name="siglip")
     optimizer = FusedAdam(model.parameters(),
                         lr=config.optimizer.learn_rate,
@@ -275,7 +275,8 @@ def train(args):
     model.train()
 
     dataloader = build_dataloader(config.dataset, model=model)
-
+    # monitor.model = model
+    # monitor.dataloader = dataloader
     monitor = build_monitor(config, ctx, model=model, dataloader=dataloader)
     decorator = MonitorDecorator(monitor, ctx)
     decorator.register_metrics(config)

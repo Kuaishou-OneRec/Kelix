@@ -74,6 +74,7 @@ class BufferShuffler(MPIBase):
                 if "parquet" in x
             ]
             np.random.shuffle(files)
+            files = files[:18000]
             while len(files) % self.world_size != 0:
                 files.append(None)
 
@@ -150,7 +151,8 @@ class BufferShuffler(MPIBase):
                 dirname = osp.dirname(fn).rstrip("/")
                 sample_rate = self.sample_rate_dict.get(dirname, 1.0)
                 df = pq.read_table(fn).to_pandas()
-                df = df.sample(frac=sample_rate)
+                if sample_rate < 1.0:
+                    df = df.sample(frac=sample_rate)
             else:
                 df = None
             df = self.process_df(df)
