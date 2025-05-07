@@ -2257,11 +2257,11 @@ class ParquetDataset(IterableDataset):
       logger.warning(f"[Rank{rank}-{worker}] {fn} finish.")
       finish_dict[(fn, epoch_idx)] = True
 
-  def read_parquet_runner(self, fn_list, tid=None):
+  def read_parquet_runner(self, fn_list, tid):
     print(f"read_parquet_runner...  fn_list={len(fn_list)}", )
     try:
       for i, epoch_fn in enumerate(fn_list):
-        if tid is not None and i % self.num_readers != tid: 
+        if tid != -1 and i % self.num_readers != tid: 
           print(f"self.num_readers={self.num_readers}, tid={tid}, continue")
           continue
         for sample in self.read_fn(epoch_fn):
@@ -2304,7 +2304,7 @@ class ParquetDataset(IterableDataset):
 
     if not self.vit_token_balance: 
       print("notttttttt")
-      for sample in self.read_parquet_runner(fn_list):
+      for sample in self.read_parquet_runner(fn_list, -1):
         yield sample
     else:
       print("yessssss")
