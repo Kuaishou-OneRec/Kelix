@@ -830,13 +830,13 @@ def train():
 
   if not args.vit_token_balance:
     with Timer("Build dataloader"):
-      try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
+      try:  dataloader = get_dataloader_v2(name=dataset, vit_token_balance=args.vit_token_balance, **dataset_config)
       except: 
         import traceback
         print_rank_0(f"get_dataloader_v2 error: {traceback.format_exc()}")
         print_rank_0(f"get_dataloader_v2 retry for get_dataloader")
         traceback.print_exc()
-        dataloader = get_dataloader(name=dataset, **dataset_config)
+        dataloader = get_dataloader(name=dataset, vit_token_balance=args.vit_token_balance, **dataset_config)
       if args.resume_dataloader and dataloader_state_dict is not None:
         dataloader.load_state_dict(dataloader_state_dict)
   else:
