@@ -2264,7 +2264,26 @@ class ParquetDataset(IterableDataset):
       logger.warning(f"[Rank{rank}-{worker}] {fn} finish.")
       finish_dict[(fn, epoch_idx)] = True
 
-  def read_parquet_runner(self, fn_list, tid):
+  def read_parquet_runner_v1(self, fn_list, tid):
+    print("read_parquet_runner__fn_list", 233343333333322)
+    print(f"read_parquet_runner__fn_list={len(fn_list)}")
+    try:
+      for i, epoch_fn in enumerate(fn_list):
+        if tid != -1 and i % self.num_readers != tid: 
+          print(f"self.num_readers={self.num_readers}, tid={tid}, continue")
+          continue
+        print(f"self.num_readers={self.num_readers}, tid={tid}, continue runnnn", self.vit_token_balance)
+        for sample in self.read_fn(epoch_fn):
+            yield sample
+    except GeneratorExit:
+      # 正确处理生成器退出
+      logger.warning("Generator exited during file processing")
+      return
+    except Exception as e:
+      logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
+      raise
+
+  def read_parquet_runner_v2(self, fn_list, tid):
     print("read_parquet_runner__fn_list", 233343333333322)
     print(f"read_parquet_runner__fn_list={len(fn_list)}")
     try:
@@ -2278,7 +2297,6 @@ class ParquetDataset(IterableDataset):
               print("put sampleint")
               self.sample_queue.put(sample)
               print("put sampleintdonnnn")
-            else: yield sample
     except GeneratorExit:
       # 正确处理生成器退出
       logger.warning("Generator exited during file processing")
@@ -2403,15 +2421,15 @@ class ParquetDataset(IterableDataset):
 
     if not self.vit_token_balance: 
       print("notttttttt")
-      for sample in self.read_parquet_runner(fn_list, -1):
+      for sample in self.read_parquet_runner_v1(fn_list, -1):
         yield sample
     else:
       print("yessssss")
       self.readers = []
       for i in range(self.num_readers):
         print(f"ssssfwafw{i}")
-        for _ in  self.read_parquet_runner(fn_list, i):
-          break
+        # for _ in  self.read_parquet_runner_v2(fn_list, i):
+        #   break
         print(465555, type(x))
         reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
         reader.start()
