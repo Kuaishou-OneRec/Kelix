@@ -2203,7 +2203,7 @@ class ParquetDataset(IterableDataset):
     try:
       #parquet_file = pq.ParquetFile(fn)
       parquet_file = load_parquet_file(fn)
-
+      print(11111111)
     except Exception as e:
       logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
       parquet_file = None
@@ -2221,13 +2221,13 @@ class ParquetDataset(IterableDataset):
               continue
             else:
               offset = offset_dict[fn_group_key] + 1
-          
+          print(33333333)
           row_group = parquet_file.read_row_group(group_idx)
           if offset >= row_group.num_rows:
             continue
           logger.warning(f"[Rank{rank}-{worker}] start {fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
           row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
-
+          print(4444444)
           for row_idx, row in row_pandas.iterrows():
             if row_idx < offset:
               continue
@@ -2274,7 +2274,10 @@ class ParquetDataset(IterableDataset):
           continue
         print(f"self.num_readers={self.num_readers}, tid={tid}, continue runnnn", self.vit_token_balance)
         for sample in self.read_fn(epoch_fn):
-            if self.vit_token_balance: self.sample_queue.put(sample)
+            if self.vit_token_balance: 
+              print("put sampleint")
+              self.sample_queue.put(sample)
+              print("put sampleintdonnnn")
             else: yield sample
     except GeneratorExit:
       # 正确处理生成器退出
