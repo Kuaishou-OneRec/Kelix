@@ -2541,6 +2541,7 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
                 image_mask = mask_expanded.to(inputs_embeds.device)
 
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                print('msy_image_embeds',image_embeds.shape)
 
                 
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
@@ -2595,7 +2596,7 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-
+        print('inputs_embeds',inputs_embeds.shape)
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
@@ -2611,6 +2612,7 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
         )
 
         hidden_states = outputs[0]
+        print('msy_hidden_states',hidden_states.shape)
         logits = self.lm_head(hidden_states)
 
         loss = None
