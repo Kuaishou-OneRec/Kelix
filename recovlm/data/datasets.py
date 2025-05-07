@@ -2278,7 +2278,9 @@ class ParquetDataset(IterableDataset):
   def shuffle_runner(self, window):
     buffer = []
     while True:
+      print("int shuffle_runner")
       buffer.append(self.sample_queue.get())
+      print("int shuffle_runner app")
       if len(buffer) == window:
         random.shuffle(buffer)
         for sample in buffer:
@@ -2320,6 +2322,7 @@ class ParquetDataset(IterableDataset):
       
       while True:
         sample = self.shuffled_queue.get()
+        print("yielddd sample")
         yield sample
 
   def __iter__local_shuffle(self):
