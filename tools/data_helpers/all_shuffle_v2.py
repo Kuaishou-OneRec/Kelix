@@ -431,7 +431,8 @@ class AutoShuffler(MPIBase):
             
             if self.rank == 0:
                 all_files = self._collect_output_files(self.prepare_output_dir)
-
+            else:
+                all_files = None
         all_files = self.comm.bcast(all_files, root=0)
         if 2 in stages:
             # 阶段2：自动触发混洗
