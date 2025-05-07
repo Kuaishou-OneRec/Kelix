@@ -2407,7 +2407,8 @@ class ParquetDataset(IterableDataset):
       self.readers = []
       for i in range(self.num_readers):
         print(f"ssssfwafw{i}")
-        x = self.read_parquet_runner(fn_list, i)
+        for _ in  self.read_parquet_runner(fn_list, i):
+          break
         print(465555, type(x))
         reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
         reader.start()
