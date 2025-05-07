@@ -8,7 +8,7 @@ from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitPretr
 # # from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
 import json
 
-from recovlm.models.siglip.modeling_siglip import SiglipVisionModel
+from recipes.ViT.training.models.siglip.modeling_siglip import SiglipVisionModel
 
 # #config = json.load(open("/llm_reco_ssd/zhouyang12/models/Qwen2.5-7B-Instruct/config.json", "r"))
 # #model = Qwen2_5_VLForConditionalGeneration_moonvit(config)
