@@ -6,7 +6,7 @@ from recovlm.training.checkpoint import CheckpointConverter
 from recovlm.models.qwen_2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVisionConfig
 from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration_moonvit
-
+from recipes.ViT.training.models.siglip.configuration_siglip import SiglipVisionConfig
 class Qwen2VLCheckpointConverter(CheckpointConverter):
   def __init__(self, model_path_or_name: str):
     self.model_path_or_name = model_path_or_name
@@ -224,6 +224,92 @@ def _test_convert_moonvit():
         # 验证数值一致性
         assert torch.allclose(original_tensor, reverted_tensor, atol=1e-6), "转换不可逆！"
         print("✅ 单个张量转换测试通过")
+    
+    # 2. 测试完整state_dict的转换可逆性
+    print("\n=== 测试完整state_dict转换的可逆性 ===")
+    original_dict = {k: v.clone() for k, v in state_dict.items()}
+    
+    # 正向转换
+    converted_dict = converter(original_dict.copy())
+    
+    # 逆向转换
+    reverted_dict = converter.tp_to_original(converted_dict.copy())
+    
+    # 验证所有键的一致性
+    assert set(original_dict.keys()) == set(reverted_dict.keys()), "键不匹配！"
+    
+    # 验证所有张量的数值一致性
+    mismatch_count = 0
+    for k in original_dict:
+        if not torch.allclose(original_dict[k], reverted_dict[k], atol=1e-4):
+            print('--------------------------------')
+            print(original_dict[k])
+            print(reverted_dict[k])
+            print(f"数值不匹配: {k}")
+            mismatch_count += 1
+    
+    if mismatch_count == 0:
+        print("✅ 完整state_dict转换测试通过")
+    else:
+        print(f"⚠️ 发现{mismatch_count}个张量数值不匹配")
+    
+    # 3. 验证转换后的权重是否可用于模型初始化
+    print("\n=== 验证转换后权重的可用性 ===")
+    model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
+        model_dir,
+        ignore_mismatched_sizes=True
+    )
+    try:
+        model.load_state_dict(converted_dict, strict=False)
+        print("✅ 转换后权重加载测试通过 (strict=False)")
+        
+        # 严格模式加载测试
+        model.load_state_dict(converted_dict, strict=True)
+        print("✅ 转换后权重加载测试通过 (strict=True)")
+    except Exception as e:
+        print(f"❌ 权重加载失败: {str(e)}")
+    
+    print("\n=== 测试完成 ===")
+
+
+
+将config和block名称转换成moonvit的
+
+class Qwen2_5_VL_siglipCheckpointConverter(CheckpointConverter):
+  def __init__(self, model_path_or_name: str):
+    self.model_path_or_name = model_path_or_name
+    self.config = SiglipVisionConfig()
+
+  def __call__(self,
+               state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    num_heads = self.config.num_attention_heads
+    hidden_size = self.config.hidden_size
+    print(f"Converting from {self.model_path_or_name}")
+    return state_dict
+
+
+  def convert(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+      return self.__call__(state_dict)
+  
+  def revert(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+      return self.tp_to_original(state_dict)
+
+  def tp_to_original(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+      num_heads = self.config.num_attention_heads
+      hidden_size = self.config.hidden_size
+      print(f"Reverting weights to original format for {self.model_path_or_name}")
+      
+      return state_dict
+
+
+
+def _test_convert_moonvit():
+    from recovlm.training.checkpoint import load_hf_checkpoint
+    model = SiglipVisionModel.from_pretrained(
+      "/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384",ignore_mismatched_sizes=True
+    )
+    state_dict = model.state_dict()
+    converter = Qwen2_5_VL_siglipCheckpointConverter(model_dir)
     
     # 2. 测试完整state_dict的转换可逆性
     print("\n=== 测试完整state_dict转换的可逆性 ===")
