@@ -272,9 +272,6 @@ def _test_convert_moonvit():
     print("\n=== 测试完成 ===")
 
 
-
-将config和block名称转换成moonvit的
-
 class Qwen2_5_VL_siglipCheckpointConverter(CheckpointConverter):
   def __init__(self, model_path_or_name: str):
     self.model_path_or_name = model_path_or_name
