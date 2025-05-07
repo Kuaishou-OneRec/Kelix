@@ -3402,6 +3402,7 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
     if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
 
+    print(f"self.vit_token_balance={self.vit_token_balance}")
     dataset = ParquetDataset(data_file_list, self.num_workers, self.n_local_shuffle_files_window, vit_token_balance=self.vit_token_balance)
     return dataset, -1
 
