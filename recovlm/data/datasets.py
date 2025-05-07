@@ -2395,7 +2395,7 @@ class ParquetDataset(IterableDataset):
 
   def __iter__(self,):
     print(f"ParquetDataset__iter__self.vit_token_balance={self.vit_token_balance:}")
-    if self.vit_token_balance:
+    if self.vit_token_balance and False:
       for sample in self.__iter__vit_token_balance():
         yield sample
     else:
