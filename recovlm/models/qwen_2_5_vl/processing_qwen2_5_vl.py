@@ -31,7 +31,7 @@ from transformers.image_utils import ImageInput, VideoInput
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
-from recovlm.recovlm.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor_moonvit
+from recovlm.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor_moonvit
 import torch
 
 class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
