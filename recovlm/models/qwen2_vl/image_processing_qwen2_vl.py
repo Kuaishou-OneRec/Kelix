@@ -23,7 +23,7 @@ import math
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-
+import torch
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
 from transformers.image_transforms import (
     convert_to_rgb,
