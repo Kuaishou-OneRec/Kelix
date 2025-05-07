@@ -303,7 +303,7 @@ class Qwen2_5_VL_siglipCheckpointConverter(CheckpointConverter):
 
 
 
-def _test_convert_moonvit():
+def _test_convert_siglip():
     from recovlm.training.checkpoint import load_hf_checkpoint
     model = SiglipVisionModel.from_pretrained(
       "/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384",ignore_mismatched_sizes=True
@@ -358,6 +358,5 @@ def _test_convert_moonvit():
     print("\n=== 测试完成 ===")
 
 if __name__ == "__main__":
-    _test_convert_moonvit()
-
+    _test_convert_siglip()
 
