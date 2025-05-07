@@ -2539,11 +2539,12 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.tokenizer = tokenizer
     self.visual_tokens_per_image = int((image_size//patch_size)** 2 * (down_sample_ratio ** 2))
     self.cut_to_pad = cut_to_pad
-    print(f"set cut_to_pad={cut_to_pad}")
+    
 
     self.down_sample_ratio=down_sample_ratio
     self.pid_info_client = PidInfoClient('10.84.241.154')
     self.vit_token_balance = vit_token_balance
+    print(f"set cut_to_pad={cut_to_pad}, vit_token_balance={vit_token_balance}")
 
     self.image_size = image_size
     self.patch_size = patch_size
@@ -3362,18 +3363,19 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
   def __iter__(self):
     if self.vit_token_balance:
-      yield from self._iter_v1()
-    else:
       yield from self._iter_vit_token_balanced()
+    else:
+      yield from self._iter_v1()
 
 
 class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDataset):
-  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, n_local_shuffle_files_window=5, **kargs):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, n_local_shuffle_files_window=5, vit_token_balance=False, **kargs):
     self.rng = random.Random(shuffle_seed)
     self.num_workers = num_workers
     self.num_epochs = num_epochs
     self.n_local_shuffle_files_window = n_local_shuffle_files_window
-    super().__init__(sources, **kargs)
+    self.vit_token_balance = vit_token_balance
+    super().__init__(sources, vit_token_balance=vit_token_balance, **kargs)
 
   def _build_source_dataset(self, sources):
     data_file_list = []
