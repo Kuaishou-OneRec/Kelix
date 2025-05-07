@@ -2265,12 +2265,14 @@ class ParquetDataset(IterableDataset):
       finish_dict[(fn, epoch_idx)] = True
 
   def read_parquet_runner(self, fn_list, tid):
-    print(f"read_parquet_runner__fn_list={len(fn_list)}", )
+    print("read_parquet_runner__fn_list", 233343333333322)
+    print(f"read_parquet_runner__fn_list={len(fn_list)}")
     try:
       for i, epoch_fn in enumerate(fn_list):
         if tid != -1 and i % self.num_readers != tid: 
           print(f"self.num_readers={self.num_readers}, tid={tid}, continue")
           continue
+        print(f"self.num_readers={self.num_readers}, tid={tid}, continue runnnn", self.vit_token_balance)
         for sample in self.read_fn(epoch_fn):
             if self.vit_token_balance: self.sample_queue.put(sample)
             else: yield sample
@@ -2282,7 +2284,7 @@ class ParquetDataset(IterableDataset):
       logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
       raise
 
-  def read_parquet_runner(self, fn_list, tid):
+  def read_parquet_runner_(self, fn_list, tid):
     rank, world_size, worker, num_workers = pytorch_worker_info()
     finish_dict = self.finish_dict_all[worker]
     offset_dict = self.offset_dict_all[worker]
@@ -2368,7 +2370,7 @@ class ParquetDataset(IterableDataset):
     except Exception as e:
       logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
       raise
-    
+
   def shuffle_runner(self, window):
     buffer = []
     while True:
