@@ -31,7 +31,9 @@ from transformers.image_utils import ImageInput, VideoInput
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
+from recovlm.recovlm.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor_moonvit
 import torch
+
 class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
     fps: Union[List[float], float]
 
@@ -255,7 +257,8 @@ class Qwen2_5_VLProcessor_moonvit(ProcessorMixin):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        self.image_processor = KimiVLImageProcessor_for_qwen2_5_vl()
+        #self.image_processor = KimiVLImageProcessor_for_qwen2_5_vl()
+        self.image_processor = Qwen2VLImageProcessor_moonvit()
 
     def __call__(
         self,
