@@ -80,6 +80,14 @@ def make_batched_images(images) -> List[List[ImageInput]]:
     raise ValueError(f"Could not make batched images from {images}")
 
 
+def adjust_size(size, patch_size):
+    num_patches = size // patch_size
+    if num_patches % 2 != 0:  # 如果是奇数，减1
+        num_patches -= 1
+    return num_patches * patch_size
+
+
+
 # Copied from transformers.models.llava_next_video.image_processing_llava_next_video.make_batched_videos
 def make_batched_videos(videos) -> List[VideoInput]:
     if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
