@@ -2036,7 +2036,7 @@ class ParquetDataset(IterableDataset):
     print(f"set n_local_shuffle_files_window={n_local_shuffle_files_window}")
 
     manager = multiprocessing.Manager()
-    self.num_readers = 8
+    self.num_readers = 4
     self.sample_queue = queue.Queue(1024)
 
     def make_dict():
