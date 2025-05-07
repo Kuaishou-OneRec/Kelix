@@ -2394,6 +2394,7 @@ class ParquetDataset(IterableDataset):
       yield sample
 
   def __iter__(self,):
+    print(f"ParquetDataset__iter__self.vit_token_balance={self.vit_token_balance:}")
     if self.vit_token_balance:
       for sample in self.__iter__vit_token_balance():
         yield sample
@@ -3362,6 +3363,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
 
   def __iter__(self):
+    print(f"InternVLChatCompletionVisionDataset__iter__self.vit_token_balance={self.vit_token_balance:}")
     if self.vit_token_balance:
       yield from self._iter_vit_token_balanced()
     else:
