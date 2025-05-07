@@ -862,7 +862,6 @@ def train():
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
   grad_norm = 0.0
-  global_step = 0
   # get_sequence_parallel_group("gloo")
   if not args.vit_token_balance: data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
   micro_step = 0
