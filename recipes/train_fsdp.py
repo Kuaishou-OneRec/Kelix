@@ -580,7 +580,8 @@ def train():
         args=(dataset_config, args.model_class, args.max_length, batch_queue, args))
     data_process.start()
     print(f"data process started")
-
+    import time; time.sleep(1000)
+    
   # init model params
   os.environ["KML_ID"] = args.kml_id
   os.environ["KML_TASK_ID"] = args.kml_task_id
