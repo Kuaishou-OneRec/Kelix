@@ -120,7 +120,7 @@ nohup mpirun --allow-run-as-root \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config examples/vlm/configs/0.7.0/2b_v0_7_0_internvl_stage3_v3.json  \
+                --dataset_config examples/vlm/configs/0.7.0/2b_v0_7_0_internvl_stage3_bl_v3.json  \
                 --max_length 21000 \
                 --learning_rate 5e-5 \
                 --model_class InternVLChatModel \
