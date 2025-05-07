@@ -2424,27 +2424,29 @@ class ParquetDataset(IterableDataset):
       for sample in self.read_parquet_runner_v1(fn_list, -1):
         yield sample
     else:
-      print("yessssss")
-      self.readers = []
-      for i in range(self.num_readers):
-        print(f"ssssfwafw{i}")
-        # for _ in  self.read_parquet_runner_v2(fn_list, i):
-        #   break
-        print(465555, type(x))
-        reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
-        reader.start()
-        self.readers.append(reader)
-      
-      print("read_parquet_runner started")
-      shuffle_window = 10000
-      self.shuffled_queue = queue.Queue(shuffle_window * 2)
-      self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
-      self.shuffle_task.start()
-      
-      while True:
-        sample = self.shuffled_queue.get()
-        print("yielddd sample")
-        yield sample
+      try:
+        print("yessssss")
+        self.readers = []
+        for i in range(self.num_readers):
+          print(f"ssssfwafw{i}")
+          # for _ in  self.read_parquet_runner_v2(fn_list, i):
+          #   break
+          reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
+          reader.start()
+          self.readers.append(reader)
+        
+        print("read_parquet_runner started")
+        shuffle_window = 10000
+        self.shuffled_queue = queue.Queue(shuffle_window * 2)
+        self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
+        self.shuffle_task.start()
+        
+        while True:
+          sample = self.shuffled_queue.get()
+          print("yielddd sample")
+          yield sample
+      except Exception as e:
+        print(e)
 
   def __iter__local_shuffle(self):
     import pandas as pd
