@@ -2035,13 +2035,13 @@ class ParquetDataset(IterableDataset):
     self.n_local_shuffle_files_window = n_local_shuffle_files_window
     print(f"set n_local_shuffle_files_window={n_local_shuffle_files_window}")
 
-    manager = multiprocessing.Manager() if vit_token_balance else None
+    manager =  None if vit_token_balance else multiprocessing.Manager()
     self.num_readers = 4
     self.sample_queue = queue.Queue(1024)
 
     def make_dict():
-      if vit_token_balance: return manager.dict()
-      else: return {}
+      if vit_token_balance: return {} 
+      else: return manager.dict()
 
     self.finish_dict_all = make_dict()
     self.offset_dict_all = make_dict()
