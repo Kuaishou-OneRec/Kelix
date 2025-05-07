@@ -798,6 +798,7 @@ class ChatCompletionVisionDataset(IterableDataset):
   
   def _build_source_dataset(self, sources):
     total_samples = 0
+    print(dist.get_rank(), 1111111)
     if isinstance(sources, str):
       sources = sources.split(",")
     with Timer("Read urls"):
@@ -809,6 +810,7 @@ class ChatCompletionVisionDataset(IterableDataset):
             urls.append(os.path.join(os.path.dirname(source), item["url"]))
             total_samples += item["nsamples"]
 
+    print(dist.get_rank(), 22222)
     with Timer("Sort -> Shuffle -> Broadcast"):
       # broadcast all urls
       urls.sort()
@@ -817,7 +819,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       dist.broadcast_object_list(t, src=0)
       urls = t[0]
       logger.info(f"[RANK{dist.get_rank()}] {urls=}")
-
+    print(dist.get_rank(), 33333)
     with Timer("Build dataset"):
       dataset = wds.WebDataset(
           urls,
@@ -832,7 +834,8 @@ class ChatCompletionVisionDataset(IterableDataset):
       dataset = dataset.shuffle(
           self.shuffle_size, initial=self.shuffle_initial_size).decode(
         "pil", handler=wds.warn_and_continue)
-      
+    print(dist.get_rank(), 4444444)
+
     return dataset, total_samples
 
   def _fill_image_block(self, block: Dict[str, Any],
@@ -2203,7 +2206,6 @@ class ParquetDataset(IterableDataset):
     try:
       #parquet_file = pq.ParquetFile(fn)
       parquet_file = load_parquet_file(fn)
-      print(11111111)
     except Exception as e:
       logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
       parquet_file = None
@@ -2221,13 +2223,11 @@ class ParquetDataset(IterableDataset):
               continue
             else:
               offset = offset_dict[fn_group_key] + 1
-          print(33333333)
           row_group = parquet_file.read_row_group(group_idx)
           if offset >= row_group.num_rows:
             continue
           logger.warning(f"[Rank{rank}-{worker}] start {fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
           row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
-          print(4444444)
           for row_idx, row in row_pandas.iterrows():
             if row_idx < offset:
               continue
