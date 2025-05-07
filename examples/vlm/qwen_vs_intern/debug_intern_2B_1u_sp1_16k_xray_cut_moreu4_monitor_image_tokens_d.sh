@@ -85,7 +85,6 @@ nohup mpirun --allow-run-as-root \
         -x https_proxy="" \
         -x HOROVOD_MPI_THREADS_DISABLE=1 \
         -x MPI_THREAD_SINGLE=1 \
-        -x CUDA_DEVICE_MAX_CONNECTIONS=1 \
         -x NO_COLOR=1 \
         -x TERM=dumb \
         -x COLORTERM=0 \
