@@ -7,6 +7,7 @@ from recovlm.models.qwen_2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLVision
 from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration_moonvit
 from recipes.ViT.training.models.siglip.configuration_siglip import SiglipVisionConfig
+from recipes.ViT.training.models.siglip.modeling_siglip import SiglipVisionModel
 class Qwen2VLCheckpointConverter(CheckpointConverter):
   def __init__(self, model_path_or_name: str):
     self.model_path_or_name = model_path_or_name
