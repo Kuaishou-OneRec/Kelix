@@ -25,6 +25,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 import torch
 from transformers.image_processing_utils import BaseImageProcessor, BatchFeature
+from torchvision.transforms import functional as TF
 from transformers.image_transforms import (
     convert_to_rgb,
     resize,
@@ -508,24 +509,26 @@ class Qwen2VLImageProcessor_moonvit(BaseImageProcessor):
         min_pixels: int = 56 * 56,
         max_pixels: int = 14 * 14 * 4096,
         patch_size: int = 14,
+        pad_input: bool = False,
         temporal_patch_size: int = 2,
         merge_size: int = 2,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         print('msy: Qwen2VLImageProcessor_moonvit init')
-        self.do_resize = do_resize
+        self.do_resize = do_resize #useless
         self.resample = resample
-        self.do_rescale = do_rescale
+        self.do_rescale = do_rescale #useless
         self.rescale_factor = rescale_factor   #useless
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.min_pixels = min_pixels
         self.max_pixels = max_pixels
-        self.in_token_limit = max_pixels
+        self.pad_input = pad_input
+        self.in_token_limit = max_pixels #used to do rescale
         self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
+        self.temporal_patch_size = temporal_patch_size #useless
         self.merge_size = merge_size
         self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
         self.do_convert_rgb = do_convert_rgb
@@ -660,8 +663,7 @@ class Qwen2VLImageProcessor_moonvit(BaseImageProcessor):
             #     image = resize(
             #         image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
             #     )
-            if do_rescale:
-                image = self.mvit_rescale(image, merge_kernel_size=[self.merge_size, self.merge_size])
+            image = self.mvit_rescale(image, merge_kernel_size=[self.merge_size, self.merge_size])
             image = self.to_tensor(image)
             #image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             patches, grid_thw = self.patchify(image)
