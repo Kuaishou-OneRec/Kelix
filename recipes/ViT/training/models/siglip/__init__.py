@@ -1,2 +1,2 @@
-from .image_processing_siglip import CustomSiglipImageProcessor
-from .image_processing_siglip_fast import CustomSiglipImageProcessorFast
+# from .image_processing_siglip import CustomSiglipImageProcessor
+# from .image_processing_siglip_fast import CustomSiglipImageProcessorFast
