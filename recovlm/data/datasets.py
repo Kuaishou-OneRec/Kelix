@@ -2039,8 +2039,9 @@ class ParquetDataset(IterableDataset):
     self.num_readers = 8
     self.sample_queue = queue.Queue(1024)
 
-    make_dict = lambda : {} if vit_token_balance else manager.dict()
-
+    def make_dict():
+      if vit_token_balance: return manager.dict()
+      else: return {}
 
     self.finish_dict_all = make_dict()
     self.offset_dict_all = make_dict()
@@ -2257,9 +2258,12 @@ class ParquetDataset(IterableDataset):
       finish_dict[(fn, epoch_idx)] = True
 
   def read_parquet_runner(self, fn_list, tid=None):
+    print(f"read_parquet_runner...  fn_list={len(fn_list)}", )
     try:
       for i, epoch_fn in enumerate(fn_list):
-        if tid is not None and i % self.num_readers != tid: continue
+        if tid is not None and i % self.num_readers != tid: 
+          print(f"self.num_readers={self.num_readers}, tid={tid}, continue")
+          continue
         for sample in self.read_fn(epoch_fn):
             if self.vit_token_balance: self.sample_queue.put(sample)
             else: yield sample
@@ -2283,6 +2287,7 @@ class ParquetDataset(IterableDataset):
 
   def __iter__vit_token_balance(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
+    assert self.vit_token_balance, f"self.vit_token_balance={self.vit_token_balance}, expected to be true"
     if not self.vit_token_balance: assert num_workers == self.num_workers, f"num_workers={num_workers} : self.num_workers={self.num_workers}"
 
     finish_dict = self.finish_dict_all[worker]
@@ -2395,7 +2400,8 @@ class ParquetDataset(IterableDataset):
 
   def __iter__(self,):
     print(f"ParquetDataset__iter__self.vit_token_balance={self.vit_token_balance:}")
-    if self.vit_token_balance and False:
+    if self.vit_token_balance:
+      print(1433)
       for sample in self.__iter__vit_token_balance():
         yield sample
     else:
