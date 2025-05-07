@@ -2265,8 +2265,6 @@ class ParquetDataset(IterableDataset):
       finish_dict[(fn, epoch_idx)] = True
 
   def read_parquet_runner_v1(self, fn_list, tid):
-    print("read_parquet_runner__fn_list", 233343333333322)
-    print(f"read_parquet_runner__fn_list={len(fn_list)}")
     try:
       for i, epoch_fn in enumerate(fn_list):
         if tid != -1 and i % self.num_readers != tid: 
@@ -2284,8 +2282,6 @@ class ParquetDataset(IterableDataset):
       raise
 
   def read_parquet_runner_v2(self, fn_list, tid):
-    print("read_parquet_runner__fn_list", 233343333333322)
-    print(f"read_parquet_runner__fn_list={len(fn_list)}")
     try:
       for i, epoch_fn in enumerate(fn_list):
         if tid != -1 and i % self.num_readers != tid: 
@@ -2395,9 +2391,7 @@ class ParquetDataset(IterableDataset):
   def shuffle_runner(self, window):
     buffer = []
     while True:
-      print("int shuffle_runner")
       buffer.append(self.sample_queue.get())
-      print("int shuffle_runner app")
       if len(buffer) == window:
         random.shuffle(buffer)
         for sample in buffer:
@@ -2420,22 +2414,16 @@ class ParquetDataset(IterableDataset):
     )
 
     if not self.vit_token_balance: 
-      print("notttttttt")
       for sample in self.read_parquet_runner_v1(fn_list, -1):
         yield sample
     else:
       try:
-        print("yessssss")
         self.readers = []
         for i in range(self.num_readers):
-          print(f"ssssfwafw{i}")
-          # for _ in  self.read_parquet_runner_v2(fn_list, i):
-          #   break
           reader = threading.Thread(target=self.read_parquet_runner_v2, args=(fn_list, i), daemon=True)
           reader.start()
           self.readers.append(reader)
         
-        print("read_parquet_runner started")
         shuffle_window = 10000
         self.shuffled_queue = queue.Queue(shuffle_window * 2)
         self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
@@ -2443,7 +2431,6 @@ class ParquetDataset(IterableDataset):
         
         while True:
           sample = self.shuffled_queue.get()
-          print("yielddd sample")
           yield sample
       except Exception as e:
         print("error __iter__vit_token_balance")
@@ -2529,9 +2516,7 @@ class ParquetDataset(IterableDataset):
       yield sample
 
   def __iter__(self,):
-    print(f"ParquetDataset__iter__self.vit_token_balance={self.vit_token_balance:}")
     if self.vit_token_balance:
-      print(1433)
       for sample in self.__iter__vit_token_balance():
         print(f"yield sample")
         yield sample
