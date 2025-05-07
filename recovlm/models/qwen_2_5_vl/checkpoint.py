@@ -307,7 +307,7 @@ def _test_convert_siglip():
       "/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384",ignore_mismatched_sizes=True
     )
     state_dict = model.state_dict()
-    converter = Qwen2_5_VL_siglipCheckpointConverter(model_dir)
+    converter = Qwen2_5_VL_siglipCheckpointConverter("/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384")
     
     # 2. 测试完整state_dict的转换可逆性
     print("\n=== 测试完整state_dict转换的可逆性 ===")
