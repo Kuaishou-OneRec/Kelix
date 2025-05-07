@@ -2258,7 +2258,7 @@ class ParquetDataset(IterableDataset):
       finish_dict[(fn, epoch_idx)] = True
 
   def read_parquet_runner(self, fn_list, tid):
-    print(f"read_parquet_runner...  fn_list={len(fn_list)}", )
+    print(f"read_parquet_runner__fn_list={len(fn_list)}", )
     try:
       for i, epoch_fn in enumerate(fn_list):
         if tid != -1 and i % self.num_readers != tid: 
@@ -2311,7 +2311,12 @@ class ParquetDataset(IterableDataset):
       self.readers = []
       for i in range(self.num_readers):
         print(f"ssssfwafw{i}")
-        reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
+        def f(*args):
+          import time
+          time.sleep(1)
+          print(args)
+
+        reader = threading.Thread(target=f, args=(fn_list, i), daemon=True)
         reader.start()
         self.readers.append(reader)
       
