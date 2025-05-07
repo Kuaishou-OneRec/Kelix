@@ -2259,21 +2259,21 @@ class ParquetDataset(IterableDataset):
 
   def read_parquet_runner(self, fn_list, tid):
     print(f"read_parquet_runner__fn_list={len(fn_list)}", )
-    try:
-      for i, epoch_fn in enumerate(fn_list):
-        if tid != -1 and i % self.num_readers != tid: 
-          print(f"self.num_readers={self.num_readers}, tid={tid}, continue")
-          continue
-        for sample in self.read_fn(epoch_fn):
-            if self.vit_token_balance: self.sample_queue.put(sample)
-            else: yield sample
-    except GeneratorExit:
-      # 正确处理生成器退出
-      logger.warning("Generator exited during file processing")
-      return
-    except Exception as e:
-      logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
-      raise
+    # try:
+    #   for i, epoch_fn in enumerate(fn_list):
+    #     if tid != -1 and i % self.num_readers != tid: 
+    #       print(f"self.num_readers={self.num_readers}, tid={tid}, continue")
+    #       continue
+    #     for sample in self.read_fn(epoch_fn):
+    #         if self.vit_token_balance: self.sample_queue.put(sample)
+    #         else: yield sample
+    # except GeneratorExit:
+    #   # 正确处理生成器退出
+    #   logger.warning("Generator exited during file processing")
+    #   return
+    # except Exception as e:
+    #   logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
+    #   raise
 
   def shuffle_runner(self, window):
     buffer = []
@@ -2311,12 +2311,8 @@ class ParquetDataset(IterableDataset):
       self.readers = []
       for i in range(self.num_readers):
         print(f"ssssfwafw{i}")
-        def f(*args):
-          import time
-          time.sleep(1)
-          print(args)
 
-        reader = threading.Thread(target=f, args=(fn_list, i), daemon=True)
+        reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
         reader.start()
         self.readers.append(reader)
       
