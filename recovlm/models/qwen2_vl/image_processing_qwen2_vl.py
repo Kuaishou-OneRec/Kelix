@@ -576,7 +576,8 @@ class Qwen2VLImageProcessor_moonvit(BaseImageProcessor):
 
         return image
 
-
+    def to_tensor(self, image: Image.Image) -> torch.Tensor:
+        return TF.to_tensor(image.convert("RGB"))
     def _preprocess(
         self,
         images: Union[ImageInput, VideoInput],
@@ -648,30 +649,22 @@ class Qwen2VLImageProcessor_moonvit(BaseImageProcessor):
         pixel_values = []
         image_grid_thws = []
         for image in images:
-            if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=self.patch_size * self.merge_size,
-                    min_pixels=self.min_pixels,
-                    max_pixels=self.max_pixels,
-                )
-                image = resize(
-                    image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
-                )
-
+            # if do_resize:
+            #     resized_height, resized_width = smart_resize(
+            #         height,
+            #         width,
+            #         factor=self.patch_size * self.merge_size,
+            #         min_pixels=self.min_pixels,
+            #         max_pixels=self.max_pixels,
+            #     )
+            #     image = resize(
+            #         image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
+            #     )
             if do_rescale:
                 image = self.mvit_rescale(image, merge_kernel_size=[self.merge_size, self.merge_size])
-
-            if do_normalize:
-                image = self.normalize(
-                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                )
-
+            image = self.to_tensor(image)
             #image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            
             patches, grid_thw = self.patchify(image)
-            
             pixel_values.append(patches)
             image_grid_thws.append(grid_thw)
 
