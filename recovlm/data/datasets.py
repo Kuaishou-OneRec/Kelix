@@ -2301,15 +2301,18 @@ class ParquetDataset(IterableDataset):
     )
 
     if not self.vit_token_balance: 
+      print("notttttttt")
       for sample in self.read_parquet_runner(fn_list):
         yield sample
     else:
+      print("yessssss")
       self.readers = []
       for i in range(self.num_readers):
         reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
         reader.start()
         self.readers.append(reader)
-        
+      
+      print("read_parquet_runner started")
       shuffle_window = 10000
       self.shuffled_queue = queue.Queue(shuffle_window * 2)
       self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
@@ -2403,6 +2406,7 @@ class ParquetDataset(IterableDataset):
     if self.vit_token_balance:
       print(1433)
       for sample in self.__iter__vit_token_balance():
+        print(f"yield sample")
         yield sample
     else:
       for sample in self.__iter__local_shuffle():
