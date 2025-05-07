@@ -252,7 +252,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
     ModelDataset = {'Qwen2VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
-    if vit_token_balance: num_workers = 1
+    if vit_token_balance: num_workers = 0
     dataset = ModelDataset[model_type](
         sources = sources,
         num_workers = num_workers,
