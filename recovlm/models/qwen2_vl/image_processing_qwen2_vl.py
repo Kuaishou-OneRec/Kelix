@@ -513,6 +513,7 @@ class Qwen2VLImageProcessor_moonvit(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
+        print('msy: Qwen2VLImageProcessor_moonvit init')
         self.do_resize = do_resize
         self.resample = resample
         self.do_rescale = do_rescale
