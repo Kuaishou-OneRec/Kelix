@@ -257,8 +257,8 @@ class Qwen2_5_VLProcessor_moonvit(ProcessorMixin):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        self.image_processor = KimiVLImageProcessor_for_qwen2_5_vl()
-        #self.image_processor = Qwen2VLImageProcessor_moonvit()
+        #self.image_processor = KimiVLImageProcessor_for_qwen2_5_vl()
+        self.image_processor = Qwen2VLImageProcessor_moonvit()
 
     def __call__(
         self,
