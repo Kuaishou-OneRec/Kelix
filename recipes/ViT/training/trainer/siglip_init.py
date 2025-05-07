@@ -269,7 +269,8 @@ def train(args):
     )
 
     # freeze LLN
-    model.text_decoder.requires_grad_(False)
+    if model.text_decoder is not None:
+        model.text_decoder.requires_grad_(False)
 
     model.train()
 

@@ -100,7 +100,7 @@ def get_image_embedding(model, batch):
     processor = model.processor
     inputs = dict()
     for key in batch:
-        if key not in ["images", "texts", "source", "task", "image_indices", "height_position_ids", "width_position_ids"]:
+        if key not in ["images", "texts", "source", "task", "image_indices", "height_position_ids", "width_position_ids", "image_grid_hws"]:
             inputs[key] = to_cuda(batch[key])
     vision_model = model.siglip
     vision_embeds = vision_model.get_image_features(**inputs)

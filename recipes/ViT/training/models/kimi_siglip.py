@@ -153,7 +153,9 @@ class KimiViT(nn.Module):
             self.regression_loss_fn = None
 
         self.siglip.gradient_checkpointing_enable()
-        self.text_decoder.gradient_checkpointing_enable()
+
+        if self.text_decoder is not None:
+            self.text_decoder.gradient_checkpointing_enable()
 
     def calcul_regression_loss(self, input_ids, image_feature, loss_mask):
         """
@@ -423,12 +425,16 @@ class KimiViT(nn.Module):
                     source=source,
                     outputs=outputs
                 )
+        else:
+            loss = Contrastive_loss
+            input_ids = inputs["input_ids"].cpu()
+            pad_token_id = self.processor.tokenizer.pad_token_id
 
         return ViTOutputs(
             Contrastive_loss=loss,
-            AR_loss=torch.FloatTensor(0),
+            AR_loss=torch.FloatTensor([0]),
             loss=loss,
-            total_image_num_tokens=np.prod(vision_embeds.shape[:2]).item(),
+            total_image_num_tokens=sum([emb.shape[0] for emb in vision_embeds]),
             total_text_num_tokens=np.prod(siglip_text_embeds.shape[:2]).item(),
             total_num_samples=batch_size,
             total_text_num_valid_tokens=(input_ids != pad_token_id).long().sum().item(),

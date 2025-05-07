@@ -36,7 +36,7 @@ model:
   VitParam_dir: /llm_reco/liuyang76/Models/MoonVitParam/MoonVit.pt
   vision_return_embed_list: true
   text_decoder:
-    enabled: true
+    enabled: false
     loss_lambda: 2.0
     model_dir: /llm_reco/liuyang76/Models/Qwen2.5-0.5B-Instruct
 optimizer:
