@@ -121,7 +121,7 @@ nohup mpirun --allow-run-as-root \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --dataset_config examples/vlm/throughput0507/2b_v0_6_0_internvl_stage2.json \
-		--max_length 21000 \
+		--max_length 23000 \
                 --learning_rate 2e-5 \
                 --model_class InternVLChatModel \
                 --min_lr 0.0 \
