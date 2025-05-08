@@ -139,7 +139,7 @@ nohup mpirun --allow-run-as-root \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
-                --comment \'$comment\' \
+                --comment \"$comment\" \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
