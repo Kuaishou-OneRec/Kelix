@@ -3071,7 +3071,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           if score < min_score:
               found = current
               min_score = score
-      print(f'{[rank=dist.get_rank()]} debug_info: {debug_info}')
+      print(f'[rank={dist.get_rank()}] debug_info: {debug_info}')
       return found + [min_score]
 
   def _select_global(self, candidates):
