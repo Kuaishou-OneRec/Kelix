@@ -3037,8 +3037,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   def _balance_score(self, image_lens, expect_image_len):
       max_len = max(image_lens)
       min_len = min(image_lens)
-      var = np.sqrt(np.var(image_lens, mean=expect_image_len)) / 2
-      return (max_len - min_len) ** 2 + float(var)
+      var = sum((v - expect_image_len) ** 2 for v in image_lens) / len(image_lens)
+      var = float(np.sqrt(var)) if var > 0 else 0
+      return (max_len - min_len) ** 2 + var / 2
 
 
   def _select_nearest_equal(self, local_image_lens, all_image_lens, expect_image_len):
