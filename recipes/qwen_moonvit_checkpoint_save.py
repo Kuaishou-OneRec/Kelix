@@ -37,7 +37,6 @@ def load_model_state():
     for key, value in loaded_model.named_parameters():
         print('--------------------------------')
         print(key, value.shape) 
-        print(value)
         print('--------------------------------')
     print('=================================')   
     
@@ -49,22 +48,14 @@ if __name__ == "__main__":
     model = Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained(
       "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct",ignore_mismatched_sizes=True
     )
-
-
-    
     pt = '/llm_reco/liuyang76/Models/MoonVitParam/MoonVit.pt'
     visual_state_dict = torch.load(pt)
-    for key, value in visual_state_dict.items():
-        print('--------------------------------')
-        print(key, value.shape)
-        print(value)
-        print('--------------------------------')
+    # for key, value in visual_state_dict.items():
+    #     print('--------------------------------')
+    #     print(key, value.shape)
+    #     print(value)
+    #     print('--------------------------------')
     model.visual.load_state_dict(visual_state_dict)
     dict_state = model.state_dict()
     save_model_state(dict_state)
     loaded_model = load_model_state()
-    for key, value in model.named_parameters():
-        print(key, value.shape)
-    print("--------------------------------")
-    for key, value in loaded_model.named_parameters():
-        print(key, value.shape)

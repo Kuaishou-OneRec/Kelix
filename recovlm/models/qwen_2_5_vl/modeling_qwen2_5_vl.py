@@ -2235,10 +2235,8 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
     def __init__(self, config):
         super().__init__(config)
         MoonViT_config = MoonViTConfig()
-        KimiVL_Config_AR = KimiVLConfig()
-        KimiVL_Config = KimiVLConfig()
         MoonViT_config._attn_implementation = 'flash_attention_2'
-        self.mlp_AR = KimiVLMultiModalProjector(KimiVL_Config_AR)
+        self.mlp_AR = Projector(config,MoonViT_config)
         self.visual = MoonVitPretrainedModel(MoonViT_config)
         self.model = Qwen2_5_VLModel(config)
         self.vocab_size = config.vocab_size
@@ -2596,7 +2594,7 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-        print('inputs_embeds',inputs_embeds.shape)
+        print('msy_inputs_embeds',inputs_embeds.shape)
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
@@ -2807,6 +2805,55 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
+
+
+
+
+class Projector(nn.Module):
+
+    def __init__(self, text_config: Qwen2_5_VLConfig,vision_config: Qwen2_5_VLVisionConfig):
+        super().__init__()
+        self.text_config = text_config
+        self.vision_config = vision_config
+
+        self.hidden_size = (
+            self.vision_config.hidden_size
+            * self.vision_config.merge_kernel_size[0]
+            * self.vision_config.merge_kernel_size[1]
+        )
+        # self.hidden_size = config.vision_config.hidden_size
+
+        self.pre_norm = torch.nn.LayerNorm(self.vision_config.hidden_size, eps=1e-05)
+        self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
+        self.act = GELUActivation()
+        self.linear_2 = nn.Linear(
+            self.hidden_size, self.text_config.hidden_size, bias=True
+        )
+
+    def forward(self, image_features: torch.Tensor) -> torch.Tensor:
+        if isinstance(image_features, (list, tuple)):
+            processed_features = list()
+            for image_feature in image_features:
+                hidden_states = self.pre_norm(image_feature).view(-1, self.hidden_size)
+                from einops import rearrange
+                p = self.vision_config.merge_kernel_size[0] * self.vision_config.merge_kernel_size[1]
+                image_feature = rearrange(image_feature, "n p d -> n (p d)", p=p)
+                hidden_states = self.linear_1(hidden_states)
+                hidden_states = self.act(hidden_states)
+                hidden_states = self.linear_2(hidden_states)
+                processed_features.append(hidden_states)
+
+            return processed_features
+
+        dims = image_features.shape[:-1]
+        dim = image_features.shape[-1]
+        image_features = image_features.view(np.prod(dims), dim)
+        hidden_states = self.pre_norm(image_features).view(-1, self.hidden_size)
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+
+        return hidden_states.view(*dims, -1)
 
 
 
