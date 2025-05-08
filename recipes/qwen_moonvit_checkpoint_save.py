@@ -63,8 +63,12 @@ if __name__ == "__main__":
     for key, value in loaded_model.named_parameters():
         if 'visual' in key:
             if key not in visual_state_dict:
-                print(f"Warning: Key {key} not found in visual_state_dict")
-                continue
+                #Warning: Key visual.encoder.blocks.26.wo.bias not found in visual_state_dict
+                #I want to delete visual. from key
+                key = key.replace('visual.', '')
+                if key not in visual_state_dict:
+                    print(f"Warning: Key {key} not found in visual_state_dict")
+                    continue
                 
             is_equal = torch.allclose(value, visual_state_dict[key], rtol=1e-5, atol=1e-5)
             if is_equal:
