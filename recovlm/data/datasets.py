@@ -2305,6 +2305,85 @@ class ParquetDataset(IterableDataset):
           self.shuffled_queue.put(sample)
         buffer = []
 
+  def read_parquet_runner_v2(self, fn_list, tid):
+    rank, world_size, worker, num_workers = pytorch_worker_info()
+    finish_dict = self.finish_dict_all[worker]
+    offset_dict = self.offset_dict_all[worker]
+    try:
+      for i, epoch_fn in enumerate(fn_list):
+        if i % self.num_readers != tid:
+          continue
+        fn, epoch_idx = epoch_fn
+        if (fn, epoch_idx) in finish_dict:
+          logger.warning(f"[Rank{rank}-{worker}] skip {fn}")
+          continue
+        
+        # open parquet file
+        try:
+          #parquet_file = pq.ParquetFile(fn)
+          parquet_file = load_parquet_file(fn)
+
+        except Exception as e:
+          logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
+          parquet_file = None
+        
+        # # process file content
+        if parquet_file is not None:
+          logger.warning(f"[Rank{rank}-{worker}] {fn} total row_groups: {parquet_file.num_row_groups}")
+          for group_idx in range(parquet_file.num_row_groups):
+            try:
+              offset = 0
+              fn_group_key = (fn, epoch_idx, group_idx)
+              if fn_group_key in offset_dict:
+                if offset_dict[fn_group_key] == -1:
+                  logger.warning(f"[Rank{rank}-{worker}] skip {fn}-epoch{epoch_idx}-group{group_idx}")
+                  continue
+                else:
+                  offset = offset_dict[fn_group_key] + 1
+              
+              row_group = parquet_file.read_row_group(group_idx)
+              if offset >= row_group.num_rows:
+                continue
+              logger.warning(f"[Rank{rank}-{worker}] start {fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
+              row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
+
+              for row_idx, row in row_pandas.iterrows():
+                if row_idx < offset:
+                  continue
+
+                try:
+                  sample = self._parser(row, fn)
+                  if sample is not None:
+                    # yield sample
+                    self.sample_queue.put(sample)
+                  offset_dict[fn_group_key] = row_idx
+                except GeneratorExit:
+                  # 正确处理生成器退出
+                  logger.warning(f"Generator exited at {fn}-epoch{epoch_idx}-group{group_idx}-row{row_idx}")
+                  return
+                except Exception as e:
+                  logger.error(f"Error processing row {row_idx}: {str(e)}")
+                  continue
+
+                if row_idx % 1000 == 0:
+                  logger.warning(f"Processing row {row_idx} in {fn}-epoch{epoch_idx}-group{group_idx}")
+
+              # group finish
+              logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx}-group{group_idx} finish.")
+              offset_dict[fn_group_key] = -1
+              
+            except GeneratorExit:
+              # 正确处理生成器退出
+              logger.warning(f"Generator exited during group processing")
+              return
+            except Exception as e:
+              logger.error(f"Error processing group {group_idx}: {str(e)}")
+              continue
+          
+          # file finish
+          logger.warning(f"[Rank{rank}-{worker}] {fn} finish.")
+          finish_dict[(fn, epoch_idx)] = True
+
   def __iter__vit_token_balance(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
     assert self.vit_token_balance, f"self.vit_token_balance={self.vit_token_balance}, expected to be true"
