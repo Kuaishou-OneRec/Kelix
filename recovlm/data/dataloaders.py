@@ -247,6 +247,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           video_min_frames=2,
                                           video_max_frames=120,
                                           datasource_config={},
+                                          vit_token_balance=False,
                                           **kwargs):
     model_type = kwargs.get('model_class','Qwen2VLForConditionalGeneration')
     cut_to_pad = kwargs.get('cut_to_pad',False)
@@ -271,16 +272,28 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
         max_retry=max_retry,
         multiple_of=multiple_of,
         cut_to_pad=cut_to_pad,
-        datasource_config=datasource_config)
+        datasource_config=datasource_config,
+        vit_token_balance=vit_token_balance,
+        **kwargs
+        )
 
     ### packing, batching size=1; shuffle in dataset
-    dataloader = StatefulDataLoader(
-        dataset=dataset,
-        shuffle=False,
-        batch_size=1,
-        num_workers=num_workers,
-        collate_fn=lambda x: x[0]
-    )
+    if vit_token_balance :
+        dataloader = DataLoader(
+            dataset=dataset,
+            shuffle=False,
+            batch_size=1,
+            num_workers=(num_workers if num_workers > 1 else 0),
+            collate_fn=lambda x: x[0],
+        )
+    else:
+        dataloader = StatefulDataLoader(
+            dataset=dataset,
+            shuffle=False,
+            batch_size=1,
+            num_workers=num_workers,
+            collate_fn=lambda x: x[0]
+        )
     return dataloader
 
 def get_chat_completion_vision_dpo_parquet_dataloader(sources: str,

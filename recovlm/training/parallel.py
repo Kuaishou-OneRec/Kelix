@@ -315,6 +315,7 @@ class UlyssesAttention(torch.nn.Module):
         
         cu_seqlens = kwargs.get("cu_seqlens")
         max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+
         cu_seqlens = cu_seqlens.to(torch.int32)
 
         attn_output = flash_attn_varlen_func(

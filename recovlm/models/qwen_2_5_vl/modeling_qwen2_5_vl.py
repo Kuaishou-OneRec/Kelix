@@ -576,9 +576,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         window_index, cu_window_seqlens = self.get_window_index(grid_thw)
 
 
-        
-        # print(f"config.fullatt_block_indexes={self.config.fullatt_block_indexes}") # [7, 15, 23, 31]
-
         cu_window_seqlens = torch.tensor(
             cu_window_seqlens,
             device=hidden_states.device,
@@ -1163,7 +1160,6 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
                 "unexpected results may be encountered."
             )
         self.self_attn = QWEN2_5_VL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
-        print(9776586876876, config, type(self.self_attn)) # ; exit()
         self.mlp = Qwen2MLP(config)
         self.input_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)

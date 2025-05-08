@@ -1,1 +1,1 @@
-python3 /llm_reco/maosiyang/msy_vit/recovlm/tests/test_datasets.py /llm_reco/maosiyang/msy_vit/recovlm/tests/files.txt
+nohup python3 tests/test_datasets.py tests/files.txt > tests/std.log 2>&1 &

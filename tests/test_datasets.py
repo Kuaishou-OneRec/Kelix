@@ -321,14 +321,13 @@ def test_InternVLParquetDataset(sources):
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
     dataset_config.pop("name")
-    dataset_config["num_workers"] = 1
+    dataset_config["num_workers"] = 5
     dataset_config["shuffle_seed"] = int(time.time())
-    dataset_config["max_length"] = 999999999
+    dataset_config["max_length"] = 16000
     dataset_config["sources"] = sources
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
-
-    dataset = get_chat_completion_vision_parquet_dataloader(cut_to_pad=True, **dataset_config,model_class="InternVLChatModel")
+    dataset = InternVLChatCompletionVisionParquetDataset(cut_to_pad=True, **dataset_config)
     ans = 0
     def collate_fn(samples):
         return samples[0]
@@ -337,17 +336,24 @@ def test_InternVLParquetDataset(sources):
         dataset=dataset,
         batch_size=1,
         shuffle=False,
-        num_workers=1,
+        num_workers=5,
         collate_fn=collate_fn
     )
+    cnt = 0
     for iteration, batch in enumerate(dataloader):
+        
         for k, v in batch.items():
             try:
                 print(k, v.shape, v.dtype, str(v)[:100])
             except:
                 print(k, v)
-            print("=" * 10)
-        
+        print("=" * 10, cnt)
+        cnt += 1
+        if cnt == 200: 
+            print('data_source-----------------------------------------------------------------', batch["data_source"])
+            break
+    print('ended')
+         
         
 '''
     {
@@ -378,11 +384,17 @@ if __name__ == "__main__":
         for line in fp:
             if line.strip() != "":
                 hdfs_dirs.append(line.strip())
+    print(f"num of hdfs dirs: {len(hdfs_dirs)}")
     test_files = []
     for fn in hdfs_dirs:
         fn_list = shell_hdfs_ls(fn)
         all_files = [fn for fn in fn_list if fn.endswith(".parquet")]
-        test_files.extend(all_files[:1])
-    print(test_files)
-    test_InternVLParquetDataset(test_files)
+        if len(all_files) > 0:  
+            n = len(all_files)
+            print(f"num of files: {n}")
+            test_files.append(all_files[:min(5, n)])
+        else:
+            print(f"no files in {fn}")
+    for files in test_files:
+        test_InternVLParquetDataset(files)
 

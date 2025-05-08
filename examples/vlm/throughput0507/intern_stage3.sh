@@ -1,6 +1,7 @@
 email=$(git config --get user.email)
 
-mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15" 
+#mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15" 
+#mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "wget https://halo.corp.kuaishou.com/api/cloud-storage/v1/public-objects/user-cloud-storage/xray%2Finstall_xray.sh -O install_xray.sh && bash install_xray.sh" 
 
 # 检查 email 是否为空
 if [[ -z "$email" ]]; then
@@ -16,7 +17,8 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/Megred_model/2B # Pretrained/Base model path
 # MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/OpenGVLab/InternVL2_5-4B
-OUTPUT_DIR=/llm_reco/chuchenglong/output/internvl-2b/0420/stage15_debug
+
+OUTPUT_DIR=/llm_reco/lingzhixin/exp_outputs/throughput0507/intern_stage3/0.0.1/
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -50,6 +52,7 @@ source set_env.sh
 hostfile=/etc/mpi/hostfile_seq
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
+TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
 
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
@@ -57,31 +60,38 @@ MASTER_PORT=8499
 # debug7b_short.json
 # debug7b_fsdp_3p_v1_debug2_orids             
 # --enable_gradient_checkpointing \
-nohup mpirun --allow-run-as-root -np $np \
-        -mca plm_rsh_args "-p ${Port}"  \
+nohup mpirun --allow-run-as-root \
         -hostfile $hostfile \
+        -mca btl self,tcp -mca pml ob1 \
+        -mca plm_rsh_num_concurrent 600 \
+        -mca routed_radix 600 \
+        -mca btl_tcp_if_include $TCP_NIC \
+        -mca oob_tcp_if_include $TCP_NIC \
+        -mca btl_openib_allow_ib false \
+        -mca opal_set_max_sys_limits 1 \
+        -x OMPI_MCA_btl=self,tcp \
+        -x OMPI_MCA_pml=ob1 \
+        -x OMPI_MCA_btl_tcp_if_include=$TCP_NIC \
+        -x OMPI_MCA_oob_tcp_if_include=$TCP_NIC \
+        -x OMPI_MCA_btl_openib_allow_ib=false \
+        -x NCCL_IB_DISABLE=0 \
+        -x NCCL_IB_GID_INDEX=3 \
+        -x NCCL_SOCKET_IFNAME=$TCP_NIC \
+        -x NCCL_IB_HCA=mlx5 \
+        -x NCCL_DEBUG=WARN \
+        -x NCCL_IB_QPS_PER_CONNECTION=4 \
+        -x NCCL_NET_OVERHEAD=1000 \
+        -x NCCL_IB_TIMEOUT=20 \
+        -x LD_PRELOAD=$LD_PRELOAD \
+        -x http_proxy="" \
+        -x https_proxy="" \
         -x HOROVOD_MPI_THREADS_DISABLE=1 \
         -x MPI_THREAD_SINGLE=1 \
         -x CUDA_DEVICE_MAX_CONNECTIONS=1 \
-        -bind-to none  -map-by slot \
-        -mca opal_set_max_sys_limits 1 \
-        -mca plm_rsh_num_concurrent 300 \
-        -mca routed_radix 600 \
-        -mca btl_tcp_if_include eth04 \
-        -mca btl_openib_allow_ib true \
-        --mca btl tcp,self \
         -x NO_COLOR=1 \
         -x TERM=dumb \
         -x COLORTERM=0 \
         -x PYTHONIOENCODING=utf-8 \
-        -x NCCL_IB_QPS_PER_CONNECTION=4 \
-        -x NCCL_IB_DISABLE=0 \
-        -x NCCL_IB_GID_INDEX=3 \
-        -x NCCL_IB_HCA=mlx5 \
-        -x NCCL_NET_OVERHEAD=1000 \
-        -x NCCL_PROTO=^LL128 \
-        -x NCCL_MIN_NCHANNELS=4 \
-        -x NCCL_ALGO=^NVLS,NVLSTree \
         -x LD_LIBRARY_PATH=$LIBRARY_PATH \
         -x PATH \
         -x PYTHONPATH=$PYTHONPATH \
@@ -106,13 +116,14 @@ nohup mpirun --allow-run-as-root -np $np \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
         -x http_proxy=\
         -x https_proxy=\
+        with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config /llm_reco/chuchenglong/InternVL/recovlm/examples/vlm/configs/2b_internvl_stage1.json \
-                --max_length 12288 \
-                --learning_rate 2e-4 \
+                --dataset_config examples/vlm/throughput0507/2b_v0_7_0_internvl_stage3_v3.json \
+		--max_length 21000 \
+                --learning_rate 2e-5 \
                 --model_class InternVLChatModel \
                 --min_lr 0.0 \
                 --weight_decay 0.01 \
@@ -123,11 +134,12 @@ nohup mpirun --allow-run-as-root -np $np \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
-                --fp32_weight true \
-                --reshard_after_forward false \
-		--freeze_llm \
+                --fp32_weight \
+                --enable_profile \
+		--monitor_image_tokens \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
+                --vit_token_balance \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
@@ -136,3 +148,4 @@ nohup mpirun --allow-run-as-root -np $np \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+

@@ -141,14 +141,14 @@ def get_optimizer_grouped_parameters(model,
       final_optimizer_grouped_parameters.append(group)
   return final_optimizer_grouped_parameters
 
-def to_device(batch, device):
+def to_device(batch, device, non_blocking=True):
   for key in list(batch.keys()):
     if isinstance(batch[key], torch.Tensor):
-      batch[key] = batch[key].to(device=device)
+      batch[key] = batch[key].to(device=device, non_blocking=non_blocking)
   return batch
 
-def to_cuda(batch):
-  to_device(batch, device=torch.cuda.current_device())
+def to_cuda(batch, non_blocking=True):
+  to_device(batch, device=torch.cuda.current_device(), non_blocking=non_blocking)
 
 def set_random_seed(seed):
   if seed is not None:
@@ -367,7 +367,7 @@ class FakeParquetFileFromFastParquetFile:
         return self.res
 
 
-def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fast_parquet') -> pq.ParquetFile:
+def load_parquet_file(fn: str, retry=5, max_cache_files=100, parquet_backend='fast_parquet') -> pq.ParquetFile:
     """
     加载 Parquet 文件，如果 HDFS 读取失败，则回退到本地缓存。
 
@@ -398,6 +398,8 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fas
     """
     import hashlib
     assert parquet_backend in ["fast_parquet", "pyarrow"]
+    if os.path.exists(fn):
+      return  pq.ParquetFile(fn) if parquet_backend == 'pyarrow' else FakeParquetFileFromFastParquetFile(fn)
 
     def calculate_text_hash(text):
         # 创建一个 SHA-256 哈希对象
@@ -423,7 +425,11 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fas
         if len(files) > max_cache_files:
             files.sort(key=os.path.getctime)
             for fn in files[:max_cache_files//2]:
-                print(f"Removing old cached file: {fn}")
+                try: 
+                  print(f"Removing old cached file: {fn}")
+                  os.remove(fn)
+                except: 
+                  print(f"Failed to remove old cached file: {fn}")
 
     for r in range(retry):
         print(f"retrying for fn={fn}/{cache_fn}")

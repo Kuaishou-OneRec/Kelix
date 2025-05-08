@@ -194,6 +194,11 @@ class InternVLChatModel(PreTrainedModel):
 
         input_embeds = input_embeds.reshape(B, N, C)
 
+        cu_seqlens = kwargs.get("cu_seqlens"),
+        assert cu_seqlens is not None, "cu_seqlens"
+        # max_seqlen = None
+        # if cu_seqlens:
+        #     max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
         outputs = self.language_model(
             inputs_embeds=input_embeds,
             attention_mask=attention_mask,
@@ -203,6 +208,7 @@ class InternVLChatModel(PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            cu_seqlens=kwargs.get("cu_seqlens"),
         )
         logits = outputs.logits
 
