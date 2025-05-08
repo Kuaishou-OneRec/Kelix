@@ -30,4 +30,4 @@ fi
 
 echo "rank $global_rank bind to numa $numa_id cores [$cores]"
 
-numactl -m $numa_id -C $cores $@
+numactl --all -m $numa_id -C $cores $@
