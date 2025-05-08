@@ -250,6 +250,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           vit_token_balance=False,
                                           **kwargs):
     model_type = kwargs.get('model_class','Qwen2VLForConditionalGeneration')
+    print('test_cut_to_pad:',kwargs.get('cut_to_pad',False))
     cut_to_pad = kwargs.get('cut_to_pad',False)
     ModelDataset = {'Qwen2VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
