@@ -2964,8 +2964,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       raise Exception("!!!!!! Error occurs in image padding. input ids are shorted than image tokens")
     return inputs
 
-  def _find_in_range(self, seq_lens, max_len, delta, target_count, max_trials=100000):
+  def _find_in_range(self, seq_lens, max_len, delta, target_count, raw_image_len, expect_image_num, max_trials=100000):
     t1 = time.perf_counter()
+    assert len(seq_lens) == len(raw_image_len)
     results = set()
     trials = 0 
 
@@ -2977,14 +2978,22 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         random.shuffle(indices)
 
         current_sum = 0 
+        current_image_sum = 0
         current_indices = []
 
         for idx in indices:
             if current_sum + seq_lens[idx] <= max_len:
                 current_sum += seq_lens[idx]
+                current_image_sum += raw_image_len[idx]
                 current_indices.append(idx)
 
-            if max_len - delta <= current_sum <= max_len:
+            if current_image_sum > max_len:
+                break
+
+            if current_image_sum > expect_image_num * (1 + 0.1):
+                break
+
+            if max_len - delta <= current_sum <= max_len and current_image_sum >= expect_image_num * (1-0.1):
                 results.add(tuple(sorted(current_indices)))  # use tuple to be hashable
                 break  # once one valid subset found, restart next trial
 
@@ -3025,7 +3034,14 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           f"errmsg={traceback.format_exc()}")
         continue
 
-  def _select_nearest_equal(self, local_image_lens, all_image_lens):
+  def _balance_score(self, image_lens, expect_image_len):
+      max_len = max(image_lens)
+      min_len = min(image_lens)
+      var = np.sqrt(np.var(image_lens, mean=expect_image_len)) / 2
+      return (max_len - min_len) ** 2 + float(var)
+
+
+  def _select_nearest_equal(self, local_image_lens, all_image_lens, expect_image_len):
       def find_nearest(arr, target):
           pos = bisect.bisect_left(arr, target)
           if pos == 0:
@@ -3040,39 +3056,45 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           else:
               return before
       found = None
-      min_var = sys.maxsize
+      min_score = sys.maxsize
+      debug_info = []
       for n in local_image_lens:
           current = []
-          cur_max = -1
-          cur_min = sys.maxsize
-          for arr in all_image_lens:
-              current.append(find_nearest(arr, n))
-              cur_max = max(cur_max, current[-1])
-              cur_min = min(cur_min, current[-1])
-          if (cur_max - cur_min) < min_var:
+          for i, arr in enumerate(all_image_lens):
+              if i == dist.get_rank():
+                  current.append(n)
+              else:
+                  current.append(find_nearest(arr, n))
+          score = self._balance_score(current, expect_image_len)
+          debug_info.append((score, current))
+          if score < min_score:
               found = current
-              min_var = cur_max - cur_min
-      return found
+              min_score = score
+      print('{[rank=dist.get_rank()]} debug_info: {debug_info}')
+      return found + [min_score]
 
   def _select_global(self, candidates):
-      min_var = sys.maxsize
-      found = None
-      max_sum = -1
-      for candidate in candidates:
-          cur_var = max(candidate) - min(candidate)
-          if cur_var < min_var:
-              found = candidate
-              min_var = cur_var
-              max_sum = sum(candidate)
-          elif cur_var == min_var:
-              cur_sum = sum(candidate)
-              if cur_sum > max_sum:
-                  max_sum = cur_sum
-                  found = candidate
+      scores = [candidate[-1] for candidate in candidates]
+      idx = int(np.argmin(scores))
+      return candidates[idx][:-1]
+      # min_var = sys.maxsize
+      # found = None
+      # max_sum = -1
+      # for candidate in candidates:
+      #     cur_var = max(candidate) - min(candidate)
+      #     if cur_var < min_var:
+      #         found = candidate
+      #         min_var = cur_var
+      #         max_sum = sum(candidate)
+      #     elif cur_var == min_var:
+      #         cur_sum = sum(candidate)
+      #         if cur_sum > max_sum:
+      #             max_sum = cur_sum
+      #             found = candidate
 
-      return found 
+      # return found 
   
-  def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 100):
+  def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 100, expect_image_num: int = 55):
     delta = int(self.max_length * delta_ratio)
     buffer = []
     source_list = []
@@ -3085,7 +3107,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         raw_image_len = [data["pixel_values"].size(0) for data in buffer]
        #  print(f"[rank={dist.get_rank()}] raw_input_ids_len={input_ids_len}, raw_image_len={raw_image_len}")
         t1 = time.perf_counter()
-        candidates = self._find_in_range(input_ids_len, self.max_length, delta, target_count)
+        candidates = self._find_in_range(input_ids_len, self.max_length, delta, target_count, raw_image_len, expect_image_num)
         input_ids_len = [sum(buffer[idx]["input_ids"].shape[-1] for idx in candidate) for candidate in candidates]
         image_len = [sum(buffer[idx]["pixel_values"].size(0) for idx in candidate) for candidate in candidates]
         print(f"[rank={dist.get_rank()}]  candidate_images: {sorted(image_len)}")
@@ -3094,7 +3116,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         all_image_lens = [None] * dist.get_world_size()
         dist.all_gather_object(all_image_lens, sorted_image_len)
         # print(f"[rank={dist.get_rank()}] all_gather_imagelens: {all_image_lens}")
-        local_found = self._select_nearest_equal(sorted_image_len, all_image_lens)
+        local_found = self._select_nearest_equal(sorted_image_len, all_image_lens, expect_image_num)
         # print(f"[rnak={dist.get_rank()}] local_found={local_found}")
         all_local_found = [None] * dist.get_world_size()
         dist.all_gather_object(all_local_found, local_found)
@@ -3127,6 +3149,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     delta_ratio = self.kargs.get("input_ids_len_delta_ratio", 0.02)
     buffer_size = self.kargs.get("balance_buffer_size", 1000)
     target_count = self.kargs.get("balance_candidate_count", 100)
+    expect_image_num = self.kargs.get("image_num_per_batch", 55)
 
     self.sample_queue = queue.Queue(maxsize=32)
     def reader_task():
@@ -3141,7 +3164,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.process_threads = [threading.Thread(target=self._process_task, daemon=True) for _ in range(16)]
     for t in self.process_threads:
       t.start()
-    self.prefetch_thread = threading.Thread(target=self._prefetched_task, args=(delta_ratio, buffer_size, target_count), daemon=True)
+    self.prefetch_thread = threading.Thread(target=self._prefetched_task, args=(delta_ratio, buffer_size, target_count, expect_image_num), daemon=True)
     self.prefetch_thread.start()
 
     while True:
