@@ -2383,7 +2383,15 @@ class ParquetDataset(IterableDataset):
           # file finish
           logger.warning(f"[Rank{rank}-{worker}] {fn} finish.")
           finish_dict[(fn, epoch_idx)] = True
+    except GeneratorExit:
+      # 正确处理生成器退出
+      logger.warning("Generator exited during file processing")
+      return
+    except Exception as e:
+      logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
+      raise
 
+    
   def __iter__vit_token_balance(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
     assert self.vit_token_balance, f"self.vit_token_balance={self.vit_token_balance}, expected to be true"
