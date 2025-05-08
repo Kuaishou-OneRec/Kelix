@@ -162,7 +162,7 @@ def get_shard_conditions(
     """
 
     # 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration'
-    if model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration']:
+    if model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit']:
         if names_to_match and name in names_to_match:
             return True
 
@@ -234,7 +234,7 @@ def shard_model(
             fully_shard(m, **fsdp_kwargs)
             num_layers_sharded += 1
     else: 
-        assert model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration']
+        assert model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit']
         layers = []
         for n, m in reversed(list(model.named_modules())):
             if any([shard_condition(n, m) for shard_condition in shard_conditions]):
