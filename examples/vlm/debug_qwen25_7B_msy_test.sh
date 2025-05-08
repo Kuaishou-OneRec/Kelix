@@ -116,7 +116,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config /llm_reco/chuchenglong/InternVL/recovlm/examples/vlm/configs/2b_qwen_stage1d.json \
+                --dataset_config examples/vlm/demo0506/qwen_cut_text_moonvit.json \
                 --model_processor Qwen2_5_VLProcessor_moonvit \
                 --model_class Qwen2_5_VLForConditionalGeneration_moonvit \
                 --monitor_datasource_loss \
