@@ -3268,6 +3268,7 @@ class ChatCompletionVisionParquetDataset_moonvit(ChatCompletionVisionDataset_moo
     self.rng = random.Random(shuffle_seed)
     self.num_workers = num_workers
     self.num_epochs = num_epochs
+    self.cut_to_pad = kargs.get("cut_to_pad", True)
     super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
