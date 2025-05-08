@@ -50,35 +50,45 @@ source set_env.sh
 hostfile=/etc/mpi/hostfile_seq
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
+TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
+
 
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
-nohup mpirun --allow-run-as-root -np $np \
-        -mca plm_rsh_args "-p ${Port}"  \
+
+nohup mpirun --allow-run-as-root \
         -hostfile $hostfile \
+        -mca btl self,tcp -mca pml ob1 \
+        -mca plm_rsh_num_concurrent 600 \
+        -mca routed_radix 600 \
+        -mca btl_tcp_if_include $TCP_NIC \
+        -mca oob_tcp_if_include $TCP_NIC \
+        -mca btl_openib_allow_ib false \
+        -mca opal_set_max_sys_limits 1 \
+        -x OMPI_MCA_btl=self,tcp \
+        -x OMPI_MCA_pml=ob1 \
+        -x OMPI_MCA_btl_tcp_if_include=$TCP_NIC \
+        -x OMPI_MCA_oob_tcp_if_include=$TCP_NIC \
+        -x OMPI_MCA_btl_openib_allow_ib=false \
+        -x NCCL_IB_DISABLE=0 \
+        -x NCCL_IB_GID_INDEX=3 \
+        -x NCCL_SOCKET_IFNAME=$TCP_NIC \
+        -x NCCL_IB_HCA=mlx5 \
+        -x NCCL_DEBUG=WARN \
+        -x NCCL_IB_QPS_PER_CONNECTION=4 \
+        -x NCCL_NET_OVERHEAD=1000 \
+        -x NCCL_IB_TIMEOUT=20 \
+        -x LD_PRELOAD=$LD_PRELOAD \
+        -x http_proxy="" \
+        -x https_proxy="" \
         -x HOROVOD_MPI_THREADS_DISABLE=1 \
         -x MPI_THREAD_SINGLE=1 \
         -x CUDA_DEVICE_MAX_CONNECTIONS=1 \
-        -bind-to none  -map-by slot \
-        -mca opal_set_max_sys_limits 1 \
-        -mca plm_rsh_num_concurrent 300 \
-        -mca routed_radix 600 \
-        -mca btl_tcp_if_include eth04 \
-        -mca btl_openib_allow_ib true \
-        --mca btl tcp,self \
         -x NO_COLOR=1 \
         -x TERM=dumb \
         -x COLORTERM=0 \
         -x PYTHONIOENCODING=utf-8 \
-        -x NCCL_IB_QPS_PER_CONNECTION=4 \
-        -x NCCL_IB_DISABLE=0 \
-        -x NCCL_IB_GID_INDEX=3 \
-        -x NCCL_IB_HCA=mlx5 \
-        -x NCCL_NET_OVERHEAD=1000 \
-        -x NCCL_PROTO=^LL128 \
-        -x NCCL_MIN_NCHANNELS=4 \
-        -x NCCL_ALGO=^NVLS,NVLSTree \
         -x LD_LIBRARY_PATH=$LIBRARY_PATH \
         -x PATH \
         -x PYTHONPATH=$PYTHONPATH \
@@ -103,6 +113,7 @@ nohup mpirun --allow-run-as-root -np $np \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
         -x http_proxy=\
         -x https_proxy=\
+        with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --dataset_config /llm_reco/chuchenglong/InternVL/recovlm/examples/vlm/configs/2b_qwen_stage1d.json \
@@ -110,7 +121,7 @@ nohup mpirun --allow-run-as-root -np $np \
                 --model_class Qwen2_5_VLForConditionalGeneration_moonvit \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 20000 \
+                --max_length 15000 \
                 --learning_rate 1e-6 \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
@@ -120,7 +131,6 @@ nohup mpirun --allow-run-as-root -np $np \
                 --save_checkpoint_per_step 500 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
-                --reshard_after_forward false \
                 --logging_per_step 10 \
                 --fp32_weight true \
                 --seed 19260817 \
@@ -133,4 +143,3 @@ nohup mpirun --allow-run-as-root -np $np \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
-
