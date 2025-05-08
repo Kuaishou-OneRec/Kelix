@@ -114,7 +114,7 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-	bash -c "unset http_proxy && unset https_proxy && bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
+	bash -c "unset http_proxy && unset https_proxy && python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
