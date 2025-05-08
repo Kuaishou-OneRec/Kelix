@@ -1,7 +1,7 @@
 email=$(git config --get user.email)
 
 mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15" 
-mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "apt-get install -y numactl" 
+mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "http_proxy=http://oversea-squid4.sgp.txyun:11080 https_proxy=http://oversea-squid4.sgp.txyun:11080 apt-get install -y numactl" 
 
 # 检查 email 是否为空
 if [[ -z "$email" ]]; then
