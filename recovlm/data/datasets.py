@@ -728,7 +728,10 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
                vision_start_token_id: int = 151652,
                vision_end_token_id: int = 151653,
                pad_token_id: int = 151643,
-               datasource_config:Dict[str, Dict[str, Any]] = {},**kwargs):
+               datasource_config:Dict[str, Dict[str, Any]] = {},
+               cut_to_pad=True,
+               **kwargs
+               ):
     """
     datasource_config: 默认覆盖全局配置
                       key: datasource_name
@@ -751,7 +754,8 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
       vision_start_token_id = model_config.vision_start_token_id
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
-
+    self.cut_to_pad = cut_to_pad
+    print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
@@ -784,6 +788,13 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
     # for data_source monitor
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
+
+    self.tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
+    self.img_start_token = "<|vision_start|>"
+    self.img_end_token = "<|vision_end|>"
+    self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
+    self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
+    # self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
 
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
@@ -829,7 +840,7 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
       dataset = dataset.shuffle(
           self.shuffle_size, initial=self.shuffle_initial_size).decode(
         "pil", handler=wds.warn_and_continue)
-      
+
     return dataset, total_samples
 
   def _fill_image_block(self, block: Dict[str, Any],
@@ -839,7 +850,9 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
     min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
     max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
 
-    if isinstance(block["image"], str):
+    if isinstance(block["image"], str) and os.path.exists(block["image"]):
+      image = Image.open(block["image"])
+    elif isinstance(block["image"], str):
       image = sample_dict[block["image"]]
     else:
       image = block["image"]
@@ -903,7 +916,10 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
     text = ""
     vision_infos = []
     segments = sample["json"]["segments"]
+    
     for segment in segments:
+      if _DATASET_SKIP_MM == "SKIP_MM" and segment["type"] != "text": continue
+
       if segment["type"] == "text":
         text += segment["text"]
       elif segment["type"] == "image":
@@ -933,7 +949,7 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 32768:
+    if inputs["input_ids"].shape[-1] > self.max_length:
       print(f"Sample is too long. token_len={inputs['input_ids'].shape[-1]}")
     
     # mask all vision token
@@ -975,20 +991,26 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
     msg_key = "message" if "message" in sample["json"] else "messages"
     messages = sample["json"][msg_key]
     for turn in messages:
-      content = turn["content"]
-      if isinstance(content, str):
-        continue
-      for block in content:
-        if block["type"] == "image":
-          self._fill_image_block(block, sample, 
-                                  conf=data_conf)
-        elif block["type"] == "video":
-          self._fill_video_block(block, sample,
-                                  conf=data_conf)
-        elif block["type"] == "text":
+      try:
+        content = turn["content"]
+        if isinstance(content, str):
           continue
-        else:
-          raise ValueError(f"sample process error, unsupport value type: {block['type']}")
+        for block in content:
+          if _DATASET_SKIP_MM == "SKIP_MM" and block["type"] != "text": continue
+
+          if block["type"] == "image":
+            self._fill_image_block(block, sample, 
+                                    conf=data_conf)
+          elif block["type"] == "video":
+            self._fill_video_block(block, sample,
+                                    conf=data_conf)
+          elif block["type"] == "text":
+            continue
+          else:
+            raise ValueError(f"sample process error, unsupport value type: {block['type']}")
+      except Exception as e:
+        print(f"sample process error, messages={str(messages)[:50]}\n, sample=\n{str(sample)[:50]}")
+        raise e
 
     text = self.processor.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
@@ -1008,7 +1030,7 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 32768:
+    if inputs["input_ids"].shape[-1] > self.max_length:
       raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
     
     inputs["loss_mask"] = get_assistant_mask(
@@ -1128,6 +1150,7 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
         inputs = self._process_chat(sample, source_conf)
       elif data_format == "completion":
         inputs = self._process_completion(sample, source_conf)
+
       else:
         raise NotImplementedError(
             f"Unsupported dataset format `{data_format}`")
@@ -1160,6 +1183,31 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
                              cu_seqlens: List[int],
                              sample_idx: Optional[int] = None):
 
+    
+    packable_length = self.max_length - cu_seqlens[-1]
+    if packable_length == 0: return
+    if self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
+      import copy
+      inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
+      inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
+
+      inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
+
+      vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
+      vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
+      if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
+        inputs["input_ids"][:, vision_starts[-1]:] = 0 # 随便什么id都可以
+        inputs["loss_mask"][:, vision_starts[-1]:] = 0
+
+      if 'image_grid_thw' in inputs: # 如果有图片
+        n_tokens = 0
+        for i in range(len(vision_ends), len(inputs["image_grid_thw"])):
+          n_tokens_hw = inputs["image_grid_thw"][i]
+          n_tokens += n_tokens_hw[1] * n_tokens_hw[2]
+
+        if n_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
+        inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
+
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
     packed_position_ids.append(inputs["position_ids"])
@@ -1168,7 +1216,7 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
     packed_sample_idx.append(
       torch.full_like(packed_input_ids[-1], sample_idx))
 
-    if "pixel_values" in inputs:
+    if "pixel_values" in inputs and len(inputs["pixel_values"]):
       packed_pixel_values.append(inputs["pixel_values"])
       packed_image_gird_thw.append(inputs["image_grid_thw"])
     if "pixel_values_videos" in inputs:
@@ -1260,25 +1308,27 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
     buffer = []
     source_list = []
     cur_length = 0
-
-    for sample in self.dataset:
-      sample_key = sample["__key__"] if "__key__" in sample else ""
-      sample_url = sample["__url__"] if "__url__" in sample else ""
-
+    ds_iter = iter(self.dataset)
+    while True:
+      #for sample in self.dataset:
       try:
-        source_name = sample["json"]["source"]
-        # WARN: ugly code, for dirty dataset.
-        if source_name.startswith("PDFA"):
-          source_name = "PDFA"
-        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-          source_name = source_name.split("/")[4]
-      except:
-        source_name = "None"
+        sample = next(ds_iter)
+        sample_key = sample["__key__"] if "__key__" in sample else ""
+        sample_url = sample["__url__"] if "__url__" in sample else ""
 
-      self.source_sample_cnt.setdefault(source_name, 0)
-      self.source_sample_cnt[source_name] += 1
+        try:
+          source_name = sample["json"]["source"]
+          # # WARN: ugly code, for dirty dataset.
+          # if source_name.startswith("PDFA"):
+          #   source_name = "PDFA"
+          # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          #   source_name = source_name.split("/")[4]
+        except:
+          source_name = "None"
 
-      try:
+        self.source_sample_cnt.setdefault(source_name, 0)
+        self.source_sample_cnt[source_name] += 1
+      
         inputs = self._process(sample, source_name)
       except:
         self.source_error_cnt.setdefault(source_name, 0)
@@ -1287,17 +1337,36 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:50]}"
           f"errmsg={traceback.format_exc()}")
         continue
 
       sample_length = inputs["input_ids"].shape[-1]
-      if cur_length + sample_length > self.max_length:
-        packed_inputs = self._packing(buffer)
-        packed_inputs["data_source"] = source_list
-        buffer = [inputs]
-        source_list = [source_name]
-        cur_length = sample_length
+      if cur_length + sample_length >= self.max_length:
+        # packed_inputs = self._packing(buffer)
+        # packed_inputs["data_source"] = source_list
+        # buffer = [inputs]
+        # source_list = [source_name]
+        # cur_length = sample_length
+
+        if self.cut_to_pad:
+          buffer.append(inputs)
+          source_list.append(source_name)
+          packed_inputs = self._packing(buffer)
+
+          packed_inputs["data_source"] = source_list
+          buffer = []
+          source_list = []
+          cur_length = 0
+          if packed_inputs["loss_mask"].sum().item() == 0:
+            continue # packing失败，这种情况通常是只有一个样本，而且这个样本以图片开头，而且图片占满了所有有效token
+        else:
+          packed_inputs = self._packing(buffer)
+          packed_inputs["data_source"] = source_list
+          buffer = [inputs]
+          source_list = [source_name]
+          cur_length = sample_length
+
 
         # skip pure text sample
         # 有pad image，原则上不会出现纯文本输入
@@ -1317,7 +1386,6 @@ class ChatCompletionVisionDataset_moonvit(IterableDataset):
         buffer.append(inputs)
         source_list.append(source_name)
         cur_length += sample_length
-
 
 
 
