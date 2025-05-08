@@ -2541,7 +2541,8 @@ class Qwen2_5_VLForConditionalGeneration_moonvit(Qwen2_5_VLPreTrainedModel, Gene
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 print('msy_image_embeds',image_embeds.shape)
 
-                
+                print('11111',image_mask.long().sum())
+                print('22222',image_embeds.numel())
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
