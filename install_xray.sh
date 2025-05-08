@@ -8,8 +8,6 @@ function print_red() {
     echo -e "\e[31m\e[100m$1\e[0m"
 }
 
-if xray update; then print_green "Info: xray auto update success" ; exit 0 ; fi
-
 export http_proxy=http://oversea-squid4.sgp.txyun:11080
 export https_proxy=http://oversea-squid4.sgp.txyun:11080
 export no_proxy=localhost,127.0.0.1,localaddress,localdomain.com,internal,corp.kuaishou.com,test.gifshow.com,staging.kuaishou.com
@@ -19,6 +17,7 @@ if [ "${_os_}" == "ubuntu" ]; then
     _pkg_="deb"
     dpkg --configure -a &> /dev/null || true
     apt update && apt-get install -y net-tools iproute2 lldpd bind9-utils ethtool iputils-ping
+    if xray update; then print_green "Info: xray auto update success" ; exit 0 ; fi
     if xray --help &> /dev/null ; then
         print_green "removing old version of xray"
         apt-get remove -y xray &> /dev/null || true
@@ -26,6 +25,7 @@ if [ "${_os_}" == "ubuntu" ]; then
 elif [ "${_os_}" == "centos" ]; then
     _pkg_="rpm"
     yum install -y --nogpgcheck net-tools iproute lldpd bind-utils ethtool iputils --skip-broken
+    if xray update; then print_green "Info: xray auto update success" ; exit 0 ; fi
     if xray --help &> /dev/null ; then
         print_green "removing old version of xray"
         yum remove -y xray &> /dev/null || true

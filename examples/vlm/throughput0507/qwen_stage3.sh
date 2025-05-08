@@ -12,7 +12,7 @@ else
         echo "Git user.emal: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile  | head -7 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct # Pretrained/Base model path
@@ -116,7 +116,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/throughput0507/2b_v0_7_0_internvl_stage3_v3.json \
+                --dataset_config examples/vlm/throughput0507/2b_v0_7_0_qwen_stage3_v3.json \
                 --model_processor Qwen2_5_VLProcessor \
                 --model_class Qwen2_5_VLForConditionalGeneration \
                 --monitor_datasource_loss \

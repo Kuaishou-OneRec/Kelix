@@ -116,12 +116,12 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/throughput0507/2b_v0_6_0_internvl_stage2.json \
+                --dataset_config examples/vlm/throughput0507/2b_v0_6_0_qwen_stage2.json \
                 --model_processor Qwen2_5_VLProcessor \
                 --model_class Qwen2_5_VLForConditionalGeneration \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 64000 \
+                --max_length 19000 \
                 --learning_rate 1e-6 \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
@@ -129,7 +129,7 @@ nohup mpirun --allow-run-as-root \
                 --num_warmup_steps 500 \
                 --num_training_steps 50000 \
                 --save_checkpoint_per_step 500 \
-                --sequence_parallel_size 4 \
+                --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
                 --fp32_weight \

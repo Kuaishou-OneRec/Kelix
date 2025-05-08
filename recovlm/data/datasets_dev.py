@@ -38,11 +38,6 @@ from transformers import AutoTokenizer, AutoProcessor, \
 
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
-
-from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit
-from recovlm.models.qwen_2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
-from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig
-
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
 from recovlm.utils.intern_vl_utils import process_vision_info_internvl,dynamic_preprocess,load_video,build_transform
@@ -700,630 +695,6 @@ def get_assistant_mask(batch_input_ids: torch.Tensor,
   return torch.tensor(masks)
 
 
-
-
-
-
-class ChatCompletionVisionDataset_moonvit(IterableDataset):
-  def __init__(self,
-               sources: Union[str, List[str]],
-               max_length: int = 1024,
-               min_visual_tokens_per_image: int = 4,
-               max_visual_tokens_per_image: int = 512,
-               video_nframe: int = -1,
-               video_fps: float = 2.0,
-               video_min_frames: int = -1,
-               video_max_frames: int = 120,
-               shrink_ratio: float = 0.9,
-               max_retry: int = 5,
-               multiple_of: int = 8,
-               shuffle_size: int = 100000,
-               shuffle_initial_size: int = 20000,
-               base_model_dir: Optional[str] = None,
-               processor: Optional[Qwen2VLProcessor] = None,
-               spatial_merge_size: int = 2,
-               patch_size: int = 14,
-               image_token_id: int = 151655,
-               video_token_id: int = 151656,
-               vision_start_token_id: int = 151652,
-               vision_end_token_id: int = 151653,
-               pad_token_id: int = 151643,
-               datasource_config:Dict[str, Dict[str, Any]] = {},**kwargs):
-    """
-    datasource_config: 默认覆盖全局配置
-                      key: datasource_name
-                      Dict: datasource config, support params:
-                        min_visual_tokens_per_image
-                        max_visual_tokens_per_image
-                        video_nframe
-                        video_fps
-                        video_min_frames
-                        video_max_frames
-    """
-    if base_model_dir:
-      processor = Qwen2_5_VLProcessor_moonvit.from_pretrained(base_model_dir)
-      model_config = Qwen2_5_VLConfig.from_pretrained(base_model_dir)
-      vision_config = MoonViTConfig()
-      spatial_merge_size = vision_config.merge_kernel_size[0]
-      patch_size = vision_config.patch_size
-      image_token_id = model_config.image_token_id
-      video_token_id = model_config.video_token_id
-      vision_start_token_id = model_config.vision_start_token_id
-      vision_end_token_id = model_config.vision_end_token_id
-      pad_token_id = model_config.pad_token_id
-
-    self.processor = processor
-    self.min_visual_tokens_per_image = min_visual_tokens_per_image
-    self.max_visual_tokens_per_image = max_visual_tokens_per_image
-    self.video_nframe = video_nframe
-    self.video_fps = video_fps
-    self.video_min_frames = video_min_frames
-    self.video_max_frames = video_max_frames
-    if video_nframe > 0 and (video_fps > 0 or video_min_frames > 0 or video_max_frames > 0):
-      logger.warning(
-        f"ChatCompletionVisionDataset(video_fps=...): video_fps, video_min_frames, "\
-          f"video_max_frames will be ignored when video_nframe>0 ({video_nframe=})"
-      )
-    self.patch_size = patch_size
-    self.shrink_ratio = shrink_ratio
-    self.max_retry = max_retry
-    self.spatial_merge_size = spatial_merge_size
-    self.image_token_id = image_token_id
-    self.video_token_id = video_token_id
-    self.vision_start_token_id = vision_start_token_id
-    self.vision_end_token_id = vision_end_token_id
-    self.pad_token_id = pad_token_id
-    self.patch_size = patch_size
-    # Pad sequence to multiple of `multiple_of`
-    self.multiple_of = multiple_of
-    self.shuffle_size = shuffle_size
-    self.shuffle_initial_size = shuffle_initial_size
-    
-    self.dataset, self.total_samples = self._build_source_dataset(sources)
-
-    # for data_source monitor
-    self.source_sample_cnt = {}
-    self.source_error_cnt = {}
-
-    # append image_pad for each packing
-    # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
-    image_pad_len = 6
-    self.max_length = max_length - image_pad_len
-    assert self.max_length > 0
-
-    self.datasource_config = datasource_config
-  
-  def _build_source_dataset(self, sources):
-    total_samples = 0
-    if isinstance(sources, str):
-      sources = sources.split(",")
-    with Timer("Read urls"):
-      urls = []
-      for source in sources:
-        with open(source, encoding="utf-8") as f:
-          index = json.loads(f.read())["shardlist"]
-          for item in index:
-            urls.append(os.path.join(os.path.dirname(source), item["url"]))
-            total_samples += item["nsamples"]
-
-    with Timer("Sort -> Shuffle -> Broadcast"):
-      # broadcast all urls
-      urls.sort()
-      random.shuffle(urls)
-      t = [urls]
-      dist.broadcast_object_list(t, src=0)
-      urls = t[0]
-      logger.info(f"[RANK{dist.get_rank()}] {urls=}")
-
-    with Timer("Build dataset"):
-      dataset = wds.WebDataset(
-          urls,
-          handler=wds.warn_and_continue,
-          resampled=True,
-          shardshuffle=True,
-          cache_dir="/tmp/_wids_cache",
-          nodesplitter=wds.split_by_node,
-          workersplitter=wds.split_by_worker
-      )
-
-      dataset = dataset.shuffle(
-          self.shuffle_size, initial=self.shuffle_initial_size).decode(
-        "pil", handler=wds.warn_and_continue)
-      
-    return dataset, total_samples
-
-  def _fill_image_block(self, block: Dict[str, Any],
-                        sample_dict: Dict[str, Any],
-                        conf: Dict[str, Any]):
-
-    min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
-    max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
-
-    if isinstance(block["image"], str):
-      image = sample_dict[block["image"]]
-    else:
-      image = block["image"]
-    if image.mode != "RGB":
-      image = image.convert("RGB")
-    block["image"] = image
-    block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
-        (self.spatial_merge_size ** 2)
-    block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
-        (self.spatial_merge_size ** 2)
-  
-  def _fill_video_block(self, block: Dict[str, Any],
-                        sample_dict: Dict[str, Any],
-                        conf: Dict[str, Any]):
-
-    min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
-    max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
-
-    if isinstance(block["video"], list):
-        if all([isinstance(image_block, str) for image_block in block["video"]]):
-          block["video"] = [
-            {
-              "type": "image",
-              "image": image_str
-            }
-            for image_str in block["video"]
-          ]
-        for image_block in block["video"]:
-          assert image_block["type"] == "image" and "image" in image_block
-          self._fill_image_block(image_block, sample_dict, conf)
-
-    elif isinstance(block["video"], str) or isinstance(block["video"], bytes):
-      # video in local tar, replace by video bytes
-      if isinstance(block["video"], str) and block["video"] in sample_dict:
-        block["video"] = sample_dict[block["video"]]
-      # fill other params
-      block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
-          (self.spatial_merge_size ** 2)
-      block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
-          (self.spatial_merge_size ** 2)
-      # video split params
-      if conf["video_nframe"] > 0:
-        block["nframes"] = conf["video_nframe"]
-      else:
-        if conf["video_fps"] > 0:
-          block["fps"] = conf["video_fps"]
-        if conf["video_min_frames"] > 0:
-          block["min_frames"] = conf["video_min_frames"]
-        if conf["video_max_frames"] > 0:
-          block["max_frames"] = conf["video_max_frames"]
-    else:
-      raise ValueError(f"Unsupport video type. {type(block['video'])=}")
-  
-  def _process_completion(self,
-                    sample: Dict[str, Any],
-                    data_conf: Dict[str, Any] = {}) -> Dict[str, torch.Tensor]:
-    assert "segments" in sample["json"]
-    data_conf["max_visual_tokens_per_image"] = max(
-        data_conf["max_visual_tokens_per_image"], data_conf["min_visual_tokens_per_image"])
-
-    text = ""
-    vision_infos = []
-    segments = sample["json"]["segments"]
-    for segment in segments:
-      if segment["type"] == "text":
-        text += segment["text"]
-      elif segment["type"] == "image":
-        text += "<|vision_start|><|image_pad|><|vision_end|>"
-        self._fill_image_block(segment, sample,
-                                conf=data_conf)
-        vision_infos.append(segment)
-      elif segment["type"] == "video":
-        text += "<|vision_start|><|video_pad|><|vision_end|>"
-        self._fill_video_block(segment, sample,
-                                conf=data_conf)
-        vision_infos.append(segment)
-      else:
-        logger.warning(f"!!! Unsupport {segment['type']=}, skip this segment.")
-    
-    # append EOS token
-    text += "<|endoftext|>"
-    image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos)
-    inputs = self.processor(
-        text=text,
-        images=image_inputs,
-        videos=video_inputs,
-        return_tensors="pt"
-    )
-
-    # For the Warning: (add by zzx)
-    #   Token indices sequence length is longer than the specified maximum 
-    #   sequence length for this model (**** > 32768). Running this sequence 
-    #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 32768:
-      print(f"Sample is too long. token_len={inputs['input_ids'].shape[-1]}")
-    
-    # mask all vision token
-    # <|vision_start|>: 151652 , <|vision_end|>: 151653, <|image_pad|>: 151655, <|video_pad|>: 151656
-    input_ids = inputs["input_ids"]
-    inputs["loss_mask"] = torch.ones_like(input_ids)
-    inputs["loss_mask"][
-        (input_ids == self.vision_start_token_id) | 
-        (input_ids == self.vision_end_token_id) |
-        (input_ids == self.image_token_id) |
-        (input_ids == self.video_token_id)
-      ] = 0
-    # mask EOS token
-    inputs["loss_mask"][-1][-1] = 0
-    if inputs["loss_mask"].sum() == 0:
-      raise ValueError(
-        f"Unable to generate sample with 0 loss_mask."
-      )
-
-    inputs["position_ids"] = get_rope_index(
-      inputs["input_ids"],
-      image_grid_thw=inputs.get("image_grid_thw"),
-      video_grid_thw=inputs.get("video_grid_thw"),
-      spatial_merge_size=self.spatial_merge_size,
-      image_token_id=self.image_token_id,
-      video_token_id=self.video_token_id,
-      vision_start_token_id=self.vision_start_token_id
-    )
-    inputs.pop("attention_mask")
-    return inputs
-
-  def _process_chat(self,
-                    sample: Dict[str, Any],
-                    data_conf: Dict[str, Any] = {}) -> Dict[str, torch.Tensor]:
-    assert "message" in sample["json"] or "messages" in sample["json"]
-    data_conf["max_visual_tokens_per_image"] = max(
-        data_conf["max_visual_tokens_per_image"], data_conf["min_visual_tokens_per_image"])
-    
-    msg_key = "message" if "message" in sample["json"] else "messages"
-    messages = sample["json"][msg_key]
-    for turn in messages:
-      content = turn["content"]
-      if isinstance(content, str):
-        continue
-      for block in content:
-        if block["type"] == "image":
-          self._fill_image_block(block, sample, 
-                                  conf=data_conf)
-        elif block["type"] == "video":
-          self._fill_video_block(block, sample,
-                                  conf=data_conf)
-        elif block["type"] == "text":
-          continue
-        else:
-          raise ValueError(f"sample process error, unsupport value type: {block['type']}")
-
-    text = self.processor.apply_chat_template(
-      messages, tokenize=False, add_generation_prompt=False
-    )
-
-    # append EOS token
-    text += "<|endoftext|>"
-    image_inputs, video_inputs = process_vision_info(messages)
-    inputs = self.processor(
-        text=text,
-        images=image_inputs,
-        videos=video_inputs,
-        return_tensors="pt"
-    )
-
-    # For the Warning: (add by zzx)
-    #   Token indices sequence length is longer than the specified maximum 
-    #   sequence length for this model (**** > 32768). Running this sequence 
-    #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > 32768:
-      raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
-    
-    inputs["loss_mask"] = get_assistant_mask(
-      inputs["input_ids"],
-      start_pattern=[151644, 77091, 198],
-      end_pattern=[151645, 198]
-    )
-    # mask EOS token
-    inputs["loss_mask"][-1][-1] = 0
-    if inputs["loss_mask"].sum() == 0:
-      # try to process no text block, like content=""
-      inputs["loss_mask"] = get_assistant_mask(
-        inputs["input_ids"],
-        start_pattern=[151644, 77091],
-        end_pattern=[151645, 198]
-      )
-      if inputs["loss_mask"].sum() == 0:
-        raise ValueError(
-          f"Unable to generate sample with 0 loss_mask."
-        )
-
-    inputs["position_ids"] = get_rope_index(
-      inputs["input_ids"],
-      image_grid_thw=inputs.get("image_grid_thw"),
-      video_grid_thw=inputs.get("video_grid_thw"),
-      spatial_merge_size=self.spatial_merge_size,
-      image_token_id=self.image_token_id,
-      video_token_id=self.video_token_id,
-      vision_start_token_id=self.vision_start_token_id
-    )
-    inputs.pop("attention_mask")
-    return inputs
-  
-  def _gen_pad_input(self, pad_len):
-    text = "<|endoftext|>" * pad_len
-    inputs = self.processor.tokenizer(text)
-    inputs["input_ids"] = torch.tensor([inputs["input_ids"]], dtype=torch.int64) # shape=[1, N], for get_rope_index
-    inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
-    inputs["position_ids"] = get_rope_index(
-      inputs["input_ids"],
-      spatial_merge_size=self.spatial_merge_size,
-      image_token_id=self.image_token_id,
-      video_token_id=self.video_token_id,
-      vision_start_token_id=self.vision_start_token_id
-    )
-    inputs.pop("attention_mask")
-    return inputs
-  
-  def _gen_img_pad(self):
-    """
-    append an image, to trigger vit for pure text sample
-    return 6 token: vstart, 4 * image_token, vend
-    """
-    text = "<|vision_start|><|image_pad|><|vision_end|>"
-    pad_image = {
-        "type": "image",
-        "image": Image.new("RGB", (1, 1), (255, 255, 255))
-    }
-
-    self._fill_image_block(pad_image, sample_dict={}, conf={
-        "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
-        "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
-        "video_nframe": self.video_nframe,
-        "video_fps": self.video_fps,
-        "video_min_frames": self.video_min_frames,
-        "video_max_frames": self.video_max_frames
-    })
-    image_inputs, _ = process_vision_info(vision_infos=[pad_image])
-    inputs = self.processor(
-        text=text,
-        images=image_inputs,
-        videos=None,
-        return_tensors="pt"
-    )
-
-    inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
-    inputs["position_ids"] = get_rope_index(
-        inputs["input_ids"],
-        image_grid_thw=inputs.get("image_grid_thw"),
-        video_grid_thw=inputs.get("video_grid_thw"),
-        spatial_merge_size=self.spatial_merge_size,
-        image_token_id=self.image_token_id,
-        video_token_id=self.video_token_id,
-        vision_start_token_id=self.vision_start_token_id
-    )
-
-    inputs.pop("attention_mask")
-    return inputs
-
-  def _process(self, sample, source_name=None):
-    # self._may_filter(sample)
-
-    # get data format
-    if "messages" in sample["json"] or "message" in sample["json"]:
-      data_format = "chatml"
-    elif "segments" in sample["json"]:
-      data_format = "completion"
-    else:
-      raise NotImplementedError(f"Unsupported dataset format.")
-    
-    source_conf = {
-      "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
-      "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
-      "video_nframe": self.video_nframe,
-      "video_fps": self.video_fps,
-      "video_min_frames": self.video_min_frames,
-      "video_max_frames": self.video_max_frames
-    }
-
-    if source_name != None and source_name in self.datasource_config:
-      for key in source_conf:
-        if key in self.datasource_config[source_name]:
-          source_conf[key] = self.datasource_config[source_name][key]
-    
-    for retry in range(self.max_retry):
-      if data_format == "chatml":
-        inputs = self._process_chat(sample, source_conf)
-      elif data_format == "completion":
-        inputs = self._process_completion(sample, source_conf)
-      else:
-        raise NotImplementedError(
-            f"Unsupported dataset format `{data_format}`")
-
-      if not inputs:
-        raise ValueError("Empty inputs, skip")
-
-      if inputs["input_ids"].shape[-1] > self.max_length:
-        source_conf["max_visual_tokens_per_image"] = (
-            source_conf["max_visual_tokens_per_image"] * self.shrink_ratio)
-        continue
-      else:
-        assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"
-        return inputs
-    else:
-      raise ValueError(
-          f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
-      )
-  
-  def _append_sample_packing(self,
-                             inputs: Dict[str, torch.Tensor],
-                             packed_input_ids: List[torch.Tensor],
-                             packed_position_ids: List[torch.Tensor],
-                             packed_loss_mask: List[torch.Tensor],
-                             packed_pixel_values: List[torch.Tensor],
-                             packed_pixel_values_videos: List[torch.Tensor],
-                             packed_image_gird_thw: List[torch.Tensor],
-                             packed_video_grid_thw: List[torch.Tensor],
-                             packed_sample_idx: List[torch.Tensor],
-                             cu_seqlens: List[int],
-                             sample_idx: Optional[int] = None):
-
-    packed_input_ids.append(inputs["input_ids"].flatten())
-    packed_loss_mask.append(inputs["loss_mask"].flatten())
-    packed_position_ids.append(inputs["position_ids"])
-    if sample_idx is None:
-      sample_idx = len(cu_seqlens) - 1
-    packed_sample_idx.append(
-      torch.full_like(packed_input_ids[-1], sample_idx))
-
-    if "pixel_values" in inputs:
-      packed_pixel_values.append(inputs["pixel_values"])
-      packed_image_gird_thw.append(inputs["image_grid_thw"])
-    if "pixel_values_videos" in inputs:
-      packed_pixel_values_videos.append(inputs["pixel_values_videos"])
-      packed_video_grid_thw.append(inputs["video_grid_thw"])
-    cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
-    return len(inputs["input_ids"][0])
-
-  def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
-    packed_input_ids: List[torch.Tensor] = []
-    packed_position_ids: List[torch.Tensor] = []
-    packed_loss_mask: List[torch.Tensor] = []
-    packed_pixel_values: List[torch.Tensor] = []
-    packed_pixel_values_videos: List[torch.Tensor] = []
-    packed_image_gird_thw: List[torch.Tensor] = []
-    packed_video_grid_thw: List[torch.Tensor] = []
-    packed_sample_idx: List[torch.Tensor] = []
-    cu_seqlens: List[int] = [0]
-
-    valid_seq_len = 0
-    for _, inputs in enumerate(buffer):
-      valid_seq_len += self._append_sample_packing(inputs,
-                                      packed_input_ids,
-                                      packed_position_ids,
-                                      packed_loss_mask,
-                                      packed_pixel_values,
-                                      packed_pixel_values_videos,
-                                      packed_image_gird_thw,
-                                      packed_video_grid_thw,
-                                      packed_sample_idx,
-                                      cu_seqlens)
-
-    # append a pad image sequence to trigger ViT
-    image_pad = self._gen_img_pad()
-    self._append_sample_packing(image_pad,
-                                packed_input_ids,
-                                packed_position_ids,
-                                packed_loss_mask,
-                                packed_pixel_values,
-                                packed_pixel_values_videos,
-                                packed_image_gird_thw,
-                                packed_video_grid_thw,
-                                packed_sample_idx,
-                                cu_seqlens,
-                                sample_idx=-1)
-
-    packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
-    packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
-    packed_position_ids = torch.cat(packed_position_ids, dim=-1)
-    packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
-    packed_pixel_values = None if len(packed_pixel_values) == 0 else \
-      torch.cat(packed_pixel_values, dim=0)
-    packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else \
-      torch.cat(packed_image_gird_thw, dim=0)
-    packed_pixel_values_videos = \
-      None if len(packed_pixel_values_videos) == 0 else \
-        torch.cat(packed_pixel_values_videos, dim=0)
-    packed_video_grid_thw = None if len(packed_video_grid_thw) == 0 else \
-      torch.cat(packed_video_grid_thw, dim=0)
-
-    # pad seq len to multiple_of
-    if (
-      self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
-    ):
-      padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
-      packed_input_ids = F.pad(
-        packed_input_ids, (0, padding_len),
-        value=self.processor.tokenizer.pad_token_id)
-      packed_sample_idx = F.pad(
-        packed_sample_idx, (0, padding_len), value=-1)
-      packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
-      packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
-      cu_seqlens.append(cu_seqlens[-1] + padding_len)
-
-    inputs = {
-      "input_ids": packed_input_ids,
-      "position_ids": packed_position_ids,
-      "loss_mask": packed_loss_mask,
-      "pixel_values": packed_pixel_values,
-      "image_grid_thw": packed_image_gird_thw,
-      "pixel_values_videos": packed_pixel_values_videos,
-      "video_grid_thw": packed_video_grid_thw,
-      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
-      "sample_idx": packed_sample_idx.to(torch.int32)
-    }
-    return inputs
-
-  def __iter__(self):
-    buffer = []
-    source_list = []
-    cur_length = 0
-
-    for sample in self.dataset:
-      sample_key = sample["__key__"] if "__key__" in sample else ""
-      sample_url = sample["__url__"] if "__url__" in sample else ""
-
-      try:
-        source_name = sample["json"]["source"]
-        # WARN: ugly code, for dirty dataset.
-        if source_name.startswith("PDFA"):
-          source_name = "PDFA"
-        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-          source_name = source_name.split("/")[4]
-      except:
-        source_name = "None"
-
-      self.source_sample_cnt.setdefault(source_name, 0)
-      self.source_sample_cnt[source_name] += 1
-
-      try:
-        inputs = self._process(sample, source_name)
-      except:
-        self.source_error_cnt.setdefault(source_name, 0)
-        self.source_error_cnt[source_name] += 1
-        error_ratio = self.source_error_cnt[source_name] * 1.0 / \
-          self.source_sample_cnt[source_name]
-        logger.error(
-          f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
-          f"errmsg={traceback.format_exc()}")
-        continue
-
-      sample_length = inputs["input_ids"].shape[-1]
-      if cur_length + sample_length > self.max_length:
-        packed_inputs = self._packing(buffer)
-        packed_inputs["data_source"] = source_list
-        buffer = [inputs]
-        source_list = [source_name]
-        cur_length = sample_length
-
-        # skip pure text sample
-        # 有pad image，原则上不会出现纯文本输入
-        if packed_inputs["pixel_values"] is None and \
-            packed_inputs["pixel_values_videos"] is None:
-          logger.warning("Skip pure text sample.")
-          continue
-
-        # skip 0 label pack
-        if packed_inputs["loss_mask"].sum() == 0:
-          logger.warning("Skip 0 lable sample.")
-          continue
-
-        yield packed_inputs
-
-      else:
-        buffer.append(inputs)
-        source_list.append(source_name)
-        cur_length += sample_length
-
-
-
-
-
-
-
 class ChatCompletionVisionDataset(IterableDataset):
   def __init__(self,
                sources: Union[str, List[str]],
@@ -1375,8 +746,6 @@ class ChatCompletionVisionDataset(IterableDataset):
       pad_token_id = model_config.pad_token_id
 
     self.cut_to_pad = cut_to_pad
-    print(f"set cut_to_pad={cut_to_pad}")
-
     self.processor = processor
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
@@ -1403,10 +772,9 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.multiple_of = multiple_of
     self.shuffle_size = shuffle_size
     self.shuffle_initial_size = shuffle_initial_size
-    print(3243232111)
+    
     self.dataset, self.total_samples = self._build_source_dataset(sources)
-    print(99999)
-
+    
     # for data_source monitor
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
@@ -1462,7 +830,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       dataset = dataset.shuffle(
           self.shuffle_size, initial=self.shuffle_initial_size).decode(
         "pil", handler=wds.warn_and_continue)
-
+      
     return dataset, total_samples
 
   def _fill_image_block(self, block: Dict[str, Any],
@@ -1631,7 +999,7 @@ class ChatCompletionVisionDataset(IterableDataset):
           else:
             raise ValueError(f"sample process error, unsupport value type: {block['type']}")
       except Exception as e:
-        print(f"sample process error, messages={str(messages)[:50]}\n, sample=\n{str(sample)[:50]}")
+        print(f"sample process error, messages={str(messages)[:500]}\n, sample=\n{str(sample)[:500]}")
         raise e
 
     text = self.processor.apply_chat_template(
@@ -1804,6 +1172,7 @@ class ChatCompletionVisionDataset(IterableDataset):
                              packed_sample_idx: List[torch.Tensor],
                              cu_seqlens: List[int],
                              sample_idx: Optional[int] = None):
+    self.rank = dist.get_rank()
 
     
     packable_length = self.max_length - cu_seqlens[-1]
@@ -1924,33 +1293,32 @@ class ChatCompletionVisionDataset(IterableDataset):
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32)
     }
+    
     return inputs
 
   def __iter__(self):
     buffer = []
     source_list = []
     cur_length = 0
-    ds_iter = iter(self.dataset)
-    while True:
-      #for sample in self.dataset:
+
+    for sample in self.dataset:
+      sample_key = sample["__key__"] if "__key__" in sample else ""
+      sample_url = sample["__url__"] if "__url__" in sample else ""
+
       try:
-        sample = next(ds_iter)
-        sample_key = sample["__key__"] if "__key__" in sample else ""
-        sample_url = sample["__url__"] if "__url__" in sample else ""
+        source_name = sample["json"]["source"]
+        # WARN: ugly code, for dirty dataset.
+        if source_name.startswith("PDFA"):
+          source_name = "PDFA"
+        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          source_name = source_name.split("/")[4]
+      except:
+        source_name = "None"
 
-        try:
-          source_name = sample["json"]["source"]
-          # # WARN: ugly code, for dirty dataset.
-          # if source_name.startswith("PDFA"):
-          #   source_name = "PDFA"
-          # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-          #   source_name = source_name.split("/")[4]
-        except:
-          source_name = "None"
+      self.source_sample_cnt.setdefault(source_name, 0)
+      self.source_sample_cnt[source_name] += 1
 
-        self.source_sample_cnt.setdefault(source_name, 0)
-        self.source_sample_cnt[source_name] += 1
-      
+      try:
         inputs = self._process(sample, source_name)
       except:
         self.source_error_cnt.setdefault(source_name, 0)
@@ -1959,17 +1327,12 @@ class ChatCompletionVisionDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:50]}"
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:500]}"
           f"errmsg={traceback.format_exc()}")
         continue
 
       sample_length = inputs["input_ids"].shape[-1]
       if cur_length + sample_length >= self.max_length:
-        # packed_inputs = self._packing(buffer)
-        # packed_inputs["data_source"] = source_list
-        # buffer = [inputs]
-        # source_list = [source_name]
-        # cur_length = sample_length
 
         if self.cut_to_pad:
           buffer.append(inputs)
@@ -1988,7 +1351,6 @@ class ChatCompletionVisionDataset(IterableDataset):
           buffer = [inputs]
           source_list = [source_name]
           cur_length = sample_length
-
 
         # skip pure text sample
         # 有pad image，原则上不会出现纯文本输入
@@ -2597,11 +1959,11 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
       try:
         source_name = sample["json"]["source"]
-        # # WARN: ugly code, for dirty dataset.
-        # if source_name.startswith("PDFA"):
-        #   source_name = "PDFA"
-        # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-        #   source_name = source_name.split("/")[4]
+        # WARN: ugly code, for dirty dataset.
+        if source_name.startswith("PDFA"):
+          source_name = "PDFA"
+        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          source_name = source_name.split("/")[4]
       except:
         source_name = "None"
 
@@ -2617,7 +1979,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=},  sample=\n{str(sample)[:50]}"
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=},  sample=\n{str(sample)[:500]}"
           f"errmsg={traceback.format_exc()}")
         continue
 
@@ -2658,33 +2020,23 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
 
 class ParquetDataset(IterableDataset):
-  def __init__(self, data_files, num_workers, n_local_shuffle_files_window=3, vit_token_balance=False):
+  def __init__(self, data_files, num_workers, vit_token_balance=False):
     self.data_files = data_files
     self.num_workers = num_workers
     self.vit_token_balance = vit_token_balance
-    self.n_local_shuffle_files_window = n_local_shuffle_files_window
-    print(f"ParquetDataset set n_local_shuffle_files_window={n_local_shuffle_files_window}, vit_token_balance={vit_token_balance}")
 
+    manager = multiprocessing.Manager()
     self.num_readers = 8
     self.sample_queue = queue.Queue(1024)
 
-    if vit_token_balance:
-      self.finish_dict_all = {}
-      self.offset_dict_all = {}
-      for i in range(self.num_workers):
-        self.finish_dict_all[i] = {}
-        self.offset_dict_all[i] = {}
-    else:
-      manager = multiprocessing.Manager()
-
-      self.finish_dict_all = manager.dict()
-      self.offset_dict_all = manager.dict()
-      for i in range(self.num_workers):
-        self.finish_dict_all[i] = manager.dict()
-        self.offset_dict_all[i] = manager.dict()
+    make_dict = lambda : {} if vit_token_balance else manager.dict()
 
 
-
+    self.finish_dict_all = make_dict()
+    self.offset_dict_all = make_dict()
+    for i in range(self.num_workers):
+      self.finish_dict_all[i] = make_dict()
+      self.offset_dict_all[i] = make_dict()
 
   def state_dict(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
@@ -2789,7 +2141,7 @@ class ParquetDataset(IterableDataset):
 
       return samples
     except:
-      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}, images={str(images)[:50]}\nsamples={str(samples)[:50]}")
+      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}, images={str(images)[:500]}\nsamples={str(samples)[:500]}")
       return None
 
   def _load_images_to_samples(self, images, samples, raw_row_data):
@@ -2833,6 +2185,7 @@ class ParquetDataset(IterableDataset):
     try:
       #parquet_file = pq.ParquetFile(fn)
       parquet_file = load_parquet_file(fn)
+
     except Exception as e:
       logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
       parquet_file = None
@@ -2850,11 +2203,13 @@ class ParquetDataset(IterableDataset):
               continue
             else:
               offset = offset_dict[fn_group_key] + 1
+          
           row_group = parquet_file.read_row_group(group_idx)
           if offset >= row_group.num_rows:
             continue
           logger.warning(f"[Rank{rank}-{worker}] start {fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
           row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
+
           for row_idx, row in row_pandas.iterrows():
             if row_idx < offset:
               continue
@@ -2891,31 +2246,13 @@ class ParquetDataset(IterableDataset):
       logger.warning(f"[Rank{rank}-{worker}] {fn} finish.")
       finish_dict[(fn, epoch_idx)] = True
 
-  def read_parquet_runner_v1(self, fn_list, tid):
+  def read_parquet_runner(self, fn_list, tid=None):
     try:
       for i, epoch_fn in enumerate(fn_list):
-        if tid != -1 and i % self.num_readers != tid: 
-          print(f"self.num_readers={self.num_readers}, tid={tid}, continue")
-          continue
-        print(f"self.num_readers={self.num_readers}, tid={tid}, continue runnnn", self.vit_token_balance)
+        if tid is not None and i % self.num_readers != tid: continue
         for sample in self.read_fn(epoch_fn):
-            yield sample
-    except GeneratorExit:
-      # 正确处理生成器退出
-      logger.warning("Generator exited during file processing")
-      return
-    except Exception as e:
-      logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
-      raise
-
-  def read_parquet_runner_v2(self, fn_list, tid):
-    try:
-      for i, epoch_fn in enumerate(fn_list):
-        if tid != -1 and i % self.num_readers != tid: 
-          continue
-        for sample in self.read_fn(epoch_fn):
-            if self.vit_token_balance: 
-              self.sample_queue.put(sample)
+            if self.vit_token_balance: self.sample_queue.put(sample)
+            else: yield sample
     except GeneratorExit:
       # 正确处理生成器退出
       logger.warning("Generator exited during file processing")
@@ -2934,96 +2271,8 @@ class ParquetDataset(IterableDataset):
           self.shuffled_queue.put(sample)
         buffer = []
 
-  def read_parquet_runner_v2(self, fn_list, tid):
+  def __iter__(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
-    finish_dict = self.finish_dict_all[worker]
-    offset_dict = self.offset_dict_all[worker]
-    try:
-      for i, epoch_fn in enumerate(fn_list):
-        if i % self.num_readers != tid:
-          continue
-        fn, epoch_idx = epoch_fn
-        if (fn, epoch_idx) in finish_dict:
-          logger.warning(f"[Rank{rank}-{worker}] skip {fn}")
-          continue
-        
-        # open parquet file
-        try:
-          #parquet_file = pq.ParquetFile(fn)
-          parquet_file = load_parquet_file(fn)
-
-        except Exception as e:
-          logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
-          parquet_file = None
-        
-        # # process file content
-        if parquet_file is not None:
-          logger.warning(f"[Rank{rank}-{worker}] {fn} total row_groups: {parquet_file.num_row_groups}")
-          for group_idx in range(parquet_file.num_row_groups):
-            try:
-              offset = 0
-              fn_group_key = (fn, epoch_idx, group_idx)
-              if fn_group_key in offset_dict:
-                if offset_dict[fn_group_key] == -1:
-                  logger.warning(f"[Rank{rank}-{worker}] skip {fn}-epoch{epoch_idx}-group{group_idx}")
-                  continue
-                else:
-                  offset = offset_dict[fn_group_key] + 1
-              
-              row_group = parquet_file.read_row_group(group_idx)
-              if offset >= row_group.num_rows:
-                continue
-              logger.warning(f"[Rank{rank}-{worker}] start {fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
-              row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
-
-              for row_idx, row in row_pandas.iterrows():
-                if row_idx < offset:
-                  continue
-
-                try:
-                  sample = self._parser(row, fn)
-                  if sample is not None:
-                    # yield sample
-                    self.sample_queue.put(sample)
-                  offset_dict[fn_group_key] = row_idx
-                except GeneratorExit:
-                  # 正确处理生成器退出
-                  logger.warning(f"Generator exited at {fn}-epoch{epoch_idx}-group{group_idx}-row{row_idx}")
-                  return
-                except Exception as e:
-                  logger.error(f"Error processing row {row_idx}: {str(e)}")
-                  continue
-
-                if row_idx % 1000 == 0:
-                  logger.warning(f"Processing row {row_idx} in {fn}-epoch{epoch_idx}-group{group_idx}")
-
-              # group finish
-              logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx}-group{group_idx} finish.")
-              offset_dict[fn_group_key] = -1
-              
-            except GeneratorExit:
-              # 正确处理生成器退出
-              logger.warning(f"Generator exited during group processing")
-              return
-            except Exception as e:
-              logger.error(f"Error processing group {group_idx}: {str(e)}")
-              continue
-          
-          # file finish
-          logger.warning(f"[Rank{rank}-{worker}] {fn} finish.")
-          finish_dict[(fn, epoch_idx)] = True
-    except GeneratorExit:
-      # 正确处理生成器退出
-      logger.warning("Generator exited during file processing")
-      return
-    except Exception as e:
-      logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
-      raise
-
-    
-  def __iter__vit_token_balance(self,):
-    rank, world_size, worker, num_workers = pytorch_worker_info()
-    assert self.vit_token_balance, f"self.vit_token_balance={self.vit_token_balance}, expected to be true"
     if not self.vit_token_balance: assert num_workers == self.num_workers, f"num_workers={num_workers} : self.num_workers={self.num_workers}"
 
     finish_dict = self.finish_dict_all[worker]
@@ -3037,115 +2286,22 @@ class ParquetDataset(IterableDataset):
     )
 
     if not self.vit_token_balance: 
-      for sample in self.read_parquet_runner_v1(fn_list, -1):
+      for sample in self.read_parquet_runner(fn_list):
         yield sample
     else:
-      try:
-        self.readers = []
-        for i in range(self.num_readers):
-          reader = threading.Thread(target=self.read_parquet_runner_v2, args=(fn_list, i), daemon=True)
-          reader.start()
-          self.readers.append(reader)
+      self.readers = []
+      for i in range(self.num_readers):
+        reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
+        reader.start()
+        self.readers.append(reader)
         
-        shuffle_window = 10000
-        self.shuffled_queue = queue.Queue(shuffle_window * 2)
-        self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
-        self.shuffle_task.start()
-        
-        while True:
-          sample = self.shuffled_queue.get()
-          yield sample
-      except Exception as e:
-        print("error __iter__vit_token_balance")
-        print(e)
-
-  def __iter__local_shuffle(self):
-    import pandas as pd
-    rank, world_size, worker, num_workers = pytorch_worker_info()
-    assert num_workers == self.num_workers
-    from multiprocessing.pool import ThreadPool as Pool
-
-    finish_dict = self.finish_dict_all[worker]
-    offset_dict = self.offset_dict_all[worker]
-
-    total_num_workers = num_workers * world_size
-    local_worker_idx = rank * num_workers + worker
-    fn_list = [fn for idx, fn in enumerate(self.data_files) if idx % total_num_workers == local_worker_idx]
-    logger.warning(
-      f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
-    )   
-    import tqdm
-
-    np.random.shuffle(fn_list)
-    def shuffle_parquet_rows(parquet_files_list, n_buffer_files):
-        # file_index = 0
-        row_counts = []
-        all_rows = []
-        # 一开始读取 n_buffer_files 个文件
-        # while file_index < n_buffer_files and file_index < len(parquet_files_list):
-        for file_index in  tqdm.tqdm(range(min(n_buffer_files, len(parquet_files_list)))):
-            fn, epoch_idx = parquet_files_list[file_index]
-            logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
-            df = load_parquet_file(fn).read_row_group(0).to_pandas()
-            row_counts.append(len(df))
-            all_rows.append(df)
-
-        all_rows = pd.concat(all_rows, ignore_index=True)
-        all_rows = all_rows.sample(frac=1).reset_index(drop=True)
-
-        rows_processed = 0
-
-        while True:
-            for i, (_, row) in enumerate(all_rows.iterrows()):
-                try:
-                  sample = self._parser(row, "tmp")
-                  if sample is not None:
-                    yield sample
-
-                except GeneratorExit:
-                  # 正确处理生成器退出
-                  logger.warning(f"Generator exited")
-                  return
-
-                except Exception as e:
-                  logger.error(f"Error processing row : {str(e)}")
-                  continue
-
-                rows_processed += 1
-
-                # 当处理的行数达到当前文件的行数且还有文件未处理
-                if rows_processed == row_counts[0] and file_index < len(parquet_files_list):
-                  break
-            
-            try:
-              fn, epoch_idx = parquet_files_list[file_index]
-              new_df = load_parquet_file(fn).read_row_group(0).to_pandas()
-              logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
-              all_rows = pd.concat([all_rows[i + 1:], new_df], ignore_index=True)
-              all_rows = all_rows.sample(frac=1).reset_index(drop=True)
-              row_counts.pop(0)
-              row_counts.append(len(new_df))
-              rows_processed = 0
-              file_index += 1
-            except Exception as e:
-              print(e)
-              print("error in ParquetDataset!!!")
-              print(traceback.format_exc())
-            # 如果已经处理完所有文件且当前数据都已处理完，则退出循环
-            if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
-                break
-    
-    for sample in shuffle_parquet_rows(fn_list, self.n_local_shuffle_files_window):
-      yield sample
-
-  def __iter__(self,):
-    print(f"parquet_iter,vit_token_balance={self.vit_token_balance}")
-    if self.vit_token_balance:
-      for sample in self.__iter__vit_token_balance():
-        yield sample
-    else:
-      for sample in self.__iter__local_shuffle():
-        if sample is None: continue
+      shuffle_window = 10000
+      self.shuffled_queue = queue.Queue(shuffle_window * 2)
+      self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
+      self.shuffle_task.start()
+      
+      while True:
+        sample = self.shuffled_queue.get()
         yield sample
 
 
@@ -3155,51 +2311,6 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
     self.num_workers = num_workers
     self.num_epochs = num_epochs
     self.cut_to_pad = kargs.get("cut_to_pad", True)
-    super().__init__(sources, **kargs)
-
-  def _build_source_dataset(self, sources):
-    data_file_list = []
-    if dist.get_rank() == 0:
-      data_files = []
-      if isinstance(sources, str) and sources.endswith(".json"):
-        with open(sources, "r") as fp:
-          data_files = json.loads(fp.read())
-          data_files = [fn for fn in data_files if fn.endswith(".parquet")]
-      elif isinstance(sources, list):
-        for source in sources:
-          hdfs_files = shell_hdfs_ls(source)
-          data_files += [fn for fn in hdfs_files if fn.endswith(".parquet")]
-      # repeat
-      for i in range(self.num_epochs):
-        data_files.sort()
-        self.rng.shuffle(data_files)
-        data_file_list += [(fn, i) for fn in data_files]
-      logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: ori_file_num={len(data_files)} file_num={len(data_file_list)}")
-
-    t = [data_file_list]
-    dist.broadcast_object_list(t, src=0)
-    data_file_list = t[0]
-
-    logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: file_num={len(data_file_list)}")
-    if len(data_file_list) == 0:
-      raise ValueError(f"no datafile found!")
-
-    dataset = ParquetDataset(data_file_list, self.num_workers)
-    return dataset, -1
-
-  def state_dict(self, ):
-    
-    return self.dataset.state_dict()
-  
-  def load_state_dict(self, state_dict):
-    self.dataset.load_state_dict(state_dict)
-
-
-class ChatCompletionVisionParquetDataset_moonvit(ChatCompletionVisionDataset_moonvit):
-  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
-    self.rng = random.Random(shuffle_seed)
-    self.num_workers = num_workers
-    self.num_epochs = num_epochs
     super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
@@ -3330,12 +2441,10 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.tokenizer = tokenizer
     self.visual_tokens_per_image = int((image_size//patch_size)** 2 * (down_sample_ratio ** 2))
     self.cut_to_pad = cut_to_pad
-    
 
     self.down_sample_ratio=down_sample_ratio
     self.pid_info_client = PidInfoClient('10.84.241.154')
     self.vit_token_balance = vit_token_balance
-    print(f"set cut_to_pad={cut_to_pad}, vit_token_balance={vit_token_balance}")
 
     self.image_size = image_size
     self.patch_size = patch_size
@@ -3608,7 +2717,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         "_process_completion",
       )
     return inputs
-
+    
 
   def _process_chat(self,
                     sample: Dict[str, Any],
@@ -3649,12 +2758,14 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       inputs["pixel_values"] = self.image_pad["pixel_values"][:0]
       inputs["image_flags"] = self.image_pad["image_flags"][:0]
 
+
     if inputs["input_ids"].shape[1] <= inputs["pixel_values"].shape[0] * 256:
-      print("unexpected shape")
+      print("baddddddd")
       print_input_info(
         inputs,
         "_process_chat",
       )
+
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
@@ -3787,6 +2898,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         # if dist.get_rank() == 0:
         #   print_input_info(inputs, prefix="inputs_cut_im: ")
 
+
         assert inputs["input_ids"].shape ==  inputs["loss_mask"].shape == inputs["position_ids"].shape and inputs["input_ids"].ndim == 2, f'inputs: {inputs["input_ids"].shape} ==  {inputs["loss_mask"].shape} == {inputs["position_ids"].shape}'
         assert inputs["image_flags"].size(0) == inputs["pixel_values"].size(0), f'inputs: {inputs["image_flags"].shape}, {inputs["pixel_values"].shape}'
 
@@ -3805,6 +2917,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     packed_image_flags.append(inputs["image_flags"])
+    
+
 
     return len(inputs["input_ids"][0])
 
@@ -3847,7 +2961,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       cu_seqlens,
                                       sample_idx=-1)
 
-    if self.cut_to_pad: assert valid_seq_len == self.max_length, f"set cut_to_pad={self.cut_to_pad}, then require valid_seq_len/{valid_seq_len} == self.max_length/{self.max_length}"
+    if self.cut_to_pad: assert valid_seq_len == self.max_length, f"set cut_to_pad={cut_to_pad}, then require valid_seq_len/{valid_seq_len} == self.max_length/{self.max_length}"
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
@@ -3920,7 +3034,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                 current_sum += seq_lens[idx]
                 current_indices.append(idx)
 
-            if max_len <= current_sum < max_len + delta:
+            if max_len - delta <= current_sum <= max_len:
                 results.add(tuple(sorted(current_indices)))  # use tuple to be hashable
                 break  # once one valid subset found, restart next trial
 
@@ -3934,8 +3048,15 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       sample_key = sample["__key__"] if "__key__" in sample else ""
       sample_url = sample["__url__"] if "__url__" in sample else ""
       
-      try: source_name = sample["json"]["source"]
-      except: source_name = "None"
+      try:
+        source_name = sample["json"]["source"]
+        # WARN: ugly code, for dirty dataset.
+        if source_name.startswith("PDFA"):
+          source_name = "PDFA"
+        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          source_name = source_name.split("/")[4]
+      except:
+        source_name = "None"
 
       self.source_sample_cnt.setdefault(source_name, 0)
       self.source_sample_cnt[source_name] += 1
@@ -4047,7 +3168,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         buffer = [x for i, x in enumerate(buffer) if i not in selected_index]
         source_list = [x for i, x in enumerate(source_list) if i not in selected_index]
 
-  def _iter_vit_token_balanced(self):
+  def _vit_token_balanced_iter(self):
     self.cache = queue.Queue(maxsize=1)
     delta_ratio = self.kargs.get("input_ids_len_delta_ratio", 0.02)
     buffer_size = self.kargs.get("balance_buffer_size", 1000)
@@ -4087,11 +3208,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
       try:
         source_name = sample["json"]["source"]
-        # # WARN: ugly code, for dirty dataset.
-        # if source_name.startswith("PDFA"):
-        #   source_name = "PDFA"
-        # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-        #   source_name = source_name.split("/")[4]
+        # WARN: ugly code, for dirty dataset.
+        if source_name.startswith("PDFA"):
+          source_name = "PDFA"
+        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          source_name = source_name.split("/")[4]
       except:
         source_name = "None"
 
@@ -4107,7 +3228,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           self.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:50]}"
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:500]}"
           f"errmsg={traceback.format_exc()}")
         continue
 
@@ -4153,21 +3274,20 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
 
   def __iter__(self):
-    print(f"InternVLChatCompletionVisionDataset__iter__self.vit_token_balance={self.vit_token_balance:}")
+    print(f"iter... self.vit_token_balance={self.vit_token_balance}")
     if self.vit_token_balance:
-      yield from self._iter_vit_token_balanced()
+      yield from self._vit_token_balanced_iter()
     else:
       yield from self._iter_v1()
 
 
 class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDataset):
-  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, n_local_shuffle_files_window=5, vit_token_balance=False, **kargs):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
     self.rng = random.Random(shuffle_seed)
     self.num_workers = num_workers
     self.num_epochs = num_epochs
-    self.n_local_shuffle_files_window = n_local_shuffle_files_window
-    self.vit_token_balance = vit_token_balance
-    super().__init__(sources, vit_token_balance=vit_token_balance, **kargs)
+
+    super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
     data_file_list = []
@@ -4196,8 +3316,7 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
     if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
 
-    print(f"self.vit_token_balance={self.vit_token_balance}")
-    dataset = ParquetDataset(data_file_list, self.num_workers, self.n_local_shuffle_files_window, vit_token_balance=self.vit_token_balance)
+    dataset = ParquetDataset(data_file_list, self.num_workers, vit_token_balance=self.vit_token_balance)
     return dataset, -1
 
   def state_dict(self, ):

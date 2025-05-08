@@ -600,7 +600,6 @@ def train():
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
       "save_checkpoint_every_epoch should be set."
 
-  print(f"vit_token_balance={args.vit_token_balance}")
   if args.vit_token_balance:
     batch_queue = mp.Queue(4)
     dataset_config = args.dataset_config
@@ -609,7 +608,7 @@ def train():
         args=(dataset_config, args.model_class, args.max_length, batch_queue, args))
     data_process.start()
     print(f"data process started")
-
+    
   # init model params
   os.environ["KML_ID"] = args.kml_id
   os.environ["KML_TASK_ID"] = args.kml_task_id

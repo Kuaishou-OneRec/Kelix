@@ -17,7 +17,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/Megred_model/2B # Pretrained/Base model path
 # MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/OpenGVLab/InternVL2_5-4B
-OUTPUT_DIR=/llm_reco/lingzhixin/exp_outputs/throughput0507/intern_stage2_sm/0.0.1/
+OUTPUT_DIR=/llm_reco/lingzhixin/exp_outputs/throughput0507/intern_stage2_sm/0.0.2/
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -86,7 +86,6 @@ nohup mpirun --allow-run-as-root \
         -x https_proxy="" \
         -x HOROVOD_MPI_THREADS_DISABLE=1 \
         -x MPI_THREAD_SINGLE=1 \
-        -x CUDA_DEVICE_MAX_CONNECTIONS=1 \
         -x NO_COLOR=1 \
         -x TERM=dumb \
         -x COLORTERM=0 \

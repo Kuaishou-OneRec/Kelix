@@ -256,6 +256,8 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration_moonvit':ChatCompletionVisionParquetDataset_moonvit,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
+    print(f"get dataloader vit_token_balance={vit_token_balance}")
+    if vit_token_balance: assert num_workers == 1
     dataset = ModelDataset[model_type](
         sources = sources,
         num_workers = num_workers,

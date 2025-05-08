@@ -12,13 +12,12 @@ else
         echo "Git user.emal: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile  | head -7 > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/Megred_model/2B # Pretrained/Base model path
 # MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/OpenGVLab/InternVL2_5-4B
-
-OUTPUT_DIR=/llm_reco/lingzhixin/exp_outputs/throughput0507/intern_stage3/0.0.1/
+OUTPUT_DIR=/llm_reco/lingzhixin/exp_outputs/throughput0507/intern_stage2_sm_nob/0.0.1/
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -121,7 +120,7 @@ nohup mpirun --allow-run-as-root \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config examples/vlm/throughput0507/2b_v0_7_0_internvl_stage3_v3.json \
+                --dataset_config examples/vlm/throughput0507/2b_v0_6_0_internvl_stage2.json \
 		--max_length 21000 \
                 --learning_rate 2e-5 \
                 --model_class InternVLChatModel \
@@ -139,7 +138,6 @@ nohup mpirun --allow-run-as-root \
 		--monitor_image_tokens \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
-                --vit_token_balance \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
