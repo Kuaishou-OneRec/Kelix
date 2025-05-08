@@ -3088,8 +3088,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         candidates = self._find_in_range(input_ids_len, self.max_length, delta, target_count)
         input_ids_len = [sum(buffer[idx]["input_ids"].shape[-1] for idx in candidate) for candidate in candidates]
         image_len = [sum(buffer[idx]["pixel_values"].size(0) for idx in candidate) for candidate in candidates]
-        #if dist.get_rank() == 0:
-        # print(f"[rank={dist.get_rank()}]  selected_candidates: {candidates}, input_ids: {input_ids_len}, images: {image_len}")
+        print(f"[rank={dist.get_rank()}]  candidate_images: {[sorted(x) for x in image_len]}")
         sorted_image_len = sorted(image_len)
         t2 = time.perf_counter()
         all_image_lens = [None] * dist.get_world_size()
@@ -3110,7 +3109,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         # selected_index = candidates[image_len.index(selected_len)]
         packed_inputs = self._packing([buffer[idx] for idx in selected_index])
         t4 = time.perf_counter()
-        print(f"[rank={dist.get_rank()}]find_input_ids={t2-t1}, balance_image={t3-t2}, packing={t4-t3},selected={selected_len}")
+        print(f"[rank={dist.get_rank()}]find_input_ids={t2-t1}, balance_image={t3-t2}, packing={t4-t3}")
         packed_inputs["data_source"] = [source_list[idx] for idx in selected_index]
         self.cache.put(packed_inputs)
         
