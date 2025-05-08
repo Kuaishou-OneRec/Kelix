@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="run internvl 2b stage1 by ccl"
+comment="run_internvl_2b_stage1_by_ccl"
 
 
 git add --all
@@ -114,7 +114,7 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-	bash -c 'unset http_proxy && unset https_proxy && bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
+	bash -c "unset http_proxy && unset https_proxy && bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
@@ -139,11 +139,11 @@ nohup mpirun --allow-run-as-root \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
-                --comment \"$comment\" \
+                --comment $comment \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --heartbeat_monitor' > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+                --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
 
 
