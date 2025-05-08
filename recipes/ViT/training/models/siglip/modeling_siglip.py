@@ -249,6 +249,90 @@ class SiglipOutput(ModelOutput):
         )
 
 
+class Rope2DPosEmb(nn.Module):
+    """2D rotary position embedding with multi-resolution support.
+    This class is intended to be used in the following way:
+    1. Before training, create an instance of Rope2DPosEmb. This instance will hold the precomputed cis.
+    2. Before each forward pass, call `get_freqs_cis_by_*` to get the `freqs_cis` tensor for this iteration.
+    3. During the forward pass, pass the `freqs_cis` tensor to each attention layer, and call `apply` just before each attention operation.
+        The rope is shared across all attention layers and all heads.
+    Refs:
+    - RoFormer: https://arxiv.org/abs/2104.09864
+    - VisionLLaMA: https://arxiv.org/abs/2403.00522
+    - https://github.com/Meituan-AutoML/VisionLLaMA/blob/main/dit/models.py
+    Args:
+        dim (int): usually the multi-head attention dimension, should be divisible by 4 (TODO: relax this constraint if needed)
+        max_height (int): the maximum height of the 2D grid
+        max_width (int): the maximum width of the 2D grid
+        theta_base (float): the base of the theta
+        device (str): the device to store the precomputed cis
+    """
+
+    def __init__(self, dim: int, max_height: int, max_width: int, theta_base=10000):
+        super().__init__()
+        self.dim = dim
+        assert self.dim % 4 == 0, "dim must be divisible by 4"
+        self.max_height = max_height
+        self.max_width = max_width
+        self.theta_base = theta_base
+
+        self.freqs_cis = None
+
+    def extra_repr(self):
+        return f"dim={self.dim}, max_height={self.max_height}, max_width={self.max_width}, theta_base={self.theta_base}"
+
+    def _precompute_freqs_cis(self, device: torch.device) -> torch.Tensor:
+        """Calculate the cis(freqs) for each position in the 2D grid.
+        Return: complex tensor of shape (max_height, max_width, dim//2) and value:
+            height axis: ret[h, w, 2*i] = cis(h * theta_base**(-4*i/dim))
+            weight axis: ret[h, w, 2*i+1] = cis(w * theta_base**(-4*i/dim))   with (i in [0, dim//4))
+            note: `cis` is a mathematical notation defined by cis x = cos x + i sin x,
+        """
+        N = self.max_height * self.max_width
+        flat_pos = torch.arange(0, N).float().to(device)
+        x_pos = flat_pos % self.max_width
+        y_pos = flat_pos // self.max_width
+        dim_range = (
+            torch.arange(0, self.dim, 4)[: (self.dim // 4)].float().to(device)
+        )  # C/4
+        freqs = 1.0 / (self.theta_base ** (dim_range / self.dim))
+        x_freqs = torch.outer(x_pos, freqs).float()  # N, C/4
+        y_freqs = torch.outer(y_pos, freqs).float()  # N, C/4
+        x_cis = torch.polar(torch.ones_like(x_freqs), x_freqs)  # N, C/4
+        y_cis = torch.polar(torch.ones_like(y_freqs), y_freqs)  # N, C/4
+        # N, C/4, 2
+        freqs_cis = torch.cat(
+            [x_cis.unsqueeze(dim=-1), y_cis.unsqueeze(dim=-1)], dim=-1
+        )
+        # max_height, max_width, C/2
+        freqs_cis = freqs_cis.reshape(self.max_height, self.max_width, -1)
+        return freqs_cis
+
+    def get_freqs_cis(self, grid_hws: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            grid_hws (torch.Tensor): grid height and width
+        Returns:
+            freqs_cis: tensor of shape (sum(t * height * width), dim//2)
+        """
+        if self.freqs_cis is None:
+            self.freqs_cis = self._precompute_freqs_cis(grid_hws.device)
+
+        shapes = grid_hws.tolist()
+        assert all(
+            1 <= h <= self.max_height and 1 <= w <= self.max_width for h, w in shapes
+        ), (
+            shapes,
+            self.max_height,
+            self.max_width,
+        )
+        freqs_cis = torch.cat(
+            [self.freqs_cis[:h, :w].reshape(-1, self.dim // 2) for h, w in shapes],
+            dim=0,
+        )
+        return freqs_cis
+
+
 class SiglipVisionEmbeddings(nn.Module):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
@@ -341,7 +425,7 @@ class SiglipVisionEmbeddings(nn.Module):
             embeddings = embeddings + self.packing_position_embedding(position_ids)
             return embeddings
         else:
-            raise NotImplementedError
+            raise NotImplementedError(str(pixel_values.shape))
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->Siglip

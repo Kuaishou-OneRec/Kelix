@@ -102,6 +102,8 @@ def get_image_embedding(model, batch):
     for key in batch:
         if key not in ["images", "texts", "source", "task", "image_indices", "height_position_ids", "width_position_ids", "image_grid_thw"]:
             inputs[key] = to_cuda(batch[key])
+    # from collections import Counter
+    # print(set(dict(Counter(inputs["sample_indices"].detach().cpu().numpy().tolist())).values()), "ZDJ")
     vision_model = model.siglip
     vision_embeds = vision_model.get_image_features(**inputs)
     vision_embeds = vision_embeds / vision_embeds.norm(p=2, dim=-1, keepdim=True)
@@ -122,6 +124,17 @@ def load_ckpt(args, ctx, model, ckpt_path):
                     shutil.copy(file, target_path)
     dist.barrier()
     model.load_state_dict(model_params, strict=True)
+
+    from safetensors import safe_open
+
+    with safe_open("/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384/model.safetensors", framework="pt", device="cpu") as f:
+        tensors = {}
+        for key in f.keys():
+            if "packing" in key:
+                continue
+            tensors[key] = f.get_tensor(key)
+    
+    model.siglip.load_state_dict(tensors, strict=True)
     return model
 
 
