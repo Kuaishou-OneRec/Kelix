@@ -520,7 +520,7 @@ class TokenStats:
 def data_func(dataset_config, model_class, max_length, batch_queue):
   p = psutil.Process(os.getpid())
   raw_cpus = p.cpu_affinity()
-  p.cpu_affinity(raw_cpus[:8])
+  p.cpu_affinity(raw_cpus[:12])
   master_port = int(os.environ["MASTER_PORT"]) + 1
   os.environ["MASTER_PORT"] = str(master_port)
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
@@ -579,6 +579,11 @@ def train():
   data_process.start()
   print(f"data process started")
 
+  p = psutil.Process(os.getpid())
+  raw_cpus = p.cpu_affinity()
+  p.cpu_affinity(raw_cpus[12:])
+  print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}")
+
   # init model params
   os.environ["KML_ID"] = args.kml_id
   os.environ["KML_TASK_ID"] = args.kml_task_id
@@ -592,7 +597,6 @@ def train():
 
   ### initialize model parallel group
   initialize_model_parallel(args.sequence_parallel_size)
-  print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}")
   print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
 
   set_random_seed(args.seed)

@@ -3028,7 +3028,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   def _balance_score(self, image_lens):
       max_len = max(image_lens)
       min_len = min(image_lens)
-      var = sum((v - max_len) ** 2 for v in image_lens) / len(image_lens)
+      target_len = min(max_len, 55)
+      var = sum((v - target_len) ** 2 for v in image_lens) / len(image_lens)
       var = float(np.sqrt(var)) if var > 0 else 0
       return (max_len - min_len) ** 2 + var
 
@@ -3059,9 +3060,10 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                   current.append(find_nearest(arr, n))
           score = self._balance_score(current)
           debug_info.append((score, current))
-          if score < min_score:
+          if score < min_score or (score == min_score and sum(current) > sum(found)):
               found = current
               min_score = score
+
       # print(f'[rank={dist.get_rank()}] debug_info: {debug_info}')
       return found + [min_score]
 
