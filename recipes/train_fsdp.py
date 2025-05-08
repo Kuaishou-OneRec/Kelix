@@ -522,6 +522,7 @@ def data_func(dataset_config, model_class, max_length, batch_queue):
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
   dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+  print(f"dataset_process: rank={dist.get_rank()}, pid={os.getpid()}")
   
   ##############
   with open(dataset_config, encoding="utf-8") as f:
@@ -587,6 +588,7 @@ def train():
 
   ### initialize model parallel group
   initialize_model_parallel(args.sequence_parallel_size)
+  print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}")
   print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
 
   set_random_seed(args.seed)

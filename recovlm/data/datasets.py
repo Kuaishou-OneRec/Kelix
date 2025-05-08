@@ -3071,7 +3071,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           if score < min_score:
               found = current
               min_score = score
-      print('{[rank=dist.get_rank()]} debug_info: {debug_info}')
+      print(f'{[rank=dist.get_rank()]} debug_info: {debug_info}')
       return found + [min_score]
 
   def _select_global(self, candidates):
@@ -3149,7 +3149,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.cache = queue.Queue(maxsize=1)
     delta_ratio = self.kargs.get("input_ids_len_delta_ratio", 0.02)
     buffer_size = self.kargs.get("balance_buffer_size", 1000)
-    target_count = self.kargs.get("balance_candidate_count", 100)
+    target_count = self.kargs.get("balance_candidate_count", 50)
     expect_image_num = self.kargs.get("image_num_per_batch", 55)
 
     self.sample_queue = queue.Queue(maxsize=32)
