@@ -2810,7 +2810,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
         super().__init__(config)
         Siglip_config = SiglipConfig.from_pretrained('/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384')
         # print('msy_siglip_config',Siglip_config)
-        Siglip_config = Siglipconfig.vision_config
+        Siglip_config = Siglip_config.vision_config
         #Siglip_config._attn_implementation = 'flash_attention_2'
         self.mlp_AR = Projector(config,Siglip_config)
         self.visual = SiglipPretrainedModel(Siglip_config)
