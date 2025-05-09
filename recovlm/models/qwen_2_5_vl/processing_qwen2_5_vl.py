@@ -536,7 +536,7 @@ class Qwen2_5_VLProcessor_siglip(ProcessorMixin):
                 while self.image_token in text[i]:
                     text[i] = text[i].replace(
                         self.image_token,
-                        "<|placeholder|>" * (image_grid_thw[index].prod()//self.image_processor.merge_kernel_size[0]//self.image_processor.merge_kernel_size[1]),
+                        "<|placeholder|>" * (image_grid_thw[index].prod()//self.image_processor.merge_size//self.image_processor.merge_size),
                         1,
                     )
                     index += 1
@@ -548,7 +548,7 @@ class Qwen2_5_VLProcessor_siglip(ProcessorMixin):
                 while self.video_token in text[i]:
                     text[i] = text[i].replace(
                         self.video_token,
-                        "<|placeholder|>" * (video_grid_thw[index].prod()//self.image_processor.merge_kernel_size[0]//self.image_processor.merge_kernel_size[1]),
+                        "<|placeholder|>" * (video_grid_thw[index].prod()//self.image_processor.merge_size//self.image_processor.merge_size),
                         1,
                     )
                     index += 1

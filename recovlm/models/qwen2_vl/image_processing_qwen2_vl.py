@@ -926,11 +926,10 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size
-        self.merge_kernel_size = [merge_size, merge_size]
         self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
         self.do_convert_rgb = do_convert_rgb
     def mvit_rescale(
-        self, image: Image.Image, merge_kernel_size: list[int, int] = [2, 2]
+        self, image: Image.Image, merge_size: int = 2
     ) -> Image.Image:
         w, h = image.size
         patch_size = self.patch_size
@@ -942,8 +941,8 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
             image = image.resize((new_w, new_h), Image.Resampling.BICUBIC)
         if self.pad_input:
             new_w, new_h = image.size
-            pad_size_h = merge_kernel_size[0] * patch_size
-            pad_size_w = merge_kernel_size[1] * patch_size
+            pad_size_h = merge_size * patch_size
+            pad_size_w = merge_size * patch_size
 
             pad_h = (pad_size_h - new_h % pad_size_h) % pad_size_h
             pad_w = (pad_size_w - new_w % pad_size_w) % pad_size_w
@@ -954,7 +953,6 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
             new_w = new_w - new_w % patch_size
             new_h = new_h - new_h % patch_size
 
-            # make sure new_h // patch_size and new_w // patch_size could be divided by merge_kernel_size
             new_w = adjust_size(new_w, patch_size)
             new_h = adjust_size(new_h, patch_size)
 
@@ -1037,7 +1035,7 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
         resized_height, resized_width = height, width
         processed_images = []
         for image in images:
-            image = self.mvit_rescale(image, merge_kernel_size=self.merge_kernel_size)
+            image = self.mvit_rescale(image, merge_size=self.merge_size)
             # if do_resize:
             #     resized_height, resized_width = smart_resize(
             #         height,
