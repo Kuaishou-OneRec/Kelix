@@ -3385,7 +3385,7 @@ class Projector(nn.Module):
         super().__init__()
         self.text_config = text_config
         self.vision_config = vision_config
-        merge_kernel_size = (2,2)
+        self.merge_kernel_size = (2,2)
 
         self.hidden_size = (
             self.vision_config.hidden_size
