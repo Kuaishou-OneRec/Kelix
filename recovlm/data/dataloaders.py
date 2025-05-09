@@ -16,7 +16,8 @@ from tqdm import tqdm
 from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
     ChatCompletionVisionDataset, ChatCompletionVisionParquetDataset, \
     ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset,InternVLChatCompletionVisionParquetDataset, \
-    ChatCompletionVisionDataset_moonvit,ChatCompletionVisionParquetDataset_moonvit
+    ChatCompletionVisionDataset_moonvit,ChatCompletionVisionParquetDataset_moonvit, \
+    ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
 
@@ -255,6 +256,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
     ModelDataset = {'Qwen2VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration_moonvit':ChatCompletionVisionParquetDataset_moonvit,
+                    'Qwen2_5_VLForConditionalGeneration_siglip':ChatCompletionVisionParquetDataset_siglip,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
     print(f"get dataloader vit_token_balance={vit_token_balance}")
     if vit_token_balance: assert num_workers == 1
