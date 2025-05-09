@@ -63,7 +63,7 @@ if __name__ == "__main__":
     #     print(key, value.shape)
     #     print(value)
     #     print('--------------------------------')
-    model.visual.load_state_dict(visual_state_dict)
+    model.visual.load_state_dict(visual_state_dict,strict=False)
     dict_state = model.state_dict()
     save_model_state(dict_state)
     loaded_model = load_model_state()
