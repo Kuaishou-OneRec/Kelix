@@ -121,7 +121,7 @@ nohup mpirun --allow-run-as-root \
                 --model_class Qwen2_5_VLForConditionalGeneration_moonvit \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 17000 \
+                --max_length 15000 \
                 --learning_rate 1e-6 \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
