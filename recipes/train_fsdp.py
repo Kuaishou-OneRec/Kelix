@@ -579,11 +579,6 @@ def train():
   data_process.start()
   print(f"data process started")
 
-  p = psutil.Process(os.getpid())
-  raw_cpus = p.cpu_affinity()
-  p.cpu_affinity(raw_cpus[12:])
-  print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}")
-
   # init model params
   os.environ["KML_ID"] = args.kml_id
   os.environ["KML_TASK_ID"] = args.kml_task_id
@@ -594,6 +589,11 @@ def train():
   torch.cuda.set_device(local_rank)
   torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
+
+  p = psutil.Process(os.getpid())
+  raw_cpus = p.cpu_affinity()
+  p.cpu_affinity(raw_cpus[12:])
+  print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}")
 
   ### initialize model parallel group
   initialize_model_parallel(args.sequence_parallel_size)
