@@ -56,6 +56,7 @@ from recovlm.utils.common import print_rank_0
 from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitPretrainedModel,KimiVLMultiModalProjector, KimiVLMultiModalProjector_Contrastive
 from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig, KimiVLConfig
 from recipes.ViT.training.models.siglip.configuration_siglip import SiglipConfig
+from recipes.ViT.training.models.siglip.modeling_siglip import SiglipVisionModel
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_varlen_func
 
