@@ -39,7 +39,7 @@ from transformers import AutoTokenizer, AutoProcessor, \
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 
-from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit
+from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
 from recovlm.models.qwen_2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
 from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig
 
