@@ -53,6 +53,7 @@ from recovlm.utils.common import shell_hdfs_ls, load_parquet_file
 from .templates import get_template
 from .prompts import PromptLoader
 from .service import balance_sequence, DatasetServer
+from recovlm.data import balance
 from recovlm.services.clients import PidInfoClient
 
 
@@ -3097,32 +3098,66 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       buffer.append(inputs)
       source_list.append(source_name)
       if len(buffer) == buffer_size:
-        input_ids_len = [data["input_ids"].shape[-1] for data in buffer]
+        raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
         raw_image_len = [data["pixel_values"].size(0) for data in buffer]
-        print(f"[rank={dist.get_rank()}] raw_input_ids_len={sorted(input_ids_len)}, raw_image_len={sorted(raw_image_len)}")
+        print(f"[rank={dist.get_rank()}] raw_input_ids_len={sorted(raw_input_ids)}, raw_image_len={sorted(raw_image_len)}")
+
         t1 = time.perf_counter()
-        candidates = self._find_in_range(input_ids_len, self.max_length, delta, target_count)
-        input_ids_len = [sum(buffer[idx]["input_ids"].shape[-1] for idx in candidate) for candidate in candidates]
-        image_len = [sum(buffer[idx]["pixel_values"].size(0) for idx in candidate) for candidate in candidates]
-        print(f"[rank={dist.get_rank()}]  candidate_images: {sorted(image_len)}, candidate_llm: {input_ids_len}")
-        sorted_image_len = sorted(image_len)
+        small_input_ids = balance.sampling(raw_input_ids, 200).tolist()
         t2 = time.perf_counter()
-        all_image_lens = [None] * dist.get_world_size()
-        dist.all_gather_object(all_image_lens, sorted_image_len)
-        # print(f"[rank={dist.get_rank()}] all_gather_imagelens: {all_image_lens}")
-        local_found = self._select_nearest_equal(sorted_image_len, all_image_lens)
-        # print(f"[rnak={dist.get_rank()}] local_found={local_found}")
-        all_local_found = [None] * dist.get_world_size()
-        dist.all_gather_object(all_local_found, local_found)
-        # print(f"[rank={dist.get_rank()}] all_local_found={all_local_found}")
-        selected_len = self._select_global(all_local_found)
-        if dist.get_rank() == 0:
-          print(f"[rank={dist.get_rank()}] selected_global: {selected_len}, diff={max(selected_len) - min(selected_len)}")
-        selected_index = candidates[image_len.index(selected_len[dist.get_rank()])]
-        # response = balance_sequence(dist.get_rank(), image_len, self.server_addr)
-        #selected_len = response["result"]
+        sampling_index = [raw_input_ids.index(v) for v in small_input_ids]
+        small_image_len = [raw_image_len[i] for i in sampling_index]
+        candidates = balance.greedy_subsets_nearst_sum(small_input_ids, self.max_length)
+        candidates = candidates[:30]
+        flops = []
+        for c in candidates:
+          llm_len = [small_input_ids[i] for i in c]
+          vit_len = [small_image_len[i] for i in c]
+          flops.append(balance.llm_flops(llm_len))
+          flops.append(balance.vit_flops(vit_len))
         t3 = time.perf_counter()
-        # selected_index = candidates[image_len.index(selected_len)]
+        all_flops = [None] * dist.get_world_size()
+        dist.all_gather_object(all_flops, flops)
+        t4 = time.perf_counter()
+        if dist.get_rank() == 0:
+          print(f"[rank=0] all_flops: {all_flops}")
+        local_best = balance.select_by_flops(all_flops, dist.get_rank())
+        t5 = time.perf_counter()
+        local_best_flat = [v for sub in local_best for v in sub]
+        all_local = [None] * dist.get_world_size()
+        dist.all_gather_object(all_local, local_best_flat)
+        t6 = time.perf_counter()
+        selected = balance.find_global(all_local)
+        found = -1
+        for i, f in enumerate(flops):
+            if f[0] == selected[0] and f[1] == selected[1]:
+                found = i
+                break
+        assert found >= 0
+        selected_index = [sampling_index[i] for i in candidates[found]]
+        selectd_llm = [raw_input_ids[i] for i in selected_index]
+        selectd_vit = [raw_image_len[i] for i in selected_index]
+        t7 = time.perf_counter()
+        print(f"[rank={dist.get_rank()}] llm={selected_llm} vit={selected_vit}")
+        print(f"sampling={t2-t1}, find_subsets={t3-t2}, gather1={t4-t3}, balance={t5-t4}, gather2={t6-t5}, other={t7-t6}")
+
+        # t1 = time.perf_counter()
+        # # candidates = self._find_in_range(raw_input_ids, self.max_length, delta, target_count)
+        # input_ids_len = [sum(buffer[idx]["input_ids"].shape[-1] for idx in candidate) for candidate in candidates]
+        # image_len = [sum(buffer[idx]["pixel_values"].size(0) for idx in candidate) for candidate in candidates]
+        # print(f"[rank={dist.get_rank()}]  candidate_images: {sorted(image_len)}, candidate_llm: {input_ids_len}")
+        # sorted_image_len = sorted(image_len)
+        # t2 = time.perf_counter()
+        # all_image_lens = [None] * dist.get_world_size()
+        # dist.all_gather_object(all_image_lens, sorted_image_len)
+        # local_found = self._select_nearest_equal(sorted_image_len, all_image_lens)
+        # all_local_found = [None] * dist.get_world_size()
+        # dist.all_gather_object(all_local_found, local_found)
+        # selected_len = self._select_global(all_local_found)
+        # if dist.get_rank() == 0:
+        #   print(f"[rank={dist.get_rank()}] selected_global: {selected_len}, diff={max(selected_len) - min(selected_len)}")
+        # selected_index = candidates[image_len.index(selected_len[dist.get_rank()])]
+        t3 = time.perf_counter()
         packed_inputs = self._packing([buffer[idx] for idx in selected_index])
         t4 = time.perf_counter()
         print(f"[rank={dist.get_rank()}]find_input_ids={t2-t1}, balance_image={t3-t2}, packing={t4-t3}")
