@@ -2813,7 +2813,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
         Siglip_config = Siglip_config.vision_config
         #Siglip_config._attn_implementation = 'flash_attention_2'
         self.mlp_AR = Projector(config,Siglip_config)
-        self.visual = SiglipPretrainedModel(Siglip_config)
+        self.visual = SiglipVisionModel(Siglip_config)
         self.model = Qwen2_5_VLModel(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
