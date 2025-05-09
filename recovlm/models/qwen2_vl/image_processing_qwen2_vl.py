@@ -909,7 +909,7 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
         min_pixels: int = 56 * 56,
         max_pixels: int = 28 * 28 * 1280,
         patch_size: int = 14,
-        temporal_patch_size: int = 2,
+        temporal_patch_size: int = 1,
         merge_size: int = 2,
         **kwargs,
     ) -> None:
@@ -1067,7 +1067,7 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
         if patches.shape[0] == 1:
             patches = np.tile(patches, (self.temporal_patch_size, 1, 1, 1))
         #channel = patches.shape[1]
-        #grid_t = patches.shape[0] // self.temporal_patch_size
+        grid_t = patches.shape[0]
         grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
         # patches = patches.reshape(
         #     grid_t,
@@ -1085,7 +1085,7 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
         #     grid_t * grid_h * grid_w, channel * self.temporal_patch_size * self.patch_size * self.patch_size
         # )
 
-        return patches, (1, grid_h, grid_w)
+        return patches, (grid_t, grid_h, grid_w)
 
     def preprocess(
         self,
