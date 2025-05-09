@@ -3385,11 +3385,12 @@ class Projector(nn.Module):
         super().__init__()
         self.text_config = text_config
         self.vision_config = vision_config
+        merge_kernel_size = (2,2)
 
         self.hidden_size = (
             self.vision_config.hidden_size
-            * self.vision_config.merge_kernel_size[0]
-            * self.vision_config.merge_kernel_size[1]
+            * self.merge_kernel_size[0]
+            * self.merge_kernel_size[1]
         )
 
         self.pre_norm = torch.nn.LayerNorm(self.vision_config.hidden_size, eps=1e-05)
