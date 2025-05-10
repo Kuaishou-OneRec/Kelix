@@ -3091,7 +3091,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
                 pixel_values = pixel_values.unsqueeze(0)
-                position_ids = list()
+                siglip_position_ids = list()
                 image_grid_hws = list()
 
                 #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
@@ -3099,13 +3099,13 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 for thw in image_grid_thw:
                     image_grid_hws.append((thw[0], thw[1],thw[2]))
                     image_position_ids = torch.arange(np.prod(thw)) % np.prod(thw[1:])
-                    position_ids.append(image_position_ids)
-                position_ids = torch.concat(position_ids, dim=0).to(pixel_values.device)
+                    siglip_position_ids.append(image_position_ids)
+                siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
                 image_embeds = self.visual(
                     pixel_values=pixel_values, 
                     image_grid_thw=image_grid_hws,
-                    position_ids=,
+                    position_ids=siglip_position_ids,
                     vision_return_embed_list=True,
                     interpolate_pos_encoding=True,
                     )
