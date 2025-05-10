@@ -932,6 +932,7 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
         self, image: Image.Image, merge_size: int = 2
     ) -> Image.Image:
         w, h = image.size
+        print(type(image), image)
         patch_size = self.patch_size
 
         if (w // patch_size) * (h // patch_size) > self.in_token_limit:
