@@ -3098,6 +3098,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
                 
                 for thw in image_grid_thw:
+                    print(thw)
                     image_grid_hws.append((thw[0], thw[1],thw[2]))
                     image_position_ids = torch.arange(np.prod(thw)) % np.prod(thw[1:])
                     siglip_position_ids.append(image_position_ids)
