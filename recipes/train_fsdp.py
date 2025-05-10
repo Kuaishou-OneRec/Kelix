@@ -666,12 +666,15 @@ def train():
     tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
 
-  with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    print(args.model_class)
+  with set_default_dtype(torch.bfloat16):
     model = eval(args.model_class).from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",use_cache = False, ignore_mismatched_sizes=True
     )
     if args.model_class == "Qwen2_5_VLForConditionalGeneration_moonvit":  
+      state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_moonvit_state_dict.pth")
+      model.load_state_dict(state_dict)
+    
+    if args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip":
       state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_moonvit_state_dict.pth")
       model.load_state_dict(state_dict)
     #msyTODO: add siglip
