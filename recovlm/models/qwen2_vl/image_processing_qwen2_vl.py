@@ -1038,18 +1038,18 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
         resized_height, resized_width = height, width
         processed_images = []
         for image in images:
-            image = self.mvit_rescale(image, merge_size=self.merge_size)
-            # if do_resize:
-            #     resized_height, resized_width = smart_resize(
-            #         height,
-            #         width,
-            #         factor=self.patch_size * self.merge_size,
-            #         min_pixels=self.min_pixels,
-            #         max_pixels=self.max_pixels,
-            #     )
-            #     image = resize(
-            #         image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
-            #     )
+            # image = self.mvit_rescale(image, merge_size=self.merge_size)
+            if do_resize:
+                resized_height, resized_width = smart_resize(
+                    height,
+                    width,
+                    factor=self.patch_size * self.merge_size,
+                    min_pixels=self.min_pixels,
+                    max_pixels=self.max_pixels,
+                )
+                image = resize(
+                    image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
+                )
 
             if do_rescale:
                 image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
