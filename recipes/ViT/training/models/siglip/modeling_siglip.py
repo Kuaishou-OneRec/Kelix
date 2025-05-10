@@ -783,7 +783,7 @@ class SiglipEncoder(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        use_mrope: Optional[bool] = False,
+        use_mrope: Optional[bool] = None,
     ) -> BaseModelOutput:
         r"""
         Args:
@@ -813,7 +813,10 @@ class SiglipEncoder(nn.Module):
         )
 
         encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
+        try:
+            all_attentions = () if output_attentions else None
+        except:
+            print("ZDJ", output_attentions)
 
         hidden_states = inputs_embeds
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
