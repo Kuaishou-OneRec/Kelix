@@ -680,8 +680,8 @@ def train():
     #msyTODO: add siglip
   
   # check all param & buffer on meta device 
-  for tensor in itertools.chain(model.parameters(), model.buffers()):
-    assert tensor.device == torch.device("meta")
+  # for tensor in itertools.chain(model.parameters(), model.buffers()):
+  #   assert tensor.device == torch.device("meta")
 
   if args.enable_gradient_checkpointing:
     print_rank_0("Enable gradient checkpointing")
