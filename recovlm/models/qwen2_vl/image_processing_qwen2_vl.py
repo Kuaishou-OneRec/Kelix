@@ -1085,7 +1085,9 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
         flatten_patches = patches.reshape(
             grid_t * grid_h * grid_w, channel, self.patch_size, self.patch_size
         )
-        print(init_patches.shape, flatten_patches.shape, (grid_t, grid_h, grid_w))
+        import torch.distributed as dist
+        if dist.get_rank() == 0:
+            print(init_patches.shape, flatten_patches.shape, (grid_t, grid_h, grid_w))
         return flatten_patches, (grid_t, grid_h, grid_w)
 
     def preprocess(

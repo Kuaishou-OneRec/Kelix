@@ -3090,6 +3090,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
             inputs_embeds = self.model.embed_tokens(input_ids)
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
+                print_rank_0(pixel_values.shape, "ZDJHHH")
+
                 #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
                 image_grid_hws = []
                 for thw in image_grid_thw:

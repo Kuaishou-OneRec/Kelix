@@ -813,10 +813,7 @@ class SiglipEncoder(nn.Module):
         )
 
         encoder_states = () if output_hidden_states else None
-        try:
-            all_attentions = () if output_attentions else None
-        except:
-            print("ZDJ", output_attentions)
+        all_attentions = () if output_attentions else None
 
         hidden_states = inputs_embeds
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
