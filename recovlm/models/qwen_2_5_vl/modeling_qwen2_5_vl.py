@@ -3427,11 +3427,11 @@ class Projector(nn.Module):
         if isinstance(image_features, (list, tuple)):
             processed_features = list()
             for image_feature, image_grid in zip(image_features, image_grid_thw):
+                image_feature = self.pre_norm(image_feature)
                 t, h, w = image_grid
                 from einops import rearrange
 
                 image_feature = rearrange(image_feature, "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2)
-                hidden_states = self.pre_norm(image_feature).view(-1, self.hidden_size)
                 hidden_states = self.linear_1(hidden_states)
                 hidden_states = self.act(hidden_states)
                 hidden_states = self.linear_2(hidden_states)
