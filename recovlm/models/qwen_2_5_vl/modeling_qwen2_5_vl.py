@@ -3104,13 +3104,14 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     siglip_position_ids.append(image_position_ids)
                 siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
-                image_embeds = self.visual(
+                vision_outputs = self.visual(
                     pixel_values=pixel_values, 
                     image_grid_thw=image_grid_hws,
                     position_ids=siglip_position_ids,
                     vision_return_embed_list=True,
                     interpolate_pos_encoding=True,
-                    )
+                )
+                image_embeds = vision_outputs.last_hidden_state
                 # print('msy1_image_embeds',image_embeds)
                 image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
                 # print('msy2_image_embeds',image_embeds)
