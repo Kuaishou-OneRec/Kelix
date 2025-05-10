@@ -3432,7 +3432,7 @@ class Projector(nn.Module):
                 from einops import rearrange
 
                 image_feature = rearrange(image_feature, "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2)
-                hidden_states = self.linear_1(hidden_states)
+                hidden_states = self.linear_1(image_feature)
                 hidden_states = self.act(hidden_states)
                 hidden_states = self.linear_2(hidden_states)
                 processed_features.append(hidden_states)
