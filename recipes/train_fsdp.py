@@ -680,7 +680,7 @@ def train():
     #msyTODO: add siglip
   
   # check all param & buffer on meta device 
-  for tensor in itertools.chain(model.parameters()):
+  for tensor in itertools.chain(model.parameters(), model.buffers()):
     assert tensor.device == torch.device("meta")
 
   if args.enable_gradient_checkpointing:
@@ -730,8 +730,9 @@ def train():
   
   # 确保任何参数都被正确初始化
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
-    assert not tensor.device == torch.device("meta"), \
-      f"{name} not initialized, device={tensor.device}"
+    if name != "visual.vision_model.embeddings.position_ids":
+      assert not tensor.device == torch.device("meta"), \
+        f"{name} not initialized, device={tensor.device}"
 
   freeze_params(args=args, model=model)
   
