@@ -3414,7 +3414,7 @@ class Projector(nn.Module):
             self.hidden_size, self.text_config.hidden_size, bias=True
         )
 
-    def forward(self, image_features: torch.Tensor, image_grid_thw: List[Tuple(int, int, int)]) -> torch.Tensor:
+    def forward(self, image_features: torch.Tensor, image_grid_thw: List[Tuple[int, int, int]]) -> torch.Tensor:
         m1, m2 = self.merge_kernel_size
         if isinstance(image_features, (list, tuple)):
             processed_features = list()
