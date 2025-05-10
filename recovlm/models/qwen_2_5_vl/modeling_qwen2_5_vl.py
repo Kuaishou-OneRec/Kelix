@@ -25,6 +25,7 @@
 # limitations under the License.
 
 import math
+import numpy as np
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 from recovlm.utils.ds_utils import print_input_info
