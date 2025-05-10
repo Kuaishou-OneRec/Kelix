@@ -3112,9 +3112,9 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     interpolate_pos_encoding=True,
                 )
                 image_embeds = vision_outputs.last_hidden_state
-                # print('msy1_image_embeds',image_embeds)
+                print('msy1_image_embeds',[x.shape for x in image_embeds], type(image_embeds))
                 image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
-                # print('msy2_image_embeds',image_embeds)
+                print('msy2_image_embeds',type(image_embeds), [x.shape for x in image_embeds])
                 #64*7168
                 
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
