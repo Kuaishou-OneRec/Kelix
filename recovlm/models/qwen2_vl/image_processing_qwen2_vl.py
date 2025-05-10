@@ -1085,7 +1085,7 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
         # flatten_patches = patches.reshape(
         #     grid_t * grid_h * grid_w, channel * self.temporal_patch_size * self.patch_size * self.patch_size
         # )
-
+        print(patches.shape)
         return patches, (grid_t, grid_h, grid_w)
 
     def preprocess(

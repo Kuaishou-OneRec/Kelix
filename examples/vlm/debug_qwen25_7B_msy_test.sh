@@ -9,7 +9,7 @@ if [[ -z "$email" ]]; then
         echo "  git config --global user.email 'you@kuaishou.com'"
         exit 1
 else
-        echo "Git user.emal: $email"
+        echo "Git user.email: $email"
 fi
 
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
