@@ -1148,6 +1148,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
     def forward(
         self,
         pixel_values,
+        sample_indices: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
@@ -1185,7 +1186,8 @@ class SiglipVisionModel(SiglipPreTrainedModel):
             interpolate_pos_encoding=interpolate_pos_encoding,
             position_ids=position_ids,
             vision_return_embed_list=vision_return_embed_list,
-            image_grid_thw=image_grid_thw
+            image_grid_thw=image_grid_thw,
+            sample_indices=sample_indices
         )
 
 
