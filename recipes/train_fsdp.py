@@ -682,7 +682,12 @@ def train():
           print(key, tensor.shape)
       model.load_state_dict(state_dict, strict=False)
     #msyTODO: add siglip
-  
+  mlp_AR.pre_norm.weight torch.Size([1152])
+mlp_AR.pre_norm.bias torch.Size([1152])
+mlp_AR.linear_1.weight torch.Size([4608, 4608])
+mlp_AR.linear_1.bias torch.Size([4608])
+mlp_AR.linear_2.weight torch.Size([3584, 4608])
+mlp_AR.linear_2.bias torch.Size([3584])
   # check all param & buffer on meta device 
   for tensor in itertools.chain(model.parameters(), model.buffers()):
     assert tensor.device == torch.device("meta")
