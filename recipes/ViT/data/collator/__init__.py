@@ -2,6 +2,7 @@ from recipes.ViT.helpers.common import filter_function_arguments
 from .single_image_text import SingleImageTextPairCollator
 from .identity import IdentityCollator
 from .vision_packing import VisionPackingCollator
+from .batch_vision_packing import BatchVisionPackingCollator
 
 
 def build_collator(**kwargs):

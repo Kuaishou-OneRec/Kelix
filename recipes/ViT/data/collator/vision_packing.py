@@ -20,12 +20,15 @@ class VisionPackingCollator(object):
                 content = sample["json"][key]
                 if isinstance(content, str):
                     samples[key].append(content)
-                elif isinstance(content, (list, tuple)):
+                elif isinstance(content, list):
                     if key == "images":
                         assert len(content) == 1, "Multi-Images not supported yet."
                         content = content[0]
                     if key == "texts":
                         assert len(content) == 1, "Multi-Texts not supported yet."
+                        content = content[0]
+                    if key == "image_grid_thw":
+                        assert len(content) == 1, "Multi-image_grid_thw not supported yet."
                         content = content[0]
                     samples[key].append(content)
                 else:

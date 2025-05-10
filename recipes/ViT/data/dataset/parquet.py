@@ -20,6 +20,7 @@ from io import BytesIO
 import pyarrow.parquet as pq
 from torch.utils.data import Dataset, IterableDataset, DataLoader
 from recipes.ViT.helpers.hook import build_hook
+from recipes.ViT.data.dataset.utils import load_parquet_file
 from typing import Union, Iterable, Optional, List, Dict, Tuple, Any
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class ParquetDataset(IterableDataset):
         self.patch_size = packing_kwargs.patch_size
         self.packing_drop_ratio = packing_kwargs.drop_ratio
         self.packing_max_length = packing_kwargs.max_length
+        self.cache_dir = kwargs["cache_dir"]
 
         self.after_hook = list()
         self.before_hook = list()
@@ -171,7 +173,8 @@ class ParquetDataset(IterableDataset):
 
                 # open parquet file
                 try:
-                    parquet_file = pq.ParquetFile(fn)
+                    # parquet_file = pq.ParquetFile(fn)
+                    parquet_file = load_parquet_file(fn, self.cache_dir, worker, rank)
                 except Exception as e:
                     logger.error(
                         f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
@@ -215,13 +218,12 @@ class ParquetDataset(IterableDataset):
 
                                 sample = self._parser(sample, fn)
 
-                                if sample is not None:
-                                    for hook in self.after_hook:
-                                        if sample is not None:
-                                            sample = hook(sample, row_info_str)
-                                    
+                                for hook in self.after_hook:
                                     if sample is not None:
-                                        yield sample
+                                        sample = hook(sample, row_info_str)
+                                    
+                                if sample is not None:
+                                    yield sample
                             except GeneratorExit:
                                 # 正确处理生成器退出
                                 logger.warning(

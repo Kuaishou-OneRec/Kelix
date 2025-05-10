@@ -22,7 +22,7 @@ def build_dataloader(config, model=None):
     )
     if "collate_fn" in loader_kwargs:
         collate_fn = loader_kwargs["collate_fn"]
-        loader_kwargs["collate_fn"] = build_collator(collate_fn=collate_fn)
+        loader_kwargs["collate_fn"] = build_collator(collate_fn=collate_fn, **config)
 
     dataloader = DataLoader(dataset, shuffle=False, **loader_kwargs)
     return dataloader

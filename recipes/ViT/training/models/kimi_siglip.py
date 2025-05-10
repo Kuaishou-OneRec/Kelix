@@ -84,9 +84,6 @@ class KimiVLMultiModalProjector(nn.Module):
             processed_features = list()
             for image_feature in image_features:
                 hidden_states = self.pre_norm(image_feature).view(-1, self.hidden_size)
-                from einops import rearrange
-                p = config.vision_config.merge_kernel_size[0] * config.vision_config.merge_kernel_size[1]
-                image_feature = rearrange(image_feature, "n p d -> n (p d)", p=p)
                 hidden_states = self.linear_1(hidden_states)
                 hidden_states = self.act(hidden_states)
                 hidden_states = self.linear_2(hidden_states)
@@ -116,6 +113,7 @@ class KimiViT(nn.Module):
         self.packing_max_length = config.packing.max_length
         self.packing_drop_ratio = config.packing.drop_ratio
         self.use_decoder = config.text_decoder.enabled
+        self.vision_return_embed_list = config.vision_return_embed_list
 
         # T5 text model for Contrastive loss
         self.siglip = SiglipModel.from_pretrained(config.siglip_dir, ignore_mismatched_sizes=True)
@@ -124,6 +122,7 @@ class KimiViT(nn.Module):
         self.hidden_size = self.siglip.hidden_size
         self.vocab_size = self.siglip.vocab_size
         self.patch_size = self.siglip.patch_size
+        self.interpolate_pos_encoding = config.interpolate_pos_encoding
 
         MoonViT_config = MoonViTConfig()
         KimiVL_Config_AR = KimiVLConfig()
@@ -155,7 +154,9 @@ class KimiViT(nn.Module):
             self.regression_loss_fn = None
 
         self.siglip.gradient_checkpointing_enable()
-        self.text_decoder.gradient_checkpointing_enable()
+
+        if self.text_decoder is not None:
+            self.text_decoder.gradient_checkpointing_enable()
 
     def calcul_regression_loss(self, input_ids, image_feature, loss_mask):
         """
@@ -288,8 +289,7 @@ class KimiViT(nn.Module):
         return outputs.loss
 
     def to_cuda(self, inputs, device):
-        if isinstance(inputs, (list, tuple)):
-            inputs = list(inputs)
+        if isinstance(inputs, list):
             for idx, item in enumerate(inputs):
                 inputs[idx] = self.to_cuda(item, device)
             return inputs
@@ -323,12 +323,14 @@ class KimiViT(nn.Module):
             # cu_seqlens
         for name in ["images", "texts", "source", "task", "image_indices", "height_position_ids", "width_position_ids"]:
             inputs.pop(name, None)
+        if not self.interpolate_pos_encoding:
+            inputs.pop("image_grid_thw", None)
 
         inputs = self.to_cuda(inputs, device)
         if use_attn_mask:
             attention_mask = (inputs["input_ids"] != self.processor.tokenizer.pad_token_id).long()
             inputs["attention_mask"] = self.to_cuda(attention_mask, device)
-        outputs = self.siglip(**inputs)
+        outputs = self.siglip(**inputs, vision_return_embed_list=self.vision_return_embed_list, interpolate_pos_encoding=self.interpolate_pos_encoding)
         Contrastive_loss = self.calcul_loss(outputs)
 
         vision_output = outputs.vision_model_output
@@ -354,37 +356,87 @@ class KimiViT(nn.Module):
                 vision_embeds = list(vision_embeds)
                 vision_seqlens = [0] + [emb.shape[0] for emb in vision_embeds]
                 vision_cu_seqlens = list(np.cumsum(vision_seqlens))
-                raise NotImplementedError
+                vision_embeds = self.mlp_AR(vision_embeds)
+
+                batch_size = len(vision_embeds)
+                vision_lengths = [emb.shape[0] for emb in vision_embeds]
+                max_vision_length = max(vision_lengths)
+
+                text_labels = input_ids.clone()
+                text_labels[input_ids == pad_token_id] = -100
+
+                max_length = max_vision_length + input_ids.shape[1]
+                hidden_dim = text_embeds.shape[-1]
+
+                labels = input_ids.new_full((batch_size, max_length), -100, dtype=torch.int64)
+                decoder_inputs_embeds = text_embeds.new_zeros((batch_size, max_length, hidden_dim))
+
+                assert text_embeds.shape[0] == batch_size
+
+                for i in range(batch_size):
+                    vision_len = vision_lengths[i]
+                    text_len = text_labels.shape[1]
+                    labels[i, vision_len: vision_len + text_len] = text_labels[i]
+
+                    decoder_inputs_embeds[i, :vision_len, :] = vision_embeds[i]
+                    decoder_inputs_embeds[i, vision_len: vision_len + text_len, :] = text_embeds[i]
+                columns_all_padding = (labels == -100).all(dim=0).flip(0).long()
+                reversed_columns_num = labels.shape[1] - (columns_all_padding.argmin(dim=0).item())
+                labels = labels[:, :reversed_columns_num]
+                decoder_inputs_embeds = decoder_inputs_embeds[:, :reversed_columns_num]
+
+                assert reversed_columns_num <= max_vision_length + input_ids.shape[1]
+
+                decoder_outputs = self.text_decoder(inputs_embeds=decoder_inputs_embeds, labels=labels)
+
+                AR_loss = decoder_outputs.loss
+                loss = Contrastive_loss + self.loss_lambda * AR_loss
+
+                return ViTOutputs(
+                    Contrastive_loss=Contrastive_loss,
+                    AR_loss=AR_loss,
+                    loss=loss,
+                    total_image_num_tokens=sum(vision_lengths),
+                    total_text_num_tokens=np.prod(siglip_text_embeds.shape[:2]).item(),
+                    total_num_samples=batch_size,
+                    total_text_num_valid_tokens=(input_ids != pad_token_id).long().detach().cpu().sum().item(),
+                    source=source,
+                    outputs=outputs
+                )
             else:
                 vision_embeds = self.mlp_AR(vision_embeds)
                 decoder_inputs_embeds = torch.concat([vision_embeds, text_embeds], dim=1)
                 vision_labels = decoder_inputs_embeds.new_full(vision_embeds.shape[:2], -100, dtype=torch.int64)
                 # text_labels = decoder_inputs_embeds.new_full(text_embeds.shape[:2], -100, dtype=torch.int64)
                 text_labels = input_ids.clone()
-                text_labels[input_ids == pad_token_id] == -100
+                text_labels[input_ids == pad_token_id] = -100
                 labels = torch.concat([vision_labels, text_labels], dim=1)
                 decoder_outputs = self.text_decoder(inputs_embeds=decoder_inputs_embeds, labels=labels)
 
                 AR_loss = decoder_outputs.loss
                 loss = Contrastive_loss + self.loss_lambda * AR_loss
             
-            return ViTOutputs(
-                Contrastive_loss=Contrastive_loss,
-                AR_loss=AR_loss,
-                loss=loss,
-                total_image_num_tokens=np.prod(vision_embeds.shape[:2]).item(),
-                total_text_num_tokens=np.prod(siglip_text_embeds.shape[:2]).item(),
-                total_num_samples=batch_size,
-                total_text_num_valid_tokens=(input_ids != pad_token_id).long().detach().cpu().sum().item(),
-                source=source,
-                outputs=outputs
-            )
+                return ViTOutputs(
+                    Contrastive_loss=Contrastive_loss,
+                    AR_loss=AR_loss,
+                    loss=loss,
+                    total_image_num_tokens=np.prod(vision_embeds.shape[:2]).item(),
+                    total_text_num_tokens=np.prod(siglip_text_embeds.shape[:2]).item(),
+                    total_num_samples=batch_size,
+                    total_text_num_valid_tokens=(input_ids != pad_token_id).long().detach().cpu().sum().item(),
+                    source=source,
+                    outputs=outputs
+                )
+        else:
+            loss = Contrastive_loss
+            input_ids = inputs["input_ids"].cpu()
+            pad_token_id = self.processor.tokenizer.pad_token_id
 
         return ViTOutputs(
             Contrastive_loss=loss,
-            AR_loss=torch.FloatTensor(0),
+            AR_loss=torch.FloatTensor([0]),
             loss=loss,
-            total_image_num_tokens=np.prod(vision_embeds.shape[:2]).item(),
+            total_image_num_tokens=sum([emb.shape[0] for emb in vision_embeds]),
             total_text_num_tokens=np.prod(siglip_text_embeds.shape[:2]).item(),
             total_num_samples=batch_size,
             total_text_num_valid_tokens=(input_ids != pad_token_id).long().sum().item(),

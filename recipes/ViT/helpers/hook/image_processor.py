@@ -51,10 +51,12 @@ class ImageProcessorHook(BaseHook):
         height_position_ids = list()
         width_position_ids = list()
         pixel_values = list()
+        image_grid_thw = list()
 
         for image_idx, image in enumerate(image_list):
             img_n_token = self.calcul_image_tokens(image)
             width, height = image.size
+            assert width % patch_size == 0 and height % patch_size == 0
             img_n_token_after_drop = max(int(img_n_token * (1. - self.drop_ratio)), 1)
 
             total_token += img_n_token_after_drop
@@ -78,6 +80,7 @@ class ImageProcessorHook(BaseHook):
             pixels = rearrange(pixels, "c (h p1) (w p2) -> (h w) c p1 p2", p1=patch_size, p2=patch_size)
             pixels = pixels[torch.LongTensor(positions)]
             pixel_values.append(pixels)
+            image_grid_thw.append((1, height // patch_size, width // patch_size))
 
         if self.add_cls_token:
             padding_embedding = pixel_values[0].new_zeros(size=(1, 3, patch_size, patch_size))
@@ -106,7 +109,8 @@ class ImageProcessorHook(BaseHook):
                 width_position_ids=width_position_ids,
                 pixel_values=pixel_values,
                 images=image_list,
-                seqlen=total_token
+                seqlen=total_token,
+                image_grid_thw=image_grid_thw
             )
         )
 
