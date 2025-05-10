@@ -65,11 +65,13 @@ def disco_gather(tensor, context):
 
 class KimiVLMultiModalProjector(nn.Module):
 
-    def __init__(self, config):
+    def __init__(self, config, merge_size=2):
         super().__init__()
         self.config = config
 
         self.hidden_size = config.vision_config.hidden_size
+        self.hidden_size = self.hidden_size * merge_size * merge_size
+        self.merge_size = merge_size
 
         self.pre_norm = torch.nn.LayerNorm(config.vision_config.hidden_size, eps=1e-05)
         self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
@@ -78,11 +80,15 @@ class KimiVLMultiModalProjector(nn.Module):
             self.hidden_size, config.text_config.hidden_size, bias=True
         )
 
-    def forward(self, image_features: torch.Tensor) -> torch.Tensor:
+    def forward(self, image_features: torch.Tensor, image_grid_thw) -> torch.Tensor:
         config = self.config
         if isinstance(image_features, (list, tuple)):
             processed_features = list()
-            for image_feature in image_features:
+            for image_feature, image_grid in zip(image_features, image_grid_thw):
+                _, h, w = image_grid
+                from einops import rearrange
+                image_feature = rearrange(image_feature, "(h w) d -> h w d", h=h, w=w)
+                image_feature = rearrange(image_feature, "(h p1) (w p2) d -> (h w) (p1 p2) d", p1=self.merge_size, p2=self.merge_size)
                 hidden_states = self.pre_norm(image_feature).view(-1, self.hidden_size)
                 hidden_states = self.linear_1(hidden_states)
                 hidden_states = self.act(hidden_states)
@@ -122,7 +128,6 @@ class KimiViT(nn.Module):
         self.hidden_size = self.siglip.hidden_size
         self.vocab_size = self.siglip.vocab_size
         self.patch_size = self.siglip.patch_size
-        self.interpolate_pos_encoding = config.interpolate_pos_encoding
 
         MoonViT_config = MoonViTConfig()
         KimiVL_Config_AR = KimiVLConfig()
@@ -289,7 +294,8 @@ class KimiViT(nn.Module):
         return outputs.loss
 
     def to_cuda(self, inputs, device):
-        if isinstance(inputs, list):
+        if isinstance(inputs, (list, tuple)):
+            inputs = list(inputs)
             for idx, item in enumerate(inputs):
                 inputs[idx] = self.to_cuda(item, device)
             return inputs
@@ -321,16 +327,14 @@ class KimiViT(nn.Module):
             # image_indices
             # image_attention_mask
             # cu_seqlens
-        for name in ["images", "texts", "source", "task", "image_indices", "height_position_ids", "width_position_ids"]:
+        for name in ["images", "texts", "source", "task", "image_indices", "height_position_ids", "width_position_ids", "image_grid_thw"]:
             inputs.pop(name, None)
-        if not self.interpolate_pos_encoding:
-            inputs.pop("image_grid_thw", None)
 
         inputs = self.to_cuda(inputs, device)
         if use_attn_mask:
             attention_mask = (inputs["input_ids"] != self.processor.tokenizer.pad_token_id).long()
             inputs["attention_mask"] = self.to_cuda(attention_mask, device)
-        outputs = self.siglip(**inputs, vision_return_embed_list=self.vision_return_embed_list, interpolate_pos_encoding=self.interpolate_pos_encoding)
+        outputs = self.siglip(**inputs, vision_return_embed_list=self.vision_return_embed_list)
         Contrastive_loss = self.calcul_loss(outputs)
 
         vision_output = outputs.vision_model_output

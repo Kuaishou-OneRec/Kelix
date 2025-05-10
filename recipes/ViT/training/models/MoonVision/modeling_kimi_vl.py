@@ -2398,9 +2398,6 @@ class KimiVLMultiModalProjector(nn.Module):
             processed_features = list()
             for image_feature in image_features:
                 hidden_states = self.pre_norm(image_feature).view(-1, self.hidden_size)
-                from einops import rearrange
-                p = config.vision_config.merge_kernel_size[0] * config.vision_config.merge_kernel_size[1]
-                image_feature = rearrange(image_feature, "n p d -> n (p d)", p=p)
                 hidden_states = self.linear_1(hidden_states)
                 hidden_states = self.act(hidden_states)
                 hidden_states = self.linear_2(hidden_states)

@@ -207,10 +207,10 @@ def check_config(args, config):
 
 
 
-def load_deepspeed_checkpoint(checkpoint_dir, model):
+def load_deepspeed_checkpoint(checkpoint_dir, model, tag="global_step1000"):
     client_state = model.load_checkpoint(
         load_dir=checkpoint_dir,
-        tag="global_step42000",  # 自动查找最新检查点
+        tag=tag,  # 自动查找最新检查点
         load_module_only=True,        # 仅加载模型参数
         load_optimizer_states=False,  # 不加载优化器状态
         load_lr_scheduler_states=False
@@ -265,6 +265,7 @@ class ImageNetDataset(torch.utils.data.Dataset):
         PIL_image, label = self.data[idx]
 
         PIL_image = PIL_image.convert("RGB")
+        # PIL_image = PIL_image.resize((378, 378))
         PIL_image = resize(PIL_image)
         processed_image = self.processor(images=PIL_image, return_tensors="pt", do_resize=False)["pixel_values"][0]
         from einops import rearrange
@@ -276,7 +277,8 @@ class ImageNetDataset(torch.utils.data.Dataset):
         instance["label"] = torch.tensor([label])
         instance["image_position_ids"] = torch.arange(processed_image.shape[0])
         instance["sample_indices"] = torch.zeros((processed_image.shape[0], ), dtype=torch.long)
-        print(processed_image.shape, PIL_image.size)
+        width, height = PIL_image.size
+        instance["image_grid_thw"] = [(1, height // 14, width // 14)]
 
         return instance
 
@@ -310,15 +312,23 @@ def train(args):
     
     ctx = DistributedContext(args=args, config=config).setup()
     
+    dataset = load_dataset("/llm_reco/caojiangxia/dataset_cache/imagenet-1k", trust_remote_code=True)
+    train_ds = dataset["validation"].select(list(range(50000)))
+
+    if args.test_model == "ours":
+        test_model = "/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384/"
+    else:
+        test_model = args.test_model
+
+    train_image_ds = ImageNetDataset(train_ds, test_model, "image", "label", config)
+
     with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config, enabled=False):
         
         if args.test_model == "ours":
             model = KimiViTSigLIP(config.model, ctx)
-            test_model = "/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384/"
             processor = AutoProcessor.from_pretrained(test_model, trust_remote_code=True)
             print("test model now: ", test_model)
         else:
-            test_model = args.test_model
             model = AutoModel.from_pretrained(test_model, trust_remote_code=True)
             processor = AutoProcessor.from_pretrained(test_model, trust_remote_code=True)
             print("test model now: ", test_model)
@@ -337,117 +347,123 @@ def train(args):
         lr_scheduler=lr_scheduler
     )
 
-    if args.test_model == "ours":
-        load_deepspeed_checkpoint(args.checkpoint_dir, model)
-
-    model.eval()
-    print("before dataset, num_replicas {}, rank {} reached".format(dist.get_world_size(), dist.get_rank()))
-
-    dataset = load_dataset("/llm_reco/caojiangxia/dataset_cache/imagenet-1k", trust_remote_code=True)
-    train_ds = dataset["validation"].select(list(range(50000)))
-
-    all_label_text_v1 = torch.cat([processor(text="This is a photo of {}".format(label_name), padding="max_length", 
-                                        truncation=True, max_length=64,
-                                        return_tensors="pt")["input_ids"] for label_name in train_ds.features["label"].names]).to(model.device)
-    all_label_text_v2 = torch.cat([processor(text="A {}".format(label_name), padding="max_length", 
-                                        truncation=True, max_length=64,
-                                        return_tensors="pt")["input_ids"] for label_name in train_ds.features["label"].names]).to(model.device)
-    all_label_text_v3 = torch.cat([processor(text="{}".format(label_name), padding="max_length", 
-                                        truncation=True, max_length=64,
-                                        return_tensors="pt")["input_ids"] for label_name in train_ds.features["label"].names]).to(model.device)
-
-    with torch.no_grad():
+    for step in range(1000, 20000, 1000):
+        tag = f"global_step{step}"
+        train_loader = create_dataloader(train_image_ds, batch_size=1)
         if args.test_model == "ours":
-            text_features_v1 = model.module.siglip.get_text_features(input_ids=all_label_text_v1)
-            text_features_v2 = model.module.siglip.get_text_features(input_ids=all_label_text_v2)
-            text_features_v3 = model.module.siglip.get_text_features(input_ids=all_label_text_v3)
-        else:
-            text_features_v1 = model.module.get_text_features(input_ids=all_label_text_v1)
-            text_features_v2 = model.module.get_text_features(input_ids=all_label_text_v2)
-            text_features_v3 = model.module.get_text_features(input_ids=all_label_text_v3)
+            load_deepspeed_checkpoint(args.checkpoint_dir, model, tag=tag)
 
-        text_features_v1 = F.normalize(text_features_v1, dim=-1)
-        text_features_v2 = F.normalize(text_features_v2, dim=-1)
-        text_features_v3 = F.normalize(text_features_v3, dim=-1)
+        model.eval()
+        print("before dataset, num_replicas {}, rank {} reached".format(dist.get_world_size(), dist.get_rank()))
 
-        text_features = torch.stack([text_features_v1, text_features_v2, text_features_v3], dim=0)  # [3, num_classes, dim]
+        all_label_text_v1 = torch.cat([processor(text="This is a photo of {}".format(label_name), padding="max_length", 
+                                            truncation=True, max_length=64,
+                                            return_tensors="pt")["input_ids"] for label_name in train_ds.features["label"].names]).to(model.device)
+        all_label_text_v2 = torch.cat([processor(text="A {}".format(label_name), padding="max_length", 
+                                            truncation=True, max_length=64,
+                                            return_tensors="pt")["input_ids"] for label_name in train_ds.features["label"].names]).to(model.device)
+        all_label_text_v3 = torch.cat([processor(text="{}".format(label_name), padding="max_length", 
+                                            truncation=True, max_length=64,
+                                            return_tensors="pt")["input_ids"] for label_name in train_ds.features["label"].names]).to(model.device)
 
-        train_ds = ImageNetDataset(train_ds, test_model, "image", "label", config)
-        train_loader = create_dataloader(train_ds, batch_size=1)
-
-        print(f"Rank {dist.get_rank()}: len(train_loader) = {len(train_loader)}")
-        print(f"Rank {dist.get_rank()}: CUDA device = {torch.cuda.current_device()}")
-        torch.cuda.set_device(dist.get_rank() % torch.cuda.device_count())
-        
-        device = torch.cuda.current_device()
-    
-        total_correct_v1 = torch.tensor(0).to(device)
-        total_correct_v2 = torch.tensor(0).to(device)
-        total_correct_v3 = torch.tensor(0).to(device)
-        total_samples = torch.tensor(0).to(device)
-        
-        for eval_step, batch in enumerate(train_loader):
-            image = batch["image"]
-            label = batch["label"]
-            image, label = image.to(device), label.to(device)
-            sample_indices = batch["sample_indices"].to(device).squeeze(0)
-            image_position_ids = batch["image_position_ids"].to(device).squeeze(0)
-            # sample_indices = None
-            # image_position_ids = None
-
+        with torch.no_grad():
             if args.test_model == "ours":
-                image_features = model.module.siglip.get_image_features(pixel_values=image, sample_indices=sample_indices, image_position_ids=image_position_ids)
+                text_features_v1 = model.module.siglip.get_text_features(input_ids=all_label_text_v1)
+                text_features_v2 = model.module.siglip.get_text_features(input_ids=all_label_text_v2)
+                text_features_v3 = model.module.siglip.get_text_features(input_ids=all_label_text_v3)
             else:
-                image_features = model.module.get_image_features(pixel_values=image)
+                text_features_v1 = model.module.get_text_features(input_ids=all_label_text_v1)
+                text_features_v2 = model.module.get_text_features(input_ids=all_label_text_v2)
+                text_features_v3 = model.module.get_text_features(input_ids=all_label_text_v3)
 
-            image_features = F.normalize(image_features, dim=-1)
+            text_features_v1 = F.normalize(text_features_v1, dim=-1)
+            text_features_v2 = F.normalize(text_features_v2, dim=-1)
+            text_features_v3 = F.normalize(text_features_v3, dim=-1)
 
-            # logits = (image_features @ text_features_v1.T).softmax(dim=-1)
-            # preds = logits.argmax(dim=1)
-            # total_correct_v1 += (preds == label).sum().item()
-            # del logits, preds  # 手动释放
-            # torch.cuda.empty_cache()  # 清空缓存
+            text_features = torch.stack([text_features_v1, text_features_v2, text_features_v3], dim=0)  # [3, num_classes, dim]
 
-            # logits = (image_features @ text_features_v2.T).softmax(dim=-1)
-            # preds = logits.argmax(dim=1)
-            # total_correct_v2 += (preds == label).sum().item()
-            # del logits, preds  # 手动释放
-            # torch.cuda.empty_cache()  # 清空缓存
+            print(f"Rank {dist.get_rank()}: len(train_loader) = {len(train_loader)}")
+            print(f"Rank {dist.get_rank()}: CUDA device = {torch.cuda.current_device()}")
+            torch.cuda.set_device(dist.get_rank() % torch.cuda.device_count())
+            
+            device = torch.cuda.current_device()
+        
+            total_correct_v1 = torch.tensor(0).to(device)
+            total_correct_v2 = torch.tensor(0).to(device)
+            total_correct_v3 = torch.tensor(0).to(device)
+            total_samples = torch.tensor(0).to(device)
+            
+            for eval_step, batch in enumerate(train_loader):
+                image = batch["image"]
+                label = batch["label"]
+                image, label = image.to(device), label.to(device)
+                sample_indices = batch["sample_indices"].to(device).squeeze(0)
+                image_position_ids = batch["image_position_ids"].to(device).squeeze(0)
+                image_grid_thw = batch["image_grid_thw"][0]
+                image_grid_thw = [(image_grid_thw[0].item(), image_grid_thw[1].item(), image_grid_thw[2].item())]
+                # sample_indices = None
+                # image_position_ids = None
 
-            # logits = (image_features @ text_features_v3.T).softmax(dim=-1)
-            # preds = logits.argmax(dim=1)
-            # total_correct_v3 += (preds == label).sum().item()
+                if args.test_model == "ours":
+                    image_features = model.module.siglip.get_image_features(
+                        pixel_values=image,
+                        sample_indices=sample_indices, 
+                        image_position_ids=image_position_ids,
+                        image_grid_thw=image_grid_thw,
+                        interpolate_pos_encoding=True,
+                    )
+                else:
+                    image_features = model.module.get_image_features(pixel_values=image)
 
-            logits = torch.einsum('bd,ncd->bnc', image_features, text_features)  # [batch, 3, num_classes]
-            preds = logits.softmax(dim=-1).argmax(dim=-1)[:, :, None]  # [batch, 3]
+                image_features = F.normalize(image_features, dim=-1)
 
-            # print((preds[:, 0] == label).shape, "ZDJ")
-            total_correct_v1 += (preds[:, 0] == label).sum().item()
-            total_correct_v2 += (preds[:, 1] == label).sum().item()
-            total_correct_v3 += (preds[:, 2] == label).sum().item()
+                # logits = (image_features @ text_features_v1.T).softmax(dim=-1)
+                # preds = logits.argmax(dim=1)
+                # total_correct_v1 += (preds == label).sum().item()
+                # del logits, preds  # 手动释放
+                # torch.cuda.empty_cache()  # 清空缓存
 
-            total_samples += torch.tensor(label.size(0), device=device)
+                # logits = (image_features @ text_features_v2.T).softmax(dim=-1)
+                # preds = logits.argmax(dim=1)
+                # total_correct_v2 += (preds == label).sum().item()
+                # del logits, preds  # 手动释放
+                # torch.cuda.empty_cache()  # 清空缓存
 
-        print("total_correct_v1: ", total_correct_v1)
-        print("total_correct_v2: ", total_correct_v2)
-        print("total_correct_v3: ", total_correct_v3)
-        print("total_samples: ", total_samples)
-        print(f"Rank {dist.get_rank()}: is_initialized = {dist.is_initialized()}")
+                # logits = (image_features @ text_features_v3.T).softmax(dim=-1)
+                # preds = logits.argmax(dim=1)
+                # total_correct_v3 += (preds == label).sum().item()
 
-        dist.all_reduce(total_correct_v1, op=dist.ReduceOp.SUM)
-        dist.all_reduce(total_correct_v2, op=dist.ReduceOp.SUM)
-        dist.all_reduce(total_correct_v3, op=dist.ReduceOp.SUM)
-        dist.all_reduce(total_samples, op=dist.ReduceOp.SUM)
+                logits = torch.einsum('bd,ncd->bnc', image_features, text_features)  # [batch, 3, num_classes]
+                preds = logits.softmax(dim=-1).argmax(dim=-1)[:, :, None]  # [batch, 3]
 
-        # torch.distributed.all_reduce(total_correct, op=torch.distributed.ReduceOp.SUM)
-        # torch.distributed.all_reduce(total_samples, op=torch.distributed.ReduceOp.SUM)
-        accuracy_v1 = total_correct_v1.item() / total_samples.item()
-        accuracy_v2 = total_correct_v2.item() / total_samples.item()
-        accuracy_v3 = total_correct_v3.item() / total_samples.item()
-        if dist.get_rank() == 0:
-            print(f"Total sample {total_samples}")
-            print(f"Total correct_v1 {total_correct_v1}, Total correct_v1 {total_correct_v2}, Total correct_v1 {total_correct_v3}")
-            print(f"Zero-shot v1: {accuracy_v1 * 100:.2f}%, Zero-shot v2: {accuracy_v2 * 100:.2f}%, Zero-shot v3: {accuracy_v3 * 100:.2f}%")
+                # print((preds[:, 0] == label).shape, "ZDJ")
+                total_correct_v1 += (preds[:, 0] == label).sum().item()
+                total_correct_v2 += (preds[:, 1] == label).sum().item()
+                total_correct_v3 += (preds[:, 2] == label).sum().item()
+
+                total_samples += torch.tensor(label.size(0), device=device)
+
+            print("total_correct_v1: ", total_correct_v1)
+            print("total_correct_v2: ", total_correct_v2)
+            print("total_correct_v3: ", total_correct_v3)
+            print("total_samples: ", total_samples)
+            print(f"Rank {dist.get_rank()}: is_initialized = {dist.is_initialized()}")
+
+            dist.all_reduce(total_correct_v1, op=dist.ReduceOp.SUM)
+            dist.all_reduce(total_correct_v2, op=dist.ReduceOp.SUM)
+            dist.all_reduce(total_correct_v3, op=dist.ReduceOp.SUM)
+            dist.all_reduce(total_samples, op=dist.ReduceOp.SUM)
+
+            # torch.distributed.all_reduce(total_correct, op=torch.distributed.ReduceOp.SUM)
+            # torch.distributed.all_reduce(total_samples, op=torch.distributed.ReduceOp.SUM)
+            accuracy_v1 = total_correct_v1.item() / total_samples.item()
+            accuracy_v2 = total_correct_v2.item() / total_samples.item()
+            accuracy_v3 = total_correct_v3.item() / total_samples.item()
+            if dist.get_rank() == 0:
+                print(f"Tag {tag}")
+                print(f"Total sample {total_samples}")
+                print(f"Total correct_v1 {total_correct_v1}, Total correct_v1 {total_correct_v2}, Total correct_v1 {total_correct_v3}")
+                print(f"Zero-shot v1: {accuracy_v1 * 100:.2f}%, Zero-shot v2: {accuracy_v2 * 100:.2f}%, Zero-shot v3: {accuracy_v3 * 100:.2f}%")
     
 
 if __name__ == "__main__":
@@ -455,7 +471,7 @@ if __name__ == "__main__":
     parser.add_argument('--config_file', type=str)
     parser.add_argument('--output_dir', type=str)
     parser.add_argument("--local_rank", type=int, help="Reserved for deepspeed framework")
-    parser.add_argument("--checkpoint_dir", default="/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/4.0.0.0/", type=str, help="default checkpoint dir")
+    parser.add_argument("--checkpoint_dir", default="/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/4.0.0.1", type=str, help="default checkpoint dir")
     # parser.add_argument("--test_model", default="/llm_reco_ssd/zhouyang12/models/clip-vit-base-patch32", type=str, help="default model dir")
     # parser.add_argument("--test_model", default="/llm_reco_ssd/zhouyang12/models/clip-vit-large-patch14-336", type=str, help="default model dir")
     # parser.add_argument("--test_model", default="/llm_reco_ssd/zhouyang12/models/EVA-CLIP-8B-448", type=str, help="default model dir")

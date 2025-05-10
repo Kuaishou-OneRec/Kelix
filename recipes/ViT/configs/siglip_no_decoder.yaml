@@ -35,7 +35,6 @@ dataset:
   truncate_text_length: 64
 model:
   siglip_dir: /llm_reco/liuyang76/Models/siglip2-so400m-patch14-384
-  dir: /llm_reco/liuyang76/Models/siglip2-so400m-patch14-384
   VitParam_dir: /llm_reco/liuyang76/Models/MoonVitParam/MoonVit.pt
   vision_return_embed_list: true
   interpolate_pos_encoding: true
