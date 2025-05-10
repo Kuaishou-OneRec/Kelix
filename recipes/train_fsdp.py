@@ -673,6 +673,10 @@ def train():
     if args.model_class == "Qwen2_5_VLForConditionalGeneration_moonvit":  
       state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_moonvit_state_dict.pth")
       model.load_state_dict(state_dict)
+    if args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip":
+      state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_siglip_state_dict.pth")
+      model.load_state_dict(state_dict)
+      print("loaded siglip state dict")
     #msyTODO: add siglip
   
   # check all param & buffer on meta device 
