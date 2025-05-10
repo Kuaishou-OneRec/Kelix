@@ -675,11 +675,11 @@ def train():
       model.load_state_dict(state_dict)
     
     if args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip":
-      state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip/global_step1000/model.pth")
+      state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip/global_step1000/model.pth", weights_only=True)
       # print(state_dict.keys())
       for key, tensor in model.named_parameters():
-        if key.startswith("mlp_AR"):
-          print(tensor.shape)
+        if key.startswith("mlp_AR") and dist.get_rank() == 0:
+          print(key, tensor.shape)
       model.load_state_dict(state_dict, strict=False)
     #msyTODO: add siglip
   
