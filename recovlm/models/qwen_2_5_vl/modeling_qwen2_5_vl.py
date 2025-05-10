@@ -3100,7 +3100,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 for thw in image_grid_thw:
                     thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
                     image_grid_hws.append(thw_tuple)
-                    image_position_ids = torch.arange(np.prod(thw)) % np.prod(thw[1:])
+                    image_position_ids = torch.arange(np.prod(thw_tuple)) % np.prod(thw_tuple[1:])
                     siglip_position_ids.append(image_position_ids)
                 siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
