@@ -1081,8 +1081,9 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
             self.patch_size,
         )
         patches = patches.transpose(0, 3, 5, 2, 1, 4, 6)
+        assert self.temporal_patch_size == 1
         flatten_patches = patches.reshape(
-            grid_t * grid_h * grid_w, channel * self.temporal_patch_size * self.patch_size * self.patch_size
+            grid_t * grid_h * grid_w, channel, self.patch_size, self.patch_size
         )
         print(init_patches.shape, flatten_patches.shape, (grid_t, grid_h, grid_w))
         return flatten_patches, (grid_t, grid_h, grid_w)
