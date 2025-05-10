@@ -116,9 +116,9 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/demo0506/qwen_cut_text_moonvit.json \
-                --model_processor Qwen2_5_VLProcessor_moonvit \
-                --model_class Qwen2_5_VLForConditionalGeneration_moonvit \
+                --dataset_config examples/vlm/demo0506/qwen_cut_text_siglip.json \
+                --model_processor Qwen2_5_VLProcessor_siglip \
+                --model_class Qwen2_5_VLForConditionalGeneration_siglip \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --max_length 15000 \
