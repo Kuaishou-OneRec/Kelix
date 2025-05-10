@@ -666,8 +666,7 @@ def train():
     tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
 
-  with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    print(args.model_class)
+  with set_default_dtype(torch.bfloat16):
     model = eval(args.model_class).from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",use_cache = False, ignore_mismatched_sizes=True
     )
