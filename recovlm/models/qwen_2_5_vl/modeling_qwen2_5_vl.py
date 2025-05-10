@@ -3090,16 +3090,27 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
             inputs_embeds = self.model.embed_tokens(input_ids)
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
-                print_rank_0(pixel_values.shape, "ZDJHHH")
+                pixel_values = pixel_values.unsqueeze(0)
+                position_ids = list()
+                image_grid_hws = list()
 
                 #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
-                image_grid_hws = []
+                
                 for thw in image_grid_thw:
-                    image_grid_hws.append((thw[1],thw[2]))
-                image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
-                image_embeds = self.visual(pixel_values, image_grid_hws)
+                    image_grid_hws.append((thw[0], thw[1],thw[2]))
+                    image_position_ids = torch.arange(np.prod(thw)) % np.prod(thw[1:])
+                    position_ids.append(image_position_ids)
+                position_ids = torch.concat(position_ids, dim=0).to(pixel_values.device)
+                # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
+                image_embeds = self.visual(
+                    pixel_values=pixel_values, 
+                    image_grid_thw=image_grid_hws,
+                    position_ids=,
+                    vision_return_embed_list=True,
+                    interpolate_pos_encoding=True,
+                    )
                 # print('msy1_image_embeds',image_embeds)
-                image_embeds = self.mlp_AR(image_embeds)
+                image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
                 # print('msy2_image_embeds',image_embeds)
                 #64*7168
                 
@@ -3388,7 +3399,7 @@ class Projector(nn.Module):
         super().__init__()
         self.text_config = text_config
         self.vision_config = vision_config
-        self.merge_kernel_size = (2,2)
+        self.merge_kernel_size = (2, 2)
 
         self.hidden_size = (
             self.vision_config.hidden_size
@@ -3403,10 +3414,15 @@ class Projector(nn.Module):
             self.hidden_size, self.text_config.hidden_size, bias=True
         )
 
-    def forward(self, image_features: torch.Tensor) -> torch.Tensor:
+    def forward(self, image_features: torch.Tensor, image_grid_thw: List[Tuple(int, int, int)]) -> torch.Tensor:
+        m1, m2 = self.merge_kernel_size
         if isinstance(image_features, (list, tuple)):
             processed_features = list()
-            for image_feature in image_features:
+            for image_feature, image_grid in zip(image_features, image_grid_thw):
+                t, h, w = image_grid
+                from einops import rearrange
+
+                image_feature = rearrange(image_feature, "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2)
                 hidden_states = self.pre_norm(image_feature).view(-1, self.hidden_size)
                 hidden_states = self.linear_1(hidden_states)
                 hidden_states = self.act(hidden_states)
