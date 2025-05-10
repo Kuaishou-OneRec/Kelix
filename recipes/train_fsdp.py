@@ -675,7 +675,7 @@ def train():
       model.load_state_dict(state_dict)
     
     if args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip":
-      state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip/global_step1000/model.pth", weights_only=True)
+      state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip/global_step1000/model_float32.pth", weights_only=True)
       model.load_state_dict(state_dict)
     #msyTODO: add siglip
   
