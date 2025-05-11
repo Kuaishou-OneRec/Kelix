@@ -43,6 +43,7 @@ from transformers.modeling_attn_mask_utils import AttentionMaskConverter
 from transformers.modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from transformers.modeling_utils import PreTrainedModel
+from transformers.processing_utils import Unpack
 from transformers.activations import GELUActivation, ACT2FN, PytorchGELUTanh
 from transformers.utils import (
     add_start_docstrings,
