@@ -3402,7 +3402,7 @@ class Qwen3_VLForConditionalGeneration_siglip(Qwen3_VLPreTrainedModel, Generatio
 
 class Projector(nn.Module):
 
-    def __init__(self, text_config: Qwen2_5_VLConfig,vision_config: Qwen2_5_VLVisionConfig):
+    def __init__(self, text_config: Qwen3_VLConfig,vision_config: Qwen3_VLVisionConfig):
         super().__init__()
         self.text_config = text_config
         self.vision_config = vision_config
