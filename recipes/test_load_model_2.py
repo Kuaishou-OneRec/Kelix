@@ -32,6 +32,7 @@ inputs = processor(
 inputs = inputs.to(model.device)
 
 print('inputs', inputs)
+print("input_ids",inputs.input_ids.shape)
 
 output = model(**inputs)
 
