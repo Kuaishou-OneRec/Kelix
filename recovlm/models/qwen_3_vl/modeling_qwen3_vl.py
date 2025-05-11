@@ -43,8 +43,7 @@ from transformers.modeling_attn_mask_utils import AttentionMaskConverter
 from transformers.modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from transformers.modeling_utils import PreTrainedModel
-from transformers.processing_utils import Unpack
-from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
+from transformers.modeling_layers import GradientCheckpointingLayer
 from transformers.activations import GELUActivation, ACT2FN, PytorchGELUTanh
 from transformers.utils import (
     add_start_docstrings,
@@ -837,7 +836,7 @@ class Qwen3Attention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -881,7 +880,7 @@ class Qwen3Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Qwen3DecoderLayer(GradientCheckpointingLayer):
+class Qwen3DecoderLayer(nn.Module):
     def __init__(self, config: Qwen3_VLConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -907,7 +906,7 @@ class Qwen3DecoderLayer(GradientCheckpointingLayer):
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
