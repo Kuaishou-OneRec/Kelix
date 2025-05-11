@@ -88,4 +88,33 @@ if __name__ == "__main__":
                 # print(f"  Max difference: {diff.max().item():.6f}")
                 # print(f"  Mean difference: {diff.mean().item():.6f}")
 
+
     print(f"\nSummary: {matched_count} parameters match, {mismatched_count} parameters differ")
+    
+    # Compare parameters between original model and saved state dict
+    print("\nComparing original model with saved state dict:")
+    original_model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
+        "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
+        ignore_mismatched_sizes=True
+    )
+    saved_state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth")
+    
+    orig_matched = 0
+    orig_mismatched = 0
+    for key, value in original_model.named_parameters():
+        if key in saved_state_dict:
+            is_equal = torch.allclose(value, saved_state_dict[key], rtol=1e-5, atol=1e-5)
+            if is_equal:
+                orig_matched += 1
+                print(f"✓ {key}: Parameters match")
+            else:
+                orig_mismatched += 1
+                print(f"✗ {key}: Parameters differ")
+                diff = torch.abs(value - saved_state_dict[key])
+                print(f"  Max difference: {diff.max().item():.6f}")
+                print(f"  Mean difference: {diff.mean().item():.6f}")
+        else:
+            print(f"Warning: Key {key} not found in saved state dict")
+    
+    print(f"\nOriginal Model Comparison Summary: {orig_matched} parameters match, {orig_mismatched} parameters differ")
+    
