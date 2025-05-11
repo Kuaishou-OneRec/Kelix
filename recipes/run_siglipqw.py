@@ -163,7 +163,7 @@ torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world
 initialize_model_parallel(1)
 
 MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen2-VL-3B-Instruct"
-MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct "
+MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct"
 # MODEL_DIR="/llm_reco/lingzhixin/output2/RecoVLM-dev/Qwen2-VL-7B-run_sft_7B_fsdp_sp/0.0.5/_1000/global_step_1000_torch_ckpt/"
 
 

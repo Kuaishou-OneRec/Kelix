@@ -1222,6 +1222,12 @@ class SiglipModel(SiglipPreTrainedModel):
             )
 
         assert not hasattr(self, "hidden_size")
+        from recovlm.utils.ds_utils import format_dict_or_list
+        print("*" * 300)
+        print(config)
+        print(format_dict_or_list(config))
+        print("*" * 300)
+
         self.hidden_size = config.vision_config.hidden_size
         self.vocab_size = config.text_config.vocab_size
         self.patch_size = config.vision_config.patch_size
