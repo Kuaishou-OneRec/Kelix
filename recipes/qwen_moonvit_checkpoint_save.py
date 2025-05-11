@@ -47,7 +47,7 @@ if __name__ == "__main__":
     # Create a list of keys to iterate over
     keys_to_remove = []
     for key in visual_state_dict.keys():
-        if "text_model" in key or "logit_scale" in key:
+        if "text_model" in key or "logit_scale" or "logit_bias"in key:
             keys_to_remove.append(key)
     
     # Remove the keys after iteration
@@ -57,37 +57,37 @@ if __name__ == "__main__":
     for key, value in visual_state_dict.items():
         print(key, value.shape)
 
-    # model.visual.load_state_dict(visual_state_dict,strict=False)
-    # dict_state = model.state_dict()
-    # save_model_state(dict_state)
+    model.visual.load_state_dict(visual_state_dict,strict=False)
+    dict_state = model.state_dict()
+    save_model_state(dict_state)
 
 
 
-    # loaded_model = load_model_state()
-    # # Check if the visual parameters in loaded_model match those in visual_state_dict
-    # matched_count = 0
-    # mismatched_count = 0
-    # model_state_dict = loaded_model.state_dict()
-    # # for key, value in loaded_model.named_parameters():
-    # #     if 'visual' in key:
-    # #         if key not in visual_state_dict:
-    # #             key = key.replace('visual.', '')
-    # #             if key not in visual_state_dict:
-    # #                 print(f"Warning: Key {key} not found in visual_state_dict")
-    # #                 continue
+    loaded_model = load_model_state()
+    # Check if the visual parameters in loaded_model match those in visual_state_dict
+    matched_count = 0
+    mismatched_count = 0
+    model_state_dict = loaded_model.state_dict()
+    for key, value in loaded_model.named_parameters():
+        if 'visual' in key:
+            if key not in visual_state_dict:
+                key = key.replace('visual.', '')
+                if key not in visual_state_dict:
+                    print(f"Warning: Key {key} not found in visual_state_dict")
+                    continue
                 
-    # #         is_equal = torch.allclose(value, visual_state_dict[key], rtol=1e-5, atol=1e-5)
-    # #         if is_equal:
-    # #             matched_count += 1
-    # #             print(f"✓ {key}: Parameters match")
-    # #         else:
-    # #             mismatched_count += 1
-    # #             print(f"✗ {key}: Parameters differ")
-    # #             # Calculate and print the difference statistics
-    # #             diff = torch.abs(value - visual_state_dict[key])
-    # #             print(f"  Max difference: {diff.max().item():.6f}")
-    # #             print(f"  Mean difference: {diff.mean().item():.6f}")
-    # for key , value in loaded_model.named_parameters():
-    #     if "models" in key:
+            is_equal = torch.allclose(value, visual_state_dict[key], rtol=1e-5, atol=1e-5)
+            if is_equal:
+                matched_count += 1
+                # print(f"✓ {key}: Parameters match")
+            else:
+                mismatched_count += 1
+                # print(f"✗ {key}: Parameters differ")
+                # Calculate and print the difference statistics
+                diff = torch.abs(value - visual_state_dict[key])
+                # print(f"  Max difference: {diff.max().item():.6f}")
+                # print(f"  Mean difference: {diff.mean().item():.6f}")
+    for key , value in loaded_model.named_parameters():
+        if "models" in key:
 
-    # print(f"\nSummary: {matched_count} parameters match, {mismatched_count} parameters differ")
+    print(f"\nSummary: {matched_count} parameters match, {mismatched_count} parameters differ")
