@@ -5,20 +5,20 @@ from PIL import Image
 from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
 from qwen_vl_utils import process_vision_info
 from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitPretrainedModel
-
+from recovlm.models.qwen_3_vl.modeling_qwen3_vl import Qwen3_VLForConditionalGeneration_siglip
 
 def save_model_state(dict_state):
-    torch.save(dict_state, "/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_siglip_state_dict.pth")
+    torch.save(dict_state, "/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth")
 
 # 加载模型状态的示例代码
 def load_model_state():
     # 1. 首先初始化一个模型实例
-    loaded_model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
+    loaded_model = Qwen3_VLForConditionalGeneration.from_pretrained(
         "/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct",
         ignore_mismatched_sizes=True
     )
     # 2. 加载保存的state dict
-    state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_siglip_state_dict.pth")
+    state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth")
     
     # 3. 将state dict加载到模型中
     print('=================================')
@@ -32,8 +32,8 @@ def load_model_state():
 
 if __name__ == "__main__":
 
-    model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
-      "/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct",ignore_mismatched_sizes=True
+    model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
+      "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",ignore_mismatched_sizes=True
     )
     from safetensors import safe_open
 

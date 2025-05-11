@@ -43,21 +43,12 @@ def main():
     sd[name] = text_sd[name]
 
   if args.vision_encoder_dir:
-    vision_encoder = transformers.CLIPModel.from_pretrained(
+    vision_encoder = transformers.SiglipModel.from_pretrained(
         args.vision_encoder_dir)
 
     vision_sd = vision_encoder.vision_model.state_dict()
-    mapped = [
-        "post_layernorm.weight",
-        "post_layernorm.bias",
-        "embeddings.patch_embedding.weight"
-    ]
-    assert "visual.merger.ln_q.weight" in sd
-    sd["visual.merger.ln_q.weight"] = vision_sd["post_layernorm.weight"]
-    assert "visual.merger.ln_q.bias" in sd
-    sd["visual.merger.ln_q.bias"] = vision_sd["post_layernorm.bias"]
-    assert "visual.patch_embed.proj.weight" in sd
-    # conv2d -> 3d
+    mapped = []
+    
     sd["visual.patch_embed.proj.weight"] = vision_sd["embeddings.patch_embedding.weight"][:,
                                                                                           :, None, :, :].repeat(1, 1, 2, 1, 1)
     for layer in range(vision_encoder.vision_model.config.num_hidden_layers):
