@@ -44,11 +44,16 @@ if __name__ == "__main__":
                 continue
             pt[key] = f.get_tensor(key)
     visual_state_dict = pt
-    for key, value in visual_state_dict.items():
-        if "text_model" in key:
-            del visual_state_dict[key]
-        if "logit_scale" in key:
-            del visual_state_dict[key]
+    # Create a list of keys to iterate over
+    keys_to_remove = []
+    for key in visual_state_dict.keys():
+        if "text_model" in key or "logit_scale" in key:
+            keys_to_remove.append(key)
+    
+    # Remove the keys after iteration
+    for key in keys_to_remove:
+        del visual_state_dict[key]
+        
     for key, value in visual_state_dict.items():
         print(key, value.shape)
 
