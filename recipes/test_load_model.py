@@ -47,7 +47,7 @@ messages = [
         ],
     }
 ]
-processor = Qwen2_5_VLProcessor_siglip()
+processor = Qwen2_5_VLProcessor_siglip.from_pretrained('/llm_reco_ssd/zhouyang12/models/msy_Qwen3vl-8B-Base')
 
 
 text = processor.apply_chat_template(
