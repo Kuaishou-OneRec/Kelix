@@ -432,7 +432,7 @@ QWEN3_VL_START_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare Qwen2_5_VL Model outputting raw hidden-states without any specific head on top.",
-    Qwen2_5_VL_START_DOCSTRING,
+    QWEN3_VL_START_DOCSTRING,
 )
 class Qwen3_VLPreTrainedModel(PreTrainedModel):
     config_class = Qwen3_VLConfig
@@ -1237,8 +1237,8 @@ class Qwen3_VLDecoderLayer(nn.Module):
 
 
 @add_start_docstrings(
-    "The bare Qwen2_5_VL Model outputting raw hidden-states without any specific head on top.",
-    Qwen2_5_VL_START_DOCSTRING,
+    "The bare Qwen3_VL Model outputting raw hidden-states without any specific head on top.",
+    QWEN3_VL_START_DOCSTRING,
 )
 class Qwen3_VLModel(Qwen3_VLPreTrainedModel):
     def __init__(self, config: Qwen3_VLConfig):
