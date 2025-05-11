@@ -247,8 +247,8 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
 
 
 def debug_model_inference(model):
-    processor = Qwen2VLProcessor.from_pretrained(MODEL_DIR)
-
+    # processor = Qwen2VLProcessor.from_pretrained(MODEL_DIR)
+    processor = Qwen2_5_VLProcessor_siglip.from_pretrained(MODEL_DIR)
     messages = [
         {
             "role": "user",
