@@ -3128,8 +3128,6 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 #image_embeds is a list of tensor, each tensor is a image feature,I want to concat them all into a tensor
                 image_embeds = torch.cat(image_embeds,dim=0)
-                if dist.get_rank() == 0:
-                    print(image_embeds.shape, inputs_embeds.shape)
                 n_image_features = image_embeds.shape[0]
                 if n_image_tokens != n_image_features:
                     raise ValueError(
@@ -3142,6 +3140,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 image_mask = mask_expanded.to(inputs_embeds.device)
 
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                if dist.get_rank() == 0:
+                    print(image_embeds.shape, inputs_embeds.shape, image_mask.shape, input_ids.shape)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
