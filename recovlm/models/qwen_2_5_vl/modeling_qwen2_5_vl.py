@@ -3149,6 +3149,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 for idx, thw in enumerate(video_grid_thw):
                     thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
                     numel = np.prod(thw_tuple)
+
                     video_grid_hws.append(thw_tuple)
                     video_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
                     siglip_position_ids.append(video_position_ids)
@@ -3186,16 +3187,6 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
-            # cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            #     dim=0,
-            #     # Select dtype based on the following factors:
-            #     #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #     #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            #     # See https://github.com/huggingface/transformers/pull/34852 for more information
-            #     dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-            # )
-            # cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-
         # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
         if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
             # calculate RoPE index once per generation in the pre-fill stage only
@@ -3207,7 +3198,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
-                    video_grid_thw, 
+                    video_grid_thw,
                     second_per_grid_ts,
                     attention_mask,
                 )
