@@ -470,6 +470,7 @@ class SiglipAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
         rope_freqs_cis: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
@@ -492,28 +493,51 @@ class SiglipAttention(nn.Module):
             keys = keys.transpose(1, 2)
             values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        if cu_seqlens is None:
+            attention_interface: Callable = eager_attention_forward
+            if self.config._attn_implementation != "eager":
+                if self.config._attn_implementation == "sdpa" and output_attentions:
+                    logger.warning_once(
+                        "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                        'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                    )
+                else:
+                    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-        )
+            attn_output, attn_weights = attention_interface(
+                self,
+                queries,
+                keys,
+                values,
+                attention_mask,
+                is_causal=self.is_causal,
+                scaling=self.scale,
+                dropout=0.0 if not self.training else self.dropout,
+            )
+            attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        else:
+            assert batch_size == 1, hidden_states.shape
+            queries = queries.transpose(1, 2).squeeze(0)
+            keys = keys.transpose(1, 2).squeeze(0)
+            values = values.transpose(1, 2).squeeze(0)
 
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+            from flash_attn import flash_attn_func, flash_attn_varlen_func
+            max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+
+            attn_output = flash_attn_varlen_func(
+                queries,
+                keys,
+                values,
+                q_cu_seqlens,
+                k_cu_seqlens,
+                max_seqlen_q,
+                max_seqlen_k,
+                causal=False,
+            )
+            attn_output = attn_output.flatten(-2).unsqueeze(0)
+            attn_weights = None
+
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
@@ -552,6 +576,7 @@ class SiglipEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
         rope_freqs_cis: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.FloatTensor]:
         """
@@ -571,6 +596,7 @@ class SiglipEncoderLayer(nn.Module):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
+            cu_seqlens=cu_seqlens,
             rope_freqs_cis=rope_freqs_cis,
         )
         hidden_states = residual + hidden_states
@@ -783,6 +809,7 @@ class SiglipEncoder(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
         use_mrope: Optional[bool] = None,
     ) -> BaseModelOutput:
         r"""
@@ -833,6 +860,7 @@ class SiglipEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                     output_attentions=output_attentions,
+                    cu_seqlens=cu_seqlens
                 )
 
             hidden_states = layer_outputs[0]
@@ -1036,7 +1064,8 @@ class SiglipVisionTransformer(nn.Module):
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            attention_mask=attention_mask
+            attention_mask=attention_mask,
+            cu_seqlens=cu_seqlens,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -1155,6 +1184,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         vision_return_embed_list: Optional[bool] = False,
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -1187,7 +1217,8 @@ class SiglipVisionModel(SiglipPreTrainedModel):
             position_ids=position_ids,
             vision_return_embed_list=vision_return_embed_list,
             image_grid_thw=image_grid_thw,
-            sample_indices=sample_indices
+            sample_indices=sample_indices,
+            cu_seqlens=cu_seqlens
         )
 
 

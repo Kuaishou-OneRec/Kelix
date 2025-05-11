@@ -3095,6 +3095,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 siglip_position_ids = list()
                 image_grid_hws = list()
                 sample_indices = list()
+                cu_seqlens = [0]
 
                 #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
                 pro = 0
@@ -3105,8 +3106,11 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
                     siglip_position_ids.append(image_position_ids)
                     sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
+                    cu_seqlens.append(cu_seqlens[-1] + numel)
                     pro += np.prod(thw_tuple)
+
                 siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
+                cu_seqlens = torch.LongTensor(cu_seqlens).to(pixel_values.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
                 import torch.distributed as dist
                 if dist.get_rank() == 0:
@@ -3118,7 +3122,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     position_ids=siglip_position_ids,
                     vision_return_embed_list=True,
                     interpolate_pos_encoding=True,
-                    sample_indices=sample_indices
+                    sample_indices=sample_indices,
+                    cu_seqlens=cu_seqlens
                 )
                 image_embeds = vision_outputs.last_hidden_state
 
