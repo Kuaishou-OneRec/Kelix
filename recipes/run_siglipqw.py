@@ -1,3 +1,52 @@
+from typing import Dict, Any, Union, Optional
+
+import contextlib
+import gc
+import argparse
+import time
+import datetime
+import os
+import glob
+import json
+import logging
+import collections
+import pickle
+import itertools
+import contextlib
+import multiprocessing as mp
+from functools import partial
+
+
+from recovlm.training.checkpoint import AppState, DistributedCheckpointer
+from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
+from recovlm.models.internvl.checkpoint import InternVLCheckpointConverter
+from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VL_moonvitCheckpointConverter
+from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VL_siglipCheckpointConverter
+
+
+from recovlm.utils.ds_utils import print_input_info
+
+import torch
+import torch.nn as nn
+import torch.distributed as dist
+import torch.nn.functional as F
+import numpy as np
+
+from pathlib import Path
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+
+from transformers import AutoTokenizer
+from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
+
+from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
+from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration_siglip,Qwen2_5_VLForConditionalGeneration
+from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
+
+
+
 import os
 import torch
 import torch.distributed as dist
@@ -114,7 +163,7 @@ torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world
 initialize_model_parallel(1)
 
 MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen2-VL-3B-Instruct"
-MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct"
+MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct "
 # MODEL_DIR="/llm_reco/lingzhixin/output2/RecoVLM-dev/Qwen2-VL-7B-run_sft_7B_fsdp_sp/0.0.5/_1000/global_step_1000_torch_ckpt/"
 
 
@@ -122,18 +171,21 @@ state_dict = None
 if dist.get_rank() == 0:
   with set_default_dtype(torch.bfloat16):
     state_dict = load_hf_checkpoint(MODEL_DIR)
-    converter = Qwen2VLCheckpointConverter(MODEL_DIR)
+    # converter = Qwen2VLCheckpointConverter(MODEL_DIR)
+    converter = Qwen2_5_VL_siglipCheckpointConverter(MODEL_DIR)
     state_dict = converter(state_dict)
 
 dist.barrier()
 
 # Load model in meta mode to avoid OOM during initialization
 with set_default_dtype(torch.bfloat16), torch.device("meta"):
-  model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-    MODEL_DIR,
-    _attn_implementation="flash_attention_2",
-    use_cache=False
-  )
+    model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
+        MODEL_DIR,
+        _attn_implementation="flash_attention_2",
+        use_cache=False
+    )
+    state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip/global_step1000/model_float32.pth", weights_only=True)
+    model.load_state_dict(state_dict)
 
 device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
 
@@ -143,12 +195,12 @@ for tensor in itertools.chain(model.parameters(), model.buffers()):
 model = model.float()
 shard_model(
     model=model,
-    shard_conditions=[partial(get_shard_conditions, model_class='Qwen2_5_VLForConditionalGeneration')],
+    shard_conditions=[partial(get_shard_conditions, model_class='Qwen2_5_VLForConditionalGeneration_siglip')],
     cpu_offload=False,
     reshard_after_forward=False,
     dp_mesh=device_mesh,
     fp32_weight=True,
-    model_class='Qwen2_5_VLForConditionalGeneration',
+    model_class='Qwen2_5_VLForConditionalGeneration_siglip',
     fp32_reduce=True
 )
 dist.barrier()
@@ -197,24 +249,6 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
 def debug_model_inference(model):
     processor = Qwen2VLProcessor.from_pretrained(MODEL_DIR)
 
-    # The default range for the number of visual tokens per image in the model is 4-16384. You can set min_pixels and max_pixels according to your needs, such as a token count range of 256-1280, to balance speed and memory usage.
-    # min_pixels = 256*28*28
-    # max_pixels = 1280*28*28
-    # processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", min_pixels=min_pixels, max_pixels=max_pixels)
-
-    #   messages = [
-    #       {
-    #           "role": "user",
-    #           "content": [
-    #             #   {
-    #             #       "type": "image",
-    #             #       "image": "./assets/demo.jpeg",
-    #             #   },
-    #               {"type": "text", "text": "Hi how are u, Can you please describe this image now." # * 8
-    #                },
-    #           ],
-    #       }
-    #   ]
     messages = [
         {
             "role": "user",
