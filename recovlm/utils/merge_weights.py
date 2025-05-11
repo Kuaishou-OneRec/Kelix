@@ -1,7 +1,7 @@
 import argparse
 import re
 import os
-
+from recovlm.models.qwen_3_vl.modeling_qwen3_vl import Qwen3_VLForConditionalGeneration
 import torch
 import transformers
 # Qwen2VLForConditionalGeneration
@@ -27,9 +27,9 @@ def main():
   args = arg_parser.parse_args()
 
   # llm weights
-  model_config = transformers.Qwen2VLForConditionalGeneration.config_class.from_pretrained(
+  model_config = Qwen3_VLForConditionalGeneration.config_class.from_pretrained(
     args.new_model_dir)
-  model = transformers.Qwen2VLForConditionalGeneration(model_config)
+  model = Qwen3_VLForConditionalGeneration(model_config)
 
   text_model = transformers.AutoModelForCausalLM.from_pretrained(
     args.model_dir)
