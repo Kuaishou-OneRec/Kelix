@@ -3136,6 +3136,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
                 print_rank_0(f"image pixel_values={pixel_values.shape}, image_grid_thw={image_grid_thw.shape}, n_image_tokens={n_image_tokens}, image_mask={image_mask.shape}, image_embeds={image_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
+                print_rank_0(f"image_grid_hws={image_grid_hws}, image_grid_thw={image_grid_thw}")
                 # image pixel_values=torch.Size([1, 196, 3, 14, 14]), image_grid_thw=torch.Size([1, 3]), n_image_tokens=49, image_mask=torch.Size([1,376, 3584]), image_embeds=torch.Size([49, 3584]), inputs_embeds=torch.Size([1,376, 3584])
 
             if pixel_values_videos is not None:
@@ -3170,6 +3171,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
                 print_rank_0(f"video pixel_values_videos={pixel_values_videos.shape}, video_grid_thw={video_grid_thw.shape}, n_video_tokens={n_video_tokens}, video_mask={video_mask.shape}, video_embeds={video_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
+                print_rank_0(f"video_grid_thw={video_grid_thw}, video_grid_hws={video_grid_hws}")
 
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
