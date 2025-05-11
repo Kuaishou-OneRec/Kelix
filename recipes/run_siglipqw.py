@@ -261,6 +261,10 @@ def debug_model_inference(model):
                     "image": generate_circle_image(), #"./assets/demo.jpeg",
                 },
                 {
+                    "type": "image",
+                    "image": generate_circle_image(), #"./assets/demo.jpeg",
+                },
+                {
                     "type": "video",
                     "video": [
                         {
