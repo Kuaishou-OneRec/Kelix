@@ -667,7 +667,6 @@ def train():
 
 
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    print(args.model_dir)
     model = eval(args.model_class).from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",use_cache = False, ignore_mismatched_sizes=True
     )
