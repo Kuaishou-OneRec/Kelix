@@ -3097,7 +3097,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 sample_indices = list()
 
                 #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
-                
+                pro = 0
                 for idx, thw in enumerate(image_grid_thw):
                     thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
                     numel = np.prod(thw_tuple)
@@ -3105,8 +3105,12 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
                     siglip_position_ids.append(image_position_ids)
                     sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
+                    pro += np.prod(thw_tuple)
                 siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
+                import torch.distributed as dist
+                if dist.get_rank() == 0:
+                    print(pro, pixel_values.shape, image_grid_thw.shape, sample_indices.min(), sample_indices.max())
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
                 vision_outputs = self.visual(
                     pixel_values=pixel_values, 
