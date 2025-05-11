@@ -1230,3 +1230,7 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+
+class Qwen2VLImageProcessor_siglip_navit(Qwen2VLImageProcessor_siglip):
+    
+    pass

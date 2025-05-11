@@ -606,4 +606,4 @@ class Qwen2_5_VLProcessor_siglip(ProcessorMixin):
         names_from_processor = list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
         return names_from_processor + ["second_per_grid_ts"]
 
-__all__ = ["Qwen2_5_VLProcessor", "Qwen2_5_VLProcessor_moonvit", "Qwen2_5_VLProcessor_siglip"]
+__all__ = ["Qwen2_5_VLProcessor", "Qwen2_5_VLProcessor_moonvit", "Qwen2_5_VLProcessor_siglip", "Qwen2VLImageProcessor_siglip_navit"]

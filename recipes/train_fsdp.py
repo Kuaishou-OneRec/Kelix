@@ -42,7 +42,7 @@ from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
 from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
-from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration_siglip,Qwen2_5_VLForConditionalGeneration
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration_siglip,Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration_siglip_navit
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
 
 
@@ -151,7 +151,7 @@ def get_argument_parser():
                       help="whether adopt balanced vit tokens")
 
   parser.add_argument("--model_class", type=str, default="Qwen2_5_VLForConditionalGeneration_moonvit",
-                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip','InternVLChatModel'",)
+                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'InternVLChatModel'",)
   
   parser.add_argument("--model_processor", type=str, default="Qwen2_5_VLProcessor_moonvit",
                       help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit'")
@@ -454,7 +454,7 @@ def freeze_params(args, model):
           param.requires_grad = False
       print_rank_0("=" * 50)
     
-  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip']:
+  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', "Qwen2_5_VLForConditionalGeneration_siglip_navit"]:
     if args.freeze_llm:
       print_rank_0("Freeze LLM parameters.")
       for name, param in model.named_parameters():
@@ -635,6 +635,8 @@ def train():
       converter = Qwen2_5_VL_moonvitCheckpointConverter(args.model_dir)
   elif args.model_class == 'Qwen2_5_VLForConditionalGeneration_siglip':
       converter = Qwen2_5_VL_siglipCheckpointConverter(args.model_dir)
+  elif args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip_navit":
+      converter = Qwen2_5_VL_siglipCheckpointConverter(args.model_dir)
   elif args.model_class == 'InternVLChatModel':
       converter = InternVLCheckpointConverter(args.model_dir)
 
@@ -677,6 +679,10 @@ def train():
     if args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip":
       state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip/global_step1000/model_float32.pth", weights_only=True)
       model.load_state_dict(state_dict)
+    
+    if args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip_navit":
+      state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth", weights_only=True)
+      model.load_state_dict(state_dict)
     #msyTODO: add siglip
   
   # check all param & buffer on meta device 
@@ -694,6 +700,7 @@ def train():
       "Qwen2_5_VLForConditionalGeneration": {Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock},
       "Qwen2_5_VLForConditionalGeneration_moonvit": {Qwen2_5_VLDecoderLayer, MoonVitEncoderLayer},
       "Qwen2_5_VLForConditionalGeneration_siglip": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
+      "Qwen2_5_VLForConditionalGeneration_siglip_navit": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
       "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
     }
     set_activation_checkpointing(
@@ -1257,7 +1264,7 @@ def train():
                       },
                       dataloader=dataloader,
                       app_state=app_state.set_call_back(converter.revert) if args.model_class in \
-                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip'] else app_state, # app_state.set_call_back(state_dict),
+                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', "Qwen2_5_VLForConditionalGeneration_siglip_navit"] else app_state, # app_state.set_call_back(state_dict),
                       dist_checkpointer=dist_checkpointer,
                   )
 

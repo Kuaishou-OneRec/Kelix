@@ -257,6 +257,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration_moonvit':ChatCompletionVisionParquetDataset_moonvit,
                     'Qwen2_5_VLForConditionalGeneration_siglip':ChatCompletionVisionParquetDataset_siglip,
+                    'Qwen2_5_VLForConditionalGeneration_siglip_navit':ChatCompletionVisionParquetDataset_siglip,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
     print(f"get dataloader vit_token_balance={vit_token_balance}")
     if vit_token_balance: assert num_workers == 1

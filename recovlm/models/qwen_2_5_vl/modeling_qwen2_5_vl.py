@@ -3112,9 +3112,6 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
                 cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
-                import torch.distributed as dist
-                if dist.get_rank() == 0:
-                    print(pro, pixel_values.shape, image_grid_thw.shape, sample_indices.min(), sample_indices.max())
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
                 vision_outputs = self.visual(
                     pixel_values=pixel_values, 
@@ -3145,8 +3142,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 image_mask = mask_expanded.to(inputs_embeds.device)
 
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                if dist.get_rank() == 0:
-                    print(image_embeds.shape, inputs_embeds.shape, image_mask.shape, input_ids.shape)
+
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
@@ -3409,6 +3405,27 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
 
         return input_ids, model_kwargs
 
+
+
+class Qwen2_5_VLForConditionalGeneration_siglip_navit(Qwen2_5_VLForConditionalGeneration_siglip):
+    _tied_weights_keys = ["lm_head.weight"]
+    config_class = Qwen2_5_VLConfig
+    _no_split_modules = ["Qwen2_5_VLDecoderLayer", "SiglipEncoderLayer"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        Siglip_config = SiglipConfig.from_pretrained('/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex')
+        # print('msy_siglip_config',Siglip_config)
+        Siglip_config = Siglip_config.vision_config
+        self.mlp_AR = Projector(config, Siglip_config)
+        self.visual = SiglipVisionModel(Siglip_config)
+        self.model = Qwen2_5_VLModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.rope_deltas = None  # cache rope_deltas here
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
 
 class Projector(nn.Module):
