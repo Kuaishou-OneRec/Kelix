@@ -13,8 +13,8 @@ def save_model_state(dict_state):
 # 加载模型状态的示例代码
 def load_model_state():
     # 1. 首先初始化一个模型实例
-    loaded_model = Qwen3_VLForConditionalGeneration.from_pretrained(
-        "/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct",
+    loaded_model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
+        "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
         ignore_mismatched_sizes=True
     )
     # 2. 加载保存的state dict
