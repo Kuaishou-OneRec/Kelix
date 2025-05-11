@@ -32,10 +32,10 @@
 
 
 
-from recovlm.models.qwen3_siglip.modeling_qwen3_siglip import Qwen3ForCausalLM
+from qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
 
-model = Qwen3ForCausalLM.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base')
-tokenizer = AutoTokenizer.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base')
+model = Qwen2_5_VLForConditionalGeneration.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base')
+#tokenizer = AutoTokenizer.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base')
 
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
