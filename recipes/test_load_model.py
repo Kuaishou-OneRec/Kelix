@@ -37,11 +37,7 @@ from recovlm.models.qwen_3_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_s
 model = Qwen3_VLForConditionalGeneration.from_pretrained('/llm_reco_ssd/zhouyang12/models/msy_Qwen3vl-8B-Base')
 #tokenizer = AutoTokenizer.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base')
 
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    torch_dtype="auto",
-    device_map="auto"
-)
+
 
 messages = [
     {
