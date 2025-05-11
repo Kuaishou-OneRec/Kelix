@@ -3110,7 +3110,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     pro += np.prod(thw_tuple)
 
                 siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
-                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
+                # cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
                 import torch.distributed as dist
                 if dist.get_rank() == 0:
@@ -3123,7 +3123,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     vision_return_embed_list=True,
                     interpolate_pos_encoding=True,
                     sample_indices=sample_indices,
-                    cu_seqlens=cu_seqlens
+                    cu_seqlens=None
                 )
                 image_embeds = vision_outputs.last_hidden_state
 
