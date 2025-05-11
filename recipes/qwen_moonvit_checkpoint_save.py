@@ -32,9 +32,9 @@ def load_model_state():
 
 if __name__ == "__main__":
 
-    # model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
-    #   "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",ignore_mismatched_sizes=True
-    # )
+    model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
+      "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",ignore_mismatched_sizes=True
+    )
     from safetensors import safe_open
 
     with safe_open("/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384/model.safetensors", framework="pt", device="cpu") as f:
