@@ -5,17 +5,6 @@ from PIL import Image
 from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
 from qwen_vl_utils import process_vision_info
 from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitPretrainedModel
-# # from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
-import json
-
-
-# #config = json.load(open("/llm_reco_ssd/zhouyang12/models/Qwen2.5-7B-Instruct/config.json", "r"))
-# #model = Qwen2_5_VLForConditionalGeneration_moonvit(config)
-# model = \
-# Qwen2_5_VLForConditionalGeneration_moonvit.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen2.5-7B-Instruct/",
-#          ignore_mismatched_sizes=True)
-# for key, value in model.named_parameters():
-#     print(key, value.shape)
 
 
 def save_model_state(dict_state):
@@ -54,15 +43,7 @@ if __name__ == "__main__":
             if "packing" in key:
                 continue
             pt[key] = f.get_tensor(key)
-    # ckpt = '/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384/model.safetensors'
-    # #convert to pt
-    # pt = '/llm_reco/liuyang76/Models/MoonVitParam/MoonVit.pt'
     visual_state_dict = pt
-    # for key, value in visual_state_dict.items():
-    #     print('--------------------------------')
-    #     print(key, value.shape)
-    #     print(value)
-    #     print('--------------------------------')
     model.visual.load_state_dict(visual_state_dict,strict=False)
     dict_state = model.state_dict()
     save_model_state(dict_state)
@@ -73,8 +54,6 @@ if __name__ == "__main__":
     for key, value in loaded_model.named_parameters():
         if 'visual' in key:
             if key not in visual_state_dict:
-                #Warning: Key visual.encoder.blocks.26.wo.bias not found in visual_state_dict
-                #I want to delete visual. from key
                 key = key.replace('visual.', '')
                 if key not in visual_state_dict:
                     print(f"Warning: Key {key} not found in visual_state_dict")

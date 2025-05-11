@@ -1,5 +1,5 @@
-git config --global user.email 'maosiyang@kuaishou.com'
-git config --global user.name 'maosiyang'
+git config --global user.email 'zangdunju@kuaishou.com'
+git config --global user.name 'zangdunju'
 
 email=$(git config --get user.email)
 
@@ -9,14 +9,14 @@ if [[ -z "$email" ]]; then
         echo "  git config --global user.email 'you@kuaishou.com'"
         exit 1
 else
-        echo "Git user.emal: $email"
+        echo "Git user.email: $email"
 fi
 
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct # Pretrained/Base model path
-OUTPUT_DIR=/llm_reco/maosiyang/output/freeze_debug/0.0.3/qwen25_7B_qwen_processor
+OUTPUT_DIR=/llm_reco/zangdunju/output2/freeze_debug/0.0.3/qwen25_7B_qwen_processor
 
 mkdir -p $OUTPUT_DIR
 
@@ -116,9 +116,9 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/demo0506/qwen_cut_text_moonvit.json \
-                --model_processor Qwen2_5_VLProcessor_moonvit \
-                --model_class Qwen2_5_VLForConditionalGeneration_moonvit \
+                --dataset_config examples/vlm/demo0506/qwen_cut_text_siglip.json \
+                --model_processor Qwen2_5_VLProcessor_siglip \
+                --model_class Qwen2_5_VLForConditionalGeneration_siglip \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --max_length 15000 \
