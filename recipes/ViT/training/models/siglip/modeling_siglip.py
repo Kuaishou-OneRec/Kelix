@@ -516,7 +516,6 @@ class SiglipAttention(nn.Module):
             )
             attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         else:
-            print("ZDJ use flash attn.")
             assert batch_size == 1, hidden_states.shape
             queries = queries.transpose(1, 2).squeeze(0)
             keys = keys.transpose(1, 2).squeeze(0)
@@ -525,6 +524,8 @@ class SiglipAttention(nn.Module):
             from flash_attn import flash_attn_func, flash_attn_varlen_func
             max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
+            print(cu_seqlens)
 
             attn_output = flash_attn_varlen_func(
                 queries,
