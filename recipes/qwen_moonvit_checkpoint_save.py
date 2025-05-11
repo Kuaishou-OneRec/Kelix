@@ -32,9 +32,9 @@ def load_model_state():
 
 if __name__ == "__main__":
 
-    model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
-      "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",ignore_mismatched_sizes=True
-    )
+    # model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
+    #   "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",ignore_mismatched_sizes=True
+    # )
     from safetensors import safe_open
 
     with safe_open("/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384/model.safetensors", framework="pt", device="cpu") as f:
@@ -44,31 +44,41 @@ if __name__ == "__main__":
                 continue
             pt[key] = f.get_tensor(key)
     visual_state_dict = pt
-    model.visual.load_state_dict(visual_state_dict,strict=False)
-    dict_state = model.state_dict()
-    save_model_state(dict_state)
-    loaded_model = load_model_state()
-    # Check if the visual parameters in loaded_model match those in visual_state_dict
-    matched_count = 0
-    mismatched_count = 0
-    for key, value in loaded_model.named_parameters():
-        if 'visual' in key:
-            if key not in visual_state_dict:
-                key = key.replace('visual.', '')
-                if key not in visual_state_dict:
-                    print(f"Warning: Key {key} not found in visual_state_dict")
-                    continue
+    for key, value in visual_state_dict.items():
+        print(key, value.shape)
+
+
+    # model.visual.load_state_dict(visual_state_dict,strict=False)
+    # dict_state = model.state_dict()
+    # save_model_state(dict_state)
+
+
+
+    # loaded_model = load_model_state()
+    # # Check if the visual parameters in loaded_model match those in visual_state_dict
+    # matched_count = 0
+    # mismatched_count = 0
+    # model_state_dict = loaded_model.state_dict()
+    # # for key, value in loaded_model.named_parameters():
+    # #     if 'visual' in key:
+    # #         if key not in visual_state_dict:
+    # #             key = key.replace('visual.', '')
+    # #             if key not in visual_state_dict:
+    # #                 print(f"Warning: Key {key} not found in visual_state_dict")
+    # #                 continue
                 
-            is_equal = torch.allclose(value, visual_state_dict[key], rtol=1e-5, atol=1e-5)
-            if is_equal:
-                matched_count += 1
-                print(f"✓ {key}: Parameters match")
-            else:
-                mismatched_count += 1
-                print(f"✗ {key}: Parameters differ")
-                # Calculate and print the difference statistics
-                diff = torch.abs(value - visual_state_dict[key])
-                print(f"  Max difference: {diff.max().item():.6f}")
-                print(f"  Mean difference: {diff.mean().item():.6f}")
-    
-    print(f"\nSummary: {matched_count} parameters match, {mismatched_count} parameters differ")
+    # #         is_equal = torch.allclose(value, visual_state_dict[key], rtol=1e-5, atol=1e-5)
+    # #         if is_equal:
+    # #             matched_count += 1
+    # #             print(f"✓ {key}: Parameters match")
+    # #         else:
+    # #             mismatched_count += 1
+    # #             print(f"✗ {key}: Parameters differ")
+    # #             # Calculate and print the difference statistics
+    # #             diff = torch.abs(value - visual_state_dict[key])
+    # #             print(f"  Max difference: {diff.max().item():.6f}")
+    # #             print(f"  Mean difference: {diff.mean().item():.6f}")
+    # for key , value in loaded_model.named_parameters():
+    #     if "models" in key:
+
+    # print(f"\nSummary: {matched_count} parameters match, {mismatched_count} parameters differ")
