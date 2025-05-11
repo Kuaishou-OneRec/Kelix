@@ -278,8 +278,8 @@ def debug_model_inference(model):
 
     output = model(**inputs); 
     logits = output.logits
-    # Convert tensor to numpy array and then to list for JSON serialization
-    logits_np = logits.detach().cpu().numpy().tolist()
+    # Convert BFloat16 tensor to float32 before numpy conversion
+    logits_np = logits.detach().cpu().float().numpy().tolist()
     json.dump(logits_np, open("logits1.json", "w"))
 
     #print_rank_0(output)
