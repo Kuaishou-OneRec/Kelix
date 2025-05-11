@@ -3184,6 +3184,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     attention_mask,
                 )
                 self.rope_deltas = rope_deltas
+                print("rope1111", position_ids.shape)
+                print(position_ids, rope_deltas)
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
@@ -3198,8 +3200,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+                print("rope2222", position_ids.shape, delta)
 
-        grid_hws = image_grid_hws + video_grid_hws 
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
