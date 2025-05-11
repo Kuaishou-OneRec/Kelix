@@ -3145,6 +3145,17 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 siglip_position_ids = list()
                 video_grid_hws = list()
                 sample_indices = list()
+
+                for idx, thw in enumerate(video_grid_thw):
+                    thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
+                    numel = np.prod(thw_tuple)
+                    video_grid_hws.append(thw_tuple)
+                    video_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+                    siglip_position_ids.append(video_position_ids)
+                    sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
+                siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values_videos.device)
+                sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values_videos.device)
+
                 vision_outputs = self.visual(
                     pixel_values=pixel_values_videos, 
                     image_grid_thw=video_grid_hws,
