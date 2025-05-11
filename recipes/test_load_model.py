@@ -278,7 +278,9 @@ def debug_model_inference(model):
 
     output = model(**inputs); 
     logits = output.logits
-    json.dump(logits, open("logits1.json", "w"))
+    # Convert tensor to numpy array and then to list for JSON serialization
+    logits_np = logits.detach().cpu().numpy().tolist()
+    json.dump(logits_np, open("logits1.json", "w"))
 
     #print_rank_0(output)
     
