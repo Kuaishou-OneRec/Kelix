@@ -516,6 +516,7 @@ class SiglipAttention(nn.Module):
             )
             attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         else:
+            print("ZDJ use flash attn.")
             assert batch_size == 1, hidden_states.shape
             queries = queries.transpose(1, 2).squeeze(0)
             keys = keys.transpose(1, 2).squeeze(0)
