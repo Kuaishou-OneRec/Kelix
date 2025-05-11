@@ -87,7 +87,5 @@ if __name__ == "__main__":
                 diff = torch.abs(value - visual_state_dict[key])
                 # print(f"  Max difference: {diff.max().item():.6f}")
                 # print(f"  Mean difference: {diff.mean().item():.6f}")
-    for key , value in loaded_model.named_parameters():
-        if "models" in key:
 
     print(f"\nSummary: {matched_count} parameters match, {mismatched_count} parameters differ")
