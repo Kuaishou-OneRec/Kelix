@@ -714,7 +714,7 @@ class Qwen3_VLRotaryEmbedding(nn.Module):
         self.original_inv_freq = self.inv_freq
         # print(f"Initializing Rope Layer done, self.inv_freq.device={self.inv_freq.device}")
 
-@use_kernel_forward_from_hub("RMSNorm")
+
 class Qwen3RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
