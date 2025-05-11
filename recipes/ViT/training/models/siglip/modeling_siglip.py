@@ -466,7 +466,7 @@ class SiglipAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
         if self.config._attn_implementation != 'flash_attention_2':
-            print("SiglipAttention flash_attention_2 is not set!!!!!!")
+            print(f"SiglipAttention flash_attention_2 is not set!!!!!! Get {self.config._attn_implementation}")
 
     def forward(
         self,

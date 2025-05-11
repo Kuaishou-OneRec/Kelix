@@ -3165,7 +3165,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     sample_indices=sample_indices
                 )
                 video_embeds = vision_outputs.last_hidden_state
-                video_embeds = self.mlp_AR(video_embeds)
+                video_embeds = self.mlp_AR(video_embeds, video_grid_thw)
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 video_embeds = torch.cat(video_embeds,dim=0)
                 n_video_features = video_embeds.shape[0]
