@@ -45,8 +45,12 @@ if __name__ == "__main__":
             pt[key] = f.get_tensor(key)
     visual_state_dict = pt
     for key, value in visual_state_dict.items():
+        if "text_model" in key:
+            del visual_state_dict[key]
+        if "logit_scale" in key:
+            del visual_state_dict[key]
+    for key, value in visual_state_dict.items():
         print(key, value.shape)
-
 
     # model.visual.load_state_dict(visual_state_dict,strict=False)
     # dict_state = model.state_dict()
