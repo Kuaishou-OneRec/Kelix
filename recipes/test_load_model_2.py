@@ -6,7 +6,7 @@ import json
 MODEL_DIR="/llm_reco_ssd/zhouyang12/models/msy_Qwen3vl-8B-Base"
 processor = Qwen2_5_VLProcessor_siglip.from_pretrained(MODEL_DIR)
 model = AutoModelForCausalLM.from_pretrained(
-    model_name,
+    MODEL_DIR,
     torch_dtype="auto",
     device_map="auto"
 )
