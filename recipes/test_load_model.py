@@ -276,7 +276,10 @@ def debug_model_inference(model):
 
     # add generation config
 
-    output = model(**inputs); exit()
+    output = model(**inputs); 
+    print_rank_0(output)
+    
+    exit()
     generation_config = GenerationConfig(
     max_new_tokens=128,
     do_sample=True,
