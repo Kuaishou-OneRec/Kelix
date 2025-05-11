@@ -1,4 +1,4 @@
-from recovlm.models.qwen_3_vl.modeling_qwen3_vl import Qwen3_VLForConditionalGeneration
+from recovlm.models.qwen_3_vl.modeling_qwen3_vl import Qwen3_VLForConditionalGeneration_siglip
 from recovlm.models.qwen_3_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
 from typing import Dict, Any, Union, Optional
 
@@ -164,12 +164,12 @@ dist.barrier()
 
 # Load model in meta mode to avoid OOM during initialization
 with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    model = Qwen3_VLForConditionalGeneration.from_pretrained(
+    model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
         MODEL_DIR,
         _attn_implementation="flash_attention_2",
         use_cache=False
     )
-    state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip/global_step1000/model_float32.pth", weights_only=True)
+    state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth", weights_only=True)
     model.load_state_dict(state_dict)
 
 device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
@@ -180,12 +180,12 @@ for tensor in itertools.chain(model.parameters(), model.buffers()):
 model = model.float()
 shard_model(
     model=model,
-    shard_conditions=[partial(get_shard_conditions, model_class='Qwen2_5_VLForConditionalGeneration_siglip')],
+    shard_conditions=[partial(get_shard_conditions, model_class='Qwen3_VLForConditionalGeneration_siglip')],
     cpu_offload=False,
     reshard_after_forward=False,
     dp_mesh=device_mesh,
     fp32_weight=True,
-    model_class='Qwen2_5_VLForConditionalGeneration_siglip',
+    model_class='Qwen3_VLForConditionalGeneration_siglip',
     fp32_reduce=True
 )
 dist.barrier()
@@ -241,24 +241,7 @@ def debug_model_inference(model):
         #      "1": "./assets/demo.jpeg",
         #   },
             "content": [
-                {
-                    "type": "image",
-                    "image": generate_circle_image(), #"./assets/demo.jpeg",
-                },
-                {
-                    "type": "image",
-                    "image": generate_circle_image(), #"./assets/demo.jpeg",
-                },
-                {
-                    "type": "video",
-                    "video": [
-                        {
-                            "type": "image",
-                            "image": generate_circle_image(), #"./assets/demo.jpeg",
-                        }
-                    ] * 6
-                },
-                {"type": "text", "text": "Hi, Can you please describe this image now."},
+                {"type": "text", "text": "Give me a short introduction to large language model."},
             ],
         }
     ]
@@ -266,12 +249,12 @@ def debug_model_inference(model):
     text = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     )
-    image_inputs, video_inputs = process_vision_info(messages)
+    # image_inputs, video_inputs = process_vision_info(messages)
     print_rank_0(text)
     inputs = processor(
         text=[text],
-        images=image_inputs,
-        videos=video_inputs,
+        # images=image_inputs,
+        # videos=video_inputs,
         padding=True,
         return_tensors="pt",
     )
@@ -281,8 +264,6 @@ def debug_model_inference(model):
 
     print_input_info({
         "inputs": inputs,
-        "image_inputs": image_inputs,
-        "video_inputs": video_inputs,
     })
     print_rank_0("=" * 100)
     # output = model(
