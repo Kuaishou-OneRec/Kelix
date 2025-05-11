@@ -73,4 +73,4 @@ mpirun --allow-run-as-root -np 8 \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
         -x http_proxy=\
         -x https_proxy=\
-        python3 recipes/test_load_model.py
+        python3 recipes/test_load_model_2.py

@@ -147,8 +147,9 @@ torch.cuda.set_device(local_rank)
 torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
 
 initialize_model_parallel(1)
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-MODEL_DIR="/llm_reco_ssd/zhouyang12/models/msy_Qwen3vl-8B-Base"
+model_name = "Qwen/Qwen3-8B"
 # MODEL_DIR="/llm_reco/lingzhixin/output2/RecoVLM-dev/Qwen2-VL-7B-run_sft_7B_fsdp_sp/0.0.5/_1000/global_step_1000_torch_ckpt/"
 
 
@@ -164,13 +165,11 @@ dist.barrier()
 
 # Load model in meta mode to avoid OOM during initialization
 with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
-        MODEL_DIR,
-        _attn_implementation="flash_attention_2",
-        use_cache=False
+    model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    torch_dtype="auto",
+    device_map="auto"
     )
-    state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth", weights_only=True)
-    model.load_state_dict(state_dict)
 
 device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
 
@@ -180,12 +179,12 @@ for tensor in itertools.chain(model.parameters(), model.buffers()):
 model = model.float()
 shard_model(
     model=model,
-    shard_conditions=[partial(get_shard_conditions, model_class='Qwen3_VLForConditionalGeneration_siglip')],
+    shard_conditions=[partial(get_shard_conditions, model_class='Qwen3')],
     cpu_offload=False,
     reshard_after_forward=False,
     dp_mesh=device_mesh,
     fp32_weight=True,
-    model_class='Qwen3_VLForConditionalGeneration_siglip',
+    model_class='Qwen3',
     fp32_reduce=True
 )
 dist.barrier()
@@ -233,30 +232,19 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
 
 def debug_model_inference(model):
     # processor = Qwen2VLProcessor.from_pretrained(MODEL_DIR)
-    processor = Qwen2_5_VLProcessor_siglip.from_pretrained(MODEL_DIR)
+    prompt = "Give me a short introduction to large language model."
     messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "Give me a short introduction to large language model."},
-            ],
-        }
+    {"role": "user", "content": prompt}
     ]
-    # Preparation for inference
-    text = processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
-    )
     # image_inputs, video_inputs = process_vision_info(messages)
-    print_rank_0(text)
-    inputs = processor(
-        text=[text],
-        # images=image_inputs,
-        # videos=video_inputs,
-        padding=True,
-        return_tensors="pt",
-    )
 
-    inputs = inputs.to(torch.cuda.current_device())
+    text = tokenizer.apply_chat_template(
+    messages,
+    tokenize=False,
+    add_generation_prompt=True,
+    enable_thinking=False # Switches between thinking and non-thinking modes. Default is True.
+    )
+    inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
 
     print_input_info({
@@ -273,11 +261,13 @@ def debug_model_inference(model):
 
     # add generation config
 
-    output = model(**inputs); 
+    output = model(**inputs);
     logits = output.logits
+    print(logits)
     # Convert BFloat16 tensor to float32 before numpy conversion
     logits_np = logits.detach().cpu().float().numpy().tolist()
-    json.dump(logits_np, open("logits1.json", "w"))
+
+    json.dump(logits_np, open("logits2.json", "w"))
 
     #print_rank_0(output)
     
