@@ -3,7 +3,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model_name = "Qwen/Qwen3-8B"
 
 # load the tokenizer and the model
-tokenizer = AutoTokenizer.from_pretrained(model_name)
+tokenizer = AutoTokenizer.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct")
 model = AutoModelForCausalLM.from_pretrained(
     model_name,
     torch_dtype="auto",
