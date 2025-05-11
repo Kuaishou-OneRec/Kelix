@@ -611,8 +611,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
-
-
         for layer_num, blk in enumerate(self.blocks):
             if layer_num in self.fullatt_block_indexes:
                 cu_seqlens_now = cu_seqlens
@@ -3107,8 +3105,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     siglip_position_ids.append(image_position_ids)
                     sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
                     cu_seqlens.append(cu_seqlens[-1] + numel)
-                    pro += np.prod(thw_tuple)
-
+                    
                 siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
                 cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
@@ -3144,10 +3141,44 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
 
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+                print_rank_0(f"image pixel_values={pixel_values.shape}, image_grid_thw={image_grid_thw.shape}, n_image_tokens={n_image_tokens}, image_mask={image_mask.shape}, image_embeds={image_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
+                print_rank_0(f"image_grid_hws={image_grid_hws}, image_grid_thw={image_grid_thw}")
+                # image pixel_values=torch.Size([1, 196, 3, 14, 14]), image_grid_thw=torch.Size([1, 3]), n_image_tokens=49, image_mask=torch.Size([1,376, 3584]), image_embeds=torch.Size([49, 3584]), inputs_embeds=torch.Size([1,376, 3584])
+
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-                video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+                pixel_values_videos = pixel_values_videos.unsqueeze(0)
+                siglip_position_ids = list()
+                video_grid_hws = list()
+                sample_indices = list()
+                cu_seqlens = [0]
+
+                for idx, thw in enumerate(video_grid_thw):
+                    thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
+                    numel = np.prod(thw_tuple)
+
+                    video_grid_hws.append(thw_tuple)
+                    video_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+                    siglip_position_ids.append(video_position_ids)
+                    sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
+                    cu_seqlens.append(cu_seqlens[-1] + numel)
+                siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values_videos.device)
+                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
+                sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values_videos.device)
+
+                vision_outputs = self.visual(
+                    pixel_values=pixel_values_videos, 
+                    image_grid_thw=video_grid_hws,
+                    position_ids=siglip_position_ids,
+                    vision_return_embed_list=True,
+                    interpolate_pos_encoding=True,
+                    sample_indices=sample_indices,
+                    cu_seqlens=cu_seqlens
+                )
+                video_embeds = vision_outputs.last_hidden_state
+                video_embeds = self.mlp_AR(video_embeds, video_grid_thw)
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
+                video_embeds = torch.cat(video_embeds,dim=0)
                 n_video_features = video_embeds.shape[0]
                 if n_video_tokens != n_video_features:
                     raise ValueError(
@@ -3161,7 +3192,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
 
                 video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-
+                print_rank_0(f"video pixel_values_videos={pixel_values_videos.shape}, video_grid_thw={video_grid_thw.shape}, n_video_tokens={n_video_tokens}, video_mask={video_mask.shape}, video_embeds={video_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
+                print_rank_0(f"video_grid_thw={video_grid_thw}, video_grid_hws={video_grid_hws}")
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
@@ -3181,6 +3213,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     attention_mask,
                 )
                 self.rope_deltas = rope_deltas
+                print("rope1111", position_ids.shape)
+                print(position_ids, rope_deltas)
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
@@ -3195,6 +3229,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+                print("rope2222", position_ids.shape, delta)
+
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,

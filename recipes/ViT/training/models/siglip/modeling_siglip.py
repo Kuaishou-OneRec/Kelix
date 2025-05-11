@@ -465,6 +465,9 @@ class SiglipAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
+        if self.config._attn_implementation != 'flash_attention_2':
+            print(f"SiglipAttention flash_attention_2 is not set!!!!!! Get {self.config._attn_implementation}")
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -472,6 +475,7 @@ class SiglipAttention(nn.Module):
         output_attentions: Optional[bool] = False,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         rope_freqs_cis: Optional[torch.Tensor] = None,
+        cu_seqlens = None
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -481,6 +485,7 @@ class SiglipAttention(nn.Module):
         keys = self.k_proj(hidden_states)
         values = self.v_proj(hidden_states)
 
+        assert rope_freqs_cis is None
         if rope_freqs_cis is None:
             queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
             keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
@@ -579,6 +584,7 @@ class SiglipEncoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         rope_freqs_cis: Optional[torch.Tensor] = None,
+        cu_seqlens = None,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -599,6 +605,7 @@ class SiglipEncoderLayer(nn.Module):
             output_attentions=output_attentions,
             cu_seqlens=cu_seqlens,
             rope_freqs_cis=rope_freqs_cis,
+            cu_seqlens=cu_seqlens
         )
         hidden_states = residual + hidden_states
 
@@ -812,6 +819,7 @@ class SiglipEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         use_mrope: Optional[bool] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
     ) -> BaseModelOutput:
         r"""
         Args:
@@ -855,6 +863,8 @@ class SiglipEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                     output_attentions,
+                    None, # rope_freqs_cis
+                    cu_seqlens
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -1061,6 +1071,16 @@ class SiglipVisionTransformer(nn.Module):
             image_grid_thw=image_grid_thw
         )
 
+        # cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+        #     dim=0,
+        #     # Select dtype based on the following factors:
+        #     #  - FA2 requires that cu_seqlens_q must have dtype int32
+        #     #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+        #     # See https://github.com/huggingface/transformers/pull/34852 for more information
+        #     dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+        # )
+        # cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
@@ -1243,6 +1263,12 @@ class SiglipModel(SiglipPreTrainedModel):
             )
 
         assert not hasattr(self, "hidden_size")
+        from recovlm.utils.ds_utils import format_dict_or_list
+        print("*" * 300)
+        print(config)
+        print(format_dict_or_list(config))
+        print("*" * 300)
+
         self.hidden_size = config.vision_config.hidden_size
         self.vocab_size = config.text_config.vocab_size
         self.patch_size = config.vision_config.patch_size

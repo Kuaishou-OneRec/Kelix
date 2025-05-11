@@ -1123,6 +1123,8 @@ def train():
             "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
             "perf/total_num_tokens": total_num_tokens,
             "perf/total_num_samples": total_num_samples,
+            "perf/num_sample_per_gpu": total_num_samples / dist.get_world_size(),
+            "perf/num_sample_per_sec_per_gpu": total_num_samples / (end_time - start_time) / dist.get_world_size(),
             "perf/valid_total_num_tokens": total_num_valid_tokens,
             "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
             "perf/image_tokens_per_sec_per_gpu": image_tokens_per_sec_per_gpu,
