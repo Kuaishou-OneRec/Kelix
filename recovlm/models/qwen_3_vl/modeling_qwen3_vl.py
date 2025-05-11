@@ -1873,7 +1873,7 @@ class Qwen3_VLForConditionalGeneration(Qwen3_VLPreTrainedModel, GenerationMixin)
 
             return position_ids, mrope_position_deltas
 
-    @add_start_docstrings_to_model_forward(QWEN2_5_VL_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(QWEN3_VL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Qwen2_5_VLCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -2441,7 +2441,7 @@ class Qwen3_VLForConditionalGeneration_moonvit(Qwen3_VLPreTrainedModel, Generati
 
             return position_ids, mrope_position_deltas
 
-    @add_start_docstrings_to_model_forward(QWEN2_5_VL_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(QWEN3_VL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Qwen2_5_VLCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -3019,7 +3019,7 @@ class Qwen3_VLForConditionalGeneration_siglip(Qwen3_VLPreTrainedModel, Generatio
 
             return position_ids, mrope_position_deltas
 
-    @add_start_docstrings_to_model_forward(QWEN2_5_VL_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(QWEN3_VL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Qwen2_5_VLCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
