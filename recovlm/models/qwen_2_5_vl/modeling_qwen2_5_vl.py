@@ -3142,11 +3142,19 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
 
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-                video_grid_hws = []
-                for thw in video_grid_thw:
-                    video_grid_hws.append((thw[1],thw[2]))
-                video_grid_hws = torch.tensor(video_grid_hws,dtype=torch.int32,device=pixel_values_videos.device)
-                video_embeds = self.visual(video_embeds, video_grid_hws)
+                pixel_values_videos = pixel_values_videos.unsqueeze(0)
+                siglip_position_ids = list()
+                video_grid_hws = list()
+                sample_indices = list()
+                vision_outputs = self.visual(
+                    pixel_values=pixel_values_videos, 
+                    image_grid_thw=video_grid_hws,
+                    position_ids=siglip_position_ids,
+                    vision_return_embed_list=True,
+                    interpolate_pos_encoding=True,
+                    sample_indices=sample_indices
+                )
+                video_embeds = vision_outputs.last_hidden_state
                 video_embeds = self.mlp_AR(video_embeds)
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 video_embeds = torch.cat(video_embeds,dim=0)

@@ -465,12 +465,16 @@ class SiglipAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
+        if self.config._attn_implementation != 'flash_attention_2':
+            print("SiglipAttention flash_attention_2 is not set!!!!!!")
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
         rope_freqs_cis: Optional[torch.Tensor] = None,
+        cu_seqlens = None
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -480,6 +484,7 @@ class SiglipAttention(nn.Module):
         keys = self.k_proj(hidden_states)
         values = self.v_proj(hidden_states)
 
+        assert rope_freqs_cis is None
         if rope_freqs_cis is None:
             queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
             keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
@@ -512,6 +517,7 @@ class SiglipAttention(nn.Module):
             is_causal=self.is_causal,
             scaling=self.scale,
             dropout=0.0 if not self.training else self.dropout,
+            cu_seqlens=cu_seqlens
         )
 
         attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
@@ -554,6 +560,7 @@ class SiglipEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
         rope_freqs_cis: Optional[torch.Tensor] = None,
+        cu_seqlens = None,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -573,6 +580,7 @@ class SiglipEncoderLayer(nn.Module):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             rope_freqs_cis=rope_freqs_cis,
+            cu_seqlens=cu_seqlens
         )
         hidden_states = residual + hidden_states
 
@@ -785,6 +793,7 @@ class SiglipEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         use_mrope: Optional[bool] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
     ) -> BaseModelOutput:
         r"""
         Args:
@@ -828,12 +837,16 @@ class SiglipEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                     output_attentions,
+                    None, # rope_freqs_cis
+                    cu_seqlens
                 )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
                     output_attentions=output_attentions,
+                    rope_freqs_cis=None,
+                    cu_seqlens=cu_seqlens
                 )
 
             hidden_states = layer_outputs[0]
@@ -1047,7 +1060,8 @@ class SiglipVisionTransformer(nn.Module):
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            attention_mask=attention_mask
+            attention_mask=attention_mask,
+            cu_seqlens=cu_seqlens
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -1166,6 +1180,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         position_ids: Optional[torch.Tensor] = None,
         vision_return_embed_list: Optional[bool] = False,
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
+        **kwargs
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -1198,7 +1213,8 @@ class SiglipVisionModel(SiglipPreTrainedModel):
             position_ids=position_ids,
             vision_return_embed_list=vision_return_embed_list,
             image_grid_thw=image_grid_thw,
-            sample_indices=sample_indices
+            sample_indices=sample_indices,
+            **kwargs
         )
 
 
