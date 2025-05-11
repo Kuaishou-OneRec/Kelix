@@ -3137,10 +3137,19 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
 
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+                print_rank_0(f"image pixel_values={pixel_values.shape}, image_grid_thw={image_grid_thw.shape}, n_image_tokens={n_image_tokens}, image_mask={image_mask.shape}, image_embeds={image_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
+
+
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-                video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+                video_grid_hws = []
+                for thw in video_grid_thw:
+                    video_grid_hws.append((thw[1],thw[2]))
+                video_grid_hws = torch.tensor(video_grid_hws,dtype=torch.int32,device=pixel_values_videos.device)
+                video_embeds = self.visual(video_embeds, video_grid_hws)
+                video_embeds = self.mlp_AR(video_embeds)
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
+                video_embeds = torch.cat(video_embeds,dim=0)
                 n_video_features = video_embeds.shape[0]
                 if n_video_tokens != n_video_features:
                     raise ValueError(
@@ -3154,6 +3163,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
 
                 video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+                print_rank_0(f"video pixel_values_videos={pixel_values_videos.shape}, video_grid_thw={video_grid_thw.shape}, n_video_tokens={n_video_tokens}, video_mask={video_mask.shape}, video_embeds={video_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
 
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
@@ -3169,7 +3179,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
-                    video_grid_thw,
+                    video_grid_thw, 
                     second_per_grid_ts,
                     attention_mask,
                 )
@@ -3188,6 +3198,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+
+        grid_hws = image_grid_hws + video_grid_hws 
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
