@@ -1,10 +1,10 @@
-from recovlm.models.qwen3.modeling_qwen3 import Qwen3ForCausalLM
+from recovlm.models.qwen_3_vl_2.processing_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip
 from recovlm.models.qwen_3_vl_2.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
 import json
 # load the tokenizer and the model
 MODEL_DIR="/llm_reco_ssd/zhouyang12/models/msy_Qwen3vl-8B-Base"
 processor = Qwen2_5_VLProcessor_siglip.from_pretrained(MODEL_DIR)
-model = Qwen3ForCausalLM.from_pretrained(
+model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
     MODEL_DIR,
     torch_dtype="auto",
     device_map="auto"
