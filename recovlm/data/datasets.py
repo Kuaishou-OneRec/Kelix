@@ -2249,7 +2249,7 @@ class ParquetDataset(IterableDataset):
       reader.start()
       self.readers.append(reader)
       
-    shuffle_window = 50000
+    shuffle_window = 10000
     self.shuffled_queue = queue.Queue(shuffle_window * 2)
     self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
     self.shuffle_task.start()
@@ -3103,7 +3103,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         print(f"[rank={dist.get_rank()}] raw_input_ids_len={sorted(raw_input_ids)}, raw_image_len={sorted(raw_image_len)}")
 
         t1 = time.perf_counter()
-        small_input_ids = balance.sampling(raw_input_ids, 200).tolist()
+        small_input_ids = balance.sampling(raw_input_ids, 200)
         t2 = time.perf_counter()
         sampling_index = [raw_input_ids.index(v) for v in small_input_ids]
         small_image_len = [raw_image_len[i] for i in sampling_index]
