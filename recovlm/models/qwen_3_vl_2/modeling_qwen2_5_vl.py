@@ -945,8 +945,11 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
     ):
         bsz, q_len, _ = hidden_states.size()
         print('msy1111111111')
-
-        query_states = self.q_norm(self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
+        q= self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
+        print(q)
+        print('msy2222222222')
+        query_states = self.q_norm(q)
+        print(query_states)
         key_states = self.k_norm(self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
         value_states = self.v_proj(hidden_states)
 
