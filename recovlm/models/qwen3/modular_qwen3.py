@@ -19,14 +19,14 @@ from typing import Callable, Optional, Tuple
 import torch
 import torch.utils.checkpoint
 
-from ...cache_utils import Cache
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
-from ...utils import LossKwargs, logging
-from ..gemma.modeling_gemma import GemmaMLP
-from ..llama.modeling_llama import (
+from transformers.cache_utils import Cache
+from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
+from transformers.modeling_outputs import CausalLMOutputWithPast
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS
+from transformers.processing_utils import Unpack
+from transformers.utils import LossKwargs, logging
+from recovlm.models.gemma.modeling_gemma import GemmaMLP
+from recovlm.models.llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
@@ -37,8 +37,8 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..mistral.modeling_mistral import MistralModel
-from .configuration_qwen3 import Qwen3Config
+from recovlm.models.mistral.modeling_mistral import MistralModel
+from recovlm.models.qwen3.configuration_qwen3 import Qwen3Config
 
 
 logger = logging.get_logger(__name__)
