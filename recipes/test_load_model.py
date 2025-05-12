@@ -88,11 +88,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from transformers import AutoTokenizer
-from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
-from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
-from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
-from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
 
 from recovlm.models.internvl import InternVLChatModel
 from recovlm.models.qwen2 import Qwen2DecoderLayer
@@ -163,7 +159,7 @@ if dist.get_rank() == 0:
 dist.barrier()
 
 # Load model in meta mode to avoid OOM during initialization
-with set_default_dtype(torch.bfloat16), torch.device("meta"):
+with set_default_dtype(torch.float32), torch.device("meta"):
     model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
         MODEL_DIR,
         _attn_implementation="flash_attention_2",
@@ -288,15 +284,7 @@ def debug_model_inference(model):
     top_p=0.95,
     temperature=0.7,
     )
-#   generated_ids = model.generate(**inputs, generation_config=generation_config)
 
-#   generated_ids_trimmed = [
-#       out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-#   ]
-#   output_text = processor.batch_decode(
-#       generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-#   )
-#   print_rank_0(output_text)
 
 
 
