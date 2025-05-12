@@ -3153,7 +3153,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         selected_llm = [raw_input_ids[i] for i in selected_index]
         selected_vit = [raw_image_len[i] for i in selected_index]
         t7 = time.perf_counter()
-        print(f"[rank={dist.get_rank()}] llm={selected_llm} vit={selected_vit}")
+        print(f"[rank={dist.get_rank()}] llm={selected_llm} vit={selected_vit}, llm_flops={balance.llm_flops(selected_llm), vit_flops={balance.vit_flops(selected_vit)}}")
         print(f"sampling={t2-t1}, find_subsets={t3-t2}, gather1={t4-t3}, balance={t5-t4}, gather2={t6-t5}, other={t7-t6}")
 
         # t1 = time.perf_counter()
