@@ -53,7 +53,7 @@ def main():
     # print(key)
     # print(pt2[key].shape)
     # print("================================================")
-  outputdir = "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip"
+  outputdir = "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip_test"
   os.makedirs(outputdir, exist_ok=True)
   #merge pt1 and pt2
   save_file(pt2, outputdir + "/model.safetensors",metadata={"format": "pt"})
