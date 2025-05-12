@@ -169,7 +169,7 @@ with set_default_dtype(torch.bfloat16), torch.device("meta"):
         _attn_implementation="flash_attention_2",
         use_cache=False
     )
-    state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth", weights_only=True)
+    state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict_2.pth", weights_only=True)
     model.load_state_dict(state_dict)
 
 device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
