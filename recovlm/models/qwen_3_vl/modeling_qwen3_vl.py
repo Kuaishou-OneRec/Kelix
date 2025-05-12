@@ -870,9 +870,7 @@ class Qwen3Attention(nn.Module):
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        print("1111qshape: ", query_states.shape)
-        print("1111kshape: ", key_states.shape)
-        print("1111vshape: ", value_states.shape)
+
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -889,6 +887,7 @@ class Qwen3Attention(nn.Module):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
+                cu_seqlens = [0,29]
                 max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
                 attn_output = flash_attn_varlen_func(query_states, key_states, value_states, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
                 seq_length, -1
