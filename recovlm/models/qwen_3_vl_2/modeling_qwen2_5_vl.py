@@ -871,9 +871,9 @@ class Qwen2_5_VLAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        # query_states, key_states = apply_multimodal_rotary_pos_emb(
-        #     query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
-        # )
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
+        )
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
@@ -961,9 +961,9 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
         cos, sin = position_embeddings
-        # query_states, key_states = apply_multimodal_rotary_pos_emb(
-        #     query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
-        # )
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
+        )
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
@@ -1107,10 +1107,10 @@ class Qwen2_5_VLSdpaAttention(Qwen2_5_VLAttention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
-        # cos, sin = position_embeddings
-        # query_states, key_states = apply_multimodal_rotary_pos_emb(
-        #     query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
-        # )
+        cos, sin = position_embeddings
+        query_states, key_states = apply_multimodal_rotary_pos_emb(
+            query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
+        )
 
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
