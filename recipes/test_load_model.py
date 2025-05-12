@@ -1,5 +1,5 @@
-from recovlm.models.qwen_3_vl.modeling_qwen3_vl import Qwen3_VLForConditionalGeneration_siglip
-from recovlm.models.qwen_3_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
+from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip
+from recovlm.models.qwen_3_vl_2.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
 from typing import Dict, Any, Union, Optional
 
 import contextlib
@@ -164,7 +164,7 @@ dist.barrier()
 
 # Load model in meta mode to avoid OOM during initialization
 with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
+    model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
         MODEL_DIR,
         _attn_implementation="flash_attention_2",
         use_cache=False
@@ -180,12 +180,12 @@ for tensor in itertools.chain(model.parameters(), model.buffers()):
 model = model.float()
 shard_model(
     model=model,
-    shard_conditions=[partial(get_shard_conditions, model_class='Qwen3_VLForConditionalGeneration_siglip')],
+    shard_conditions=[partial(get_shard_conditions, model_class='Qwen2_5_VLForConditionalGeneration_siglip')],
     cpu_offload=False,
     reshard_after_forward=False,
     dp_mesh=device_mesh,
     fp32_weight=True,
-    model_class='Qwen3_VLForConditionalGeneration_siglip',
+    model_class='Qwen2_5_VLForConditionalGeneration_siglip',
     fp32_reduce=True
 )
 dist.barrier()

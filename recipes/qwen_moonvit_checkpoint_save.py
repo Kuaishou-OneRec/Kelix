@@ -13,7 +13,7 @@ def save_model_state(dict_state):
 # 加载模型状态的示例代码
 def load_model_state():
     # 1. 首先初始化一个模型实例
-    loaded_model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
+    loaded_model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
         "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
         ignore_mismatched_sizes=True
     )
@@ -32,7 +32,7 @@ def load_model_state():
 
 if __name__ == "__main__":
 
-    model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
+    model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
       "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",ignore_mismatched_sizes=True
     )
     from safetensors import safe_open
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     
     # Compare parameters between original model and saved state dict
     print("\nComparing original model with saved state dict:")
-    original_model = Qwen3_VLForConditionalGeneration_siglip.from_pretrained(
+    original_model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
         "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
         ignore_mismatched_sizes=True
     )
