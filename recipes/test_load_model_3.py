@@ -171,7 +171,7 @@ with set_default_dtype(torch.bfloat16):
 
 def debug_model_inference(model):
     # processor = Qwen2VLProcessor.from_pretrained(MODEL_DIR)
-    MODEL_DIR2="/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct"
+    MODEL_DIR2="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip"
     processor = Qwen2_5_VLProcessor_siglip.from_pretrained(MODEL_DIR2)
     messages = [
         {
