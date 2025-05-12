@@ -820,6 +820,17 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    _ , batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
 class Qwen3Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -871,8 +882,9 @@ class Qwen3Attention(nn.Module):
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-
+        print("1111query_states: ", query_states.shape)
+        print("1111key_states: ", key_states.shape)
+        print("1111value_states: ", value_states.shape)
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -890,9 +902,7 @@ class Qwen3Attention(nn.Module):
             else:
                 cu_seqlens = torch.tensor([0,29], dtype=torch.int32, device=query_states.device)
                 max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-                print("1111query_states: ", query_states.shape)
-                print("1111key_states: ", key_states.shape)
-                print("1111value_states: ", value_states.shape)
+
                 query_state = query_states.squeeze(0).transpose(0,1)
                 key_state = key_states.squeeze(0).transpose(0,1)
                 value_state = value_states.squeeze(0).transpose(0,1)
