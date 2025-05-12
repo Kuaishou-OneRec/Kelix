@@ -28,6 +28,7 @@ def get_argument_parser():
 def main():
   arg_parser = get_argument_parser()
   args = arg_parser.parse_args()
+  print(args)
 
   # llm weights
   model_config = Qwen2_5_VLForConditionalGeneration_siglip.config_class.from_pretrained(
