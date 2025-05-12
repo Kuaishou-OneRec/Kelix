@@ -889,9 +889,15 @@ class Qwen3Attention(nn.Module):
             else:
                 cu_seqlens = torch.tensor([0,29], dtype=torch.int32, device=query_states.device)
                 max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                print("1111query_states: ", query_states.shape)
+                print("1111key_states: ", key_states.shape)
+                print("1111value_states: ", value_states.shape)
                 query_state = query_states.squeeze(0).transpose(0,1)
                 key_state = key_states.squeeze(0).transpose(0,1)
                 value_state = value_states.squeeze(0).transpose(0,1)
+                print("2222query_state: ", query_state.shape)
+                print("2222key_state: ", key_state.shape)
+                print("2222value_state: ", value_state.shape)
                 attn_output,attention_weights = flash_attn_varlen_func(query_state, 
                                                                         key_state, 
                                                                         value_state, 
