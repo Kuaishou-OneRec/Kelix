@@ -27,10 +27,6 @@ from safetensors import safe_open
 
 
 def main():
-  arg_parser = get_argument_parser()
-  args = arg_parser.parse_args()
-  print(args)
-  
   # Load the safetensors file properly
   pt1 = {}
   with safe_open("/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384/model.safetensors", framework="pt", device="cpu") as f:
