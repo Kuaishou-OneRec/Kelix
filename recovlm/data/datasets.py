@@ -3145,6 +3145,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
             if math.isclose(flops[2*i], local_selected[0]) and math.isclose(flops[2*i+1], local_selected[1]):
                 found = i
                 break
+        if found == -1:
+            print(f"not_found rank={dist.get_rank()}, flops={flops}, sel={local_selected}")
         assert found >= 0
         # selected_index = [sampling_index[i] for i in candidates[found]]
         selected_index = candidates[found]
