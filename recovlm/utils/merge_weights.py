@@ -8,6 +8,7 @@ from recipes.ViT.training.models.siglip.modeling_siglip import SiglipVisionModel
 import torch
 import transformers
 from safetensors import safe_open
+from safetensors.torch import save_file
 # Qwen2VLForConditionalGeneration
 
 
@@ -31,18 +32,30 @@ def main():
   pt1 = {}
   with safe_open("/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384/model.safetensors", framework="pt", device="cpu") as f:
       for key in f.keys():
+          if "packing" in key:
+              print(key)
+              print(f.get_tensor(key).shape)
+              print("================================================")
+              continue
           if "vision_model" in key:
               pt1[key] = f.get_tensor(key)
-  for key in pt1.keys():
-    print(key)
-    print(pt1[key].shape)
-    print("================================================")
+  pt2 = {}
+  with safe_open("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base/model-00001-of-00005.safetensors", framework="pt", device="cpu") as f:
+      for key in f.keys():
+          pt2[key] = f.get_tensor(key)
   
-  #pt2 = torch.load("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base/model-00001-of-00005.safetensors")
+
+  print('lalallalalallal')
+  for key in pt1.keys():
+    keypt2 = "visual." + key
+    pt2[keypt2] = pt1[key]
+  for key in pt2.keys():
+    print(key)
+    print(pt2[key].shape)
+    print("================================================")
+  outputdir = "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip"
+  os.makedirs(outputdir, exist_ok=True)
   #merge pt1 and pt2
-
-  #save the merged weights
-  #torch.save(pt2, "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip/model.safetensors")
-
+  save_file(pt2, outputdir + "/model.safetensors",metadata={"format": "pt"})
 if __name__ == "__main__":
   main()
