@@ -49,7 +49,7 @@ def main():
   for key in pt1.keys():
     keypt2 = "visual." + key
     pt2[keypt2] = pt1[key]
-  for key in pt2.keys():
+  #for key in pt2.keys():
     # print(key)
     # print(pt2[key].shape)
     # print("================================================")
