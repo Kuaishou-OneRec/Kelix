@@ -866,6 +866,7 @@ class Qwen3Attention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
+        print('0000hidden_states: ', hidden_states.shape)
 
         query_states = self.q_norm(self.q_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
         key_states = self.k_norm(self.k_proj(hidden_states).view(hidden_shape)).transpose(1, 2)
@@ -908,6 +909,7 @@ class Qwen3Attention(nn.Module):
                                                                         dropout_p=0.0 if not self.training else self.attention_dropout,
                                                                         softmax_scale=self.scaling
                                                                        )
+                print("3333attn_output: ", attn_output.shape)
                 attn_output = attn_output.transpose(0,1).unsqueeze(0)
                 attn_weights = attention_weights.transpose(0,1).unsqueeze(0)
         else:
