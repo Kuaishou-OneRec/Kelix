@@ -944,12 +944,12 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
         cu_seqlens: Optional[torch.Tensor] = None
     ):
         bsz, q_len, _ = hidden_states.size()
-        print('msy1111111111')
+        print_rank_0('msy1111111111')
         q= self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
-        print(q)
-        print('msy2222222222')
+        print_rank_0(q)
+        print_rank_0('msy2222222222')
         query_states = self.q_norm(q)
-        print(query_states)
+        print_rank_0(query_states)
         key_states = self.k_norm(self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
         value_states = self.v_proj(hidden_states)
 
