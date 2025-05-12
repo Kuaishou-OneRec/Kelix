@@ -814,6 +814,9 @@ class Qwen2_5_VLAttention(nn.Module):
     """
 
     def __init__(self, config: Qwen2_5_VLConfig, layer_idx: Optional[int] = None):
+        print_rank_0("=============================")
+        print_rank_0("Qwen2_5_VLAttention init")
+        print_rank_0("=============================")
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -924,6 +927,9 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        print_rank_0("=============================")
+        print_rank_0("Qwen2_5_VLFlashAttention2 init")
+        print_rank_0("=============================")
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
