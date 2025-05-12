@@ -1,11 +1,11 @@
-from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration_siglip
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
 import torch
 from PIL import Image
 from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
 from qwen_vl_utils import process_vision_info
 from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitPretrainedModel
-from recovlm.models.qwen_3_vl.modeling_qwen3_vl import Qwen3_VLForConditionalGeneration_siglip
+from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip
 
 def save_model_state(dict_state):
     torch.save(dict_state, "/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth")
@@ -15,6 +15,7 @@ def load_model_state():
     # 1. 首先初始化一个模型实例
     loaded_model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
         "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
+        _attn_implementation="flash_attention_2",
         ignore_mismatched_sizes=True
     )
     # 2. 加载保存的state dict
