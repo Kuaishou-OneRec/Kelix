@@ -159,7 +159,7 @@ if dist.get_rank() == 0:
 dist.barrier()
 
 # Load model in meta mode to avoid OOM during initialization
-with set_default_dtype(torch.float32)#, torch.device("meta"):
+with set_default_dtype(torch.float32):#, torch.device("meta"):
     model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
         MODEL_DIR,
         _attn_implementation="flash_attention_2",
