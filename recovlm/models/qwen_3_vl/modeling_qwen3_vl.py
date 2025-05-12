@@ -896,7 +896,7 @@ class Qwen3Attention(nn.Module):
                                                                         cu_seqlens, 
                                                                         max_seqlen, 
                                                                         max_seqlen,
-                                                                        dropout=0.0 if not self.training else self.attention_dropout,
+                                                                        dropout_p=0.0 if not self.training else self.attention_dropout,
                                                                         softmax_scale=self.scaling,
                                                                         **kwargs,
                                                                         )
