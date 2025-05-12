@@ -3128,9 +3128,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         all_flops = [None] * dist.get_world_size()
         dist.all_gather_object(all_flops, flops)
         t4 = time.perf_counter()
-        print(f"rank={dist.get_rank()} len_info={len_info}, flops={flops}")
-        if dist.get_rank() == 0:
-          print(f"[rank=0] all_flops: {all_flops}")
+        # print(f"rank={dist.get_rank()} len_info={len_info}, flops={flops}")
+        # if dist.get_rank() == 0:
+        #   print(f"[rank=0] all_flops: {all_flops}")
         local_best = balance.select_by_flops(all_flops, dist.get_rank())
         t5 = time.perf_counter()
         local_best_flat = [v for sub in local_best for v in sub]
@@ -3138,7 +3138,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         dist.all_gather_object(all_local, local_best_flat)
         t6 = time.perf_counter()
         selected = balance.find_global(all_local)
-        print(f"rank={dist.get_rank()} local_best={local_best}, all_local={all_local}, global_best={selected}")
+        # print(f"rank={dist.get_rank()} local_best={local_best}, all_local={all_local}, global_best={selected}")
         target = selected[dist.get_rank()]
         found = -1
         for i in range(0, len(flops), 2):
@@ -3153,8 +3153,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         selected_llm = [raw_input_ids[i] for i in selected_index]
         selected_vit = [raw_image_len[i] for i in selected_index]
         t7 = time.perf_counter()
-        print(f"[rank={dist.get_rank()}] llm={selected_llm} vit={selected_vit}, llm_flops={balance.llm_flops(selected_llm)}, vit_flops={balance.vit_flops(selected_vit)}")
-        print(f"sampling={t2-t1}, find_subsets={t3-t2}, gather1={t4-t3}, balance={t5-t4}, gather2={t6-t5}, other={t7-t6}")
+        print(f"[rank={dist.get_rank()}] llm={selected_llm} vit={selected_vit}, llm_flops={balance.llm_flops(selected_llm)}, vit_flops={balance.vit_flops(selected_vit)}, find_sub={t3-t2}, gather1={t4-t3}, balance={t5-t4}, gather2={t6-t5}, other={t7-t6}")
 
         # t1 = time.perf_counter()
         # # candidates = self._find_in_range(raw_input_ids, self.max_length, delta, target_count)
@@ -3215,10 +3214,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         result = self.cache.get()
         t2 = time.perf_counter()
         print(f'next_batch[{dist.get_rank()}]={t2-t1}')
-        if False:
-            yield result
-        else:
-            continue
+        yield result
 
   def __iter_v2__(self):
     buffer = []
