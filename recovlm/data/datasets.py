@@ -2249,7 +2249,7 @@ class ParquetDataset(IterableDataset):
       reader.start()
       self.readers.append(reader)
       
-    shuffle_window = 10000
+    shuffle_window = 50000
     self.shuffled_queue = queue.Queue(shuffle_window * 2)
     self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
     self.shuffle_task.start()
@@ -3115,15 +3115,18 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           print(f"candidates: {candidates}")
         candidates = candidates[:30]
         flops = []
+        len_info = []
         for c in candidates:
           llm_len = [small_input_ids[i] for i in c]
           vit_len = [small_image_len[i] for i in c]
+          len_info.append((llm_len, vit_len))
           flops.append(balance.llm_flops(llm_len))
           flops.append(balance.vit_flops(vit_len))
         t3 = time.perf_counter()
         all_flops = [None] * dist.get_world_size()
         dist.all_gather_object(all_flops, flops)
         t4 = time.perf_counter()
+        print(f"rank={dist.get_rank()} len_info={len_info}, flops={flops}")
         if dist.get_rank() == 0:
           print(f"[rank=0] all_flops: {all_flops}")
         local_best = balance.select_by_flops(all_flops, dist.get_rank())
@@ -3134,8 +3137,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         t6 = time.perf_counter()
         selected = balance.find_global(all_local)
         found = -1
-        for i, f in enumerate(flops):
-            if f[0] == selected[0] and f[1] == selected[1]:
+        for i in range(0, len(flops) // 2, 2):
+            if flops[2*i] == selected[0] and f[2*i+1] == selected[1]:
                 found = i
                 break
         assert found >= 0
