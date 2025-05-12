@@ -887,23 +887,31 @@ class Qwen3Attention(nn.Module):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                cu_seqlens = torch.tensor([0,29]).to(query_states.device).dtype(torch.int32)
+                cu_seqlens = torch.tensor([0,29], dtype=torch.int32, device=query_states.device)
                 max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-                attn_output = flash_attn_varlen_func(query_states, key_states, value_states, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
-                seq_length, -1
-                )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,  # diff with Llama
-            **kwargs,
-        )
+                attn_output,attention_weights = flash_attn_varlen_func(query_states, 
+                                                                        key_states, 
+                                                                        value_states, 
+                                                                        cu_seqlens, 
+                                                                        cu_seqlens, 
+                                                                        max_seqlen, 
+                                                                        max_seqlen,
+                                                                        dropout=0.0 if not self.training else self.attention_dropout,
+                                                                        softmax_scale=self.scaling,
+                                                                        **kwargs,
+                                                                        )
+        else:
+            attn_output, attn_weights = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                scaling=self.scaling,
+                sliding_window=self.sliding_window,  # diff with Llama
+                **kwargs,
+            )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
