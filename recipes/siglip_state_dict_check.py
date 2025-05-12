@@ -8,10 +8,14 @@ from recovlm.models.qwen_3_vl_2.processing_qwen2_5_vl import Qwen2_5_VLProcessor
 
 
 saved_state_dict1 = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth")
+# 将state_dict1转换为float类型
+saved_state_dict1 = {k: v.float() for k, v in saved_state_dict1.items()}
 
 
 file_path = "/llm_reco_ssd/zhouyang12/models/msy_Qwen3vl-8B-Base/model-00001-of-00005.safetensors"
 saved_state_dict2 = safetensors.torch.load_file(file_path)
+# 将state_dict2转换为float类型
+saved_state_dict2 = {k: v.float() for k, v in saved_state_dict2.items()}
 
 # 获取两个state dict的共同key
 common_keys = set(saved_state_dict1.keys()) & set(saved_state_dict2.keys())
