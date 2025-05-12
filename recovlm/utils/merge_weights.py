@@ -1,7 +1,10 @@
 import argparse
 import re
 import os
-from recovlm.models.qwen_3_vl.modeling_qwen3_vl import Qwen3_VLForConditionalGeneration
+from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip
+from recovlm.models.qwen_3_vl_2.configuration_qwen2_5_vl import Qwen2_5_VLConfig
+from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLModel
+from recipes.ViT.training.models.siglip.modeling_siglip import SiglipVisionModel
 import torch
 import transformers
 # Qwen2VLForConditionalGeneration
@@ -10,13 +13,13 @@ import transformers
 def get_argument_parser():
   parser = argparse.ArgumentParser()
 
-  parser.add_argument("--model_dir", type=str, default=None,
+  parser.add_argument("--model_dir", type=str, default="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
                       help="The directory of the pretrained LLM.")
 
-  parser.add_argument("--vision_encoder_dir", type=str, default=None,
+  parser.add_argument("--vision_encoder_dir", type=str, default="/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384",
                       help="The directory of the pretrained ViT.")
 
-  parser.add_argument("--new_model_dir", type=str, default=None,
+  parser.add_argument("--new_model_dir", type=str, default="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip",
                       help="The directory of the pretrained ViT.")
 
   return parser
@@ -27,11 +30,11 @@ def main():
   args = arg_parser.parse_args()
 
   # llm weights
-  model_config = Qwen3_VLForConditionalGeneration.config_class.from_pretrained(
+  model_config = Qwen2_5_VLForConditionalGeneration_siglip.config_class.from_pretrained(
     args.new_model_dir)
-  model = Qwen3_VLForConditionalGeneration(model_config)
+  model = Qwen2_5_VLForConditionalGeneration_siglip(model_config)
 
-  text_model = transformers.AutoModelForCausalLM.from_pretrained(
+  text_model = Qwen2_5_VLModel.from_pretrained(
     args.model_dir)
 
   sd = model.state_dict()
@@ -43,76 +46,14 @@ def main():
     sd[name] = text_sd[name]
 
   if args.vision_encoder_dir:
-    vision_encoder = transformers.SiglipModel.from_pretrained(
+    vision_encoder = SiglipVisionModel.from_pretrained(
         args.vision_encoder_dir)
 
     vision_sd = vision_encoder.vision_model.state_dict()
-    mapped = []
-    
-    sd["visual.patch_embed.proj.weight"] = vision_sd["embeddings.patch_embedding.weight"][:,
-                                                                                          :, None, :, :].repeat(1, 1, 2, 1, 1)
-    for layer in range(vision_encoder.vision_model.config.num_hidden_layers):
-      wq = vision_sd[f"encoder.layers.{layer}.self_attn.q_proj.weight"]
-      wk = vision_sd[f"encoder.layers.{layer}.self_attn.k_proj.weight"]
-      wv = vision_sd[f"encoder.layers.{layer}.self_attn.v_proj.weight"]
-
-      bq = vision_sd[f"encoder.layers.{layer}.self_attn.q_proj.bias"]
-      bk = vision_sd[f"encoder.layers.{layer}.self_attn.k_proj.bias"]
-      bv = vision_sd[f"encoder.layers.{layer}.self_attn.v_proj.bias"]
-
-      qkv_weight = torch.cat([wq, wk, wv], dim=0)
-      qkv_bias = torch.cat([bq, bk, bv], dim=0)
-
-      assert f"visual.blocks.{layer}.attn.qkv.weight" in sd
-      sd[f"visual.blocks.{layer}.attn.qkv.weight"] = qkv_weight
-      assert f"visual.blocks.{layer}.attn.qkv.bias" in sd
-      sd[f"visual.blocks.{layer}.attn.qkv.bias"] = qkv_bias
-
-      assert f"visual.blocks.{layer}.attn.proj.weight" in sd
-      sd[f"visual.blocks.{layer}.attn.proj.weight"] = vision_sd[f"encoder.layers.{layer}.self_attn.out_proj.weight"]
-      assert f"visual.blocks.{layer}.attn.proj.bias" in sd
-      sd[f"visual.blocks.{layer}.attn.proj.bias"] = vision_sd[f"encoder.layers.{layer}.self_attn.out_proj.bias"]
-
-      assert f"visual.blocks.{layer}.mlp.fc1.weight" in sd
-      sd[f"visual.blocks.{layer}.mlp.fc1.weight"] = vision_sd[f"encoder.layers.{layer}.mlp.fc1.weight"]
-      assert f"visual.blocks.{layer}.mlp.fc1.bias" in sd
-      sd[f"visual.blocks.{layer}.mlp.fc1.bias"] = vision_sd[f"encoder.layers.{layer}.mlp.fc1.bias"]
-      assert f"visual.blocks.{layer}.mlp.fc2.weight" in sd
-      sd[f"visual.blocks.{layer}.mlp.fc2.weight"] = vision_sd[f"encoder.layers.{layer}.mlp.fc2.weight"]
-      assert f"visual.blocks.{layer}.mlp.fc2.bias" in sd
-      sd[f"visual.blocks.{layer}.mlp.fc2.bias"] = vision_sd[f"encoder.layers.{layer}.mlp.fc2.bias"]
-
-      assert f"visual.blocks.{layer}.norm1.weight" in sd
-      sd[f"visual.blocks.{layer}.norm1.weight"] = vision_sd[f"encoder.layers.{layer}.layer_norm1.weight"]
-      assert f"visual.blocks.{layer}.norm1.bias" in sd
-      sd[f"visual.blocks.{layer}.norm1.bias"] = vision_sd[f"encoder.layers.{layer}.layer_norm1.bias"]
-      assert f"visual.blocks.{layer}.norm2.weight" in sd
-      sd[f"visual.blocks.{layer}.norm2.weight"] = vision_sd[f"encoder.layers.{layer}.layer_norm2.weight"]
-      assert f"visual.blocks.{layer}.norm2.bias" in sd
-      sd[f"visual.blocks.{layer}.norm2.bias"] = vision_sd[f"encoder.layers.{layer}.layer_norm2.bias"]
-
-      mapped.extend([
-          f"encoder.layers.{layer}.self_attn.q_proj.weight",
-          f"encoder.layers.{layer}.self_attn.k_proj.weight",
-          f"encoder.layers.{layer}.self_attn.v_proj.weight",
-          f"encoder.layers.{layer}.self_attn.q_proj.bias",
-          f"encoder.layers.{layer}.self_attn.k_proj.bias",
-          f"encoder.layers.{layer}.self_attn.v_proj.bias",
-          f"encoder.layers.{layer}.self_attn.out_proj.weight",
-          f"encoder.layers.{layer}.self_attn.out_proj.bias",
-          f"encoder.layers.{layer}.mlp.fc1.weight",
-          f"encoder.layers.{layer}.mlp.fc1.bias",
-          f"encoder.layers.{layer}.mlp.fc2.weight",
-          f"encoder.layers.{layer}.mlp.fc2.bias",
-          f"encoder.layers.{layer}.layer_norm1.weight",
-          f"encoder.layers.{layer}.layer_norm1.bias",
-          f"encoder.layers.{layer}.layer_norm2.weight",
-          f"encoder.layers.{layer}.layer_norm2.bias"
-      ])
-
-    for name in vision_encoder.vision_model.state_dict().keys():
-      if name not in mapped:
-        print(f"Parameter {name} in VisionEncoder is not mapped.")
+  for name in vision_sd.keys():
+    assert name in sd
+    print(name)
+    sd[name] = vision_sd[name]
 
   model.load_state_dict(sd)
   if not os.path.exists(args.new_model_dir):
