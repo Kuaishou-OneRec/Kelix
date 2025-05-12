@@ -897,8 +897,7 @@ class Qwen3Attention(nn.Module):
                                                                         max_seqlen, 
                                                                         max_seqlen,
                                                                         dropout_p=0.0 if not self.training else self.attention_dropout,
-                                                                        softmax_scale=self.scaling,
-                                                                        **kwargs,
+                                                                        softmax_scale=self.scaling
                                                                         )
         else:
             attn_output, attn_weights = attention_interface(
