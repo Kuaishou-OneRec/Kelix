@@ -3108,7 +3108,11 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         t2 = time.perf_counter()
         sampling_index = [raw_input_ids.index(v) for v in small_input_ids]
         small_image_len = [raw_image_len[i] for i in sampling_index]
+        if dist.get_rank() == 0:
+          print(f"small_ids: {small_input_ids}, small_img: {small_image_len}, idx: {sampling_index}")
         candidates = balance.greedy_subsets_nearst_sum(small_input_ids, self.max_length)
+        if dist.get_rank() == 0:
+          print(f"candidates: {candidates}")
         candidates = candidates[:30]
         flops = []
         for c in candidates:

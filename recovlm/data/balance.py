@@ -76,7 +76,7 @@ def select_by_flops(all_flops, rank):
         flops_pair.append(sorted_pair)
 
     def find_best(arr, target):
-        pos = bisect.bisect_left(arr, target, key=lambda x : x[0])
+        pos = bisect.bisect_left(arr, target[0], key=lambda x : x[0])
         best = None
         diff = 1e12
         for i in range(pos - 5, pos + 5):
