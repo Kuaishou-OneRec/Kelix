@@ -31,8 +31,12 @@ def main():
   pt1 = {}
   with safe_open("/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384/model.safetensors", framework="pt", device="cpu") as f:
       for key in f.keys():
-          print(key)
-          #pt1[key] = f.get_tensor(key)
+          if "vision_model" in key:
+              pt1[key] = f.get_tensor(key)
+  for key in pt1.keys():
+    print(key)
+    print(pt1[key].shape)
+    print("================================================")
   
   #pt2 = torch.load("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base/model-00001-of-00005.safetensors")
   #merge pt1 and pt2
