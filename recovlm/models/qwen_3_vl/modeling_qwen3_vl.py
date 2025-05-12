@@ -902,8 +902,8 @@ class Qwen3Attention(nn.Module):
                                                                         dropout_p=0.0 if not self.training else self.attention_dropout,
                                                                         softmax_scale=self.scaling
                                                                        )
-                attn_output = attn_output.unsqueeze(0).transpose(0,1)
-                attn_weights = attention_weights.unsqueeze(0).transpose(0,1)
+                attn_output = attn_output.transpose(0,1).unsqueeze(0)
+                attn_weights = attention_weights.transpose(0,1).unsqueeze(0)
         else:
             attn_output, attn_weights = attention_interface(
                 self,
