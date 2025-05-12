@@ -3104,21 +3104,22 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           print(f"[rank={dist.get_rank()}] raw_input_ids_len={sorted(raw_input_ids)}, raw_image_len={sorted(raw_image_len)}")
 
         t1 = time.perf_counter()
-        small_input_ids = balance.sampling(raw_input_ids, 200)
+        # small_input_ids = balance.sampling(raw_input_ids, 200)
         t2 = time.perf_counter()
-        sampling_index = [raw_input_ids.index(v) for v in small_input_ids]
-        small_image_len = [raw_image_len[i] for i in sampling_index]
-        if dist.get_rank() == 0:
-          print(f"small_ids: {small_input_ids}, small_img: {small_image_len}, idx: {sampling_index}")
-        candidates = balance.greedy_subsets_nearst_sum(small_input_ids, self.max_length)
+        # sampling_index = [raw_input_ids.index(v) for v in small_input_ids]
+        # small_image_len = [raw_image_len[i] for i in sampling_index]
+        # if dist.get_rank() == 0:
+        #   print(f"small_ids: {small_input_ids}, small_img: {small_image_len}, idx: {sampling_index}")
+        # candidates = balance.greedy_subsets_nearst_sum(small_input_ids, self.max_length)
+        candidates = balance.greedy_subsets_nearst_sum(raw_input_ids, self.max_length)
         if dist.get_rank() == 0:
           print(f"candidates: {candidates}")
-        candidates = candidates[:30]
+        candidates = candidates[:50]
         flops = []
         len_info = []
         for c in candidates:
-          llm_len = [small_input_ids[i] for i in c]
-          vit_len = [small_image_len[i] for i in c]
+          llm_len = [raw_input_ids[i] for i in c]
+          vit_len = [raw_image_len[i] for i in c]
           len_info.append((llm_len, vit_len))
           flops.append(balance.llm_flops(llm_len))
           flops.append(balance.vit_flops(vit_len))
@@ -3137,13 +3138,15 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         t6 = time.perf_counter()
         selected = balance.find_global(all_local)
         print(f"rank={dist.get_rank()} local_best={local_best}, all_local={all_local}, global_best={selected}")
+        local_selected = selected[dist.get_rank()]
         found = -1
         for i in range(0, len(flops) // 2, 2):
-            if flops[2*i] == selected[0] and f[2*i+1] == selected[1]:
+            if flops[2*i] == local_selected[0] and f[2*i+1] == local_selected[1]:
                 found = i
                 break
         assert found >= 0
-        selected_index = [sampling_index[i] for i in candidates[found]]
+        # selected_index = [sampling_index[i] for i in candidates[found]]
+        selected_index = candidates[found]
         selectd_llm = [raw_input_ids[i] for i in selected_index]
         selectd_vit = [raw_image_len[i] for i in selected_index]
         t7 = time.perf_counter()
