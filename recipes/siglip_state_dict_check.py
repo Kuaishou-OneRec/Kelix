@@ -1,3 +1,12 @@
+import torch
+import safetensors
+from PIL import Image
+from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
+from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitPretrainedModel
+from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip
+from recovlm.models.qwen_3_vl_2.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
+
+
 saved_state_dict1 = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth")
 
 
