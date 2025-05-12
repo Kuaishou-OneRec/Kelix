@@ -17,7 +17,7 @@ def sampling(input_ids_len, target_size=200, n_bins=20):
         in_bin = input_ids_len[(input_ids_len >= bounds[i]) & (input_ids_len < bounds[i+1])]
         sampled.extend(np.random.choice(in_bin, sample_counts[i], replace=False))
     
-    return np.input_ids_lenay(sampled).tolist()
+    return np.array(sampled).tolist()
 
 
 def greedy_subsets_nearst_sum(nums, N):
