@@ -889,16 +889,21 @@ class Qwen3Attention(nn.Module):
             else:
                 cu_seqlens = torch.tensor([0,29], dtype=torch.int32, device=query_states.device)
                 max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-                attn_output,attention_weights = flash_attn_varlen_func(query_states, 
-                                                                        key_states, 
-                                                                        value_states, 
+                query_state = query_states.squeeze(0)
+                key_state = key_states.squeeze(0)
+                value_state = value_states.squeeze(0)
+                attn_output,attention_weights = flash_attn_varlen_func(query_state, 
+                                                                        key_state, 
+                                                                        value_state, 
                                                                         cu_seqlens, 
                                                                         cu_seqlens, 
                                                                         max_seqlen, 
                                                                         max_seqlen,
                                                                         dropout_p=0.0 if not self.training else self.attention_dropout,
                                                                         softmax_scale=self.scaling
-                                                                        )
+                                                                       )
+                attn_output = attn_output.unsqueeze(0)
+                attn_weights = attention_weights.unsqueeze(0)
         else:
             attn_output, attn_weights = attention_interface(
                 self,
