@@ -72,5 +72,9 @@ def main():
         print("================================================")
         closecnt += 1 
   print(closecnt)
+  for key in pt3.keys():
+    print(key)
+    print(pt3[key].shape)
+    print("================================================")
 if __name__ == "__main__":
   main()
