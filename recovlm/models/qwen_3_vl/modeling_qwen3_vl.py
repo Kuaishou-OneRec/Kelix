@@ -887,7 +887,7 @@ class Qwen3Attention(nn.Module):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
-                cu_seqlens = [0,29]
+                cu_seqlens = torch.tensor([0,29]).to(query_states.device).dtype(torch.int32)
                 max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
                 attn_output = flash_attn_varlen_func(query_states, key_states, value_states, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
                 seq_length, -1
