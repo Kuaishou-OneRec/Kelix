@@ -273,7 +273,7 @@ def debug_model_inference(model):
     logits = output.logits
     # Convert BFloat16 tensor to float32 before numpy conversion
     logits_np = logits.detach().cpu().float().numpy().tolist()
-    json.dump(logits_np, open("logits1.json", "w"))
+    json.dump(logits_np, open("logits3.json", "w"))
 
     #print_rank_0(output)
     
