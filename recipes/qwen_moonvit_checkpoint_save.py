@@ -1,5 +1,5 @@
 import torch
-from torch import set_default_dtype
+from recovlm.training.common import set_default_dtype
 from PIL import Image
 from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
 from qwen_vl_utils import process_vision_info
