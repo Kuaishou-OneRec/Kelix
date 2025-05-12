@@ -3100,7 +3100,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       if len(buffer) == buffer_size:
         raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
         raw_image_len = [data["pixel_values"].size(0) for data in buffer]
-        print(f"[rank={dist.get_rank()}] raw_input_ids_len={sorted(raw_input_ids)}, raw_image_len={sorted(raw_image_len)}")
+        if dist.get_rank() == 0:
+          print(f"[rank={dist.get_rank()}] raw_input_ids_len={sorted(raw_input_ids)}, raw_image_len={sorted(raw_image_len)}")
 
         t1 = time.perf_counter()
         small_input_ids = balance.sampling(raw_input_ids, 200)

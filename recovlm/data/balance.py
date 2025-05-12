@@ -1,6 +1,7 @@
 import numpy as np
 import time
 import math
+import bisect
 
 def sampling(input_ids_len, target_size=200, n_bins=20):
     input_ids_len = np.array(input_ids_len, dtype=np.int64)
