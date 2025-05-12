@@ -40,7 +40,7 @@ def main():
           if "vision_model" in key:
               pt1[key] = f.get_tensor(key)
   pt2 = {}
-  for i in range(1, 5):
+  for i in range(1, 6):
       with safe_open("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base/model-0000" + str(i) + "-of-00005.safetensors", framework="pt", device="cpu") as f:
           for key in f.keys():
               pt2[key] = f.get_tensor(key)
