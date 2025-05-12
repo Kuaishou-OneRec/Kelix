@@ -194,6 +194,7 @@ def debug_model_inference(model):
 
     inputs = inputs.to(torch.cuda.current_device())
     model = model.to(torch.cuda.current_device())
+    model = model.float()
 
 
     print_input_info({
