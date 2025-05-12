@@ -44,7 +44,7 @@ def main():
       with safe_open("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base/model-0000" + str(i) + "-of-00005.safetensors", framework="pt", device="cpu") as f:
           for key in f.keys():
               pt2[key] = f.get_tensor(key)
-
+  print(pt2.keys())
   print('lalallalalallal')
   for key in pt1.keys():
     keypt2 = "visual." + key
@@ -72,9 +72,9 @@ def main():
         print("================================================")
         closecnt += 1 
   print(closecnt)
-  for key in pt3.keys():
-    print(key)
-    print(pt3[key].shape)
-    print("================================================")
+  # for key in pt3.keys():
+  #   print(key)
+  #   print(pt3[key].shape)
+  #   print("================================================")
 if __name__ == "__main__":
   main()
