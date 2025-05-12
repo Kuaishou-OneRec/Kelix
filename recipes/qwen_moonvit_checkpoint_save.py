@@ -59,42 +59,42 @@ if __name__ == "__main__":
             keys_to_remove.append(key)
     
     # Remove the keys after iteration
-    for key in keys_to_remove:
-        del visual_state_dict[key]
+    # for key in keys_to_remove:
+    #     del visual_state_dict[key]
         
-    for key, value in visual_state_dict.items():
-        print(key, value.shape, value.dtype)
+    # for key, value in visual_state_dict.items():
+    #     print(key, value.shape, value.dtype)
 
-    model.visual.load_state_dict(visual_state_dict, strict=False)
-    dict_state = model.state_dict()
-    save_model_state(dict_state)
+    # model.visual.load_state_dict(visual_state_dict, strict=False)
+    # dict_state = model.state_dict()
+    # save_model_state(dict_state)
 
-    loaded_model = load_model_state()
-    # Check if the visual parameters in loaded_model match those in visual_state_dict
-    matched_count = 0
-    mismatched_count = 0
-    model_state_dict = loaded_model.state_dict()
-    for key, value in loaded_model.named_parameters():
-        if 'visual' in key:
-            if key not in visual_state_dict:
-                key = key.replace('visual.', '')
-                if key not in visual_state_dict:
-                    print(f"Warning: Key {key} not found in visual_state_dict")
-                    continue
+    # loaded_model = load_model_state()
+    # # Check if the visual parameters in loaded_model match those in visual_state_dict
+    # matched_count = 0
+    # mismatched_count = 0
+    # model_state_dict = loaded_model.state_dict()
+    # for key, value in loaded_model.named_parameters():
+    #     if 'visual' in key:
+    #         if key not in visual_state_dict:
+    #             key = key.replace('visual.', '')
+    #             if key not in visual_state_dict:
+    #                 print(f"Warning: Key {key} not found in visual_state_dict")
+    #                 continue
                 
-            is_equal = torch.allclose(value.float(), visual_state_dict[key].float(), rtol=1e-5, atol=1e-5)
-            if is_equal:
-                matched_count += 1
-            else:
-                mismatched_count += 1
-                diff = torch.abs(value.float() - visual_state_dict[key].float())
-                print(f"  Max difference: {diff.max().item():.6f}")
-                print(f"  Mean difference: {diff.mean().item():.6f}")
+    #         is_equal = torch.allclose(value.float(), visual_state_dict[key].float(), rtol=1e-5, atol=1e-5)
+    #         if is_equal:
+    #             matched_count += 1
+    #         else:
+    #             mismatched_count += 1
+    #             diff = torch.abs(value.float() - visual_state_dict[key].float())
+    #             print(f"  Max difference: {diff.max().item():.6f}")
+    #             print(f"  Mean difference: {diff.mean().item():.6f}")
 
-    print(f"\nSummary: {matched_count} parameters match, {mismatched_count} parameters differ")
+    # print(f"\nSummary: {matched_count} parameters match, {mismatched_count} parameters differ")
     
-    # Compare parameters between original model and saved state dict
-    print("\nComparing original model with saved state dict:")
+    # # Compare parameters between original model and saved state dict
+    # print("\nComparing original model with saved state dict:")
     with set_default_dtype(torch.float32):
         original_model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
             "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
