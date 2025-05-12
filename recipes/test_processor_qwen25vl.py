@@ -19,6 +19,7 @@ inputs = processor(
     return_tensors="pt",
 )
 print(inputs)
+print("=============================")
+inputs_text = processor.tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)
 
-
-
+print(inputs_text)

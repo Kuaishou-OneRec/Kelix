@@ -19,3 +19,6 @@ text = tokenizer.apply_chat_template(
 )
 model_inputs = tokenizer([text], return_tensors="pt")
 print(model_inputs)
+print("=============================")
+input_text = tokenizer.decode(model_inputs["input_ids"][0], skip_special_tokens=True)
+print(input_text)
