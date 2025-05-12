@@ -57,7 +57,10 @@ def main():
   os.makedirs(outputdir, exist_ok=True)
   #merge pt1 and pt2
   save_file(pt2, outputdir + "/model.safetensors",metadata={"format": "pt"})
-  pt3 = torch.load("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip/model.safetensors")
+  pt3 = {}
+  with safe_open(outputdir + "/model.safetensors", framework="pt", device="cpu") as f:
+    for key in f.keys():
+      pt3[key] = f.get_tensor(key)
   closecnt =0 
   for key in pt3.keys():
     if key in pt2.keys():
