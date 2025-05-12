@@ -3136,6 +3136,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         dist.all_gather_object(all_local, local_best_flat)
         t6 = time.perf_counter()
         selected = balance.find_global(all_local)
+        print(f"rank={dist.get_rank()} local_best={local_best}, all_local={all_local}, global_best={selected}")
         found = -1
         for i in range(0, len(flops) // 2, 2):
             if flops[2*i] == selected[0] and f[2*i+1] == selected[1]:
