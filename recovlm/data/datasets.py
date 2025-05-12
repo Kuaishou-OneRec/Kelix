@@ -3142,7 +3142,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         local_selected = selected[dist.get_rank()]
         found = -1
         for i in range(0, len(flops) // 2, 2):
-            if math.isclose(flops[2*i], local_selected[0]) and math.isclose(flops[2*i+1], local_selected[1]):
+            if math.isclose(flops[2*i], local_selected[0], rel_tol=1e-6) and math.isclose(flops[2*i+1], local_selected[1], rel_tol=1e-6):
                 found = i
                 break
         if found == -1:
