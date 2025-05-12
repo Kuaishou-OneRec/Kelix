@@ -3139,14 +3139,14 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         t6 = time.perf_counter()
         selected = balance.find_global(all_local)
         print(f"rank={dist.get_rank()} local_best={local_best}, all_local={all_local}, global_best={selected}")
-        local_selected = selected[dist.get_rank()]
+        target = selected[dist.get_rank()]
         found = -1
-        for i in range(0, len(flops) // 2, 2):
-            if math.isclose(flops[2*i], local_selected[0], rel_tol=1e-6) and math.isclose(flops[2*i+1], local_selected[1], rel_tol=1e-6):
+        for i in range(0, len(flops), 2):
+            if math.isclose(flops[i], target[0], abs_tol=1e-6) and math.isclose(flops[i+1], target[1], abs_tol=1e-6):
                 found = i
                 break
         if found == -1:
-            print(f"not_found rank={dist.get_rank()}, flops={flops}, sel={local_selected}")
+            print(f"not_found rank={dist.get_rank()}, flops={flops}, sel={target}")
         assert found >= 0
         # selected_index = [sampling_index[i] for i in candidates[found]]
         selected_index = candidates[found]
