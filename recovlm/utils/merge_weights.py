@@ -33,9 +33,9 @@ def main():
   with safe_open("/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384/model.safetensors", framework="pt", device="cpu") as f:
       for key in f.keys():
           if "packing" in key:
-              print(key)
-              print(f.get_tensor(key).shape)
-              print("================================================")
+              # print(key)
+              # print(f.get_tensor(key).shape)
+              # print("================================================")
               continue
           if "vision_model" in key:
               pt1[key] = f.get_tensor(key)
@@ -50,9 +50,9 @@ def main():
     keypt2 = "visual." + key
     pt2[keypt2] = pt1[key]
   for key in pt2.keys():
-    print(key)
-    print(pt2[key].shape)
-    print("================================================")
+    # print(key)
+    # print(pt2[key].shape)
+    # print("================================================")
   outputdir = "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip"
   os.makedirs(outputdir, exist_ok=True)
   #merge pt1 and pt2
