@@ -1,4 +1,3 @@
-from recovlm.models.qwen_3_vl_2.processing_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip
 from recovlm.models.qwen_3_vl_2.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
 from transformers.models.qwen3.modeling_qwen3 import Qwen3Model
 import json
