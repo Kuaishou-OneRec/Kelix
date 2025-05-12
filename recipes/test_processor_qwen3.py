@@ -18,3 +18,4 @@ text = tokenizer.apply_chat_template(
     enable_thinking=True # Switches between thinking and non-thinking modes. Default is True.
 )
 model_inputs = tokenizer([text], return_tensors="pt")
+print(model_inputs)
