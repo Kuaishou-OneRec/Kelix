@@ -1,10 +1,12 @@
 from recovlm.models.qwen_3_vl_2.processing_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip
 from recovlm.models.qwen_3_vl_2.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
+from transformers.models.qwen3.modeling_qwen3 import Qwen3Model
 import json
 # load the tokenizer and the model
-MODEL_DIR="/llm_reco_ssd/zhouyang12/models/msy_Qwen3vl-8B-Base"
-processor = Qwen2_5_VLProcessor_siglip.from_pretrained(MODEL_DIR)
-model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
+MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen3vl-8B-Base"
+processor_dir = '"/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip"'
+processor = Qwen2_5_VLProcessor_siglip.from_pretrained(processor_dir)
+model = Qwen3Model.from_pretrained(
     MODEL_DIR,
     torch_dtype="auto",
     device_map="auto"
@@ -35,6 +37,3 @@ output = model(**inputs)
 
 logits = output.logits
 print(logits)
-# Convert BFloat16 tensor to float32 before numpy conversion
-logits_np = logits.detach().cpu().float().numpy().tolist()
-json.dump(logits_np, open("logits2.json", "w"))
