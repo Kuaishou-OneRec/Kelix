@@ -13,15 +13,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from transformers.utils import _LazyModule
-from transformers.utils import define_import_structure
 
 
+TYPE_CHECKING = True
 if TYPE_CHECKING:
     from .configuration_qwen3 import *
     from .modeling_qwen3 import *
 else:
     import sys
+    from transformers.utils import _LazyModule
+    from transformers.utils import define_import_structure
 
     _file = globals()["__file__"]
     sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
