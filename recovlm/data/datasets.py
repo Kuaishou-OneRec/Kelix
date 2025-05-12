@@ -3141,7 +3141,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         local_selected = selected[dist.get_rank()]
         found = -1
         for i in range(0, len(flops) // 2, 2):
-            if flops[2*i] == local_selected[0] and f[2*i+1] == local_selected[1]:
+            if flops[2*i] == local_selected[0] and flops[2*i+1] == local_selected[1]:
                 found = i
                 break
         assert found >= 0
