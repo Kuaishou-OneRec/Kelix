@@ -113,6 +113,7 @@ def find_global(flops_list):
         local_diff = flops_diff(max(local, key=lambda x: x[0]), min(local, key=lambda x: x[0]))
         if local_diff < min_diff:
             best = local
+            min_diff = local_diff
     return best
 
 
