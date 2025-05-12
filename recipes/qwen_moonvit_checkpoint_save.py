@@ -100,7 +100,7 @@ if __name__ == "__main__":
             "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
             ignore_mismatched_sizes=True
         )
-        saved_state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth")
+        saved_state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict_2.pth")
         # Ensure saved state dict is in float32
         saved_state_dict = {k: v.float() for k, v in saved_state_dict.items()}
     
