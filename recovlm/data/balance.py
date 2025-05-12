@@ -39,7 +39,7 @@ def greedy_subsets_nearst_sum(nums, N):
             subsets.append([idx])
             sum_dict[len(subsets) - 1] = num
     
-    return subsets, sum_dict
+    return subsets 
 
 
 def llm_flops(seq_list):
@@ -86,7 +86,7 @@ def select_by_flops(all_flops, rank):
                     diff = d
         return best 
 
-    current = all_flops[rank]
+    current = flops_pair[rank]
     result = None
     min_diff = 1e12
     for p in current:
@@ -130,7 +130,7 @@ if __name__ == '__main__':
     
     
     t1 = time.perf_counter()
-    found, _ = greedy_subsets_nearst_sum(data, 21000)
+    found = greedy_subsets_nearst_sum(data, 21000)
     t2 = time.perf_counter()
     
     from prettytable import PrettyTable
