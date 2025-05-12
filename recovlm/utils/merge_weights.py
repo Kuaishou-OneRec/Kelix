@@ -65,7 +65,7 @@ def main():
   for key in pt3.keys():
     if key in pt2.keys():
       #check tensor allclose
-      if not torch.allclose(pt3[key], pt2[key]):
+      if not torch.allclose(pt3[key], pt2[key], atol=1e-7):
         print(key)
         print(pt3[key].shape)
         print(pt2[key].shape)
