@@ -1,4 +1,3 @@
-
 import torch
 from PIL import Image
 from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
@@ -8,34 +7,40 @@ from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditio
 from recovlm.models.qwen_3_vl_2.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
 
 def save_model_state(dict_state):
-    torch.save(dict_state, "/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth")
+    # Ensure all tensors are in float32 before saving
+    float32_state = {k: v.float() for k, v in dict_state.items()}
+    with set_default_dtype(torch.float32):
+        torch.save(float32_state, "/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict_2.pth")
 
 # 加载模型状态的示例代码
 def load_model_state():
     # 1. 首先初始化一个模型实例
-    loaded_model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
-        "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
-        _attn_implementation="flash_attention_2",
-        ignore_mismatched_sizes=True
-    )
-    # 2. 加载保存的state dict
-    state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth")
+    with set_default_dtype(torch.float32):
+        loaded_model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
+            "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
+            _attn_implementation="flash_attention_2",
+            ignore_mismatched_sizes=True
+        )
+        # 2. 加载保存的state dict
+        state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict_2.pth")
+        # Ensure loaded state dict is in float32
+        state_dict = {k: v.float() for k, v in state_dict.items()}
     
     # 3. 将state dict加载到模型中
     print('=================================')
     loaded_model.load_state_dict(state_dict)
     for key, value in loaded_model.named_parameters():
-        print(key, value.shape) 
+        print(key, value.shape, value.dtype) 
     print('=================================')   
     
     return loaded_model 
 
-
 if __name__ == "__main__":
-
-    model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
-      "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",ignore_mismatched_sizes=True
-    )
+    with set_default_dtype(torch.float32):
+        model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
+          "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
+          ignore_mismatched_sizes=True
+        )
     from safetensors import safe_open
 
     with safe_open("/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384/model.safetensors", framework="pt", device="cpu") as f:
@@ -43,7 +48,8 @@ if __name__ == "__main__":
         for key in f.keys():
             if "packing" in key:
                 continue
-            pt[key] = f.get_tensor(key)
+            # Ensure loaded tensors are in float32
+            pt[key] = f.get_tensor(key).float()
     visual_state_dict = pt
     # Create a list of keys to iterate over
     keys_to_remove = []
@@ -56,13 +62,11 @@ if __name__ == "__main__":
         del visual_state_dict[key]
         
     for key, value in visual_state_dict.items():
-        print(key, value.shape)
+        print(key, value.shape, value.dtype)
 
-    model.visual.load_state_dict(visual_state_dict,strict=False)
+    model.visual.load_state_dict(visual_state_dict, strict=False)
     dict_state = model.state_dict()
     save_model_state(dict_state)
-
-
 
     loaded_model = load_model_state()
     # Check if the visual parameters in loaded_model match those in visual_state_dict
@@ -77,41 +81,40 @@ if __name__ == "__main__":
                     print(f"Warning: Key {key} not found in visual_state_dict")
                     continue
                 
-            is_equal = torch.allclose(value, visual_state_dict[key], rtol=1e-5, atol=1e-5)
+            is_equal = torch.allclose(value.float(), visual_state_dict[key].float(), rtol=1e-5, atol=1e-5)
             if is_equal:
                 matched_count += 1
-                # print(f"✓ {key}: Parameters match")
             else:
                 mismatched_count += 1
-                # print(f"✗ {key}: Parameters differ")
-                # Calculate and print the difference statistics
-                diff = torch.abs(value - visual_state_dict[key])
-                # print(f"  Max difference: {diff.max().item():.6f}")
-                # print(f"  Mean difference: {diff.mean().item():.6f}")
-
+                diff = torch.abs(value.float() - visual_state_dict[key].float())
+                print(f"  Max difference: {diff.max().item():.6f}")
+                print(f"  Mean difference: {diff.mean().item():.6f}")
 
     print(f"\nSummary: {matched_count} parameters match, {mismatched_count} parameters differ")
     
     # Compare parameters between original model and saved state dict
     print("\nComparing original model with saved state dict:")
-    original_model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
-        "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
-        ignore_mismatched_sizes=True
-    )
-    saved_state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth")
+    with set_default_dtype(torch.float32):
+        original_model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
+            "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
+            ignore_mismatched_sizes=True
+        )
+        saved_state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth")
+        # Ensure saved state dict is in float32
+        saved_state_dict = {k: v.float() for k, v in saved_state_dict.items()}
     
     orig_matched = 0
     orig_mismatched = 0
     for key, value in original_model.named_parameters():
         if key in saved_state_dict:
-            is_equal = torch.allclose(value, saved_state_dict[key], rtol=1e-5, atol=1e-5)
+            is_equal = torch.allclose(value.float(), saved_state_dict[key].float(), rtol=1e-5, atol=1e-5)
             if is_equal:
                 orig_matched += 1
                 print(f"✓ {key}: Parameters match")
             else:
                 orig_mismatched += 1
                 print(f"✗ {key}: Parameters differ")
-                diff = torch.abs(value - saved_state_dict[key])
+                diff = torch.abs(value.float() - saved_state_dict[key].float())
                 print(f"  Max difference: {diff.max().item():.6f}")
                 print(f"  Mean difference: {diff.mean().item():.6f}")
         else:
