@@ -842,7 +842,8 @@ class Qwen2_5_VLAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-
+        self.q_norm = Qwen2RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = Qwen2RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
         self.rotary_emb = Qwen2_5_VLRotaryEmbedding(config=config)
 
     def forward(
@@ -858,12 +859,12 @@ class Qwen2_5_VLAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
+        query_states = self.q_norm(self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
+        key_states = self.k_norm(self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
