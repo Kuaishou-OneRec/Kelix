@@ -1223,12 +1223,18 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
             **kwargs
         )
         hidden_states = residual + hidden_states
+        print("=============================")
+        print_rank_0("qwen2_5_vl_decoder_layer_hidden_states", hidden_states)
+        print("=============================")
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
+        print("=============================")
+        print_rank_0("qwen2_5_vl_decoder_layer_hidden_states_2", hidden_states)
+        print("=============================")
 
         outputs = (hidden_states,)
 
@@ -1325,7 +1331,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-
+        print("=============================")
+        print_rank_0("qwen2_5_vl_model_hidden_states", hidden_states)
+        print("=============================")
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -1383,6 +1391,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
+        print("=============================")
+        print_rank_0("qwen2_5_vl_model_hidden_states_2", hidden_states)
+        print("=============================")
 
         # add hidden states from the last decoder layer
         if output_hidden_states:

@@ -159,20 +159,19 @@ if dist.get_rank() == 0:
 dist.barrier()
 
 # Load model in meta mode to avoid OOM during initialization
-with set_default_dtype(torch.float32):#, torch.device("meta"):
+with set_default_dtype(torch.float32), torch.device("meta"):
     model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
         MODEL_DIR,
         _attn_implementation="flash_attention_2",
         use_cache=False
     )
+    state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict_2.pth", weights_only=True)
+    model.load_state_dict(state_dict)
 
-    # state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict_2.pth", weights_only=True)
-    # model.load_state_dict(state_dict)
+device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
 
-# device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
-
-# for tensor in itertools.chain(model.parameters(), model.buffers()):
-#     assert tensor.device == torch.device("meta")
+for tensor in itertools.chain(model.parameters(), model.buffers()):
+    assert tensor.device == torch.device("meta")
 
 model = model.float()
 shard_model(
@@ -186,7 +185,7 @@ shard_model(
     fp32_reduce=True
 )
 dist.barrier()
-# load_from_full_model_state_dict(model=model, full_sd=state_dict)
+load_from_full_model_state_dict(model=model, full_sd=state_dict)
 
 with torch.device(torch.cuda.current_device()):
     for m in model.modules():
@@ -274,7 +273,7 @@ def debug_model_inference(model):
     logits = output.logits
     # Convert BFloat16 tensor to float32 before numpy conversion
     logits_np = logits.detach().cpu().float().numpy().tolist()
-    json.dump(logits_np, open("logits3.json", "w"))
+    json.dump(logits_np, open("logits1.json", "w"))
 
     #print_rank_0(output)
     
