@@ -3,7 +3,7 @@ from transformers.models.qwen3.modeling_qwen3 import Qwen3Model
 import json
 # load the tokenizer and the model
 MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen3-8B/Qwen3-8B"
-processor_dir = '"/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip"'
+processor_dir = '/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip'
 processor = Qwen2_5_VLProcessor_siglip.from_pretrained(processor_dir)
 model = Qwen3Model.from_pretrained(
     MODEL_DIR,

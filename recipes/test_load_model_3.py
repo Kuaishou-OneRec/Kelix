@@ -144,7 +144,7 @@ torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world
 
 initialize_model_parallel(1)
 
-MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip"
+MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip"
 # MODEL_DIR="/llm_reco/lingzhixin/output2/RecoVLM-dev/Qwen2-VL-7B-run_sft_7B_fsdp_sp/0.0.5/_1000/global_step_1000_torch_ckpt/"
 
 
@@ -170,7 +170,7 @@ with set_default_dtype(torch.bfloat16):
 
 def debug_model_inference(model):
     # processor = Qwen2VLProcessor.from_pretrained(MODEL_DIR)
-    MODEL_DIR2="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip"
+    MODEL_DIR2="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip"
     processor = Qwen2_5_VLProcessor_siglip.from_pretrained(MODEL_DIR2)
     messages = [
         {
@@ -202,20 +202,22 @@ def debug_model_inference(model):
     })
     print_rank_0("=" * 100)
 
-    output = model(**inputs); 
+    output = model(**inputs)
+
     logits = output.logits
+    print(logits)
     # Convert BFloat16 tensor to float32 before numpy conversion
     logits_np = logits.detach().cpu().float().numpy().tolist()
     json.dump(logits_np, open("logits1.json", "w"))
-    generated_ids = model.generate(**inputs, max_new_tokens=128)
-    generated_ids_trimmed = [
-        out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-    ]
-    output_text = processor.batch_decode(
-        generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    )
-    print_rank_0(output_text)
-    #print_rank_0(output)
+    # generated_ids = model.generate(**inputs, max_new_tokens=128)
+    # generated_ids_trimmed = [
+    #     out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
+    # ]
+    # output_text = processor.batch_decode(
+    #     generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
+    # )
+    # print_rank_0(output_text)
+    # #print_rank_0(output)
     
     exit()
     generation_config = GenerationConfig(
