@@ -70,6 +70,17 @@ def main():
   for key in pt2.keys():
     assert key in pt3.keys()
     assert pt2[key].shape == pt3[key].shape
+  for key in pt3.keys():
+    if key in pt2.keys():
+      print(key)
+      print(pt3[key].shape)
+      print(pt2[key].shape)
+      print("================================================")
+    else:
+      print('not in pt2')
+      print(key)
+      print(pt3[key].shape)
+      print("================================================")
   print("all close")
 if __name__ == "__main__":
   main()
