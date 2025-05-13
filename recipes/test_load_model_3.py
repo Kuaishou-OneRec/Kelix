@@ -162,6 +162,7 @@ dist.barrier()
 with set_default_dtype(torch.bfloat16):
     model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
         MODEL_DIR,
+        _attn_implementation = 'flash_attention_2',
         use_cache=False
     )
 
