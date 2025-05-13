@@ -3044,14 +3044,13 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         all_flops = []
         for per_worker_infos in all_infos:
           all_flops.append([(info[-2], info[-1]) for info in per_worker_infos])
-        if dist.get_rank() == 0:
-            print(f"all_infos: {all_infos}")
-            print(f"all_flops: {all_flops}")
         local_best = balance.select_by_flops(all_flops, dist.get_rank())
         t5 = time.perf_counter()
         all_local = [None] * dist.get_world_size()
         dist.all_gather_object(all_local, [local_best])
         t6 = time.perf_counter()
+        if dist.get_rank() == 0:
+          print(f"all_local: {all_local}")
         selected = balance.find_global(all_local)
         # print(f"rank={dist.get_rank()} local_best={local_best}, all_local={all_local}, global_best={selected}")
 
