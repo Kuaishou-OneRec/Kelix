@@ -3047,7 +3047,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         local_best = balance.select_by_flops(all_flops, dist.get_rank())
         t5 = time.perf_counter()
         all_local = [None] * dist.get_world_size()
-        dist.all_gather_object(all_local, [local_best])
+        dist.all_gather_object(all_local, local_best)
         t6 = time.perf_counter()
         if dist.get_rank() == 0:
           print(f"all_local: {all_local}")
