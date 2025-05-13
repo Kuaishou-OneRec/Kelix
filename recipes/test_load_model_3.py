@@ -1,5 +1,5 @@
-from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip
-from recovlm.models.qwen_3_vl_2.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
+from recovlm.models.qwen3_siglip.modeling_qwen3_siglip import Qwen3SiglipForConditionalGeneration_navit
+from recovlm.models.qwen3_siglip.processing_qwen3_siglip import Qwen3SiglipProcessor_siglip
 from typing import Dict, Any, Union, Optional
 
 import contextlib
@@ -160,7 +160,7 @@ dist.barrier()
 
 # Load model in meta mode to avoid OOM during initialization
 with set_default_dtype(torch.bfloat16):
-    model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
+    model = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
         MODEL_DIR,
         _attn_implementation = 'flash_attention_2',
         use_cache=False
@@ -172,7 +172,7 @@ with set_default_dtype(torch.bfloat16):
 def debug_model_inference(model):
     # processor = Qwen2VLProcessor.from_pretrained(MODEL_DIR)
     MODEL_DIR2="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip"
-    processor = Qwen2_5_VLProcessor_siglip.from_pretrained(MODEL_DIR2)
+    processor = Qwen3SiglipProcessor_siglip.from_pretrained(MODEL_DIR2)
     messages = [
         {
             "role": "user",
@@ -207,8 +207,8 @@ def debug_model_inference(model):
     logits = output.logits
     print_rank_0(logits)
     # Convert BFloat16 tensor to float32 before numpy conversion
-    logits_np = logits.detach().cpu().float().numpy().tolist()
-    json.dump(logits_np, open("logits8B-siglip.json", "w"))
+    # logits_np = logits.detach().cpu().float().numpy().tolist()
+    # json.dump(logits_np, open("logits8B-siglip.json", "w"))
     # generated_ids = model.generate(**inputs, max_new_tokens=128)
     # generated_ids_trimmed = [
     #     out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
