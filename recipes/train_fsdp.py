@@ -15,6 +15,7 @@ import itertools
 import contextlib
 import multiprocessing as mp
 import psutil
+import threading
 from functools import partial
 
 
@@ -846,6 +847,73 @@ def train():
   ticker = TimeTracker(n=args.logging_per_step)
   iter_ticker = TimeTracker(n=args.logging_per_step)
   token_stasts = TokenStats()
+
+  gpu_batch_q = queue.Queue(maxsize=1)
+  def prefetch_to_gpu(input_q, output_q):
+    while True:
+      try:
+        batch = input_q.get()
+        to_cuda(batch)
+        output_q.put(batch)
+      except StopIteration:
+        break
+
+  prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(batch_queue, gpu_batch_q), daemon=True)
+  prefetch_t.start()
+
+  tb_metrics_q = queue.Queue(maxsize=8)
+  def write_tb_async(tb_writer, metrics_queue, grad_acc_steps):
+    while True:
+      metrics = metrics_queue.get()
+      global_step, log_dict, ticker_stats, ds_loss, ds_tokens, ds_samples = metrics_queue.get()
+      total_num_samples = log_dict["perf/total_num_samples"]
+      total_num_valid_tokens = log_dict["perf/valid_total_num_tokens"]
+      for name, data in log_dict.items():
+        if data is not None and tb_writer:
+          tb_writer.add_scalar(
+              name,
+              data,
+              global_step=global_step,
+              new_style=True)
+
+          # log metric by valid tokens
+          if name.startswith("training/"):
+            tb_writer.add_scalar(
+              f"x_token_{name}",
+              data,
+              global_step=total_num_valid_tokens / grad_acc_steps,
+              new_style=True
+            )
+
+      for name, data in ticker_stats.items():
+        tb_writer.add_scalar(f"ticker/{name}", data, global_step=global_step, new_style=True)
+
+      for key, loss_sum in ds_loss.items():
+        tb_writer.add_scalar(
+              f"data_source_loss/{key}",
+              loss_sum / (ds_tokens[key] + 1e-6) ,
+              global_step=global_step,
+              new_style=True)
+
+      for key, samples in ds_samples.items():
+        tb_writer.add_scalar(
+            f"data_source_sample_ratio/{key}",
+            1.0 * samples / total_num_samples,
+            global_step=global_step,
+            new_style=True)
+
+      for key, num_tokens in ds_tokens.items():
+        tb_writer.add_scalar(
+            f"data_source_token_ratio/{key}",
+            1.0 * num_tokens / total_num_valid_tokens,
+            global_step=global_step,
+            new_style=True)
+
+  if dist.get_rank() == 0:
+    tb_writer_t = threading.Thread(target=write_tb_async, args=(tb_writer, tb_metrics_q, args.gradient_accumulation_steps), daemon=True)
+    tb_writer_t.start()
+              
+
   while True:
     ticker.tick("while_True")
     with contextlib.ExitStack() as ctx:
@@ -887,30 +955,14 @@ def train():
 
 
       # 打印 token 数量
-      token_count = input_ids.numel()  # 计算 token 数量
-      print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
-      num_tokens = token_count
-      num_samples = (sample_idx.max() + 1).sum()
-      num_image_tokens = pixel_values.shape[0] * 256 if args.model_class == "InternVLChatModel" else 0
+      print_rank_0(f"Iteration {micro_step}: Token count = {batch['num_tokens']}")
       
       num_image_tokens2 = (input_ids == 151667).sum().item()
           
-      # num_tokens - (sample_idx == -1).sum()
-      num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
-      token_metrics = torch.tensor(
-        [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda(non_blocking=True)
-
-      
-
-      ticker.tick("token_metrics_init")
-      
-      dist.all_reduce(
-        token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-
-      ticker.tick("token_metrics_reduce")
-
-      num_tokens, num_samples, num_valid_tokens, num_image_tokens = token_metrics.detach().cpu().numpy()
-      ticker.tick("token_metrics.detach().cpu().numpy()")
+      num_tokens = batch.get("num_tokens", 0)
+      num_samples = batch.get("num_samples", 0)
+      num_valid_tokens = batch.get("num_valid_tokens", 0)
+      num_image_tokens = batch.get("num_image_tokens", 0)
       t2 = time.perf_counter()
 
       total_num_samples += num_samples
@@ -1065,61 +1117,20 @@ def train():
           log_dict.update(colleced_token_stasts)
           ticker.tick(f"log_dict*{log_acc_step}")
 
-
-          
-
-          for name, data in log_dict.items():
-            if data is not None and tb_writer:
-              tb_writer.add_scalar(
-                  name,
-                  data,
-                  global_step=global_step,
-                  new_style=True)
-
-              # log metric by valid tokens
-              if name.startswith("training/"):
-                tb_writer.add_scalar(
-                  f"x_token_{name}",
-                  data,
-                  global_step=total_num_valid_tokens / args.gradient_accumulation_steps,
-                  new_style=True
-                )
-
+          ticker_stats = {}
           for t in [ticker, iter_ticker]:
-            for name, data in t.stat().items():
-              tb_writer.add_scalar(f"ticker/{name}", data, global_step=global_step, new_style=True)
+              ticker_stats.update(t.stat())
+          metrics_info = (global_step, log_dict, ticker_stats, batch_data_source_loss, batch_data_source_tokens)
+          tb_metrics_q.put(metrics_info)
 
-          if args.monitor_datasource_loss and tb_writer:
-            for key, loss_sum in batch_data_source_loss.items():
-              tb_writer.add_scalar(
-                    f"data_source_loss/{key}",
-                    loss_sum / (valid_data_source_tokens[key] + 1e-6) ,
-                    global_step=global_step,
-                    new_style=True)
-
-          if args.monitor_datasource_cnt and tb_writer:
-            for key, samples in total_data_source_samples.items():
-              tb_writer.add_scalar(
-                  f"data_source_sample_ratio/{key}",
-                  1.0 * samples / total_num_samples,
-                  global_step=global_step,
-                  new_style=True)
-
-            for key, num_tokens in total_data_source_tokens.items():
-              tb_writer.add_scalar(
-                  f"data_source_token_ratio/{key}",
-                  1.0 * num_tokens / total_num_valid_tokens,
-                  global_step=global_step,
-                  new_style=True)
-              
-          ticker.tick(f"tb_writer.add_scalar*{log_acc_step}")
+          ticker.tick(f"tb_metrics_q.put")
           print_rank_0(
             f"Step: {global_step}, Loss: {avg_loss}, "
             f"Learning Rate: {learning_rate}, "
             f"Grad Norm: {get_global_grad_norm(model).detach().cpu().item()}, "
             f"Sec per Step: {sec_per_step}",
             format_dict_or_list(log_dict)
-        )        
+          )        
 
           # upload heart_beat to remote
           if args.heartbeat_monitor:

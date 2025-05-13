@@ -3024,38 +3024,61 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         if dist.get_rank() == 0:
           print(f"candidates: {candidates}")
         candidates = candidates[:target_count]
-        flops = []
-        len_info = []
+        info_list = []
         for c in candidates:
           llm_len = [raw_input_ids[i] for i in c]
           vit_len = [raw_image_len[i] for i in c]
-          len_info.append((llm_len, vit_len))
-          flops.append(balance.llm_flops(llm_len))
-          flops.append(balance.vit_flops(vit_len))
+          info = []
+          info.append(len(llm_len)) # sample_num
+          info.append(len(sum(llm_len))) # input_ids_num
+          info.append(len(sum(vit_len))) # image_num
+          info.append(balance.llm_flops(llm_len))
+          info.append(balance.vit_flops(vit_len))
+          info_list.append(info)
         t3 = time.perf_counter()
-        all_flops = [None] * dist.get_world_size()
-        dist.all_gather_object(all_flops, flops)
+        all_infos = [None] * dist.get_world_size()
+        dist.all_gather_object(all_infos, [info_list])
         t4 = time.perf_counter()
-        # print(f"rank={dist.get_rank()} len_info={len_info}, flops={flops}")
         # if dist.get_rank() == 0:
         #   print(f"[rank=0] all_flops: {all_flops}")
+        all_flops = []
+        for per_worker_infos in all_infos:
+          all_flops.append([(info[-2], info[-1]) for info in per_worker_info])
         local_best = balance.select_by_flops(all_flops, dist.get_rank())
         t5 = time.perf_counter()
-        local_best_flat = [v for sub in local_best for v in sub]
         all_local = [None] * dist.get_world_size()
-        dist.all_gather_object(all_local, local_best_flat)
+        dist.all_gather_object(all_local, [local_best])
         t6 = time.perf_counter()
         selected = balance.find_global(all_local)
         # print(f"rank={dist.get_rank()} local_best={local_best}, all_local={all_local}, global_best={selected}")
+
+        def match(info, flops):
+          return math.isclose(info[-2], target[0], abs_tol=1e-6) and math.isclose(info[-1], target[1], abs_tol=1e-6)
+
         target = selected[dist.get_rank()]
         found = -1
-        for i in range(0, len(flops), 2):
-            if math.isclose(flops[i], target[0], abs_tol=1e-6) and math.isclose(flops[i+1], target[1], abs_tol=1e-6):
-                found = i // 2
+        for i, info in enumerate(info_list):
+          if match(info, target)
+            found = i
+            break
+
+        assert found >= 0, f"not_found rank={dist.get_rank()}, flops_info={info_list}, sel={target}"
+        step_info = [0, 0, 0]
+        if dist.get_rank() == 0:
+          num_samples = 0
+          num_tokens = 0
+          num_image_tokens = 0
+          for rank, infos in enumerate(all_infos):
+            target = selected[rank]
+            for info in infos:
+              if match(info, target):
+                num_samples += info[0]
+                num_tokens += info[1]
+                num_images_tokens += info[2] * 1025
                 break
-        if found == -1:
-            print(f"not_found rank={dist.get_rank()}, flops={flops}, sel={target}")
-        assert found >= 0
+          step_info = [num_samples, num_tokens, num_image_tokens]
+          print(f"rank=0, dataset_info: {step_info}")
+
         # selected_index = [sampling_index[i] for i in candidates[found]]
         selected_index = candidates[found]
         selected_llm = [raw_input_ids[i] for i in selected_index]
@@ -3064,7 +3087,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         print(f"[rank={dist.get_rank()}] llm={selected_llm} vit={selected_vit}, llm_flops={balance.llm_flops(selected_llm)}, vit_flops={balance.vit_flops(selected_vit)}, find_sub={t3-t2}, gather1={t4-t3}, balance={t5-t4}, gather2={t6-t5}, other={t7-t6}")
         inputs = [buffer[idx] for idx in selected_index]
         data_source = [source_list[idx] for idx in selected_index]
-        self._balance_buf.put((inputs, data_source))
+        self._balance_buf.put((inputs, data_source, step_info))
 
         buffer = [x for i, x in enumerate(buffer) if i not in selected_index]
         source_list = [x for i, x in enumerate(source_list) if i not in selected_index]
@@ -3072,10 +3095,14 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
   def _packing_task(self):
     while True:
       t1 = time.perf_counter()
-      inputs, data_source = self._balance_buf.get()
+      inputs, data_source, step_info = self._balance_buf.get()
       t2 = time.perf_counter()
       packed_inputs = self._packing(inputs)
       packed_inputs["data_source"] = data_source
+      packed_inputs["num_samples"] = step_info[0]
+      packed_inputs["num_tokens"] = step_info[1]
+      packed_inputs["num_image_tokens"] = step_info[2]
+        
       t3 = time.perf_counter()
       print(f"[rank={dist.get_rank()}] get_balanced={t2-t1} packing={t3-t2}")
       self._result_buf.put(packed_inputs)

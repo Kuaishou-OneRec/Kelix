@@ -70,9 +70,7 @@ def flops_diff(flops1, flops2):
 def select_by_flops(all_flops, rank):
     flops_pair = []
     for flops in all_flops:
-        it = iter(flops)
-        pair = list(zip(it, it))
-        sorted_pair = sorted(pair, key=lambda x : x[0])
+        sorted_pair = sorted(flops, key=lambda x : x[0])
         flops_pair.append(sorted_pair)
 
     def find_best(arr, target):
@@ -108,11 +106,9 @@ def find_global(flops_list):
     best = None
     min_diff = 1e12
     for flops in flops_list:
-        it = iter(flops)
-        local = list(zip(it, it))
-        local_diff = flops_diff(max(local, key=lambda x: x[0]), min(local, key=lambda x: x[0]))
+        local_diff = flops_diff(max(flops, key=lambda x: x[0]), min(flops, key=lambda x: x[0]))
         if local_diff < min_diff:
-            best = local
+            best = flops
             min_diff = local_diff
     return best
 
