@@ -1,5 +1,5 @@
-git config --global user.email 'zangdunju@kuaishou.com'
-git config --global user.name 'zangdunju'
+git config --global user.email 'lingzhixin@kuaishou.com'
+git config --global user.name 'lingzhixin'
 
 email=$(git config --get user.email)
 
@@ -16,6 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct # Pretrained/Base model path
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip/
 OUTPUT_DIR=/llm_reco/lingzhixin/exps/qwen3navit/debug_qwen3navit/0.0.1/
 
 mkdir -p $OUTPUT_DIR
