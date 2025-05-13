@@ -234,7 +234,7 @@ def shard_model(
             fully_shard(m, **fsdp_kwargs)
             num_layers_sharded += 1
     else: 
-        assert model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit', "Qwen2_5_VLForConditionalGeneration_siglip","Qwen3_VLForConditionalGeneration_siglip",'Qwen3']
+        assert model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit', "Qwen2_5_VLForConditionalGeneration_siglip","Qwen3_VLForConditionalGeneration_siglip",'Qwen3_VLForConditionalGeneration_navit']
         layers = []
         for n, m in reversed(list(model.named_modules())):
             if any([shard_condition(n, m) for shard_condition in shard_conditions]):
