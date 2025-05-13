@@ -1247,17 +1247,22 @@ class Qwen2VLImageProcessor_Navit(Qwen2VLImageProcessor_siglip):
         temporal_patch_size: int = 1,
         merge_size: int = 2,
         **kwargs,):
-        super().__init__(**kwargs)
-        self.do_resize = do_resize
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_convert_rgb = do_convert_rgb
-        self.min_pixels = min_pixels
-        self.max_pixels = max_pixels
-        self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
-        self.merge_size = merge_size
+        super().__init__(
+        do_resize,
+        resample,
+        do_rescale,
+        rescale_factor,
+        do_normalize,
+        image_mean,
+        image_std,
+        do_convert_rgb,
+        min_pixels,
+        max_pixels,
+        patch_size,
+        temporal_patch_size,
+        merge_size,
+        **kwargs)
+
+
+
+    
