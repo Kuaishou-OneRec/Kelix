@@ -117,9 +117,21 @@ def smart_resize(
     3. The aspect ratio of the image is maintained as closely as possible.
 
     """
-    if height < factor or width < factor:
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    elif max(height, width) / min(height, width) > 200:
+    #if height < factor or width < factor:
+    #    raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
+    if height < factor:
+        print(f"smart_resize: height={height} < factor={factor}, reset height=factor")
+        width = round((width * factor) / height) 
+        height = factor
+
+    if width < factor:
+        print(f"smart_resize: width={width} < factor={factor}, reset width=factor")
+        height = round((height * factor) / width)
+        width = factor
+
+        
+
+    if max(height, width) / min(height, width) > 200:
         raise ValueError(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
