@@ -194,6 +194,7 @@ def debug_model_inference(model):
     )
     print_rank_0(inputs)
     inputs = inputs.to(torch.cuda.current_device())
+    model = model.float()
     model = model.to(torch.cuda.current_device())
 
 
