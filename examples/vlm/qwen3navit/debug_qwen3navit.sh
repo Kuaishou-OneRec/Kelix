@@ -117,7 +117,6 @@ nohup mpirun --allow-run-as-root \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --dataset_config examples/vlm/qwen3navit/debug_qwen3navit.json \
-                --model_processor Qwen2_5_VLProcessor_siglip \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
