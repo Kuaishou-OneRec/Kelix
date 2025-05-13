@@ -291,7 +291,13 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
 
     for param_name, sharded_meta_param in meta_sharded_sd.items():
         if dist.get_rank() == 0:
-            full_tensor = full_sd[param_name].detach().cuda().type(sharded_meta_param.dtype)
+            try:
+                full_tensor = full_sd[param_name].detach().cuda().type(sharded_meta_param.dtype)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                print(f"bad param_name={param_name}\nsharded_meta_param={sharded_meta_param}")
+                raise e
         else:
             full_tensor = torch.empty(
                 sharded_meta_param.size(),
