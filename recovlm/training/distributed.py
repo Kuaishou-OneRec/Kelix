@@ -265,7 +265,8 @@ def shard_model(
 
 
 def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any], allow_random_init_params=None):
-    allow_random_init_params = ['mlp_AR.pre_norm.weight', 'mlp_AR.pre_norm.bias', 'mlp_AR.linear_1.weight', 'mlp_AR.linear_1.bias', 'mlp_AR.linear_2.weight', 'mlp_AR.linear_2.bias']
+    # allow_random_init_params = ['mlp_AR.pre_norm.weight', 'mlp_AR.pre_norm.bias', 'mlp_AR.linear_1.weight', 'mlp_AR.linear_1.bias', 'mlp_AR.linear_2.weight', 'mlp_AR.linear_2.bias']
+    if isinstance(allow_random_init_params, str): allow_random_init_params = allow_random_init_params.split(',')
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
     if dist.get_rank() == 0:
@@ -280,7 +281,7 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
         for k in extra_meta_sharded_sd:
             if allow_random_init_params is not None and k in allow_random_init_params:
                 print(f"random init k={k}, {extra_meta_sharded_sd[k]}")
-                full_ds[k] = meta_sharded_sd[k].clone()
+                full_sd[k] = meta_sharded_sd[k].clone()
 
         assert len(meta_sharded_sd) == len(full_sd), \
             f"Sharded State Dict doesn't equal to Full State Dict, {len(meta_sharded_sd) } v.s {len(full_sd)}" + "\n" + \

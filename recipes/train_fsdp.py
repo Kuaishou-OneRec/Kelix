@@ -72,7 +72,7 @@ from recovlm.training.distributed import shard_model, get_shard_conditions, \
   load_from_full_model_state_dict
 from recovlm.training.checkpoint import load_hf_checkpoint
 
-from recovlm.training.activations import set_activation_checkpointing
+from recovlm.training.activations import set_activation_checkpoinload_from_full_model_state_dictting
 
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
 
@@ -114,6 +114,8 @@ def get_argument_parser():
   
   parser.add_argument("--fp32_weight", action="store_true",
                       help="Whether use fp32 for model weight updating")
+
+
 
   parser.add_argument("--fp32_reduce", action="store_true",
                       help="Whether use fp32 for model gradient reduction")
@@ -177,6 +179,9 @@ def get_argument_parser():
   parser.add_argument("--max_length", type=int, default=None,
                       help="Max tokens per sentence in corpus")
   
+    parser.add_argument("--allow_random_init_params", type=str, default='',
+                      help="-")
+
   ############ Learning Rate Args ############
   parser.add_argument("--lr_scheduler_type", type=str, default="cosine_with_min_lr",
                       help="The type of learning rate scheduler.")
@@ -733,7 +738,7 @@ def train():
   dist.barrier()
 
   with Timer("Load state dict"):
-    load_from_full_model_state_dict(model=model, full_sd=state_dict) # 这里应该全部转成CUDA了, meta -> CUDA
+    load_from_full_model_state_dict(model=model, full_sd=state_dict, allow_random_init_params=args.allow_random_init_params) # 这里应该全部转成CUDA了, meta -> CUDA
 
   if state_dict is not None:
     del state_dict
