@@ -12,11 +12,11 @@ else
         echo "Git user.email: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip/
-OUTPUT_DIR=/llm_reco/liuyang76/train_out/0.0.0/qwen3_2B_stage1/
+OUTPUT_DIR=/llm_reco/lingzhixin/exps/qwen3navit/debug_qwen3navit/0.0.1/1.7B/
 
 mkdir -p $OUTPUT_DIR
 
@@ -116,19 +116,19 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_1.7B.json \
+                --dataset_config examples/vlm/0.0.0/qwen3navit_1.7B_stage1.json \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 15000 \
-                --learning_rate 1e-6 \
-                --min_lr 0.0 \
+                --max_length 21000 \
+                --learning_rate 1e-3 \
+                --min_lr 5e-4 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 500 \
-                --num_training_steps 50000 \
-                --save_checkpoint_per_step 500 \
+                --num_training_steps 5000000 \
+                --save_checkpoint_per_step 2000 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
