@@ -2828,7 +2828,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
 
     def __init__(self, config):
         super().__init__(config)
-        Siglip_config = SiglipConfig.from_pretrained('/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384')
+        Siglip_config = SiglipConfig.from_pretrained('/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex')
         # print('msy_siglip_config',Siglip_config)
         Siglip_config = Siglip_config.vision_config
         #Siglip_config._attn_implementation = 'flash_attention_2'
