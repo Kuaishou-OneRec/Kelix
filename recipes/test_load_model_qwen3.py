@@ -174,7 +174,7 @@ messages = [
 
 
 
-MODEL_DIR2="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip"
+MODEL_DIR2="/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip"
 processor = Qwen3SiglipProcessor_siglip.from_pretrained(MODEL_DIR2)
 messages = [
     {
@@ -207,7 +207,7 @@ if 1:
         # from recovlm.qwen3.modeling_qwen3 import *
         with set_default_dtype(torch.bfloat16):
             model = AutoModelForCausalLM.from_pretrained(
-                "/llm_reco_ssd/zhouyang12/models/Qwen3-8B/",
+                "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B/",
                 # "Qwen/Qwen3-1.7B",
                 torch_dtype="auto",
                 _attn_implementation = 'flash_attention_2',
