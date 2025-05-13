@@ -192,7 +192,7 @@ inputs = processor(
     text=[text],
     padding=True,
     return_tensors="pt",
-)
+).to(model.device)
 print('input')
 print(inputs)
 '''
