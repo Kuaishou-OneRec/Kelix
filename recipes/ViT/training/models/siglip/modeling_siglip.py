@@ -605,7 +605,7 @@ class SiglipEncoderLayer(nn.Module):
             output_attentions=output_attentions,
             cu_seqlens=cu_seqlens,
             rope_freqs_cis=rope_freqs_cis,
-            cu_seqlens=cu_seqlens
+            # cu_seqlens=cu_seqlens
         )
         hidden_states = residual + hidden_states
 
