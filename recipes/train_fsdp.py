@@ -860,6 +860,7 @@ def train():
 
       micro_step += 1
 
+      t1 = time.perf_counter()
       if show_cnt > 0 and dist.get_rank() == 0:
         with Timer("Show data"):
           input_text = tokenizer.decode(batch['input_ids'][0])
@@ -905,6 +906,7 @@ def train():
       
       dist.all_reduce(
         token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+      t2 = time.perf_counter()
 
       ticker.tick("token_metrics_reduce")
 
@@ -954,6 +956,7 @@ def train():
         loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
 
         ticker.tick("loss_fn")
+      t3 = time.perf_counter()
 
 
       with Timer("bwd"):
@@ -968,6 +971,8 @@ def train():
           global_step += 1
 
           ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
+      t4 = time.perf_counter()
+      print_rank_0(f"init_metrics={t2-t1}, fwd={t3-t2}, bwd={t4-t3}")
 
       ########## dataset source monitor ###############
       if args.monitor_datasource_loss:
