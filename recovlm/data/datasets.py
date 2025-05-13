@@ -3030,8 +3030,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           vit_len = [raw_image_len[i] for i in c]
           info = []
           info.append(len(llm_len)) # sample_num
-          info.append(len(sum(llm_len))) # input_ids_num
-          info.append(len(sum(vit_len))) # image_num
+          info.append(sum(llm_len)) # input_ids_num
+          info.append(sum(vit_len)) # image_num
           info.append(balance.llm_flops(llm_len))
           info.append(balance.vit_flops(vit_len))
           info_list.append(info)
