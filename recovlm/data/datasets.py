@@ -2966,34 +2966,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       raise Exception("!!!!!! Error occurs in image padding. input ids are shorted than image tokens")
     return inputs
 
-  def _find_in_range(self, seq_lens, max_len, delta, target_count, max_trials=5000):
-    t1 = time.perf_counter()
-    results = set()
-    trials = 0 
-
-    while len(results) < target_count and trials < max_trials:
-        trials += 1
-
-        # Randomly shuffle indices
-        indices = list(range(len(seq_lens)))
-        random.shuffle(indices)
-
-        current_sum = 0 
-        current_indices = []
-
-        for idx in indices:
-            if current_sum + seq_lens[idx] <= max_len:
-                current_sum += seq_lens[idx]
-                current_indices.append(idx)
-
-            if max_len - delta <= current_sum <= max_len:
-                results.add(tuple(sorted(current_indices)))  # use tuple to be hashable
-                break  # once one valid subset found, restart next trial
-
-    t2 = time.perf_counter()
-    print(f"Found {len(results)} valid subsets in {trials} trials, dur={t2-t1}")
-    return [list(subset) for subset in results]
-  
   def _process_task(self):
     while True:
       sample = self.sample_queue.get()
@@ -3027,71 +2999,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           f"errmsg={traceback.format_exc()}")
         continue
 
-  def _balance_score(self, image_lens):
-      max_len = max(image_lens)
-      min_len = min(image_lens)
-      target_len = min(max_len, 55)
-      var = sum((v - target_len) ** 2 for v in image_lens) / len(image_lens)
-      var = float(np.sqrt(var)) if var > 0 else 0
-      return (max_len - min_len) ** 2 + var
-
-
-  def _select_nearest_equal(self, local_image_lens, all_image_lens):
-      def find_nearest(arr, target):
-          pos = bisect.bisect_left(arr, target)
-          if pos == 0:
-              return arr[0]
-          if pos == len(arr):
-              return arr[-1]
-          if target == arr[pos]:
-              return target
-          before, after = arr[pos-1], arr[pos]
-          if after - target < target - before:
-              return after
-          else:
-              return before
-      found = None
-      min_score = sys.maxsize
-      debug_info = []
-      for n in local_image_lens:
-          current = []
-          for i, arr in enumerate(all_image_lens):
-              if i == dist.get_rank():
-                  current.append(n)
-              else:
-                  current.append(find_nearest(arr, n))
-          score = self._balance_score(current)
-          debug_info.append((score, current))
-          if score < min_score or (score == min_score and sum(current) > sum(found)):
-              found = current
-              min_score = score
-
-      # print(f'[rank={dist.get_rank()}] debug_info: {debug_info}')
-      return found + [min_score]
-
-  def _select_global(self, candidates):
-      scores = [candidate[-1] for candidate in candidates]
-      idx = int(np.argmin(scores))
-      return candidates[idx][:-1]
-      # min_var = sys.maxsize
-      # found = None
-      # max_sum = -1
-      # for candidate in candidates:
-      #     cur_var = max(candidate) - min(candidate)
-      #     if cur_var < min_var:
-      #         found = candidate
-      #         min_var = cur_var
-      #         max_sum = sum(candidate)
-      #     elif cur_var == min_var:
-      #         cur_sum = sum(candidate)
-      #         if cur_sum > max_sum:
-      #             max_sum = cur_sum
-      #             found = candidate
-
-      # return found 
-  
-  def _prefetched_task(self, delta_ratio: float = 0.02, buffer_size: int = 1000, target_count: int = 100):
-    delta = int(self.max_length * delta_ratio)
+  def _balance_task(self, buffer_size: int = 1000, target_count: int = 100):
     buffer = []
     source_list = []
     while True:
@@ -3115,7 +3023,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         candidates = balance.greedy_subsets_nearst_sum(raw_input_ids, self.max_length)
         if dist.get_rank() == 0:
           print(f"candidates: {candidates}")
-        candidates = candidates[:50]
+        candidates = candidates[:target_count]
         flops = []
         len_info = []
         for c in candidates:
@@ -3154,44 +3062,28 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         selected_vit = [raw_image_len[i] for i in selected_index]
         t7 = time.perf_counter()
         print(f"[rank={dist.get_rank()}] llm={selected_llm} vit={selected_vit}, llm_flops={balance.llm_flops(selected_llm)}, vit_flops={balance.vit_flops(selected_vit)}, find_sub={t3-t2}, gather1={t4-t3}, balance={t5-t4}, gather2={t6-t5}, other={t7-t6}")
+        inputs = [buffer[idx] for idx in selected_index]
+        data_source = [source_list[idx] for idx in selected_index]
+        self._balance_buf.put((inputs, data_source))
 
-        # t1 = time.perf_counter()
-        # # candidates = self._find_in_range(raw_input_ids, self.max_length, delta, target_count)
-        # input_ids_len = [sum(buffer[idx]["input_ids"].shape[-1] for idx in candidate) for candidate in candidates]
-        # image_len = [sum(buffer[idx]["pixel_values"].size(0) for idx in candidate) for candidate in candidates]
-        # print(f"[rank={dist.get_rank()}]  candidate_images: {sorted(image_len)}, candidate_llm: {input_ids_len}")
-        # sorted_image_len = sorted(image_len)
-        # t2 = time.perf_counter()
-        # all_image_lens = [None] * dist.get_world_size()
-        # dist.all_gather_object(all_image_lens, sorted_image_len)
-        # local_found = self._select_nearest_equal(sorted_image_len, all_image_lens)
-        # all_local_found = [None] * dist.get_world_size()
-        # dist.all_gather_object(all_local_found, local_found)
-        # selected_len = self._select_global(all_local_found)
-        # if dist.get_rank() == 0:
-        #   print(f"[rank={dist.get_rank()}] selected_global: {selected_len}, diff={max(selected_len) - min(selected_len)}")
-        # selected_index = candidates[image_len.index(selected_len[dist.get_rank()])]
-        t3 = time.perf_counter()
-        packed_inputs = self._packing([buffer[idx] for idx in selected_index])
-        t4 = time.perf_counter()
-        print(f"[rank={dist.get_rank()}]find_input_ids={t2-t1}, balance_image={t3-t2}, packing={t4-t3}")
-        packed_inputs["data_source"] = [source_list[idx] for idx in selected_index]
-        self.cache.put(packed_inputs)
-        
         buffer = [x for i, x in enumerate(buffer) if i not in selected_index]
         source_list = [x for i, x in enumerate(source_list) if i not in selected_index]
 
-  def __iter__(self):
-    # rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
-    # world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
-    # if not torch.distributed.is_initialized():
-    #     print(f'init process_group in dataset, {rank}, {world_size}, {worker_id}')
-    #     dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+  def _packing_task(self):
+    t1 = time.perf_counter()
+    inputs, data_source = self._balance_buf.get()
+    t2 = time.perf_counter()
+    packed_inputs = self._packing(inputs)
+    packed_inputs["data_source"] = data_source
+    t3 = time.perf_counter()
+    print(f"[rank={dist.get_rank()}] get_balanced={t2-t1} packing={t4-t3}")
+    self._result_buf.put(packed_inputs)
 
-    self.cache = queue.Queue(maxsize=1)
-    delta_ratio = self.kargs.get("input_ids_len_delta_ratio", 0.02)
+  def __iter__(self):
+    self._balance_buf = queue.Queue(maxsize=8)
+    self._result_buf = queue.Queue(maxsize=8)
     buffer_size = self.kargs.get("balance_buffer_size", 1000)
-    target_count = self.kargs.get("balance_candidate_count", 100)
+    target_count = self.kargs.get("balance_candidate_count", 50)
 
     self.sample_queue = queue.Queue(maxsize=32)
     def reader_task():
@@ -3206,12 +3098,14 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.process_threads = [threading.Thread(target=self._process_task, daemon=True) for _ in range(16)]
     for t in self.process_threads:
       t.start()
-    self.prefetch_thread = threading.Thread(target=self._prefetched_task, args=(delta_ratio, buffer_size, target_count), daemon=True)
-    self.prefetch_thread.start()
+    self.balance_thread = threading.Thread(target=self._balance_task, args=(buffer_size, target_count), daemon=True)
+    self.packing_thread = threading.Thread(target=self._packing_task, daemon=True)
+    self.balance_thread.start()
+    self.packing_thread.start()
 
     while True:
         t1 = time.perf_counter()
-        result = self.cache.get()
+        result = self._result_buf.get()
         t2 = time.perf_counter()
         print(f'next_batch[{dist.get_rank()}]={t2-t1}')
         yield result
