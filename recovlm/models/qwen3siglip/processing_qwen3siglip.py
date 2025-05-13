@@ -608,7 +608,7 @@ class Qwen3SiglipProcessor_siglip(ProcessorMixin):
 
 
 
-class Qwen3SiglipProcessor_navit(ProcessorMixin):
+class Qwen3SiglipProcessor_navit(Qwen3SiglipProcessor_siglip):
     r"""
     Constructs a Qwen2.5-VL processor which wraps a Qwen2.5-VL image processor and a Qwen2 tokenizer into a single processor.
     [`Qwen3SiglipProcessor`] offers all the functionalities of [`Qwen2VLImageProcessor`] and [`Qwen2TokenizerFast`]. See the
