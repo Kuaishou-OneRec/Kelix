@@ -72,7 +72,7 @@ from recovlm.training.distributed import shard_model, get_shard_conditions, \
   load_from_full_model_state_dict
 from recovlm.training.checkpoint import load_hf_checkpoint
 
-from recovlm.training.activations import set_activation_checkpoinload_from_full_model_state_dictting
+from recovlm.training.activations import set_activation_checkpointing
 
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
 
@@ -178,9 +178,6 @@ def get_argument_parser():
 
   parser.add_argument("--max_length", type=int, default=None,
                       help="Max tokens per sentence in corpus")
-  
-  parser.add_argument("--allow_random_init_params", type=str, default='',
-                      help="-")
 
   ############ Learning Rate Args ############
   parser.add_argument("--lr_scheduler_type", type=str, default="cosine_with_min_lr",
@@ -246,6 +243,9 @@ def get_argument_parser():
 
   parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
                       help="Gradient accumulation steps.")
+
+  parser.add_argument("--allow_random_init_params", type=str, default='',
+                      help="-")
   
   parser.add_argument("--sequence_parallel_size", type=int, default=1,
                       help="Enable gradient checkpointing during training")
