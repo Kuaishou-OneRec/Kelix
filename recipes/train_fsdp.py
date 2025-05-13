@@ -906,12 +906,12 @@ def train():
       
       dist.all_reduce(
         token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-      t2 = time.perf_counter()
 
       ticker.tick("token_metrics_reduce")
 
       num_tokens, num_samples, num_valid_tokens, num_image_tokens = token_metrics.detach().cpu().numpy()
       ticker.tick("token_metrics.detach().cpu().numpy()")
+      t2 = time.perf_counter()
 
       total_num_samples += num_samples
       total_num_tokens += num_tokens

@@ -3070,14 +3070,15 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         source_list = [x for i, x in enumerate(source_list) if i not in selected_index]
 
   def _packing_task(self):
-    t1 = time.perf_counter()
-    inputs, data_source = self._balance_buf.get()
-    t2 = time.perf_counter()
-    packed_inputs = self._packing(inputs)
-    packed_inputs["data_source"] = data_source
-    t3 = time.perf_counter()
-    print(f"[rank={dist.get_rank()}] get_balanced={t2-t1} packing={t3-t2}")
-    self._result_buf.put(packed_inputs)
+    while True:
+      t1 = time.perf_counter()
+      inputs, data_source = self._balance_buf.get()
+      t2 = time.perf_counter()
+      packed_inputs = self._packing(inputs)
+      packed_inputs["data_source"] = data_source
+      t3 = time.perf_counter()
+      print(f"[rank={dist.get_rank()}] get_balanced={t2-t1} packing={t3-t2}")
+      self._result_buf.put(packed_inputs)
 
   def __iter__(self):
     self._balance_buf = queue.Queue(maxsize=8)
