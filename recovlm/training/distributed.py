@@ -281,9 +281,11 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
         print(f"full_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in full_sd.items()})}")
         print(f"meta_sharded_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in meta_sharded_sd.items()})}")
 
+        device0 = list(full_sd)[0]
         for k in extra_meta_sharded_sd:
             if allow_random_init_params is not None and k in allow_random_init_params:
-                full_sd[k] = meta_sharded_sd[k].clone()
+                # full_sd[k] = meta_sharded_sd[k].clone()
+                full_sd[k] = (torch.rand(*extra_meta_sharded_sd[k][0]) * 0.1).to(device0)
                 print(f"random init k={k}, {extra_meta_sharded_sd[k]}\n, meta_sharded_sd={meta_sharded_sd[k]} \nfull={full_sd[k]}")
 
         assert len(meta_sharded_sd) == len(full_sd), \
