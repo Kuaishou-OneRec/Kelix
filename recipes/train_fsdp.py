@@ -520,7 +520,7 @@ class TokenStats:
 def data_func(dataset_config, model_class, max_length, batch_queue):
   p = psutil.Process(os.getpid())
   raw_cpus = p.cpu_affinity()
-  p.cpu_affinity(raw_cpus[:12])
+  p.cpu_affinity(raw_cpus[:8])
   master_port = int(os.environ["MASTER_PORT"]) + 1
   os.environ["MASTER_PORT"] = str(master_port)
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
@@ -592,7 +592,7 @@ def train():
 
   p = psutil.Process(os.getpid())
   raw_cpus = p.cpu_affinity()
-  p.cpu_affinity(raw_cpus[12:])
+  p.cpu_affinity(raw_cpus[8:])
   print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}")
 
   ### initialize model parallel group
