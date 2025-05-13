@@ -192,7 +192,7 @@ inputs = processor(
     text=[text],
     padding=True,
     return_tensors="pt",
-).to(model.device)
+)
 print('input')
 print(inputs)
 '''
@@ -213,6 +213,7 @@ if 1:
                 _attn_implementation = 'flash_attention_2',
                 device_map="auto"
             )
+            inputs = inputs.to(model.device)
             # model = model.float()
             logits = model(**inputs).logits
             print(222, logits, logits.shape)
