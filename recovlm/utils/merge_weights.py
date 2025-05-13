@@ -28,19 +28,14 @@ from safetensors.torch import save_file
 
 
 def main():
-  # Load the safetensors file properly
-  pt1 = {}
-  #/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth
-  with safe_open("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth", framework="pt", device="cpu") as f:
-      for key in f.keys():
-        print(key)
-        #   if "packing" in key:
-        #       # print(key)
-        #       # print(f.get_tensor(key).shape)
-        #       # print("================================================")
-        #       continue
-        #   if "vision_model" in key:
-        #       pt1[key] = f.get_tensor(key)
+    # Load the PyTorch model file
+    model_path = "/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth"
+    pt1 = torch.load(model_path, map_location='cpu')
+    
+    # Print the keys in the state dict
+    if isinstance(pt1, dict):
+        for key in pt1.keys():
+            print(key)
 
 
 
