@@ -1,6 +1,6 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from recovlm.models.qwen_3_vl.modeling_qwen3_vl import Qwen3_VLForConditionalGeneration_siglip
-from recovlm.models.qwen_3_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
+from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_siglip
 from typing import Dict, Any, Union, Optional
 
 import contextlib
@@ -194,7 +194,7 @@ inputs = processor(
     padding=True,
     return_tensors="pt",
 )
-
+print('input')
 print(inputs)
 '''
 {'input_ids': tensor([[151644,   8948,    198,   2610,    525,    264,  10950,  17847,     13,

@@ -186,13 +186,13 @@ def debug_model_inference(model):
         messages, tokenize=False, add_generation_prompt=True
     )
     # image_inputs, video_inputs = process_vision_info(messages)
-    print_rank_0(text)
+    
     inputs = processor(
         text=[text],
         padding=True,
         return_tensors="pt",
     )
-
+    print_rank_0(inputs)
     inputs = inputs.to(torch.cuda.current_device())
     model = model.to(torch.cuda.current_device())
 
