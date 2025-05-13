@@ -1187,7 +1187,8 @@ class SiglipVisionModel(SiglipPreTrainedModel):
             position_ids=position_ids,
             vision_return_embed_list=vision_return_embed_list,
             image_grid_thw=image_grid_thw,
-            sample_indices=sample_indices
+            sample_indices=sample_indices,
+            
         )
 
 
