@@ -30,12 +30,15 @@ from safetensors.torch import save_file
 def main():
     # Load the PyTorch model file
     model_path = "/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth"
-    pt1 = torch.load(model_path, map_location='cpu')
-    
+    ptm = torch.load(model_path, map_location='cpu')
+    pt1 = {}
     # Print the keys in the state dict
-    if isinstance(pt1, dict):
-        for key in pt1.keys():
-            print(key)
+    if isinstance(ptm, dict):
+        for key in ptm.keys():
+            if "vision_model" in key:
+                pt1[key] = ptm[key]
+
+    print(pt1.keys())
 
 
 
