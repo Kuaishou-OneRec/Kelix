@@ -30,57 +30,62 @@ from safetensors.torch import save_file
 def main():
   # Load the safetensors file properly
   pt1 = {}
-  with safe_open("/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex/model.safetensors", framework="pt", device="cpu") as f:
+  #/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth
+  with safe_open("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth", framework="pt", device="cpu") as f:
       for key in f.keys():
-          if "packing" in key:
-              # print(key)
-              # print(f.get_tensor(key).shape)
-              # print("================================================")
-              continue
-          if "vision_model" in key:
-              pt1[key] = f.get_tensor(key)
-  pt2 = {}
-  for i in range(1, 6):
-      with safe_open("/llm_reco_ssd/zhouyang12/models/Qwen3-8B/Qwen3-8B/model-0000" + str(i) + "-of-00005.safetensors", framework="pt", device="cpu") as f:
-          for key in f.keys():
-              pt2[key] = f.get_tensor(key)
-  print('lalallalalallal')
-  for key in pt1.keys():
-    keypt2 = "visual." + key
-    pt2[keypt2] = pt1[key]
-  outputdir = "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip"
-  os.makedirs(outputdir, exist_ok=True)
-  #merge pt1 and pt2
-  save_file(pt2, outputdir + "/model.safetensors",metadata={"format": "pt"})
-  pt3 = {}
-  with safe_open(outputdir + "/model.safetensors", framework="pt", device="cpu") as f:
-    for key in f.keys():
-      pt3[key] = f.get_tensor(key)
-  closecnt =0 
-  for key in pt3.keys():
-    if key in pt2.keys():
-      #check tensor allclose
-      if not torch.allclose(pt3[key], pt2[key], atol=1e-7):
-        print(key)
-        print(pt3[key].shape)
-        print(pt2[key].shape)
-        print("================================================")
-        closecnt += 1 
-  print(closecnt)
-  for key in pt2.keys():
-    assert key in pt3.keys()
-    assert pt2[key].shape == pt3[key].shape
-  for key in pt3.keys():
-    if key in pt2.keys():
-      print(key)
-      print(pt3[key].shape)
-      print(pt2[key].shape)
-      print("================================================")
-    else:
-      print('not in pt2')
-      print(key)
-      print(pt3[key].shape)
-      print("================================================")
-  print("all close")
+        # print(key)
+        #   if "packing" in key:
+        #       # print(key)
+        #       # print(f.get_tensor(key).shape)
+        #       # print("================================================")
+        #       continue
+        #   if "vision_model" in key:
+        #       pt1[key] = f.get_tensor(key)
+
+
+
+  # pt2 = {}
+  # for i in range(1, 6):
+  #     with safe_open("/llm_reco_ssd/zhouyang12/models/Qwen3-8B/Qwen3-8B/model-0000" + str(i) + "-of-00005.safetensors", framework="pt", device="cpu") as f:
+  #         for key in f.keys():
+  #             pt2[key] = f.get_tensor(key)
+  # print('lalallalalallal')
+  # for key in pt1.keys():
+  #   keypt2 = "visual." + key
+  #   pt2[keypt2] = pt1[key]
+  # outputdir = "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip"
+  # os.makedirs(outputdir, exist_ok=True)
+  # #merge pt1 and pt2
+  # save_file(pt2, outputdir + "/model.safetensors",metadata={"format": "pt"})
+  # pt3 = {}
+  # with safe_open(outputdir + "/model.safetensors", framework="pt", device="cpu") as f:
+  #   for key in f.keys():
+  #     pt3[key] = f.get_tensor(key)
+  # closecnt =0 
+  # for key in pt3.keys():
+  #   if key in pt2.keys():
+  #     #check tensor allclose
+  #     if not torch.allclose(pt3[key], pt2[key], atol=1e-7):
+  #       print(key)
+  #       print(pt3[key].shape)
+  #       print(pt2[key].shape)
+  #       print("================================================")
+  #       closecnt += 1 
+  # print(closecnt)
+  # for key in pt2.keys():
+  #   assert key in pt3.keys()
+  #   assert pt2[key].shape == pt3[key].shape
+  # for key in pt3.keys():
+  #   if key in pt2.keys():
+  #     print(key)
+  #     print(pt3[key].shape)
+  #     print(pt2[key].shape)
+  #     print("================================================")
+  #   else:
+  #     print('not in pt2')
+  #     print(key)
+  #     print(pt3[key].shape)
+  #     print("================================================")
+  # print("all close")
 if __name__ == "__main__":
   main()
