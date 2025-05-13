@@ -53,7 +53,7 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLVisionConfig
-from recovlm.utils.common import print_rank_0
+from recovlm.utils.common import print
 from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitPretrainedModel,KimiVLMultiModalProjector, KimiVLMultiModalProjector_Contrastive
 from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig, KimiVLConfig
 from recipes.ViT.training.models.siglip.configuration_siglip import SiglipConfig
@@ -73,7 +73,6 @@ from recovlm.training.parallel import UlyssesAttention, \
 
 def get_sequence_parallel_world_size(): return 1
 
-
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_varlen_func
     from flash_attn.layers.rotary import apply_rotary_emb
@@ -92,7 +91,12 @@ else:
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Qwen2_5_VLConfig"
-
+def _print(*args, **kargs):
+    try:
+        if torch.distributed.get_rank() == 0:
+            print(*args, **kargs)
+    except:
+        print(*args, **kargs)
 
 class Qwen2_5_VLMLP(nn.Module):
     def __init__(self, config, bias: bool = False):
@@ -722,7 +726,7 @@ class Qwen2_5_VLRotaryEmbedding(nn.Module):
         # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
         cos = cos * self.attention_scaling
         sin = sin * self.attention_scaling
-
+        print("ccosssss", cos)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def rope_init(self):
@@ -783,6 +787,7 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    # return q, k
     mrope_section = mrope_section * 2
     cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
         unsqueeze_dim
@@ -793,6 +798,7 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
 
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
+    print(f"q_embed={q_embed.shape}, k_embed={k_embed.shape}, q={q.shape}, k={k.shape}, cos={cos.shape}, mrope_section={mrope_section}")
     return q_embed, k_embed
 
 
@@ -815,9 +821,6 @@ class Qwen2_5_VLAttention(nn.Module):
     """
 
     def __init__(self, config: Qwen2_5_VLConfig, layer_idx: Optional[int] = None):
-        print_rank_0("=============================")
-        print_rank_0("Qwen2_5_VLAttention init")
-        print_rank_0("=============================")
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -883,12 +886,15 @@ class Qwen2_5_VLAttention(nn.Module):
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
-
+        print("ddddddd", query_states, math.sqrt(self.head_dim))
+        print("eeeeeee", key_states)
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-
-        if attention_mask is not None:  # no matter the length, we just slice it
+        attention_mask = None
+        if attention_mask is not None :  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
+        # print("iiiiiii", causal_mask, attention_mask is not None)
+        print("ccccccc", attn_weights)
 
         # Fix precision issues in Qwen2-VL float16 inference
         # Replace inf values with zeros in attention weights to prevent NaN propagation
@@ -898,7 +904,10 @@ class Qwen2_5_VLAttention(nn.Module):
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        print("aaaaaaa", attn_weights)
+        print("bbbbbbb", value_states)
         attn_output = torch.matmul(attn_weights, value_states)
+        print("ggggggg", attn_output)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
@@ -1167,8 +1176,7 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."
             )
-        # config._attn_implementation = "eager"
-        assert config._attn_implementation == "flash_attention_2"
+        config._attn_implementation = 'eager'
         self.self_attn = QWEN2_5_VL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         self.mlp = Qwen2MLP(config)
         self.input_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1207,11 +1215,12 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
                 Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
                 into the model
         """
-
+        _print("00000", hidden_states)
         residual = hidden_states
 
-        hidden_states = self.input_layernorm(hidden_states)
 
+        hidden_states = self.input_layernorm(hidden_states)
+        _print("11111", hidden_states)
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -1224,13 +1233,16 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             **kwargs
         )
+        _print("22222", hidden_states)
         hidden_states = residual + hidden_states
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+
         hidden_states = residual + hidden_states
+        _print("33333", hidden_states)
 
         outputs = (hidden_states,)
 
@@ -1239,7 +1251,7 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
 
         if use_cache:
             outputs += (present_key_value,)
-
+        _print("44444", hidden_states)
         return outputs
 
 
@@ -1285,6 +1297,7 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1327,9 +1340,23 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
+        print("hidden_states_before=")
+        print(hidden_states)
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        # create position embeddings to be shared across the decoder layers
+        # position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
+        print("=" * 30)
+        print(len(position_embeddings))
+        print("=" * 30)
+        print(len(position_embeddings), len(position_embeddings[0]), len(position_embeddings[0][0])) # 2 3 1
+        print("=" * 30)
+        print(position_embeddings[0][0].shape)
+        print("=" * 30)
+        print(position_embeddings[0][0])
 
         # shard hidden_states & position_embeddings for sequence parallel
         if get_sequence_parallel_world_size() > 1:
@@ -1377,6 +1404,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 )
 
             hidden_states = layer_outputs[0]
+            print("=============================")
+            print(f"qwen2_5_vl_model_hidden_states_layer{i}", hidden_states)
+            print("=============================")
 
             if use_cache:
                 next_decoder_cache = layer_outputs[2 if output_attentions else 1]
@@ -1385,6 +1415,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
+        print("=============================")
+        print("qwen2_5_vl_model_hidden_states_2", hidden_states)
+        print("=============================")
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1765,9 +1798,9 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
         spatial_merge_size = self.config.vision_config.spatial_merge_size
-        image_token_id = self.config.image_token_id
-        video_token_id = self.config.video_token_id
-        vision_start_token_id = self.config.vision_start_token_id
+        image_token_id = -3 # self.config.image_token_id
+        video_token_id = -1 # self.config.video_token_id
+        vision_start_token_id = -2 # self.config.vision_start_token_id
         mrope_position_deltas = []
         if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
             total_input_ids = input_ids
@@ -2038,7 +2071,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-
         loss = None
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues
@@ -3112,6 +3144,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
                     siglip_position_ids.append(image_position_ids)
                     sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
+                    
                 siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
@@ -3211,7 +3244,9 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-
+        print("llllllllll", logits, logits.shape)
+        print(self.lm_head)
+        print("hhhhhh", self.lm_head.weight)
         loss = None
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues

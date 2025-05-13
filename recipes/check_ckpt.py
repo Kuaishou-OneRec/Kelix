@@ -5,6 +5,20 @@ import json
 # load the tokenizer and the model
 MODEL_DIR="/llm_reco_ssd/zhouyang12/models/msy_Qwen3vl-8B-Base"
 
+
+import glob
+
+for d in [
+    "/llm_reco_ssd/zhouyang12/models/msy_Qwen3vl-8B-Base",
+    "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base"
+]:
+    for di in glob.glob(os.path.join(d, f"*.safetensors")):
+        pass
+    # 
+    weights = 
+
+
+
 processor = Qwen2_5_VLProcessor_siglip.from_pretrained(MODEL_DIR)
 model = AutoModelForCausalLM.from_pretrained(
     MODEL_DIR,

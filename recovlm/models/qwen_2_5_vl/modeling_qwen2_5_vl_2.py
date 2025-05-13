@@ -71,7 +71,6 @@ from recovlm.training.parallel import UlyssesAttention, \
     get_local_sequence_boundary, \
     get_local_sequence
 
-def get_sequence_parallel_world_size(): return 1
 
 
 if is_flash_attn_2_available():
@@ -928,6 +927,9 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        print_rank_0("=============================")
+        print_rank_0("Qwen2_5_VLFlashAttention2 init")
+        print_rank_0("=============================")
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
@@ -1167,8 +1169,6 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."
             )
-        # config._attn_implementation = "eager"
-        assert config._attn_implementation == "flash_attention_2"
         self.self_attn = QWEN2_5_VL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         self.mlp = Qwen2MLP(config)
         self.input_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1225,12 +1225,18 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
             **kwargs
         )
         hidden_states = residual + hidden_states
+        print_rank_0("=============================")
+        print_rank_0("qwen2_5_vl_decoder_layer_hidden_states", hidden_states)
+        print_rank_0("=============================")
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
+        print_rank_0("=============================")
+        print_rank_0("qwen2_5_vl_decoder_layer_hidden_states_2", hidden_states)
+        print_rank_0("=============================")
 
         outputs = (hidden_states,)
 
@@ -1327,7 +1333,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-
+        print_rank_0("=============================")
+        print_rank_0("qwen2_5_vl_model_hidden_states", hidden_states)
+        print_rank_0("=============================")
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -1385,6 +1393,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
+        print_rank_0("=============================")
+        print_rank_0("qwen2_5_vl_model_hidden_states_2", hidden_states)
+        print_rank_0("=============================")
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
