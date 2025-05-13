@@ -83,6 +83,7 @@ from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitEncod
 from recipes.ViT.training.models.siglip.modeling_siglip import SiglipEncoderLayer
 from recovlm.utils.time_tracker import TimeTracker
 from recovlm.utils.ds_utils import format_dict_or_list
+from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor
 
 
 # Logger 初始化
@@ -155,7 +156,7 @@ def get_argument_parser():
                       help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip','InternVLChatModel','Qwen3SiglipDecoderLayer'. ",)
   
   parser.add_argument("--model_processor", type=str, default="Qwen2_5_VLProcessor_moonvit",
-                      help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit'")
+                      help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit' or 'Qwen3SiglipProcessor'")
 
   ############ Dataset args ############
   parser.add_argument("--dataset_config", type=str, default=None,

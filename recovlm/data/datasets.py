@@ -1416,7 +1416,7 @@ class ChatCompletionVisionDataset_siglip(IterableDataset):
                pad_token_id: int = 151643,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
-               siglip_vision_config='/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384'
+               siglip_vision_config='/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384',
                **kwargs
                ):
     """

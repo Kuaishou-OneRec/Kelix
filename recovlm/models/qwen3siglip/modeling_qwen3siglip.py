@@ -72,7 +72,7 @@ from recovlm.training.parallel import UlyssesAttention, \
     get_local_sequence
 
 
-# def get_sequence_parallel_world_size(): return 1
+def get_sequence_parallel_world_size(): return 1
 
 
 if is_flash_attn_2_available():
