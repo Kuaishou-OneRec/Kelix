@@ -15,9 +15,8 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct # Pretrained/Base model path
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip/
-OUTPUT_DIR=/llm_reco/lingzhixin/exps/qwen3navit/debug_qwen3navit/0.0.1/
+OUTPUT_DIR=/llm_reco/lingzhixin/exps/qwen3navit/debug_qwen3navit/0.0.1/8B/
 
 mkdir -p $OUTPUT_DIR
 
@@ -117,7 +116,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/qwen3navit/debug_qwen3navit.json \
+                --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_8B.json \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
