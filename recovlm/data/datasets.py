@@ -3037,7 +3037,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           info_list.append(info)
         t3 = time.perf_counter()
         all_infos = [None] * dist.get_world_size()
-        dist.all_gather_object(all_infos, [info_list])
+        dist.all_gather_object(all_infos, info_list)
         t4 = time.perf_counter()
         # if dist.get_rank() == 0:
         #   print(f"[rank=0] all_flops: {all_flops}")
