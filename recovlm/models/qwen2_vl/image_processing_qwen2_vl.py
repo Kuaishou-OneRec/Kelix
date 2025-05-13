@@ -908,7 +908,7 @@ class Qwen2VLImageProcessor_siglip(BaseImageProcessor):
         do_convert_rgb: bool = True,
         min_pixels: int = 56 * 56,
         max_pixels: int = 28 * 28 * 1280,
-        patch_size: int = 14,
+        patch_size: int = 16,
         temporal_patch_size: int = 1,
         merge_size: int = 2,
         **kwargs,
