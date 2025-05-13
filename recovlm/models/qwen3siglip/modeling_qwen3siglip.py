@@ -399,6 +399,7 @@ class Qwen3SiglipVisionBlock(nn.Module):
         super().__init__()
         self.norm1 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
+        assert attn_implementation == 'flash_attention_2'
         self.attn = QWEN2_5_VL_VISION_ATTENTION_CLASSES[attn_implementation](
             config.hidden_size, num_heads=config.num_heads
         )

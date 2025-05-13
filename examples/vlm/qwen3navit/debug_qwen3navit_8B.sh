@@ -111,6 +111,7 @@ nohup mpirun --allow-run-as-root \
         -x KAI_FLAG_FILE \
         -x KML_ID \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
+	-x TOKENIZERS_PARALLELISM=false \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
@@ -118,6 +119,7 @@ nohup mpirun --allow-run-as-root \
                 --output_dir $OUTPUT_DIR \
                 --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_8B.json \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
+		--allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --max_length 15000 \

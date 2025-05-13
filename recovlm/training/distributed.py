@@ -264,18 +264,31 @@ def shard_model(
         model.set_modules_to_forward_prefetch([prev])
 
 
-def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]):
+def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any], allow_random_init_params=None):
+    # allow_random_init_params = ['mlp_AR.pre_norm.weight', 'mlp_AR.pre_norm.bias', 'mlp_AR.linear_1.weight', 'mlp_AR.linear_1.bias', 'mlp_AR.linear_2.weight', 'mlp_AR.linear_2.bias']
+    if isinstance(allow_random_init_params, str): allow_random_init_params = allow_random_init_params.split(',')
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
     if dist.get_rank() == 0:
         extra_meta_sharded_sd = set(meta_sharded_sd.keys()) - set((full_sd.keys()))
         extra_full_ds = set(full_sd.keys()) - set((meta_sharded_sd.keys()))
         extra_meta_sharded_sd = {
-            k:v.shape for k, v in extra_meta_sharded_sd.items()
+            k:(v.shape, v.device, v.dtype) for k, v in meta_sharded_sd.items() if k in extra_meta_sharded_sd
         }
         extra_full_ds = {
-            k:v.shape for k, v in extra_full_ds.items()
+            k:(v.shape, v.device, v.dtype) for k, v in full_sd.items() if k in extra_full_ds
         }
+        print(f"full_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in full_sd.items()})}")
+        print(f"meta_sharded_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in meta_sharded_sd.items()})}")
+
+        device0 = full_sd[list(full_sd)[0]]
+        for k in extra_meta_sharded_sd:
+            if allow_random_init_params is not None and k in allow_random_init_params:
+                # full_sd[k] = meta_sharded_sd[k].clone()
+                print(11342345, extra_meta_sharded_sd[k])
+                full_sd[k] = (torch.rand(extra_meta_sharded_sd[k][0]) * 0.1).to(device0)
+                print(f"random init k={k}, {extra_meta_sharded_sd[k]}\n, meta_sharded_sd={meta_sharded_sd[k]} \nfull={full_sd[k]}")
+
         assert len(meta_sharded_sd) == len(full_sd), \
             f"Sharded State Dict doesn't equal to Full State Dict, {len(meta_sharded_sd) } v.s {len(full_sd)}" + "\n" + \
             f"extra_meta_sharded_sd={format_dict_or_list(extra_meta_sharded_sd)}, extra_full_ds={format_dict_or_list(extra_full_ds)}"
@@ -284,7 +297,13 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
 
     for param_name, sharded_meta_param in meta_sharded_sd.items():
         if dist.get_rank() == 0:
-            full_tensor = full_sd[param_name].detach().cuda().type(sharded_meta_param.dtype)
+            try:
+                full_tensor = full_sd[param_name].detach().cuda().type(sharded_meta_param.dtype)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                print(f"bad param_name={param_name}\nsharded_meta_param={sharded_meta_param}")
+                raise e
         else:
             full_tensor = torch.empty(
                 sharded_meta_param.size(),

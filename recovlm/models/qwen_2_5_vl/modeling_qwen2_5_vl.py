@@ -613,8 +613,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
-
-
         for layer_num, blk in enumerate(self.blocks):
             if layer_num in self.fullatt_block_indexes:
                 cu_seqlens_now = cu_seqlens
@@ -3199,7 +3197,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
 
                 video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-
+                print_rank_0(f"video pixel_values_videos={pixel_values_videos.shape}, video_grid_thw={video_grid_thw.shape}, n_video_tokens={n_video_tokens}, video_mask={video_mask.shape}, video_embeds={video_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
+                print_rank_0(f"video_grid_thw={video_grid_thw}, video_grid_hws={video_grid_hws}")
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
@@ -3219,6 +3218,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     attention_mask,
                 )
                 self.rope_deltas = rope_deltas
+                print("rope1111", position_ids.shape)
+                print(position_ids, rope_deltas)
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
@@ -3233,6 +3234,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+                print("rope2222", position_ids.shape, delta)
+
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
@@ -3455,6 +3458,27 @@ class Qwen2_5_VLForConditionalGeneration_siglip_navit(Qwen2_5_VLForConditionalGe
         # print('msy_siglip_config',Siglip_config)
         Siglip_config = Siglip_config.vision_config
         Siglip_config._attn_implementation = 'flash_attention_2'
+        self.mlp_AR = Projector(config, Siglip_config)
+        self.visual = SiglipVisionModel(Siglip_config)
+        self.model = Qwen2_5_VLModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.rope_deltas = None  # cache rope_deltas here
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+
+class Qwen2_5_VLForConditionalGeneration_siglip_navit(Qwen2_5_VLForConditionalGeneration_siglip):
+    _tied_weights_keys = ["lm_head.weight"]
+    config_class = Qwen2_5_VLConfig
+    _no_split_modules = ["Qwen2_5_VLDecoderLayer", "SiglipEncoderLayer"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        Siglip_config = SiglipConfig.from_pretrained('/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex')
+        # print('msy_siglip_config',Siglip_config)
+        Siglip_config = Siglip_config.vision_config
         self.mlp_AR = Projector(config, Siglip_config)
         self.visual = SiglipVisionModel(Siglip_config)
         self.model = Qwen2_5_VLModel(config)

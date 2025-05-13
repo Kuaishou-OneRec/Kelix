@@ -30,7 +30,8 @@ from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import ImageInput, VideoInput
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
-from recovlm.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor_moonvit,Qwen2VLImageProcessor_siglip,Qwen2VLImageProcessor_Navit
+from recipes.ViT.training.models.MoonVision.image_processing_kimi_vl import KimiVLImageProcessor_for_qwen2_5_vl
+from recovlm.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor_moonvit,Qwen2VLImageProcessor_siglip, Qwen2VLImageProcessor_Navit
 import torch
 
 class Qwen3SiglipVideosProcessorKwargs(VideosKwargs, total=False):
@@ -605,4 +606,34 @@ class Qwen3SiglipProcessor_siglip(ProcessorMixin):
         names_from_processor = list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
         return names_from_processor + ["second_per_grid_ts"]
 
-__all__ = ["Qwen3SiglipProcessor", "Qwen3SiglipProcessor_moonvit", "Qwen3SiglipProcessor_siglip"]
+
+
+class Qwen3SiglipProcessor_navit(ProcessorMixin):
+    r"""
+    Constructs a Qwen2.5-VL processor which wraps a Qwen2.5-VL image processor and a Qwen2 tokenizer into a single processor.
+    [`Qwen3SiglipProcessor`] offers all the functionalities of [`Qwen2VLImageProcessor`] and [`Qwen2TokenizerFast`]. See the
+    [`~Qwen3SiglipProcessor.__call__`] and [`~Qwen3SiglipProcessor.decode`] for more information.
+    Args:
+        image_processor ([`Qwen2VLImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`Qwen2TokenizerFast`], *optional*):
+            The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+    """
+
+    attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["chat_template"]
+
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
+
+    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+        self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
+        self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        #self.image_processor = KimiVLImageProcessor_for_qwen3siglip()
+        self.image_processor = Qwen2VLImageProcessor_Navit()
+
+
+__all__ = ["Qwen3SiglipProcessor", "Qwen3SiglipProcessor_moonvit", "Qwen3SiglipProcessor_siglip", "Qwen3SiglipProcessor_navit"]
