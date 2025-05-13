@@ -13,6 +13,7 @@ from typing import Any, Callable, cast, Dict, List, Optional, Tuple
 import torch
 import torch.distributed as dist
 from torch import nn
+from recovlm.utils.ds_utils import format_dict_or_list
 
 from torch.distributed._composable.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
 from torch.distributed._tensor import distribute_tensor, DTensor
@@ -267,8 +268,12 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
     if dist.get_rank() == 0:
+        extra_meta_sharded_sd = set(meta_sharded_sd.keys()) - set((full_sd.keys()))
+        extra_full_ds = set(full_sd.keys()) - set((meta_sharded_sd.keys()))
+        
         assert len(meta_sharded_sd) == len(full_sd), \
-            "Sharded State Dict doesn't equal to Full State Dict"
+            f"Sharded State Dict doesn't equal to Full State Dict, {len(meta_sharded_sd) } v.s {len(full_sd)}" + "\n" + \
+            f"extra_meta_sharded_sd={format_dict_or_list(extra_meta_sharded_sd)}, extra_full_ds={format_dict_or_list(extra_full_ds)}"
         assert sorted(list(meta_sharded_sd.keys())) == sorted(list(full_sd.keys())), \
             "Keys of Sharded State Dict doesn't equal to Full State Dict"
 
