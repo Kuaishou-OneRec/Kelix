@@ -28,17 +28,17 @@ from safetensors.torch import save_file
 
 
 def main():
-    # Load the PyTorch model file
-    model_path = "/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth"
-    ptm = torch.load(model_path, map_location='cpu')
-    pt1 = {}
-    # Print the keys in the state dict
-    if isinstance(ptm, dict):
-        for key in ptm.keys():
-            if "visual" in key:
-                pt1[key] = ptm[key]
+  # Load the PyTorch model file
+  model_path = "/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth"
+  ptm = torch.load(model_path, map_location='cpu')
+  pt1 = {}
+  # Print the keys in the state dict
+  if isinstance(ptm, dict):
+      for key in ptm.keys():
+          if "visual" in key:
+              pt1[key] = ptm[key]
 
-    print(pt1.keys())
+  print(pt1.keys())
   pt2 = {}
   for i in range(1, 6):
       with safe_open("/llm_reco_ssd/zhouyang12/models/Qwen3-8B/Qwen3-8B/model-0000" + str(i) + "-of-00005.safetensors", framework="pt", device="cpu") as f:
