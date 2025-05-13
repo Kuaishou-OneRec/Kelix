@@ -197,15 +197,15 @@ def debug_model_inference(model):
     model = model.float()
 
 
-    print_input_info({
-        "inputs": inputs,
-    })
-    print_rank_0("=" * 100)
+    # print_input_info({
+    #     "inputs": inputs,
+    # })
+    # print_rank_0("=" * 100)
 
     output = model(**inputs)
-
+    print_rank_0("output")
     logits = output.logits
-    print(logits)
+    print_rank_0(logits)
     # Convert BFloat16 tensor to float32 before numpy conversion
     logits_np = logits.detach().cpu().float().numpy().tolist()
     json.dump(logits_np, open("logits8B-siglip.json", "w"))
