@@ -271,10 +271,10 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
         extra_meta_sharded_sd = set(meta_sharded_sd.keys()) - set((full_sd.keys()))
         extra_full_ds = set(full_sd.keys()) - set((meta_sharded_sd.keys()))
         extra_meta_sharded_sd = {
-            k:v.shape for k, v in meta_sharded_sd.items()
+            k:v.shape for k, v in meta_sharded_sd.items() if k in meta_sharded_sd
         }
         extra_full_ds = {
-            k:v.shape for k, v in full_sd.items()
+            k:v.shape for k, v in full_sd.items() if k in extra_full_ds
         }
         assert len(meta_sharded_sd) == len(full_sd), \
             f"Sharded State Dict doesn't equal to Full State Dict, {len(meta_sharded_sd) } v.s {len(full_sd)}" + "\n" + \
