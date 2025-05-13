@@ -30,7 +30,7 @@ from safetensors.torch import save_file
 def main():
   # Load the safetensors file properly
   pt1 = {}
-  with safe_open("/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384/model.safetensors", framework="pt", device="cpu") as f:
+  with safe_open("/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex/model.safetensors", framework="pt", device="cpu") as f:
       for key in f.keys():
           if "packing" in key:
               # print(key)
