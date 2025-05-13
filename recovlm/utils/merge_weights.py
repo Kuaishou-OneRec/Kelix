@@ -33,7 +33,7 @@ def main():
   #/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth
   with safe_open("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth", framework="pt", device="cpu") as f:
       for key in f.keys():
-        # print(key)
+        print(key)
         #   if "packing" in key:
         #       # print(key)
         #       # print(f.get_tensor(key).shape)
