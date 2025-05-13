@@ -774,9 +774,10 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.multiple_of = multiple_of
     self.shuffle_size = shuffle_size
     self.shuffle_initial_size = shuffle_initial_size
-    
+    print(3243232111)
     self.dataset, self.total_samples = self._build_source_dataset(sources)
-    
+    print(99999)
+
     # for data_source monitor
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
@@ -832,7 +833,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       dataset = dataset.shuffle(
           self.shuffle_size, initial=self.shuffle_initial_size).decode(
         "pil", handler=wds.warn_and_continue)
-      
+
     return dataset, total_samples
 
   def _fill_image_block(self, block: Dict[str, Any],
@@ -2028,25 +2029,33 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
 
 class ParquetDataset(IterableDataset):
-  def __init__(self, data_files, num_workers, vit_token_balance=False, n_local_shuffle_files_window=3):
+  def __init__(self, data_files, num_workers, n_local_shuffle_files_window=3, vit_token_balance=False):
     self.data_files = data_files
     self.num_workers = num_workers
     self.vit_token_balance = vit_token_balance
     self.n_local_shuffle_files_window = n_local_shuffle_files_window
-    print(f"set n_local_shuffle_files_window={n_local_shuffle_files_window}")
+    print(f"ParquetDataset set n_local_shuffle_files_window={n_local_shuffle_files_window}, vit_token_balance={vit_token_balance}")
 
-    manager = multiprocessing.Manager()
     self.num_readers = 8
     self.sample_queue = queue.Queue(1024)
 
-    make_dict = lambda : {} if vit_token_balance else manager.dict()
+    if vit_token_balance:
+      self.finish_dict_all = {}
+      self.offset_dict_all = {}
+      for i in range(self.num_workers):
+        self.finish_dict_all[i] = {}
+        self.offset_dict_all[i] = {}
+    else:
+      manager = multiprocessing.Manager()
+
+      self.finish_dict_all = manager.dict()
+      self.offset_dict_all = manager.dict()
+      for i in range(self.num_workers):
+        self.finish_dict_all[i] = manager.dict()
+        self.offset_dict_all[i] = manager.dict()
 
 
-    self.finish_dict_all = make_dict()
-    self.offset_dict_all = make_dict()
-    for i in range(self.num_workers):
-      self.finish_dict_all[i] = make_dict()
-      self.offset_dict_all[i] = make_dict()
+
 
   def state_dict(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
@@ -2195,7 +2204,6 @@ class ParquetDataset(IterableDataset):
     try:
       #parquet_file = pq.ParquetFile(fn)
       parquet_file = load_parquet_file(fn)
-
     except Exception as e:
       logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
       parquet_file = None
@@ -2213,13 +2221,11 @@ class ParquetDataset(IterableDataset):
               continue
             else:
               offset = offset_dict[fn_group_key] + 1
-          
           row_group = parquet_file.read_row_group(group_idx)
           if offset >= row_group.num_rows:
             continue
           logger.warning(f"[Rank{rank}-{worker}] start {fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
           row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
-
           for row_idx, row in row_pandas.iterrows():
             if row_idx < offset:
               continue
@@ -2256,13 +2262,31 @@ class ParquetDataset(IterableDataset):
       logger.warning(f"[Rank{rank}-{worker}] {fn} finish.")
       finish_dict[(fn, epoch_idx)] = True
 
-  def read_parquet_runner(self, fn_list, tid=None):
+  def read_parquet_runner_v1(self, fn_list, tid):
     try:
       for i, epoch_fn in enumerate(fn_list):
-        if tid is not None and i % self.num_readers != tid: continue
+        if tid != -1 and i % self.num_readers != tid: 
+          print(f"self.num_readers={self.num_readers}, tid={tid}, continue")
+          continue
+        print(f"self.num_readers={self.num_readers}, tid={tid}, continue runnnn", self.vit_token_balance)
         for sample in self.read_fn(epoch_fn):
-            if self.vit_token_balance: self.sample_queue.put(sample)
-            else: yield sample
+            yield sample
+    except GeneratorExit:
+      # 正确处理生成器退出
+      logger.warning("Generator exited during file processing")
+      return
+    except Exception as e:
+      logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
+      raise
+
+  def read_parquet_runner_v2(self, fn_list, tid):
+    try:
+      for i, epoch_fn in enumerate(fn_list):
+        if tid != -1 and i % self.num_readers != tid: 
+          continue
+        for sample in self.read_fn(epoch_fn):
+            if self.vit_token_balance: 
+              self.sample_queue.put(sample)
     except GeneratorExit:
       # 正确处理生成器退出
       logger.warning("Generator exited during file processing")
@@ -2281,8 +2305,96 @@ class ParquetDataset(IterableDataset):
           self.shuffled_queue.put(sample)
         buffer = []
 
+  def read_parquet_runner_v2(self, fn_list, tid):
+    rank, world_size, worker, num_workers = pytorch_worker_info()
+    finish_dict = self.finish_dict_all[worker]
+    offset_dict = self.offset_dict_all[worker]
+    try:
+      for i, epoch_fn in enumerate(fn_list):
+        if i % self.num_readers != tid:
+          continue
+        fn, epoch_idx = epoch_fn
+        if (fn, epoch_idx) in finish_dict:
+          logger.warning(f"[Rank{rank}-{worker}] skip {fn}")
+          continue
+        
+        # open parquet file
+        try:
+          #parquet_file = pq.ParquetFile(fn)
+          parquet_file = load_parquet_file(fn)
+
+        except Exception as e:
+          logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
+          parquet_file = None
+        
+        # # process file content
+        if parquet_file is not None:
+          logger.warning(f"[Rank{rank}-{worker}] {fn} total row_groups: {parquet_file.num_row_groups}")
+          for group_idx in range(parquet_file.num_row_groups):
+            try:
+              offset = 0
+              fn_group_key = (fn, epoch_idx, group_idx)
+              if fn_group_key in offset_dict:
+                if offset_dict[fn_group_key] == -1:
+                  logger.warning(f"[Rank{rank}-{worker}] skip {fn}-epoch{epoch_idx}-group{group_idx}")
+                  continue
+                else:
+                  offset = offset_dict[fn_group_key] + 1
+              
+              row_group = parquet_file.read_row_group(group_idx)
+              if offset >= row_group.num_rows:
+                continue
+              logger.warning(f"[Rank{rank}-{worker}] start {fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
+              row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
+
+              for row_idx, row in row_pandas.iterrows():
+                if row_idx < offset:
+                  continue
+
+                try:
+                  sample = self._parser(row, fn)
+                  if sample is not None:
+                    # yield sample
+                    self.sample_queue.put(sample)
+                  offset_dict[fn_group_key] = row_idx
+                except GeneratorExit:
+                  # 正确处理生成器退出
+                  logger.warning(f"Generator exited at {fn}-epoch{epoch_idx}-group{group_idx}-row{row_idx}")
+                  return
+                except Exception as e:
+                  logger.error(f"Error processing row {row_idx}: {str(e)}")
+                  continue
+
+                if row_idx % 1000 == 0:
+                  logger.warning(f"Processing row {row_idx} in {fn}-epoch{epoch_idx}-group{group_idx}")
+
+              # group finish
+              logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx}-group{group_idx} finish.")
+              offset_dict[fn_group_key] = -1
+              
+            except GeneratorExit:
+              # 正确处理生成器退出
+              logger.warning(f"Generator exited during group processing")
+              return
+            except Exception as e:
+              logger.error(f"Error processing group {group_idx}: {str(e)}")
+              continue
+          
+          # file finish
+          logger.warning(f"[Rank{rank}-{worker}] {fn} finish.")
+          finish_dict[(fn, epoch_idx)] = True
+    except GeneratorExit:
+      # 正确处理生成器退出
+      logger.warning("Generator exited during file processing")
+      return
+    except Exception as e:
+      logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
+      raise
+
+
   def __iter__vit_token_balance(self,):
     rank, world_size, worker, num_workers = pytorch_worker_info()
+    assert self.vit_token_balance, f"self.vit_token_balance={self.vit_token_balance}, expected to be true"
     if not self.vit_token_balance: assert num_workers == self.num_workers, f"num_workers={num_workers} : self.num_workers={self.num_workers}"
 
     finish_dict = self.finish_dict_all[worker]
@@ -2296,23 +2408,27 @@ class ParquetDataset(IterableDataset):
     )
 
     if not self.vit_token_balance: 
-      for sample in self.read_parquet_runner(fn_list):
+      for sample in self.read_parquet_runner_v1(fn_list, -1):
         yield sample
     else:
-      self.readers = []
-      for i in range(self.num_readers):
-        reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
-        reader.start()
-        self.readers.append(reader)
+      try:
+        self.readers = []
+        for i in range(self.num_readers):
+          reader = threading.Thread(target=self.read_parquet_runner_v2, args=(fn_list, i), daemon=True)
+          reader.start()
+          self.readers.append(reader)
         
-      shuffle_window = 10000
-      self.shuffled_queue = queue.Queue(shuffle_window * 2)
-      self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
-      self.shuffle_task.start()
-      
-      while True:
-        sample = self.shuffled_queue.get()
-        yield sample
+        shuffle_window = 10000
+        self.shuffled_queue = queue.Queue(shuffle_window * 2)
+        self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
+        self.shuffle_task.start()
+        
+        while True:
+          sample = self.shuffled_queue.get()
+          yield sample
+      except Exception as e:
+        print("error __iter__vit_token_balance")
+        print(e)
 
   def __iter__local_shuffle(self):
     import pandas as pd
@@ -2394,6 +2510,7 @@ class ParquetDataset(IterableDataset):
       yield sample
 
   def __iter__(self,):
+    print(f"parquet_iter,vit_token_balance={self.vit_token_balance}")
     if self.vit_token_balance:
       for sample in self.__iter__vit_token_balance():
         yield sample
@@ -2409,6 +2526,7 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
     self.num_workers = num_workers
     self.num_epochs = num_epochs
     self.cut_to_pad = kargs.get("cut_to_pad", True)
+    print(f"ChatCompletionVisionParquetDataset: cut_to_pad={self.cut_to_pad}")
     super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
@@ -2539,11 +2657,14 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     self.tokenizer = tokenizer
     self.visual_tokens_per_image = int((image_size//patch_size)** 2 * (down_sample_ratio ** 2))
     self.cut_to_pad = cut_to_pad
-    print(f"set cut_to_pad={cut_to_pad}")
+    if int(vit_token_balance) + int(cut_to_pad) <= 1:
+      print(f"The parameters vit_token_balance({vit_token_balance}) and cut_to_pad({cut_to_pad}) cannot be set to True simultaneously. We set cut_to_pad to false")
+      cut_to_pad = False
 
     self.down_sample_ratio=down_sample_ratio
     self.pid_info_client = PidInfoClient('10.84.241.154')
     self.vit_token_balance = vit_token_balance
+    print(f"set cut_to_pad={cut_to_pad}, vit_token_balance={vit_token_balance}")
 
     self.image_size = image_size
     self.patch_size = patch_size
@@ -3055,7 +3176,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                                       cu_seqlens,
                                       sample_idx=-1)
 
-    if self.cut_to_pad: assert valid_seq_len == self.max_length, f"set cut_to_pad={cut_to_pad}, then require valid_seq_len/{valid_seq_len} == self.max_length/{self.max_length}"
+    if self.cut_to_pad and not valid_seq_len == self.max_length:
+      print(f"set cut_to_pad={self.cut_to_pad}, then require valid_seq_len/{valid_seq_len} == self.max_length/{self.max_length}. This is a warning")
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
@@ -3077,11 +3199,15 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     # pad seq len to multiple_of
     if (
       self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
-    ):
+    ) or self.cut_to_pad:
       padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+      padding_len = self.max_length - packed_input_ids.numel()
+
+      if self.cut_to_pad and padding_len:
+        print(f"padding_len={padding_len}, not equal to 0")
       # assert self.max_length % self.multiple_of == 0
 
-      if self.cut_to_pad: assert padding_len == 0, f"padding_len={padding_len}, not equal to 0"
+      # if self.cut_to_pad: assert padding_len == 0, f"padding_len={padding_len}, not equal to 0"
 
       packed_input_ids = F.pad(
         packed_input_ids, (0, padding_len),
@@ -3128,6 +3254,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
                 current_sum += seq_lens[idx]
                 current_indices.append(idx)
 
+            # if max_len <= current_sum < max_len + delta:
             if max_len - delta <= current_sum <= max_len:
                 results.add(tuple(sorted(current_indices)))  # use tuple to be hashable
                 break  # once one valid subset found, restart next trial
@@ -3361,19 +3488,21 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
 
   def __iter__(self):
+    print(f"InternVLChatCompletionVisionDataset__iter__self.vit_token_balance={self.vit_token_balance:}")
     if self.vit_token_balance:
-      yield from self._iter_v1()
-    else:
       yield from self._iter_vit_token_balanced()
+    else:
+      yield from self._iter_v1()
 
 
 class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDataset):
-  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, n_local_shuffle_files_window=5, **kargs):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, n_local_shuffle_files_window=5, vit_token_balance=False, **kargs):
     self.rng = random.Random(shuffle_seed)
     self.num_workers = num_workers
     self.num_epochs = num_epochs
     self.n_local_shuffle_files_window = n_local_shuffle_files_window
-    super().__init__(sources, **kargs)
+    self.vit_token_balance = vit_token_balance
+    super().__init__(sources, vit_token_balance=vit_token_balance, **kargs)
 
   def _build_source_dataset(self, sources):
     data_file_list = []
@@ -3402,6 +3531,7 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
     if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
 
+    print(f"self.vit_token_balance={self.vit_token_balance}")
     dataset = ParquetDataset(data_file_list, self.num_workers, self.n_local_shuffle_files_window, vit_token_balance=self.vit_token_balance)
     return dataset, -1
 

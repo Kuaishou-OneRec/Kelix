@@ -42,7 +42,7 @@ from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
 from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
-from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration_siglip,Qwen2_5_VLForConditionalGeneration
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration_siglip,Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration_siglip_navit
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
 from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
 
@@ -155,7 +155,7 @@ def get_argument_parser():
                       help="whether adopt balanced vit tokens")
 
   parser.add_argument("--model_class", type=str, default="Qwen2_5_VLForConditionalGeneration_moonvit",
-                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip','InternVLChatModel','Qwen3SiglipDecoderLayer'. ",)
+                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'InternVLChatModel'",)
   
   parser.add_argument("--model_processor", type=str, default="Qwen2_5_VLProcessor_moonvit",
                       help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit' or 'Qwen3SiglipProcessor'")
@@ -656,6 +656,10 @@ def train():
       converter = Qwen2VLCheckpointConverter(args.model_dir)
   elif args.model_class == 'Qwen2_5_VLForConditionalGeneration_moonvit':
       converter = Qwen2_5_VL_moonvitCheckpointConverter(args.model_dir)
+  elif args.model_class == 'Qwen2_5_VLForConditionalGeneration_siglip':
+      converter = Qwen2_5_VL_siglipCheckpointConverter(args.model_dir)
+  elif args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip_navit":
+      converter = Qwen2_5_VL_siglipCheckpointConverter(args.model_dir)
   elif args.model_class == 'InternVLChatModel':
       converter = InternVLCheckpointConverter(args.model_dir)
 
@@ -698,6 +702,10 @@ def train():
     if args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip":
       state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip/global_step1000/model_float32.pth", weights_only=True)
       model.load_state_dict(state_dict)
+    
+    if args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip_navit":
+      state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth", weights_only=True)
+      model.load_state_dict(state_dict)
     #msyTODO: add siglip
   
   # check all param & buffer on meta device 
@@ -716,6 +724,7 @@ def train():
       "Qwen2_5_VLForConditionalGeneration_moonvit": {Qwen2_5_VLDecoderLayer, MoonVitEncoderLayer},
       "Qwen2_5_VLForConditionalGeneration_siglip": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
       "Qwen3SiglipForConditionalGeneration_navit": {Qwen3SiglipDecoderLayer, SiglipEncoderLayer},
+      "Qwen2_5_VLForConditionalGeneration_siglip_navit": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
       "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
     }
     set_activation_checkpointing(
@@ -1137,6 +1146,8 @@ def train():
             "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
             "perf/total_num_tokens": total_num_tokens,
             "perf/total_num_samples": total_num_samples,
+            "perf/num_sample_per_gpu": total_num_samples / dist.get_world_size(),
+            "perf/num_sample_per_sec_per_gpu": total_num_samples / (end_time - start_time) / dist.get_world_size(),
             "perf/valid_total_num_tokens": total_num_valid_tokens,
             "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
             "perf/image_tokens_per_sec_per_gpu": image_tokens_per_sec_per_gpu,
