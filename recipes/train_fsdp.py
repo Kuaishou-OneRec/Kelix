@@ -882,8 +882,10 @@ def train():
 
   dist.barrier()
 
-  tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
-
+  try: tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
+  except Exception as e:
+    print(f"init tokenizer failed\ne={e}")
+    tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
 
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
@@ -1133,6 +1135,8 @@ def train():
             acc_num_tokens  / (end_time - start_time) / dist.get_world_size()
           samples_per_sec_per_gpu = \
             acc_num_samples  / (end_time - start_time) / dist.get_world_size()
+          samples_per_step_per_gpu = \
+            acc_num_samples  / dist.get_world_size()
           valid_tokens_per_sec_per_gpu = \
             acc_valid_num_tokens / (end_time - start_time) / dist.get_world_size()
           image_tokens_per_sec_per_gpu = \
@@ -1151,6 +1155,7 @@ def train():
             "perf/total_num_tokens": total_num_tokens,
             "perf/total_num_samples": total_num_samples,
             "perf/num_sample_per_gpu": total_num_samples / dist.get_world_size(),
+            "perf/samples_per_step_per_gpu": samples_per_step_per_gpu,
             "perf/num_sample_per_sec_per_gpu": total_num_samples / (end_time - start_time) / dist.get_world_size(),
             "perf/valid_total_num_tokens": total_num_valid_tokens,
             "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
