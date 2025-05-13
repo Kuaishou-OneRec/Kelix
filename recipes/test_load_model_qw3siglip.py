@@ -188,6 +188,33 @@ inputs = processor(
     return_tensors="pt",
 )
 
+
+
+messages = [
+    {
+        "role": "user",
+        "content": "How are you"
+        # [
+        #     {"type": "text", "text": "How are you"},
+        # ],
+    }
+]
+processor = AutoTokenizer.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen3-8B/")
+# processor = Qwen2_5_VLProcessor_siglip.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip")
+
+text = processor.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True
+)
+# image_inputs, video_inputs = process_vision_info(messages)
+inputs = processor(
+    text=[text],
+    # images=image_inputs,
+    # videos=video_inputs,
+    padding=True,
+    return_tensors="pt",
+)
+
+print(inputs)
 print(inputs)
 '''
 {'input_ids': tensor([[151644,   8948,    198,   2610,    525,    264,  10950,  17847,     13,
@@ -217,8 +244,8 @@ if 1:
         traceback.print_exc()
         print(e)
         pass
-
     
+    exit()
     print("=" *200)
 
     try:

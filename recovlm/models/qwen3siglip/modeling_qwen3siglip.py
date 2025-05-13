@@ -93,7 +93,13 @@ else:
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Qwen3SiglipConfig"
-
+def _print(*args, **kargs):
+    return None
+    try:
+        if torch.distributed.get_rank() == 0:
+            print(*args, **kargs)
+    except:
+        print(*args, **kargs)
 
 class Qwen3SiglipMLP(nn.Module):
     def __init__(self, config, bias: bool = False):
@@ -881,9 +887,14 @@ class Qwen3SiglipAttention(nn.Module):
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
-
+        _print("ddddddd", query_states, 1.0  / math.sqrt(self.head_dim))
+        _print("eeeeeee", key_states)
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
+        _print("qqqqqq", query_states)
+        _print("kkkkkk", key_states)
 
+        _print("mmmmmm", attention_mask is None) # False
+        attention_mask = None
         if attention_mask is not None:  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
@@ -892,11 +903,15 @@ class Qwen3SiglipAttention(nn.Module):
         # Replace inf values with zeros in attention weights to prevent NaN propagation
         if query_states.dtype == torch.float16:
             attn_weights = torch.where(torch.isinf(attn_weights), torch.zeros_like(attn_weights), attn_weights)
+        _print("ccccccc", attn_weights)
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+        _print("aaaaaaa", attn_weights)
+        _print("bbbbbbb", value_states)
         attn_output = torch.matmul(attn_weights, value_states)
+        _print("ggggggg", attn_output)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
@@ -969,7 +984,11 @@ class Qwen3SiglipFlashAttention2(Qwen3SiglipAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
         dropout_rate = 0.0 if not self.training else self.attention_dropout
-
+        # _print("ddddddd", query_states, scaling)
+        _print("eeeeeee", key_states)
+        # attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+        # attention_mask = None
+        _print("mmmmmm", attention_mask is None)
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
         # cast them back in float16 just to be sure everything works as expected.
@@ -1208,8 +1227,9 @@ class Qwen3SiglipDecoderLayer(nn.Module):
 
         residual = hidden_states
 
+        _print("00000", hidden_states)
         hidden_states = self.input_layernorm(hidden_states)
-
+        _print("11111", hidden_states)
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
@@ -1222,6 +1242,8 @@ class Qwen3SiglipDecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             **kwargs
         )
+        _print("22222", hidden_states)
+
         hidden_states = residual + hidden_states
 
         # Fully Connected
@@ -1229,11 +1251,14 @@ class Qwen3SiglipDecoderLayer(nn.Module):
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
+        _print("33333", hidden_states)
 
         outputs = (hidden_states,)
 
         if output_attentions:
             outputs += (self_attn_weights,)
+        _print("44444", hidden_states)
+
 
         if use_cache:
             outputs += (present_key_value,)
@@ -1320,10 +1345,15 @@ class Qwen3SiglipModel(Qwen3SiglipPreTrainedModel):
         elif position_ids.dim() == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
+        _print("ststststsstss", attention_mask)
+        _print("ooooooooo", output_attentions)
+        _print("inputs_embeds", inputs_embeds)
+        _print("cache_position", cache_position)
+        _print("past_key_values", past_key_values)
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
-
+        _print("ssssssss", causal_mask)
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
@@ -2036,7 +2066,6 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-
         loss = None
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues

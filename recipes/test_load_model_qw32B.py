@@ -135,6 +135,7 @@ from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2
 from recovlm.utils.time_tracker import TimeTracker
 from recipes.inspects import info_params_recursive
 
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 # # initialize distributed environment
@@ -151,7 +152,7 @@ from recipes.inspects import info_params_recursive
 local_rank = 0
 # print_rank_0(rank, world_size, local_rank)
 # torch init
-torch.cuda.set_device(local_rank)
+# torch.cuda.set_device(local_rank)
 # torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
 
 
@@ -169,12 +170,14 @@ model_name = "Qwen/Qwen3-8B"
 messages = [
     {
         "role": "user",
-        "content": [
-            {"type": "text", "text": "How are you"},
-        ],
+        "content": "How are you"
+        # [
+        #     {"type": "text", "text": "How are you"},
+        # ],
     }
 ]
-processor = Qwen2_5_VLProcessor_siglip.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base")
+processor = AutoTokenizer.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen3-8B/")
+# processor = Qwen2_5_VLProcessor_siglip.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip")
 
 text = processor.apply_chat_template(
     messages, tokenize=False, add_generation_prompt=True
@@ -199,7 +202,8 @@ if 1:
         # from recovlm.qwen3.modeling_qwen3 import *
         with set_default_dtype(torch.float32):
             model = AutoModelForCausalLM.from_pretrained(
-                "/llm_reco_ssd/zhouyang12/models/Qwen3-8B",
+                "/llm_reco_ssd/zhouyang12/models/Qwen3-8B/",
+                # "Qwen/Qwen3-1.7B",
                 torch_dtype="auto",
                 _attn_implementation = 'flash_attention_2',
                 device_map="auto"
@@ -217,14 +221,14 @@ if 1:
         print(e)
         pass
 
-    
+    exit()
     print("=" *200)
 
     try:
         # from recovlm.qwen3.modeling_qwen3 import *
         with set_default_dtype(torch.float32):
             model = AutoModelForCausalLM.from_pretrained(
-                "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B",
+                "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B/",
                 torch_dtype="auto",
                 _attn_implementation = 'flash_attention_2',
                 device_map="auto"
@@ -241,3 +245,67 @@ if 1:
         traceback.print_exc()
         print(e)
         pass
+
+
+
+'''
+from huggingface_hub import snapshot_download
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# 下载模型到本地
+snapshot_download(
+    repo_id="Qwen/Qwen3-1.7B",
+    local_dir="/code/models/Qwen3-1.7B",
+    revision="main",  # 使用最新版本
+    token=None  # 如果需要认证，提供HF token
+)
+
+
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_name = "Qwen/Qwen3-1.7B"
+# model_name = "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B/"
+# load the tokenizer and the model
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    torch_dtype="auto",
+    device_map="auto",
+    cache_dir="/code/qwen3_1.7b"
+)
+
+# prepare the model input
+prompt = "Give me a short introduction to large language model."
+messages = [
+    {"role": "user", "content": prompt}
+]
+text = tokenizer.apply_chat_template(
+    messages,
+    tokenize=False,
+    add_generation_prompt=True,
+    enable_thinking=True # Switches between thinking and non-thinking modes. Default is True.
+)
+model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+
+# conduct text completion
+generated_ids = model.generate(
+    **model_inputs,
+    max_new_tokens=32768
+)
+output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist() 
+
+# parsing thinking content
+try:
+    # rindex finding 151668 (</think>)
+    index = len(output_ids) - output_ids[::-1].index(151668)
+except ValueError:
+    index = 0
+
+thinking_content = tokenizer.decode(output_ids[:index], skip_special_tokens=True).strip("\n")
+content = tokenizer.decode(output_ids[index:], skip_special_tokens=True).strip("\n")
+
+print("thinking content:", thinking_content)
+print("content:", content)
+
+'''

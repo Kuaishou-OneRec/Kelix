@@ -134,7 +134,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
-    print(f"q_embed={q_embed.shape}, k_embed={k_embed.shape}, q={q.shape}, k={k.shape}, cos={cos.shape}, position_ids={position_ids}")
+    _print(f"q_embed={q_embed.shape}, k_embed={k_embed.shape}, q={q.shape}, k={k.shape}, cos={cos.shape}, position_ids={position_ids}")
     return q_embed, k_embed
 
 
@@ -162,21 +162,24 @@ def eager_attention_forward(
 ):
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
-    print("ddddddd", query, scaling)
-    print("eeeeeee", key_states)
+    _print("ddddddd", query, scaling)
+    _print("eeeeeee", key_states)
     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    attention_mask = None
+    _print("qqqqqq", query)
+    _print("kkkkkk", key_states)
+    _print("mmmmmm", attention_mask is None) # True
+    attention_mask = None # True
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
-    # print("iiiiiii", causal_mask, attention_mask is not None)
-    print("ccccccc", attn_weights)
+    # _print("iiiiiii", causal_mask, attention_mask is not None)
+    _print("ccccccc", attn_weights)
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    print("aaaaaaa", attn_weights)
-    print("bbbbbbb", value_states)
+    _print("aaaaaaa", attn_weights)
+    _print("bbbbbbb", value_states)
     attn_output = torch.matmul(attn_weights, value_states)
-    print("ggggggg", attn_output)
+    _print("ggggggg", attn_output)
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
@@ -250,7 +253,7 @@ class Qwen3Attention(nn.Module):
                 )
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-        attention_interface = eager_attention_forward
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -358,7 +361,7 @@ class Qwen3RotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
-        print("ccosssss", cos)
+        _print("ccosssss", cos)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -558,11 +561,17 @@ class Qwen3Model(Qwen3PreTrainedModel):
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
+        
+        _print("ststststsstss", attention_mask)
+        _print("ooooooooo", output_attentions)
+        _print("inputs_embeds", inputs_embeds)
+        _print("cache_position", cache_position)
+        _print("past_key_values", past_key_values)
 
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
-
+        _print("ssssssss", causal_mask)
         hidden_states = inputs_embeds
         _print("hidden_states_before=")
         _print(hidden_states)
@@ -644,6 +653,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
+        print("cffffff", self.config._attn_implementation)
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and past_key_values is not None:
                 is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
@@ -897,9 +907,9 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
         logits = self.lm_head(hidden_states[:, slice_indices, :])
-        print("llllllllll", logits, logits.shape)
-        print(self.lm_head)
-        print("hhhhhh", self.lm_head.weight)
+        _print("llllllllll", logits, logits.shape)
+        _print(self.lm_head)
+        _print("hhhhhh", self.lm_head.weight)
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)

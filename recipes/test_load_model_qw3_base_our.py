@@ -225,8 +225,8 @@ if 1:
         # from recovlm.qwen3.modeling_qwen3 import *
         with set_default_dtype(torch.float32):
             model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
-                # "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip",
-                "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip",
+                "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip",
+                # "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip",
                 torch_dtype="auto",
                 _attn_implementation = 'flash_attention_2',
                 device_map="auto",
@@ -236,7 +236,7 @@ if 1:
             logits = model(**inputs).logits
             print(222, logits, logits.shape)
             #
-        with open("Qwen2_5_VLForConditionalGeneration_siglip-Qwen3-8B-siglip.txt", 'w') as f:
+        with open("Qwen2_5_VLForConditionalGeneration_siglip-Qwen3-8B-base-siglip.txt", 'w') as f:
             f.write(info_params_recursive(model.model, max_depth=10))
             print(f"load is done")
     except Exception as e:
