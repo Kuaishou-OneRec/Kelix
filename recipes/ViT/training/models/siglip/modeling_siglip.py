@@ -819,7 +819,7 @@ class SiglipEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         use_mrope: Optional[bool] = None,
-        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        # cu_seqlens: Optional[List[torch.Tensor]] = None,
     ) -> BaseModelOutput:
         r"""
         Args:
