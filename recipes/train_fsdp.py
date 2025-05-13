@@ -78,6 +78,7 @@ from recovlm.training.common import set_default_dtype, get_global_grad_norm, cli
 
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
+from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipDecoderLayer
 from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitEncoderLayer
 from recipes.ViT.training.models.siglip.modeling_siglip import SiglipEncoderLayer
 from recovlm.utils.time_tracker import TimeTracker
@@ -151,7 +152,7 @@ def get_argument_parser():
                       help="whether adopt balanced vit tokens")
 
   parser.add_argument("--model_class", type=str, default="Qwen2_5_VLForConditionalGeneration_moonvit",
-                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip','InternVLChatModel'",)
+                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip','InternVLChatModel','Qwen3SiglipDecoderLayer'. ",)
   
   parser.add_argument("--model_processor", type=str, default="Qwen2_5_VLProcessor_moonvit",
                       help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit'")
@@ -454,7 +455,7 @@ def freeze_params(args, model):
           param.requires_grad = False
       print_rank_0("=" * 50)
     
-  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip']:
+  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit']:
     if args.freeze_llm:
       print_rank_0("Freeze LLM parameters.")
       for name, param in model.named_parameters():
@@ -633,8 +634,6 @@ def train():
       converter = Qwen2VLCheckpointConverter(args.model_dir)
   elif args.model_class == 'Qwen2_5_VLForConditionalGeneration_moonvit':
       converter = Qwen2_5_VL_moonvitCheckpointConverter(args.model_dir)
-  elif args.model_class == 'Qwen2_5_VLForConditionalGeneration_siglip':
-      converter = Qwen2_5_VL_siglipCheckpointConverter(args.model_dir)
   elif args.model_class == 'InternVLChatModel':
       converter = InternVLCheckpointConverter(args.model_dir)
 
@@ -694,6 +693,7 @@ def train():
       "Qwen2_5_VLForConditionalGeneration": {Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock},
       "Qwen2_5_VLForConditionalGeneration_moonvit": {Qwen2_5_VLDecoderLayer, MoonVitEncoderLayer},
       "Qwen2_5_VLForConditionalGeneration_siglip": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
+      "Qwen3SiglipForConditionalGeneration_navit": {Qwen3SiglipDecoderLayer, SiglipEncoderLayer},
       "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
     }
     set_activation_checkpointing(
@@ -1257,7 +1257,7 @@ def train():
                       },
                       dataloader=dataloader,
                       app_state=app_state.set_call_back(converter.revert) if args.model_class in \
-                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip'] else app_state, # app_state.set_call_back(state_dict),
+                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration_moonvit'] else app_state, # app_state.set_call_back(state_dict),
                       dist_checkpointer=dist_checkpointer,
                   )
 
