@@ -280,7 +280,7 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
         for k in extra_meta_sharded_sd:
             if allow_random_init_params is not None and k in allow_random_init_params:
                 print(f"random init k={k}, {extra_meta_sharded_sd[k]}")
-                extra_full_ds[k] = meta_sharded_sd[k].clone()
+                full_ds[k] = meta_sharded_sd[k].clone()
 
         assert len(meta_sharded_sd) == len(full_sd), \
             f"Sharded State Dict doesn't equal to Full State Dict, {len(meta_sharded_sd) } v.s {len(full_sd)}" + "\n" + \
