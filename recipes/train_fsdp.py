@@ -992,11 +992,11 @@ def train():
       
       num_image_tokens2 = (input_ids == 151667).sum().item()
       if num_image_tokens2 == 0: num_image_tokens2 = (input_ids == 151655).sum().item()
-        
+
       num_image_tokens = num_image_tokens2
 
-      print(input_ids, 54544444)
-      print(f"num_image_tokens111111={num_image_tokens}")
+      # print(input_ids, 54544444)
+      # print(f"num_image_tokens111111={num_image_tokens}")
 
       # num_tokens - (sample_idx == -1).sum()
       num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
