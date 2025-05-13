@@ -19,6 +19,7 @@ import contextlib
 import multiprocessing as mp
 from functools import partial
 
+
 from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VL_siglipCheckpointConverter
 
 
@@ -127,7 +128,7 @@ from recovlm.training.common import set_default_dtype, get_global_grad_norm, cli
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
 # from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
 
-from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip
+from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip, Qwen2_5_VLForConditionalGeneration_siglip_navit
 
 from recovlm.utils.time_tracker import TimeTracker
 from recipes.inspects import info_params_recursive
@@ -191,20 +192,23 @@ print(inputs)
          151645,    198, 151644,    872,    198,   4340,    525,    498, 151645,
             198, 151644,  77091,    198]]), 'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])}
 '''
-if 0:
+if 1:
     try:
         # from recovlm.qwen3.modeling_qwen3 import *
         with set_default_dtype(torch.float32):
-            model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
+            model = Qwen2_5_VLForConditionalGeneration_siglip_navit.from_pretrained(
                 "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip",
                 torch_dtype="auto",
-                device_map="auto"
+                _attn_implementation = 'flash_attention_2',
+                device_map="auto",
+                ignore_mismatched_sizes=True
+
             )
-            model = model.float()
+            # model = model.float()
             logits = model(**inputs).logits
             print(222, logits, logits.shape)
             #
-        with open("Qwen3-8B_baseline_loadvia25_v2.txt", 'w') as f:
+        with open("Qwen3-8B_baseline_navit_loadvia25_v2.txt", 'w') as f:
             f.write(info_params_recursive(model.model, max_depth=10))
             print(f"load is done")
     except Exception as e:
@@ -213,21 +217,20 @@ if 0:
         print(e)
         pass
 
-if 1:
+if 0:
     try:
         # from recovlm.models.qwen3.modeling_qwen3 import *
         with set_default_dtype(torch.float32):
             model = AutoModelForCausalLM.from_pretrained(
-                # "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
-                "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip",
+                "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
                 torch_dtype="auto",
                 device_map="auto"
             )
-            # model = model.float()
             # inputs["input_ids"] += 1343322
             logits = model(**inputs).logits
             print(222, logits)
             print(logits.shape)
+
             #
         with open("Qwen3-8B_baseline_load_v2.txt", 'w') as f:
             f.write(info_params_recursive(model.model, max_depth=10))
@@ -245,7 +248,8 @@ if 0:
             model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
                 MODEL_DIR,
                 torch_dtype="auto",
-                device_map="auto"
+                device_map="auto",
+                ignore_mismatched_sizes=True
             )
 
             logits = model(**inputs).logits

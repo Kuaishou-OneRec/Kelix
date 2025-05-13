@@ -92,6 +92,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Qwen2_5_VLConfig"
 def _print(*args, **kargs):
+    return None
     try:
         if torch.distributed.get_rank() == 0:
             print(*args, **kargs)
@@ -726,7 +727,7 @@ class Qwen2_5_VLRotaryEmbedding(nn.Module):
         # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
         cos = cos * self.attention_scaling
         sin = sin * self.attention_scaling
-        print("ccosssss", cos)
+        # _print("ccosssss", cos)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def rope_init(self):
@@ -798,7 +799,7 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
 
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
-    print(f"q_embed={q_embed.shape}, k_embed={k_embed.shape}, q={q.shape}, k={k.shape}, cos={cos.shape}, mrope_section={mrope_section}")
+    _print(f"q_embed={q_embed.shape}, k_embed={k_embed.shape}, q={q.shape}, k={k.shape}, cos={cos.shape}, mrope_section={mrope_section}")
     return q_embed, k_embed
 
 
@@ -886,15 +887,11 @@ class Qwen2_5_VLAttention(nn.Module):
         # repeat k/v heads if n_kv_heads < n_heads
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
-        print("ddddddd", query_states, math.sqrt(self.head_dim))
-        print("eeeeeee", key_states)
         attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
         attention_mask = None
         if attention_mask is not None :  # no matter the length, we just slice it
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
-        # print("iiiiiii", causal_mask, attention_mask is not None)
-        print("ccccccc", attn_weights)
 
         # Fix precision issues in Qwen2-VL float16 inference
         # Replace inf values with zeros in attention weights to prevent NaN propagation
@@ -904,10 +901,7 @@ class Qwen2_5_VLAttention(nn.Module):
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        print("aaaaaaa", attn_weights)
-        print("bbbbbbb", value_states)
         attn_output = torch.matmul(attn_weights, value_states)
-        print("ggggggg", attn_output)
 
         if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
             raise ValueError(
@@ -1176,7 +1170,9 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."
             )
-        config._attn_implementation = 'eager'
+        # config._attn_implementation = 'eager'
+        assert config._attn_implementation == "flash_attention_2", f"config._attn_implementation is {config._attn_implementation}"
+
         self.self_attn = QWEN2_5_VL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         self.mlp = Qwen2MLP(config)
         self.input_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1340,23 +1336,9 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-        print("hidden_states_before=")
-        print(hidden_states)
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        # create position embeddings to be shared across the decoder layers
-        # position_embeddings = self.rotary_emb(hidden_states, position_ids)
-
-        print("=" * 30)
-        print(len(position_embeddings))
-        print("=" * 30)
-        print(len(position_embeddings), len(position_embeddings[0]), len(position_embeddings[0][0])) # 2 3 1
-        print("=" * 30)
-        print(position_embeddings[0][0].shape)
-        print("=" * 30)
-        print(position_embeddings[0][0])
 
         # shard hidden_states & position_embeddings for sequence parallel
         if get_sequence_parallel_world_size() > 1:
@@ -1404,9 +1386,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 )
 
             hidden_states = layer_outputs[0]
-            print("=============================")
-            print(f"qwen2_5_vl_model_hidden_states_layer{i}", hidden_states)
-            print("=============================")
 
             if use_cache:
                 next_decoder_cache = layer_outputs[2 if output_attentions else 1]
@@ -1415,9 +1394,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
-        print("=============================")
-        print("qwen2_5_vl_model_hidden_states_2", hidden_states)
-        print("=============================")
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1798,9 +1774,9 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
         spatial_merge_size = self.config.vision_config.spatial_merge_size
-        image_token_id = -3 # self.config.image_token_id
-        video_token_id = -1 # self.config.video_token_id
-        vision_start_token_id = -2 # self.config.vision_start_token_id
+        image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
+        vision_start_token_id = self.config.vision_start_token_id
         mrope_position_deltas = []
         if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
             total_input_ids = input_ids
@@ -3135,8 +3111,10 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                 image_grid_hws = list()
                 sample_indices = list()
 
+                cu_seqlens = [0]
+
                 #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
-                
+                pro = 0
                 for idx, thw in enumerate(image_grid_thw):
                     thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
                     numel = np.prod(thw_tuple)
@@ -3144,8 +3122,10 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
                     siglip_position_ids.append(image_position_ids)
                     sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
+                    cu_seqlens.append(cu_seqlens[-1] + numel)
                     
                 siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
+                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
                 vision_outputs = self.visual(
@@ -3154,7 +3134,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     position_ids=siglip_position_ids,
                     vision_return_embed_list=True,
                     interpolate_pos_encoding=True,
-                    sample_indices=sample_indices
+                    sample_indices=sample_indices,
+                    cu_seqlens=cu_seqlens
                 )
                 image_embeds = vision_outputs.last_hidden_state
 
@@ -3170,17 +3151,52 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                         f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
                     )
 
-                mask = input_ids == self.config.image_token_id
+                mask = (input_ids == self.config.image_token_id)
                 mask_unsqueezed = mask.unsqueeze(-1)
                 mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
                 image_mask = mask_expanded.to(inputs_embeds.device)
 
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+                # print_rank_0(f"image pixel_values={pixel_values.shape}, image_grid_thw={image_grid_thw.shape}, n_image_tokens={n_image_tokens}, image_mask={image_mask.shape}, image_embeds={image_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
+                # print_rank_0(f"image_grid_hws={image_grid_hws}, image_grid_thw={image_grid_thw}")
+                # image pixel_values=torch.Size([1, 196, 3, 14, 14]), image_grid_thw=torch.Size([1, 3]), n_image_tokens=49, image_mask=torch.Size([1,376, 3584]), image_embeds=torch.Size([49, 3584]), inputs_embeds=torch.Size([1,376, 3584])
+
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-                video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
+                pixel_values_videos = pixel_values_videos.unsqueeze(0)
+                siglip_position_ids = list()
+                video_grid_hws = list()
+                sample_indices = list()
+                cu_seqlens = [0]
+
+                for idx, thw in enumerate(video_grid_thw):
+                    thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
+                    numel = np.prod(thw_tuple)
+
+                    video_grid_hws.append(thw_tuple)
+                    video_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+                    siglip_position_ids.append(video_position_ids)
+                    sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
+                    cu_seqlens.append(cu_seqlens[-1] + numel)
+                siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values_videos.device)
+                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
+                sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values_videos.device)
+
+                vision_outputs = self.visual(
+                    pixel_values=pixel_values_videos, 
+                    image_grid_thw=video_grid_hws,
+                    position_ids=siglip_position_ids,
+                    vision_return_embed_list=True,
+                    interpolate_pos_encoding=True,
+                    sample_indices=sample_indices,
+                    cu_seqlens=cu_seqlens
+                )
+                video_embeds = vision_outputs.last_hidden_state
+                video_embeds = self.mlp_AR(video_embeds, video_grid_thw)
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
+                video_embeds = torch.cat(video_embeds,dim=0)
                 n_video_features = video_embeds.shape[0]
                 if n_video_tokens != n_video_features:
                     raise ValueError(
@@ -3244,9 +3260,7 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-        print("llllllllll", logits, logits.shape)
-        print(self.lm_head)
-        print("hhhhhh", self.lm_head.weight)
+
         loss = None
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues
@@ -3440,6 +3454,26 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
 
         return input_ids, model_kwargs
 
+class Qwen2_5_VLForConditionalGeneration_siglip_navit(Qwen2_5_VLForConditionalGeneration_siglip):
+    _tied_weights_keys = ["lm_head.weight"]
+    config_class = Qwen2_5_VLConfig
+    _no_split_modules = ["Qwen2_5_VLDecoderLayer", "SiglipEncoderLayer"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        Siglip_config = SiglipConfig.from_pretrained('/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex')
+        # print('msy_siglip_config',Siglip_config)
+        Siglip_config = Siglip_config.vision_config
+        Siglip_config._attn_implementation = 'flash_attention_2'
+        self.mlp_AR = Projector(config, Siglip_config)
+        self.visual = SiglipVisionModel(Siglip_config)
+        self.model = Qwen2_5_VLModel(config)
+        self.vocab_size = config.vocab_size
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.rope_deltas = None  # cache rope_deltas here
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
 
 class Projector(nn.Module):
