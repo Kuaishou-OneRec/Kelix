@@ -475,7 +475,7 @@ class SiglipAttention(nn.Module):
         output_attentions: Optional[bool] = False,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         rope_freqs_cis: Optional[torch.Tensor] = None,
-        cu_seqlens = None
+        # cu_seqlens = None
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -584,7 +584,7 @@ class SiglipEncoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         rope_freqs_cis: Optional[torch.Tensor] = None,
-        cu_seqlens = None,
+        # cu_seqlens = None,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
