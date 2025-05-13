@@ -859,8 +859,8 @@ def train():
       except StopIteration:
         break
 
-  prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(batch_queue, gpu_batch_q), daemon=True)
-  prefetch_t.start()
+  # prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(batch_queue, gpu_batch_q), daemon=True)
+  # prefetch_t.start()
 
   tb_metrics_q = queue.Queue(maxsize=8)
   def write_tb_async(tb_writer, metrics_queue, grad_acc_steps):
@@ -922,10 +922,13 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = gpu_batch_q.get()
-      except StopIteration: break
+      try:
+        batch = batch_queue.get()
+      except StopIteration:
+        break
       ticker.tick("next(data_iter)")
-      
+      to_cuda(batch)
+      ticker.tick("to_cuda(batch)")
 
       micro_step += 1
 
