@@ -2970,6 +2970,17 @@ class ChatCompletionVisionParquetDataset_siglip(ChatCompletionVisionDataset_sigl
   def load_state_dict(self, state_dict):
     self.dataset.load_state_dict(state_dict)
 
+
+
+class ChatCompletionVisionParquetDataset_navit(ChatCompletionVisionDataset_navit):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
+    self.rng = random.Random(shuffle_seed)
+    self.num_workers = num_workers
+    self.num_epochs = num_epochs
+    self.cut_to_pad = kargs.get("cut_to_pad", True)
+    super().__init__(sources, num_workers, shuffle_seed,  num_epochs, **kargs)
+
+
 class ChatCompletionVisionDpoParquetDataset(ChatCompletionVisionDpoDataset):
   def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
     self.rng = random.Random(shuffle_seed)
