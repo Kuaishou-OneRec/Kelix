@@ -278,8 +278,8 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
         extra_full_ds = {
             k:(v.shape, v.device, v.dtype) for k, v in full_sd.items() if k in extra_full_ds
         }
-        print(f"full_sd={format_dict_or_list(full_sd)}")
-        print(f"full_sd={format_dict_or_list(meta_sharded_sd)}")
+        print(f"full_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in full_sd.items()})}")
+        print(f"meta_sharded_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in meta_sharded_sd.items()})}")
 
         for k in extra_meta_sharded_sd:
             if allow_random_init_params is not None and k in allow_random_init_params:
