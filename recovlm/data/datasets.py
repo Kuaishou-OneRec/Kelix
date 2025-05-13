@@ -3049,8 +3049,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         all_local = [None] * dist.get_world_size()
         dist.all_gather_object(all_local, local_best)
         t6 = time.perf_counter()
-        if dist.get_rank() == 0:
-          print(f"all_local: {all_local}")
         selected = balance.find_global(all_local)
         # print(f"rank={dist.get_rank()} local_best={local_best}, all_local={all_local}, global_best={selected}")
 
@@ -3076,7 +3074,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
               if match(info, target):
                 num_samples += info[0]
                 num_tokens += info[1]
-                num_images_tokens += info[2] * 1025
+                num_image_tokens += info[2] * 1025
                 break
           step_info = [num_samples, num_tokens, num_image_tokens]
           print(f"rank=0, dataset_info: {step_info}")
