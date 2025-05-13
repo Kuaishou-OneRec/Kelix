@@ -286,7 +286,7 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
             if allow_random_init_params is not None and k in allow_random_init_params:
                 # full_sd[k] = meta_sharded_sd[k].clone()
                 full_sd[k] = torch.rand(extra_meta_sharded_sd[k][0]) * 0.1 # ) .to(device0)
-                nn.init.kaiming_normal_(tensor, a=0, mode='fan_in', nonlinearity='relu')
+                nn.init.kaiming_normal_(full_sd[k], a=0, mode='fan_in', nonlinearity='relu')
                 full_sd[k] = full_sd[k].to(device0)
                 # full_sd[k] = meta_sharded_sd[k].clone().to(device0)
                 print(f"random init k={k}, {extra_meta_sharded_sd[k]}\n, meta_sharded_sd={meta_sharded_sd[k]} \nfull={full_sd[k]}")
