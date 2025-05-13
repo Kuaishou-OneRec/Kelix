@@ -120,8 +120,12 @@ from recovlm.training.activations import set_activation_checkpointing
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
 
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
-from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
+# from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
+
+from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip
+
 from recovlm.utils.time_tracker import TimeTracker
+from recipes.inspects import info_params_recursive
 
 
 
@@ -142,10 +146,23 @@ local_rank = rank % world_size
 torch.cuda.set_device(local_rank)
 torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
 
-initialize_model_parallel(1)
 
-MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip"
+MODEL_DIR="/llm_reco_ssd/zhouyang12/models/msy_Qwen3vl-8B-Base"
+MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip"
 # MODEL_DIR="/llm_reco/lingzhixin/output2/RecoVLM-dev/Qwen2-VL-7B-run_sft_7B_fsdp_sp/0.0.5/_1000/global_step_1000_torch_ckpt/"
+
+# Qwen2_5_VLForConditionalGeneration_siglip
+
+with set_default_dtype(torch.float32):
+    model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
+        MODEL_DIR,
+        _attn_implementation="flash_attention_2",
+        use_cache=False
+    )
+#
+with open("Qwen2_5_VLForConditionalGeneration_siglip_0512_1738.txt", 'w') as f:
+    f.write(info_params_recursive(model.model, max_depth=10))
+initialize_model_parallel(1)
 
 
 state_dict = None
@@ -165,7 +182,7 @@ with set_default_dtype(torch.float32), torch.device("meta"):
         _attn_implementation="flash_attention_2",
         use_cache=False
     )
-    state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict_2.pth", weights_only=True)
+    # state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen3_vl_siglip_state_dict.pth", weights_only=True)
     model.load_state_dict(state_dict)
 
 device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))

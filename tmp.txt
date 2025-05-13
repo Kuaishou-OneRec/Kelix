@@ -1,0 +1,49 @@
+如有问题, 请先参考通用FAQ: https://halo.corp.kuaishou.com/help/docs/bb8c63d537777c563fd04ba4dca24ee1
+如需开启框架的日志辅助问题定位, 可参考: https://infra-doc.corp.kuaishou.com/docs/infra-kess-python/logger.html
+不存在环境变量：KWS_SERVICE_REGION，使用默认值：HB1
+不存在环境变量：KWS_SERVICE_AZ，使用默认值：ZW
+不存在环境变量：KWS_SERVICE_PAZ，使用默认空值：
+[2025-05-12 19:07:42,884] [INFO] [real_accelerator.py:222:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+/usr/local/lib/python3.10/dist-packages/timm/models/layers/__init__.py:48: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.48, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
+You are using a model of type qwen3 to instantiate a model of type qwen2_5_vl. This is not supported for all configurations of models and can yield errors.
+Some weights of Qwen2_5_VLForConditionalGeneration_siglip were not initialized from the model checkpoint at /llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip and are newly initialized: ['lm_head.weight', 'mlp_AR.linear_1.bias', 'mlp_AR.linear_1.weight', 'mlp_AR.linear_2.bias', 'mlp_AR.linear_2.weight', 'mlp_AR.pre_norm.bias', 'mlp_AR.pre_norm.weight', 'visual.vision_model.embeddings.packing_position_embedding.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+_DATASET_SKIP_MM=
+=============================
+qwen2_5_vl_model_hidden_states tensor([[[ 0.0122,  0.0117, -0.0119,  ..., -0.0118, -0.0071,  0.0049],
+         [ 0.0243, -0.0369,  0.0126,  ...,  0.0125, -0.0142, -0.0420],
+         [-0.0009,  0.0042, -0.0016,  ..., -0.0084, -0.0126, -0.0055],
+         ...,
+         [ 0.0122,  0.0117, -0.0119,  ..., -0.0118, -0.0071,  0.0049],
+         [ 0.0139,  0.0199, -0.0170,  ..., -0.0044, -0.0024, -0.0077],
+         [-0.0009,  0.0042, -0.0016,  ..., -0.0084, -0.0126, -0.0055]]],
+       device='cuda:1', dtype=torch.bfloat16, grad_fn=<EmbeddingBackward0>)
+=============================
+Traceback (most recent call last):
+  File "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/recipes/test_load_model_qw3.py", line 198, in <module>
+    logits = model(**inputs).logits
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/accelerate/hooks.py", line 165, in new_forward
+    output = module._old_forward(*args, **kwargs)
+  File "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/recovlm/models/qwen_3_vl_2/modeling_qwen2_5_vl.py", line 3203, in forward
+    outputs = self.model(
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1736, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+  File "/usr/local/lib/python3.10/dist-packages/torch/nn/modules/module.py", line 1747, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/recovlm/models/qwen_3_vl_2/modeling_qwen2_5_vl.py", line 1337, in forward
+    if get_sequence_parallel_world_size() > 1:
+  File "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/recovlm/training/parallel.py", line 59, in get_sequence_parallel_world_size
+    return dist.get_world_size(group=get_sequence_parallel_group())
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/distributed_c10d.py", line 2020, in get_world_size
+    return _get_group_size(group)
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/distributed_c10d.py", line 986, in _get_group_size
+    default_pg = _get_default_group()
+  File "/usr/local/lib/python3.10/dist-packages/torch/distributed/distributed_c10d.py", line 1150, in _get_default_group
+    raise ValueError(
+ValueError: Default process group has not been initialized, please make sure to call init_process_group.

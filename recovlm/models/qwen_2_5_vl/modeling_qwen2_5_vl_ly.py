@@ -72,8 +72,6 @@ from recovlm.training.parallel import UlyssesAttention, \
     get_local_sequence
 
 
-def get_sequence_parallel_world_size(): return 1
-
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_varlen_func
@@ -613,8 +611,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
-
-
         for layer_num, blk in enumerate(self.blocks):
             if layer_num in self.fullatt_block_indexes:
                 cu_seqlens_now = cu_seqlens
@@ -840,12 +836,11 @@ class Qwen2_5_VLAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.q_norm = Qwen2RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = Qwen2RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
+
         self.rotary_emb = Qwen2_5_VLRotaryEmbedding(config=config)
 
     def forward(
@@ -861,12 +856,12 @@ class Qwen2_5_VLAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_norm(self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
-        key_states = self.k_norm(self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
@@ -946,13 +941,13 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
         cu_seqlens: Optional[torch.Tensor] = None
     ):
         bsz, q_len, _ = hidden_states.size()
-        q= self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
-        query_states = self.q_norm(q)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
@@ -1095,12 +1090,12 @@ class Qwen2_5_VLSdpaAttention(Qwen2_5_VLAttention):
 
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_norm(self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
-        key_states = self.k_norm(self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
@@ -1165,8 +1160,6 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."
             )
-        # config._attn_implementation = "eager"
-        assert config._attn_implementation == "flash_attention_2", f"config._attn_implementation is {config._attn_implementation}"
         self.self_attn = QWEN2_5_VL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         self.mlp = Qwen2MLP(config)
         self.input_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -3199,7 +3192,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
 
                 video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-
+                # print_rank_0(f"video pixel_values_videos={pixel_values_videos.shape}, video_grid_thw={video_grid_thw.shape}, n_video_tokens={n_video_tokens}, video_mask={video_mask.shape}, video_embeds={video_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
+                # print_rank_0(f"video_grid_thw={video_grid_thw}, video_grid_hws={video_grid_hws}")
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
@@ -3219,6 +3213,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     attention_mask,
                 )
                 self.rope_deltas = rope_deltas
+                # print("rope1111", position_ids.shape)
+                # print(position_ids, rope_deltas)
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
@@ -3233,6 +3229,8 @@ class Qwen2_5_VLForConditionalGeneration_siglip(Qwen2_5_VLPreTrainedModel, Gener
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+                # print("rope2222", position_ids.shape, delta)
+
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,

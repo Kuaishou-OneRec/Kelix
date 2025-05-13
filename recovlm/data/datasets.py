@@ -1416,6 +1416,7 @@ class ChatCompletionVisionDataset_siglip(IterableDataset):
                pad_token_id: int = 151643,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
+               siglip_vision_config='/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384',
                **kwargs
                ):
     """
@@ -1432,7 +1433,8 @@ class ChatCompletionVisionDataset_siglip(IterableDataset):
     if base_model_dir:
       processor = Qwen2_5_VLProcessor_siglip.from_pretrained(base_model_dir)
       model_config = Qwen2_5_VLConfig.from_pretrained(base_model_dir)
-      vision_config = SiglipConfig.from_pretrained('/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384').vision_config
+      print(f"ChatCompletionVisionDataset_siglip: siglip_vision_config={siglip_vision_config}")
+      vision_config = SiglipConfig.from_pretrained(siglip_vision_config).vision_config
       spatial_merge_size = 2#vision_config.merge_kernel_size[0]
       patch_size = vision_config.patch_size
       image_token_id = model_config.image_token_id

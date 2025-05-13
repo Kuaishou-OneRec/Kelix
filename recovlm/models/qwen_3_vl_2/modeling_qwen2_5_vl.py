@@ -53,7 +53,7 @@ from transformers.utils import (
     replace_return_docstrings,
 )
 from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLVisionConfig
-from recovlm.utils.common import print_rank_0
+from recovlm.utils.common import print
 from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitPretrainedModel,KimiVLMultiModalProjector, KimiVLMultiModalProjector_Contrastive
 from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig, KimiVLConfig
 from recipes.ViT.training.models.siglip.configuration_siglip import SiglipConfig
@@ -71,7 +71,7 @@ from recovlm.training.parallel import UlyssesAttention, \
     get_local_sequence_boundary, \
     get_local_sequence
 
-
+def get_sequence_parallel_world_size(): return 1
 
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_varlen_func
@@ -90,7 +90,6 @@ else:
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "Qwen2_5_VLConfig"
 
 
 class Qwen2_5_VLMLP(nn.Module):
@@ -721,7 +720,6 @@ class Qwen2_5_VLRotaryEmbedding(nn.Module):
         # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
         cos = cos * self.attention_scaling
         sin = sin * self.attention_scaling
-
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def rope_init(self):
@@ -814,9 +812,9 @@ class Qwen2_5_VLAttention(nn.Module):
     """
 
     def __init__(self, config: Qwen2_5_VLConfig, layer_idx: Optional[int] = None):
-        print_rank_0("=============================")
-        print_rank_0("Qwen2_5_VLAttention init")
-        print_rank_0("=============================")
+        # print_rank_0("=============================")
+        # print_rank_0("Qwen2_5_VLAttention init")
+        # print_rank_0("=============================")
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -927,9 +925,6 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        print_rank_0("=============================")
-        print_rank_0("Qwen2_5_VLFlashAttention2 init")
-        print_rank_0("=============================")
 
         # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
         # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
@@ -1225,18 +1220,13 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
             **kwargs
         )
         hidden_states = residual + hidden_states
-        print_rank_0("=============================")
-        print_rank_0("qwen2_5_vl_decoder_layer_hidden_states", hidden_states)
-        print_rank_0("=============================")
 
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        print_rank_0("=============================")
-        print_rank_0("qwen2_5_vl_decoder_layer_hidden_states_2", hidden_states)
-        print_rank_0("=============================")
+
 
         outputs = (hidden_states,)
 
@@ -1245,7 +1235,6 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
 
         if use_cache:
             outputs += (present_key_value,)
-
         return outputs
 
 
@@ -1393,9 +1382,6 @@ class Qwen2_5_VLModel(Qwen2_5_VLPreTrainedModel):
                 all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
-        # print_rank_0("=============================")
-        # print_rank_0("qwen2_5_vl_model_hidden_states_2", hidden_states)
-        # print_rank_0("=============================")
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -2049,7 +2035,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
 
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
-
         loss = None
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues
