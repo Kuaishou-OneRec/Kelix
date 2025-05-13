@@ -13,5 +13,6 @@
     "num_workers": 8,
     "num_epochs": 1,
     "cut_to_pad": 1,
-    "model_class": "Qwen3SiglipForConditionalGeneration_navit"
+    "model_class": "Qwen3SiglipForConditionalGeneration_navit",
+    "siglip_vision_config": "/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex"
 }
