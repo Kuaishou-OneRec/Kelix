@@ -35,7 +35,7 @@ def main():
     # Print the keys in the state dict
     if isinstance(ptm, dict):
         for key in ptm.keys():
-            if "vision_model" in key:
+            if "visual" in key:
                 pt1[key] = ptm[key]
 
     print(pt1.keys())
