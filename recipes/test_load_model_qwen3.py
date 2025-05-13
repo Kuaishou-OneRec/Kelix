@@ -168,17 +168,29 @@ messages = [
         # ],
     }
 ]
-processor = AutoTokenizer.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen3-8B/")
 # processor = Qwen2_5_VLProcessor_siglip.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip")
 
+
+
+
+
+
+MODEL_DIR2="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip"
+processor = Qwen3SiglipProcessor_siglip.from_pretrained(MODEL_DIR2)
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Give me a short introduction to large language model."},
+        ],
+    }
+]
+# Preparation for inference
 text = processor.apply_chat_template(
     messages, tokenize=False, add_generation_prompt=True
 )
-# image_inputs, video_inputs = process_vision_info(messages)
 inputs = processor(
     text=[text],
-    # images=image_inputs,
-    # videos=video_inputs,
     padding=True,
     return_tensors="pt",
 )
@@ -192,7 +204,7 @@ print(inputs)
 if 1:
     try:
         # from recovlm.qwen3.modeling_qwen3 import *
-        with set_default_dtype(torch.float32):
+        with set_default_dtype(torch.bfloat16):
             model = AutoModelForCausalLM.from_pretrained(
                 "/llm_reco_ssd/zhouyang12/models/Qwen3-8B/",
                 # "Qwen/Qwen3-1.7B",
