@@ -585,6 +585,20 @@ def data_func(dataset_config, model_class, max_length, batch_queue, args):
     batch_queue.put(batch)
 
 
+class FakeConverter:
+  def __init__(self, model_path_or_name: str = None):
+    self.model_path_or_name = model_path_or_name
+
+  def __call__(self, state_dict):
+     return self.convert(state_dict)
+
+  def convert(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    return state_dict
+
+  def revert(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    return state_dict
+
+
 def train():
   arg_parser = get_argument_parser()
   args = arg_parser.parse_args()
@@ -631,6 +645,8 @@ def train():
   set_random_seed(args.seed)
 
   state_dict = None
+
+  converter = FakeConverter()
   if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration']:
       converter = Qwen2VLCheckpointConverter(args.model_dir)
   elif args.model_class == 'Qwen2_5_VLForConditionalGeneration_moonvit':
@@ -812,8 +828,7 @@ def train():
     client_state = {}
 
     # 获取state_dict用于加载
-    state_dict = {"app": app_state.set_call_back(converter.convert) if args.model_class in \
-                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration_moonvit'] else app_state  }
+    state_dict = {"app": app_state.set_call_back(converter.convert)}
               
     # 使用DCP API加载分片数据
     dist_checkpointer.load_checkpoint(
@@ -1215,8 +1230,7 @@ def train():
                           "total_data_source_tokens": total_data_source_tokens,
                       },
                       dataloader=dataloader,
-                      app_state=app_state.set_call_back(converter.revert) if args.model_class in \
-                                  ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration'] else app_state, # app_state.set_call_back(state_dict), # no need to convert 
+                      app_state=app_state.set_call_back(converter.revert), # app_state.set_call_back(state_dict), # no need to convert 
                       dist_checkpointer=dist_checkpointer
                   )
           try:
@@ -1257,8 +1271,7 @@ def train():
                           "total_data_source_tokens": total_data_source_tokens,
                       },
                       dataloader=dataloader,
-                      app_state=app_state.set_call_back(converter.revert) if args.model_class in \
-                                ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration_moonvit'] else app_state, # app_state.set_call_back(state_dict),
+                      app_state=app_state.set_call_back(converter.revert), # app_state.set_call_back(state_dict),
                       dist_checkpointer=dist_checkpointer,
                   )
 
