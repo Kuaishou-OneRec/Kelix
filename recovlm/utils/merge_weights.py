@@ -92,5 +92,5 @@ def main():
 #   #     print(ptm[key].shape)
 #   #     print("================================================")
 #   print("all close")
-# if __name__ == "__main__":
-#   main()
+if __name__ == "__main__":
+  main()
