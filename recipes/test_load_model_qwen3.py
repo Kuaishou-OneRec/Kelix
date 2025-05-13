@@ -222,7 +222,7 @@ if 1:
             model = AutoModelForCausalLM.from_pretrained(
                 "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B/",
                 torch_dtype="auto",
-                _attn_implementation = 'flash_attention_2',
+                _attn_implementation = 'eager',
                 device_map="auto"
             )
             # model = model.float()
