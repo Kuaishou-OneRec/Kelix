@@ -121,7 +121,7 @@ nohup mpirun --allow-run-as-root \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 21000 \
+                --max_length 23000 \
                 --learning_rate 1e-3 \
                 --min_lr 5e-4 \
                 --weight_decay 0.1 \
@@ -131,7 +131,7 @@ nohup mpirun --allow-run-as-root \
                 --save_checkpoint_per_step 2000 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
-                --logging_per_step 10 \
+                --logging_per_step 5 \
                 --fp32_weight \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
@@ -142,5 +142,7 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
+                --freeze_llm \
+                --freeze_visual \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
