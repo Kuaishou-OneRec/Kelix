@@ -3058,7 +3058,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         target = selected[dist.get_rank()]
         found = -1
         for i, info in enumerate(info_list):
-          if match(info, target)
+          if match(info, target):
             found = i
             break
 
