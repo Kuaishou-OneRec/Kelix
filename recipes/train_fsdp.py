@@ -16,6 +16,7 @@ import contextlib
 import multiprocessing as mp
 import psutil
 import threading
+import queue
 from functools import partial
 
 
@@ -921,7 +922,7 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = batch_queue.get()
+      try: batch = gpu_batch_q.get()
       except StopIteration: break
       ticker.tick("next(data_iter)")
       
@@ -938,7 +939,7 @@ def train():
           show_cnt -= 1
           
       data_source = batch.pop("data_source", None) # dataset source list cur batch
-      to_cuda(batch, non_blocking=True)
+      # to_cuda(batch, non_blocking=True)
       ticker.tick("to_cuda(batch)")
 
       input_ids = batch["input_ids"]
