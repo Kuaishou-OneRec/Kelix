@@ -1,5 +1,5 @@
-from recovlm.models.qwen3siglip.modeling_qwen3_siglip import Qwen3SiglipForConditionalGeneration_navit
-from recovlm.models.qwen3siglip.processing_qwen3_siglip import Qwen3SiglipProcessor_siglip
+from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
+from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_siglip
 from typing import Dict, Any, Union, Optional
 
 import contextlib
