@@ -190,8 +190,6 @@ inputs = processor(
     return_tensors="pt",
 )
 
-
-
 messages = [
     {
         "role": "user",
