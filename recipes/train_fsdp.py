@@ -179,7 +179,7 @@ def get_argument_parser():
   parser.add_argument("--max_length", type=int, default=None,
                       help="Max tokens per sentence in corpus")
   
-    parser.add_argument("--allow_random_init_params", type=str, default='',
+  parser.add_argument("--allow_random_init_params", type=str, default='',
                       help="-")
 
   ############ Learning Rate Args ############
