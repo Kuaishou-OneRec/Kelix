@@ -332,6 +332,8 @@ class SiglipVisionEmbeddings(nn.Module):
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
         interpolate_pos_encoding=False
     ) -> torch.Tensor:
+        print("ffff", pixel_values.device, self.patch_embedding.weight.device, )
+        print([x.device for x in self.parameters() ])
         if pixel_values.dim() == 4:
             # raise NotImplementedError
             _, _, height, width = pixel_values.shape
@@ -343,6 +345,8 @@ class SiglipVisionEmbeddings(nn.Module):
                 embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
             else:
                 embeddings = embeddings + self.position_embedding(self.position_ids)
+            
+            print("ffff11111", embeddings.device)
             return embeddings
         elif pixel_values.dim() == 5:
             assert position_ids is not None
@@ -373,6 +377,8 @@ class SiglipVisionEmbeddings(nn.Module):
                 embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
             else:
                 embeddings = embeddings + self.packing_position_embedding(position_ids)
+
+            print("ffff22222", embeddings.device)
             return embeddings
         else:
             raise NotImplementedError(str(pixel_values.shape))
@@ -1060,16 +1066,22 @@ class SiglipVisionTransformer(nn.Module):
         Returns:
 
         """
+        
+        print("pppppppp", list(self.embeddings.parameters())[0].device, list(self.encoder.parameters())[0].device, list(self.post_layernorm.parameters())[0].device )
+        # ccccccc cuda:0 cuda:1 cuda:3
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        print("pixel_values_device", pixel_values.device)
         hidden_states = self.embeddings(
             pixel_values, 
             interpolate_pos_encoding=interpolate_pos_encoding, 
             position_ids=position_ids,
             image_grid_thw=image_grid_thw
         )
+        print(3245645777, hidden_states.device, pixel_values.device)
 
         # cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
         #     dim=0,
@@ -1105,7 +1117,9 @@ class SiglipVisionTransformer(nn.Module):
             if len(unique_sample_index) > 0 and unique_sample_index[0] == -1:
                 unique_sample_index = unique_sample_index[1:]
             for sample_idx in unique_sample_index:
+                print(sample_index.device, sample_idx.device)
                 token_indices = (sample_index == sample_idx).nonzero().flatten()
+                print(12343, hidden_state.device, token_indices.device, (sample_index == sample_idx).nonzero().device)
                 sample_hidden_state = hidden_state[token_indices]
                 sample_hidden_state_list.append(sample_hidden_state)
             

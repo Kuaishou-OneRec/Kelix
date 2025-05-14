@@ -1039,6 +1039,7 @@ class Qwen3SiglipFlashAttention2(Qwen3SiglipAttention):
             )
         else:
             if cu_seqlens is not None:
+                print(324555554, 2345364664)
                 # Sample packing with FA2
                 max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
                 cu_seqlens = cu_seqlens.to(torch.int32)
@@ -3115,6 +3116,7 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "The image shows a street scene with a red stop sign in the foreground. In the background, there is a large red gate with Chinese characters ..."
         ```"""
+        print("ccccccc", list(self.mlp_AR.parameters())[0].device, list(self.visual.parameters())[0].device, list(self.lm_head.parameters())[0].device )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

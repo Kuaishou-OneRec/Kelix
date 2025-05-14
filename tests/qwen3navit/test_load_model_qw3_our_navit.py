@@ -136,6 +136,27 @@ from recovlm.utils.time_tracker import TimeTracker
 from recipes.inspects import info_params_recursive
 
 
+def set_seed(seed: int):
+    import random
+    import numpy as np
+
+    """设置所有可能的随机数种子，保证实验可重复性"""
+    # 设置 Python 内置的随机数种子
+    random.seed(seed)
+    # 设置 NumPy 的随机数种子
+    np.random.seed(seed)
+    # 设置 PyTorch 的 CPU 随机数种子
+    torch.manual_seed(seed)
+    # 设置 PyTorch 的 CUDA 随机数种子（用于 GPU 计算）
+    torch.cuda.manual_seed(seed)
+    # 如果使用了多个 GPU，还需要设置这个
+    torch.cuda.manual_seed_all(seed)
+    # 禁用 CuDNN 的非确定性算法（确保结果可复现）
+    torch.backends.cudnn.deterministic = True
+    # 禁用 CuDNN 的自动调优功能（确保每次运行使用相同的算法）
+    torch.backends.cudnn.benchmark = False
+
+set_seed(0)
 
 # # initialize distributed environment
 # rank = int(os.environ["RANK"])
@@ -215,78 +236,54 @@ inputs = processor(
 )
 
 print(inputs)
+
+
+
+messagest = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "what's in the image"},
+        ],
+    }
+]
+textt = processor.apply_chat_template(
+    messagest, tokenize=False, add_generation_prompt=False
+)
+inputst = processor(
+    text=[text],
+    padding=True,
+    return_tensors="pt",
+)
+
+print(inputs)
 '''
 {'input_ids': tensor([[151644,   8948,    198,   2610,    525,    264,  10950,  17847,     13,
          151645,    198, 151644,    872,    198,   4340,    525,    498, 151645,
             198, 151644,  77091,    198]]), 'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])}
 '''
+
 if 1:
     try:
-        # from recovlm.qwen3.modeling_qwen3 import *
-        with set_default_dtype(torch.float32):
+        with set_default_dtype(torch.bfloat16):
             model = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
                 "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip",
-                torch_dtype="auto",
+                torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
-                device_map="auto",
-                # ignore_mismatched_sizes=True
-
-            )
-            # model = model.float()
-            logits = model(**inputs).logits
-            print(222, logits, logits.shape)
-            #
-        # with open("Qwen3-8B_baseline_navit_loadvia25_v2.txt", 'w') as f:
-        #     f.write(info_params_recursive(model.model, max_depth=10))
-        #     print(f"load is done")
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(e)
-        pass
-
-if 0:
-    try:
-        # from recovlm.models.qwen3.modeling_qwen3 import *
-        with set_default_dtype(torch.float32):
-            model = AutoModelForCausalLM.from_pretrained(
-                "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
-                torch_dtype="auto",
-                device_map="auto"
-            )
-            # inputs["input_ids"] += 1343322
-            logits = model(**inputs).logits
-            print(222, logits)
-            print(logits.shape)
-
-            #
-        with open("Qwen3-8B_baseline_load_v2.txt", 'w') as f:
-            f.write(info_params_recursive(model.model, max_depth=10))
-            print(f"load is done")
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(e)
-        pass
-
-if 0:
-    try:
-        # load the tokenizer and the model
-        with set_default_dtype(torch.float32):
-            model = Qwen2_5_VLForConditionalGeneration_siglip.from_pretrained(
-                MODEL_DIR,
-                torch_dtype="auto",
-                device_map="auto",
+                device_map="cuda:0",
                 ignore_mismatched_sizes=True
+
             )
+            for k in inputst: inputst[k] = inputst[k].cuda()
+            model = model.cuda()
+            logits = model(**inputst).logits
+            print("text_output", logits, logits.mean(), logits.max(), logits.min(), logits.shape)
 
+            for k in inputs: inputs[k] = inputs[k].cuda()
             logits = model(**inputs).logits
-            print(111, logits)
+            print("mm_output", logits, logits.mean(), logits.max(), logits.min(), logits.shape)
 
-            #
-        with open("Qwen2_5_VLForConditionalGeneration_siglip_v2.txt", 'w') as f:
-            f.write(info_params_recursive(model.model, max_depth=10))
-            print(f"load is done")
+
     except Exception as e:
         import traceback
         traceback.print_exc()
