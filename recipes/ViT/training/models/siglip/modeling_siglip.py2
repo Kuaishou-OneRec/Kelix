@@ -268,8 +268,6 @@ class SiglipVisionEmbeddings(nn.Module):
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
-        self.cache_position_embedding = dict()
-        self.cache_position_count = dict()
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.packing_position_embedding = nn.Embedding(32768, self.embed_dim)
 
@@ -327,22 +325,6 @@ class SiglipVisionEmbeddings(nn.Module):
                 tmp_image_grid_thw.append(image_grid)
         return tmp_image_grid_thw
 
-    def fetch_position_embedding_lfu_cache(self, embeddings, h, w, max_cache=20):
-        grid = (h, w)
-        if grid in self.cache_position_embedding:
-            self.cache_position_count[grid] += 1
-            return self.cache_position_embedding[grid]
-        
-        if len(self.cache_position_embedding) >= max_cache:
-            min_hit_grid = min(self.cache_position_count, key=self.cache_position_count.get)
-            self.cache_position_count.pop(min_hit_grid)
-            self.cache_position_embedding.pop(min_hit_grid)
-        
-        position_embedding = self.interpolate_pos_encoding(embeddings, h, w, True)
-        self.cache_position_count[grid] = 1
-        self.cache_position_embedding[grid] = position_embedding
-        return position_embedding
-
     def forward(
         self, 
         pixel_values: torch.FloatTensor, 
@@ -350,6 +332,8 @@ class SiglipVisionEmbeddings(nn.Module):
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
         interpolate_pos_encoding=False
     ) -> torch.Tensor:
+        print("ffff", pixel_values.device, self.patch_embedding.weight.device, )
+        print([x.device for x in self.parameters() ])
         if pixel_values.dim() == 4:
             # raise NotImplementedError
             _, _, height, width = pixel_values.shape
@@ -361,6 +345,8 @@ class SiglipVisionEmbeddings(nn.Module):
                 embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
             else:
                 embeddings = embeddings + self.position_embedding(self.position_ids)
+            
+            print("ffff11111", embeddings.device)
             return embeddings
         elif pixel_values.dim() == 5:
             assert position_ids is not None
@@ -385,12 +371,14 @@ class SiglipVisionEmbeddings(nn.Module):
                     for _ in range(t):
                         end = start + h * w
                         image_embeddings = embeddings[start: end, :]
-                        image_embeddings = image_embeddings + self.fetch_position_embedding_lfu_cache(image_embeddings, h, w).squeeze(0)
+                        image_embeddings = image_embeddings + self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0)
                         tmp_embeddings.append(image_embeddings)
                         start = end
                 embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
             else:
                 embeddings = embeddings + self.packing_position_embedding(position_ids)
+
+            print("ffff22222", embeddings.device)
             return embeddings
         else:
             raise NotImplementedError(str(pixel_values.shape))
@@ -1073,22 +1061,28 @@ class SiglipVisionTransformer(nn.Module):
         padding_mask: Optional[torch.Tensor] = None,
         vision_return_embed_list: Optional[bool] = False,
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
-        return_pooler_output: Optional[bool] = True,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
 
         """
+        print(f"pixel_values={pixel_values}")
+        print("pppppppp", list(self.embeddings.parameters())[0].device, list(self.encoder.parameters())[0].device, list(self.post_layernorm.parameters())[0].device )
+        # ccccccc cuda:0 cuda:1 cuda:3
+
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        print("pixel_values_device", pixel_values.device)
         hidden_states = self.embeddings(
             pixel_values, 
             interpolate_pos_encoding=interpolate_pos_encoding, 
             position_ids=position_ids,
             image_grid_thw=image_grid_thw
         )
+        print("hidden_states12432254=", hidden_states)
+        print(3245645777, hidden_states.device, pixel_values.device)
 
         # cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
         #     dim=0,
@@ -1110,75 +1104,62 @@ class SiglipVisionTransformer(nn.Module):
 
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
+        print("last_hidden_state435644=", last_hidden_state)
 
-        if return_pooler_output is True:
-            if sample_indices is not None:
-                assert self.use_head is True
-                dim = last_hidden_state.shape[-1]
-                sample_hidden_state_list = list()
+        if sample_indices is not None:
+            assert self.use_head is True
+            dim = last_hidden_state.shape[-1]
+            sample_hidden_state_list = list()
 
-                hidden_state = last_hidden_state.squeeze(0)
-                sample_index = sample_indices
-                # for hidden_state, sample_index in zip(last_hidden_state_list, sample_index_list):
-                unique_sample_index = torch.unique(sample_index).sort().values.unbind(0)
-                unique_sample_index = list(unique_sample_index)
-                if len(unique_sample_index) > 0 and unique_sample_index[0] == -1:
-                    unique_sample_index = unique_sample_index[1:]
-                for sample_idx in unique_sample_index:
-                    token_indices = (sample_index == sample_idx).nonzero().flatten()
-                    sample_hidden_state = hidden_state[token_indices]
-                    sample_hidden_state_list.append(sample_hidden_state)
-                
-                if not vision_return_embed_list:
-                    max_length = max([_state.shape[0] for _state in sample_hidden_state_list])
-                    tmp_sample_hidden_state_list = list()
-                    padding_mask = list()
-                    for idx, _state in enumerate(sample_hidden_state_list):
-                        padding_length = max_length - _state.shape[0]
-                        mask = _state.new_zeros(size=(max_length, ), dtype=torch.int64)
-                        mask[-padding_length: ] = 1
-                        padding_mask.append(mask)
-                        padding = _state.new_zeros(size=(padding_length, dim))
-                        new_state = torch.concat([_state, padding], dim=0)
-                        tmp_sample_hidden_state_list.append(new_state)
-                    sample_hidden_state = torch.stack(tmp_sample_hidden_state_list, dim=0)
-                    padding_mask = torch.stack(padding_mask, dim=0).float().to(last_hidden_state.dtype)
-                    pooler_output = self.head(sample_hidden_state, key_padding_mask=padding_mask)
-                else:
-                    pooler_output = list()
-                    for state in sample_hidden_state_list:
-                        sample_pooler_output = self.head(state.unsqueeze(0))
-                        pooler_output.append(sample_pooler_output)
-                    pooler_output = torch.concat(pooler_output, dim=0)
-                    sample_hidden_state = sample_hidden_state_list
-
-                return BaseModelOutputWithPooling(
-                    last_hidden_state=sample_hidden_state,
-                    pooler_output=pooler_output,
-                    hidden_states=encoder_outputs.hidden_states,
-                    attentions=encoder_outputs.attentions,
-                )
+            hidden_state = last_hidden_state.squeeze(0)
+            sample_index = sample_indices
+            # for hidden_state, sample_index in zip(last_hidden_state_list, sample_index_list):
+            unique_sample_index = torch.unique(sample_index).sort().values.unbind(0)
+            unique_sample_index = list(unique_sample_index)
+            if len(unique_sample_index) > 0 and unique_sample_index[0] == -1:
+                unique_sample_index = unique_sample_index[1:]
+            for sample_idx in unique_sample_index:
+                print(sample_index.device, sample_idx.device)
+                token_indices = (sample_index == sample_idx).nonzero().flatten()
+                print(12343, hidden_state.device, token_indices.device, (sample_index == sample_idx).nonzero().device)
+                sample_hidden_state = hidden_state[token_indices]
+                sample_hidden_state_list.append(sample_hidden_state)
+            
+            if not vision_return_embed_list:
+                max_length = max([_state.shape[0] for _state in sample_hidden_state_list])
+                tmp_sample_hidden_state_list = list()
+                padding_mask = list()
+                for idx, _state in enumerate(sample_hidden_state_list):
+                    padding_length = max_length - _state.shape[0]
+                    mask = _state.new_zeros(size=(max_length, ), dtype=torch.int64)
+                    mask[-padding_length: ] = 1
+                    padding_mask.append(mask)
+                    padding = _state.new_zeros(size=(padding_length, dim))
+                    new_state = torch.concat([_state, padding], dim=0)
+                    tmp_sample_hidden_state_list.append(new_state)
+                sample_hidden_state = torch.stack(tmp_sample_hidden_state_list, dim=0)
+                padding_mask = torch.stack(padding_mask, dim=0).float().to(last_hidden_state.dtype)
+                pooler_output = self.head(sample_hidden_state, key_padding_mask=padding_mask)
             else:
-                pooler_output = self.head(last_hidden_state) if self.use_head else None
+                pooler_output = list()
+                for state in sample_hidden_state_list:
+                    sample_pooler_output = self.head(state.unsqueeze(0))
+                    pooler_output.append(sample_pooler_output)
+                pooler_output = torch.concat(pooler_output, dim=0)
+                sample_hidden_state = sample_hidden_state_list
 
             return BaseModelOutputWithPooling(
-                last_hidden_state=last_hidden_state,
+                last_hidden_state=sample_hidden_state,
                 pooler_output=pooler_output,
                 hidden_states=encoder_outputs.hidden_states,
                 attentions=encoder_outputs.attentions,
             )
-        
-        sample_hidden_state = list()
-        assert cu_seqlens is not None
-        for i in range(cu_seqlens.shape[0] - 1):
-            start = cu_seqlens[i]
-            end = cu_seqlens[i + 1]
-            tensor = last_hidden_state[:, start: end, :].squeeze(0)
-            sample_hidden_state.append(tensor)
-        
+        else:
+            pooler_output = self.head(last_hidden_state) if self.use_head else None
+
         return BaseModelOutputWithPooling(
-            last_hidden_state=sample_hidden_state,
-            pooler_output=None,
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooler_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -1241,7 +1222,6 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         vision_return_embed_list: Optional[bool] = False,
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
-        return_pooler_output: Optional[bool] = True,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -1275,8 +1255,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
             vision_return_embed_list=vision_return_embed_list,
             image_grid_thw=image_grid_thw,
             sample_indices=sample_indices,
-            cu_seqlens=cu_seqlens,
-            return_pooler_output=return_pooler_output
+            cu_seqlens=cu_seqlens
         )
 
 
