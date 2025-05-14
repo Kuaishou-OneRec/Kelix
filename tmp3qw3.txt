@@ -1,21 +1,0 @@
-WARNING:infra.doc_init:如有问题, 请先参考通用FAQ: https://halo.corp.kuaishou.com/help/docs/bb8c63d537777c563fd04ba4dca24ee1
-WARNING:infra.doc_init:如需开启框架的日志辅助问题定位, 可参考: https://infra-doc.corp.kuaishou.com/docs/infra-kess-python/logger.html
-WARNING:infra.kafka:不存在环境变量：KWS_SERVICE_REGION，使用默认值：HB1
-WARNING:infra.kafka:不存在环境变量：KWS_SERVICE_AZ，使用默认值：ZW
-WARNING:infra.kafka:不存在环境变量：KWS_SERVICE_PAZ，使用默认空值：
-[2025-05-12 12:02:18,683] [INFO] [real_accelerator.py:222:get_accelerator] Setting ds_accelerator to cuda (auto detect)
-/usr/local/lib/python3.10/dist-packages/timm/models/layers/__init__.py:48: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
-  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
-Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. `use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`.
-_DATASET_SKIP_MM=
-Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards:  20%|██        | 1/5 [00:01<00:06,  1.65s/it]Loading checkpoint shards:  40%|████      | 2/5 [00:03<00:04,  1.65s/it]Loading checkpoint shards:  60%|██████    | 3/5 [00:04<00:03,  1.64s/it]Loading checkpoint shards:  80%|████████  | 4/5 [00:06<00:01,  1.50s/it]Loading checkpoint shards: 100%|██████████| 5/5 [00:06<00:00,  1.14s/it]Loading checkpoint shards: 100%|██████████| 5/5 [00:06<00:00,  1.34s/it]
-222 tensor([[[18.7500, 21.7500, 19.2500,  ...,  7.8125,  7.8125,  7.8125],
-         [23.6250, 26.0000, 23.0000,  ..., 11.5625, 11.5625, 11.5625],
-         [22.0000, 24.3750, 26.8750,  ..., 10.8750, 10.8750, 10.8750],
-         ...,
-         [18.0000, 18.8750, 16.6250,  ...,  1.4922,  1.4922,  1.4922],
-         [22.5000, 26.2500, 23.6250,  ..., 10.6875, 10.6875, 10.6875],
-         [20.0000, 22.1250, 18.8750,  ...,  7.4062,  7.4062,  7.4062]]],
-       dtype=torch.bfloat16, grad_fn=<ToCopyBackward0>)
-torch.Size([1, 22, 151936])
-load is done
