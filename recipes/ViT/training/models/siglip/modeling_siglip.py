@@ -328,6 +328,7 @@ class SiglipVisionEmbeddings(nn.Module):
         return tmp_image_grid_thw
 
     def fetch_position_embedding_lfu_cache(self, embeddings, h, w, max_cache=20):
+        return self.interpolate_pos_encoding(embeddings, h, w, True)
         grid = (h, w)
         if grid in self.cache_position_embedding:
             self.cache_position_count[grid] += 1
