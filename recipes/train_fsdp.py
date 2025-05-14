@@ -825,7 +825,6 @@ def train():
     args.load_weights_only = False
     print_rank_0(f"WARN: --resume_dataloader is rewrited to True \n" \
                  f"WARN: --load_weights_only is rewrited to False \n")
-  global_step = 0
 
 
   if ckpt_id:
@@ -926,7 +925,10 @@ def train():
     ignore_index=-100, return_token_loss=True, shift_labels=False)
 
   start_time = time.time()
+  start_time0 = start_time
   show_cnt = 1
+  global_step = 0
+
 
   # Metrics, acc_ account for gradient accumulation
   # TODO: use mestrics manager
@@ -1141,6 +1143,18 @@ def train():
             acc_valid_num_tokens / (end_time - start_time) / dist.get_world_size()
           image_tokens_per_sec_per_gpu = \
             acc_num_image_tokens / (end_time - start_time) / dist.get_world_size()
+
+
+          samples_per_step_per_gpu_v2 = total_num_samples / dist.get_world_size() / global_step
+          samples_per_sec_per_gpu_v2 = total_num_samples / dist.get_world_size() / (end_time - start_time0)
+
+          image_tokens_per_step_per_gpu_v2 = total_num_image_tokens / dist.get_world_size() / global_step
+          image_tokens_per_sec_per_gpu_v2 = total_num_image_tokens / dist.get_world_size() / (end_time - start_time0)
+
+          tokens_per_step_per_gpu_v2 = total_num_tokens / dist.get_world_size() / global_step
+          tokens_per_sec_per_gpu_v2 = total_num_tokens / dist.get_world_size() / (end_time - start_time0)
+
+
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
           start_time = end_time
           log_dict = {
@@ -1162,7 +1176,15 @@ def train():
             "perf/image_tokens_per_sec_per_gpu": image_tokens_per_sec_per_gpu,
             "perf/image_token_ratio_by_valid": image_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
-            "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples
+            "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples,
+
+            "perf/samples_per_step_per_gpu_v2": samples_per_step_per_gpu_v2,
+            "perf/samples_per_sec_per_gpu_v2": samples_per_sec_per_gpu_v2,
+            "perf/image_tokens_per_step_per_gpu_v2": image_tokens_per_step_per_gpu_v2,
+            "perf/image_tokens_per_sec_per_gpu_v2": image_tokens_per_sec_per_gpu_v2,
+            "perf/tokens_per_step_per_gpu_v2": tokens_per_step_per_gpu_v2,
+            "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
+
           }
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
           ticker.tick(f"log_dict*{log_acc_step}")

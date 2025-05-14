@@ -2573,6 +2573,7 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
 
                 #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
                 pro = 0
+                print(image_grid_thw, 345343)
                 for idx, thw in enumerate(image_grid_thw):
                     thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
                     numel = np.prod(thw_tuple)
@@ -2623,6 +2624,7 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
                 # print_rank_0(f"image pixel_values={pixel_values.shape}, image_grid_thw={image_grid_thw.shape}, n_image_tokens={n_image_tokens}, image_mask={image_mask.shape}, image_embeds={image_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
                 # print_rank_0(f"image_grid_hws={image_grid_hws}, image_grid_thw={image_grid_thw}")
                 # image pixel_values=torch.Size([1, 196, 3, 14, 14]), image_grid_thw=torch.Size([1, 3]), n_image_tokens=49, image_mask=torch.Size([1,376, 3584]), image_embeds=torch.Size([49, 3584]), inputs_embeds=torch.Size([1,376, 3584])
+                print(88811111555, inputs_embeds)
 
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
@@ -2954,6 +2956,13 @@ class Projector(nn.Module):
         )
 
         self.pre_norm = torch.nn.LayerNorm(self.vision_config.hidden_size, eps=1e-05)
+
+        nn.init.ones_(self.pre_norm.weight)  # 权重初始化为 1
+        print("45445244sssss", self.pre_norm.weight)
+
+
+        nn.init.zeros_(self.pre_norm.bias)   # 偏置初始化为 0
+
         self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
         self.act = GELUActivation()
         self.linear_2 = nn.Linear(
@@ -2965,12 +2974,18 @@ class Projector(nn.Module):
         if isinstance(image_features, (list, tuple)):
             processed_features = list()
             for image_feature, image_grid in zip(image_features, image_grid_thw):
+                print("sssss", self.pre_norm.weight)
+                print("iiiii", image_feature)
                 image_feature = self.pre_norm(image_feature)
+                print("afterppppp", image_feature)
                 t, h, w = image_grid
                 from einops import rearrange
 
                 image_feature = rearrange(image_feature, "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2)
+                print("fffff", image_feature)
+                print(6677777, self.linear_1.weight)
                 hidden_states = self.linear_1(image_feature)
+                print(hidden_states)
                 hidden_states = self.act(hidden_states)
                 hidden_states = self.linear_2(hidden_states)
                 processed_features.append(hidden_states)
@@ -2980,6 +2995,7 @@ class Projector(nn.Module):
         dims = image_features.shape[:-1]
         dim = image_features.shape[-1]
         image_features = image_features.view(np.prod(dims), dim)
+
         hidden_states = self.pre_norm(image_features).view(-1, self.hidden_size)
         hidden_states = self.linear_1(hidden_states)
         hidden_states = self.act(hidden_states)

@@ -2,6 +2,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 # from recovlm.models.qwen_3_vl.modeling_qwen3_vl import Qwen3_VLForConditionalGeneration_siglip
 # from recovlm.models.qwen_3_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
 from typing import Dict, Any, Union, Optional
+from recovlm.utils.ds_utils import format_dict_or_list
 
 import contextlib
 import gc
@@ -135,6 +136,8 @@ from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForCondit
 from recovlm.utils.time_tracker import TimeTracker
 from recipes.inspects import info_params_recursive
 
+# /llm_reco/lingzhixin/recovlm_qw0510/recovlm/recovlm/models/qwen3siglip/processing_qwen3siglip.py
+from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_navit
 
 def set_seed(seed: int):
     import random
@@ -210,64 +213,112 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-messages = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "image": generate_circle_image()},
-            {"type": "text", "text": "what's in the image"},
-        ],
-    }
-]
-
-# /llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2/config.json
-from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_navit
 processor = Qwen3SiglipProcessor_navit.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2')
 
-text = processor.apply_chat_template(
-    messages, tokenize=False, add_generation_prompt=False
-)
-image_inputs, video_inputs = process_vision_info(messages)
-
-print(image_inputs)
-
-inputs = processor(
-    text=[text],
-    images=image_inputs,
-    videos=video_inputs,
-    padding=True,
-    return_tensors="pt",
-)
-
-print(inputs)
 
 
+def make_inputs(a,b):
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": generate_circle_image((a,b),) },
+                {"type": "text", "text": "what's in the image"},
+            ],
+        }
+    ]
 
-messagest = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "text", "text": "what's in the image"},
-        ],
-    }
-]
-textt = processor.apply_chat_template(
-    messagest, tokenize=False, add_generation_prompt=False
-)
-inputst = processor(
-    text=[text],
-    padding=True,
-    return_tensors="pt",
-)
+    # /llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2/config.json
+    from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_navit
 
-print(inputs)
+    text = processor.apply_chat_template(
+        messages, tokenize=False, add_generation_prompt=False
+    )
+    image_inputs, video_inputs = process_vision_info(messages)
+
+    inputs = processor(
+        text=[text],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=True,
+        return_tensors="pt",
+    )
+    return inputs
+
+
+
+
+# messagest = [
+#     {
+#         "role": "user",
+#         "content": [
+#             {"type": "text", "text": "what's in the image"},
+#         ],
+#     }
+# ]
+# textt = processor.apply_chat_template(
+#     messagest, tokenize=False, add_generation_prompt=False
+# )
+# inputst = processor(
+#     text=[text],
+#     padding=True,
+#     return_tensors="pt",
+# )
+
+# print(inputs)
 '''
 {'input_ids': tensor([[151644,   8948,    198,   2610,    525,    264,  10950,  17847,     13,
          151645,    198, 151644,    872,    198,   4340,    525,    498, 151645,
             198, 151644,  77091,    198]]), 'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])}
 '''
 
+
+def load_from_full_model_state_dict(model, full_sd: Dict[str, Any], allow_random_init_params="mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias"):
+    # allow_random_init_params = ['mlp_AR.pre_norm.weight', 'mlp_AR.pre_norm.bias', 'mlp_AR.linear_1.weight', 'mlp_AR.linear_1.bias', 'mlp_AR.linear_2.weight', 'mlp_AR.linear_2.bias']
+    if isinstance(allow_random_init_params, str): allow_random_init_params = allow_random_init_params.split(',')
+    meta_sharded_sd = model.state_dict()
+    sharded_sd = {}
+
+    extra_meta_sharded_sd = set(meta_sharded_sd.keys()) - set((full_sd.keys()))
+    extra_full_ds = set(full_sd.keys()) - set((meta_sharded_sd.keys()))
+    extra_meta_sharded_sd = {
+        k:(v.shape, v.device, v.dtype) for k, v in meta_sharded_sd.items() if k in extra_meta_sharded_sd
+    }
+    extra_full_ds = {
+        k:(v.shape, v.device, v.dtype) for k, v in full_sd.items() if k in extra_full_ds
+    }
+    print(f"full_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in full_sd.items()})}")
+    print(f"meta_sharded_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in meta_sharded_sd.items()})}")
+
+    device0 = full_sd[list(full_sd)[0]]
+    for k in extra_meta_sharded_sd:
+        if allow_random_init_params is not None and k in allow_random_init_params:
+            # full_sd[k] = meta_sharded_sd[k].clone()
+            full_sd[k] = torch.rand(extra_meta_sharded_sd[k][0]) * 0.1 # ) .to(device0)
+            if full_sd[k].ndim >= 2:
+                nn.init.kaiming_normal_(full_sd[k], a=0, mode='fan_in', nonlinearity='relu')
+            else:
+                nn.init.zeros_(full_sd[k])  # 最常见
+            full_sd[k] = full_sd[k].to(device0)
+            # full_sd[k] = meta_sharded_sd[k].clone().to(device0)
+            print(f"random init k={k}, {extra_meta_sharded_sd[k]}\n, meta_sharded_sd={meta_sharded_sd[k]} \nfull={full_sd[k]}")
+
+    assert len(meta_sharded_sd) == len(full_sd), \
+        f"Sharded State Dict doesn't equal to Full State Dict, {len(meta_sharded_sd) } v.s {len(full_sd)}" + "\n" + \
+        f"extra_meta_sharded_sd={format_dict_or_list(extra_meta_sharded_sd)}, extra_full_ds={format_dict_or_list(extra_full_ds)}"
+    assert sorted(list(meta_sharded_sd.keys())) == sorted(list(full_sd.keys())), \
+        "Keys of Sharded State Dict doesn't equal to Full State Dict"
+
+
+    for param_name, sharded_meta_param in meta_sharded_sd.items():
+        full_tensor = full_sd[param_name].detach().cuda().type(sharded_meta_param.dtype)
+        sharded_sd[param_name] = nn.Parameter(full_tensor)
+    model.load_state_dict(sharded_sd, assign=True)
+
+
+logits_all = []
 if 1:
+    # state_dict = load_hf_checkpoint(args.model_dir)
     try:
         with set_default_dtype(torch.bfloat16):
             model = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
@@ -277,14 +328,19 @@ if 1:
                 device_map="cuda:0",
                 ignore_mismatched_sizes=True
             )
-            for k in inputst: inputst[k] = inputst[k].cuda()
-            model = model.cuda()
-            logits = model(**inputst).logits
-            print("text_output", logits, logits.mean(), logits.max(), logits.min(), logits.shape)
 
-            for k in inputs: inputs[k] = inputs[k].cuda()
-            logits = model(**inputs).logits
-            print("mm_output", logits, logits.mean(), logits.max(), logits.min(), logits.shape)
+            load_from_full_model_state_dict(model, load_hf_checkpoint("/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2"))
+            # for k in inputst: inputst[k] = inputst[k].cuda()
+            model = model.cuda()
+
+            # logits = model(**inputst).logits
+            # print("text_output", logits, logits.mean(), logits.max(), logits.min(), logits.shape)
+
+            for a,b in [(100,200),(100,100),(50, 1000), (400, 600), (465, 345), (155, 581), (201, 356), (34,532), (135,1799)]: 
+                inputs = make_inputs(a,b)
+                for k in inputs: inputs[k] = inputs[k].cuda()
+                logits = model(**inputs).logits
+                logits_all.append(logits)
 
 
     except Exception as e:
@@ -292,3 +348,6 @@ if 1:
         traceback.print_exc()
         print(e)
         pass
+
+for i, logits in enumerate(logits_all):
+    print(f"mm_output-{i}", logits.flatten()[:4], logits.flatten().std(), logits.mean(), logits.max(), logits.min(), logits.shape)
