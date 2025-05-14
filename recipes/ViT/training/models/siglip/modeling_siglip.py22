@@ -317,16 +317,6 @@ class SiglipVisionEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
-    @staticmethod
-    def flatten_list(image_grid_thw):
-        tmp_image_grid_thw = list()
-        for image_grid in image_grid_thw:
-            if isinstance(image_grid, list):
-                tmp_image_grid_thw.extend(image_grid)
-            else:
-                tmp_image_grid_thw.append(image_grid)
-        return tmp_image_grid_thw
-
     def fetch_position_embedding_lfu_cache(self, embeddings, h, w, max_cache=20):
         grid = (h, w)
         if grid in self.cache_position_embedding:
@@ -342,6 +332,16 @@ class SiglipVisionEmbeddings(nn.Module):
         self.cache_position_count[grid] = 1
         self.cache_position_embedding[grid] = position_embedding
         return position_embedding
+
+    @staticmethod
+    def flatten_list(image_grid_thw):
+        tmp_image_grid_thw = list()
+        for image_grid in image_grid_thw:
+            if isinstance(image_grid, list):
+                tmp_image_grid_thw.extend(image_grid)
+            else:
+                tmp_image_grid_thw.append(image_grid)
+        return tmp_image_grid_thw
 
     def forward(
         self, 
@@ -1167,7 +1167,7 @@ class SiglipVisionTransformer(nn.Module):
                 hidden_states=encoder_outputs.hidden_states,
                 attentions=encoder_outputs.attentions,
             )
-        
+    
         sample_hidden_state = list()
         assert cu_seqlens is not None
         for i in range(cu_seqlens.shape[0] - 1):
@@ -1276,7 +1276,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
             image_grid_thw=image_grid_thw,
             sample_indices=sample_indices,
             cu_seqlens=cu_seqlens,
-            return_pooler_output=return_pooler_output
+            return_pooler_output=return_pooler_output,
         )
 
 
