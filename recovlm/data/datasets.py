@@ -3137,7 +3137,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         result = self._result_buf.get()
         t2 = time.perf_counter()
         print(f'next_batch[{dist.get_rank()}]={t2-t1}')
-        yield result
+        if False:
+          yield result
 
   def __iter_v2__(self):
     buffer = []
