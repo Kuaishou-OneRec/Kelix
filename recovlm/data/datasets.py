@@ -3100,9 +3100,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       t2 = time.perf_counter()
       packed_inputs = self._packing(inputs)
       packed_inputs["data_source"] = data_source
-      packed_inputs["num_samples"] = step_info[0]
-      packed_inputs["num_tokens"] = step_info[1]
-      packed_inputs["num_image_tokens"] = step_info[2]
+      # packed_inputs["num_samples"] = step_info[0]
+      # packed_inputs["num_tokens"] = step_info[1]
+      # packed_inputs["num_image_tokens"] = step_info[2]
         
       t3 = time.perf_counter()
       print(f"[rank={dist.get_rank()}] get_balanced={t2-t1} packing={t3-t2}")
