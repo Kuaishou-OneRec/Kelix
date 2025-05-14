@@ -1015,7 +1015,6 @@ def train():
             dtype=labels.dtype).to(device=labels.device, non_blocking=True)
         labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
         local_labels = get_local_sequence(labels, seq_idx=1)
-        print(f"local_labels={local_labels.device}, logits={logits.device}, labels={labels.device}")
         loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
 
         ticker.tick("loss_fn")
@@ -1134,7 +1133,7 @@ def train():
           ticker_stats = {}
           for t in [ticker, iter_ticker]:
               ticker_stats.update(t.stat())
-          metrics_info = (global_step, log_dict, ticker_stats, batch_data_source_loss, batch_data_source_tokens)
+          metrics_info = (global_step, log_dict, ticker_stats, batch_data_source_loss, batch_data_source_tokens, total_data_source_samples)
           tb_metrics_q.put(metrics_info)
 
           ticker.tick(f"tb_metrics_q.put")
@@ -1202,8 +1201,8 @@ def train():
                 f"rank{dist.get_rank()}_global_step{global_step}.pth")
               )
         ticker.tick(f"save_ckpt*{args.save_checkpoint_per_step * args.gradient_accumulation_steps}") 
-        print_rank_0(f"ticker_info: {ticker.stat()}")
 
+      print_rank_0(f"ticker_info: {ticker.stat()}")
       iter_ticker.tick("iter_ticker")
       if torch_profiler: torch_profiler.step()
 
