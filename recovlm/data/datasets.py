@@ -3036,7 +3036,6 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
           info.append(balance.vit_flops(vit_len))
           info_list.append(info)
         t3 = time.perf_counter()
-        print(f"info_list; {info_list}")
         all_infos = [None] * dist.get_world_size()
         dist.all_gather_object(all_infos, info_list)
         t4 = time.perf_counter()
@@ -3137,8 +3136,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         result = self._result_buf.get()
         t2 = time.perf_counter()
         print(f'next_batch[{dist.get_rank()}]={t2-t1}')
-        if True:
-          yield result
+        yield result
 
   def __iter_v2__(self):
     buffer = []

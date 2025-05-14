@@ -853,14 +853,17 @@ def train():
   def prefetch_to_gpu(input_q, output_q):
     while True:
       try:
+        t1 = time.perf_counter()
         batch = input_q.get()
-        to_cuda(batch)
-        output_q.put(batch)
+        t2 = time.perf_counter()
+        print_rank_0(f"get_one_batch={t2-t1}")
+        to_cuda(batch, non_blocking=True)
+        # output_q.put(batch)
       except StopIteration:
         break
 
-  # prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(batch_queue, gpu_batch_q), daemon=True)
-  # prefetch_t.start()
+  prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(batch_queue, gpu_batch_q), daemon=True)
+  prefetch_t.start()
 
   tb_metrics_q = queue.Queue(maxsize=8)
   def write_tb_async(tb_writer, metrics_queue, grad_acc_steps):
@@ -924,15 +927,13 @@ def train():
       ticker.tick("enter_context(torch_profiler)")
       try:
         while True:
-          t1 = time.perf_counter()
-          batch = batch_queue.get()
+          batch = gpu_batch_q.get()
           if dist.get_rank() == 0:
-            t2 = time.perf_counter()
-            print(f"get_one_batch: {batch}, dur={t2-t1}")
+            print(f"get_one_batch: {batch}")
       except StopIteration:
         break
       ticker.tick("next(data_iter)")
-      to_cuda(batch)
+      # to_cuda(batch, non_blocking=True)
       ticker.tick("to_cuda(batch)")
 
       micro_step += 1
