@@ -959,7 +959,6 @@ def train():
 
 
       # 打印 token 数量
-      print_rank_0(f"Iteration {micro_step}: Token count = {batch['num_tokens']}")
       
       num_image_tokens2 = (input_ids == 151667).sum().item()
           
@@ -968,6 +967,7 @@ def train():
       num_valid_tokens = batch.get("num_valid_tokens", 0)
       num_image_tokens = batch.get("num_image_tokens", 0)
       t2 = time.perf_counter()
+      print_rank_0(f"Iteration {micro_step}: Token count = {num_tokens}")
 
       total_num_samples += num_samples
       total_num_tokens += num_tokens
