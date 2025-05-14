@@ -1072,13 +1072,14 @@ def train():
         ticker.tick(f"token_stasts*{log_acc_step}")
 
         with Timer("reduce data source metrics"):
-          batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
-          batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
-          valid_data_source_tokens = dist_reduce_dict(valid_data_source_tokens)
-          total_data_source_samples = dist_reduce_dict(
-            local_acc_data_source_samples, group=get_data_parallel_group())
-          for ds_key, ds_num_tokens in batch_data_source_tokens.items():
-            total_data_source_tokens[ds_key] += ds_num_tokens
+          print_rank_0(f"batch_ds_loss: {batch_data_source_loss}, token: {batch_data_source_tokens}, samples: {local_acc_data_source_samples}")
+          # batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
+          # batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
+          # valid_data_source_tokens = dist_reduce_dict(valid_data_source_tokens)
+          # total_data_source_samples = dist_reduce_dict(
+          #   local_acc_data_source_samples, group=get_data_parallel_group())
+          # for ds_key, ds_num_tokens in batch_data_source_tokens.items():
+          #   total_data_source_tokens[ds_key] += ds_num_tokens
           
 
         if dist.get_rank() == 0:
