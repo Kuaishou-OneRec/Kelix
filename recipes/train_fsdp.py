@@ -961,7 +961,6 @@ def train():
       
 
       micro_step += 1
-      print(f"micro_stepmicro_step={micro_step}")
 
       if show_cnt > 0 and dist.get_rank() == 0:
         with Timer("Show data"):
