@@ -176,6 +176,7 @@ messages = [
         ],
     }
 ]
+
 processor = Qwen2_5_VLProcessor_siglip.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip")
 
 text = processor.apply_chat_template(
@@ -222,31 +223,31 @@ print(inputs)
             198, 151644,  77091,    198]]), 'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])}
 '''
 if 1:
-    try:
-        # from recovlm.qwen3.modeling_qwen3 import *
-        with set_default_dtype(torch.float32):
-            model = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
-                "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip",
-                torch_dtype="auto",
-                _attn_implementation = 'flash_attention_2',
-                device_map="auto",
-                ignore_mismatched_sizes=True,
-            )
-            # model = model.float()
-            logits = model(**inputs).logits
-            print(222, logits, logits.shape)
-            #
-        with open("Qwen3SiglipForConditionalGeneration_navit_Qwen3-8B-siglip.txt", 'w') as f:
-            f.write(info_params_recursive(model.model, max_depth=10))
-            print(f"load is done")
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        print(e)
-        pass
+    # try:
+    #     # from recovlm.qwen3.modeling_qwen3 import *
+    #     with set_default_dtype(torch.float32):
+    #         model = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
+    #             "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip",
+    #             torch_dtype="auto",
+    #             _attn_implementation = 'flash_attention_2',
+    #             device_map="auto",
+    #             ignore_mismatched_sizes=True,
+    #         )
+    #         # model = model.float()
+    #         logits = model(**inputs).logits
+    #         print(222, logits, logits.shape)
+    #         #
+    #     with open("Qwen3SiglipForConditionalGeneration_navit_Qwen3-8B-siglip.txt", 'w') as f:
+    #         f.write(info_params_recursive(model.model, max_depth=10))
+    #         print(f"load is done")
+    # except Exception as e:
+    #     import traceback
+    #     traceback.print_exc()
+    #     print(e)
+    #     pass
     
-    exit()
-    print("=" *200)
+    # exit()
+    # print("=" *200)
 
     try:
         # from recovlm.qwen3.modeling_qwen3 import *

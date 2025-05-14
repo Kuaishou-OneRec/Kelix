@@ -1,6 +1,6 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer
-from recovlm.models.qwen_3_vl.modeling_qwen3_vl import Qwen3_VLForConditionalGeneration_siglip
-from recovlm.models.qwen_3_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
+# from recovlm.models.qwen_3_vl.modeling_qwen3_vl import Qwen3_VLForConditionalGeneration_siglip
+# from recovlm.models.qwen_3_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
 from typing import Dict, Any, Union, Optional
 
 import contextlib
@@ -19,6 +19,7 @@ import contextlib
 import multiprocessing as mp
 from functools import partial
 
+from PIL import Image, ImageDraw
 
 from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VL_siglipCheckpointConverter
 
@@ -78,7 +79,7 @@ from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
 from recovlm.models.internvl.checkpoint import InternVLCheckpointConverter
 
 from recovlm.utils.ds_utils import print_input_info
-
+from PIL import Image
 import torch
 import torch.nn as nn
 import torch.distributed as dist
@@ -128,8 +129,9 @@ from recovlm.training.common import set_default_dtype, get_global_grad_norm, cli
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
 # from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
 
-from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip, Qwen2_5_VLForConditionalGeneration_siglip_navit
-
+# from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip, Qwen2_5_VLForConditionalGeneration_siglip_navit
+# /llm_reco/lingzhixin/recovlm_qw0510/recovlm/recovlm/models/qwen3siglip/modeling_qwen3siglip.py
+from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
 from recovlm.utils.time_tracker import TimeTracker
 from recipes.inspects import info_params_recursive
 
@@ -163,25 +165,51 @@ MODEL_DIR="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip"
 
 
 model_name = "Qwen/Qwen3-8B"
+def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(255, 255, 255), outline_width=5):
+    """
+    生成一个包含一个圆的 PIL Image 对象。
+
+    :param size: 图像的大小，默认为 (200, 200)
+    :param fill_color: 圆的填充颜色，默认为黑色 (0, 0, 0)
+    :param outline_color: 圆的轮廓颜色，默认为白色 (255, 255, 255)
+    :param outline_width: 圆的轮廓宽度，默认为 5
+    :return: 生成的 PIL Image 对象
+    """
+    # 创建一个新的图像对象
+    image = Image.new('RGB', size, color=(255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    # 计算圆的坐标（图像中心为圆心）
+    x_center, y_center = size[0] // 2, size[1] // 2
+    radius = min(size[0], size[1]) // 2
+    # 绘制圆
+    draw.ellipse([x_center - radius, y_center - radius, x_center + radius, y_center + radius],
+                 fill=fill_color,
+                 outline=outline_color,
+                 width=outline_width)
+    return image
+
 
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "text", "text": "How are you"},
+            {"type": "image", "image": generate_circle_image()},
+            {"type": "text", "text": "what's in the image"},
         ],
     }
 ]
-processor = Qwen2_5_VLProcessor_siglip.from_pretrained("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip")
+
+from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_navit
+processor = Qwen3SiglipProcessor_navit.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip')
 
 text = processor.apply_chat_template(
-    messages, tokenize=False, add_generation_prompt=True
+    messages, tokenize=False, add_generation_prompt=False
 )
-# image_inputs, video_inputs = process_vision_info(messages)
+image_inputs, video_inputs = process_vision_info(messages)
 inputs = processor(
     text=[text],
-    # images=image_inputs,
-    # videos=video_inputs,
+    images=image_inputs,
+    videos=video_inputs,
     padding=True,
     return_tensors="pt",
 )
@@ -196,21 +224,21 @@ if 1:
     try:
         # from recovlm.qwen3.modeling_qwen3 import *
         with set_default_dtype(torch.float32):
-            model = Qwen2_5_VLForConditionalGeneration_siglip_navit.from_pretrained(
-                "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip",
+            model = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
+                "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip",
                 torch_dtype="auto",
                 _attn_implementation = 'flash_attention_2',
                 device_map="auto",
-                ignore_mismatched_sizes=True
+                # ignore_mismatched_sizes=True
 
             )
             # model = model.float()
             logits = model(**inputs).logits
             print(222, logits, logits.shape)
             #
-        with open("Qwen3-8B_baseline_navit_loadvia25_v2.txt", 'w') as f:
-            f.write(info_params_recursive(model.model, max_depth=10))
-            print(f"load is done")
+        # with open("Qwen3-8B_baseline_navit_loadvia25_v2.txt", 'w') as f:
+        #     f.write(info_params_recursive(model.model, max_depth=10))
+        #     print(f"load is done")
     except Exception as e:
         import traceback
         traceback.print_exc()
