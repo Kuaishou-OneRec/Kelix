@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip/
-OUTPUT_DIR=/llm_reco/liuyang76/train_out/0.0.0/qwen3_2B_stage1/
+OUTPUT_DIR=/llm_reco/liuyang76/train_out/0.0.2/qwen3_2B_stage1/
 
 mkdir -p $OUTPUT_DIR
 
@@ -57,31 +57,38 @@ MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
 
-nohup mpirun --allow-run-as-root  -np $np  \
-        -mca plm_rsh_args "-p ${Port}"  \
+nohup mpirun --allow-run-as-root \
         -hostfile $hostfile \
+        -mca btl self,tcp -mca pml ob1 \
+        -mca plm_rsh_num_concurrent 600 \
+        -mca routed_radix 600 \
+        -mca btl_tcp_if_include $TCP_NIC \
+        -mca oob_tcp_if_include $TCP_NIC \
+        -mca btl_openib_allow_ib false \
+        -mca opal_set_max_sys_limits 1 \
+        -x OMPI_MCA_btl=self,tcp \
+        -x OMPI_MCA_pml=ob1 \
+        -x OMPI_MCA_btl_tcp_if_include=$TCP_NIC \
+        -x OMPI_MCA_oob_tcp_if_include=$TCP_NIC \
+        -x OMPI_MCA_btl_openib_allow_ib=false \
+        -x NCCL_IB_DISABLE=0 \
+        -x NCCL_IB_GID_INDEX=3 \
+        -x NCCL_SOCKET_IFNAME=$TCP_NIC \
+        -x NCCL_IB_HCA=mlx5 \
+        -x NCCL_DEBUG=WARN \
+        -x NCCL_IB_QPS_PER_CONNECTION=4 \
+        -x NCCL_NET_OVERHEAD=1000 \
+        -x NCCL_IB_TIMEOUT=20 \
+        -x LD_PRELOAD=$LD_PRELOAD \
+        -x http_proxy="" \
+        -x https_proxy="" \
         -x HOROVOD_MPI_THREADS_DISABLE=1 \
         -x MPI_THREAD_SINGLE=1 \
         -x CUDA_DEVICE_MAX_CONNECTIONS=1 \
-        -bind-to none  -map-by slot \
-        -mca opal_set_max_sys_limits 1 \
-        -mca plm_rsh_num_concurrent 300 \
-        -mca routed_radix 600 \
-        -mca btl_tcp_if_include eth04 \
-        -mca btl_openib_allow_ib true \
-        --mca btl tcp,self \
         -x NO_COLOR=1 \
         -x TERM=dumb \
         -x COLORTERM=0 \
         -x PYTHONIOENCODING=utf-8 \
-        -x NCCL_IB_QPS_PER_CONNECTION=4 \
-        -x NCCL_IB_DISABLE=0 \
-        -x NCCL_IB_GID_INDEX=3 \
-        -x NCCL_IB_HCA=mlx5 \
-        -x NCCL_NET_OVERHEAD=1000 \
-        -x NCCL_PROTO=^LL128 \
-        -x NCCL_MIN_NCHANNELS=4 \
-        -x NCCL_ALGO=^NVLS,NVLSTree \
         -x LD_LIBRARY_PATH=$LIBRARY_PATH \
         -x PATH \
         -x PYTHONPATH=$PYTHONPATH \
@@ -104,8 +111,10 @@ nohup mpirun --allow-run-as-root  -np $np  \
         -x KAI_FLAG_FILE \
         -x KML_ID \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
+	-x TOKENIZERS_PARALLELISM=false \
         -x http_proxy=\
         -x https_proxy=\
+        with_nccl_local_env \
 	python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_1.7B.json \
