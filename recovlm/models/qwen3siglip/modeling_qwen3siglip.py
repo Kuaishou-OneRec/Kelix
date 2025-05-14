@@ -1836,7 +1836,6 @@ class Qwen3SiglipForConditionalGeneration_moonvit(Qwen3SiglipPreTrainedModel, Ge
 
             return position_ids, mrope_position_deltas
 
-    @add_start_docstrings_to_model_forward(QWEN2_5_VL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Qwen3SiglipCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -2414,7 +2413,6 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
 
             return position_ids, mrope_position_deltas
 
-    @add_start_docstrings_to_model_forward(QWEN2_5_VL_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Qwen3SiglipCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,

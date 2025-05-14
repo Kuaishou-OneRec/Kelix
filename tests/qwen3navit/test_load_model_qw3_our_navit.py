@@ -336,8 +336,8 @@ if 1:
 
             # logits = model(**inputst).logits
             # print("text_output", logits, logits.mean(), logits.max(), logits.min(), logits.shape)
-
-            for a,b in [(100,200),(100,100),(50, 1000), (400, 600), (465, 345), (155, 581), (201, 356), (34,532), (135,1799)]: 
+            shapes = [(100,200),(100,100),(50, 1000), (400, 600), (465, 345), (155, 581), (201, 356), (34,532), (135,1799)]
+            for a,b in shapes: 
                 inputs = make_inputs(a,b)
                 for k in inputs: inputs[k] = inputs[k].cuda()
                 logits = model(**inputs).logits
@@ -352,3 +352,4 @@ if 1:
 
 for i, logits in enumerate(logits_all):
     print(f"mm_output-{i}", logits.flatten()[:4], logits.flatten().std(), logits.mean(), logits.max(), logits.min(), logits.shape)
+    print(f"logits={logits[:30,:30,:30]}")
