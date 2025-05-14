@@ -858,7 +858,7 @@ def train():
         t2 = time.perf_counter()
         print_rank_0(f"get_one_batch={t2-t1}")
         to_cuda(batch, non_blocking=True)
-        # output_q.put(batch)
+        output_q.put(batch)
       except StopIteration:
         break
 
@@ -926,10 +926,7 @@ def train():
 
       ticker.tick("enter_context(torch_profiler)")
       try:
-        while True:
-          batch = gpu_batch_q.get()
-          if dist.get_rank() == 0:
-            print(f"get_one_batch: {batch}")
+        batch = gpu_batch_q.get()
       except StopIteration:
         break
       ticker.tick("next(data_iter)")
