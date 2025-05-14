@@ -573,7 +573,7 @@ def train():
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
       "save_checkpoint_every_epoch should be set."
 
-  batch_queue = mp.Queue(4)
+  batch_queue = mp.Queue(1)
   dataset_config = args.dataset_config
   data_process = mp.Process(
       target=data_func,
@@ -849,7 +849,7 @@ def train():
   iter_ticker = TimeTracker(n=args.logging_per_step)
   token_stasts = TokenStats()
 
-  gpu_batch_q = queue.Queue(maxsize=1)
+  gpu_batch_q = queue.Queue(maxsize=2)
   def prefetch_to_gpu(input_q, output_q):
     while True:
       try:
@@ -923,7 +923,8 @@ def train():
 
       ticker.tick("enter_context(torch_profiler)")
       try:
-        batch = batch_queue.get()
+        while True:
+          batch = batch_queue.get()
       except StopIteration:
         break
       ticker.tick("next(data_iter)")

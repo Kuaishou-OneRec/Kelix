@@ -3110,7 +3110,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
 
   def __iter__(self):
     self._balance_buf = queue.Queue(maxsize=8)
-    self._result_buf = queue.Queue(maxsize=8)
+    self._result_buf = queue.Queue(maxsize=2)
     buffer_size = self.kargs.get("balance_buffer_size", 1000)
     target_count = self.kargs.get("balance_candidate_count", 50)
 
@@ -3137,7 +3137,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         result = self._result_buf.get()
         t2 = time.perf_counter()
         print(f'next_batch[{dist.get_rank()}]={t2-t1}')
-        if False:
+        if True:
           yield result
 
   def __iter_v2__(self):
