@@ -927,6 +927,9 @@ def train():
       ticker.tick("enter_context(torch_profiler)")
       try:
         batch = gpu_batch_q.get()
+        for k, v in batch.items():
+            if isinstance(v, torch.Tensor):
+                print_rank_0(f"device_info:{k}={v.device}")
       except StopIteration:
         break
       ticker.tick("next(data_iter)")
@@ -1012,7 +1015,7 @@ def train():
             dtype=labels.dtype).to(device=labels.device, non_blocking=True)
         labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
         local_labels = get_local_sequence(labels, seq_idx=1)
-        print(f"local_labels={local_labels.device}, logits={logits.device}")
+        print(f"local_labels={local_labels.device}, logits={logits.device}, labels={labels.device}")
         loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
 
         ticker.tick("loss_fn")
