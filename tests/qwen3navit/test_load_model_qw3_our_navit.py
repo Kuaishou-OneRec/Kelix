@@ -322,14 +322,15 @@ if 1:
     try:
         with set_default_dtype(torch.bfloat16):
             model = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
-                "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2",
+                # "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2",
+                "/llm_reco/liuyang76/train_out/0.0.0/qwen3_2B_stage1/step1000/global_step1000/converted/",
                 torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
                 device_map="cuda:0",
                 ignore_mismatched_sizes=True
             )
 
-            load_from_full_model_state_dict(model, load_hf_checkpoint("/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2"))
+            # load_from_full_model_state_dict(model, load_hf_checkpoint("/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2"))
             # for k in inputst: inputst[k] = inputst[k].cuda()
             model = model.cuda()
 

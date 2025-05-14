@@ -97,9 +97,9 @@ def _print(*args, **kargs):
     return None
     try:
         if torch.distributed.get_rank() == 0:
-            print(*args, **kargs)
+            _print(*args, **kargs)
     except:
-        print(*args, **kargs)
+        _print(*args, **kargs)
 
 class Qwen3SiglipMLP(nn.Module):
     def __init__(self, config, bias: bool = False):
@@ -734,13 +734,13 @@ class Qwen3SiglipRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def rope_init(self):
-        # print("Initializing Rope Layer...")
+        # _print("Initializing Rope Layer...")
         inv_freq, self.attention_scaling = self.rope_init_fn(
             self.config, device=None, **self.rope_kwargs
         )
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
-        # print(f"Initializing Rope Layer done, self.inv_freq.device={self.inv_freq.device}")
+        # _print(f"Initializing Rope Layer done, self.inv_freq.device={self.inv_freq.device}")
 
 
 class Qwen2MLP(nn.Module):
@@ -1039,7 +1039,7 @@ class Qwen3SiglipFlashAttention2(Qwen3SiglipAttention):
             )
         else:
             if cu_seqlens is not None:
-                print(324555554, 2345364664)
+                _print(324555554, 2345364664)
                 # Sample packing with FA2
                 max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
                 cu_seqlens = cu_seqlens.to(torch.int32)
@@ -1992,9 +1992,9 @@ class Qwen3SiglipForConditionalGeneration_moonvit(Qwen3SiglipPreTrainedModel, Ge
                     image_grid_hws.append((thw[1],thw[2]))
                 image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
                 image_embeds = self.visual(pixel_values, image_grid_hws)
-                # print('msy1_image_embeds',image_embeds)
+                # _print('msy1_image_embeds',image_embeds)
                 image_embeds = self.mlp_AR(image_embeds)
-                # print('msy2_image_embeds',image_embeds)
+                # _print('msy2_image_embeds',image_embeds)
                 #64*7168
                 
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
@@ -2284,7 +2284,7 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
     def __init__(self, config):
         super().__init__(config)
         Siglip_config = SiglipConfig.from_pretrained('/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384')
-        # print('msy_siglip_config',Siglip_config)
+        # _print('msy_siglip_config',Siglip_config)
         Siglip_config = Siglip_config.vision_config
         Siglip_config._attn_implementation = 'flash_attention_2'
         self.mlp_AR = Projector(config,Siglip_config)
@@ -2553,7 +2553,7 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "The image shows a street scene with a red stop sign in the foreground. In the background, there is a large red gate with Chinese characters ..."
         ```"""
-        print("ccccccc", list(self.mlp_AR.parameters())[0].device, list(self.visual.parameters())[0].device, list(self.lm_head.parameters())[0].device )
+        _print("ccccccc", list(self.mlp_AR.parameters())[0].device, list(self.visual.parameters())[0].device, list(self.lm_head.parameters())[0].device )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2573,7 +2573,7 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
 
                 #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
                 pro = 0
-                print(image_grid_thw, 345343)
+                _print(image_grid_thw, 345343)
                 for idx, thw in enumerate(image_grid_thw):
                     thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
                     numel = np.prod(thw_tuple)
@@ -2598,10 +2598,10 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
                 )
                 image_embeds = vision_outputs.last_hidden_state
 
-                print(34254, image_embeds)
+                _print(34254, image_embeds)
                 image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
 
-                print(888555, image_embeds)
+                _print(888555, image_embeds)
                 #64*7168
                 
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
@@ -2624,7 +2624,7 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
                 # print_rank_0(f"image pixel_values={pixel_values.shape}, image_grid_thw={image_grid_thw.shape}, n_image_tokens={n_image_tokens}, image_mask={image_mask.shape}, image_embeds={image_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
                 # print_rank_0(f"image_grid_hws={image_grid_hws}, image_grid_thw={image_grid_thw}")
                 # image pixel_values=torch.Size([1, 196, 3, 14, 14]), image_grid_thw=torch.Size([1, 3]), n_image_tokens=49, image_mask=torch.Size([1,376, 3584]), image_embeds=torch.Size([49, 3584]), inputs_embeds=torch.Size([1,376, 3584])
-                print(88811111555, inputs_embeds)
+                _print(88811111555, inputs_embeds)
 
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
@@ -2927,7 +2927,7 @@ class Qwen3SiglipForConditionalGeneration_navit(Qwen3SiglipForConditionalGenerat
         super().__init__(config)
         Siglip_config = SiglipConfig.from_pretrained('/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex')
         # /llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex
-        # print('msy_siglip_config',Siglip_config)
+        # _print('msy_siglip_config',Siglip_config)
         Siglip_config = Siglip_config.vision_config
         Siglip_config._attn_implementation = 'flash_attention_2'
         self.mlp_AR = Projector(config, Siglip_config)
@@ -2958,7 +2958,7 @@ class Projector(nn.Module):
         self.pre_norm = torch.nn.LayerNorm(self.vision_config.hidden_size, eps=1e-05)
 
         nn.init.ones_(self.pre_norm.weight)  # 权重初始化为 1
-        print("45445244sssss", self.pre_norm.weight)
+        _print("45445244sssss", self.pre_norm.weight)
 
 
         nn.init.zeros_(self.pre_norm.bias)   # 偏置初始化为 0
@@ -2974,18 +2974,18 @@ class Projector(nn.Module):
         if isinstance(image_features, (list, tuple)):
             processed_features = list()
             for image_feature, image_grid in zip(image_features, image_grid_thw):
-                print("sssss", self.pre_norm.weight)
-                print("iiiii", image_feature)
+                _print("sssss", self.pre_norm.weight)
+                _print("iiiii", image_feature)
                 image_feature = self.pre_norm(image_feature)
-                print("afterppppp", image_feature)
+                _print("afterppppp", image_feature)
                 t, h, w = image_grid
                 from einops import rearrange
 
                 image_feature = rearrange(image_feature, "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2)
-                print("fffff", image_feature)
-                print(6677777, self.linear_1.weight)
+                _print("fffff", image_feature)
+                _print(6677777, self.linear_1.weight)
                 hidden_states = self.linear_1(image_feature)
-                print(hidden_states)
+                _print(hidden_states)
                 hidden_states = self.act(hidden_states)
                 hidden_states = self.linear_2(hidden_states)
                 processed_features.append(hidden_states)
