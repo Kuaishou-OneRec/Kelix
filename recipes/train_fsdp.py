@@ -929,7 +929,7 @@ def train():
         batch = gpu_batch_q.get()
         for k, v in batch.items():
             if isinstance(v, torch.Tensor):
-                print_rank_0(f"device_info:{k}={v.device}")
+                print(f"[rank={dist.get_rank()}] device_info:{k}={v.device}")
       except StopIteration:
         break
       ticker.tick("next(data_iter)")
