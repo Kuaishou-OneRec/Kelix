@@ -923,7 +923,12 @@ def train():
 
       ticker.tick("enter_context(torch_profiler)")
       try:
-        batch = batch_queue.get()
+        while True:
+          t1 = time.perf_counter()
+          batch = batch_queue.get()
+          if dist.get_rank() == 0:
+            t2 = time.perf_counter()
+            print(f"get_one_batch: {batch}, dur={t2-t1}")
       except StopIteration:
         break
       ticker.tick("next(data_iter)")
