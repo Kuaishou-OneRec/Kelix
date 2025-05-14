@@ -927,9 +927,9 @@ def train():
       ticker.tick("enter_context(torch_profiler)")
       try:
         batch = gpu_batch_q.get()
-        for k, v in batch.items():
-            if isinstance(v, torch.Tensor):
-                print(f"[rank={dist.get_rank()}] device_info:{k}={v.device}")
+        #for k, v in batch.items():
+        #    if isinstance(v, torch.Tensor):
+        #        print(f"[rank={dist.get_rank()}] device_info:{k}={v.device}")
       except StopIteration:
         break
       ticker.tick("next(data_iter)")
@@ -970,7 +970,7 @@ def train():
           
       num_tokens = batch.get("num_tokens", 0)
       num_samples = batch.get("num_samples", 0)
-      num_valid_tokens = batch.get("num_valid_tokens", 0)
+      num_valid_tokens = batch.get("num_valid_tokens", num_tokens)
       num_image_tokens = batch.get("num_image_tokens", 0)
       t2 = time.perf_counter()
       print_rank_0(f"Iteration {micro_step}: Token count = {num_tokens}")
