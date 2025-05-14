@@ -849,7 +849,7 @@ def train():
   iter_ticker = TimeTracker(n=args.logging_per_step)
   token_stasts = TokenStats()
 
-  gpu_batch_q = queue.Queue(maxsize=2)
+  gpu_batch_q = queue.Queue(maxsize=1)
   def prefetch_to_gpu(input_q, output_q):
     while True:
       try:
@@ -910,9 +910,9 @@ def train():
             global_step=global_step,
             new_style=True)
 
-  if dist.get_rank() == 0:
-    tb_writer_t = threading.Thread(target=write_tb_async, args=(tb_writer, tb_metrics_q, args.gradient_accumulation_steps), daemon=True)
-    tb_writer_t.start()
+  # if dist.get_rank() == 0:
+  #   tb_writer_t = threading.Thread(target=write_tb_async, args=(tb_writer, tb_metrics_q, args.gradient_accumulation_steps), daemon=True)
+  #   tb_writer_t.start()
               
 
   while True:
