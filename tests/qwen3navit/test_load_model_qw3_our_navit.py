@@ -220,13 +220,17 @@ messages = [
     }
 ]
 
+# /llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2/config.json
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_navit
-processor = Qwen3SiglipProcessor_navit.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip')
+processor = Qwen3SiglipProcessor_navit.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2')
 
 text = processor.apply_chat_template(
     messages, tokenize=False, add_generation_prompt=False
 )
 image_inputs, video_inputs = process_vision_info(messages)
+
+print(image_inputs)
+
 inputs = processor(
     text=[text],
     images=image_inputs,
@@ -267,12 +271,11 @@ if 1:
     try:
         with set_default_dtype(torch.bfloat16):
             model = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
-                "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip",
+                "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2",
                 torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
                 device_map="cuda:0",
                 ignore_mismatched_sizes=True
-
             )
             for k in inputst: inputst[k] = inputst[k].cuda()
             model = model.cuda()

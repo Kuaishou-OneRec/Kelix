@@ -1066,7 +1066,7 @@ class SiglipVisionTransformer(nn.Module):
         Returns:
 
         """
-        
+        print(f"pixel_values={pixel_values}")
         print("pppppppp", list(self.embeddings.parameters())[0].device, list(self.encoder.parameters())[0].device, list(self.post_layernorm.parameters())[0].device )
         # ccccccc cuda:0 cuda:1 cuda:3
 
@@ -1081,6 +1081,7 @@ class SiglipVisionTransformer(nn.Module):
             position_ids=position_ids,
             image_grid_thw=image_grid_thw
         )
+        print("hidden_states12432254=", hidden_states)
         print(3245645777, hidden_states.device, pixel_values.device)
 
         # cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
@@ -1103,6 +1104,7 @@ class SiglipVisionTransformer(nn.Module):
 
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
+        print("last_hidden_state435644=", last_hidden_state)
 
         if sample_indices is not None:
             assert self.use_head is True
