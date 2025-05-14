@@ -52,7 +52,7 @@ from recovlm.data.dataloaders import get_dataloader
 
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.losses import CrossEntropyLoss
-from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
+from recovlm.utils.common import set_random_seed, to_cuda, to_device, print_rank_0, \
   get_optimizer_grouped_parameters, dist_reduce_dict, Timer, heart_beat
 from recovlm.training.lr_schedulers import get_scheduler
 
@@ -850,19 +850,19 @@ def train():
   token_stasts = TokenStats()
 
   gpu_batch_q = queue.Queue(maxsize=1)
-  def prefetch_to_gpu(input_q, output_q):
+  def prefetch_to_gpu(input_q, output_q, dev):
     while True:
       try:
         t1 = time.perf_counter()
         batch = input_q.get()
         t2 = time.perf_counter()
         print_rank_0(f"get_one_batch={t2-t1}")
-        to_cuda(batch, non_blocking=True)
+        to_device(batch, dev, True)
         output_q.put(batch)
       except StopIteration:
         break
 
-  prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(batch_queue, gpu_batch_q), daemon=True)
+  prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(batch_queue, gpu_batch_q, torch.cuda.current_device()))
   prefetch_t.start()
 
   tb_metrics_q = queue.Queue(maxsize=8)
@@ -914,7 +914,7 @@ def train():
             new_style=True)
 
   if dist.get_rank() == 0:
-    tb_writer_t = threading.Thread(target=write_tb_async, args=(tb_writer, tb_metrics_q, args.gradient_accumulation_steps), daemon=True)
+    tb_writer_t = threading.Thread(target=write_tb_async, args=(tb_writer, tb_metrics_q, args.gradient_accumulation_steps))
     tb_writer_t.start()
               
 
