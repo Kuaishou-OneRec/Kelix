@@ -1080,6 +1080,8 @@ def train():
           #   local_acc_data_source_samples, group=get_data_parallel_group())
           # for ds_key, ds_num_tokens in batch_data_source_tokens.items():
           #   total_data_source_tokens[ds_key] += ds_num_tokens
+          total_data_source_samples = local_acc_data_source_samples
+          total_data_source_tokens = batch_data_source_tokens
           
 
         if dist.get_rank() == 0:
@@ -1193,6 +1195,7 @@ def train():
                 f"rank{dist.get_rank()}_global_step{global_step}.pth")
               )
         ticker.tick(f"save_ckpt*{args.save_checkpoint_per_step * args.gradient_accumulation_steps}") 
+        print_rank_0(f"ticker_info: {ticker.stat()}")
 
       iter_ticker.tick("iter_ticker")
       if torch_profiler: torch_profiler.step()
