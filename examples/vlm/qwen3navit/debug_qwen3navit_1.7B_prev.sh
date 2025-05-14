@@ -1,6 +1,3 @@
-git config --global user.email 'liuyang76@kuaishou.com'
-git config --global user.name 'liuyang76'
-
 email=$(git config --get user.email)
 
 # 检查 email 是否为空
@@ -9,15 +6,15 @@ if [[ -z "$email" ]]; then
         echo "  git config --global user.email 'you@kuaishou.com'"
         exit 1
 else
-        echo "Git user.email: $email"
+        echo "Git user.emal: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip/
-OUTPUT_DIR=/llm_reco/liuyang76/train_out/0.0.0/qwen3_2B_stage1/
-
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2-VL-72B-Instruct # Pretrained/Base model path
+OUTPUT_DIR=/llm_reco/lingzhixin/output2/RecoVLM-dev/Qwen2-VL-72B-run_sft_72B_fsdp_sp/0.0.2
+rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
@@ -25,10 +22,11 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.4.1;model_size:72B;GPU_type:H800;data:inner & outer comments"
+comment="72B FSDP"
+
 
 git add --all
-git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
+git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
 git_hash=$(git rev-parse --short HEAD)
 
 set -x
@@ -44,20 +42,19 @@ echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=$PWD:$PYTHONPATH
 
-
 source set_env.sh
 
 hostfile=/etc/mpi/hostfile_seq
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
-TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
-
 
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
-
-nohup mpirun --allow-run-as-root  -np $np  \
+# debug7b_short.json
+# debug7b_fsdp_3p_v1_debug2_orids             
+# --enable_gradient_checkpointing \
+nohup mpirun --allow-run-as-root -np $np \
         -mca plm_rsh_args "-p ${Port}"  \
         -hostfile $hostfile \
         -x HOROVOD_MPI_THREADS_DISABLE=1 \
@@ -106,25 +103,23 @@ nohup mpirun --allow-run-as-root  -np $np  \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
         -x http_proxy=\
         -x https_proxy=\
-	python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
+        python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_1.7B.json \
-                --model_class Qwen3SiglipForConditionalGeneration_navit \
-                --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 15000 \
+                --dataset_config examples/vlm/configs/debug7b_fsdp_3p_v1_debug.json \
+                --max_length 30000 \
                 --learning_rate 1e-6 \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 500 \
-                --num_training_steps 50000 \
-                --save_checkpoint_per_step 500 \
-                --sequence_parallel_size 1 \
+                --num_training_steps 20000 \
+                --save_checkpoint_per_step 100 \
+                --sequence_parallel_size 4 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
-                --fp32_weight \
+                --fp32_weight true \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
                 --merge_checkpoint \
@@ -135,4 +130,3 @@ nohup mpirun --allow-run-as-root  -np $np  \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
-
