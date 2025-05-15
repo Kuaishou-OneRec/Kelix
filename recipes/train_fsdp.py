@@ -882,10 +882,8 @@ def train():
 
   dist.barrier()
 
-  try: tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
-  except Exception as e:
-    print(f"init tokenizer failed\ne={e}")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
+  tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
+  image_token_id = tokenizer.encode('<|image_pad|>')[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<IMG_CONTEXT>')[0]
 
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
@@ -996,8 +994,7 @@ def train():
       num_samples = (sample_idx.max() + 1).sum()
       # num_image_tokens = pixel_values.shape[0] * 256 # if args.model_class == "InternVLChatModel" else 0
       
-      num_image_tokens2 = (input_ids == 151667).sum().item()
-      if num_image_tokens2 == 0: num_image_tokens2 = (input_ids == 151655).sum().item()
+      num_image_tokens2 = (input_ids == tokenizer).sum().item()
 
       num_image_tokens = num_image_tokens2
 
