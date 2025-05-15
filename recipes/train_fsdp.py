@@ -884,7 +884,7 @@ def train():
 
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
   image_token_id = tokenizer.encode('<|image_pad|>')[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<IMG_CONTEXT>')[0]
-  image_start_id = tokenizer.encode('<|vision_start|>')[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode("<img>")[0]
+  image_start_id = tokenizer.encode("<img>")[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|vision_start|>')[0]
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
     dataset_config = json.loads(f.read())
