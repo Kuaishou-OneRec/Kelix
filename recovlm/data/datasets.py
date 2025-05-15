@@ -3685,7 +3685,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
         # print(f"rank={dist.get_rank()} local_best={local_best}, all_local={all_local}, global_best={selected}")
 
         def match(info, flops):
-          return math.isclose(info[-2], target[0], abs_tol=1e-6) and math.isclose(info[-1], target[1], abs_tol=1e-6)
+          return math.isclose(info[-2], flops[0], abs_tol=1e-6) and math.isclose(info[-1], flops[1], abs_tol=1e-6)
 
         best = selected[dist.get_rank()]
         found = -1
