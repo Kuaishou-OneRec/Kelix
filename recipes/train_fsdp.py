@@ -936,7 +936,9 @@ def train():
   acc_num_samples = 0
   acc_valid_num_tokens = 0
   acc_num_image_tokens = 0
+  acc_num_images = 0
   total_num_image_tokens = 0
+  num_images = 0
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
@@ -993,7 +995,7 @@ def train():
       num_tokens = token_count
       num_samples = (sample_idx.max() + 1).sum()
       # num_image_tokens = pixel_values.shape[0] * 256 # if args.model_class == "InternVLChatModel" else 0
-      num_images += (input_ids == image_start_id).sum().item()
+      num_images = (input_ids == image_start_id).sum().item()
 
       image_tokens_ids = input_ids == image_token_id
       num_image_tokens = image_tokens_ids.sum().item()
