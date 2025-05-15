@@ -224,6 +224,7 @@ def debug_model_inference(model):
         padding=True,
         return_tensors="pt",
     )["input_ids"][0]
+    assistant_tokens = assistant_tokens.to(torch.cuda.current_device())
     
     # Find the start position of assistant's response in the full sequence
     assistant_start_pos = None
