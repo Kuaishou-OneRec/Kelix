@@ -3020,7 +3020,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         # if dist.get_rank() == 0:
         #   print(f"small_ids: {small_input_ids}, small_img: {small_image_len}, idx: {sampling_index}")
         # candidates = balance.greedy_subsets_nearst_sum(small_input_ids, self.max_length)
-        candidates = balance.greedy_subsets_nearst_sum(raw_input_ids, self.max_length)
+        candidates = balance.greedy_subsets_nearst_sum(raw_input_ids, self.max_length - self.image_pad_len)
         if dist.get_rank() == 0:
           print(f"candidates: {candidates}")
         candidates = candidates[:target_count]
@@ -3074,7 +3074,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
               if match(info, target):
                 num_samples += info[0]
                 num_tokens += info[1]
-                num_image_tokens += info[2] * 1025
+                num_image_tokens += info[2] * 256
                 break
           step_info = [num_samples, num_tokens, num_image_tokens]
           print(f"rank=0, dataset_info: {step_info}")
