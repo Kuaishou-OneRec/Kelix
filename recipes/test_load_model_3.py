@@ -179,6 +179,17 @@ def debug_model_inference(model):
             "content": [
                 {"type": "text", "text": "Give me a short introduction to large language model."},
             ],
+        },
+        {
+            "role": "assistant",
+            "content":[
+                {
+                  "type":"text",
+                  "text":"LLM is large language model. happy happy happy~"
+                }
+
+            ]
+
         }
     ]
     # Preparation for inference
