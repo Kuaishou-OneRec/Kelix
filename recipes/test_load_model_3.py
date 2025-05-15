@@ -239,6 +239,8 @@ def debug_model_inference(model):
     
     # Calculate PPL only for the assistant's response part
     # Shift logits and labels for next token prediction
+    print_rank_0("logits.shape", logits.shape)
+    print_rank_0("input_ids.shape", input_ids.shape)
     shift_logits = logits[..., :-1, :].contiguous()
     shift_labels = input_ids[..., 1:].contiguous()
     
