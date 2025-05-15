@@ -996,9 +996,7 @@ def train():
       num_samples = (sample_idx.max() + 1).sum()
       # num_image_tokens = pixel_values.shape[0] * 256 # if args.model_class == "InternVLChatModel" else 0
       num_images = (input_ids == image_start_id).sum().item()
-      print(151652, (input_ids == 151652).sum().item(), image_start_id)
-      print(151644, (input_ids == 151644).sum().item())
-      print("=" * 200)
+
       # 151652
       image_tokens_ids = input_ids == image_token_id
       num_image_tokens = image_tokens_ids.sum().item()
@@ -1028,7 +1026,7 @@ def train():
       acc_valid_num_tokens += num_valid_tokens
       acc_num_image_tokens += num_image_tokens
       acc_num_images += num_images
-      print(8888234523, acc_num_images, num_images, num_image_tokens)
+
       ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
 
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
@@ -1085,7 +1083,6 @@ def train():
 
         unique_sample_idx = local_sample_idx.unique()
         # mage_tokens2 = (input_ids == 151667) or (input_ids == 151655)
-        image_tokens_by_sample = []
         tokens_by_sample = []
         for s_idx in unique_sample_idx:
           if s_idx < 0:
@@ -1163,9 +1160,8 @@ def train():
 
 
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
-          print(3253444, acc_num_images)
           mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), 
-            total_seq_len=tokens_by_sample, 
+            total_seq_len=total_num_tokens, 
             image_token_merged_len=[round(acc_num_image_tokens / acc_num_images)] * acc_num_images if acc_num_images != 0 else 1, 
             llm_batch_size=num_samples, 
             secs_per_step=end_time - start_time)
