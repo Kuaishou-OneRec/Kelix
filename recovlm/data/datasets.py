@@ -1136,7 +1136,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
       else:
         raise NotImplementedError(
-            f"Unsupported dataset format `{data_format}`")
+            f"Unsupported dataset format `{data_format}`")````
 
       if not inputs:
         raise ValueError("Empty inputs, skip")
@@ -1983,14 +1983,11 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
 
 class ParquetDataset(IterableDataset):
-  def __init__(self, data_files, num_workers):
+  def __init__(self, data_files, num_workers, num_readers=1, shuffle_window=0):
     self.data_files = data_files
     self.num_workers = num_workers
-    self.num_readers = 8
-    self.sample_queue = queue.Queue(1024)
-    # self.lock = threading.Lock()
-
-    # manager = multiprocessing.Manager()
+    self.num_readers = num_readers
+    self.shuffle_window = shuffle_window
 
     self.finish_dict_all = {}
     self.offset_dict_all = {}
@@ -2229,9 +2226,9 @@ class ParquetDataset(IterableDataset):
           self.shuffled_queue.put(sample)
         buffer = []
 
-  def __iter__(self,):
+  def __iter__(self):
     rank, world_size, worker, num_workers = pytorch_worker_info()
-    # assert num_workers == self.num_workers, f"{num_workers} : {self.num_workers}"
+    assert num_workers == self.num_workers, f"{num_workers} : {self.num_workers}"
 
     finish_dict = self.finish_dict_all[worker]
     offset_dict = self.offset_dict_all[worker]
@@ -2243,22 +2240,25 @@ class ParquetDataset(IterableDataset):
       f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
     )
     
+    self.sample_queue = queue.Queue(maxsize=1024)
     self.readers = []
     for i in range(self.num_readers):
       reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
       reader.start()
       self.readers.append(reader)
+    input_q = self.sample_queue
       
-    shuffle_window = 50000
-    self.shuffled_queue = queue.Queue(shuffle_window * 2)
-    self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
-    self.shuffle_task.start()
+    if self.shuffle_window > 0:
+      self.shuffled_queue = queue.Queue(shuffle_window * 2)
+      self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
+      self.shuffle_task.start()
+      input_q = shuffled_queue
     
     while True:
-      sample = self.shuffled_queue.get()
+      sample = input_q.get()
       yield sample
 
-  
+
 class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
   def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
     self.rng = random.Random(shuffle_seed)
@@ -2345,9 +2345,6 @@ class ChatCompletionVisionDpoParquetDataset(ChatCompletionVisionDpoDataset):
   
   def load_state_dict(self, state_dict):
     self.dataset.load_state_dict(state_dict)
-
-
-    
 
 
 class InternVLChatCompletionVisionDataset(IterableDataset):
@@ -3048,8 +3045,8 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
     self.num_epochs = num_epochs
 
     super().__init__(sources, **kargs)
-
-  def _build_source_dataset(self, sources):
+    
+  def _get_file_list(self, sources):
     data_file_list = []
     if dist.get_rank() == 0:
       data_files = []
@@ -3075,7 +3072,10 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
     logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: file_num={len(data_file_list)}")
     if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
+    return data_file_list
 
+  def _build_source_dataset(self, sources):
+    data_file_list = self._get_file_list(sources)
     dataset = ParquetDataset(data_file_list, self.num_workers)
     return dataset, -1
 
@@ -3086,11 +3086,16 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
     self.dataset.load_state_dict(state_dict)
 
 
-class InternVLBalancedParquetDataset(InternVLChatCompletionVisionParquetDataset):
+class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
   def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
     super().__init__(sources, num_workers, shuffle_seed, num_epochs, **kargs)
     
-    def _process_task(self):
+  def _build_source_dataset(self, sources):
+    data_file_list = self._get_file_list(sources)
+    dataset = ParquetDataset(data_file_list, self.num_workers, num_readers=8, shuffle_window=50000)
+    return dataset, -1
+    
+  def _process_task(self):
     while True:
       sample = self.sample_queue.get()
       sample_key = sample["__key__"] if "__key__" in sample else ""
@@ -3145,8 +3150,8 @@ class InternVLBalancedParquetDataset(InternVLChatCompletionVisionParquetDataset)
         #   print(f"small_ids: {small_input_ids}, small_img: {small_image_len}, idx: {sampling_index}")
         # candidates = balance.greedy_subsets_nearst_sum(small_input_ids, self.max_length)
         candidates = balance.greedy_subsets_nearst_sum(raw_input_ids, self.max_length - self.image_pad_len)
-        if dist.get_rank() == 0:
-          print(f"candidates: {candidates}")
+        # if dist.get_rank() == 0:
+        #   print(f"candidates: {candidates}")
         candidates = candidates[:target_count]
         info_list = []
         for c in candidates:
