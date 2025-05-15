@@ -119,7 +119,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/0.0.0_2B_stage1/qwen3navit_1.7B_stage1.json \
+                --dataset_config examples/vlm/qwen3navit/qwen3navit_1.7B_stage1.json \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
 		--allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
