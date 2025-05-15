@@ -1136,7 +1136,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
       else:
         raise NotImplementedError(
-            f"Unsupported dataset format `{data_format}`")````
+            f"Unsupported dataset format `{data_format}`")
 
       if not inputs:
         raise ValueError("Empty inputs, skip")
