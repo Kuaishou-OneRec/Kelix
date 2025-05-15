@@ -996,7 +996,7 @@ def train():
       num_samples = (sample_idx.max() + 1).sum()
       # num_image_tokens = pixel_values.shape[0] * 256 # if args.model_class == "InternVLChatModel" else 0
       num_images = (input_ids == image_start_id).sum().item()
-      print(151652, (input_ids == 151652).sum().item())
+      print(151652, (input_ids == 151652).sum().item(), image_start_id)
       print(151644, (input_ids == 151644).sum().item())
       print("=" * 200)
       # 151652
@@ -1028,6 +1028,7 @@ def train():
       acc_valid_num_tokens += num_valid_tokens
       acc_num_image_tokens += num_image_tokens
       acc_num_images += num_images
+      print(8888234523, acc_num_images, num_images)
       ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
 
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
