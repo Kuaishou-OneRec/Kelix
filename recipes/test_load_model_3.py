@@ -184,7 +184,7 @@ def debug_model_inference(model):
             "content":[
                 {
                   "type":"text",
-                  "text":"A large language model (LLM) is an AI system trained on vast amounts of text data to understand and generate human-like text."
+                  "text":"A large language model (LLM) is an AI system lalallallalal alal al a a ll alla l al la l a"
                 }
             ]
         },
