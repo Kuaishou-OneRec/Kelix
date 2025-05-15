@@ -244,11 +244,11 @@ def debug_model_inference(model):
     # Calculate loss only for the assistant's response tokens
     loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
     loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-    
+    print_rank_0("loss.shape1", loss.shape)
     # Reshape loss to match sequence length
     loss = loss.view(shift_logits.size(0), -1)
-    
-    # Calculate PPL only for the assistant's response tokens
+    print_rank_0("loss.shape2", loss.shape)
+    # Calculate PPL only for t`he assistant's response tokens
     assistant_loss = loss[0, assistant_start_pos:assistant_start_pos+len(assistant_tokens)-1]
     ppl = torch.exp(assistant_loss.mean())
     
