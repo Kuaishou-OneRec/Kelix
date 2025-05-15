@@ -994,7 +994,7 @@ def train():
       num_samples = (sample_idx.max() + 1).sum()
       # num_image_tokens = pixel_values.shape[0] * 256 # if args.model_class == "InternVLChatModel" else 0
       
-      num_image_tokens = (input_ids == image_token_id).int32().sum().item()
+      num_image_tokens = (input_ids == image_token_id).sum().item()
 
       # print(input_ids, 54544444)
       # print(f"num_image_tokens111111={num_image_tokens}")
