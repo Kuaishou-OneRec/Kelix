@@ -5,6 +5,11 @@ import subprocess
 import os
 import re
 
+
+def s(x):
+    if isinstance(x, list): return sum(x)
+    else: return x
+
 @lru_cache(maxsize=1)
 def get_gpu_model():
     """
@@ -109,47 +114,51 @@ def calculate_decoder_flops_v1(num_head, head_dim, hidden_size, intermediate_siz
     返回:
     dict: 包含各步骤FLOPs和总FLOPs的字典
     """
-
     # 默认KV头数量等于查询头数量
     if kv_heads is None:
         kv_heads = num_head
 
     # 计算每个样本的序列长度
-    seq_len_per_sample = seq_len // batch_size
+    seq_len_per_sample = None if isinstance(seq_len, list) else seq_len // batch_size
     
+    s_seq_len = s(seq_len)
+
     # 注意力计算FLOPs
     # QKV投影 (不受batch_size影响)
-    q_flops = linear_factor * seq_len * hidden_size * (num_head * head_dim)
-    k_flops = linear_factor * seq_len * hidden_size * (kv_heads * head_dim)
-    v_flops = linear_factor * seq_len * hidden_size * (kv_heads * head_dim)
+    q_flops = linear_factor * s_seq_len * hidden_size * (num_head * head_dim)
+    k_flops = linear_factor * s_seq_len * hidden_size * (kv_heads * head_dim)
+    v_flops = linear_factor * s_seq_len * hidden_size * (kv_heads * head_dim)
 
     # 注意力分数计算 [seq_len_per_sample, num_head, seq_len_per_sample, head_dim]
-    attn_scores_flops = linear_factor * num_head * seq_len_per_sample * seq_len_per_sample * head_dim * batch_size
-    
+    if isinstance(seq_len, list):
+        attn_scores_flops = 0
+        for i, seq_len_per_sample in enumerate(seq_len):
+            attn_scores_flops += linear_factor * num_head * seq_len_per_sample * seq_len_per_sample * head_dim
+    else:
+        attn_scores_flops = linear_factor * num_head * seq_len_per_sample * seq_len_per_sample * head_dim * batch_size
+
+
     # 因果掩码（如果启用）会减少一半的注意力计算
     if is_causal:
         # 因果掩码下三角区域计算量: n(n+1)/2 ≈ n²/2
         attn_scores_flops *= 0.5
     
-    # 注意力权重与V相乘
-    attn_v_flops = linear_factor * num_head * seq_len_per_sample * seq_len_per_sample * head_dim * batch_size
-    if is_causal:
-        attn_v_flops *= 0.5
+    attn_v_flops = attn_scores_flops
 
     # 注意力输出投影 (不受batch_size影响)
-    attn_out_flops = linear_factor * seq_len * (num_head * head_dim) * hidden_size * ffn_layers
+    attn_out_flops = linear_factor * s_seq_len * (num_head * head_dim) * hidden_size * ffn_layers
     
     # 注意力总FLOPs
     attention_flops = q_flops + k_flops + v_flops + attn_scores_flops + attn_v_flops + attn_out_flops
     
     # FFN层FLOPs (不受batch_size影响)
-    ffn_1_flops = linear_factor * seq_len * hidden_size * intermediate_size
-    ffn_2_flops = linear_factor * seq_len * intermediate_size * hidden_size
+    ffn_1_flops = linear_factor * s_seq_len * hidden_size * intermediate_size
+    ffn_2_flops = linear_factor * s_seq_len * intermediate_size * hidden_size
     ffn_flops = ffn_1_flops + ffn_2_flops
 
     # 总FLOPs
     total_flops = attention_flops + ffn_flops
-    
+
     return {
         'total_flops': total_flops,
         'attention': {
@@ -278,7 +287,7 @@ def calculate_vlm_flops(vit_params, llm_params, linear_factor=2):
         ffn_layers=2
     )
 
-    vit2llm_flops = linear_factor * vit_params.seq_len * (vit_params.hidden_size * llm_params.hidden_size + llm_params.hidden_size * llm_params.hidden_size)
+    vit2llm_flops = linear_factor * s(vit_params.seq_len) * (vit_params.hidden_size * llm_params.hidden_size + llm_params.hidden_size * llm_params.hidden_size)
     vit_flops['total_flops'] += vit2llm_flops
     vit_flops['vit2llm_flops'] = vit2llm_flops
     
@@ -297,7 +306,7 @@ def calculate_vlm_flops(vit_params, llm_params, linear_factor=2):
         ffn_layers=3
     )
     
-    lm_head_flops = linear_factor * llm_params.seq_len * (llm_params.hidden_size * llm_params.vocab_size)
+    lm_head_flops = linear_factor * s(llm_params.seq_len) * (llm_params.hidden_size * llm_params.vocab_size)
     llm_flops['total_flops'] += lm_head_flops
     llm_flops['lm_head_flops'] = lm_head_flops
     
@@ -333,7 +342,7 @@ def extract_model_params(config_path):
         - vision_params: Vision模块参数
     """
     import json
-    
+
     # 读取JSON配置文件
     with open(config_path, 'r') as f:
         config = json.load(f)
@@ -384,8 +393,6 @@ def extract_model_params(config_path):
             'num_layers': vision_config['depth'],
             
         }
-    elif 'architectures' in config and 'InternVLMoQwen2_5_VLForConditionalGenerationdel' in config['architectures']:
-        pass
     else:
         # Qwen3架构处理逻辑 (保持原有逻辑)
         transformer_params = {
@@ -397,7 +404,6 @@ def extract_model_params(config_path):
             'num_layers': config['num_hidden_layers'],
             'vocab_size': config['vocab_size']
         }
-        
         vision_config = config['vision_config']
         vision_params = {
             'num_head':vision_config['num_heads'],
@@ -412,10 +418,8 @@ def extract_model_params(config_path):
     
 
 
-@lru_cache(maxsize=32)
 def calc_mfu(config_path, total_seq_len, image_token_merged_len, llm_batch_size, image_batch_size=None, secs_per_step=None):
     if image_batch_size is None: image_batch_size = llm_batch_size
-    config_path = '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/qwen3_1.7b_navit.json'
     transformer_params, vision_params = extract_model_params(
         config_path
     )
@@ -429,7 +433,7 @@ def calc_mfu(config_path, total_seq_len, image_token_merged_len, llm_batch_size,
     vit_params = easydict.EasyDict({
         **vision_params,
         'is_causal': False,
-        'seq_len': image_token_merged_len * 4, 
+        'seq_len': [x*4 for x in image_token_merged_len] if isinstance(image_token_merged_len, list) else image_token_merged_len * 4, 
         'batch_size': image_batch_size
     })
 
@@ -492,9 +496,9 @@ if 0:
 
 if __name__=='__main__':
     mfu = calc_mfu(
-        '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/qwen3_8b_navit.json',
-        total_seq_len=17496,
-        image_token_merged_len=15315,
+        '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/qwen3_1.7b_navitd.json',
+        total_seq_len=4800*2,
+        image_token_merged_len=4800,
         llm_batch_size=48,
         secs_per_step=10
     )
@@ -503,6 +507,17 @@ if __name__=='__main__':
     print('VLM FLOPs计算结果:')
     print(format_dict_or_list(mfu))
 
+    mfu = calc_mfu(
+        '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/qwen3_1.7b_navitd.json',
+        total_seq_len=[4800*2 // 48 for _ in range(48)],
+        image_token_merged_len=[4800 // 48 for _ in range(48)],
+        llm_batch_size=48,
+        secs_per_step=10
+    )
+
+    # 打印结果
+    print('VLM FLOPs计算结果:')
+    print(format_dict_or_list(mfu))
 
 '''
 2B 模型
