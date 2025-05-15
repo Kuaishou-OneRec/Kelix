@@ -1083,6 +1083,9 @@ def train():
         local_sample_idx = get_local_sequence(sample_idx).squeeze()
 
         unique_sample_idx = local_sample_idx.unique()
+        image_tokens2 = (input_ids == 151667) or (input_ids == 151655)
+        image_tokens_by_sample = []
+        tokens_by_sample = []
         for s_idx in unique_sample_idx:
           if s_idx < 0:
             continue
@@ -1091,7 +1094,9 @@ def train():
 
           key = data_source[int(s_idx.item())]
           batch_data_source_loss[key] += sum_loss.item()
-          batch_data_source_tokens[key] += mask.sum().item()
+          tokens_by_sample.append(mask.sum().item())
+          batch_data_source_tokens[key] += tokens_by_sample[-1]
+          image_tokens_by_sample.append(image_tokens2 * mask).sum().item()
           valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
         ticker.tick("monitor_datasource_loss")
 
@@ -1160,13 +1165,8 @@ def train():
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
           start_time = end_time
 
-          for key, num_tokens in total_data_source_tokens.items():
-            tb_writer.add_scalar(
-                f"data_source_token_ratio/{key}",
-                1.0 * num_tokens / total_num_valid_tokens,
-                global_step=global_step,
-                new_style=True)
-          mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), num_tokens, num_image_tokens, num_samples, end_time - start_time)
+
+          mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), tokens_by_sample, image_tokens_by_sample, num_samples, end_time - start_time)
           total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)']
           total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)']
           total_mfu['mfu'] += mfu_per_step_per_gpu['mfu']
@@ -1207,9 +1207,6 @@ def train():
           }
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
           ticker.tick(f"log_dict*{log_acc_step}")
-
-
-          
 
           for name, data in log_dict.items():
             if data is not None and tb_writer:
