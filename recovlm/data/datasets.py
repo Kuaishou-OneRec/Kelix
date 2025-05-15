@@ -2964,8 +2964,133 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       print_input_info(inputs, "inputs111: ")
       raise Exception("!!!!!! Error occurs in image padding. input ids are shorted than image tokens")
     return inputs
+  
+  def __iter__(self):
+    buffer = []
+    source_list = []
+    cur_length = 0
 
-  def _process_task(self):
+    for sample in self.dataset:
+      sample_key = sample["__key__"] if "__key__" in sample else ""
+      sample_url = sample["__url__"] if "__url__" in sample else ""
+
+      try:
+        source_name = sample["json"]["source"]
+        # WARN: ugly code, for dirty dataset.
+        if source_name.startswith("PDFA"):
+          source_name = "PDFA"
+        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
+          source_name = source_name.split("/")[4]
+      except:
+        source_name = "None"
+
+      self.source_sample_cnt.setdefault(source_name, 0)
+      self.source_sample_cnt[source_name] += 1
+
+      try:
+        inputs = self._process(sample, source_name)
+      except:
+        self.source_error_cnt.setdefault(source_name, 0)
+        self.source_error_cnt[source_name] += 1
+        error_ratio = self.source_error_cnt[source_name] * 1.0 / \
+          self.source_sample_cnt[source_name]
+        logger.error(
+          f"ChatCompletionVisionDataset process sample error. "
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:500]}"
+          f"errmsg={traceback.format_exc()}")
+        continue
+
+      sample_length = inputs["input_ids"].shape[-1]
+      if cur_length + sample_length > self.max_length - self.image_pad_len:
+
+        if self.cut_to_pad:
+          buffer.append(inputs)
+          source_list.append(source_name)
+          packed_inputs = self._packing(buffer)
+
+          packed_inputs["data_source"] = source_list
+          buffer = []
+          source_list = []
+          cur_length = 0
+          if packed_inputs["loss_mask"].sum().item() == 0:
+            continue # packing失败，这种情况通常是只有一个样本，而且这个样本以图片开头，而且图片占满了所有有效token
+        else:
+          packed_inputs = self._packing(buffer)
+          packed_inputs["data_source"] = source_list
+          buffer = [inputs]
+          source_list = [source_name]
+          cur_length = sample_length
+
+        # skip pure text sample
+        # 有pad image，原则上不会出现纯文本输入
+        if packed_inputs["pixel_values"] is None and \
+            packed_inputs["pixel_values_videos"] is None:
+          logger.warning("Skip pure text sample.")
+          continue
+
+        # skip 0 label pack
+        if packed_inputs["loss_mask"].sum() == 0:
+          logger.warning("Skip 0 lable sample.")
+          continue
+
+        yield packed_inputs
+
+      else:
+        buffer.append(inputs)
+        source_list.append(source_name)
+        cur_length += sample_length
+
+
+class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDataset):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
+    self.rng = random.Random(shuffle_seed)
+    self.num_workers = num_workers
+    self.num_epochs = num_epochs
+
+    super().__init__(sources, **kargs)
+
+  def _build_source_dataset(self, sources):
+    data_file_list = []
+    if dist.get_rank() == 0:
+      data_files = []
+      if isinstance(sources, str) and sources.endswith(".json"):
+        with open(sources, "r") as fp:
+          data_files = json.loads(fp.read())
+          data_files = [fn for fn in data_files if fn.endswith(".parquet")]
+      elif isinstance(sources, list):
+        for source in sources:
+          hdfs_files = shell_hdfs_ls(source)
+          data_files += [fn for fn in hdfs_files if fn.endswith(".parquet")]
+      # repeat
+      for i in range(self.num_epochs):
+        data_files.sort()
+        self.rng.shuffle(data_files)
+        data_file_list += [(fn, i) for fn in data_files]
+      logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: ori_file_num={len(data_files)} file_num={len(data_file_list)}")
+
+    t = [data_file_list]
+    dist.broadcast_object_list(t, src=0)
+    data_file_list = t[0]
+
+    logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: file_num={len(data_file_list)}")
+    if len(data_file_list) == 0:
+      raise ValueError(f"no datafile found!")
+
+    dataset = ParquetDataset(data_file_list, self.num_workers)
+    return dataset, -1
+
+  def state_dict(self, ):
+    return self.dataset.state_dict()
+  
+  def load_state_dict(self, state_dict):
+    self.dataset.load_state_dict(state_dict)
+
+
+class InternVLBalancedParquetDataset(InternVLChatCompletionVisionParquetDataset):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
+    super().__init__(sources, num_workers, shuffle_seed, num_epochs, **kargs)
+    
+    def _process_task(self):
     while True:
       sample = self.sample_queue.get()
       sample_key = sample["__key__"] if "__key__" in sample else ""
@@ -3136,126 +3261,3 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
         t2 = time.perf_counter()
         print(f'next_batch[{dist.get_rank()}]={t2-t1}')
         yield result
-
-  def __iter_v2__(self):
-    buffer = []
-    source_list = []
-    cur_length = 0
-
-    for sample in self.dataset:
-      sample_key = sample["__key__"] if "__key__" in sample else ""
-      sample_url = sample["__url__"] if "__url__" in sample else ""
-
-      try:
-        source_name = sample["json"]["source"]
-        # WARN: ugly code, for dirty dataset.
-        if source_name.startswith("PDFA"):
-          source_name = "PDFA"
-        elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-          source_name = source_name.split("/")[4]
-      except:
-        source_name = "None"
-
-      self.source_sample_cnt.setdefault(source_name, 0)
-      self.source_sample_cnt[source_name] += 1
-
-      try:
-        inputs = self._process(sample, source_name)
-      except:
-        self.source_error_cnt.setdefault(source_name, 0)
-        self.source_error_cnt[source_name] += 1
-        error_ratio = self.source_error_cnt[source_name] * 1.0 / \
-          self.source_sample_cnt[source_name]
-        logger.error(
-          f"ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:500]}"
-          f"errmsg={traceback.format_exc()}")
-        continue
-
-      sample_length = inputs["input_ids"].shape[-1]
-      if cur_length + sample_length > self.max_length - self.image_pad_len:
-
-        if self.cut_to_pad:
-          buffer.append(inputs)
-          source_list.append(source_name)
-          packed_inputs = self._packing(buffer)
-
-          packed_inputs["data_source"] = source_list
-          buffer = []
-          source_list = []
-          cur_length = 0
-          if packed_inputs["loss_mask"].sum().item() == 0:
-            continue # packing失败，这种情况通常是只有一个样本，而且这个样本以图片开头，而且图片占满了所有有效token
-        else:
-          packed_inputs = self._packing(buffer)
-          packed_inputs["data_source"] = source_list
-          buffer = [inputs]
-          source_list = [source_name]
-          cur_length = sample_length
-
-        # skip pure text sample
-        # 有pad image，原则上不会出现纯文本输入
-        if packed_inputs["pixel_values"] is None and \
-            packed_inputs["pixel_values_videos"] is None:
-          logger.warning("Skip pure text sample.")
-          continue
-
-        # skip 0 label pack
-        if packed_inputs["loss_mask"].sum() == 0:
-          logger.warning("Skip 0 lable sample.")
-          continue
-
-        yield packed_inputs
-
-      else:
-        buffer.append(inputs)
-        source_list.append(source_name)
-        cur_length += sample_length
-
-
-class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDataset):
-  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
-    self.rng = random.Random(shuffle_seed)
-    self.num_workers = num_workers
-    self.num_epochs = num_epochs
-
-    super().__init__(sources, **kargs)
-
-  def _build_source_dataset(self, sources):
-    data_file_list = []
-    if dist.get_rank() == 0:
-      data_files = []
-      if isinstance(sources, str) and sources.endswith(".json"):
-        with open(sources, "r") as fp:
-          data_files = json.loads(fp.read())
-          data_files = [fn for fn in data_files if fn.endswith(".parquet")]
-      elif isinstance(sources, list):
-        for source in sources:
-          hdfs_files = shell_hdfs_ls(source)
-          data_files += [fn for fn in hdfs_files if fn.endswith(".parquet")]
-      # repeat
-      for i in range(self.num_epochs):
-        data_files.sort()
-        self.rng.shuffle(data_files)
-        data_file_list += [(fn, i) for fn in data_files]
-      logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: ori_file_num={len(data_files)} file_num={len(data_file_list)}")
-
-    t = [data_file_list]
-    dist.broadcast_object_list(t, src=0)
-    data_file_list = t[0]
-
-    logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: file_num={len(data_file_list)}")
-    if len(data_file_list) == 0:
-      raise ValueError(f"no datafile found!")
-
-    dataset = ParquetDataset(data_file_list, self.num_workers)
-    return dataset, -1
-
-  def state_dict(self, ):
-    return self.dataset.state_dict()
-  
-  def load_state_dict(self, state_dict):
-    self.dataset.load_state_dict(state_dict)
-
-
-
