@@ -253,6 +253,7 @@ def debug_model_inference(model):
     loss = loss.view(shift_logits.size(0), -1)
     # Calculate PPL only for t`he assistant's response tokens
     assistant_loss = loss[0, assistant_start_pos:assistant_start_pos+len(assistant_tokens)-1]
+    print_rank_0("assistant_loss", assistant_loss)
     ppl = torch.exp(assistant_loss.mean())
     
     print_rank_0(f"Full conversation: {text}")
