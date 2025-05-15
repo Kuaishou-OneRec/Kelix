@@ -619,9 +619,6 @@ def train():
   dataset = dataset_config.pop("name")
   dataset_config["model_class"] = args.model_class
   if args.max_length:
-    print_rank_0(
-      f"Overwrite max_length in dataset_config: "
-      f"{dataset_config['max_length']} -> {args.max_length}")
     dataset_config["max_length"] = args.max_length
   use_flops_balance = data_config.get("use_flops_balance", False)
 
