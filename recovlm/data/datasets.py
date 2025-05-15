@@ -2252,7 +2252,7 @@ class ParquetDataset(IterableDataset):
       self.shuffled_queue = queue.Queue(self.shuffle_window * 2)
       self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(self.shuffle_window, ), daemon=True)
       self.shuffle_task.start()
-      input_q = shuffled_queue
+      input_q = self.shuffled_queue
     
     while True:
       sample = input_q.get()
