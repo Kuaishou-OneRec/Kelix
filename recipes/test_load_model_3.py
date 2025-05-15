@@ -184,7 +184,22 @@ def debug_model_inference(model):
             "content":[
                 {
                   "type":"text",
-                  "text":"Hello"
+                  "text":"A large language model (LLM) is an AI system trained on vast amounts of text data to understand and generate human-like text."
+                }
+            ]
+        },
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What are its main applications?"},
+            ],
+        },
+        {
+            "role": "assistant",
+            "content":[
+                {
+                  "type":"text",
+                  "text":"LLMs are used for tasks like text generation, translation, summarization, and question answering."
                 }
             ]
         }
@@ -194,9 +209,6 @@ def debug_model_inference(model):
     text = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     )
-    
-    # Get the assistant's response text
-    assistant_text = messages[1]["content"][0]["text"]
     
     # Tokenize the full conversation
     inputs = processor(
@@ -217,49 +229,63 @@ def debug_model_inference(model):
     logits = outputs.logits
     input_ids = inputs["input_ids"]
     
-    # Find the position where assistant's response starts
-    # We need to find where the assistant's response begins in the tokenized sequence
-    assistant_tokens = processor(
-        text=[assistant_text],
-        padding=True,
-        return_tensors="pt",
-    )["input_ids"][0]
-    assistant_tokens = assistant_tokens.to(torch.cuda.current_device())
+    # Find all assistant responses in the messages
+    assistant_responses = []
+    for i, msg in enumerate(messages):
+        if msg["role"] == "assistant":
+            assistant_responses.append({
+                "text": msg["content"][0]["text"],
+                "index": i
+            })
     
-    # Find the start position of assistant's response in the full sequence
-    assistant_start_pos = None
-    for i in range(len(input_ids[0]) - len(assistant_tokens)):
-        if torch.all(input_ids[0][i:i+len(assistant_tokens)] == assistant_tokens):
-            assistant_start_pos = i
-            break
+    # Calculate PPL for each assistant response
+    total_ppl = 0
+    for assistant_response in assistant_responses:
+        # Get assistant's response text
+        assistant_text = assistant_response["text"]
+        
+        # Tokenize the assistant's response
+        assistant_tokens = processor(
+            text=[assistant_text],
+            padding=True,
+            return_tensors="pt",
+        )["input_ids"][0]
+        assistant_tokens = assistant_tokens.to(torch.cuda.current_device())
+        
+        # Find the start position of this assistant's response in the full sequence
+        assistant_start_pos = None
+        for i in range(len(input_ids[0]) - len(assistant_tokens)):
+            if torch.all(input_ids[0][i:i+len(assistant_tokens)] == assistant_tokens):
+                assistant_start_pos = i
+                break
+        
+        if assistant_start_pos is None:
+            print_rank_0(f"Could not find assistant's response in the sequence: {assistant_text}")
+            continue
+        
+        # Calculate PPL for this assistant's response
+        shift_logits = logits[..., :-1, :].contiguous()
+        shift_labels = input_ids[..., 1:].contiguous()
+        
+        # Calculate loss
+        loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+        loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+        loss = loss.view(shift_logits.size(0), -1)
+        
+        # Calculate PPL for this response
+        assistant_loss = loss[0, assistant_start_pos-1:assistant_start_pos+len(assistant_tokens)-1]
+        response_ppl = torch.exp(assistant_loss.mean())
+        
+        print_rank_0(f"\nAssistant response {assistant_response['index']}: {assistant_text}")
+        print_rank_0(f"Perplexity: {response_ppl.item():.4f}")
+        
+        total_ppl += response_ppl.item()
     
-    if assistant_start_pos is None:
-        print_rank_0("Could not find assistant's response in the sequence!")
-        return None
+    # Calculate average PPL across all responses
+    avg_ppl = total_ppl / len(assistant_responses)
+    print_rank_0(f"\nFull conversation: {text}")
+    print_rank_0(f"Average Perplexity across all responses: {avg_ppl:.4f}")
     
-    # Calculate PPL only for the assistant's response part
-    # Shift logits and labels for next token prediction
-    print_rank_0("logits.shape", logits.shape)
-    print_rank_0("input_ids.shape", input_ids.shape)
-    shift_logits = logits[..., :-1, :].contiguous()
-    shift_labels = input_ids[..., 1:].contiguous()
-    
-    # Calculate loss only for the assistant's response tokens
-    loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
-    print_rank_0("shift_logits.shape", shift_logits.view(-1, shift_logits.size(-1)).shape)
-    print_rank_0("shift_labels.shape", shift_labels.view(-1).shape)
-    loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-    # Reshape loss to match sequence length
-    loss = loss.view(shift_logits.size(0), -1)
-    # Calculate PPL only for t`he assistant's response tokens
-    assistant_loss = loss[0, assistant_start_pos-1:assistant_start_pos+len(assistant_tokens)-1]
-    print_rank_0("assistant_loss", assistant_loss)
-    ppl = torch.exp(assistant_loss.mean())
-    
-    print_rank_0(f"Full conversation: {text}")
-    print_rank_0(f"Assistant response: {assistant_text}")
-    print_rank_0(f"Perplexity: {ppl.item():.4f}")
-    
-    return ppl.item()
+    return avg_ppl
 
 debug_model_inference(model)
