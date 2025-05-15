@@ -15,7 +15,8 @@ from tqdm import tqdm
 
 from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
     ChatCompletionVisionDataset, ChatCompletionVisionParquetDataset, \
-    ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset,InternVLChatCompletionVisionParquetDataset, \
+    ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset, \
+    InternVLChatCompletionVisionParquetDataset, InternVLBalanceParquetDataset, \
     ChatCompletionVisionDataset_moonvit,ChatCompletionVisionParquetDataset_moonvit, \
     ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip, ChatCompletionVisionParquetDataset_navit
 
@@ -248,19 +249,20 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           video_min_frames=2,
                                           video_max_frames=120,
                                           datasource_config={},
-                                          vit_token_balance=False,
                                           **kwargs):
+    print(f"create vision_parquet_dataloader: num_workers={num_workers}")
     model_type = kwargs.get('model_class','Qwen2VLForConditionalGeneration')
-    print('test_cut_to_pad:',kwargs.get('cut_to_pad',False))
-    cut_to_pad = kwargs.get('cut_to_pad',False)
+    use_balance = kwargs.get("use_flops_balance", False)
+
     ModelDataset = {'Qwen2VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration_moonvit':ChatCompletionVisionParquetDataset_moonvit,
                     'Qwen2_5_VLForConditionalGeneration_siglip':ChatCompletionVisionParquetDataset_siglip,
                     'Qwen3SiglipForConditionalGeneration_navit':ChatCompletionVisionParquetDataset_navit,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
-    print(f"get dataloader vit_token_balance={vit_token_balance}")
-    if vit_token_balance: assert num_workers == 1
+
+    if use_balance and model_type == "InternVLChatModel":
+        ModelDataset = InternVLBalanceParquetDataset
     dataset = ModelDataset[model_type](
         sources = sources,
         num_workers = num_workers,
@@ -278,12 +280,11 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
         max_retry=max_retry,
         multiple_of=multiple_of,
         datasource_config=datasource_config,
-        vit_token_balance=vit_token_balance,
         **kwargs
         )
 
-    ### packing, batching size=1; shuffle in dataset
-    if vit_token_balance :
+    if use_balance:
+        assert num_workers == 1, f"use_flops_balance requires one dataset process per worker"
         dataloader = DataLoader(
             dataset=dataset,
             shuffle=False,
@@ -297,7 +298,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
             shuffle=False,
             batch_size=1,
             num_workers=num_workers,
-            collate_fn=lambda x: x[0]
+            collate_fn=lambda x: x[0],
         )
     return dataloader
 

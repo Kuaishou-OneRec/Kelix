@@ -15,9 +15,9 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1999  > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/InternVL3-2Bt/ # Pretrained/Base model path
+MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/Megred_model/2B # Pretrained/Base model path
 # MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/OpenGVLab/InternVL2_5-4B
-OUTPUT_DIR=/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.7.0/2b/stage1_v0
+OUTPUT_DIR=/llm_reco/huangsui/output/internvl-2b/qwen_vs_intern/kai_balance_llm_flops
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
@@ -26,7 +26,8 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="run internvl 2b 0.7.0 stage1 by lzx, use stage1.5-0.6.0 data"
+comment="run_internvl_2b_stage1_by_ccl"
+
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
@@ -118,22 +119,20 @@ nohup mpirun --allow-run-as-root \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config examples/vlm/configs/0.7.0/2b_v0_6_0_internvl_stage1_5.json  \
+                --dataset_config examples/vlm/configs/2b_internvl_stage2_cut.json \
                 --max_length 21000 \
-                --learning_rate 2e-4 \
+                --learning_rate 4e-7 \
                 --model_class InternVLChatModel \
                 --min_lr 0.0 \
                 --weight_decay 0.01 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 500 \
                 --num_training_steps 100000 \
-                --save_checkpoint_per_step 1000 \
+                --save_checkpoint_per_step 50000 \
+		--fp32_weight \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
-                --fp32_weight \
-		--freeze_llm \
-		--freeze_visual \
                 --enable_profile \
                 --seed 19260817 \
 		--monitor_image_tokens \
@@ -143,7 +142,6 @@ nohup mpirun --allow-run-as-root \
                 --merge_checkpoint_output_file pytorch_model.bin \
                 --comment $comment \
                 --commit_id $git_hash \
-		--logging_per_step 10 \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
