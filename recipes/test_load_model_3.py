@@ -184,7 +184,7 @@ def debug_model_inference(model):
             "content":[
                 {
                   "type":"text",
-                  "text":"LLM is large language model. It is a kind of model that can understand and generate human language."
+                  "text":"LLM"
                 }
             ]
         }
