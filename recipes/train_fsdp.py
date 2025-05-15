@@ -1089,7 +1089,7 @@ def train():
           batch_data_source_loss[key] += sum_loss.item()
           tokens_by_sample.append(mask.sum().item())
           batch_data_source_tokens[key] += tokens_by_sample[-1]
-          image_tokens_by_sample.append(image_tokens_ids * mask).sum().item()
+          image_tokens_by_sample.append(image_tokens_ids * mask.sum().item())
           valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
         ticker.tick("monitor_datasource_loss")
 
