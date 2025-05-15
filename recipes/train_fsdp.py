@@ -996,7 +996,7 @@ def train():
       num_samples = (sample_idx.max() + 1).sum()
       # num_image_tokens = pixel_values.shape[0] * 256 # if args.model_class == "InternVLChatModel" else 0
       num_images = (input_ids == image_start_id).sum().item()
-      print(num_images, image_start_id, 23545)
+
       image_tokens_ids = input_ids == image_token_id
       num_image_tokens = image_tokens_ids.sum().item()
 
@@ -1159,15 +1159,14 @@ def train():
 
 
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
-          start_time = end_time
-
-          print(type(tokens_by_sample), tokens_by_sample)
-          print(acc_num_images)
+          
           mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), 
             total_seq_len=tokens_by_sample, 
             image_token_merged_len=[round(acc_num_image_tokens / acc_num_images)] * acc_num_images if acc_num_images != 0 else 1, 
             llm_batch_size=num_samples, 
             secs_per_step=end_time - start_time)
+          
+          start_time = end_time
           total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)']
           total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)']
           total_mfu['mfu'] += mfu_per_step_per_gpu['mfu']
