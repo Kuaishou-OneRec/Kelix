@@ -290,17 +290,11 @@ def _init_profiler(output_dir, start_step=13, end_step=22) -> None:
             torch.profiler.ProfilerActivity.CPU,
             torch.profiler.ProfilerActivity.CUDA,
         ],
-        #schedule=torch.profiler.schedule(
-        #    wait=1,
-        #    warmup=start_step - 1,
-        #    active=end_step - start_step,
-        #    repeat=1,
-        #),
         schedule=torch.profiler.schedule(
-            wait=1,
-            warmup=11,
-            active=3,
-            repeat=0,
+           wait=1,
+           warmup=start_step - 1,
+           active=end_step - start_step,
+           repeat=1,
         ),
         on_trace_ready=trace_handler,
     )
@@ -471,8 +465,6 @@ def freeze_params(args, model):
     raise NotImplementedError(f"freeze_params Not support model class: {args.model_class}")
 
 
-
-
 class TokenStats:
   def __init__(self):
     self.max_image_tokens = []
@@ -581,6 +573,7 @@ def train():
 
   batch_queue = mp.Queue(1)
   dataset_config = args.dataset_config
+  use_balance = dataset_config
   data_process = mp.Process(
       target=data_func,
       args=(dataset_config, args.model_class, args.max_length, batch_queue))

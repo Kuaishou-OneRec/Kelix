@@ -15,7 +15,8 @@ from tqdm import tqdm
 
 from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
     ChatCompletionVisionDataset, ChatCompletionVisionParquetDataset, \
-    ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset,InternVLChatCompletionVisionParquetDataset
+    ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset, \
+    InternVLChatCompletionVisionParquetDataset, InternVLBalanceParquetDataset
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
 
@@ -249,9 +250,12 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           **kwargs):
     print(f"create vision_parquet_dataloader: num_workers={num_workers}")
     model_type = kwargs.get('model_class','Qwen2VLForConditionalGeneration')
+    use_balance = kwargs.get("with_flops_balance", False)
     ModelDataset = {'Qwen2VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
+    if use_balance and model_type == "InternVLChatModel":
+        ModelDataset = InternVLBalanceParquetDataset
     dataset = ModelDataset[model_type](
         sources = sources,
         num_workers = num_workers,
@@ -271,14 +275,24 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
         datasource_config=datasource_config,
         **kwargs
         )
-
-    dataloader = DataLoader(
-        dataset=dataset,
-        shuffle=False,
-        batch_size=1,
-        num_workers=(num_workers if num_workers > 1 else 0),
-        collate_fn=lambda x: x[0],
-    )
+    
+    if use_balance:
+        assert num_workers == 1, f"with_flops_balance requires one dataset process per worker"
+        dataloader = DataLoader(
+            dataset=dataset,
+            shuffle=False,
+            batch_size=1,
+            num_workers=(num_workers if num_workers > 1 else 0),
+            collate_fn=lambda x: x[0],
+        )
+    else:
+        dataloader = StatefulDataLoader(
+            dataset=dataset,
+            shuffle=False,
+            batch_size=1,
+            num_workers=num_workers,
+            collate_fn=lambda x: x[0],
+        )
     return dataloader
 
 def get_chat_completion_vision_dpo_parquet_dataloader(sources: str,
