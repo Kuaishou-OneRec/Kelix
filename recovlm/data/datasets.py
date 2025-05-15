@@ -2249,8 +2249,8 @@ class ParquetDataset(IterableDataset):
     input_q = self.sample_queue
       
     if self.shuffle_window > 0:
-      self.shuffled_queue = queue.Queue(shuffle_window * 2)
-      self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(shuffle_window, ), daemon=True)
+      self.shuffled_queue = queue.Queue(self.shuffle_window * 2)
+      self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(self.shuffle_window, ), daemon=True)
       self.shuffle_task.start()
       input_q = shuffled_queue
     
