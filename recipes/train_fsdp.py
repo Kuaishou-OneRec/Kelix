@@ -620,7 +620,7 @@ def train():
   dataset_config["model_class"] = args.model_class
   if args.max_length:
     dataset_config["max_length"] = args.max_length
-  use_flops_balance = data_config.get("use_flops_balance", False)
+  use_flops_balance = dataset_config.get("use_flops_balance", False)
 
   if use_flops_balance:
     batch_queue = mp.Queue(1)
