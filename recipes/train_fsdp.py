@@ -557,7 +557,7 @@ class TokenStats:
       return res
 
 
-def data_func(dataset_config, batch_queue):
+def data_func(name, dataset_config, batch_queue):
   p = psutil.Process(os.getpid())
   raw_cpus = p.cpu_affinity()
   p.cpu_affinity(raw_cpus[:8])
@@ -569,13 +569,13 @@ def data_func(dataset_config, batch_queue):
   print(f"dataset_process: rank={dist.get_rank()}, pid={os.getpid()}")
 
   # with Timer("Build dataloader"):
-  try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
+  try:  dataloader = get_dataloader_v2(name=name, **dataset_config)
   except: 
     import traceback
     print(f"get_dataloader_v2 error: {traceback.format_exc()}")
     print(f"get_dataloader_v2 retry for get_dataloader")
     traceback.print_exc()
-    dataloader = get_dataloader(name=dataset, **dataset_config)
+    dataloader = get_dataloader(name=name, **dataset_config)
 
   for batch in dataloader:
     batch_queue.put(batch)
@@ -624,7 +624,7 @@ def train():
 
   if use_flops_balance:
     batch_queue = mp.Queue(1)
-    data_process = mp.Process(target=data_func, args=(dataset_config, batch_queue))
+    data_process = mp.Process(target=data_func, args=(dataset, dataset_config, batch_queue))
     data_process.start()
     print(f"data process started")
   else:
