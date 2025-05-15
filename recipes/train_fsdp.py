@@ -884,7 +884,7 @@ def train():
 
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
   image_token_id = tokenizer.encode('<|image_pad|>')[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<IMG_CONTEXT>')[0]
-
+  image_start_id = tokenizer.encode('<|vision_start|>')[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode("<img>")[0]
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
     dataset_config = json.loads(f.read())
@@ -993,7 +993,8 @@ def train():
       num_tokens = token_count
       num_samples = (sample_idx.max() + 1).sum()
       # num_image_tokens = pixel_values.shape[0] * 256 # if args.model_class == "InternVLChatModel" else 0
-      
+      num_images += (input_ids == image_start_id).sum().item()
+
       image_tokens_ids = input_ids == image_token_id
       num_image_tokens = image_tokens_ids.sum().item()
 
@@ -1021,6 +1022,7 @@ def train():
       acc_num_tokens += num_tokens
       acc_valid_num_tokens += num_valid_tokens
       acc_num_image_tokens += num_image_tokens
+      acc_num_images += num_images
       ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
 
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
@@ -1159,7 +1161,11 @@ def train():
 
           print(type(tokens_by_sample), tokens_by_sample)
           print(image_tokens_by_sample)
-          mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), tokens_by_sample, acc_num_image_tokens, num_samples, end_time - start_time)
+          mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), 
+            total_seq_len=tokens_by_sample, 
+            image_token_merged_len=[round(acc_num_image_tokens / num_images)] * num_images, 
+            llm_batch_size=num_samples, 
+            secs_per_step=end_time - start_time)
           total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)']
           total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)']
           total_mfu['mfu'] += mfu_per_step_per_gpu['mfu']
