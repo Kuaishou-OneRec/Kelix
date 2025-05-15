@@ -1089,7 +1089,6 @@ def train():
           batch_data_source_loss[key] += sum_loss.item()
           tokens_by_sample.append(mask.sum().item())
           batch_data_source_tokens[key] += tokens_by_sample[-1]
-          image_tokens_by_sample.append(image_tokens_ids * mask.sum().item())
           valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
         ticker.tick("monitor_datasource_loss")
 
@@ -1158,8 +1157,9 @@ def train():
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
           start_time = end_time
 
-
-          mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), tokens_by_sample, image_tokens_by_sample, num_samples, end_time - start_time)
+          print(type(tokens_by_sample), tokens_by_sample)
+          print(image_tokens_by_sample)
+          mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), tokens_by_sample, acc_num_image_tokens, num_samples, end_time - start_time)
           total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)']
           total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)']
           total_mfu['mfu'] += mfu_per_step_per_gpu['mfu']
