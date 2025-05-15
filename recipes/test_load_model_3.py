@@ -170,7 +170,6 @@ with set_default_dtype(torch.bfloat16):
 
 
 def debug_model_inference(model):
-    # processor = Qwen2VLProcessor.from_pretrained(MODEL_DIR)
     MODEL_DIR2="/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip"
     processor = Qwen3SiglipProcessor_siglip.from_pretrained(MODEL_DIR2)
     messages = [
@@ -187,58 +186,76 @@ def debug_model_inference(model):
                   "type":"text",
                   "text":"LLM is large language model. happy happy happy~"
                 }
-
             ]
-
         }
     ]
-    # Preparation for inference
+    
+    # Get the full conversation text
     text = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     )
-    # image_inputs, video_inputs = process_vision_info(messages)
     
+    # Get the assistant's response text
+    assistant_text = messages[1]["content"][0]["text"]
+    
+    # Tokenize the full conversation
     inputs = processor(
         text=[text],
         padding=True,
         return_tensors="pt",
     )
-    print_rank_0(inputs)
+    
+    # Move to GPU
     inputs = inputs.to(torch.cuda.current_device())
     model = model.to(torch.cuda.current_device())
 
-
-    # print_input_info({
-    #     "inputs": inputs,
-    # })
-    # print_rank_0("=" * 100)
-
-    output = model(**inputs)
-    print_rank_0("output")
-    logits = output.logits
-    print_rank_0(logits , logits.shape)
-    # Convert BFloat16 tensor to float32 before numpy conversion
-    # logits_np = logits.detach().cpu().float().numpy().tolist()
-    # json.dump(logits_np, open("logits8B-siglip.json", "w"))
-    # generated_ids = model.generate(**inputs, max_new_tokens=128)
-    # generated_ids_trimmed = [
-    #     out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-    # ]
-    # output_text = processor.batch_decode(
-    #     generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    # )
-    # print_rank_0(output_text)
-    # #print_rank_0(output)
+    # Get model outputs
+    with torch.no_grad():
+        outputs = model(**inputs)
     
-    exit()
-    generation_config = GenerationConfig(
-    max_new_tokens=128,
-    do_sample=True,
-    top_p=0.95,
-    temperature=0.7,
-    )
-
-
-
+    # Get the logits and input ids
+    logits = outputs.logits
+    input_ids = inputs["input_ids"]
+    
+    # Find the position where assistant's response starts
+    # We need to find where the assistant's response begins in the tokenized sequence
+    assistant_tokens = processor(
+        text=[assistant_text],
+        padding=True,
+        return_tensors="pt",
+    )["input_ids"][0]
+    
+    # Find the start position of assistant's response in the full sequence
+    assistant_start_pos = None
+    for i in range(len(input_ids[0]) - len(assistant_tokens)):
+        if torch.all(input_ids[0][i:i+len(assistant_tokens)] == assistant_tokens):
+            assistant_start_pos = i
+            break
+    
+    if assistant_start_pos is None:
+        print_rank_0("Could not find assistant's response in the sequence!")
+        return None
+    
+    # Calculate PPL only for the assistant's response part
+    # Shift logits and labels for next token prediction
+    shift_logits = logits[..., :-1, :].contiguous()
+    shift_labels = input_ids[..., 1:].contiguous()
+    
+    # Calculate loss only for the assistant's response tokens
+    loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+    loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+    
+    # Reshape loss to match sequence length
+    loss = loss.view(shift_logits.size(0), -1)
+    
+    # Calculate PPL only for the assistant's response tokens
+    assistant_loss = loss[0, assistant_start_pos:assistant_start_pos+len(assistant_tokens)-1]
+    ppl = torch.exp(assistant_loss.mean())
+    
+    print_rank_0(f"Full conversation: {text}")
+    print_rank_0(f"Assistant response: {assistant_text}")
+    print_rank_0(f"Perplexity: {ppl.item():.4f}")
+    
+    return ppl.item()
 
 debug_model_inference(model)
