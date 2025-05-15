@@ -994,10 +994,8 @@ def train():
       num_samples = (sample_idx.max() + 1).sum()
       # num_image_tokens = pixel_values.shape[0] * 256 # if args.model_class == "InternVLChatModel" else 0
       
-      num_image_tokens = (input_ids == image_token_id).sum().item()
-
-      # print(input_ids, 54544444)
-      # print(f"num_image_tokens111111={num_image_tokens}")
+      image_tokens_ids = input_ids == image_token_id
+      num_image_tokens = image_tokens_ids.sum().item()
 
       # num_tokens - (sample_idx == -1).sum()
       num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
@@ -1078,7 +1076,7 @@ def train():
         local_sample_idx = get_local_sequence(sample_idx).squeeze()
 
         unique_sample_idx = local_sample_idx.unique()
-        image_tokens2 = (input_ids == 151667) or (input_ids == 151655)
+        # mage_tokens2 = (input_ids == 151667) or (input_ids == 151655)
         image_tokens_by_sample = []
         tokens_by_sample = []
         for s_idx in unique_sample_idx:
@@ -1091,7 +1089,7 @@ def train():
           batch_data_source_loss[key] += sum_loss.item()
           tokens_by_sample.append(mask.sum().item())
           batch_data_source_tokens[key] += tokens_by_sample[-1]
-          image_tokens_by_sample.append(image_tokens2 * mask).sum().item()
+          image_tokens_by_sample.append(image_tokens_ids * mask).sum().item()
           valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
         ticker.tick("monitor_datasource_loss")
 
