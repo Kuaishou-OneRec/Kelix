@@ -4,6 +4,7 @@ import contextlib
 import gc
 import argparse
 import time
+from collections import defaultdict
 import datetime
 import os
 import glob
@@ -15,7 +16,7 @@ import itertools
 import contextlib
 import multiprocessing as mp
 from functools import partial
-
+from tools.mfu.flops_counter import calc_mfu
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
@@ -945,6 +946,7 @@ def train():
   # get_sequence_parallel_group("gloo")
   if not args.vit_token_balance: data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
   micro_step = 0
+  total_mfu = defaultdict(int)
   ticker = TimeTracker(n=args.logging_per_step)
   iter_ticker = TimeTracker(n=args.logging_per_step)
   token_stasts = TokenStats()
@@ -1157,6 +1159,17 @@ def train():
 
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
           start_time = end_time
+
+          for key, num_tokens in total_data_source_tokens.items():
+            tb_writer.add_scalar(
+                f"data_source_token_ratio/{key}",
+                1.0 * num_tokens / total_num_valid_tokens,
+                global_step=global_step,
+                new_style=True)
+          mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), num_tokens, num_image_tokens, num_samples, end_time - start_time)
+          total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)']
+          total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)']
+          total_mfu['mfu'] += mfu_per_step_per_gpu['mfu']
           log_dict = {
             # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
             "training/loss": avg_loss,
@@ -1177,6 +1190,9 @@ def train():
             "perf/image_token_ratio_by_valid": image_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
             "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples,
+            "perf/mfu_per_step_per_gpu": mfu_per_step_per_gpu['mfu'],
+            "perf/vit_flops_per_step_per_gpu": mfu_per_step_per_gpu['vit_total_flops*3(T)'],
+            "perf/llm_flops_per_step_per_gpu": mfu_per_step_per_gpu['llm_total_flops*3(T)'],
 
             "perf/samples_per_step_per_gpu_v2": samples_per_step_per_gpu_v2,
             "perf/samples_per_sec_per_gpu_v2": samples_per_sec_per_gpu_v2,
@@ -1185,6 +1201,9 @@ def train():
             "perf/tokens_per_step_per_gpu_v2": tokens_per_step_per_gpu_v2,
             "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
 
+            "perf/mfu_per_step_per_gpu_v2": total_mfu['mfu'] / global_step,
+            "perf/vit_flops_per_step_per_gpu_v2": total_mfu['vit_total_flops*3(T)'] / global_step,
+            "perf/llm_flops_per_step_per_gpu_v2": total_mfu['llm_total_flops*3(T)'] / global_step,
           }
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
           ticker.tick(f"log_dict*{log_acc_step}")
