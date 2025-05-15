@@ -932,7 +932,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > self.max_length:
+    if inputs["input_ids"].shape[-1] > 32768:
       print(f"Sample is too long. token_len={inputs['input_ids'].shape[-1]}")
     
     # mask all vision token
@@ -1013,7 +1013,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     #   Token indices sequence length is longer than the specified maximum 
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
-    if inputs["input_ids"].shape[-1] > self.max_length:
+    if inputs["input_ids"].shape[-1] > 32768:
       raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
     
     inputs["loss_mask"] = get_assistant_mask(
