@@ -883,7 +883,7 @@ def train():
   dist.barrier()
 
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
-  image_token_id = tokenizer.encode('<|image_pad|>')[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<IMG_CONTEXT>')[0]
+  image_token_id = tokenizer.encode('<IMG_CONTEXT>')[0]  if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|image_pad|>')[0]
   image_start_id = tokenizer.encode("<img>")[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|vision_start|>')[0]
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
@@ -1028,7 +1028,7 @@ def train():
       acc_valid_num_tokens += num_valid_tokens
       acc_num_image_tokens += num_image_tokens
       acc_num_images += num_images
-      print(8888234523, acc_num_images, num_images)
+      print(8888234523, acc_num_images, num_images, num_image_tokens)
       ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
 
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
@@ -1163,14 +1163,13 @@ def train():
 
 
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
-          
+          print(3253444, acc_num_images)
           mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), 
             total_seq_len=tokens_by_sample, 
             image_token_merged_len=[round(acc_num_image_tokens / acc_num_images)] * acc_num_images if acc_num_images != 0 else 1, 
             llm_batch_size=num_samples, 
             secs_per_step=end_time - start_time)
           
-          start_time = end_time
           total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)']
           total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)']
           total_mfu['mfu'] += mfu_per_step_per_gpu['mfu']
@@ -1209,6 +1208,7 @@ def train():
             "perf/vit_flops_per_step_per_gpu_v2": total_mfu['vit_total_flops*3(T)'] / global_step,
             "perf/llm_flops_per_step_per_gpu_v2": total_mfu['llm_total_flops*3(T)'] / global_step,
           }
+          start_time = end_time
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
           ticker.tick(f"log_dict*{log_acc_step}")
 
