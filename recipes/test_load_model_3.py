@@ -187,22 +187,22 @@ def debug_model_inference(model):
                   "text":"A large language model (LLM) is an AI system lalallallalal alal al a a ll alla l al la l a"
                 }
             ]
-        },
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "What are its main applications?"},
-            ],
-        },
-        {
-            "role": "assistant",
-            "content":[
-                {
-                  "type":"text",
-                  "text":"LLMs are used for tasks like text generation, translation, summarization, and question answering."
-                }
-            ]
         }
+        # {
+        #     "role": "user",
+        #     "content": [
+        #         {"type": "text", "text": "What are its main applications?"},
+        #     ],
+        # },
+        # {
+        #     "role": "assistant",
+        #     "content":[
+        #         {
+        #           "type":"text",
+        #           "text":"LLMs are used for tasks like text generation, translation, summarization, and question answering."
+        #         }
+        #     ]
+        # }
     ]
     
     # Get the full conversation text
