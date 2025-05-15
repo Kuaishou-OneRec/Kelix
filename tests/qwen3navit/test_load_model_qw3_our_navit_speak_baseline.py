@@ -166,7 +166,9 @@ set_seed(0)
 # world_size = int(os.environ.get("WORLD_SIZE", "1"))
 # local_rank = int(os.environ.get("LOCAL_RANK", "0"))
 # device = torch.device(f"cuda:{local_rank}")
-# torch.cuda.set_device(device)
+torch.cuda.set_device(0)
+# torch.cuda.set_default_device(0)
+
 # torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
 
 # rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
@@ -302,14 +304,16 @@ if 1:
             )
 
             # load_from_full_model_state_dict(model, load_hf_checkpoint("/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2"))
-            # for k in inputst: inputst[k] = inputst[k].cuda()
-            model = model.cuda()
+            # model = model.cuda()
             messages, inputs = make_inputs(100,100)
+            for k in inputs: inputs[k] = inputs[k].cuda()
+
             generated = model.generate(**inputs, max_new_tokens=32768)
             logits = model(**inputs).logits
             output_ids = generated[0][len(inputs.input_ids[0]):].tolist() 
             content = tokenizer.decode(output_ids[0:], skip_special_tokens=True).strip("\n")
 
+            messages = messages[0]
             messages["content"] = content
             messages["logits"] = logits
             print(format_dict_or_list(messages))
