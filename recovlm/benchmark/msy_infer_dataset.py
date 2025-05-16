@@ -158,34 +158,35 @@ class MsyInferDataset(ParquetDataset):
   def __iter__(self):
     """重写父类的__iter__方法，处理每个样本"""
     for item in super().__iter__():
-      try:
-        messages = self.transform_func(item)
-        text = self.processor.apply_chat_template(
-          messages,
-          tokenize=False,
-          add_generation_prompt=True
-        )
-        image_inputs, video_inputs = process_vision_info(messages)
-        mm_data = {}
-        if image_inputs is not None:
-          mm_data["images"] = image_inputs
-        if video_inputs is not None:
-          mm_data["videos"] = video_inputs
-        inputs  = self.processor(
-          text=[text],
-          **mm_data,
-          padding=True,
-          return_tensors="pt",
-        )
-        yield {
-          "inputs": inputs
-        }
+      # try:
+      messages = self.transform_func(item)
+      print(messages)
+      text = self.processor.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True
+      )
+      image_inputs, video_inputs = process_vision_info(messages)
+      mm_data = {}
+      if image_inputs is not None:
+        mm_data["images"] = image_inputs
+      if video_inputs is not None:
+        mm_data["videos"] = video_inputs
+      inputs  = self.processor(
+        text=[text],
+        **mm_data,
+        padding=True,
+        return_tensors="pt",
+      )
+      yield {
+        "inputs": inputs
+      }
         
-      except Exception as e:
-        print(f"Error processing item: {e}")
-        yield {
-          "inputs": None
-        }
+      # except Exception as e:
+      #   print(f"Error processing item: {e}")
+      #   yield {
+      #     "inputs": None
+      #   }
 
   def __len__(self):
     """返回数据集的总行数"""
