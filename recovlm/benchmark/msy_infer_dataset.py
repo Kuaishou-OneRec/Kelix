@@ -177,6 +177,7 @@ class MsyInferDataset(ParquetDataset):
         padding=True,
         return_tensors="pt",
       )
+      print(inputs)
       yield {
         "inputs": inputs
       }
