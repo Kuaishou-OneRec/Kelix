@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip/
-OUTPUT_DIR=/llm_reco/lingzhixin/exps/qwen3navit/debug_qwen3navit_0516_8b_stage2/0.0.3/8B/
+OUTPUT_DIR=/llm_reco/lingzhixin/exps/qwen3navit/debug_qwen3navit_0516_8b_stage2/0.0.4/8B/
 
 # debug_qwen3navit_0516_8b_stage1.sh 
 
