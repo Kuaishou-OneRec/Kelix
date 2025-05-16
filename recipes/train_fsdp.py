@@ -555,7 +555,6 @@ class TokenStats:
         "perf/mean_image_tokens": res[2],
         "perf/std_image_tokens": res[3]
       }
-      print(f"rrrr", res)
       self.max_image_tokens.clear()
       self.min_image_tokens.clear()
       self.mean_image_tokens.clear()
@@ -1146,7 +1145,7 @@ def train():
           else:
             vision_learning_rate = lr_scheduler.get_lr()[1]
           end_time = time.time()
-          sec_per_step = (end_time - start_time) # / args.gradient_accumulation_steps
+          sec_per_step = (end_time - start_time) / args.logging_per_step # / args.gradient_accumulation_steps
           tokens_per_sec_per_gpu = \
             acc_num_tokens  / (end_time - start_time) / dist.get_world_size()
           samples_per_sec_per_gpu = \
@@ -1273,7 +1272,8 @@ def train():
             f"Learning Rate: {learning_rate}, "
             f"Grad Norm: {get_global_grad_norm(model).detach().cpu().item()}, "
             f"Sec per Step: {sec_per_step}",
-            format_dict_or_list(log_dict)
+            format_dict_or_list(log_dict),
+            format_dict_or_list({"mfu_stats": mfu_per_step_per_gpu})
         )        
 
           # upload heart_beat to remote
