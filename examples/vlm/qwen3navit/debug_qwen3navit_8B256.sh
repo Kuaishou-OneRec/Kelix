@@ -137,6 +137,7 @@ nohup mpirun --allow-run-as-root \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
                 --merge_checkpoint \
+		--monitor_image_tokens \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
                 --comment "$comment" \

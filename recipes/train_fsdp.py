@@ -526,7 +526,6 @@ class TokenStats:
       input_tensor = torch.tensor([num_image_tokens], dtype=torch.long).cuda()
       all_image_tokens = list(torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) if rank == 0 else None
       dist.gather(input_tensor, gather_list=all_image_tokens, dst=0)
-      print(3243233333, all_image_tokens)
       if rank == 0:
           all_image_tokens = [x.item() for x in all_image_tokens]
           # 计算统计指标
@@ -1003,7 +1002,7 @@ def train():
       image_tokens_ids = input_ids == image_token_id
       num_image_tokens = image_tokens_ids.sum().item()
       num_image_tokens2 = num_image_tokens
-      num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChat" else (input_ids == image_start_id).sum().item()
+      num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item()
 
       tokens_for_mfu["num_image_tokens"] += num_image_tokens
       tokens_for_mfu["num_tokens"] += num_tokens
