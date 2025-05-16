@@ -360,7 +360,7 @@ def extract_model_params(config_path):
             'intermediate_size': llm_config['intermediate_size'],
             'kv_heads': llm_config.get('num_key_value_heads', llm_config['num_attention_heads']),
             'num_layers': llm_config['num_hidden_layers'],
-            'vocab_size': config['vocab_size']
+            'vocab_size': llm_config['vocab_size']
         }
         
         vision_config = config['vision_config']
