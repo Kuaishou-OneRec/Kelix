@@ -208,4 +208,4 @@ if __name__ == "__main__":
 
   for batch in DataLoader(dataset, batch_size=1, shuffle=False):
     for idx, item in enumerate(batch):
-      print(idx, item)
+      print(idx, item['inputs'])
