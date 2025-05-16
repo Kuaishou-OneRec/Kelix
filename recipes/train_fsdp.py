@@ -1165,14 +1165,15 @@ def train():
 
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
           import easydict
-          d = easydict.EasyDict(
+          mfu_args = easydict.EasyDict(
+
+            # 暂时认为各条样本长度均匀
             total_seq_len=round(tokens_for_mfu["num_tokens"] / args.logging_per_step), 
             image_token_merged_len=[round(tokens_for_mfu["num_image_tokens"]  / tokens_for_mfu["num_images"])] * round(tokens_for_mfu["num_images"] / args.logging_per_step)  if tokens_for_mfu["num_images"] != 0 else 1, 
             llm_batch_size=round(tokens_for_mfu["num_images"] / args.logging_per_step), 
             secs_per_step=(end_time - start_time) / args.logging_per_step
           )
-
-          mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), **d)
+          mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), **mfu_args)
           total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)'] * args.logging_per_step
           total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)'] * args.logging_per_step
           total_mfu['mfu'] += mfu_per_step_per_gpu['mfu'] * args.logging_per_step
