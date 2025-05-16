@@ -506,6 +506,7 @@ if __name__=='__main__':
     # 打印结果
     print('VLM FLOPs计算结果:')
     print(format_dict_or_list(mfu))
+    print(mfu['mfu'])
 
     mfu = calc_mfu(
         '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/qwen3_1.7b_navitd.json',
@@ -518,25 +519,11 @@ if __name__=='__main__':
     # 打印结果
     print('VLM FLOPs计算结果:')
     print(format_dict_or_list(mfu))
+    print(mfu['mfu'])
 
 '''
 2B 模型
 样本吞吐10, image token 1324, 132*4 token
-
-105
-
-10.6%
-
-
-
-
-8B模型
-240卡
-llm_batchsize=48
-llm_seq_len=17496
-vit_token_len=15315
-mfu = 9%
-  "vit_total_flops*3(T)": 237.74510186496,
   "llm_total_flops*3(T)": 613.585621352448
 
 2B模型
