@@ -7,8 +7,6 @@ from torch.utils.data import IterableDataset
 import webdataset as wds
 import tarfile
 import base64
-from bs4 import BeautifulSoup as bs
-from html import escape
 import pandas as pd
 import traceback
 
@@ -217,59 +215,3 @@ class VlmTextJsonl(IterableDataset):
                     pass
                 else:
                     yield src
-
-class PubTabNetDataset(IterableDataset):
-    def __init__(self, path):
-        super().__init__()
-        self.path = path
-        self.jsonl_path = os.path.join(path, "PubTabNet_2.0.0.jsonl")
-        
-        with open(self.jsonl_path, "r") as f:
-            self.lines = f.readlines()
-    
-    def __len__(self):
-        return len(self.lines)
-    
-    def format_html(self, img_data):
-        html_code = img_data['html']['structure']['tokens'].copy()
-        to_insert = [i for i, tag in enumerate(html_code) if tag in ('<td>', '>')]
-        for i, cell in zip(to_insert[::-1], img_data['html']['cells'][::-1]):
-            if cell['tokens']:
-                cell = [escape(token) if len(token) == 1 else token for token in cell['tokens']]
-                cell = ''.join(cell)
-                html_code.insert(i + 1, cell)
-        html_code = ''.join(html_code)
-        html_code = '''<html>
-                       <head>
-                       <meta charset="UTF-8">
-                       <style>
-                       table, th, td {
-                         border: 1px solid black;
-                         font-size: 10px;
-                       }
-                       </style>
-                       </head>
-                       <body>
-                       <table frame="hsides" rules="groups" width="100%%">
-                         %s
-                       </table>
-                       </body>
-                       </html>''' % html_code
-
-        soup = bs(html_code)
-        return soup.prettify()
-    
-    def __iter__(self):
-        for line in self.lines:
-            if line.strip() != '':
-                data = json.loads(line)
-                filename = data['filename']
-                split = data['split']
-                
-                img_path = os.path.join(self.path, split, filename)
-                if os.path.exists(img_path):
-                    with open(img_path, 'rb') as f:
-                        img_bytes = f.read()
-                        data['image'] = base64.b64encode(img_bytes).decode('ascii')
-                        data['html'] = self.format_html(data)
-                        yield data
