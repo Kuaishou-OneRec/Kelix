@@ -193,12 +193,19 @@ class MsyInferDataset(ParquetDataset):
     return self.total_rows
 
 if __name__ == "__main__":
+  # dataset = MsyInferDataset(
+  #   dataset_name="MMBench",
+  #   parquet_path="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/en/dev-00000-of-00001.parquet",
+  #   model_name_or_path="/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip",
+  #   user='mpi'
+  # )
   dataset = MsyInferDataset(
-    dataset_name="MMBench",
-    parquet_path="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/en/dev-00000-of-00001.parquet",
+    dataset_name="OCRBench",
+    parquet_path="/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/OCRBench/data/test-00000-of-00001.parquet",
     model_name_or_path="/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip",
     user='mpi'
   )
+
   for batch in DataLoader(dataset, batch_size=1, shuffle=False):
     for idx, item in enumerate(batch):
       print(idx, item)
