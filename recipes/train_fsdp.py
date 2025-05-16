@@ -938,6 +938,7 @@ def train():
   acc_num_image_tokens = 0
   acc_num_images = 0
   total_num_image_tokens = 0
+  tokens_for_mfu = collections.defaultdict(int)
   num_images = 0
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
@@ -994,12 +995,15 @@ def train():
       print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
       num_tokens = token_count
       num_samples = (sample_idx.max() + 1).sum()
-      # num_image_tokens = pixel_values.shape[0] * 256 # if args.model_class == "InternVLChatModel" else 0
       num_images = (input_ids == image_start_id).sum().item()
 
-      # 151652
       image_tokens_ids = input_ids == image_token_id
       num_image_tokens = image_tokens_ids.sum().item()
+
+      tokens_for_mfu["num_image_tokens"] += num_image_tokens
+      tokens_for_mfu["num_tokens"] += num_tokens
+      tokens_for_mfu["num_samples"] += num_samples
+      tokens_for_mfu["num_images"] += num_images
 
       # num_tokens - (sample_idx == -1).sum()
       num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
@@ -1160,15 +1164,18 @@ def train():
 
 
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
+          import easydict
+          d = easydict.EasyDict(
+            total_seq_len=round(tokens_for_mfu["num_tokens"] / args.logging_per_step), 
+            image_token_merged_len=[round(tokens_for_mfu["num_image_tokens"]  / tokens_for_mfu["num_images"])] * round(tokens_for_mfu["num_images"] / args.logging_per_step)  if tokens_for_mfu["num_images"] != 0 else 1, 
+            llm_batch_size=round(tokens_for_mfu["num_images"] / args.logging_per_step), 
+            secs_per_step=(end_time - start_time) / args.logging_per_step
+          )
+          print(format_dict_or_list(tokens_for_mfu))
 
-          print(324454442222, round(acc_num_tokens / dist.get_world_size()), )
-          print([round(acc_num_image_tokens / acc_num_images)] * acc_num_images)
-          print(acc_num_samples, end_time - start_time)
-          mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), 
-            total_seq_len=round(acc_num_tokens / dist.get_world_size()), 
-            image_token_merged_len=[round(acc_num_image_tokens / acc_num_images)] * acc_num_images if acc_num_images != 0 else 1, 
-            llm_batch_size=acc_num_samples, 
-            secs_per_step=end_time - start_time)
+          print(45655555)
+          print(format_dict_or_list(d))
+          mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), **d)
           
           total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)']
           total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)']
