@@ -39,9 +39,79 @@ def format_text(doc, max_text_len=1000):
       items.append(f"{key}: {str(text)[:max_text_len]}")
   return "\n".join(items)
 
+def image_to_PIL(image):
+  #images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`)
+  #convert image bytes to PIL.Image.Image
+  if isinstance(image, bytes):
+    image = Image.open(BytesIO(image))
+  return image
+
+def MMBenchTransform(self, sample) -> list:
+  index = sample['index']
+  image = sample['image']
+  answer = sample['answer']
+  hint = sample['hint'] if sample['hint'] else 'N/A'
+  question = sample['question']
+  multiple_choices = ['A', 'B', 'C', 'D', 'E']
+
+  choices = sample['choices']
+  choice_list = []
+  for i, c in enumerate(choices):
+      choice_list.append('{}. {}'.format(multiple_choices[i], c))
+  choice_txt = '\n'.join(choice_list)
+
+  prompt = self.prompt.format(hint, question, choice_txt)
+  messages = [
+      {
+          "role": "user",
+          "content": [
+              {
+                  "type": "image",
+                  "image": image_to_PIL(image)
+              },
+              {
+                  "type": "text", 
+                  "text": prompt
+              },
+          ]
+
+      },
+      {
+        "role": "assistant",
+        "content": answer
+      }
+  ] 
+  return messages
+
+def OCRBenchTransform(self, sample) -> list:
+  question = sample['question'] 
+  image = sample['image']
+  answer = sample['answer']
+  messages = [
+    {
+      "role": "user",
+      "content": [
+        {"type": "image", "image": image_to_PIL(image)},
+        {"type": "text", "text": question}
+      ],
+    },
+    {
+      "role": "assistant",
+      "content": answer
+    }
+  ]
+  return messages
+
+transform_func_map = {
+  "MMBench": MMBenchTransform,
+  "OCRBench": OCRBenchTransform
+}
+
+
 class MsyInferDataset(ParquetDataset):
   """I2I Pairwise Relevance"""
   def __init__(self, 
+               dataset_name,
                parquet_path,  # 明确声明必需的参数
                system_prompt=None,
                model_name_or_path=None,
@@ -66,7 +136,6 @@ class MsyInferDataset(ParquetDataset):
     else:
       self.processor = None
       
-    self.system_prompt = system_prompt or "You are a helpful assistant."
     self.model_name_or_path = model_name_or_path
     self.max_text_len = max_text_len
     self.max_frames = max_frames
@@ -81,19 +150,16 @@ class MsyInferDataset(ParquetDataset):
     if limit is not None:
       self.total_rows = min(self.total_rows, limit)
     self.enable_remove_comment = enable_remove_comment
+    try:
+      self.transform_func = transform_func_map[dataset_name]
+    except KeyError:
+      raise ValueError(f"Dataset name {dataset_name} not found in transform_func_map")
 
   def __iter__(self):
     """重写父类的__iter__方法，处理每个样本"""
     for item in super().__iter__():
       try:
-        # 获取messages
-        messages = item.get("messages", [])
-        if isinstance(messages, str):
-          try:
-            messages = json.loads(messages)
-          except Exception as e:
-            print(f"Error parsing messages JSON: {e}")
-            messages = [{"role": "user", "content": messages}]
+        messages = self.transform_func(item)
         text = self.processor.apply_chat_template(
           messages,
           tokenize=False,
@@ -131,7 +197,7 @@ if __name__ == "__main__":
     model_name_or_path="/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip",
     user='mpi'
   )
-  for batch in DataLoader(dataset, batch_size=2, shuffle=False):
+  for batch in DataLoader(dataset, batch_size=1, shuffle=False):
     for idx, item in enumerate(batch):
       print(idx, item)
     break
