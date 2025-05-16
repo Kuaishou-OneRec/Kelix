@@ -3631,20 +3631,8 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
           f"errmsg={traceback.format_exc()}")
         continue
       
-  def _balance_global(self, buffer):
-    raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
-    raw_image_len = [data["pixel_values"].size(0) for data in buffer]
-    # if dist.get_rank() == 0:
-    #   print(f"[rank={dist.get_rank()}] raw_input_ids_len={sorted(raw_input_ids)}, raw_image_len={sorted(raw_image_len)}")
-
-    t1 = time.perf_counter()
-    # small_input_ids = balance.sampling(raw_input_ids, 200)
+  def _balance_global(self, raw_input_ids, raw_image_len):
     t2 = time.perf_counter()
-    # sampling_index = [raw_input_ids.index(v) for v in small_input_ids]
-    # small_image_len = [raw_image_len[i] for i in sampling_index]
-    # if dist.get_rank() == 0:
-    #   print(f"small_ids: {small_input_ids}, small_img: {small_image_len}, idx: {sampling_index}")
-    # candidates = balance.greedy_subsets_nearst_sum(small_input_ids, self.max_length)
     candidates = balance.greedy_subsets_nearst_sum(raw_input_ids, self.max_length - self.image_pad_len)
     # if dist.get_rank() == 0:
     #   print(f"candidates: {candidates}")
@@ -3711,9 +3699,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     selected_index = candidates[found]
     return selected_index, step_info
   
-  def _balance_local(self, buffer):
-    raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
-    raw_image_len = [data["pixel_values"].size(0) for data in buffer]
+  def _balance_local(self, raw_input_ids, raw_image_len):
     selected_index = balance.find_local_v1(raw_input_ids, self.max_length - self.image_pad_len)
     num_token, num_img = 0, 0
     for i in selected_index:
@@ -3739,7 +3725,9 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       buffer.append(inputs)
       source_list.append(source_name)
       if len(buffer) == buffer_size:
-        selected_index, step_info = self._balance_local(buffer)
+        raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
+        raw_image_len = [data["pixel_values"].size(0) for data in buffer]
+        selected_index, step_info = self._balance_local(raw_input_ids, raw_image_len)
         selected_llm = [raw_input_ids[i] for i in selected_index]
         selected_vit = [raw_image_len[i] for i in selected_index]
         
