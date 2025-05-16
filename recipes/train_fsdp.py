@@ -1173,9 +1173,6 @@ def train():
           )
 
           mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), **d)
-          print("=" * 20)
-          print(format_dict_or_list(d))
-          print(format_dict_or_list(mfu_per_step_per_gpu))
           total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)'] * args.logging_per_step
           total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)'] * args.logging_per_step
           total_mfu['mfu'] += mfu_per_step_per_gpu['mfu'] * args.logging_per_step
@@ -1284,6 +1281,8 @@ def train():
         batch_data_source_loss = collections.defaultdict(float)
         batch_data_source_tokens = collections.defaultdict(int)
         valid_data_source_tokens = collections.defaultdict(int)
+        tokens_for_mfu = defaultdict(int)
+
 
       if global_step % args.save_checkpoint_per_step == 0 and \
           global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
