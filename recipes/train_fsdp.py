@@ -1170,6 +1170,7 @@ def train():
             image_token_merged_len=[round(tokens_for_mfu["num_image_tokens"]  / tokens_for_mfu["num_images"])] * round(tokens_for_mfu["num_images"] / args.logging_per_step)  if tokens_for_mfu["num_images"] != 0 else 1, 
             llm_batch_size=round(tokens_for_mfu["num_images"] / args.logging_per_step), 
             secs_per_step=(end_time - start_time) / args.logging_per_step
+          )
 
           mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), **d)
           
