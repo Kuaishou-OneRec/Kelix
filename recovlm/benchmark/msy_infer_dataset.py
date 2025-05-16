@@ -41,7 +41,7 @@ def format_text(doc, max_text_len=1000):
 
 def MMBenchTransform(sample) -> list:
   index = sample['index']
-  image = sample['image']
+  image = sample['image']['bytes']
   print('test',image)
   answer = sample['answer']
   hint = sample['hint'] if sample['hint'] else 'N/A'
