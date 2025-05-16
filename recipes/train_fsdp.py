@@ -1008,6 +1008,7 @@ def train():
       tokens_for_mfu["num_tokens"] += num_tokens
       tokens_for_mfu["num_samples"] += num_samples
       tokens_for_mfu["num_images"] += num_images
+      tokens_for_mfu["num_samples"] += num_samples
 
       # num_tokens - (sample_idx == -1).sum()
       num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
@@ -1174,7 +1175,7 @@ def train():
             # 暂时认为各条样本长度均匀
             total_seq_len=round(tokens_for_mfu["num_tokens"] / args.logging_per_step), 
             image_token_merged_len=[round(tokens_for_mfu["num_image_tokens"]  / tokens_for_mfu["num_images"])] * round(tokens_for_mfu["num_images"] / args.logging_per_step)  if tokens_for_mfu["num_images"] != 0 else 1, 
-            llm_batch_size=round(tokens_for_mfu["num_images"] / args.logging_per_step), 
+            llm_batch_size=round(tokens_for_mfu["num_samples"] / args.logging_per_step), 
             secs_per_step=(end_time - start_time) / args.logging_per_step
           )
           mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), **mfu_args)
