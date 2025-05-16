@@ -3,6 +3,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 # from recovlm.models.qwen_3_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_siglip
 from typing import Dict, Any, Union, Optional
 from recovlm.utils.ds_utils import format_dict_or_list
+from transformers import AutoTokenizer, AutoProcessor
 
 import contextlib
 import gc
@@ -173,7 +174,7 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-processor = InternVLChatModel.from_pretrained('/llm_reco_ssd/zhouyang12/models/InternVL3-2B')
+processor = AutoProcessor.from_pretrained('/llm_reco_ssd/zhouyang12/models/InternVL3-2B')
 converter = InternVLCheckpointConverter('/llm_reco_ssd/zhouyang12/models/InternVL3-2B')
 
 

@@ -1209,8 +1209,8 @@ def train():
             "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
 
             "perf/mfu_per_step_per_gpu_v2": total_mfu['mfu'] / global_step,
-            "perf/vit_flops_per_step_per_gpu_v2": total_mfu['vit_total_flops*3(T)'] / global_step,
-            "perf/llm_flops_per_step_per_gpu_v2": total_mfu['llm_total_flops*3(T)'] / global_step,
+            "perf/vit_flops_per_step_per_gpu_v2": total_mfu['vit_total_flops*3(T)'] / (global_step / args.logging_per_step),
+            "perf/llm_flops_per_step_per_gpu_v2": total_mfu['llm_total_flops*3(T)'] / (global_step / args.logging_per_step),
           }
           start_time = end_time
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
