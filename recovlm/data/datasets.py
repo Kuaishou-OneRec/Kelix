@@ -3714,7 +3714,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
   def _balance_local(self, buffer):
     raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
     raw_image_len = [data["pixel_values"].size(0) for data in buffer]
-    selected_index = balance.find_local_v1(raw_input_ds)
+    selected_index = balance.find_local_v1(raw_input_ids)
     num_token, num_img = 0, 0
     for i in selected_index:
       num_token += raw_input_ids[i]
