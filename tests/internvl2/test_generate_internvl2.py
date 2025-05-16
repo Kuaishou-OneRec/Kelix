@@ -304,7 +304,7 @@ logits_all = []
 if 1:
     try:
         with set_default_dtype(torch.bfloat16):
-            model = AutoModel.from_pretrained(
+            model = InternVLChatModel.from_pretrained(
                 '/llm_reco_ssd/zhouyang12/models/InternVL3-2B',
                 torch_dtype=torch.bfloat16,
                 # load_in_8bit=True,
