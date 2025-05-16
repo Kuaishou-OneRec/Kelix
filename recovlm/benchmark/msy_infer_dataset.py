@@ -66,7 +66,7 @@ def MMBenchTransform(sample) -> list:
           "content": [
               {
                   "type": "image",
-                  "image": base64.b64encode(image).decode("ascii")
+                  "image": base64.b64encode(image).decode('ascii')
               },
               {
                   "type": "text", 
@@ -91,7 +91,7 @@ def OCRBenchTransform(sample) -> list:
     {
       "role": "user",
       "content": [
-        {"type": "image", "image": base64.b64encode(image).decode("utf-8")},
+        {"type": "image", "image": base64.b64encode(image).decode('ascii')},
         {"type": "text", "text": question}
       ],
     },
