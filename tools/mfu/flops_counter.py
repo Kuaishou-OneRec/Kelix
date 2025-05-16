@@ -366,11 +366,11 @@ def extract_model_params(config_path):
         vision_config = config['vision_config']
         # 提取Vision参数 
         vision_params = {
-            'num_head': vision_config['num_heads'],
-            'head_dim': vision_config['hidden_size'] / vision_config['num_heads'],
+            'num_head': vision_config['num_attention_heads'],
+            'head_dim': vision_config['hidden_size'] / vision_config['num_attention_heads'],
             'hidden_size': vision_config['hidden_size'],
             'intermediate_size': config['intermediate_size'],
-            'num_layers': vision_config['depth'],
+            'num_layers': vision_config['num_hidden_layers'],
         }
         vision_params = {k: v for k, v in vision_params.items() if v is not None}
     elif 'architectures' in config and 'Qwen2_5_VLForConditionalGeneration' in config['architectures']:
