@@ -178,7 +178,7 @@ processor = AutoProcessor.from_pretrained('/llm_reco_ssd/zhouyang12/models/Inter
 converter = InternVLCheckpointConverter('/llm_reco_ssd/zhouyang12/models/InternVL3-2B')
 
 
-tokenizer = processor.tokenizer
+tokenizer = AutoTokenizer.from_pretrained('/llm_reco_ssd/zhouyang12/models/InternVL3-2B')
 
 
 def make_inputs(a,b):
@@ -222,8 +222,9 @@ if 1:
                 '/llm_reco_ssd/zhouyang12/models/InternVL3-2B',
                 torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
-                device_map="cuda:0",
-                ignore_mismatched_sizes=False
+                # device_map="cuda:0",
+                ignore_mismatched_sizes=False,
+
             )
             model.load_state_dict(state_dict)
 

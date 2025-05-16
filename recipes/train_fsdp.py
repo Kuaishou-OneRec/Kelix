@@ -1173,9 +1173,11 @@ def train():
           )
 
           mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), **d)
-          
-          total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)']
-          total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)']
+          print("=" * 20)
+          print(format_dict_or_list(d))
+          print(format_dict_or_list(mfu_per_step_per_gpu))
+          total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)'] * args.logging_per_step
+          total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)'] * args.logging_per_step
           total_mfu['mfu'] += mfu_per_step_per_gpu['mfu'] * args.logging_per_step
           log_dict = {
             # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
@@ -1209,8 +1211,8 @@ def train():
             "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
 
             "perf/mfu_per_step_per_gpu_v2": total_mfu['mfu'] / global_step,
-            "perf/vit_flops_per_step_per_gpu_v2": total_mfu['vit_total_flops*3(T)'] / (global_step / args.logging_per_step),
-            "perf/llm_flops_per_step_per_gpu_v2": total_mfu['llm_total_flops*3(T)'] / (global_step / args.logging_per_step),
+            "perf/vit_flops_per_step_per_gpu_v2": total_mfu['vit_total_flops*3(T)'] / global_step,
+            "perf/llm_flops_per_step_per_gpu_v2": total_mfu['llm_total_flops*3(T)'] / global_step,
           }
           start_time = end_time
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
