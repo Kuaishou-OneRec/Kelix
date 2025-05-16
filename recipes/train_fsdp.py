@@ -1118,7 +1118,7 @@ def train():
               (micro_step + 1) % args.gradient_accumulation_steps == 0:
 
         if args.monitor_image_tokens: 
-          token_stasts.collect_image_token_stats(num_image_tokens2)
+          token_stasts.collect_image_token_stats(num_image_tokens)
           colleced_token_stasts = token_stasts.stats()         
         ticker.tick(f"token_stasts*{log_acc_step}")
 
