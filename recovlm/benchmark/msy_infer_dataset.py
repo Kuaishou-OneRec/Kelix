@@ -207,5 +207,12 @@ if __name__ == "__main__":
   )
 
   for batch in DataLoader(dataset, batch_size=1, shuffle=False):
+    print("Batch type:", type(batch))
+    print("Batch contents:", batch)
     for idx, item in enumerate(batch):
-      print(idx, item['inputs'])
+      print("Item type:", type(item))
+      print("Item contents:", item)
+      if isinstance(item, dict):
+        print("Inputs:", item.get('inputs'))
+      else:
+        print("Item is not a dictionary:", item)
