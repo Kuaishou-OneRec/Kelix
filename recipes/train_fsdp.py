@@ -1161,9 +1161,9 @@ def train():
 
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
           mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), 
-            total_seq_len=total_num_tokens, 
+            total_seq_len=acc_num_tokens, 
             image_token_merged_len=[round(acc_num_image_tokens / acc_num_images)] * acc_num_images if acc_num_images != 0 else 1, 
-            llm_batch_size=num_samples, 
+            llm_batch_size=acc_num_samples, 
             secs_per_step=end_time - start_time)
           
           total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)']
