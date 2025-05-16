@@ -160,7 +160,6 @@ class MsyInferDataset(ParquetDataset):
     for item in super().__iter__():
       # try:
       messages = self.transform_func(item)
-      print(messages)
       text = self.processor.apply_chat_template(
         messages,
         tokenize=False,
@@ -202,4 +201,3 @@ if __name__ == "__main__":
   for batch in DataLoader(dataset, batch_size=1, shuffle=False):
     for idx, item in enumerate(batch):
       print(idx, item)
-    break
