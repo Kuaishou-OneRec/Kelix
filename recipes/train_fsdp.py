@@ -1006,9 +1006,8 @@ def train():
 
       tokens_for_mfu["num_image_tokens"] += num_image_tokens
       tokens_for_mfu["num_tokens"] += num_tokens
-      tokens_for_mfu["num_samples"] += num_samples
+      tokens_for_mfu["num_samples"] += num_samples.detach().item()
       tokens_for_mfu["num_images"] += num_images
-      tokens_for_mfu["num_samples"] += num_samples
 
       # num_tokens - (sample_idx == -1).sum()
       num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
