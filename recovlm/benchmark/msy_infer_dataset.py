@@ -15,7 +15,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_siglip
 from torch.utils.data import DataLoader
-from qwen_vl_utils import process_vision_info
+rom recovlm.utils.qwen_vl_utils import process_vision_info
 
 # 使用正确的相对导入路径
 from dataset import ParquetDataset
