@@ -317,8 +317,9 @@ if 1:
             )
             model = model.cuda(0)
             # model.load_state_dict(state_dict)
-            system_prompt = "You are a helpful assistant."
-            question = f'<|im_start|>system\n{system_prompt}<|im_end|>\n'
+            # system_prompt = "You are a helpful assistant."
+            question = ""
+            model.system_message = "You are a helpful assistant."
             question += '<image>\nPlease describe the image in detail.'
             pixels = load_image()
             pixels = pixels.cuda(0)
