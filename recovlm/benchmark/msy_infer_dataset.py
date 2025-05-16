@@ -46,7 +46,7 @@ def image_to_PIL(image):
     image = Image.open(BytesIO(image))
   return image
 
-def MMBenchTransform(self, sample) -> list:
+def MMBenchTransform(sample) -> list:
   index = sample['index']
   image = sample['image']
   answer = sample['answer']
@@ -83,7 +83,7 @@ def MMBenchTransform(self, sample) -> list:
   ] 
   return messages
 
-def OCRBenchTransform(self, sample) -> list:
+def OCRBenchTransform(sample) -> list:
   question = sample['question'] 
   image = sample['image']
   answer = sample['answer']
