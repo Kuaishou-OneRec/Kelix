@@ -66,7 +66,7 @@ def MMBenchTransform(sample) -> list:
           "content": [
               {
                   "type": "image",
-                  "image": base64.b64encode(image).decode("utf-8")
+                  "image": base64.b64encode(image).decode("ascii")
               },
               {
                   "type": "text", 
