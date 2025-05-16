@@ -39,14 +39,6 @@ def format_text(doc, max_text_len=1000):
       items.append(f"{key}: {str(text)[:max_text_len]}")
   return "\n".join(items)
 
-def image_to_PIL(image):
-  #images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`)
-  #convert image bytes to PIL.Image.Image
-  if isinstance(image, bytes):
-    image = Image.open(BytesIO(image))
-  print('test',image)
-  return image
-
 def MMBenchTransform(sample) -> list:
   index = sample['index']
   image = sample['image']
@@ -93,6 +85,7 @@ def MMBenchTransform(sample) -> list:
 def OCRBenchTransform(sample) -> list:
   question = sample['question'] 
   image = sample['image']
+  print('test',image)
   answer = sample['answer']
   messages = [
     {
