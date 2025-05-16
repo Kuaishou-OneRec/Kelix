@@ -1160,8 +1160,12 @@ def train():
 
 
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
+
+          print(324454442222, round(acc_num_tokens / dist.get_world_size()), )
+          print([round(acc_num_image_tokens / acc_num_images)] * acc_num_images)
+          print(acc_num_samples, end_time - start_time)
           mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), 
-            total_seq_len=acc_num_tokens / dist.get_world_size(), 
+            total_seq_len=round(acc_num_tokens / dist.get_world_size()), 
             image_token_merged_len=[round(acc_num_image_tokens / acc_num_images)] * acc_num_images if acc_num_images != 0 else 1, 
             llm_batch_size=acc_num_samples, 
             secs_per_step=end_time - start_time)
