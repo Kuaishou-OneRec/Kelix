@@ -22,26 +22,27 @@ def sampling(input_ids_len, target_size=200, n_bins=20):
 
 
 def greedy_subsets_nearst_sum(nums, N):
-    indexed_nums = sorted([(num, idx) for idx, num in enumerate(nums)], key=lambda x: -x[0])
-    
-    subsets = []
-    sum_dict = {}
-    
-    for num, idx in indexed_nums:
-        placed = False
-        for subset_idx in range(len(subsets)):
-            if sum_dict[subset_idx] + num <= N:
-                subsets[subset_idx].append(idx)
-                sum_dict[subset_idx] += num
-                placed = True
+    key_fn = lambda x : x[0]
+    ordered = sorted([(num, idx) for idx, num in enumerate(nums)], key=key_fn)
+    result = []
+    for i in reversed(range(len(nums))):
+        current = []
+        cur_sum = 0
+        j = i
+        while j >= 0:
+            cur_sum += ordered[j][0]
+            if cur_sum > N:
                 break
-        
-        if not placed:
-            subsets.append([idx])
-            sum_dict[len(subsets) - 1] = num
+            else:
+                current = [ordered[j]] + current
+                j = bisect.bisect_right(ordered, N - cur_sum, 0, j, key=key_fn) - 1
+        result.append(current)
+    sorted_result = sorted(result, key=lambda x: -sum(v[0] for v in x))
+    result_index = []
+    for res in sorted_result:
+        result_index.append([v[1] for v in res])
+    return result_index
     
-    return subsets 
-
 
 def llm_flops(seq_list):
     h = 1536
