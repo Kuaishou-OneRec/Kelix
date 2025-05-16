@@ -999,7 +999,7 @@ def train():
       print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
       num_tokens = token_count
       num_samples = (sample_idx.max() + 1).sum()
-      num_images = (input_ids == image_start_id).sum().item()
+      num_images = round(num_tokens / 256) if args.model_class == "InternVLChat" else (input_ids == image_start_id).sum().item()
 
       image_tokens_ids = input_ids == image_token_id
       num_image_tokens = image_tokens_ids.sum().item()
