@@ -52,15 +52,21 @@ def MMBenchTransform(sample) -> list:
   answer = sample['answer']
   hint = sample['hint'] if sample['hint'] else 'N/A'
   question = sample['question']
-  multiple_choices = ['A', 'B', 'C', 'D', 'E']
+  multiple_choices = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
 
-  choices = sample['choices']
+  # choices = sample['choices']
+  # choice_list = []
+  # for i, c in enumerate(choices):
+  #     choice_list.append('{}. {}'.format(multiple_choices[i], c))
+  # choice_txt = '\n'.join(choice_list)
   choice_list = []
-  for i, c in enumerate(choices):
-      choice_list.append('{}. {}'.format(multiple_choices[i], c))
+  for i,c in enumerate(multiple_choices):
+    #if sample got options column, use it
+    if c in sample:
+      choice_list.append('{}. {}'.format(c, sample[c]))
   choice_txt = '\n'.join(choice_list)
 
-  prompt = self.prompt.format(hint, question, choice_txt)
+  prompt = "hint: {}\nquestion: {}\noptions: {}\nanswer:".format(hint, question, choice_txt)
   messages = [
       {
           "role": "user",
