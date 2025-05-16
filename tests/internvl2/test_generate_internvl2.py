@@ -262,7 +262,7 @@ def load_image(image_file=None, input_size=448, max_num=12):
     pixel_values = torch.stack(pixel_values)
     return pixel_values
 
-processor = AutoProcessor.from_pretrained('/llm_reco_ssd/zhouyang12/models/InternVL3-2B')
+processor = AutoProcessor.from_pretrained('/llm_reco_ssd/zhouyang12/models/InternVL3-2B', trust_remote_code=True)
 converter = InternVLCheckpointConverter('/llm_reco_ssd/zhouyang12/models/InternVL3-2B')
 
 
@@ -307,15 +307,18 @@ if 1:
             model = AutoModel.from_pretrained(
                 '/llm_reco_ssd/zhouyang12/models/InternVL3-2B',
                 torch_dtype=torch.bfloat16,
-                load_in_8bit=True,
-                low_cpu_mem_usage=True,
+                # load_in_8bit=True,
+                # low_cpu_mem_usage=True,
                 use_flash_attn=True,
                 trust_remote_code=True
             )
+            model = model.cuda(0)
             # model.load_state_dict(state_dict)
 
             question = '<image>\nPlease describe the image in detail.'
-            response, history = model.chat(tokenizer, load_image(), question, generation_config, history=None, return_history=True)
+            pixels = load_image()
+            pixels = pixels.cuda(0)
+            response, history = model.chat(tokenizer, pixels, question, generation_config, history=None, return_history=True)
             print(f'User: {question}\nAssistant: {response}')
 
 
