@@ -3630,6 +3630,106 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
           f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
           f"errmsg={traceback.format_exc()}")
         continue
+      
+  def _balance_global(self, buffer):
+    raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
+    raw_image_len = [data["pixel_values"].size(0) for data in buffer]
+    # if dist.get_rank() == 0:
+    #   print(f"[rank={dist.get_rank()}] raw_input_ids_len={sorted(raw_input_ids)}, raw_image_len={sorted(raw_image_len)}")
+
+    t1 = time.perf_counter()
+    # small_input_ids = balance.sampling(raw_input_ids, 200)
+    t2 = time.perf_counter()
+    # sampling_index = [raw_input_ids.index(v) for v in small_input_ids]
+    # small_image_len = [raw_image_len[i] for i in sampling_index]
+    # if dist.get_rank() == 0:
+    #   print(f"small_ids: {small_input_ids}, small_img: {small_image_len}, idx: {sampling_index}")
+    # candidates = balance.greedy_subsets_nearst_sum(small_input_ids, self.max_length)
+    candidates = balance.greedy_subsets_nearst_sum(raw_input_ids, self.max_length - self.image_pad_len)
+    # if dist.get_rank() == 0:
+    #   print(f"candidates: {candidates}")
+    candidates = candidates[:target_count]
+    info_list = []
+    for c in candidates:
+      llm_len = [raw_input_ids[i] for i in c]
+      vit_len = [raw_image_len[i] for i in c]
+      info = []
+      info.append(len(llm_len)) # sample_num
+      info.append(sum(llm_len)) # input_ids_num
+      info.append(sum(vit_len)) # image_num
+      info.append(balance.llm_flops(llm_len))
+      info.append(balance.vit_flops(vit_len))
+      info_list.append(info)
+    t3 = time.perf_counter()
+    all_infos = [None] * dist.get_world_size()
+    dist.all_gather_object(all_infos, info_list)
+    t4 = time.perf_counter()
+    # if dist.get_rank() == 0:
+    #   print(f"[rank=0] all_flops: {all_flops}")
+    all_flops = []
+    for per_worker_infos in all_infos:
+      all_flops.append([(info[-2], info[-1]) for info in per_worker_infos])
+    local_best = balance.select_by_flops(all_flops, dist.get_rank())
+    t5 = time.perf_counter()
+    all_local = [None] * dist.get_world_size()
+    dist.all_gather_object(all_local, local_best)
+    t6 = time.perf_counter()
+    selected = balance.find_global(all_local)
+    best_llm = [v[0] for v in selected]
+    sele_vit = [v[1] for v in selected]
+    if dist.get_rank() == 0:
+      print(f"best_llm={best_llm}, max_llm={max(best_llm)}, min_llm={min(best_llm)}, vit={sele_vit}, max_vit={max(sele_vit)}, min_vit={min(sele_vit)}")
+    # print(f"rank={dist.get_rank()} local_best={local_best}, all_local={all_local}, global_best={selected}")
+
+    def match(info, flops):
+      return math.isclose(info[-2], flops[0], abs_tol=1e-6) and math.isclose(info[-1], flops[1], abs_tol=1e-6)
+
+    best = selected[dist.get_rank()]
+    found = -1
+    for i, info in enumerate(info_list):
+      if match(info, best):
+        found = i
+        break
+
+    assert found >= 0, f"not_found rank={dist.get_rank()}, flops_info={info_list}, select={best}"
+    step_info = [0, 0, 0]
+    if dist.get_rank() == 0:
+      num_samples = 0
+      num_tokens = 0
+      num_image_tokens = 0
+      for rank, infos in enumerate(all_infos):
+        target = selected[rank]
+        for info in infos:
+          if match(info, target):
+            num_samples += info[0]
+            num_tokens += info[1]
+            num_image_tokens += info[2] * 256
+            break
+      step_info = [num_samples, num_tokens, num_image_tokens]
+      print(f"rank=0, dataset_info: {step_info}")
+
+    selected_index = candidates[found]
+    return selected_index, step_info
+  
+  def _balance_local(self, buffer):
+    raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
+    raw_image_len = [data["pixel_values"].size(0) for data in buffer]
+    selected_index = balance.find_local_v1(raw_input_ds)
+    num_token, num_img = 0, 0
+    for i in selected_index:
+      num_token += raw_input_ids[i]
+      num_img += raw_image_len[i]
+    local_info = [len(selected_index), num_token, num_img]
+    global_info = [None] * dist.get_world_size()
+    dist.all_gather_object(global_info, local_info)
+    num_samples, num_tokens, num_image_tokens = 0, 0, 0
+    for info in global_info:
+      num_samples += info[0]
+      num_tokens += info[1]
+      num_image_tokens += info[2]
+    if dist.get_rank() == 10:
+      print(f"step_info: {global_info}")
+    return selected_index, [num_samples, num_tokens, num_image_tokens]
 
   def _balance_task(self, buffer_size: int = 1000, target_count: int = 100):
     buffer = []
@@ -3639,92 +3739,15 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       buffer.append(inputs)
       source_list.append(source_name)
       if len(buffer) == buffer_size:
-        raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
-        raw_image_len = [data["pixel_values"].size(0) for data in buffer]
-        # if dist.get_rank() == 0:
-        #   print(f"[rank={dist.get_rank()}] raw_input_ids_len={sorted(raw_input_ids)}, raw_image_len={sorted(raw_image_len)}")
-
-        t1 = time.perf_counter()
-        # small_input_ids = balance.sampling(raw_input_ids, 200)
-        t2 = time.perf_counter()
-        # sampling_index = [raw_input_ids.index(v) for v in small_input_ids]
-        # small_image_len = [raw_image_len[i] for i in sampling_index]
-        # if dist.get_rank() == 0:
-        #   print(f"small_ids: {small_input_ids}, small_img: {small_image_len}, idx: {sampling_index}")
-        # candidates = balance.greedy_subsets_nearst_sum(small_input_ids, self.max_length)
-        candidates = balance.greedy_subsets_nearst_sum(raw_input_ids, self.max_length - self.image_pad_len)
-        # if dist.get_rank() == 0:
-        #   print(f"candidates: {candidates}")
-        candidates = candidates[:target_count]
-        info_list = []
-        for c in candidates:
-          llm_len = [raw_input_ids[i] for i in c]
-          vit_len = [raw_image_len[i] for i in c]
-          info = []
-          info.append(len(llm_len)) # sample_num
-          info.append(sum(llm_len)) # input_ids_num
-          info.append(sum(vit_len)) # image_num
-          info.append(balance.llm_flops(llm_len))
-          info.append(balance.vit_flops(vit_len))
-          info_list.append(info)
-        t3 = time.perf_counter()
-        all_infos = [None] * dist.get_world_size()
-        dist.all_gather_object(all_infos, info_list)
-        t4 = time.perf_counter()
-        # if dist.get_rank() == 0:
-        #   print(f"[rank=0] all_flops: {all_flops}")
-        all_flops = []
-        for per_worker_infos in all_infos:
-          all_flops.append([(info[-2], info[-1]) for info in per_worker_infos])
-        local_best = balance.select_by_flops(all_flops, dist.get_rank())
-        t5 = time.perf_counter()
-        all_local = [None] * dist.get_world_size()
-        dist.all_gather_object(all_local, local_best)
-        t6 = time.perf_counter()
-        selected = balance.find_global(all_local)
-        best_llm = [v[0] for v in selected]
-        sele_vit = [v[1] for v in selected]
-        if dist.get_rank() == 0:
-          print(f"best_llm={best_llm}, max_llm={max(best_llm)}, min_llm={min(best_llm)}, vit={sele_vit}, max_vit={max(sele_vit)}, min_vit={min(sele_vit)}")
-        # print(f"rank={dist.get_rank()} local_best={local_best}, all_local={all_local}, global_best={selected}")
-
-        def match(info, flops):
-          return math.isclose(info[-2], flops[0], abs_tol=1e-6) and math.isclose(info[-1], flops[1], abs_tol=1e-6)
-
-        best = selected[dist.get_rank()]
-        found = -1
-        for i, info in enumerate(info_list):
-          if match(info, best):
-            found = i
-            break
-
-        assert found >= 0, f"not_found rank={dist.get_rank()}, flops_info={info_list}, select={best}"
-        step_info = [0, 0, 0]
-        if dist.get_rank() == 0:
-          num_samples = 0
-          num_tokens = 0
-          num_image_tokens = 0
-          for rank, infos in enumerate(all_infos):
-            target = selected[rank]
-            for info in infos:
-              if match(info, target):
-                num_samples += info[0]
-                num_tokens += info[1]
-                num_image_tokens += info[2] * 256
-                break
-          step_info = [num_samples, num_tokens, num_image_tokens]
-          print(f"rank=0, dataset_info: {step_info}")
-
-        # selected_index = [sampling_index[i] for i in candidates[found]]
-        selected_index = candidates[found]
+        selected_index, step_info = self._balance_local(buffer)
         selected_llm = [raw_input_ids[i] for i in selected_index]
         selected_vit = [raw_image_len[i] for i in selected_index]
-        t7 = time.perf_counter()
+        
         # print(f"[rank={dist.get_rank()}] llm={selected_llm} vit={selected_vit}, llm_flops={best[0]}, vit_flops={best[1]}, find_sub={t3-t2}, gather1={t4-t3}, balance={t5-t4}, gather2={t6-t5}, other={t7-t6}")
         inputs = [buffer[idx] for idx in selected_index]
         data_source = [source_list[idx] for idx in selected_index]
         self._balance_buf.put((inputs, data_source, step_info))
-
+        
         buffer = [x for i, x in enumerate(buffer) if i not in selected_index]
         source_list = [x for i, x in enumerate(source_list) if i not in selected_index]
 
@@ -3746,7 +3769,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
   def __iter__(self):
     self._balance_buf = queue.Queue(maxsize=8)
     self._result_buf = queue.Queue(maxsize=2)
-    buffer_size = self.kargs.get("balance_buffer_size", 1000)
+    buffer_size = self.kargs.get("balance_buffer_size", 10000)
     target_count = self.kargs.get("balance_candidate_count", 50)
 
     self.sample_queue = queue.Queue(maxsize=32)
