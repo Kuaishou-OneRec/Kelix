@@ -239,7 +239,7 @@ def calculate_decoder_layers_flops(num_head, head_dim, hidden_size, intermediate
     }
 
 
-def calculate_vlm_flops(vit_params, llm_params, linear_factor=2):
+def calculate_vlm_flops(vit_params, llm_params, linear_factor=2, _gpu_flops=None):
     """
     计算VLM(Vision-Language Model)的总计算量
     
@@ -312,7 +312,7 @@ def calculate_vlm_flops(vit_params, llm_params, linear_factor=2):
     
     # 计算总FLOPs
     total_flops = vit_flops['total_flops'] + llm_flops['total_flops']
-    _gpu_flops = gpu_flops()
+    _gpu_flops = gpu_flops() if _gpu_flops is None else _gpu_flops
     return {
         'total_flops': total_flops,
         'vit': vit_flops,
@@ -418,7 +418,7 @@ def extract_model_params(config_path):
     
 
 
-def calc_mfu(config_path, total_seq_len, image_token_merged_len, llm_batch_size, image_batch_size=None, secs_per_step=None):
+def calc_mfu(config_path, total_seq_len, image_token_merged_len, llm_batch_size, image_batch_size=None, secs_per_step=None, _gpu_flops=None):
     if image_batch_size is None: image_batch_size = llm_batch_size
     transformer_params, vision_params = extract_model_params(
         config_path
@@ -437,7 +437,7 @@ def calc_mfu(config_path, total_seq_len, image_token_merged_len, llm_batch_size,
         'batch_size': image_batch_size
     })
 
-    flops = calculate_vlm_flops(vit_params, llm_params)
+    flops = calculate_vlm_flops(vit_params, llm_params, _gpu_flops=_gpu_flops)
 
     flops['input_args'] = easydict.EasyDict(
         config_path=config_path,
@@ -494,32 +494,114 @@ if 0:
 
     print(f"=" * 40)
 
+
+def draw_intern_vl_mfu_by_im_token_ratio():
+    """绘制不同图像token比例下的MFU和FLOPs占比曲线"""
+    import matplotlib.pyplot as plt
+
+    ratios = [0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    mfu_values = []
+    vit_flops_values = []
+    total_flops_values = []
+    flops_ratio_values = []
+    
+    for ratio in ratios:
+        im_tokens = int(ratio * 21000)
+        mfu = calc_mfu(
+            '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/internvl3_2b.json',
+            total_seq_len=21000.0,
+            image_token_merged_len=[256]*(im_tokens//256),
+            llm_batch_size=14,
+            secs_per_step=1.9,
+            _gpu_flops=989e12
+        )
+        mfu_values.append(mfu['mfu'] * 100)  # 转换为百分比
+        vit_flops_values.append(mfu['vit_total_flops*3(T)'])
+        total_flops_values.append(mfu['total_flops*3(T)'])
+        flops_ratio_values.append(mfu['vit_total_flops*3(T)'] / mfu['total_flops*3(T)'] * 100)
+        mfu_values.append(mfu['mfu'] * 100)  # 转换为百分比
+        
+    # 绘制曲线图
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    ax1.plot(ratios, mfu_values, marker='o', linestyle='-', color='tab:blue', label='MFU')
+    ax1.set_xlabel('Image Token Ratio')
+    ax1.set_ylabel('MFU (%)', color='tab:blue')
+    ax1.tick_params(axis='y', labelcolor='tab:blue')
+    ax1.grid(True)
+    
+    ax2 = ax1.twinx()
+    ax2.plot(ratios, flops_ratio_values, marker='s', linestyle='--', color='tab:orange', 
+            label='ViT FLOPs/Total FLOPs (%)')
+    ax2.set_ylabel('FLOPs Ratio (%)', color='tab:red')
+    ax2.tick_params(axis='y', labelcolor='tab:red')
+    
+    lines1, labels1 = ax1.get_legend_handles_labels()
+    lines2, labels2 = ax2.get_legend_handles_labels()
+    ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
+    plt.title('MFU and FLOPs Ratio vs Image Token Ratio (InternVL3-2B)')
+    plt.xlabel('Image Token Ratio')
+    plt.ylabel('MFU (%)')
+    plt.grid(True)
+    
+    # 保存图像
+    plt.savefig('mfu_and_flops_ratio_vs_im_token_ratio.png', bbox_inches='tight')
+    plt.close()
+    
+    print("曲线图已保存为: mfu_and_flops_ratio_vs_im_token_ratio.png")
+    plt.savefig('mfu_vs_im_token_ratio.png')
+    plt.close()
+    
+    print("MFU曲线图已保存为: mfu_vs_im_token_ratio.png")
+        
+
+
+def demo_intern_vl():
+    # print(format_dict_or_list(extract_model_params("/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/internvl3_2b.json"))); exit()
+
+    mfu = calc_mfu(
+        '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/internvl3_2b.json',
+        total_seq_len=21000.0,
+        image_token_merged_len=[256]*(17414//256),
+        # image_token_merged_len=[13000//26]*26,
+        llm_batch_size=14,
+        secs_per_step=1.9,
+        _gpu_flops=989e12
+
+    )
+    print('图片比例(17414/21000)VLM FLOPs计算结果:')
+    print(mfu['mfu'])
+
+    mfu = calc_mfu(
+        '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/internvl3_2b.json',
+        total_seq_len=21000.0,
+        image_token_merged_len=[256]*(13414//256),
+        # image_token_merged_len=[13000//26]*26,
+        llm_batch_size=14,
+        secs_per_step=1.9,
+        _gpu_flops=989e12
+    )
+    # 打印结果
+    print('图片比例(13414/21000)VLM FLOPs计算结果:')
+    # print(format_dict_or_list(mfu))
+    print(mfu['mfu'])
+
+    mfu = calc_mfu(
+        '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/internvl3_2b.json',
+        total_seq_len=21000.0,
+        image_token_merged_len=[256]*(256//256),
+        # image_token_merged_len=[13000//26]*26,
+        llm_batch_size=14,
+        secs_per_step=1.9,
+        _gpu_flops=989e12
+    )
+    # 打印结果
+    print('图片比例(256/21000)VLM FLOPs计算结果:')
+    # print(format_dict_or_list(mfu))
+    print(mfu['mfu'])
+
+
 if __name__=='__main__':
-    mfu = calc_mfu(
-        '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/qwen3_1.7b_navitd.json',
-        total_seq_len=4800*2,
-        image_token_merged_len=4800,
-        llm_batch_size=48,
-        secs_per_step=10
-    )
-
-    # 打印结果
-    print('VLM FLOPs计算结果:')
-    print(format_dict_or_list(mfu))
-    print(mfu['mfu'])
-
-    mfu = calc_mfu(
-        '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/qwen3_1.7b_navitd.json',
-        total_seq_len=[4800*2 // 48 for _ in range(48)],
-        image_token_merged_len=[4800 // 48 for _ in range(48)],
-        llm_batch_size=48,
-        secs_per_step=10
-    )
-
-    # 打印结果
-    print('VLM FLOPs计算结果:')
-    print(format_dict_or_list(mfu))
-    print(mfu['mfu'])
+    draw_intern_vl_mfu_by_im_token_ratio()
 
 '''
 2B 模型
@@ -536,4 +618,8 @@ mfu= 3%
   "llm_percentage": 34.79381463257135,
   "vit_total_flops*3(T)": 314.5511215104,
   "llm_total_flops*3(T)": 167.8434852864
+
+
+  
+
 '''
