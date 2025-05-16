@@ -84,7 +84,7 @@ def MMBenchTransform(sample) -> list:
 
 def OCRBenchTransform(sample) -> list:
   question = sample['question'] 
-  image = sample['image']
+  image = sample['image']['bytes']
   print('test',image)
   answer = sample['answer']
   messages = [
@@ -97,7 +97,9 @@ def OCRBenchTransform(sample) -> list:
     },
     {
       "role": "assistant",
-      "content": answer
+      "content": [
+        {"type": "text", "text": answer}
+      ]
     }
   ]
   return messages
