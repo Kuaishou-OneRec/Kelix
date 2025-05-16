@@ -85,7 +85,6 @@ def MMBenchTransform(sample) -> list:
 def OCRBenchTransform(sample) -> list:
   question = sample['question'] 
   image = sample['image']['bytes']
-  print('test',image)
   answer = sample['answer']
   messages = [
     {
@@ -179,7 +178,6 @@ class MsyInferDataset(ParquetDataset):
         padding=True,
         return_tensors="pt",
       )
-      print(inputs)
       yield {
         "inputs": inputs
       }
