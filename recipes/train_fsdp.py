@@ -524,7 +524,7 @@ class TokenStats:
       input_tensor = torch.tensor([num_image_tokens], dtype=torch.long).cuda()
       all_image_tokens = list(torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) if rank == 0 else None
       dist.gather(input_tensor, gather_list=all_image_tokens, dst=0)
-
+      print(3243233333, all_image_tokens)
       if rank == 0:
           all_image_tokens = [x.item() for x in all_image_tokens]
           # 计算统计指标
