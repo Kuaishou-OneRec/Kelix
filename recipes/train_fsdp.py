@@ -553,6 +553,7 @@ class TokenStats:
         "perf/mean_image_tokens": res[2],
         "perf/std_image_tokens": res[3]
       }
+      print(f"rrrr", res)
       self.max_image_tokens.clear()
       self.min_image_tokens.clear()
       self.mean_image_tokens.clear()
@@ -1214,6 +1215,7 @@ def train():
             "perf/mfu_per_step_per_gpu_v2": total_mfu['mfu'] / global_step,
             "perf/vit_flops_per_step_per_gpu_v2": total_mfu['vit_total_flops*3(T)'] / global_step,
             "perf/llm_flops_per_step_per_gpu_v2": total_mfu['llm_total_flops*3(T)'] / global_step,
+            "perf/num_images_per_step": tokens_for_mfu["num_images"] / args.logging_per_step,
           }
           start_time = end_time
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
