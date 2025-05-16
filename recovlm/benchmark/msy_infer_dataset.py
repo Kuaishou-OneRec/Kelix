@@ -44,6 +44,7 @@ def image_to_PIL(image):
   #convert image bytes to PIL.Image.Image
   if isinstance(image, bytes):
     image = Image.open(BytesIO(image))
+  print('test',image)
   return image
 
 def MMBenchTransform(sample) -> list:
