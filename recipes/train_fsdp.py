@@ -517,6 +517,8 @@ class TokenStats:
 
   
   def collect_image_token_stats(self, num_image_tokens):
+      torch.cuda.empty_cache()
+
       # 收集所有rank的image tokens统计信息
       world_size = dist.get_world_size()
       rank = dist.get_rank()
