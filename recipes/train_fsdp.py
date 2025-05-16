@@ -1005,6 +1005,8 @@ def train():
       tokens_for_mfu["num_samples"] += num_samples
       tokens_for_mfu["num_images"] += num_images
 
+      print(13423333, num_images, tokens_for_mfu["num_images"])
+
       # num_tokens - (sample_idx == -1).sum()
       num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
       token_metrics = torch.tensor(
@@ -1171,7 +1173,7 @@ def train():
             llm_batch_size=round(tokens_for_mfu["num_images"] / args.logging_per_step), 
             secs_per_step=(end_time - start_time) / args.logging_per_step
           )
-          print(format_dict_or_list(tokens_for_mfu))
+          print(format_dict_or_list(d))
 
           print(45655555)
           print(format_dict_or_list(d))
