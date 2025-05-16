@@ -297,6 +297,9 @@ def make_inputs(a,b):
     return messages, inputs
 
 
+
+
+
 from transformers import AutoTokenizer, AutoModel
 generation_config = dict(max_new_tokens=1024, do_sample=True)
 
@@ -304,18 +307,19 @@ logits_all = []
 if 1:
     try:
         with set_default_dtype(torch.bfloat16):
-            model = InternVLChatModel.from_pretrained(
-                '/llm_reco_ssd/zhouyang12/models/InternVL3-2B',
+            model = AutoModel.from_pretrained(
+                '/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.7.0/2b/stage_3_v3/step77000/global_step77000/converted/',
                 torch_dtype=torch.bfloat16,
                 # load_in_8bit=True,
                 # low_cpu_mem_usage=True,
-                use_flash_attn=True,
+                # use_flash_attn=True,
                 trust_remote_code=True
             )
             model = model.cuda(0)
             # model.load_state_dict(state_dict)
-
-            question = '<image>\nPlease describe the image in detail.'
+            system_prompt = "You are a helpful assistant."
+            question = f'<|im_start|>system\n{system_prompt}<|im_end|>\n'
+            question += '<image>\nPlease describe the image in detail.'
             pixels = load_image()
             pixels = pixels.cuda(0)
             response, history = model.chat(tokenizer, pixels, question, generation_config, history=None, return_history=True)
