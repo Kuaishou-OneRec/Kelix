@@ -3682,6 +3682,10 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
         dist.all_gather_object(all_local, local_best)
         t6 = time.perf_counter()
         selected = balance.find_global(all_local)
+        best_llm = [v[0] for v in selected]
+        sele_vit = [v[1] for v in selected]
+        if dist.get_rank() == 0:
+          print(f"best_llm={best_llm}, max_llm={max(best_llm)}, min_llm={min(best_llm)}, vit={sele_vit}, max_vit={max(sele_vit)}, min_vit={min(sele_vit)}")
         # print(f"rank={dist.get_rank()} local_best={local_best}, all_local={all_local}, global_best={selected}")
 
         def match(info, flops):
@@ -3716,7 +3720,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
         selected_llm = [raw_input_ids[i] for i in selected_index]
         selected_vit = [raw_image_len[i] for i in selected_index]
         t7 = time.perf_counter()
-        print(f"[rank={dist.get_rank()}] llm={selected_llm} vit={selected_vit}, llm_flops={best[0]}, vit_flops={best[1]}, find_sub={t3-t2}, gather1={t4-t3}, balance={t5-t4}, gather2={t6-t5}, other={t7-t6}")
+        # print(f"[rank={dist.get_rank()}] llm={selected_llm} vit={selected_vit}, llm_flops={best[0]}, vit_flops={best[1]}, find_sub={t3-t2}, gather1={t4-t3}, balance={t5-t4}, gather2={t6-t5}, other={t7-t6}")
         inputs = [buffer[idx] for idx in selected_index]
         data_source = [source_list[idx] for idx in selected_index]
         self._balance_buf.put((inputs, data_source, step_info))
