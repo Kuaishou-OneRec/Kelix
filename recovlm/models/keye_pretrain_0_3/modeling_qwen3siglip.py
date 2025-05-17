@@ -684,7 +684,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = SiglipConfig
+    config_class = Qwen3SiglipConfig
     base_model_prefix = "siglip"
     supports_gradient_checkpointing = True
 
@@ -703,7 +703,7 @@ class SiglipPreTrainedModel(PreTrainedModel):
         if isinstance(module, SiglipVisionEmbeddings):
             width = (
                 self.config.vision_config.hidden_size
-                if isinstance(self.config, SiglipConfig)
+                if isinstance(self.config, Qwen3SiglipConfig)
                 else self.config.hidden_size
             )
             nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
@@ -755,7 +755,7 @@ SIGLIP_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`SiglipConfig`]): Model configuration class with all the parameters of the model.
+        config ([`Qwen3SiglipConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -856,10 +856,10 @@ class SiglipEncoder(nn.Module):
     [`SiglipEncoderLayer`].
 
     Args:
-        config: SiglipConfig
+        config: Qwen3SiglipConfig
     """
 
-    def __init__(self, config: SiglipConfig):
+    def __init__(self, config: Qwen3SiglipConfig):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
