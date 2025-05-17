@@ -75,7 +75,7 @@ def greedy_find_by_diff(current_flops, candidates):
     curmax = max(current_flops, key=key_fn)
     curmin = min(current_flops, key=key_fn)
     diff = flops_diff(curmax, curmin)
-    if diff = 0:
+    if diff == 0:
         diff = sys.maxsize
     found = None
     for c in candidates:
