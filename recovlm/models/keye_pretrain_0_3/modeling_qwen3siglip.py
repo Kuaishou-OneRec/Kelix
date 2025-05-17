@@ -330,7 +330,7 @@ class SiglipVisionModelOutput(ModelOutput):
 
 
 class SiglipVisionEmbeddings(nn.Module):
-    def __init__(self, config: Qwen3Qwen3SiglipVisionConfig):
+    def __init__(self, config: Qwen3SiglipVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -3099,7 +3099,7 @@ class Qwen3SiglipForConditionalGeneration_navit(Qwen3SiglipPreTrainedModel, Gene
 
 class Projector(nn.Module):
 
-    def __init__(self, text_config: Qwen3SiglipConfig,vision_config: Qwen3Qwen3SiglipVisionConfig):
+    def __init__(self, text_config: Qwen3SiglipConfig,vision_config: Qwen3SiglipVisionConfig):
         super().__init__()
         self.text_config = text_config
         self.vision_config = vision_config
