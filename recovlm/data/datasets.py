@@ -2840,6 +2840,9 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
     self.num_epochs = num_epochs
     self.cut_to_pad = kargs.get("cut_to_pad", True)
     self.kargs = kargs
+
+    from recovlm.utils.ds_utils import format_dict_or_list
+    print(f"ChatCompletionVisionParquetDataset, kargs={format_dict_or_list(kargs)}")
     super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
