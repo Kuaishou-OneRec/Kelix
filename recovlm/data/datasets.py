@@ -3631,7 +3631,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
           f"errmsg={traceback.format_exc()}")
         continue
       
-  def _balance_global(self, raw_input_ids, raw_image_len):
+  def _balance_global(self, raw_input_ids, raw_image_len, target_count):
     t2 = time.perf_counter()
     candidates = balance.greedy_subsets_nearst_sum(raw_input_ids, self.max_length - self.image_pad_len)
     # if dist.get_rank() == 0:
@@ -3727,7 +3727,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       if len(buffer) == buffer_size:
         raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
         raw_image_len = [data["pixel_values"].size(0) for data in buffer]
-        selected_index, step_info = self._balance_global(raw_input_ids, raw_image_len)
+        selected_index, step_info = self._balance_global(raw_input_ids, raw_image_len, target_count)
         selected_llm = [raw_input_ids[i] for i in selected_index]
         selected_vit = [raw_image_len[i] for i in selected_index]
         
