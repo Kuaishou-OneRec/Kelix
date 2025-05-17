@@ -3752,7 +3752,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
 
   def __iter__(self):
     self._balance_buf = queue.Queue(maxsize=8)
-    self._result_buf = queue.Queue(maxsize=2)
+    self._result_buf = queue.Queue(maxsize=4)
     buffer_size = self.kargs.get("balance_buffer_size", 1000)
     target_count = self.kargs.get("balance_candidate_count", 50)
 

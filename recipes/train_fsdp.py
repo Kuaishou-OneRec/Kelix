@@ -943,7 +943,7 @@ def train():
   iter_ticker = TimeTracker(n=args.logging_per_step)
   token_stasts = TokenStats()
 
-  gpu_batch_q = queue.Queue(maxsize=1)
+  gpu_batch_q = queue.Queue(maxsize=2)
   def prefetch_to_gpu(input_fn, output_q, dev):
     while True:
       try:
