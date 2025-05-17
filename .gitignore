@@ -29,6 +29,8 @@ hostfile
 *.parquet
 *.swp
 *.xlsx
+*.png
+
 .git
 
 recovlm/benchmark/eval/tmp*

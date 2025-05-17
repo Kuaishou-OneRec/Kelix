@@ -4,8 +4,7 @@ import platform
 import subprocess
 import os
 import re
-import collections
-from collections import defaultdict
+
 
 def s(x):
     if isinstance(x, list): return sum(x)
@@ -443,7 +442,7 @@ def calc_mfu(config_path, total_seq_len, image_token_merged_len, llm_batch_size,
     flops['input_args'] = easydict.EasyDict(
         config_path=config_path,
         total_seq_len=total_seq_len,
-        image_token_merged_len=len(image_token_merged_len) if isinstance(image_token_merged_len, list) else image_token_merged_len,
+        image_token_merged_len=image_token_merged_len,
         llm_batch_size=llm_batch_size,
         image_batch_size=image_batch_size,
         secs_per_step=secs_per_step
@@ -451,50 +450,6 @@ def calc_mfu(config_path, total_seq_len, image_token_merged_len, llm_batch_size,
     if secs_per_step is not None:
         flops['mfu'] = flops['total_flops/gpu_flops'] / secs_per_step
     return flops
-
-
-class MFUStats:
-  def __init__(self, args):
-      self.tokens_for_mfu = collections.defaultdict(int)
-      self.mfu_per_step_per_gpu = None
-      self.args = args
-      self.total_mfu = defaultdict(int)
-
-  def set(self, num_image_tokens, num_tokens, num_samples, num_images):
-      self.tokens_for_mfu["num_image_tokens"] += num_image_tokens
-      self.tokens_for_mfu["num_tokens"] += num_tokens
-      self.tokens_for_mfu["num_samples"] += num_samples
-      self.tokens_for_mfu["num_images"] += num_images
-
-  def mfu(self, secs, global_step):
-      import easydict
-      args = self.args
-      tokens_for_mfu = self.tokens_for_mfu
-      mfu_args = easydict.EasyDict(
-        # 暂时认为各条样本长度均匀
-        total_seq_len=round(tokens_for_mfu["num_tokens"] / args.logging_per_step), 
-        image_token_merged_len=[round(tokens_for_mfu["num_image_tokens"]  / tokens_for_mfu["num_images"])] * round(tokens_for_mfu["num_images"] / args.logging_per_step)  if tokens_for_mfu["num_images"] != 0 else 1, 
-        llm_batch_size=round(tokens_for_mfu["num_samples"] / args.logging_per_step), 
-        secs_per_step=secs / args.logging_per_step
-      )
-      mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), **mfu_args)
-      self.mfu_per_step_per_gpu = mfu_per_step_per_gpu
-      total_mfu = self.total_mfu
-      total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)'] * args.logging_per_step
-      total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)'] * args.logging_per_step
-      total_mfu['mfu'] += mfu_per_step_per_gpu['mfu'] * args.logging_per_step
-      mfu_log_dict = {
-        "perf/mfu_per_step_per_gpu": mfu_per_step_per_gpu['mfu'],
-        "perf/vit_flops_per_step_per_gpu": mfu_per_step_per_gpu['vit_total_flops*3(T)'],
-        "perf/llm_flops_per_step_per_gpu": mfu_per_step_per_gpu['llm_total_flops*3(T)'],
-        "perf/mfu_per_step_per_gpu_v2": total_mfu['mfu'] / global_step,
-        "perf/vit_flops_per_step_per_gpu_v2": total_mfu['vit_total_flops*3(T)'] / global_step,
-        "perf/llm_flops_per_step_per_gpu_v2": total_mfu['llm_total_flops*3(T)'] / global_step,
-        "perf/num_images_per_step": tokens_for_mfu["num_images"] / args.logging_per_step,
-      }
-      self.tokens_for_mfu = collections.defaultdict(int)
-      return mfu_log_dict
-
 
 if 0:
     config_path = '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/qwen3_1.7b_navit.json'
@@ -557,14 +512,13 @@ def draw_intern_vl_mfu_by_im_token_ratio():
             total_seq_len=21000.0,
             image_token_merged_len=[256]*(im_tokens//256),
             llm_batch_size=14,
-            secs_per_step=1.9,
+            secs_per_step=2.1,
             _gpu_flops=989e12
         )
         mfu_values.append(mfu['mfu'] * 100)  # 转换为百分比
         vit_flops_values.append(mfu['vit_total_flops*3(T)'])
         total_flops_values.append(mfu['total_flops*3(T)'])
         flops_ratio_values.append(mfu['vit_total_flops*3(T)'] / mfu['total_flops*3(T)'] * 100)
-        mfu_values.append(mfu['mfu'] * 100)  # 转换为百分比
         
     # 绘制曲线图
     fig, ax1 = plt.subplots(figsize=(12, 6))
@@ -583,9 +537,9 @@ def draw_intern_vl_mfu_by_im_token_ratio():
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper left')
-    plt.title('MFU and FLOPs Ratio vs Image Token Ratio (InternVL3-2B)')
+    plt.title('MFU and FLOPs Ratio vs Image Token Ratio (InternVL3-2B) [2.1sec/step, 21k seq len]')
     plt.xlabel('Image Token Ratio')
-    plt.ylabel('MFU (%)')
+    plt.ylabel('VIT FLOPS ratio (%)')
     plt.grid(True)
     
     # 保存图像
