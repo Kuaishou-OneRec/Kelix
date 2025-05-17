@@ -215,7 +215,7 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-processor = Qwen3SiglipProcessor_navit.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2')
+processor = Qwen3SiglipProcessor_navit.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip2')
 tokenizer = processor.tokenizer
 
 
