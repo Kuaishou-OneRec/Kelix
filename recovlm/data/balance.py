@@ -66,18 +66,14 @@ def vit_flops(image_list):
     return (24 * seq_sum * h * h + attention) * 24 * 3 / 1e12
 
 def flops_diff(flops1, flops2):
-    # return (flops1[0] - flops2[0]) ** 2 + math.fabs(flops1[1] - flops2[1])
-    return math.fabs(flops1[0] - flops2[0])
+    return (flops1[0] - flops2[0]) ** 2 + math.fabs(flops1[1] - flops2[1])
 
 
 def greedy_find_by_diff(current_flops, candidates):
     key_fn = lambda x: x[0]
     curmax = max(current_flops, key=key_fn)
     curmin = min(current_flops, key=key_fn)
-    if len(current_flops) <= 1:
-        diff = sys.maxsize
-    else:
-        diff = flops_diff(curmax, curmin)
+    diff = sys.maxsize
     found = None
     for c in candidates:
         newmax = max(curmax, c, key=key_fn)

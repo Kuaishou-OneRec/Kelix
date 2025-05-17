@@ -3652,8 +3652,8 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     all_infos = [None] * dist.get_world_size()
     dist.all_gather_object(all_infos, info_list)
     t4 = time.perf_counter()
-    if dist.get_rank() == 10:
-      print(f"[rank=10] all_infos: {all_infos}")
+    # if dist.get_rank() == 10:
+    #   print(f"[rank=10] all_infos: {all_infos}")
     all_flops = []
     for per_worker_infos in all_infos:
       all_flops.append([(info[-2], info[-1]) for info in per_worker_infos])
