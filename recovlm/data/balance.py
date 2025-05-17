@@ -74,18 +74,19 @@ def greedy_find_by_diff(current_flops, candidates):
     key_fn = lambda x: x[0]
     curmax = max(current_flops, key=key_fn)
     curmin = min(current_flops, key=key_fn)
-    diff = flops_diff(curmax, curmin)
-    if diff == 0:
+    if len(current_flops) <= 1:
         diff = sys.maxsize
+    else:
+        diff = flops_diff(curmax, curmin)
     found = None
     for c in candidates:
         newmax = max(curmax, c, key=key_fn)
         newmin = min(curmin, c, key=key_fn)
-        newdiff = flops_diff(curmax, curmin)
+        newdiff = flops_diff(newmax, newmin)
         if newdiff < diff:
             diff = newdiff
             found = c
-    assert found is not None
+    assert found is not None, f"{current_flops}, {candidates}"
     return found
 
 
