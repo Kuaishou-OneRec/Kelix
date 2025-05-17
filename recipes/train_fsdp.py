@@ -566,6 +566,7 @@ class MFUStats:
       self.tokens_for_mfu = collections.defaultdict(int)
       self.mfu_per_step_per_gpu = None
       self.args = args
+      self.total_mfu = defaultdict(int)
 
   def set(self, num_image_tokens, num_tokens, num_samples, num_images):
       self.tokens_for_mfu["num_image_tokens"] += num_image_tokens
@@ -586,6 +587,7 @@ class MFUStats:
       )
       mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), **mfu_args)
       self.mfu_per_step_per_gpu = mfu_per_step_per_gpu
+      total_mfu = self.total_mfu
       total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)'] * args.logging_per_step
       total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)'] * args.logging_per_step
       total_mfu['mfu'] += mfu_per_step_per_gpu['mfu'] * args.logging_per_step
@@ -989,7 +991,6 @@ def train():
   # get_sequence_parallel_group("gloo")
   if not args.vit_token_balance: data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
   micro_step = 0
-  total_mfu = defaultdict(int)
   ticker = TimeTracker(n=args.logging_per_step)
   iter_ticker = TimeTracker(n=args.logging_per_step)
   token_stasts = TokenStats()
