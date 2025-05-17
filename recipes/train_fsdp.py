@@ -560,6 +560,43 @@ class TokenStats:
       self.std_image_tokens.clear()
       return res
 
+
+class MFUStats:
+  def __init__(self, args):
+      self.tokens_for_mfu = collections.defaultdict(int)
+      self.mfu_per_step_per_gpu = None
+      self.args = args
+
+  def set(self, num_image_tokens, num_tokens, num_samples, num_images):
+      self.tokens_for_mfu["num_image_tokens"] += num_image_tokens
+      self.tokens_for_mfu["num_tokens"] += num_tokens
+      self.tokens_for_mfu["num_samples"] += num_samples
+      self.tokens_for_mfu["num_images"] += num_images
+
+  def mfu(self, secs, global_step):
+      import easydict
+      args = self.args
+      tokens_for_mfu = self.tokens_for_mfu
+      mfu_args = easydict.EasyDict(
+        # 暂时认为各条样本长度均匀
+        total_seq_len=round(tokens_for_mfu["num_tokens"] / args.logging_per_step), 
+        image_token_merged_len=[round(tokens_for_mfu["num_image_tokens"]  / tokens_for_mfu["num_images"])] * round(tokens_for_mfu["num_images"] / args.logging_per_step)  if tokens_for_mfu["num_images"] != 0 else 1, 
+        llm_batch_size=round(tokens_for_mfu["num_samples"] / args.logging_per_step), 
+        secs_per_step=secs / args.logging_per_step
+      )
+      mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), **mfu_args)
+      self.mfu_per_step_per_gpu = mfu_per_step_per_gpu
+      total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)'] * args.logging_per_step
+      total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)'] * args.logging_per_step
+      total_mfu['mfu'] += mfu_per_step_per_gpu['mfu'] * args.logging_per_step
+      mfu_log_dict = {
+        "perf/mfu_per_step_per_gpu_v2": total_mfu['mfu'] / global_step,
+        "perf/vit_flops_per_step_per_gpu_v2": total_mfu['vit_total_flops*3(T)'] / global_step,
+        "perf/llm_flops_per_step_per_gpu_v2": total_mfu['llm_total_flops*3(T)'] / global_step,
+        "perf/num_images_per_step": tokens_for_mfu["num_images"] / args.logging_per_step,
+      }
+      self.tokens_for_mfu = collections.defaultdict(int)
+      return mfu_log_dict
   
 def data_func(dataset_config, model_class, max_length, batch_queue, args):
   master_port = int(os.environ["MASTER_PORT"]) + 1
@@ -942,6 +979,8 @@ def train():
   acc_num_images = 0
   total_num_image_tokens = 0
   tokens_for_mfu = collections.defaultdict(int)
+  mfu_stats = MFUStats(args)
+
   num_images = 0
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
@@ -1002,12 +1041,9 @@ def train():
       image_tokens_ids = input_ids == image_token_id
       num_image_tokens = image_tokens_ids.sum().item()
       num_image_tokens2 = num_image_tokens
-      num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item()
 
-      tokens_for_mfu["num_image_tokens"] += num_image_tokens
-      tokens_for_mfu["num_tokens"] += num_tokens
-      tokens_for_mfu["num_samples"] += num_samples.detach().item()
-      tokens_for_mfu["num_images"] += num_images
+      num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item()
+      mfu_stats.set(num_image_tokens, num_tokens, num_samples.detach().item(), num_images)
 
       # num_tokens - (sample_idx == -1).sum()
       num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
@@ -1168,19 +1204,7 @@ def train():
 
 
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
-          import easydict
-          mfu_args = easydict.EasyDict(
-
-            # 暂时认为各条样本长度均匀
-            total_seq_len=round(tokens_for_mfu["num_tokens"] / args.logging_per_step), 
-            image_token_merged_len=[round(tokens_for_mfu["num_image_tokens"]  / tokens_for_mfu["num_images"])] * round(tokens_for_mfu["num_images"] / args.logging_per_step)  if tokens_for_mfu["num_images"] != 0 else 1, 
-            llm_batch_size=round(tokens_for_mfu["num_samples"] / args.logging_per_step), 
-            secs_per_step=(end_time - start_time) / args.logging_per_step
-          )
-          mfu_per_step_per_gpu = calc_mfu(os.path.join(args.model_dir, "config.json"), **mfu_args)
-          total_mfu['llm_total_flops*3(T)'] += mfu_per_step_per_gpu['llm_total_flops*3(T)'] * args.logging_per_step
-          total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)'] * args.logging_per_step
-          total_mfu['mfu'] += mfu_per_step_per_gpu['mfu'] * args.logging_per_step
+          mfu_log_dict = mfu_stats.mfu(end_time - start_time, global_step)
           log_dict = {
             # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
             "training/loss": avg_loss,
@@ -1212,10 +1236,7 @@ def train():
             "perf/tokens_per_step_per_gpu_v2": tokens_per_step_per_gpu_v2,
             "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
 
-            "perf/mfu_per_step_per_gpu_v2": total_mfu['mfu'] / global_step,
-            "perf/vit_flops_per_step_per_gpu_v2": total_mfu['vit_total_flops*3(T)'] / global_step,
-            "perf/llm_flops_per_step_per_gpu_v2": total_mfu['llm_total_flops*3(T)'] / global_step,
-            "perf/num_images_per_step": tokens_for_mfu["num_images"] / args.logging_per_step,
+            **mfu_log_dict
           }
           start_time = end_time
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
@@ -1272,7 +1293,7 @@ def train():
             f"Grad Norm: {get_global_grad_norm(model).detach().cpu().item()}, "
             f"Sec per Step: {sec_per_step}",
             format_dict_or_list(log_dict),
-            format_dict_or_list({"mfu_stats": mfu_per_step_per_gpu})
+            "\n", format_dict_or_list({"mfu_stats": mfu_stats.mfu_per_step_per_gpu})
         )        
 
           # upload heart_beat to remote
