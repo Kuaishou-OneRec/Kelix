@@ -618,6 +618,7 @@ def train():
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
   local_world_size = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_SIZE", 0))
   cpu_bind = get_numa_bind_info(local_rank, local_world_size)
+  print(f"rank={rank}, cpu_bind={cpu_bind}")
 
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
