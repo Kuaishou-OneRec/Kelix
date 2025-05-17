@@ -625,7 +625,7 @@ class SiglipMLP(nn.Module):
 
 
 class SiglipEncoderLayer(nn.Module):
-    def __init__(self, config: Union[Qwen3SiglipVisionConfig, SiglipTextConfig]):
+    def __init__(self, config: Union[Qwen3SiglipVisionConfig]):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
