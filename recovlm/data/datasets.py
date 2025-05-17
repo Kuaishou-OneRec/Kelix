@@ -2342,7 +2342,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
 
 class ParquetDataset(IterableDataset):
-  def __init__(self, data_files, num_workers, n_local_shuffle_files_window=3, vit_token_balance=False):
+  def __init__(self, data_files, num_workers, n_local_shuffle_files_window=3, vit_token_balance=False, **kargs):
     self.data_files = data_files
     self.num_workers = num_workers
     self.vit_token_balance = vit_token_balance
@@ -2839,6 +2839,7 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
     self.num_workers = num_workers
     self.num_epochs = num_epochs
     self.cut_to_pad = kargs.get("cut_to_pad", True)
+    self.kargs = kargs
     super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
@@ -2868,7 +2869,7 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
     if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
 
-    dataset = ParquetDataset(data_file_list, self.num_workers)
+    dataset = ParquetDataset(data_file_list, self.num_workers, **self.kargs)
     return dataset, -1
 
   def state_dict(self, ):
