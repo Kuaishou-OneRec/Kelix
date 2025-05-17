@@ -58,6 +58,7 @@ from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
 from recovlm.data.dataloaders import get_dataloader
 
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
+from recovlm.utils.numa_bind import get_numa_bind_info
 from recovlm.losses import CrossEntropyLoss
 from recovlm.utils.common import set_random_seed, to_cuda, to_device, print_rank_0, \
   get_optimizer_grouped_parameters, dist_reduce_dict, Timer, heart_beat
@@ -557,10 +558,9 @@ class TokenStats:
       return res
 
 
-def data_func(name, dataset_config, batch_queue):
+def data_func(name, dataset_config, batch_queue, cpu_bind):
   p = psutil.Process(os.getpid())
-  raw_cpus = p.cpu_affinity()
-  p.cpu_affinity(raw_cpus[:8])
+  p.cpu_affinity(cpu_bind)
   master_port = int(os.environ["MASTER_PORT"]) + 1
   os.environ["MASTER_PORT"] = str(master_port)
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
@@ -613,6 +613,12 @@ def train():
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
       "save_checkpoint_every_epoch should be set."
       
+  rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+  world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+  local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+  local_world_size = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_SIZE", 0))
+  cpu_bind = get_numa_bind_info(local_rank, local_world_size)
+
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
     dataset_config = json.loads(f.read())
@@ -624,27 +630,24 @@ def train():
 
   if use_flops_balance:
     batch_queue = mp.Queue(1)
-    data_process = mp.Process(target=data_func, args=(dataset, dataset_config, batch_queue))
+    data_process = mp.Process(target=data_func, args=(dataset, dataset_config, batch_queue, cpu_bind[:8]))
     data_process.start()
-    print(f"data process started")
+    print(f"data process started, bind: {cpu_bind[:8]}")
   else:
     batch_queue = None
     
   # init model params
   os.environ["KML_ID"] = args.kml_id
   os.environ["KML_TASK_ID"] = args.kml_task_id
-  rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
-  world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
-  local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
   # torch init
   torch.cuda.set_device(local_rank)
   torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
 
-  p = psutil.Process(os.getpid())
-  raw_cpus = p.cpu_affinity()
-  p.cpu_affinity(raw_cpus[8:])
-  print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}")
+  if use_flops_balance:
+    p = psutil.Process(os.getpid())
+    p.cpu_affinity(cpu_bind[8:])
+    print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}, bind: {cpu_bind[8:]}")
 
   ### initialize model parallel group
   initialize_model_parallel(args.sequence_parallel_size)
