@@ -2,6 +2,7 @@ import numpy as np
 import time
 import math
 import bisect
+import sys
 
 def sampling(input_ids_len, target_size=200, n_bins=20):
     input_ids_len = np.array(input_ids_len, dtype=np.int64)
@@ -65,7 +66,28 @@ def vit_flops(image_list):
     return (24 * seq_sum * h * h + attention) * 24 * 3 / 1e12
 
 def flops_diff(flops1, flops2):
-    return (flops1[0] - flops2[0]) ** 2 + math.fabs(flops1[1] - flops2[1])
+    # return (flops1[0] - flops2[0]) ** 2 + math.fabs(flops1[1] - flops2[1])
+    return math.fabs(flops1[0] - flops2[0])
+
+
+def greedy_find_by_diff(current_flops, candidates):
+    key_fn = lambda x: x[0]
+    curmax = max(current_flops, key=key_fn)
+    curmin = min(current_flops, key=key_fn)
+    diff = flops_diff(curmax, curmin)
+    if diff = 0:
+        diff = sys.maxsize
+    found = None
+    for c in candidates:
+        newmax = max(curmax, c, key=key_fn)
+        newmin = min(curmin, c, key=key_fn)
+        newdiff = flops_diff(curmax, curmin)
+        if newdiff < diff:
+            diff = newdiff
+            found = c
+    assert found is not None
+    return found
+
 
 
 def select_by_flops(all_flops, rank):
@@ -77,8 +99,8 @@ def select_by_flops(all_flops, rank):
     def find_best(arr, target):
         pos = bisect.bisect_left(arr, target[0], key=lambda x : x[0])
         best = None
-        diff = 1e12
-        for i in range(pos - 5, pos + 5):
+        diff = sys.maxsize
+        for i in range(pos - 1, pos + 1):
             if i >= 0 and i < len(arr):
                 d = flops_diff(arr[i], target)
                 if d < diff:
@@ -88,24 +110,28 @@ def select_by_flops(all_flops, rank):
 
     current = flops_pair[rank]
     result = None
-    min_diff = 1e12
+    min_diff = sys.maxsize
     for p in current:
         local = []
+        curflops = []
+        curflops.append(p)
         for i, flops in enumerate(flops_pair):
             if i == rank:
                 local.append(p)
-            else:
-                local.append(find_best(flops, p))
+                continue
+            select = greedy_find_by_diff(curflops, flops)
+            curflops.append(select)
+            local.append(select)
         local_diff = flops_diff(max(local, key=lambda x: x[0]), min(local, key=lambda x: x[0]))
         if local_diff < min_diff:
-            local_diff = min_diff
+            min_diff = local_diff
             result = local
     return result
 
 
 def find_global(flops_list):
     best = None
-    min_diff = 1e12
+    min_diff = sys.maxsize 
     for flops in flops_list:
         local_diff = flops_diff(max(flops, key=lambda x: x[0]), min(flops, key=lambda x: x[0]))
         if local_diff < min_diff:

@@ -3652,8 +3652,8 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     all_infos = [None] * dist.get_world_size()
     dist.all_gather_object(all_infos, info_list)
     t4 = time.perf_counter()
-    # if dist.get_rank() == 0:
-    #   print(f"[rank=0] all_flops: {all_flops}")
+    if dist.get_rank() == 10:
+      print(f"[rank=10] all_infos: {all_infos}")
     all_flops = []
     for per_worker_infos in all_infos:
       all_flops.append([(info[-2], info[-1]) for info in per_worker_infos])
@@ -3727,7 +3727,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       if len(buffer) == buffer_size:
         raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
         raw_image_len = [data["pixel_values"].size(0) for data in buffer]
-        selected_index, step_info = self._balance_local(raw_input_ids, raw_image_len)
+        selected_index, step_info = self._balance_global(raw_input_ids, raw_image_len)
         selected_llm = [raw_input_ids[i] for i in selected_index]
         selected_vit = [raw_image_len[i] for i in selected_index]
         
