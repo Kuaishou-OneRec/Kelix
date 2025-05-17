@@ -296,7 +296,7 @@ if 1:
     try:
         with set_default_dtype(torch.bfloat16):
             model = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
-                "/llm_reco/liuyang76/train_out/0.0.0/qwen3_2B_stage1_resume_1k/step4000/global_step4000/converted/",
+                "/llm_reco/liuyang76/train_out/0.0.0/qwen3_2B_stage1_resume_1k/step4000/global_step4000/converted2/",
                 torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
                 device_map="cuda:0",
