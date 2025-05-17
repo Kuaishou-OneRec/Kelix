@@ -1205,7 +1205,6 @@ def train():
 
 
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
-          mfu_log_dict = mfu_stats.mfu(end_time - start_time, global_step)
           log_dict = {
             # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
             "training/loss": avg_loss,
@@ -1226,10 +1225,7 @@ def train():
             "perf/image_token_ratio_by_valid": image_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
             "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples,
-            "perf/mfu_per_step_per_gpu": mfu_per_step_per_gpu['mfu'],
-            "perf/vit_flops_per_step_per_gpu": mfu_per_step_per_gpu['vit_total_flops*3(T)'],
-            "perf/llm_flops_per_step_per_gpu": mfu_per_step_per_gpu['llm_total_flops*3(T)'],
-
+            **mfu_stats.mfu(end_time - start_time, global_step),
             "perf/samples_per_step_per_gpu_v2": samples_per_step_per_gpu_v2,
             "perf/samples_per_sec_per_gpu_v2": samples_per_sec_per_gpu_v2,
             "perf/image_tokens_per_step_per_gpu_v2": image_tokens_per_step_per_gpu_v2,
@@ -1237,7 +1233,6 @@ def train():
             "perf/tokens_per_step_per_gpu_v2": tokens_per_step_per_gpu_v2,
             "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
 
-            **mfu_log_dict
           }
           start_time = end_time
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
