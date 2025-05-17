@@ -31,4 +31,4 @@ numa_id=$(($local_rank / $ranks_per_numa))
 # echo "rank $global_rank bind to numa $numa_id cores [$cores]"
 # 
 # numactl --all -m $numa_id -C $cores $@
-numactl --all -m $numa_id -N $numa_id
+numactl --all -m $numa_id -N $numa_id $@
