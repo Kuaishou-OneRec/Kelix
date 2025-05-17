@@ -4,6 +4,7 @@ import platform
 import subprocess
 import os
 import re
+import collections
 
 
 def s(x):
@@ -491,7 +492,7 @@ class MFUStats:
       self.tokens_for_mfu = collections.defaultdict(int)
       return mfu_log_dict
 
-      
+
 if 0:
     config_path = '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/qwen3_1.7b_navit.json'
     transformer_params, vision_params = extract_model_params(
