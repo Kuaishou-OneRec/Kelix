@@ -3776,7 +3776,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
 
     i = 0
     while True:
-        if i % 1 == 0:
+        if i % 2 == 0:
           result = self._result_buf.get()
         i += 1
         yield result
