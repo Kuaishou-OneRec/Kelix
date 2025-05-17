@@ -1192,7 +1192,6 @@ def train():
             "perf/image_tokens_per_sec_per_gpu_v2": image_tokens_per_sec_per_gpu_v2,
             "perf/tokens_per_step_per_gpu_v2": tokens_per_step_per_gpu_v2,
             "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
-
           }
           start_time = end_time
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
@@ -1249,7 +1248,7 @@ def train():
             f"Grad Norm: {get_global_grad_norm(model).detach().cpu().item()}, "
             f"Sec per Step: {sec_per_step}",
             format_dict_or_list(log_dict),
-            "\n", format_dict_or_list({"mfu_stats": mfu_stats.mfu_per_step_per_gpu})
+            "\n", format_dict_or_list({"mfu_stats": mfu_stats.mfu_per_step_per_gpu, "ticker": ticker.stat()})
         )        
 
           # upload heart_beat to remote
