@@ -941,7 +941,6 @@ def train():
   acc_num_image_tokens = 0
   acc_num_images = 0
   total_num_image_tokens = 0
-  tokens_for_mfu = collections.defaultdict(int)
   mfu_stats = MFUStats(args)
 
   num_images = 0
