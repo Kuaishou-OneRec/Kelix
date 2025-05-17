@@ -3774,7 +3774,9 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     self.balance_thread.start()
     self.packing_thread.start()
 
-    result = self._result_buf.get()
+    i = 0
     while True:
-        #result = self._result_buf.get()
+        if i % 8 == 0:
+          result = self._result_buf.get()
+        i += 1
         yield result

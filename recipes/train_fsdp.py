@@ -566,7 +566,7 @@ def data_func(name, dataset_config, batch_queue, cpu_bind):
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
   dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
-  print(f"dataset_process: rank={dist.get_rank()}, pid={os.getpid()}")
+  print(f"dataset_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind}")
 
   # with Timer("Build dataloader"):
   try:  dataloader = get_dataloader_v2(name=name, **dataset_config)
@@ -618,7 +618,6 @@ def train():
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
   local_world_size = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_SIZE", 0))
   cpu_bind = get_numa_bind_info(local_rank, local_world_size)
-  print(f"rank={rank}, cpu_bind={cpu_bind}")
 
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
@@ -633,7 +632,6 @@ def train():
     batch_queue = mp.Queue(1)
     data_process = mp.Process(target=data_func, args=(dataset, dataset_config, batch_queue, cpu_bind[:8]))
     data_process.start()
-    print(f"data process started, bind: {cpu_bind[:8]}")
   else:
     batch_queue = None
     
@@ -648,7 +646,7 @@ def train():
   if use_flops_balance:
     p = psutil.Process(os.getpid())
     p.cpu_affinity(cpu_bind[8:])
-    print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}, bind: {cpu_bind[8:]}")
+    print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind[8:]}")
 
   ### initialize model parallel group
   initialize_model_parallel(args.sequence_parallel_size)
