@@ -484,6 +484,9 @@ class MFUStats:
       total_mfu['vit_total_flops*3(T)'] += mfu_per_step_per_gpu['vit_total_flops*3(T)'] * args.logging_per_step
       total_mfu['mfu'] += mfu_per_step_per_gpu['mfu'] * args.logging_per_step
       mfu_log_dict = {
+        "perf/mfu_per_step_per_gpu": mfu_per_step_per_gpu['mfu'],
+        "perf/vit_flops_per_step_per_gpu": mfu_per_step_per_gpu['vit_total_flops*3(T)'],
+        "perf/llm_flops_per_step_per_gpu": mfu_per_step_per_gpu['llm_total_flops*3(T)'],
         "perf/mfu_per_step_per_gpu_v2": total_mfu['mfu'] / global_step,
         "perf/vit_flops_per_step_per_gpu_v2": total_mfu['vit_total_flops*3(T)'] / global_step,
         "perf/llm_flops_per_step_per_gpu_v2": total_mfu['llm_total_flops*3(T)'] / global_step,
