@@ -47,8 +47,9 @@ def split_cpus_by_physical(numa_map, cores_list, local_world_size):
     for rank in range(local_world_size):
         numa_id = rank // size_per_numa
         num_cores_per_rank = len(numa_map[numa_id]) // size_per_numa
-        begin = rank * num_cores_per_rank
-        end = (rank + 1) * num_cores_per_rank
+        rank_in_numa = rank % size_per_numa
+        begin = rank_in_numa * num_cores_per_rank
+        end = (rank_in_numa + 1) * num_cores_per_rank
         infos = numa_map[numa_id][begin:end]
         result[rank] = [info[0] for info in infos]
     return result
@@ -61,7 +62,5 @@ def get_numa_bind_info(local_rank, local_world_size):
 
 
 if __name__ == "__main__":
-    numa_map, cpu_cores = get_cpu_topology()
-    print(numa_map)
-    res = split_cpus_by_physical(numa_map, cpu_cores, 8)
-    print(res)
+    print(get_numa_bind_info(0, 8))
+    print(get_numa_bind_info(4, 8))
