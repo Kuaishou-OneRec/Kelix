@@ -54,12 +54,7 @@ from transformers.utils import (
     torch_int,
 )
 from .configuration_keye import KeyeConfig, KeyeVisionConfig
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_varlen_func
 
-    from transformers.modeling_flash_attention_utils import _flash_attention_forward
-else:
-    flash_attn_varlen_func = None
 
 import warnings
 from typing import Any, Callable, Optional, Tuple, Union, List
@@ -78,20 +73,15 @@ from recovlm.training.parallel import UlyssesAttention, \
 
 def get_sequence_parallel_world_size(): return 1
 
-
+assert is_flash_attn_2_available()
 if is_flash_attn_2_available():
     from flash_attn import flash_attn_varlen_func
     from flash_attn.layers.rotary import apply_rotary_emb
-
+    from transformers.modeling_flash_attention_utils import _flash_attention_forward
 else:
     flash_attn_varlen_func = None
     apply_rotary_emb = None
 
-
-if is_flash_attn_2_available():
-    from transformers.modeling_flash_attention_utils import _flash_attention_forward
-else:
-    flash_attn_varlen_func = None
 
 
 logger = logging.get_logger(__name__)
