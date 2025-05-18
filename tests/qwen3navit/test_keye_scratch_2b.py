@@ -143,7 +143,7 @@ if 1:
             # load_from_full_model_state_dict(model, load_hf_checkpoint(MODEL_DIR),
             #                                 allow_random_init_params="mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias"
             #                                 )
-            # model = model.cuda()
+            model = model.cuda()
             messages, inputs = make_inputs(100,100)
             for k in inputs: inputs[k] = inputs[k].cuda()
 
