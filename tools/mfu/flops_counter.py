@@ -395,7 +395,7 @@ def extract_model_params(config_path):
             
         }
     else:
-        # Qwen3架构处理逻辑 (保持原有逻辑)
+        # Qwen3/Keye架构处理逻辑 (保持原有逻辑)
         transformer_params = {
             'num_head': config['num_attention_heads'],
             'head_dim': config['head_dim'],
