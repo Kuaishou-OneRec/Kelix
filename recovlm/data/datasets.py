@@ -3717,7 +3717,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
           samples = []
           for sid in idx:
             samples.append(buffer[sid])
-            samples[-1][pivot] = transfer.convert_data_source(source_list[sid])
+            samples[-1][pivot] = source_list[sid]
           send_data[t[1]].append(samples)
         begin += t[2]
       recvs = transfer.exchange_batch_data(scheme, send_data)

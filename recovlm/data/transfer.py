@@ -4,13 +4,19 @@ import os
 import struct
 from typing import List, Tuple, Dict
 
-def serialize_tensor_group(tensors: List[torch.Tensor], names: List[str]) -> bytes:
+def serialize_tensor_group(tensors: List[torch.Tensor], names: List[str], ds_names) -> bytes:
     assert len(tensors) == len(names), "张量数量与名称数量必须匹配"
     
     # 原始序列化逻辑
-    metadata = []
-    data = bytearray()
+    ds_data = bytearray()
+    ds_data.extend(struct.pack(">I", len(ds_names)))
+    for ds in ds_names:
+        encoded = ds.encode("utf-8")
+        ds_data.extend(struct.pack(">I", len(encoded)))
+        ds_data.extend(encoded)
     
+    data = bytearray()
+    metadata = []
     for tensor, name in zip(tensors, names):
         dtype = str(tensor.dtype)
         shape = tensor.shape
@@ -43,7 +49,7 @@ def serialize_tensor_group(tensors: List[torch.Tensor], names: List[str]) -> byt
         metadata_bytes.extend(struct.pack(">Q", data_len))
     
     # 组合元数据和张量数据（添加总长度前缀）
-    total_size = len(metadata_bytes) + len(data)
+    total_size = len(metadata_bytes) + len(data) + len(ds_data)
     return struct.pack(">Q", total_size) + bytes(metadata_bytes) + bytes(data)
 
 
@@ -57,7 +63,16 @@ def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[st
     # 验证缓冲区长度
     if len(buffer) != 8 + total_size:
         raise ValueError(f"Deserialized failed: Expect: {8 + total_size}, Got: {len(buffer)} bytes")
-    
+    num_ds = struct.unpack(">I", buffer[ptr:ptr+4])[0]
+    ds_list = []
+    ptr += 4
+    for - in range(num_ds):
+        ds_len = struct.unpack(">I", buffer[ptr:ptr+4])[0]
+        ptr += 4
+        ds_name = buffer[ptr:ptr+ds_len].decode("utf-8")
+        ptr += ds_len
+        ds_list.append(ds_name)
+
     # 读取元数据
     num_tensors = struct.unpack(">I", buffer[ptr:ptr+4])[0]
     print(f"rank={dist.get_rank()}, num_tensors={num_tensors}")
@@ -66,7 +81,7 @@ def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[st
     tensors = []
     names = []
     
-    for N in range(num_tensors):
+    for _ in range(num_tensors):
         # 读取名称
         name_len = struct.unpack(">I", buffer[ptr:ptr+4])[0]
         print(f"rank={dist.get_rank()}, name_len={name_len}")
@@ -108,7 +123,7 @@ def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[st
     if ptr != 8 + total_size:
         raise ValueError(f"Inconsistent data: current_ptr: {ptr}, total={8 + total_size}")
     
-    return tensors, names
+    return tensors, names, ds_list
     
 def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
     rank = dist.get_rank()
@@ -126,13 +141,17 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
         for batch in batch_list:
             batch_tensors = []
             batch_names = []
+            ds_names = []
             for sample in batch:
                 assert pivot in sample
-                names = [pivot] + [k for k in sample.keys() if k != pivot]
+                ds_name = sample.pop(pivot)
+                assert "input_ids" in sample
+                names = ["input_ids"] + [k for k in sample.keys() if k != "input_ids"]
                 tensors = [sample[k] for k in names]
+                ds_names.append(ds_name)
                 batch_names.extend(names)
                 batch_tensors.extend(tensors)
-            serialized = serialize_tensor_group(batch_tensors, batch_names)
+            serialized = serialize_tensor_group(batch_tensors, batch_names, ds_names)
             send_data[receiver].append(serialized)
     
     # 构建send_counts和recv_counts：每个节点发送/接收至其他节点的总字节数
@@ -187,12 +206,12 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
             group_data = recv_buffer[ptr:ptr + 8 + group_size]
             
             # 反序列化
-            tensors, names = deserialize_tensor_group(group_data)
+            tensors, names, ds_list = deserialize_tensor_group(group_data)
             print(f"rank={rank}, parsed_names: {names}")
             group = []
             sample = {}
             for name, t in zip(names, tensors):
-                if name == pivot:
+                if name == "input_ids":
                     if sample:
                         group.append(sample)
                     sample = {name: t}
@@ -201,6 +220,8 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
 
             if samlpe:
                 group.append(sample)
+            for s, ds in zip(group, ds_list):
+                s[pivot] = ds
    
             received_groups.append(group)
             
