@@ -153,7 +153,8 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-processor = KeyeProcessor.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip2')
+model_path = "/llm_reco/liuyang76/train_out/0.0.0/qwen3_2B_stage1_resume_1k/step4000/global_step4000/converted2/"
+processor = KeyeProcessor.from_pretrained(model_path)
 tokenizer = processor.tokenizer
 
 
@@ -233,7 +234,7 @@ if 1:
     try:
         with set_default_dtype(torch.bfloat16):
             model = KeyeForConditionalGeneration.from_pretrained(
-                "/llm_reco/liuyang76/train_out/0.0.0/qwen3_2B_stage1_resume_1k/step4000/global_step4000/converted2/",
+                model_path,
                 torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
                 device_map="cuda:0",
