@@ -21,25 +21,44 @@ def serialize_tensor_group(tensors: List[torch.Tensor], names: List[str]) -> byt
         data.extend(tensor_data)
     
     # 序列化元数据
-    metadata_bytes = struct.pack(">I", len(metadata))  # 张量数量
-    for name, dtype, shape, data_len in metadata:
-        metadata_bytes += struct.pack(">I", len(name)) + name.encode()
-        metadata_bytes += struct.pack(">I", len(dtype)) + dtype.encode()
-        metadata_bytes += struct.pack(">I", len(shape)) + struct.pack(">" + "I"*len(shape), *shape)
-        metadata_bytes += struct.pack(">Q", data_len)
+    metadata_bytes = bytearray()
+    metadata_bytes.extend(struct.pack(">I", len(metadata)))  # 张量数量
     
-    # 完整的组数据：组大小（8字节） + 元数据 + 张量数据
-    group_bytes = struct.pack(">Q", len(metadata_bytes) + len(data)) + metadata_bytes + bytes(data)
-    return group_bytes
+    for name, dtype, shape, data_len in metadata:
+        # 序列化名称
+        name_bytes = name.encode('utf-8')
+        metadata_bytes.extend(struct.pack(">I", len(name_bytes)))
+        metadata_bytes.extend(name_bytes)
+        
+        # 序列化数据类型
+        dtype_bytes = dtype.encode('utf-8')
+        metadata_bytes.extend(struct.pack(">I", len(dtype_bytes)))
+        metadata_bytes.extend(dtype_bytes)
+        
+        # 序列化形状
+        metadata_bytes.extend(struct.pack(">I", len(shape)))  # 维度数量
+        metadata_bytes.extend(struct.pack(f">{len(shape)}I", *shape))  # 各维度大小
+        
+        # 序列化数据长度
+        metadata_bytes.extend(struct.pack(">Q", data_len))
+    
+    # 组合元数据和张量数据（添加总长度前缀）
+    total_size = len(metadata_bytes) + len(data)
+    return struct.pack(">Q", total_size) + bytes(metadata_bytes) + bytes(data)
+
 
 def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[str]]:
     ptr = 0
-    
-    # 读取组大小（跳过，因为整个buffer就是一个完整的组）
-    group_size = struct.unpack(">Q", buffer[ptr:ptr+8])[0]
+    if ptr + 8 > len(buffer):
+        raise ValueError("Not enough buffer, cannot read buffer_size")
+    total_size = struct.unpack(">Q", buffer[ptr:ptr+8])[0]
     ptr += 8
     
-    # 解析张量数量
+    # 验证缓冲区长度
+    if len(buffer) != 8 + total_size:
+        raise ValueError(f"Deserialized failed: Expect: {8 + total_size}, Got: {len(buffer)} bytes")
+    
+    # 读取元数据
     num_tensors = struct.unpack(">I", buffer[ptr:ptr+4])[0]
     ptr += 4
     
@@ -47,40 +66,44 @@ def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[st
     names = []
     
     for _ in range(num_tensors):
-        # 解析名称
+        # 读取名称
         name_len = struct.unpack(">I", buffer[ptr:ptr+4])[0]
         ptr += 4
-        name = buffer[ptr:ptr+name_len].decode()
+        name = buffer[ptr:ptr+name_len].decode('utf-8')
         ptr += name_len
         
-        # 解析dtype
+        # 读取数据类型
         dtype_len = struct.unpack(">I", buffer[ptr:ptr+4])[0]
         ptr += 4
-        dtype = buffer[ptr:ptr+dtype_len].decode()
+        dtype = buffer[ptr:ptr+dtype_len].decode('utf-8')
         ptr += dtype_len
         
-        # 解析形状
+        # 读取形状
         shape_len = struct.unpack(">I", buffer[ptr:ptr+4])[0]
         ptr += 4
-        shape = struct.unpack(">" + "I"*shape_len, buffer[ptr:ptr+4*shape_len])
-        ptr += 4*shape_len
+        shape = struct.unpack(f">{shape_len}I", buffer[ptr:ptr+4*shape_len])
+        ptr += 4 * shape_len
         shape = tuple(shape)
         
-        # 解析数据长度
+        # 读取数据长度
         data_len = struct.unpack(">Q", buffer[ptr:ptr+8])[0]
         ptr += 8
         
-        # 解析数据
+        # 读取张量数据
         tensor_data = buffer[ptr:ptr+data_len]
         ptr += data_len
         
-        # 转换为张量
+        # 创建张量
         tensor = torch.frombuffer(tensor_data, dtype=eval(dtype)).reshape(shape)
         tensors.append(tensor)
         names.append(name)
     
+    # 验证指针是否到达缓冲区末尾
+    if ptr != 8 + total_size:
+        raise ValueError(f"Inconsistent data: current_ptr: {ptr}, total={8 + total_size}")
+    
     return tensors, names
-
+    
 def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
     rank = dist.get_rank()
     world_size = dist.get_world_size()
@@ -107,21 +130,17 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
             send_data[receiver].append(serialized)
     
     # 构建send_counts和recv_counts：每个节点发送/接收至其他节点的总字节数
-    send_counts = [0] * world_size
-    for target in send_data:
-        send_counts[target] = sum(len(group) for group in send_data[target])
+    send_counts = [sum(len(group) for group in send_data.get(r, [])) for r in range(world_size)]
     
     send_counts_tensor = torch.tensor(send_counts, dtype=torch.int64)
     recv_counts_tensor = torch.zeros_like(send_counts_tensor)
     dist.all_to_all_single(recv_counts_tensor, send_counts_tensor)
     recv_counts = [recv_counts_tensor[i].item() for i in range(world_size)]
     
-    send_counts = [send_counts[i] for i in range(world_size)]
-    
     # 构建发送缓冲区：将所有发送数据按目标节点顺序连接
     send_buffer = []
-    for target in range(world_size):
-        send_buffer.extend(send_data[target])
+    for r in range(world_size):
+        send_buffer.extend(send_data.get(r, []))
     buf = b''.join(send_buffer)
     send_buffer = torch.empty(0, dtype=torch.uint8) if len(buf) == 0 else torch.frombuffer(buf, dtype=torch.uint8)
     
@@ -142,13 +161,14 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
     # 解析接收数据
     received_groups = []
     ptr = 0
+    recv_buffer = recv_buffer.numpy().tobytes()
     while ptr < len(recv_buffer):
         try:
             # 读取组大小
             if ptr + 8 > len(recv_buffer):
                 break  # 数据不足，退出
             
-            group_size = struct.unpack(">Q", recv_buffer[ptr:ptr+8].numpy())[0]
+            group_size = struct.unpack(">Q", recv_buffer[ptr:ptr+8])[0]
             
             # 检查缓冲区是否包含完整的组
             if ptr + 8 + group_size > len(recv_buffer):
@@ -156,7 +176,7 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
                 break
             
             # 提取组数据
-            group_data = recv_buffer[ptr:ptr + 8 + group_size].numpy().tobytes()
+            group_data = recv_buffer[ptr:ptr + 8 + group_size]
             
             # 反序列化
             tensors, names = deserialize_tensor_group(group_data)
@@ -164,11 +184,13 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
             sample = {}
             for name, t in zip(names, tensors):
                 if name == pivot:
-                    if len(sample) > 0:
+                    if sample:
                         group.append(sample)
-                    sample = {}
-                sample[name] = t
-            if len(samlpe) > 0:
+                    sample = {name: t}
+                else:
+                    sample[name] = t
+
+            if samlpe:
                 group.append(sample)
    
             received_groups.append(group)
@@ -178,11 +200,10 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
             
         except Exception as e:
             print(f"deserialized failed: rank={rank}, scheme={transfer_scheme}, {e}")
-            ptr += 8  # 跳过组大小字段，避免死循环
+            ptr += 8
             break
     
-    # 打印结果
-    print(f"Rank {rank} 共接收 {len(received_groups)} 组数据")
+    print(f"Rank {rank} received {len(received_groups)}")
     return received_groups
 
 
