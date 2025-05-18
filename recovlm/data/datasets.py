@@ -3722,7 +3722,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
         begin += t[2]
       recvs = transfer.exchange_batch_data(scheme, send_data)
       if self_r < v:
-        assert self_r + len(recvs)) == v, f"{self_r}, {recvs}, {v}"
+        assert self_r + len(recvs) == v, f"{self_r}, {recvs}, {v}"
         for off in range(self_r):
           found.append((groups[gid][begin + off], True))
         for recv in recvs:
