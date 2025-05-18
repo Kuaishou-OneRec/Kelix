@@ -378,49 +378,49 @@ def test_keye_datasets():
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
 
-    dataset_keyi = ChatCompletionVisionParquetDataset_keye(**dataset_config)
+    # dataset_keyi = ChatCompletionVisionParquetDataset_keye(**dataset_config)
 
     def collate_fn(samples):
         return samples[0]
 
-    dataloader_keye = DataLoader(
-        dataset=dataset_keyi,
-        batch_size=1,
-        shuffle=False,
-        num_workers=1,
-        collate_fn=collate_fn
-    )
-    for iteration, batch in enumerate(dataloader_keye):
-        print_input_info(batch, "keye")
-        break
-    
-    with open("./test_keye_datasets_keye.txt", "w") as f:
-        f.write(print_input_info(batch, return_str=True))
-        f.write(str(batch["input_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
-        f.write(str(batch["position_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
-        f.write(str(batch["pixel_values"])[:10000] + '\n' +str(batch["input_ids"])[-10000:])
-        f.write(str(batch["cu_seqlens"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
-
-    # print("=" * 20)
-    # dataset_navit = ChatCompletionVisionParquetDataset_navit(**dataset_config)
-
-    # dataset_navit = DataLoader(
-    #     dataset=dataset_navit,
+    # dataloader_keye = DataLoader(
+    #     dataset=dataset_keyi,
     #     batch_size=1,
     #     shuffle=False,
     #     num_workers=1,
     #     collate_fn=collate_fn
     # )
-    # for iteration, batch in enumerate(dataset_navit):
-    #     print_input_info(batch, "navi")
+    # for iteration, batch in enumerate(dataloader_keye):
+    #     print_input_info(batch, "keye")
     #     break
-
-    # with open("./test_keye_datasets_navi.txt", "w") as f:
+    
+    # with open("./test_keye_datasets_keye.txt", "w") as f:
     #     f.write(print_input_info(batch, return_str=True))
     #     f.write(str(batch["input_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
     #     f.write(str(batch["position_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
     #     f.write(str(batch["pixel_values"])[:10000] + '\n' +str(batch["input_ids"])[-10000:])
     #     f.write(str(batch["cu_seqlens"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
+
+    # print("=" * 20)
+    dataset_navit = ChatCompletionVisionParquetDataset_navit(**dataset_config)
+
+    dataset_navit = DataLoader(
+        dataset=dataset_navit,
+        batch_size=1,
+        shuffle=False,
+        num_workers=1,
+        collate_fn=collate_fn
+    )
+    for iteration, batch in enumerate(dataset_navit):
+        print_input_info(batch, "navi")
+        break
+
+    with open("./test_keye_datasets_navi.txt", "w") as f:
+        f.write(print_input_info(batch, return_str=True))
+        f.write(str(batch["input_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
+        f.write(str(batch["position_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
+        f.write(str(batch["pixel_values"])[:10000] + '\n' +str(batch["input_ids"])[-10000:])
+        f.write(str(batch["cu_seqlens"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
 
 
 
