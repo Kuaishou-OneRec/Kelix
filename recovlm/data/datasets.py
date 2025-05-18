@@ -3595,7 +3595,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     
   def _build_source_dataset(self, sources):
     data_file_list = self._get_file_list(sources)
-    dataset = ParquetDataset(data_file_list, self.num_workers, num_readers=8, shuffle_window=50000)
+    dataset = ParquetDataset(data_file_list, self.num_workers, num_readers=8, shuffle_window=10000)
     return dataset, -1
     
   def _process_task(self):
@@ -3700,7 +3700,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     for gid, size_list in enumerate(all_groups):
       v, scheme = balance.calculate_transfer_scheme(size_list)
       if self.rank == 0:
-        print(f"gid={gid}, v={v}, scheme={schem}")
+        print(f"gid={gid}, v={v}, scheme={scheme}")
       self_r = size_list[self.rank]
       if v == 0:
         continue
@@ -3711,7 +3711,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
           continue
         assert begin < len(groups[gi])
         sends = groups[gi][begin : begin + t[2]]
-        send_idx.append(sends)
+        send_idx.extend(sends)
         send_data[t[1]] = []
         for idx in sends:
           samples = []
