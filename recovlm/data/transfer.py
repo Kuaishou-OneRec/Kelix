@@ -66,7 +66,7 @@ def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[st
     num_ds = struct.unpack(">I", buffer[ptr:ptr+4])[0]
     ds_list = []
     ptr += 4
-    for - in range(num_ds):
+    for _ in range(num_ds):
         ds_len = struct.unpack(">I", buffer[ptr:ptr+4])[0]
         ptr += 4
         ds_name = buffer[ptr:ptr+ds_len].decode("utf-8")
