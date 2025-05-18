@@ -940,7 +940,10 @@ class ChatCompletionVisionDataset(IterableDataset):
     
     # append EOS token
     text += "<|endoftext|>"
-    image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos)
+
+    # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
+    # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
+    image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos, **self.process_vision_info_args)
     inputs = self.processor(
         text=text,
         images=image_inputs,
@@ -1622,6 +1625,7 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
                pad_token_id: int = 151643,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
+               process_vision_info_args={"image_factor":None},
                **kwargs
                ):
     """
@@ -1645,11 +1649,8 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
       vision_start_token_id = model_config.vision_start_token_id
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
-      print(
-        "keyye\n",
-        "qqqqq", spatial_merge_size, patch_size, image_token_id, video_token_id, vision_start_token_id, vision_end_token_id, pad_token_id
-      )
 
+    self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
@@ -1727,6 +1728,7 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
                pad_token_id: int = 151643,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
+               process_vision_info_args={"image_factor": None},
                **kwargs
                ):
     """
@@ -1753,7 +1755,7 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
-
+    self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
