@@ -3722,8 +3722,8 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
         begin += t[2]
       recvs = transfer.exchange_batch_data(scheme, send_data)
       if self_r < v:
-        assert len(self_r + len(recvs)) == self_r, f"{self_r}, {recvs}, {v}"
-        for off in range(v - self_r):
+        assert self_r + len(recvs)) == v, f"{self_r}, {recvs}, {v}"
+        for off in range(self_r):
           found.append((groups[gid][begin + off], True))
         for recv in recvs:
           found.append((recv, False))
@@ -3796,8 +3796,8 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
   def __iter__(self):
     self.rank = dist.get_rank()
     self.world_size = dist.get_world_size()
-    self._balance_buf = queue.Queue(maxsize=8)
-    self._result_buf = queue.Queue(maxsize=4)
+    self._balance_buf = queue.Queue(maxsize=32)
+    self._result_buf = queue.Queue(maxsize=16)
     buffer_size = self.kargs.get("balance_buffer_size", 1000)
     target_count = self.kargs.get("balance_candidate_count", 50)
 
