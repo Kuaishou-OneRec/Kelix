@@ -41,6 +41,9 @@ from recovlm.training.common import set_default_dtype
 from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration
 from recovlm.models.keye.processing_keye import KeyeProcessor
 
+from tests.utils import init_processes
+init_processes(0,1)
+
 
 def set_seed(seed: int):
     import random
