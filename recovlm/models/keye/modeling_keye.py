@@ -392,6 +392,7 @@ class SiglipVisionEmbeddings(nn.Module):
             return embeddings
         elif pixel_values.dim() == 5:
             assert position_ids is not None
+            from einops import rearrange
             batch_size, squence_len, channel, height, width = pixel_values.shape
             target_dtype = self.patch_embedding.weight.dtype
             pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
