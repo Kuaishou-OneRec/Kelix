@@ -3657,11 +3657,14 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       else:
         return 4
 
+    flops = [[] for _ in range(num_group)]
     for c in candidates:
       llm_len = [raw_input_ids[i] for i in c]
       llm_flops = balance.llm_flops(llm_len)
       gi = group_index(llm_flops)
       groups[gi].append(c)
+      flops[gi].append(llm_flops)
+    print(f"local_group: rank={dist.get_rank()}, flops={flops}")
       
     info_list = [len(g) for g in groups]
     t3 = time.perf_counter()
