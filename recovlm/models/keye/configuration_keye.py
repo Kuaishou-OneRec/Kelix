@@ -45,6 +45,9 @@ class KeyeVisionConfig(PretrainedConfig):
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
+        spatial_merge_size=2,
+        temporal_patch_size=2,
+        tokens_per_second=2,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -59,6 +62,9 @@ class KeyeVisionConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
+        self.spatial_merge_size = spatial_merge_size
+        self.temporal_patch_size = temporal_patch_size
+        self.tokens_per_second = tokens_per_second
 
 
 class KeyeConfig(PretrainedConfig):
