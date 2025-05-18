@@ -45,6 +45,48 @@ def greedy_subsets_nearst_sum(nums, N):
     return result_index
     
 
+def greedy_subsets_without_replacement(nums, N):
+    ordered = sorted([(num, idx) for idx, num in enumerate(nums)], key=lambda x: x[0])
+    values = [x[0] for x in ordered]
+    result = []
+    used_indices = set()
+    
+    for i in reversed(range(len(nums))):
+        if ordered[i][1] in used_indices:
+            continue
+
+        current = []
+        cur_sum = 0
+        j = i
+        
+        while j >= 0:
+            num, idx = ordered[j]
+            if idx in used_indices or cur_sum + num > N:
+                j -= 1
+                continue
+                
+            current.append((num, idx))
+            cur_sum += num
+            used_indices.add(idx)
+            
+            remaining = N - cur_sum
+            if remaining <= 0:
+                break
+                
+            pos = bisect.bisect_right(values, remaining, 0, j) - 1
+            j = pos
+            while j >= 0 and (ordered[j][1] in used_indices or ordered[j][0] > remaining):
+                j -= 1
+                
+        if current:
+            result.append(current)
+    
+    # sorted_result = sorted(result, key=lambda x: -sum(v[0] for v in x))
+    sorted_result = sorted(result, key=lambda x: -llm_flops([v[0] for v in x]))
+    result_index = [[v[1] for v in res] for res in sorted_result]
+    return result_index
+
+
 def llm_flops(seq_list):
     h = 1536
     intermediate_size = 8960
