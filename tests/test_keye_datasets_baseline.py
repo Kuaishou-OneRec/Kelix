@@ -1,3 +1,28 @@
+import random
+import numpy as np
+import torch
+import pandas as pd
+import pyarrow.parquet as pq
+
+def set_random_seeds(seed):
+    """
+    设置parquet、pandas、numpy、random、torch的随机种子
+    
+    参数：
+    seed (int): 随机种子值
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    pd.options.mode.chained_assignment = None  # 避免pandas链式赋值警告
+    pd.util.hash_pandas_object = lambda x, **kwargs: x  # 固定pandas哈希，确保结果一致
+    # parquet本身没有随机操作，这里无需额外设置与随机相关内容
+
+set_random_seeds(0)
+
 import os
 import torch
 

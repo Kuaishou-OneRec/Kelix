@@ -2878,7 +2878,7 @@ class ParquetDataset(IterableDataset):
             all_rows.append(df)
 
         all_rows = pd.concat(all_rows, ignore_index=True)
-        all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+        # all_rows = all_rows.sample(frac=1).reset_index(drop=True)
 
         rows_processed = 0
 
@@ -2886,6 +2886,7 @@ class ParquetDataset(IterableDataset):
             for i, (_, row) in enumerate(all_rows.iterrows()):
                 try:
                   sample = self._parser(row, "tmp")
+                  print(i, "\n", print_input_info(sample, return_str=True))
                   if sample is not None:
                     yield sample
 

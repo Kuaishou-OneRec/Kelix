@@ -1,4 +1,30 @@
-import os
+import random
+import numpy as np
+import torch
+import pandas as pd
+import pyarrow.parquet as pq
+
+def set_random_seeds(seed):
+    """
+    设置parquet、pandas、numpy、random、torch的随机种子
+    
+    参数：
+    seed (int): 随机种子值
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+    pd.options.mode.chained_assignment = None  # 避免pandas链式赋值警告
+    pd.util.hash_pandas_object = lambda x, **kwargs: x  # 固定pandas哈希，确保结果一致
+    # parquet本身没有随机操作，这里无需额外设置与随机相关内容
+
+set_random_seeds(0)
+
+
+
 import torch
 
 import wids
@@ -369,7 +395,7 @@ def test_keye_datasets():
     dataset_config["n_local_shuffle_files_window"] = 1
     dataset_config["num_workers"] = 1
     dataset_config["shuffle_seed"] = int(time.time())
-    dataset_config["max_length"] = 16000
+    dataset_config["max_length"] = 1024
     dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/pt/0421/stage2_ccl_v3_0425/_prepared/0/prep-0-5f8467a5aa2c472d9c31bbb81356540f.parquet"]
     dataset_config["cut_to_pad"] = True
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v3/rank-11-4ef695ac-2336-11f0-b166-946daee9184a.parquet
@@ -401,26 +427,26 @@ def test_keye_datasets():
         f.write(str(batch["pixel_values"])[:10000] + '\n' +str(batch["input_ids"])[-10000:])
         f.write(str(batch["cu_seqlens"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
 
-    # print("=" * 20)
-    # dataset_navit = ChatCompletionVisionParquetDataset_navit(**dataset_config)
+    print("=" * 20)
+    dataset_navit = ChatCompletionVisionParquetDataset_navit(**dataset_config)
 
-    # dataset_navit = DataLoader(
-    #     dataset=dataset_navit,
-    #     batch_size=1,
-    #     shuffle=False,
-    #     num_workers=1,
-    #     collate_fn=collate_fn
-    # )
-    # for iteration, batch in enumerate(dataset_navit):
-    #     print_input_info(batch, "navi")
-    #     break
+    dataset_navit = DataLoader(
+        dataset=dataset_navit,
+        batch_size=1,
+        shuffle=False,
+        num_workers=1,
+        collate_fn=collate_fn
+    )
+    for iteration, batch in enumerate(dataset_navit):
+        print_input_info(batch, "navi")
+        break
 
-    # with open("./test_keye_datasets_navi.txt", "w") as f:
-    #     f.write(print_input_info(batch, return_str=True))
-    #     f.write(str(batch["input_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
-    #     f.write(str(batch["position_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
-    #     f.write(str(batch["pixel_values"])[:10000] + '\n' +str(batch["input_ids"])[-10000:])
-    #     f.write(str(batch["cu_seqlens"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
+    with open("./test_keye_datasets_navi.txt", "w") as f:
+        f.write(print_input_info(batch, return_str=True))
+        f.write(str(batch["input_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
+        f.write(str(batch["position_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
+        f.write(str(batch["pixel_values"])[:10000] + '\n' +str(batch["input_ids"])[-10000:])
+        f.write(str(batch["cu_seqlens"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
 
 
 
