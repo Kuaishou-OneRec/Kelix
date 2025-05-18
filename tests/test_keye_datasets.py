@@ -386,7 +386,7 @@ def test_keye_datasets():
     torch.manual_seed(0)
     np.random.seed(0)
     # processor = AutoProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/InternVL3-2B", trust_remote_code=True)
-    path = "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/examples/vlm/qwen3navit/debug_qwen3navit_8B256_nols.json"
+    path = "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/examples/vlm/qwen3navit/debug_qwen3navit_8B256_nols2.json"
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
     dataset_config.pop("name")
@@ -395,7 +395,7 @@ def test_keye_datasets():
     dataset_config["n_local_shuffle_files_window"] = 1
     dataset_config["num_workers"] = 1
     dataset_config["shuffle_seed"] = int(time.time())
-    dataset_config["max_length"] = 256
+    dataset_config["max_length"] = 1024*12
     dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/pt/0421/stage2_ccl_v3_0425/_prepared/0/prep-0-5f8467a5aa2c472d9c31bbb81356540f.parquet"]
     dataset_config["cut_to_pad"] = True
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v3/rank-11-4ef695ac-2336-11f0-b166-946daee9184a.parquet
@@ -428,6 +428,25 @@ def test_keye_datasets():
         f.write(str(batch["cu_seqlens"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
 
     print("=" * 20)
+    path = "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/examples/vlm/qwen3navit/debug_qwen3navit_8B256_nols.json"
+    with open(path, encoding="utf-8") as f:
+        dataset_config = json.loads(f.read())
+    dataset_config.pop("name")
+
+    # n_local_shuffle_files_window=3
+    dataset_config["n_local_shuffle_files_window"] = 1
+    dataset_config["num_workers"] = 1
+    dataset_config["shuffle_seed"] = int(time.time())
+    dataset_config["max_length"] = 1024*12
+    dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/pt/0421/stage2_ccl_v3_0425/_prepared/0/prep-0-5f8467a5aa2c472d9c31bbb81356540f.parquet"]
+    dataset_config["cut_to_pad"] = True
+    # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v3/rank-11-4ef695ac-2336-11f0-b166-946daee9184a.parquet
+    # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v3/rank-11-4ef695ac-2336-11f0-b166-946daee9184a.parquet","viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-code/train_v1/rank-12-2a107142-2438-11f0-ba28-946daee91688.parquet"][1:]
+    
+    # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
+    # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
+
+    dataset_keyi = ChatCompletionVisionParquetDataset_keye(**dataset_config)
     dataset_navit = ChatCompletionVisionParquetDataset_navit(**dataset_config)
 
     dataset_navit = DataLoader(
