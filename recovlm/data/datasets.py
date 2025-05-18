@@ -3661,9 +3661,9 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     for c in candidates:
       llm_len = [raw_input_ids[i] for i in c]
       llm_flops = balance.llm_flops(llm_len)
-      gi = group_index(llm_flops)
-      groups[gi].append(c)
-      flops[gi].append(llm_flops)
+      gid = group_index(llm_flops)
+      groups[gid].append(c)
+      flops[gid].append(llm_flops)
     print(f"local_group: rank={dist.get_rank()}, flops={flops}")
       
     info_list = [len(g) for g in groups]
@@ -3709,8 +3709,8 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       for t in scheme:
         if t[0] != self.rank:
           continue
-        assert begin < len(groups[gi]), f"{self.rank}, {begin}, {groups[gi]}, {t}"
-        sends = groups[gi][begin : begin + t[2]]
+        assert begin < len(groups[gid]), f"{self.rank}, {begin}, {groups[gid]}, {t}"
+        sends = groups[gid][begin : begin + t[2]]
         send_idx.extend(sends)
         send_data[t[1]] = []
         for idx in sends:
@@ -3724,12 +3724,12 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       if self_r < v:
         assert len(self_r + len(recvs)) == self_r, f"{self_r}, {recvs}, {v}"
         for off in range(v - self_r):
-          found.append((groups[gi][begin + off], True))
+          found.append((groups[gid][begin + off], True))
         for recv in recvs:
           found.append((recv, False))
       else:
         for off in range(v):
-          found.append((groups[gi][begin + off], True))
+          found.append((groups[gid][begin + off], True))
       
     return found, send_idx
   
