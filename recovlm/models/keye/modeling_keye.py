@@ -52,6 +52,7 @@ from transformers.utils import (
     logging,
     replace_return_docstrings,
     torch_int,
+    is_flash_attn_greater_or_equal_2_10
 )
 from .configuration_keye import KeyeConfig, KeyeVisionConfig
 
