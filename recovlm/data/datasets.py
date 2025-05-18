@@ -3679,14 +3679,18 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     groups_by_rank = all_infos
     
     avail = []
+    remains = []
     for i in range(num_group):
       group = [groups_by_rank[j][i] for j in range(ws)]
       min_count = min(group)
       avail.append(min_count)
+      remains.append([v - min_count for v in group])
       # remains = sum(group) - min_count * ws
       # if remains >= ws:
       #   print(group)
       #   # todo: shuffle remains
+    if dist.get_rank() == 0:
+      print(f"avail={avail}, remains={remains}")
     if sum(avail) == 0:
       raise RuntimeError("not found available group, must shuffle")
     found = []
