@@ -2980,8 +2980,7 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
   
   def load_state_dict(self, state_dict):
     self.dataset.load_state_dict(state_dict)
-
-
+    
 
 class ChatCompletionVisionParquetDataset_keye(ChatCompletionVisionDataset_keye):
   def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
