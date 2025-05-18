@@ -147,7 +147,6 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
     # 构建接收缓冲区
     recv_buffer = torch.zeros(sum(recv_counts), dtype=torch.uint8)
     
-    print(f"rank={rank}, recv:{recv_buffer.shape}, {recv_counts}, send:{send_buffer.shape}, {send_counts}")
     num_recv = sum([recv > 0 for recv in recv_counts])
     # 执行all_to_all操作
     dist.all_to_all_single(
@@ -162,6 +161,7 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
     received_groups = []
     ptr = 0
     recv_buffer = recv_buffer.numpy().tobytes()
+    print(f"rank={rank}, recv:{recv_buffer.shape}, {recv_counts}, send:{send_buffer.shape}, {send_counts}, recv_buf: {len(recv_buffer)}")
     while ptr < len(recv_buffer):
         try:
             # 读取组大小
