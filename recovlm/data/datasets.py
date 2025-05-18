@@ -3631,7 +3631,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
           f"errmsg={traceback.format_exc()}")
         continue
       
-  def _balance_global(self, raw_input_ids, raw_image_len, target_count):
+  def _balance_global(self, raw_input_ids, raw_image_len, buffer, source_list):
     t2 = time.perf_counter()
     candidates = balance.greedy_subsets_without_replacement(raw_input_ids, self.max_length - self.image_pad_len)
     ids_list = [[raw_input_ids[i] for i in idx] for idx in candidates]
@@ -3680,8 +3680,10 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     
     avail = []
     remains = []
+    all_groups = []
     for i in range(num_group):
       group = [groups_by_rank[j][i] for j in range(ws)]
+      all_groups.append(group)
       min_count = min(group)
       avail.append(min_count)
       remains.append([v - min_count for v in group])
@@ -3690,16 +3692,44 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       #   print(group)
       #   # todo: shuffle remains
     if dist.get_rank() == 0:
-      print(f"avail={avail}, remains={remains}")
-    if sum(avail) == 0:
-      raise RuntimeError("not found available group, must shuffle")
-    found = []
-    for i, cnt in enumerate(avail):
-      if cnt == 0:
-        continue
-      found.extend(groups[i][:cnt])
+      print(f"avail={avail}, remains={remains}, all_groups={all_groups}")
       
-    return found
+    found = []
+    send_idx = []
+    pivot = "__ds__"
+    for gid, size_list in enumerate(all_groups):
+      v, scheme = balance.calculate_transfer_scheme(size_list)
+      self_r = size_list[rank]
+      if v == 0:
+        continue
+      begin = 0
+      send_data = {}
+      for t in scheme:
+        if t[0] != self.rank:
+          continue
+        assert begin < len(groups[gi])
+        sends = groups[gi][begin : begin + t[2]]
+        send_idx.append(sends)
+        send_data[t[1]] = []
+        for idx in sends:
+          samples = []
+          for sid in idx:
+            samples.append(buffer[sid])
+            samples[-1][pivot] = transfer.convert_data_source(source_list[sid])
+          send_data[t[1]].append(samples)
+        begin += t[2]
+      recvs = transfer.exchange_batch_data(scheme, send_data)
+      if self_r < v:
+        assert len(self_r + len(recvs)) == self_r, f"{self_r}, {recvs}, {v}"
+        for off in range(v - self_r):
+          found.append((groups[gi][begin + off], True))
+        for recv in recvs:
+          found.append((recv, False))
+      else:
+        for off in range(v):
+          found.append((groups[gi][begin + off], True))
+      
+    return found, send_idx
   
   def _balance_local(self, raw_input_ids, raw_image_len):
     selected_index = balance.find_local_v1(raw_input_ids, self.max_length - self.image_pad_len)
@@ -3729,16 +3759,23 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       if len(buffer) == buffer_size:
         raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
         raw_image_len = [data["pixel_values"].size(0) for data in buffer]
-        index_list = self._balance_global(raw_input_ids, raw_image_len, target_count)
+        candidates, send_out = self._balance_global(raw_input_ids, raw_image_len, buffer, source_list)
         used = set()
-        for selected in index_list:
-          selected_llm = [raw_input_ids[i] for i in selected]
-          selected_vit = [raw_image_len[i] for i in selected]
-          used.update(selected)
-
-          inputs = [buffer[idx] for idx in selected]
-          data_source = [source_list[idx] for idx in selected]
-          self._balance_buf.put((inputs, data_source, [0, 0, 0]))
+        for selected, is_local in candidates:
+          if is_local:
+            used.update(selected)
+            inputs = [buffer[idx] for idx in selected]
+            data_source = [source_list[idx] for idx in selected]
+            self._balance_buf.put((inputs, data_source, [0, 0, 0]))
+          else:
+            data_source = []
+            for sample in selected:
+              data_source.append(selected.pop("__ds__"))
+            self._balance_buf.put((selected, data_source, [0, 0, 0]))
+        for sends in send_out:
+          for idx in sends:
+            assert idx not in used
+            used.add(idx)
 
         buffer = [x for i, x in enumerate(buffer) if i not in used]
         source_list = [x for i, x in enumerate(source_list) if i not in used]
@@ -3755,6 +3792,8 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       self._result_buf.put(packed_inputs)
 
   def __iter__(self):
+    self.rank = dist.get_rank()
+    self.world_size = dist.get_world_size()
     self._balance_buf = queue.Queue(maxsize=8)
     self._result_buf = queue.Queue(maxsize=4)
     buffer_size = self.kargs.get("balance_buffer_size", 1000)
