@@ -218,4 +218,5 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
 
 def convert_data_source(name):
     buf = name.encode("ascii")
+    print(f"rank={dist.get_rank()}, raw_name={name}, encode_name: {buf}")
     return torch.frombuffer(buf, dtype=torch.uint8)
