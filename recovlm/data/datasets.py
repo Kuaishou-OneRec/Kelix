@@ -3726,16 +3726,18 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
             if isinstance(v, torch.Tensor):
                 sum_bytes += v.nbytes
         return sum_bytes, len(inputs)
+    max_bytes = -1
     while True:
       inputs, source_name = self.processed_buffer.get()
       buffer.append(inputs)
       source_list.append(source_name)
-      max_bytes = -1
       if dist.get_rank() == 0:
         sum_bytes, _ = get_bytes(inputs)
         if max_bytes < sum_bytes:
             max_bytes = sum_bytes
-        print(f"inputs: {sum_bytes}, source_name: {source_name}, max={max_bytes}")
+        s1 = [inputs["input_ids"].shape[-1]]
+        s2 = [inputs["pixel_values"].size(0)]
+        print(f"inputs: {sum_bytes}, source_name: {source_name}, s1={s1}, s2={s2}, max={max_bytes}, f1={llm_flops(s1)}, f2={vit_flops(s2)}")
       if len(buffer) == buffer_size:
         raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
         raw_image_len = [data["pixel_values"].size(0) for data in buffer]
