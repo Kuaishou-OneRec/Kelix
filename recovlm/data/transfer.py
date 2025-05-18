@@ -50,7 +50,7 @@ def serialize_tensor_group(tensors: List[torch.Tensor], names: List[str], ds_nam
     
     # 组合元数据和张量数据（添加总长度前缀）
     total_size = len(metadata_bytes) + len(data) + len(ds_data)
-    return struct.pack(">Q", total_size) + bytes(metadata_bytes) + bytes(data)
+    return struct.pack(">Q", total_size) + bytes(ds_data) + bytes(metadata_bytes) + bytes(data)
 
 
 def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[str]]:
