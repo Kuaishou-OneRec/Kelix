@@ -144,7 +144,7 @@ def smart_resize(
     return h_bar, w_bar
 
 
-class KeyeImageProcessor(BaseImageProcessor):
+class SiglipImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Qwen2-VL image processor that dynamically resizes images based on the original images.
 
