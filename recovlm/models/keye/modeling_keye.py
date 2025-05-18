@@ -59,6 +59,14 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
 
+import warnings
+from typing import Any, Callable, Optional, Tuple, Union, List
+from torch import nn
+from torch.nn.init import _calculate_fan_in_and_fan_out
+
+from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+
 from recovlm.training.parallel import UlyssesAttention, \
     get_sequence_parallel_group, \
     get_sequence_parallel_world_size, \
@@ -150,43 +158,6 @@ class Qwen3VisionRotaryEmbedding(nn.Module):
         seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.outer(seq, self.inv_freq)
         return freqs
-
-
-import math
-import warnings
-from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple, Union, List
-
-from einops import rearrange
-import numpy as np
-import torch
-from torch import nn
-from torch.nn.init import _calculate_fan_in_and_fan_out
-
-from transformers.utils import is_flash_attn_2_available
-from transformers.activations import ACT2FN
-from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from transformers.utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    # can_return_tuple,
-    logging,
-    replace_return_docstrings,
-    torch_int,
-)
-
-if is_flash_attn_2_available():
-    from flash_attn import flash_attn_varlen_func
-else:
-    flash_attn_varlen_func = None
-
-
-logger = logging.get_logger(__name__)
-
-
-
 
 
 def _trunc_normal_(tensor, mean, std, a, b):
