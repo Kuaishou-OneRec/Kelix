@@ -1776,18 +1776,15 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
 
         # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
         if position_ids is None and input_ids is not None and (attention_mask is None or attention_mask.ndim == 2):
-            print(111111111)
 
             # calculate RoPE index once per generation in the pre-fill stage only
             if (cache_position is not None and cache_position[0] == 0) or self.rope_deltas is None:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids, image_grid_thw, video_grid_thw, attention_mask
                 )
-                print(22222222)
                 self.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
-                print(33333333)
                 batch_size, seq_length, _ = inputs_embeds.shape
                 delta = cache_position[0] + self.rope_deltas if cache_position is not None else 0
                 position_ids = torch.arange(seq_length, device=inputs_embeds.device)
