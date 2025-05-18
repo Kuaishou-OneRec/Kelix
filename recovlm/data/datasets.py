@@ -1645,6 +1645,11 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
       vision_start_token_id = model_config.vision_start_token_id
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
+      print(
+        "keyye\n",
+        "qqqqq", spatial_merge_size, patch_size, image_token_id, video_token_id, vision_start_token_id, vision_end_token_id, pad_token_id
+      )
+
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
@@ -1747,6 +1752,11 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
       vision_start_token_id = model_config.vision_start_token_id
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
+
+      print(
+        "navit\n",
+        "qqqqq", spatial_merge_size, patch_size, image_token_id, video_token_id, vision_start_token_id, vision_end_token_id, pad_token_id
+      )
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
