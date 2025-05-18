@@ -2428,17 +2428,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
     def __init__(self, config):
         super().__init__(config)
-        Siglip_config = KeyeConfig.from_pretrained('/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex')
-        print('KeyeForConditionalGeneration',config)
-        print(config)
-        print(Siglip_config)
-        # /llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex
-        # print('msy_siglip_config',Siglip_config)
-        # Siglip_config = Siglip_config.vision_config
-        # Siglip_config._attn_implementation = 'flash_attention_2'
-        print(f"Projector original config", Siglip_config)
-        print(f"Projector current config", config.vision_config)
-
         self.mlp_AR = Projector(config, config.vision_config)
         self.visual = SiglipVisionModel(config.vision_config)
         self.model = Qwen3Model(config)
@@ -3115,4 +3104,10 @@ class Projector(nn.Module):
         hidden_states = self.linear_2(hidden_states)
 
         return hidden_states.view(*dims, -1)
+
+
+
+
+
+
 
