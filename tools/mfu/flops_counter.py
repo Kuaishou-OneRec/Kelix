@@ -350,6 +350,7 @@ def extract_model_params(config_path):
     
     # 判断模型架构类型
     if 'architectures' in config and 'InternVLChatModel' in config['architectures']:
+        print(f"flops_counter: InternVLChatModel architectures")
         # InternVL架构处理逻辑
         llm_config = config['llm_config']
 
@@ -375,6 +376,8 @@ def extract_model_params(config_path):
         }
         vision_params = {k: v for k, v in vision_params.items() if v is not None}
     elif 'architectures' in config and 'Qwen2_5_VLForConditionalGeneration' in config['architectures']:
+        print(f"flops_counter: Qwen2_5_VLForConditionalGeneration architectures")
+
         # Qwen2.5 VL架构处理逻辑
         transformer_params = {
             'num_head': config['num_attention_heads'],
@@ -394,8 +397,30 @@ def extract_model_params(config_path):
             'num_layers': vision_config['depth'],
             
         }
+    elif 'architectures' in config and 'KeyeForConditionalGeneration' in config['architectures']:
+        print(f"flops_counter: KeyeForConditionalGeneration architectures")
+        transformer_params = {
+            'num_head': config['num_attention_heads'],
+            'head_dim': config['hidden_size'] / config['num_attention_heads'],
+            'hidden_size': config['hidden_size'],
+            'intermediate_size': config['intermediate_size'],
+            'kv_heads': config['num_key_value_heads'],
+            'num_layers': config['num_hidden_layers'],
+            'vocab_size': config['vocab_size']
+        }
+        vision_config = config['vision_config']
+        vision_params = {
+            'num_head': vision_config['num_attention_heads'],
+            'head_dim': vision_config['hidden_size'] / vision_config['num_attention_heads'],
+            'hidden_size': vision_config['hidden_size'],
+            'intermediate_size': vision_config['intermediate_size'],
+            'num_layers': vision_config['num_hidden_layers'],
+            
+        }
     else:
-        # Qwen3/Keye架构处理逻辑 (保持原有逻辑)
+        print(f"flops_counter: Qwen3siglip architectures")
+
+        # Qwen3siglip架构处理逻辑 (保持原有逻辑)
         transformer_params = {
             'num_head': config['num_attention_heads'],
             'head_dim': config['head_dim'],
@@ -405,6 +430,7 @@ def extract_model_params(config_path):
             'num_layers': config['num_hidden_layers'],
             'vocab_size': config['vocab_size']
         }
+        with open('/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex/config.json', 'r') as f: vision_config = json.load(f)['vision_config']
         vision_config = config['vision_config']
         vision_params = {
             'num_head':vision_config['num_heads'],
