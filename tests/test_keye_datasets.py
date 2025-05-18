@@ -314,6 +314,8 @@ def gather_batches(buffer, group):
 
 def test_InternVLParquetDataset():
     init_processes(0, 1)
+    torch.manual_seed(0)
+    np.random.seed(0)
 
     processor = AutoProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/InternVL3-2B", trust_remote_code=True)
     path = "/llm_reco/chuchenglong/work_space/recovlm/examples/vlm/configs/internvl/2b_internvl_stage2.json"
@@ -355,8 +357,9 @@ def test_InternVLParquetDataset():
 
 def test_keye_datasets():
     init_processes(0, 1)
-
-    processor = AutoProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/InternVL3-2B", trust_remote_code=True)
+    torch.manual_seed(0)
+    np.random.seed(0)
+    # processor = AutoProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/InternVL3-2B", trust_remote_code=True)
     path = "/llm_reco/chuchenglong/work_space/recovlm/examples/vlm/configs/internvl/2b_internvl_stage2.json"
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
@@ -371,7 +374,6 @@ def test_keye_datasets():
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
 
-    dataset_navit = ChatCompletionVisionParquetDataset_navit(cut_to_pad=True, **dataset_config)
     dataset_keyi = ChatCompletionVisionParquetDataset_keye(cut_to_pad=True, **dataset_config)
 
     def collate_fn(samples):
@@ -387,19 +389,27 @@ def test_keye_datasets():
     for iteration, batch in enumerate(dataloader_keye):
         print_input_info(batch, "keye")
         break
+    
+    with open("./test_keye_datasets_keye.txt", "w") as f:
+        f.write(print_input_info(batch, return_str=True))
+
+    print("=" * 20)
+    dataset_navit = ChatCompletionVisionParquetDataset_navit(cut_to_pad=True, **dataset_config)
 
     dataset_navit = DataLoader(
-        dataset=dataset_keyi,
+        dataset=dataset_navit,
         batch_size=1,
         shuffle=False,
         num_workers=1,
         collate_fn=collate_fn
     )
     for iteration, batch in enumerate(dataset_navit):
-        print_input_info(batch, "keye")
+        print_input_info(batch, "navi")
         break
 
+    with open("./test_keye_datasets_keye.txt", "w") as f:
+        f.write(print_input_info(batch, return_str=True))
 
 if __name__ == "__main__":
-    test_InternVLParquetDataset()
+    test_keye_datasets()
 
