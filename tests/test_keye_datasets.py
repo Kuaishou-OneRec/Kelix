@@ -415,7 +415,7 @@ def test_keye_datasets():
         print_input_info(batch, "navi")
         break
 
-    with open("./test_keye_datasets_keye.txt", "w") as f:
+    with open("./test_keye_datasets_navi.txt", "w") as f:
         f.write(print_input_info(batch, return_str=True))
         f.write(str(batch["input_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
         f.write(str(batch["position_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
