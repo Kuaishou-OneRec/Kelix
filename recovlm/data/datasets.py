@@ -2898,7 +2898,6 @@ class ParquetDataset(IterableDataset):
             for i, (_, row) in enumerate(all_rows.iterrows()):
                 try:
                   sample = self._parser(row, "tmp")
-                  print(i, "\n", print_input_info(sample, return_str=True))
                   if sample is not None:
                     yield sample
 
