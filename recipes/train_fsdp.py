@@ -116,6 +116,8 @@ def get_argument_parser():
   parser.add_argument("--fp32_weight", action="store_true",
                       help="Whether use fp32 for model weight updating")
 
+
+
   parser.add_argument("--fp32_reduce", action="store_true",
                       help="Whether use fp32 for model gradient reduction")
 
@@ -515,8 +517,6 @@ class TokenStats:
 
   
   def collect_image_token_stats(self, num_image_tokens):
-      torch.cuda.empty_cache()
-
       # 收集所有rank的image tokens统计信息
       world_size = dist.get_world_size()
       rank = dist.get_rank()
@@ -524,6 +524,7 @@ class TokenStats:
       input_tensor = torch.tensor([num_image_tokens], dtype=torch.long).cuda()
       all_image_tokens = list(torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) if rank == 0 else None
       dist.gather(input_tensor, gather_list=all_image_tokens, dst=0)
+
       if rank == 0:
           all_image_tokens = [x.item() for x in all_image_tokens]
           # 计算统计指标
@@ -939,7 +940,6 @@ def train():
   acc_num_image_tokens = 0
   total_num_image_tokens = 0
   mfu_stats = MFUStats(args)
-
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
@@ -1026,7 +1026,6 @@ def train():
       acc_num_tokens += num_tokens
       acc_valid_num_tokens += num_valid_tokens
       acc_num_image_tokens += num_image_tokens
-
       ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
 
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
@@ -1189,6 +1188,9 @@ def train():
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
           ticker.tick(f"log_dict*{log_acc_step}")
 
+
+
+
           for name, data in log_dict.items():
             if data is not None and tb_writer:
               tb_writer.add_scalar(
@@ -1255,7 +1257,6 @@ def train():
         batch_data_source_loss = collections.defaultdict(float)
         batch_data_source_tokens = collections.defaultdict(int)
         valid_data_source_tokens = collections.defaultdict(int)
-
 
       if global_step % args.save_checkpoint_per_step == 0 and \
           global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
