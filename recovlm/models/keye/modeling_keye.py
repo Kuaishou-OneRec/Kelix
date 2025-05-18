@@ -48,6 +48,7 @@ from transformers.utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     # can_return_tuple,
+    is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
     torch_int,
