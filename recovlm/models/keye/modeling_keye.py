@@ -28,8 +28,7 @@ import math
 import numpy as np
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
-from recovlm.utils.ds_utils import print_input_info
-from recovlm.training import parallel as mpu
+
 
 import torch
 import torch.nn as nn
@@ -185,6 +184,8 @@ else:
 
 
 logger = logging.get_logger(__name__)
+
+
 
 
 
@@ -1373,20 +1374,13 @@ class KeyeVisionSdpaAttention(nn.Module):
         return attn_output
 
 
-QWEN2_5_VL_VISION_ATTENTION_CLASSES = {
-    "eager": KeyeVisionAttention,
-    "flash_attention_2": KeyeVisionFlashAttention2,
-    "sdpa": KeyeVisionSdpaAttention,
-}
-
-
 class KeyeVisionBlock(nn.Module):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = Qwen3RMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen3RMSNorm(config.hidden_size, eps=1e-6)
         assert attn_implementation == 'flash_attention_2'
-        self.attn = QWEN2_5_VL_VISION_ATTENTION_CLASSES[attn_implementation](
+        self.attn = QWEN3_ATTENTION_CLASSES[attn_implementation](
             config.hidden_size, num_heads=config.num_heads
         )
         self.mlp = KeyeMLP(config, bias=True)
@@ -1972,7 +1966,8 @@ class KeyeSdpaAttention(KeyeAttention):
         return attn_output, None, past_key_value
 
 
-QWEN2_5_VL_ATTENTION_CLASSES = {
+
+QWEN3_ATTENTION_CLASSES = {
     "eager": KeyeAttention,
     "flash_attention_2": KeyeFlashAttention2,
     "sdpa": KeyeSdpaAttention,
@@ -1991,7 +1986,7 @@ class KeyeDecoderLayer(nn.Module):
             )
         # config._attn_implementation = "eager"
         assert config._attn_implementation == "flash_attention_2", f"config._attn_implementation is {config._attn_implementation}"
-        self.self_attn = QWEN2_5_VL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+        self.self_attn = QWEN3_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         self.mlp = Qwen3MLP(config)
         self.input_layernorm = Qwen3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -2829,9 +2824,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
-        
-        print(f"position_ids={position_ids}", position_ids is None and (attention_mask is None or attention_mask.ndim == 2))
-        print(24544442111, attention_mask is None, attention_mask.ndim == 2, attention_mask.ndim)
+
         # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
         if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
             # calculate RoPE index once per generation in the pre-fill stage only
@@ -2840,7 +2833,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 or self.rope_deltas is None
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
             ):
-                print(3333313111, position_ids)
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
@@ -2851,7 +2843,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 self.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
-                print(4444555544, position_ids)
                 batch_size, seq_length, _ = inputs_embeds.shape
                 delta = (
                     (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
