@@ -1,43 +1,11 @@
-
-from typing import Dict, Any, Union, Optional
 from recovlm.utils.ds_utils import format_dict_or_list
-
 from PIL import Image, ImageDraw
-
 import torch
-import torch.nn as nn
-import torch.distributed as dist
-import torch.nn.functional as F
-import numpy as np
-
-import os
-import torch
-
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
-from recovlm.training.checkpoint import load_hf_checkpoint
-import itertools
-from recovlm.utils.ds_utils import print_input_info
 from recovlm.utils.qwen_vl_utils import process_vision_info
-
-from typing import Dict, Any, Union, Optional
-
-import os
-
-import itertools
-import contextlib
-from functools import partial
-
-
 from PIL import Image
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
-from recovlm.training.checkpoint import load_hf_checkpoint
-
-
 from recovlm.training.common import set_default_dtype
-
 from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration
 from recovlm.models.keye.processing_keye import KeyeProcessor
 from recovlm.utils.custom_dcp_converter import convert_v2
@@ -94,7 +62,7 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-BASE_MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/"
+BASE_MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-8B-scratch/"
 MODEL_DIR = convert_v2(
     '/llm_reco/lingzhixin/exps/qwen3navit/debug_qwen3navit/0.0.1/8B',
     'step27000',
