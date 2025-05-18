@@ -3709,7 +3709,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       for t in scheme:
         if t[0] != self.rank:
           continue
-        assert begin < len(groups[gi])
+        assert begin < len(groups[gi]), f"{begin}, {groups[gi]}"
         sends = groups[gi][begin : begin + t[2]]
         send_idx.extend(sends)
         send_data[t[1]] = []
