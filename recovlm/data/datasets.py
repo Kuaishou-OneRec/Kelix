@@ -3720,28 +3720,10 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
   def _balance_task(self, buffer_size: int = 1000, target_count: int = 100):
     buffer = []
     source_list = []
-    def get_bytes(inputs):
-        sum_bytes = 0
-        for k,v in inputs.items():
-            if isinstance(v, torch.Tensor):
-                sum_bytes += v.nbytes
-        return sum_bytes, len(inputs)
-    max_bytes = -1
     while True:
       inputs, source_name = self.processed_buffer.get()
       buffer.append(inputs)
       source_list.append(source_name)
-      #if dist.get_rank() == 0:
-      sum_bytes, _ = get_bytes(inputs)
-      if sum_bytes >= 150000000:
-          for k, v in inputs.items():
-              if isinstance(v, torch.Tensor):
-                  print(f"rank={dist.get_rank()}, sample_info={k}, {v.shape}, {v.dtype}")
-      if max_bytes < sum_bytes:
-          max_bytes = sum_bytes
-      s1 = [inputs["input_ids"].shape[-1]]
-      s2 = [inputs["pixel_values"].size(0)]
-      print(f"rank:{dist.get_rank()}, inputs: {sum_bytes}, source_name: {source_name}, s1={s1}, s2={s2}, max={max_bytes}, f1={balance.llm_flops(s1)}, f2={balance.vit_flops(s2)}")
       if len(buffer) == buffer_size:
         raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
         raw_image_len = [data["pixel_values"].size(0) for data in buffer]
@@ -3749,7 +3731,6 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
         selected_llm = [raw_input_ids[i] for i in selected_index]
         selected_vit = [raw_image_len[i] for i in selected_index]
         
-        # print(f"[rank={dist.get_rank()}] llm={selected_llm} vit={selected_vit}, llm_flops={best[0]}, vit_flops={best[1]}, find_sub={t3-t2}, gather1={t4-t3}, balance={t5-t4}, gather2={t6-t5}, other={t7-t6}")
         inputs = [buffer[idx] for idx in selected_index]
         data_source = [source_list[idx] for idx in selected_index]
         self._balance_buf.put((inputs, data_source, step_info))
