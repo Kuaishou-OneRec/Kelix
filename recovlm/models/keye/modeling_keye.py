@@ -2840,6 +2840,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 or self.rope_deltas is None
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
             ):
+                print(3333313111, position_ids)
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
@@ -2850,6 +2851,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 self.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
+                print(4444555544, position_ids)
                 batch_size, seq_length, _ = inputs_embeds.shape
                 delta = (
                     (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
