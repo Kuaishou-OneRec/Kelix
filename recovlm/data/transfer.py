@@ -60,22 +60,26 @@ def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[st
     
     # 读取元数据
     num_tensors = struct.unpack(">I", buffer[ptr:ptr+4])[0]
+    print(f"rank={dist.get_rank()}, num_tensors={num_tensors}")
     ptr += 4
     
     tensors = []
     names = []
     
-    for _ in range(num_tensors):
+    for N in range(num_tensors):
         # 读取名称
         name_len = struct.unpack(">I", buffer[ptr:ptr+4])[0]
+        print(f"rank={dist.get_rank()}, name_len={name_len}")
         ptr += 4
         name = buffer[ptr:ptr+name_len].decode('utf-8')
+        print(f"rank={dist.get_rank()}, name={name}")
         ptr += name_len
         
         # 读取数据类型
         dtype_len = struct.unpack(">I", buffer[ptr:ptr+4])[0]
         ptr += 4
         dtype = buffer[ptr:ptr+dtype_len].decode('utf-8')
+        print(f"rank={dist.get_rank()}, dtype={dtype}")
         ptr += dtype_len
         
         # 读取形状
@@ -84,6 +88,7 @@ def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[st
         shape = struct.unpack(f">{shape_len}I", buffer[ptr:ptr+4*shape_len])
         ptr += 4 * shape_len
         shape = tuple(shape)
+        print(f"rank={dist.get_rank()}, shape={shape}")
         
         # 读取数据长度
         data_len = struct.unpack(">Q", buffer[ptr:ptr+8])[0]
@@ -95,6 +100,7 @@ def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[st
         
         # 创建张量
         tensor = torch.frombuffer(tensor_data, dtype=eval(dtype)).reshape(shape)
+        print(f"rank={dist.get_rank()}, tensor={tensor}")
         tensors.append(tensor)
         names.append(name)
     
@@ -170,6 +176,7 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
                 break  # 数据不足，退出
             
             group_size = struct.unpack(">Q", recv_buffer[ptr:ptr+8])[0]
+            print(f"rank={rank}, group_size: {group_size}")
             
             # 检查缓冲区是否包含完整的组
             if ptr + 8 + group_size > len(recv_buffer):
@@ -181,6 +188,7 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
             
             # 反序列化
             tensors, names = deserialize_tensor_group(group_data)
+            print(f"rank={rank}, parsed_names: {names}")
             group = []
             sample = {}
             for name, t in zip(names, tensors):
