@@ -106,7 +106,6 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
         raise ValueError(f"Unrecognized image input, support local path, http url, base64 and PIL.Image, got {image}")
     image = image_obj.convert("RGB")
     if size_factor is None: 
-        print("do not resize image", image)
         return image
 
     ## resize
