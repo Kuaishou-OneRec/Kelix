@@ -3737,7 +3737,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
             max_bytes = sum_bytes
         s1 = [inputs["input_ids"].shape[-1]]
         s2 = [inputs["pixel_values"].size(0)]
-        print(f"inputs: {sum_bytes}, source_name: {source_name}, s1={s1}, s2={s2}, max={max_bytes}, f1={llm_flops(s1)}, f2={vit_flops(s2)}")
+        print(f"inputs: {sum_bytes}, source_name: {source_name}, s1={s1}, s2={s2}, max={max_bytes}, f1={balance.llm_flops(s1)}, f2={balance.vit_flops(s2)}")
       if len(buffer) == buffer_size:
         raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
         raw_image_len = [data["pixel_values"].size(0) for data in buffer]
