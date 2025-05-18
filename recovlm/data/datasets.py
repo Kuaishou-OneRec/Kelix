@@ -3699,7 +3699,9 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     pivot = "__ds__"
     for gid, size_list in enumerate(all_groups):
       v, scheme = balance.calculate_transfer_scheme(size_list)
-      self_r = size_list[rank]
+      if self.rank == 0:
+        print(f"gid={gid}, v={v}, scheme={schem}")
+      self_r = size_list[self.rank]
       if v == 0:
         continue
       begin = 0
