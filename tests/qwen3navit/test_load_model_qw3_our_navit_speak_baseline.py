@@ -236,8 +236,7 @@ def make_inputs(a,b):
     text = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=False
     )
-    image_inputs, video_inputs = process_vision_info(messages, #image_factor=None
-                                                     )
+    image_inputs, video_inputs = process_vision_info(messages, image_factor=None)
     print(image_inputs, video_inputs)
     inputs = processor(
         text=[text],
