@@ -75,7 +75,7 @@ def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[st
         ptr += data_len
         
         # 转换为张量
-        tensor = torch.frombuffer(tensor_data, dtype=getattr(torch, dtype)).reshape(shape)
+        tensor = torch.frombuffer(tensor_data, dtype=eval(dtype)).reshape(shape)
         tensors.append(tensor)
         names.append(name)
     
@@ -129,6 +129,7 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
     recv_buffer = torch.zeros(sum(recv_counts), dtype=torch.uint8)
     
     print(f"rank={rank}, recv:{recv_buffer.shape}, {recv_counts}, send:{send_buffer.shape}, {send_counts}")
+    num_recv = sum([recv > 0 for recv in recv_counts])
     # 执行all_to_all操作
     dist.all_to_all_single(
         recv_buffer,
@@ -151,7 +152,7 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
             
             # 检查缓冲区是否包含完整的组
             if ptr + 8 + group_size > len(recv_buffer):
-                print(f"数据不完整：期望大小 {ptr + 8 + group_size}，实际大小 {len(recv_buffer)}")
+                print(f"inconsistent data: expect_size={ptr + 8 + group_size}, got={len(recv_buffer)}")
                 break
             
             # 提取组数据
@@ -176,7 +177,7 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
             ptr += 8 + group_size
             
         except Exception as e:
-            print(f"解析数据失败: {e}")
+            print(f"deserialized failed: rank={rank}, scheme={transfer_scheme}, {e}")
             ptr += 8  # 跳过组大小字段，避免死循环
             break
     
