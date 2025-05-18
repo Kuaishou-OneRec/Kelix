@@ -107,7 +107,8 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
     image = image_obj.convert("RGB")
 
     # no resize, 这个脚本的resize factor写死了28。 qwen走这支没问题（只会resize一次），如果是siglip走这个resize，可能会损失分辨率。
-    # 每次resize都是向下resize: math.floor(number / factor)，siglip会resize两次，损失分辨率。
+    # 每次resize都是向下resize: math.floor(number / factor) * factor，siglip会resize两次，损失分辨率。
+    # 比如70 -> 56 -> 32，会损失一半的分辨率。
     if size_factor is None: 
         return image
 
