@@ -1,43 +1,17 @@
 
-from typing import Dict, Any, Union, Optional
 from recovlm.utils.ds_utils import format_dict_or_list
-
 from PIL import Image, ImageDraw
-
 import torch
-import torch.nn as nn
-import torch.distributed as dist
-import torch.nn.functional as F
-import numpy as np
-
-import os
 import torch
 
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
 from recovlm.training.checkpoint import load_hf_checkpoint
-import itertools
-from recovlm.utils.ds_utils import print_input_info
+
 from recovlm.utils.qwen_vl_utils import process_vision_info
-
-from typing import Dict, Any, Union, Optional
-
-import os
-
-import itertools
-import contextlib
-from functools import partial
-
-
 from PIL import Image
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import numpy as np
 from recovlm.training.checkpoint import load_hf_checkpoint
-
-
 from recovlm.training.common import set_default_dtype
-
 from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration
 from recovlm.models.keye.processing_keye import KeyeProcessor
 

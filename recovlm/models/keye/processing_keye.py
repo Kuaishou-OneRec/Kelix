@@ -30,7 +30,7 @@ from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import ImageInput, VideoInput
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
-from .image_processing_keye import KeyeImageProcessor
+from .image_processing_keye import SiglipImageProcessor
 import torch
 
 class KeyeVideosProcessorKwargs(VideosKwargs, total=False):
@@ -49,10 +49,10 @@ class KeyeProcessorKwargs(ProcessingKwargs, total=False):
 
 class KeyeProcessor(ProcessorMixin):
     r"""
-    [`KeyeProcessor`] offers all the functionalities of [`KeyeImageProcessor`] and [`Qwen2TokenizerFast`]. See the
+    [`KeyeProcessor`] offers all the functionalities of [`SiglipImageProcessor`] and [`Qwen2TokenizerFast`]. See the
     [`~KeyeProcessor.__call__`] and [`~KeyeProcessor.decode`] for more information.
     Args:
-        image_processor ([`KeyeImageProcessor`], *optional*):
+        image_processor ([`SiglipImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -70,7 +70,7 @@ class KeyeProcessor(ProcessorMixin):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        self.image_processor = KeyeImageProcessor()
+        self.image_processor = SiglipImageProcessor()
 
     def __call__(
         self,
@@ -83,7 +83,7 @@ class KeyeProcessor(ProcessorMixin):
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
         and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
         the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwrags` arguments to
-        KeyeImageProcessor's [`~KeyeImageProcessor.__call__`] if `vision_infos` is not `None`.
+        SiglipImageProcessor's [`~SiglipImageProcessor.__call__`] if `vision_infos` is not `None`.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
