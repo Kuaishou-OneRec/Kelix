@@ -122,17 +122,18 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
     send_buffer = []
     for target in range(world_size):
         send_buffer.extend(send_data[target])
-    send_buffer = torch.tensor(list(b''.join(send_buffer)), dtype=torch.uint8)
+    send_buffer = torch.frombuffer(b''.join(send_buffer), dtype=torch.uint8)
     
     # 构建接收缓冲区
     recv_buffer = torch.zeros(sum(recv_counts), dtype=torch.uint8)
     
+    print(f"rank={rank}, recv:{recv_buffer.shape}, {recv_counts}, send:{send_buffer.shape}, {send_counts}")
     # 执行all_to_all操作
     dist.all_to_all_single(
         recv_buffer,
         send_buffer,
-        send_counts=send_counts,
-        recv_counts=recv_counts,
+        recv_counts,
+        send_counts,
         async_op=False
     )
     
