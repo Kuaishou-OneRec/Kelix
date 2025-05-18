@@ -10,7 +10,7 @@ from recovlm.utils.common import shell_hdfs_ls
 from transformers import AutoTokenizer, AutoProcessor
 from recovlm.data.datasets import *
 from torch.utils.data import DataLoader
-from recovlm.data.datasets import ChatCompletionDataset, ImageTextPairDatasetWithPacking, ChatCompletionVisionDataset, ParquetDataset, ChatCompletionVisionParquetDataset, ChatCompletionVisionDpoParquetDataset
+from recovlm.data.datasets import ChatCompletionDataset, ImageTextPairDatasetWithPacking, ChatCompletionVisionDataset, ParquetDataset, ChatCompletionVisionDpoParquetDataset
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
     get_optimizer_grouped_parameters, dist_reduce_dict, Timer, heart_beat
