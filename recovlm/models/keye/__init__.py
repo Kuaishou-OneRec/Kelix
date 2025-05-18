@@ -17,8 +17,8 @@ from transformers.utils import OptionalDependencyNotAvailable, _LazyModule, is_t
 
 
 _import_structure = {
-    "configuration_qwen2_5_vl": ["Qwen2_5_VLConfig"],
-    "processing_qwen2_5_vl": ["Qwen2_5_VLProcessor"],
+    "configuration_keye": ["KeyeConfig"],
+    "processing_keye": ["KeyeProcessor"],
 }
 
 
@@ -28,10 +28,10 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_qwen2_5_vl"] = [
-        "Qwen2_5_VLForConditionalGeneration",
-        "Qwen2_5_VLModel",
-        "Qwen2_5_VLPreTrainedModel",
+    _import_structure["modeling_keye"] = [
+        "KeyeForConditionalGeneration",
+        "SiglipVisionModel",
+        "Qwen3PreTrainedModel",
     ]
 
 try:
@@ -40,12 +40,12 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["image_processing_qwen2_5_vl"] = ["Qwen2_5_VLImageProcessor"]
+    _import_structure["image_processing_keye"] = ["SiglipImageProcessor"]
 
 
 if TYPE_CHECKING:
-    from .configuration_qwen2_5_vl import Qwen2_5_VLConfig
-    from .processing_qwen2_5_vl import Qwen2_5_VLProcessor
+    from .configuration_keye import KeyeConfig
+    from .processing_keye import KeyeProcessor
 
     try:
         if not is_torch_available():
@@ -53,10 +53,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_qwen2_5_vl import (
-            Qwen2_5_VLForConditionalGeneration,
-            Qwen2_5_VLModel,
-            Qwen2_5_VLPreTrainedModel,
+        from .modeling_keye import (
+            KeyeForConditionalGeneration,
+            SiglipVisionModel,
+            Qwen3PreTrainedModel,
         )
 
     try:
@@ -65,7 +65,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_qwen2_5_vl import Qwen2_5_VLImageProcessor
+        from .image_processing_keye import SiglipImageProcessor
 
 
 else:
