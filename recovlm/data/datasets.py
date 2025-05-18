@@ -784,9 +784,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.multiple_of = multiple_of
     self.shuffle_size = shuffle_size
     self.shuffle_initial_size = shuffle_initial_size
-    print(3243232111)
     self.dataset, self.total_samples = self._build_source_dataset(sources)
-    print(99999)
 
     # for data_source monitor
     self.source_sample_cnt = {}
@@ -2890,7 +2888,7 @@ class ParquetDataset(IterableDataset):
             all_rows.append(df)
 
         all_rows = pd.concat(all_rows, ignore_index=True)
-        # all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+        all_rows = all_rows.sample(frac=1).reset_index(drop=True)
 
         rows_processed = 0
 
