@@ -43,8 +43,7 @@ from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
 from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
-from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration_siglip,Qwen2_5_VLForConditionalGeneration
-from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration_siglip,Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration_siglip_navitfrom recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
 from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
 from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration, KeyeDecoderLayer
 from recovlm.models.keye.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer
@@ -693,7 +692,6 @@ def train():
 
 
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    print(args.model_class)
     model = eval(args.model_class).from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",use_cache = False, ignore_mismatched_sizes=True
     )
@@ -939,11 +937,9 @@ def train():
   acc_num_samples = 0
   acc_valid_num_tokens = 0
   acc_num_image_tokens = 0
-  acc_num_images = 0
   total_num_image_tokens = 0
   mfu_stats = MFUStats(args)
 
-  num_images = 0
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
@@ -1030,7 +1026,6 @@ def train():
       acc_num_tokens += num_tokens
       acc_valid_num_tokens += num_valid_tokens
       acc_num_image_tokens += num_image_tokens
-      acc_num_images += num_images
 
       ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
 
@@ -1087,8 +1082,6 @@ def train():
         local_sample_idx = get_local_sequence(sample_idx).squeeze()
 
         unique_sample_idx = local_sample_idx.unique()
-        # mage_tokens2 = (input_ids == 151667) or (input_ids == 151655)
-        tokens_by_sample = []
         for s_idx in unique_sample_idx:
           if s_idx < 0:
             continue
@@ -1097,8 +1090,7 @@ def train():
 
           key = data_source[int(s_idx.item())]
           batch_data_source_loss[key] += sum_loss.item()
-          tokens_by_sample.append(mask.sum().item())
-          batch_data_source_tokens[key] += tokens_by_sample[-1]
+          batch_data_source_tokens[key] += mask.sum().item()
           valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
         ticker.tick("monitor_datasource_loss")
 
@@ -1260,11 +1252,9 @@ def train():
         acc_num_tokens = 0
         acc_valid_num_tokens = 0
         acc_num_image_tokens = 0
-        acc_num_images = 0
         batch_data_source_loss = collections.defaultdict(float)
         batch_data_source_tokens = collections.defaultdict(int)
         valid_data_source_tokens = collections.defaultdict(int)
-        tokens_for_mfu = defaultdict(int)
 
 
       if global_step % args.save_checkpoint_per_step == 0 and \
