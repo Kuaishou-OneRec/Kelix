@@ -105,6 +105,10 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
     if image_obj is None:
         raise ValueError(f"Unrecognized image input, support local path, http url, base64 and PIL.Image, got {image}")
     image = image_obj.convert("RGB")
+    if size_factor is None: 
+        print("do not resize image", image)
+        return image
+
     ## resize
     if "resized_height" in ele and "resized_width" in ele:
         resized_height, resized_width = smart_resize(
@@ -283,6 +287,9 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR) -> torch.Tensor | l
     if isinstance(ele["video"], str) or isinstance(ele["video"], bytes): 
         video_reader_backend = get_video_reader_backend()
         video = VIDEO_READER_BACKENDS[video_reader_backend](ele)
+        if image_factor is None:
+            return None
+
         nframes, _, height, width = video.shape
 
         min_pixels = ele.get("min_pixels", VIDEO_MIN_PIXELS)
@@ -348,7 +355,7 @@ def extract_vision_info(conversations: list[dict] | list[list[dict]]) -> list[di
 
 
 def process_vision_info(
-    conversations: list[dict] | list[list[dict]] = None, vision_infos: list[dict] = None
+    conversations: list[dict] | list[list[dict]] = None, vision_infos: list[dict] = None, image_factor: int = IMAGE_FACTOR
 ) -> tuple[list[Image.Image] | None, list[torch.Tensor | list[Image.Image]] | None]:
     assert conversations is not None or vision_infos is not None
 
@@ -359,7 +366,7 @@ def process_vision_info(
     video_inputs = []
     for vision_info in vision_infos:
         if "image" in vision_info or "image_url" in vision_info:
-            image_inputs.append(fetch_image(vision_info))
+            image_inputs.append(fetch_image(vision_info, image_factor))
         elif "video" in vision_info:
             if isinstance(vision_info["video"], str) and "480p_60s_4fps_v2" in vision_info["video"]:
                 path = vision_info["video"]
@@ -368,7 +375,7 @@ def process_vision_info(
                     post = str(int(pid_str[-4:]))
                     path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
                 vision_info["video"] = path
-            video_inputs.append(fetch_video(vision_info))
+            video_inputs.append(fetch_video(vision_info, image_factor))
 
         else:
             raise ValueError("image, image_url or video should in content.")
@@ -377,3 +384,5 @@ def process_vision_info(
     if len(video_inputs) == 0:
         video_inputs = None
     return image_inputs, video_inputs
+
+
