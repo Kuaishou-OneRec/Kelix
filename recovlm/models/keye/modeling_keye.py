@@ -44,12 +44,13 @@ from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from transformers.modeling_utils import PreTrainedModel
 from transformers.activations import GELUActivation, ACT2FN, PytorchGELUTanh
 from transformers.utils import (
+    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
+    # can_return_tuple,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_keye import KeyeConfig, KeyeVisionConfig
 if is_flash_attn_2_available():
