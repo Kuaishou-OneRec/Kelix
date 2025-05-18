@@ -328,11 +328,11 @@ def test_InternVLParquetDataset():
     dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/pt/0421/stage2_ccl_v3_0425/_prepared/0/prep-0-5f8467a5aa2c472d9c31bbb81356540f.parquet"]
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v3/rank-11-4ef695ac-2336-11f0-b166-946daee9184a.parquet
     dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v3/rank-11-4ef695ac-2336-11f0-b166-946daee9184a.parquet","viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-code/train_v1/rank-12-2a107142-2438-11f0-ba28-946daee91688.parquet"][1:]
-    
+    dataset_config["cut_to_pad"] = True
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
 
-    dataset = InternVLChatCompletionVisionParquetDataset(cut_to_pad=True, **dataset_config)
+    dataset = InternVLChatCompletionVisionParquetDataset(**dataset_config)
     ans = 0
     def collate_fn(samples):
         return samples[0]
@@ -371,13 +371,14 @@ def test_keye_datasets():
     dataset_config["shuffle_seed"] = int(time.time())
     dataset_config["max_length"] = 16000
     dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/chuchenglong/pt/0421/stage2_ccl_v3_0425/_prepared/0/prep-0-5f8467a5aa2c472d9c31bbb81356540f.parquet"]
+    dataset_config["cut_to_pad"] = True
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v3/rank-11-4ef695ac-2336-11f0-b166-946daee9184a.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-text-code-block/train_v3/rank-11-4ef695ac-2336-11f0-b166-946daee9184a.parquet","viewfs://hadoop-lt-cluster/home/reco_wl/mpi/lingzhixin/recovlm/tools/data_helpers/scripts/convert_megamath/megamath-code/train_v1/rank-12-2a107142-2438-11f0-ba28-946daee91688.parquet"][1:]
     
     # viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet
     # dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/luoxinchen/recovlm_dataset_stage2/Wanjuan_reconstruct/rank-0-0098b494-d499-11ef-9d06-946daee91052.parquet"]
 
-    dataset_keyi = ChatCompletionVisionParquetDataset_keye(cut_to_pad=True, **dataset_config)
+    dataset_keyi = ChatCompletionVisionParquetDataset_keye(**dataset_config)
 
     def collate_fn(samples):
         return samples[0]
@@ -397,7 +398,7 @@ def test_keye_datasets():
         f.write(print_input_info(batch, return_str=True))
 
     print("=" * 20)
-    dataset_navit = ChatCompletionVisionParquetDataset_navit(cut_to_pad=True, **dataset_config)
+    dataset_navit = ChatCompletionVisionParquetDataset_navit(**dataset_config)
 
     dataset_navit = DataLoader(
         dataset=dataset_navit,
