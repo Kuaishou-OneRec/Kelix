@@ -187,5 +187,5 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
 
 
 def convert_data_source(name):
-    decode = name.encode("utf-8")
-    return torch.tensor(list(decode), dtype=torch.uint8)
+    buf = name.encode("ascii")
+    return torch.frombuffer(buf, dtype=torch.uint8)

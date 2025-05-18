@@ -3772,7 +3772,9 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
           else:
             data_source = []
             for sample in selected:
-              data_source.append(selected.pop("__ds__"))
+              ds = sample.pop("__ds__")
+              ds = ds.numpy().tobytes().decode("ascii")
+              data_source.append(ds)
             self._balance_buf.put((selected, data_source, [0, 0, 0]))
         for sends in send_out:
           for idx in sends:
