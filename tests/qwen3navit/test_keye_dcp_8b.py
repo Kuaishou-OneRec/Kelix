@@ -40,7 +40,7 @@ from recovlm.training.common import set_default_dtype
 
 from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration
 from recovlm.models.keye.processing_keye import KeyeProcessor
-from recovlm.utils.qwen72b_dcp_converter import dcp_to_torch_save
+from recovlm.utils.custom_dcp_converter import convert_v2
 
 
 def set_seed(seed: int):
@@ -94,8 +94,12 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-2B-demo/"
-processor = KeyeProcessor.from_pretrained(MODEL_DIR)
+BASE_MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/"
+MODEL_DIR = convert_v2(
+    '/llm_reco/lingzhixin/exps/qwen3navit/debug_qwen3navit/0.0.1/8B',
+    'step27000',
+    BASE_MODEL_DIR)
+processor = KeyeProcessor.from_pretrained(BASE_MODEL_DIR)
 tokenizer = processor.tokenizer
 
 
