@@ -40,8 +40,7 @@ from recovlm.training.common import set_default_dtype
 
 from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration
 from recovlm.models.keye.processing_keye import KeyeProcessor
-
-
+from recovlm.utils.qwen72b_dcp_converter import dcp_to_torch_save
 
 
 def set_seed(seed: int):
@@ -95,7 +94,7 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-2B-scratch/"
+MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-2B-demo/"
 processor = KeyeProcessor.from_pretrained(MODEL_DIR)
 tokenizer = processor.tokenizer
 
@@ -127,7 +126,7 @@ def make_inputs(a,b):
     return messages, inputs
 
 
-from recovlm.training.distributed import load_from_full_model_state_dict_local
+from recovlm.training.distributed import load_from_full_model_state_dict
 
 
 logits_all = []
@@ -142,10 +141,10 @@ if 1:
                 ignore_mismatched_sizes=True
             )
 
-            load_from_full_model_state_dict_local(model, load_hf_checkpoint(MODEL_DIR),
-                                            allow_random_init_params="mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias"
-                                            )
-            model = model.cuda()
+            # load_from_full_model_state_dict(model, load_hf_checkpoint(MODEL_DIR),
+            #                                 allow_random_init_params="mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias"
+            #                                 )
+            # model = model.cuda()
             messages, inputs = make_inputs(100,100)
             for k in inputs: inputs[k] = inputs[k].cuda()
 
