@@ -247,7 +247,7 @@ def test_ChatCompletionVisionParquetDataset():
     dataset_config.pop("name")
     dataset_config["num_workers"] = 8
     dataset_config["shuffle_seed"] = int(time.time())
-
+    dataset_config["n_local_shuffle_files_window"] = 1
     dataset_config["sources"] = ["viewfs://hadoop-lt-cluster/home/reco_wl/mpi/huqigen/recovlm_dataset/wenjuan_sft/0210_11w_cot_v2/photo_0210_11w_sft_data-train-00000-of-02048.parquet"]
 
     dataset = ChatCompletionVisionDpoParquetDataset(**dataset_config)
@@ -360,10 +360,13 @@ def test_keye_datasets():
     torch.manual_seed(0)
     np.random.seed(0)
     # processor = AutoProcessor.from_pretrained("/llm_reco_ssd/zhouyang12/models/InternVL3-2B", trust_remote_code=True)
-    path = "/llm_reco/chuchenglong/work_space/recovlm/examples/vlm/configs/internvl/2b_internvl_stage2.json"
+    path = "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/examples/vlm/qwen3navit/debug_qwen3navit_8B256_nols.json"
     with open(path, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
     dataset_config.pop("name")
+
+    # n_local_shuffle_files_window=3
+    dataset_config["n_local_shuffle_files_window"] = 1
     dataset_config["num_workers"] = 1
     dataset_config["shuffle_seed"] = int(time.time())
     dataset_config["max_length"] = 16000
