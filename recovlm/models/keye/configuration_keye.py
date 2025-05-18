@@ -213,6 +213,11 @@ class KeyeConfig(PretrainedConfig):
         attention_dropout=0.0,
         vision_config=None,
         rope_scaling=None,
+        vision_start_token_id=151652,
+        vision_end_token_id=151653,
+        vision_token_id=151654,
+        image_token_id=151655,
+        video_token_id=151656,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -229,6 +234,11 @@ class KeyeConfig(PretrainedConfig):
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window
         self.max_window_layers = max_window_layers
+        self.vision_start_token_id = vision_start_token_id
+        self.vision_end_token_id = vision_end_token_id
+        self.vision_token_id = vision_token_id
+        self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
 
         # for backward compatibility
         if num_key_value_heads is None:
