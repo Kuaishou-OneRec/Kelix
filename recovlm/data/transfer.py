@@ -122,7 +122,8 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
     send_buffer = []
     for target in range(world_size):
         send_buffer.extend(send_data[target])
-    send_buffer = torch.frombuffer(b''.join(send_buffer), dtype=torch.uint8)
+    buf = b''.join(send_buffer)
+    send_buffer = torch.empty(0, dtype=torch.uint8) if len(buf) == 0 else torch.frombuffer(buf, dtype=torch.uint8)
     
     # 构建接收缓冲区
     recv_buffer = torch.zeros(sum(recv_counts), dtype=torch.uint8)
