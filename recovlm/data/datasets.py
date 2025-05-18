@@ -3724,6 +3724,8 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       inputs, source_name = self.processed_buffer.get()
       buffer.append(inputs)
       source_list.append(source_name)
+      if dist.get_rank() == 0:
+        print("inputs: {inputs}, source_name: {source_name}")
       if len(buffer) == buffer_size:
         raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
         raw_image_len = [data["pixel_values"].size(0) for data in buffer]
