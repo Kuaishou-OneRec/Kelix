@@ -3733,6 +3733,10 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       source_list.append(source_name)
       if dist.get_rank() == 0:
         sum_bytes, _ = get_bytes(inputs)
+        if sum_bytes >= 1500000:
+            for k, v in inputs.items():
+                if isinstance(v, torch.Tensor):
+                    print(f"sample_info: {k} : {v.shape}, {v.dtype}")
         if max_bytes < sum_bytes:
             max_bytes = sum_bytes
         s1 = [inputs["input_ids"].shape[-1]]
