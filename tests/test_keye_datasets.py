@@ -396,11 +396,11 @@ def test_keye_datasets():
     
     with open("./test_keye_datasets_keye.txt", "w") as f:
         f.write(print_input_info(batch, return_str=True))
-        f.write(str(batch["input_ids"])[:10000], str(batch["input_ids"])[-10000:])
-        f.write(str(batch["position_ids"])[:10000], str(batch["input_ids"])[-10000:])
-        f.write(str(batch["pixel_values"])[:10000], str(batch["input_ids"])[-10000:])
-        f.write(str(batch["cu_seqlens"])[:10000], str(batch["input_ids"])[-10000:])
-        
+        f.write(str(batch["input_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
+        f.write(str(batch["position_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
+        f.write(str(batch["pixel_values"])[:10000] + '\n' +str(batch["input_ids"])[-10000:])
+        f.write(str(batch["cu_seqlens"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
+
     print("=" * 20)
     dataset_navit = ChatCompletionVisionParquetDataset_navit(**dataset_config)
 
@@ -417,10 +417,10 @@ def test_keye_datasets():
 
     with open("./test_keye_datasets_keye.txt", "w") as f:
         f.write(print_input_info(batch, return_str=True))
-        f.write(str(batch["input_ids"])[:10000], str(batch["input_ids"])[-10000:])
-        f.write(str(batch["position_ids"])[:10000], str(batch["input_ids"])[-10000:])
-        f.write(str(batch["pixel_values"])[:10000], str(batch["input_ids"])[-10000:])
-        f.write(str(batch["cu_seqlens"])[:10000], str(batch["input_ids"])[-10000:])
+        f.write(str(batch["input_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
+        f.write(str(batch["position_ids"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
+        f.write(str(batch["pixel_values"])[:10000] + '\n' +str(batch["input_ids"])[-10000:])
+        f.write(str(batch["cu_seqlens"])[:10000] + '\n' + str(batch["input_ids"])[-10000:])
 
 
 
