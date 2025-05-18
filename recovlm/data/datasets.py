@@ -61,7 +61,7 @@ import glob
 from recovlm.utils.common import shell_hdfs_ls, load_parquet_file
 from .templates import get_template
 from .prompts import PromptLoader
-from recovlm.data import balance
+from recovlm.data import balance, transfer
 from recovlm.services.clients import PidInfoClient
 
 
