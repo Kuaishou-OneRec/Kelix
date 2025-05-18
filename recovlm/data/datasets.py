@@ -1024,7 +1024,10 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # append EOS token
     text += "<|endoftext|>"
-    image_inputs, video_inputs = process_vision_info(messages)
+
+    # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
+    # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
+    image_inputs, video_inputs = process_vision_info(messages, **self.process_vision_info_args)
     inputs = self.processor(
         text=text,
         images=image_inputs,
