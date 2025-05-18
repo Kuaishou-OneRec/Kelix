@@ -93,7 +93,7 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
             continue
         
         batch_list = batch_data[receiver]
-        assert len(batch_list) == count
+        assert len(batch_list) == count, f"{sender}, {receiver}, {count}, {batch_list}"
         for batch in batch_list:
             batch_tensors = []
             batch_names = []
