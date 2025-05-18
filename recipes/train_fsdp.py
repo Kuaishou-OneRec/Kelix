@@ -520,7 +520,7 @@ class TokenStats:
       # 收集所有rank的image tokens统计信息
       world_size = dist.get_world_size()
       rank = dist.get_rank()
-      print(23344444, num_image_tokens)
+
       input_tensor = torch.tensor([num_image_tokens], dtype=torch.long).cuda()
       all_image_tokens = list(torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) if rank == 0 else None
       dist.gather(input_tensor, gather_list=all_image_tokens, dst=0)
