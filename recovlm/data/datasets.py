@@ -941,9 +941,9 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
     # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
-    image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos, **self.process_vision_info_args)
+    image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos, **self.process_vision_info_args) # 20 -> 28
     inputs = self.processor( # sig: 32
-        text=text,
+        text=text, # 28 -> 32
         images=image_inputs,
         videos=video_inputs,
         return_tensors="pt"
@@ -1308,7 +1308,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       "position_ids": packed_position_ids,
       "loss_mask": packed_loss_mask,
       "pixel_values": packed_pixel_values,
-      "image_grid_thw": packed_image_gird_thw,
+      "image_grid_thw": packed_image_gird_thw, # 
       "pixel_values_videos": packed_pixel_values_videos,
       "video_grid_thw": packed_video_grid_thw,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
