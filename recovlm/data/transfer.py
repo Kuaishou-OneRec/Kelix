@@ -111,7 +111,6 @@ def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[st
             tensor = torch.frombuffer(tensor_data, dtype=eval(dtype)).reshape(shape)
         else:
             tensor = torch.empty(0, dtype=eval(dtype)).reshape(shape)
-        print(f"rank={dist.get_rank()}, tensor={tensor}")
         tensors.append(tensor)
         names.append(name)
     
@@ -214,7 +213,7 @@ def exchange_batch_data(transfer_scheme, batch_data, pivot="__ds__"):
                 else:
                     sample[name] = t
 
-            if samlpe:
+            if sample:
                 group.append(sample)
             for s, ds in zip(group, ds_list):
                 s[pivot] = ds
