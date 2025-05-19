@@ -2,7 +2,7 @@
 
 hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=4  # 每个任务使用4个进程
+np=1  # Changed from 4 to 1 to match available slots
 export HOSTFILE=/etc/mpi/hostfile
 
 # 设置输出文件路径
@@ -51,20 +51,11 @@ COMMON_SCRIPT_PARAMS="--tp 4 \
     --max_frames 10 \
     --num_generations 1"
 
-# 运行第一个MPI任务 (使用前4张GPU)
-CUDA_VISIBLE_DEVICES=0,1,2,3 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
+# 运行MPI任务 (使用所有可用GPU)
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
     python3 recovlm/benchmark/batch_infer_msy.py \
     $COMMON_SCRIPT_PARAMS \
-    --global_rank 0 &
-
-# 运行第二个MPI任务 (使用后4张GPU)
-CUDA_VISIBLE_DEVICES=4,5,6,7 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
-    python3 recovlm/benchmark/batch_infer_msy.py \
-    $COMMON_SCRIPT_PARAMS \
-    --global_rank 1 &
-
-# 等待所有后台任务完成
-wait
+    --global_rank 0
 
 # 合并最终结果
 cat ${OUTPUT_PATH}.global* > ${OUTPUT_PATH}
