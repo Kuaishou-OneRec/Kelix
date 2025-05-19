@@ -13,7 +13,7 @@ export PATH=$CUDA_HOME/bin:$PATH
 export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 
 # 设置输出文件路径
-OUTPUT_PATH="msy_infer.jsonl"
+OUTPUT_PATH="msy_infer"
 
 # 环境变量设置
 KWS_SERVICE_REGION=HB2

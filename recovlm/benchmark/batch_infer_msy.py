@@ -113,7 +113,7 @@ flags.DEFINE_integer(
 )
 
 flags.DEFINE_string(
-  "output_path", "msy_test.jsonl", "The path of file to write results." 
+  "output_path", "msy_test", "The path of file to write results." 
 )
 
 flags.DEFINE_integer(
@@ -251,7 +251,7 @@ def merge_results(local_results_path, comm, rank, output_path, global_rank, data
             logging.info(f"Average PPL across all ranks: {total_ppl_sum:.4f}")
             
             # 写入合并后的结果
-            final_output_path = f"{output_path}_{dataset_name}.global{global_rank}"
+            final_output_path = f"{output_path}_{dataset_name}.jsonl"
             with open(final_output_path, 'w', encoding='utf-8') as f:
                 # 首先写入平均PPL
                 f.write(json.dumps({"average_ppl": total_ppl_sum, "total_samples": total_count}, ensure_ascii=False) + "\n")
@@ -370,22 +370,18 @@ def main(_):
         # "infoVQA":"/llm_reco_ssd/luoxinchen/dataset/infoVQA/human_download/infographicsvqa_qas/reconstruct_val.json",
         # "RealWorldQA":"/llm_reco_ssd/luoxinchen/dataset/RealWorldQA/RealWorldQA/data/merge/test-00000-of-00001.parquet"
     }
-    
+    with set_default_dtype(torch.bfloat16):
+        llm = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
+            FLAGS.model_name_or_path,
+            _attn_implementation = 'flash_attention_2',
+            use_cache=False
+        )
     # Split dataset for this MPI rank
     for dataset_name, dataset_path in datasetlist.items():
         dataset = MsyInferDataset(dataset_name=dataset_name, parquet_path=dataset_path, model_name_or_path=FLAGS.model_name_or_path, user='mpi')
         local_dataset = split_dataset(dataset, size, rank)
-        
-        
         # Create local results file for this rank using both local and global rank
-        local_output_path = f"{FLAGS.output_path}.rank{rank}.global{FLAGS.global_rank}"
-        with set_default_dtype(torch.bfloat16):
-            llm = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
-                FLAGS.model_name_or_path,
-                _attn_implementation = 'flash_attention_2',
-                use_cache=False
-            )
-
+        local_output_path = f"{FLAGS.output_path}_{dataset_name}.jsonl.rank{rank}.global{FLAGS.global_rank}"
 
         # Process local chunk of data
         with open(local_output_path, "w", encoding="utf-8") as f:
@@ -437,9 +433,9 @@ def main(_):
         merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank, dataset_name)
         if rank == 0:
             # Merge results from all processes
-            logging.info(f"Results being written to: {FLAGS.output_path}_{dataset_name}")
+            logging.info(f"Results being written to: {FLAGS.output_path}_{dataset_name}.jsonl")
             for r in range(size):
-                temp_file = f"{FLAGS.output_path}.rank{r}.global{FLAGS.global_rank}"
+                temp_file = f"{FLAGS.output_path}_{dataset_name}.jsonl.rank{r}.global{FLAGS.global_rank}"
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
 
