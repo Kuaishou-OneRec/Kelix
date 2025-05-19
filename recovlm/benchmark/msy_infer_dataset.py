@@ -182,6 +182,7 @@ class MsyInferDataset(ParquetDataset):
       for message in messages:
         if message["role"] == "assistant":
           assistant_responses.append(message["content"][0]["text"])
+      print(assistant_responses)
       start_pos_list = []
       for assistant_response in assistant_responses:
         print(assistant_response)
