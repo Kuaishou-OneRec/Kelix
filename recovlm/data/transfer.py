@@ -107,7 +107,10 @@ def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[st
         ptr += data_len
         
         # 创建张量
-        tensor = torch.frombuffer(tensor_data, dtype=eval(dtype)).reshape(shape)
+        if data_len > 0:
+            tensor = torch.frombuffer(tensor_data, dtype=eval(dtype)).reshape(shape)
+        else:
+            tensor = torch.empty(0, dtype=eval(dtype)).reshape(shape)
         print(f"rank={dist.get_rank()}, tensor={tensor}")
         tensors.append(tensor)
         names.append(name)
