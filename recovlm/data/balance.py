@@ -47,7 +47,7 @@ def greedy_subsets_nearst_sum(nums, N):
     return result_index
     
 
-def greedy_subsets_without_replacement(nums, N):
+def greedy_subsets_without_replacement(nums, N, m):
     ordered = sorted([(num, idx) for idx, num in enumerate(nums)], key=lambda x: x[0])
     values = [x[0] for x in ordered]
     result = []
@@ -84,7 +84,7 @@ def greedy_subsets_without_replacement(nums, N):
             result.append(current)
     
     # sorted_result = sorted(result, key=lambda x: -sum(v[0] for v in x))
-    sorted_result = sorted(result, key=lambda x: -llm_flops([v[0] for v in x]))
+    sorted_result = sorted(result, key=lambda x: -m.llm_flops([v[0] for v in x]))
     result_index = [[v[1] for v in res] for res in sorted_result]
     return result_index
 

@@ -3638,7 +3638,7 @@ class BalanceParquetDataset(IterableDataset):
     t2 = time.perf_counter()
     image_pad_len = getattr(self.input, "image_pad_len", 0)
     candidates = balance.greedy_subsets_without_replacement(
-      raw_input_ids, self.input.max_length - image_pad_len)
+      raw_input_ids, self.input.max_length - image_pad_len, self.fm)
     ids_list = [[raw_input_ids[i] for i in idx] for idx in candidates]
     seq_lens = [sum(ids) for ids in ids_list]
     filtered_num = sum(s > 20500 for s in seq_lens)
@@ -3761,7 +3761,7 @@ class BalanceParquetDataset(IterableDataset):
               ds = sample.pop("__ds__")
               data_source.append(ds)
             inputs = selected
-          stats = balance.exchange_batch_info(inputs, data_source)
+          stats = balance.exchange_batch_info(inputs, data_source, self.fm)
           if self.rank == 0:
             print(f"rank=0, step_stats={stats}")
           self._balance_buf.put((inputs, data_source, [stats[0], stats[1], stats[2]]))
