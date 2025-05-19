@@ -413,6 +413,7 @@ def main(_):
                     count += 1
                     print('response_ppl:', response_ppl)
         print('==================================================')
+        total_ppl = float(total_ppl.cpu().numpy())
         print('total_ppl:', total_ppl, 'rank:', rank)
         result = {
             "total_ppl": total_ppl,
