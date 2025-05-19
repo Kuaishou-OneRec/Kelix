@@ -60,8 +60,8 @@ class ParquetDataset(IterableDataset):
                                     row_dict = {}
                                     for col, val in row.items():
                                         try:
-                                        if pd.isna(val):
-                                            continue
+                                            if pd.isna(val):
+                                                continue
                                         except Exception as e:
                                             print(f"Error processing row: {e}")
                                             print('msy--------------------------------------')
