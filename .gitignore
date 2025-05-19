@@ -30,7 +30,7 @@ hostfile
 *.swp
 *.xlsx
 *.png
-
+*.txt
 .git
 
 recovlm/benchmark/eval/tmp*

@@ -1188,10 +1188,15 @@ class ChatCompletionVisionDataset(IterableDataset):
                              packed_video_grid_thw: List[torch.Tensor],
                              packed_sample_idx: List[torch.Tensor],
                              cu_seqlens: List[int],
-                             sample_idx: Optional[int] = None):
-    packable_length = self.max_length - cu_seqlens[-1]
-    if packable_length == 0: return
-    if self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
+                             sample_idx: Optional[int] = None,
+                             image_pad=False
+                             ):
+
+    if not image_pad:
+      packable_length = self.max_length - cu_seqlens[-1]
+      if packable_length == 0: return
+
+    if not image_pad and self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
       import copy
       inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
       inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
@@ -1266,7 +1271,9 @@ class ChatCompletionVisionDataset(IterableDataset):
                                 packed_video_grid_thw,
                                 packed_sample_idx,
                                 cu_seqlens,
-                                sample_idx=-1)
+                                sample_idx=-1,
+                                image_pad=True
+                                )
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
