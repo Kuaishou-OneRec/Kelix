@@ -3699,8 +3699,8 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     pivot = "__ds__"
     for gid, size_list in enumerate(all_groups):
       v, scheme = balance.calculate_transfer_scheme(size_list)
-      # if self.rank == 0:
-      print(f"rank={self.rank}, gid={gid}, v={v}, scheme={scheme}")
+      if self.rank == 0:
+        print(f"rank={self.rank}, gid={gid}, v={v}, scheme={scheme}")
       self_r = size_list[self.rank]
       if v == 0:
         continue
@@ -3773,7 +3773,6 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
             data_source = []
             for sample in selected:
               ds = sample.pop("__ds__")
-              ds = ds.numpy().tobytes().decode("ascii")
               data_source.append(ds)
             self._balance_buf.put((selected, data_source, [0, 0, 0]))
         for sends in send_out:
