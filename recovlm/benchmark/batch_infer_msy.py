@@ -397,7 +397,6 @@ def main(_):
                     total_ppl = 0
                     valid_positions = 0
                     start_pos, end_pos = answer_idx_list[0]
-                    print('start_pos:', start_pos, 'end_pos:', end_pos)
                     try:
                         shift_logits = logits[..., :-1, :].contiguous()
                         shift_labels = input_ids[..., 1:].contiguous()
