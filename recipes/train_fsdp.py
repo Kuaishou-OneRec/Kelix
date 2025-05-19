@@ -61,7 +61,7 @@ from recovlm.data.dataloaders import get_dataloader
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.utils.numa_bind import get_numa_bind_info
 from recovlm.losses import CrossEntropyLoss
-from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
+from recovlm.utils.common import set_random_seed, to_cuda, to_device, print_rank_0, \
   get_optimizer_grouped_parameters, dist_reduce_dict, Timer, heart_beat
 from recovlm.training.lr_schedulers import get_scheduler
 
