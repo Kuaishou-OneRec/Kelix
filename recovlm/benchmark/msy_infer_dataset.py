@@ -182,12 +182,13 @@ class MsyInferDataset(ParquetDataset):
       for message in messages:
         if message["role"] == "assistant":
           assistant_responses.append(message["content"][0]["text"])
-      print(assistant_responses)
+      print(assistant_responses)#[array(['CENTRE'], dtype=object)]
       start_pos_list = []
       for assistant_response in assistant_responses:
-        print(assistant_response)
+        print(assistant_response)#['CENTRE']
+        text = [assistant_response]
         assistant_tokens = self.processor(
-          text=[assistant_response],
+          text=text,
           padding=True,
           return_tensors="pt",
         )["input_ids"][0]
