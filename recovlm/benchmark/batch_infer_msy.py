@@ -14,7 +14,7 @@ import math
 from msy_infer_dataset import MsyInferDataset
 import pyarrow.parquet as pq
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
-
+import time
 
 # 设置日志格式
 logging.basicConfig(
@@ -270,13 +270,6 @@ def merge_results(local_results_path, comm, rank, output_path, global_rank):
                 comm.send(None, dest=0, tag=11)  # 发送空结果表示错误
     except Exception as e:
         logging.error(f"Error in merge_results on rank {rank}: {e}")
-        if rank == 0:
-            # 如果合并失败，至少保存本地结果
-            logging.warning("Merge failed, saving local results only")
-            final_output_path = f"{output_path}.rank{rank}.global{global_rank}"
-            if os.path.exists(local_results_path):
-                import shutil
-                shutil.copy2(local_results_path, final_output_path)
 
 def parse_hostfile(hostfile_path):
     """解析 hostfile 获取机器数量和每台机器的 slots"""
