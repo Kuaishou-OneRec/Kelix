@@ -234,16 +234,12 @@ def exchange_batch_info(samples, ds_list):
     f2 = vit_flops(image_len)
     info = [N, sum(input_len), sum(image_len), f1, f2] + ds_list
     global_info = [None] * dist.get_world_size()
-    if dist.get_rank() == 0:
-        print(f"debug_global_info: {global_info}")
     dist.all_gather_object(global_info, info)
     num_samples = sum(info[0] for info in global_info)
     num_input_ids = sum(info[1] for info in global_info)
     num_images = sum(info[2] for info in global_info)
     llm_flops_list = [info[3] for info in global_info]
     vit_flops_list = [info[4] for info in global_info]
-    if dist.get_rank() == 0:
-        print(f"debug_flops: {llm_flops_list}, {vit_flops_list}")
     return (num_samples, num_input_ids, num_images, llm_flops_list, vit_flops_list)
 
 

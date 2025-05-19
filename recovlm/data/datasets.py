@@ -3664,7 +3664,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       gid = group_index(llm_flops)
       groups[gid].append(c)
       flops[gid].append(llm_flops)
-    print(f"local_group: rank={dist.get_rank()}, flops={flops}")
+    # print(f"local_group: rank={dist.get_rank()}, flops={flops}")
       
     info_list = [len(g) for g in groups]
     t3 = time.perf_counter()
@@ -3692,7 +3692,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       #   print(group)
       #   # todo: shuffle remains
     if dist.get_rank() == 0:
-      print(f"avail={avail}, remains={remains}, all_groups={all_groups}")
+      print(f"all_groups={all_groups}")
       
     found = []
     send_idx = []
@@ -3775,6 +3775,8 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
               data_source.append(ds)
             inputs = selected
           stats = balance.exchange_batch_info(inputs, data_source)
+          if self.rank == 0:
+            print(f"rank=0, step_stats={stats}")
           self._balance_buf.put((inputs, data_source, [stats[0], stats[1], stats[2]]))
         for sends in send_out:
           for idx in sends:
@@ -3825,6 +3827,4 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
         t1 = time.perf_counter()
         result = self._result_buf.get()
         t2 = time.perf_counter()
-        print(f"dataset_iter: {t2-t1}")
-        if False:
-          yield result
+        yield result
