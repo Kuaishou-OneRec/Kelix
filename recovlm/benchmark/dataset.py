@@ -92,7 +92,7 @@ class ParquetDataset(IterableDataset):
                             try:
                                 row_dict = {}
                                 for col, val in row.items():
-                                    if val == 'nan':
+                                    if val is None:
                                         continue
                                     elif isinstance(val, list):
                                         val = val[0]
