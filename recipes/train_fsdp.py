@@ -1,3 +1,7 @@
+import torch
+
+torch.use_deterministic_algorithms(True)
+
 from typing import Dict, Any, Union, Optional
 
 import contextlib
