@@ -185,7 +185,7 @@ class MsyInferDataset(ParquetDataset):
       start_pos_list = []
       for assistant_response in assistant_response:
         assistant_tokens = self.processor(
-          text=[assistant_response],
+          text=assistant_response,
           padding=True,
           return_tensors="pt",
         )["input_ids"][0]
