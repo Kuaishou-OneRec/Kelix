@@ -3665,7 +3665,7 @@ class BalanceParquetDataset(IterableDataset):
     flops = [[] for _ in range(num_group)]
     for c in candidates:
       llm_len = [raw_input_ids[i] for i in c]
-      llm_flops = balance.llm_flops(llm_len)
+      llm_flops = self.fm.llm_flops(llm_len)
       gid = group_index(llm_flops)
       groups[gid].append(c)
       flops[gid].append(llm_flops)
