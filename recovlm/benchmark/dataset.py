@@ -89,38 +89,34 @@ class ParquetDataset(IterableDataset):
                         if read_columns:
                             df = df[read_columns]
                         for _, row in df.iterrows():
-                            # try:
-                            row_dict = {}
-                            for col, val in row.items():
-                                try:
-                                    if pd.isna(val):
+                            try:
+                                row_dict = {}
+                                for col, val in row.items():
+                                    if val == 'nan':
                                         continue
-                                except Exception as e:
-                                    print('msy--------------------------------------')
-                                    print(val)
-                                    print(f"Error processing row: {e}")
-                                    continue
-                                if col in ['images', 'messages', 'videos', 'segments']:
-                                    if isinstance(val, str):
-                                        try:
-                                            row_dict[col] = json.loads(val)
-                                        except json.JSONDecodeError:
-                                            print(f"JSON decode error for column {col}: {val}")
+                                    elif isinstance(val, list):
+                                        val = val[0]
+                                    if col in ['images', 'messages', 'videos', 'segments']:
+                                        if isinstance(val, str):
+                                            try:
+                                                row_dict[col] = json.loads(val)
+                                            except json.JSONDecodeError:
+                                                print(f"JSON decode error for column {col}: {val}")
+                                                row_dict[col] = val
+                                        else:
                                             row_dict[col] = val
                                     else:
                                         row_dict[col] = val
-                                else:
-                                    row_dict[col] = val
-                            if row_dict:
-                                yield row_dict
-                                count += 1
-                                if self.limit and count >= self.limit:
-                                    return
-                            # except Exception as e:
-                            #     print("Full traceback:")
-                            #     traceback.print_exc()
-                            #     print(f"Error processing row: {e}")
-                            #     continue
+                                if row_dict:
+                                    yield row_dict
+                                    count += 1
+                                    if self.limit and count >= self.limit:
+                                        return
+                            except Exception as e:
+                                print("Full traceback:")
+                                traceback.print_exc()
+                                print(f"Error processing row: {e}")
+                                continue
             except Exception as e:
                 print(f"Error processing file {fn}: {e}")
                 traceback.print_exc()
