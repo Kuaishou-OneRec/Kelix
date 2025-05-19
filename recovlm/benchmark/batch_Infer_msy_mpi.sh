@@ -6,7 +6,7 @@ np=4  # 每个任务使用4个进程
 export HOSTFILE=/etc/mpi/hostfile
 
 # 设置输出文件路径
-OUTPUT_PATH="wenjuan_response_sft_with_cot_only_correct.jsonl"
+OUTPUT_PATH="msy_infer.jsonl"
 
 # 环境变量设置
 KWS_SERVICE_REGION=HB2
