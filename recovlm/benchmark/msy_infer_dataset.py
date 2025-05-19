@@ -106,7 +106,8 @@ def OCRBenchTransform(sample) -> list:
 
 transform_func_map = {
   "MMBench": MMBenchTransform,
-  "OCRBench": OCRBenchTransform
+  "OCRBench": OCRBenchTransform,
+  "MMBenchCn": MMBenchTransform
 }
 
 
