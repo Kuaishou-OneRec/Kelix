@@ -81,7 +81,6 @@ class ParquetDataset(IterableDataset):
                                     print("Full traceback:")
                                     traceback.print_exc()
                                     print(f"Error processing row: {e}")
-                                    print(col,val)
                                     continue
                 else:
                     print(f"Reading parquet file: {fn}")

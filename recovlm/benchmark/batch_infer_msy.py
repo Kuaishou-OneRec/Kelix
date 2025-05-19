@@ -386,7 +386,7 @@ def main(_):
             batch_generations = [[] for _ in range(len(batch["inputs"]))]
             with torch.no_grad():
                 for idx in range(len(batch["inputs"])):
-                    start_pos_list = batch["start_pos_list"][idx]
+                    answer_idx_list = batch["answer_idx_list"][idx]
                     inputs = batch["inputs"][idx].to(torch.cuda.current_device())
                     input_ids = inputs["input_ids"]
                     llm = llm.to(torch.cuda.current_device())
@@ -396,31 +396,26 @@ def main(_):
                     
                     total_ppl = 0
                     valid_positions = 0
-                    for start_pos in start_pos_list:
-                        if start_pos is None:
-                            continue
-                        try:
-                            shift_logits = logits[..., :-1, :].contiguous()
-                            shift_labels = input_ids[..., 1:].contiguous()
+                    start_pos, end_pos = answer_idx_list[0]
+                    try:
+                        shift_logits = logits[..., :-1, :].contiguous()
+                        shift_labels = input_ids[..., 1:].contiguous()
 
-                            loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
-                            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-                            loss = loss.view(shift_logits.size(0), -1)
+                        loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+                        loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                        loss = loss.view(shift_logits.size(0), -1)
 
-                            assistant_loss = loss[0, start_pos-1:start_pos+len(input_ids[0])-1]
-                            response_ppl = torch.exp(assistant_loss.mean())
-                            total_ppl += response_ppl
-                            valid_positions += 1
-                        except Exception as e:
-                            logging.warning(f"Error calculating PPL for position {start_pos}: {e}")
-                            continue
-                    
-                    if valid_positions > 0:
-                        total_ppl /= valid_positions
-                        print('total_ppl:', total_ppl, 'rank:', rank)
-                    else:
-                        logging.warning("No valid positions found for PPL calculation")
+                        assistant_loss = loss[0, start_pos-1:end_pos]
+                        response_ppl = torch.exp(assistant_loss.mean())
+                    except Exception as e:
+                        logging.warning(f"Error calculating PPL for position {start_pos}: {e}")
+                        continue
+                
+                    total_ppl = valid_positions
+                    print('total_ppl:', total_ppl, 'rank:', rank)
 
+            # # 处理并保存该批次的所有结果
+            # for idx in range(len(batch["inputs"])):
             # # 处理并保存该批次的所有结果
             # for idx in range(len(batch["inputs"])):
             #     photo_id = batch["photo_id"][idx]
