@@ -2,7 +2,7 @@
 
 hostfile=/etc/mpi/hostfile
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=1  # Changed from 4 to 1 to match available slots
+np=4  # 总进程数改为4
 export HOSTFILE=/etc/mpi/hostfile
 
 # CUDA environment variables
@@ -56,28 +56,10 @@ COMMON_SCRIPT_PARAMS="--output_path ${OUTPUT_PATH} \
     --max_frames 10 \
     --num_generations 1"
 
-# 运行MPI任务 (使用GPU0)
-CUDA_VISIBLE_DEVICES=0 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
+# 运行单个MPI任务，使用所有GPU
+CUDA_VISIBLE_DEVICES=0,1,2,3 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
     python3 recovlm/benchmark/batch_infer_msy.py \
-    $COMMON_SCRIPT_PARAMS \
-    --global_rank 0 &
-# 运行MPI任务 (使用GPU1)
-CUDA_VISIBLE_DEVICES=1 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
-    python3 recovlm/benchmark/batch_infer_msy.py \
-    $COMMON_SCRIPT_PARAMS \
-    --global_rank 1 &
-# 运行MPI任务 (使用GPU2)
-CUDA_VISIBLE_DEVICES=2 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
-    python3 recovlm/benchmark/batch_infer_msy.py \
-    $COMMON_SCRIPT_PARAMS \
-    --global_rank 2 &
-# 运行MPI任务 (使用GPU3)    
-CUDA_VISIBLE_DEVICES=3 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
-    python3 recovlm/benchmark/batch_infer_msy.py \
-    $COMMON_SCRIPT_PARAMS \
-    --global_rank 3 &
-
-
+    $COMMON_SCRIPT_PARAMS
 
 # 合并最终结果
 cat ${OUTPUT_PATH}.global* > ${OUTPUT_PATH}
