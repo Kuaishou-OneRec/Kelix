@@ -17,3 +17,4 @@
     "siglip_vision_config": "/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex",
     "use_flops_balance": true
 }
+
