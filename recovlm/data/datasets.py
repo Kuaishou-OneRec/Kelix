@@ -3647,8 +3647,7 @@ class BalanceParquetDataset(IterableDataset):
     # if dist.get_rank() == 0:
     #   print(f"candidates: {candidates}")
     info_list = []
-    # 0-185, 185-205, 205-225,225-250, 250-
-    num_group = 5
+    num_group = len(self.fm.flops_range) + 1
     groups = [[] for _ in range(num_group)]
 
     flops = [[] for _ in range(num_group)]
