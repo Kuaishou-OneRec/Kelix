@@ -1260,20 +1260,20 @@ class ChatCompletionVisionDataset(IterableDataset):
                                       cu_seqlens)
 
     # append a pad image sequence to trigger ViT
-    image_pad = self._gen_img_pad()
-    self._append_sample_packing(image_pad,
-                                packed_input_ids,
-                                packed_position_ids,
-                                packed_loss_mask,
-                                packed_pixel_values,
-                                packed_pixel_values_videos,
-                                packed_image_gird_thw,
-                                packed_video_grid_thw,
-                                packed_sample_idx,
-                                cu_seqlens,
-                                sample_idx=-1,
-                                image_pad=True
-                                )
+    # image_pad = self._gen_img_pad()
+    # self._append_sample_packing(image_pad,
+    #                             packed_input_ids,
+    #                             packed_position_ids,
+    #                             packed_loss_mask,
+    #                             packed_pixel_values,
+    #                             packed_pixel_values_videos,
+    #                             packed_image_gird_thw,
+    #                             packed_video_grid_thw,
+    #                             packed_sample_idx,
+    #                             cu_seqlens,
+    #                             sample_idx=-1,
+    #                             image_pad=True
+    #                             )
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
