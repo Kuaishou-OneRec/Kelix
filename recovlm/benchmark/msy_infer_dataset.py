@@ -203,6 +203,7 @@ class MsyInferDataset(ParquetDataset):
                     answer_idx_list.append((start_pos, end_pos))
                     print("Found third pair positions:", answer_idx_list)
                     print("Input IDs:", input_ids_list)
+                    print("output IDs:", input_ids_list[start_pos:end_pos])
                 else:
                     logging.warning("Found end_id before start_id, skipping")
             else:
