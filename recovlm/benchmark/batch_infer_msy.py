@@ -412,7 +412,7 @@ def main(_):
                         logging.warning(f"Error calculating PPL for position {start_pos}: {e}")
                         continue
                 
-                    total_ppl = valid_positions
+                    total_ppl = response_ppl
                     print('total_ppl:', total_ppl, 'rank:', rank)
 
             # # 处理并保存该批次的所有结果
