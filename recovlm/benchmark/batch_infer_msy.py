@@ -113,7 +113,7 @@ flags.DEFINE_integer(
 )
 
 flags.DEFINE_string(
-  "output_path", "wenjuan_response_sft_with_cot_large_token.jsonl", "The path of file to write results." 
+  "output_path", "msy_test.jsonl", "The path of file to write results." 
 )
 
 flags.DEFINE_integer(
@@ -284,10 +284,10 @@ def parse_hostfile(hostfile_path):
         raise RuntimeError(f"Failed to parse hostfile {hostfile_path}: {str(e)}")
 
 def main(_):
-    rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
-    world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
-    local_rank = rank % world_size
-    torch.cuda.set_device(local_rank)
+    comm, rank, size, hostname = init_mpi()
+    print('rank:', rank)
+    print('size:', size)
+    torch.cuda.set_device(rank)
     # Check CUDA availability
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is not available. This script requires GPU to run.")
@@ -297,7 +297,6 @@ def main(_):
         logging.info(f"Device {i}: {torch.cuda.get_device_name(i)}")
     
     # 初始化 MPI
-    comm, rank, size, hostname = init_mpi()
     
     # 从环境变量获取 hostfile 路径，如果没有则使用命令行参数
     hostfile = os.getenv('HOSTFILE')
@@ -380,6 +379,8 @@ def main(_):
 
     # Process local chunk of data
     with open(local_output_path, "w", encoding="utf-8") as f:
+        count = 1
+        total_ppl = 0
         for batch in tqdm(DataLoader(local_dataset,batch_size=FLAGS.batch_size,
                                    collate_fn=collate_fn),disable=rank != 0):  # Only rank 0 shows progress bar
             # 存储该批次所有样本的所有生成结果
@@ -393,9 +394,6 @@ def main(_):
                     with torch.no_grad():
                         outputs = llm(**inputs)
                         logits = outputs.logits 
-                    
-                    total_ppl = 0
-                    valid_positions = 0
                     start_pos, end_pos = answer_idx_list[0]
                     try:
                         shift_logits = logits[..., :-1, :].contiguous()
@@ -411,98 +409,29 @@ def main(_):
                         logging.warning(f"Error calculating PPL for position {start_pos}: {e}")
                         continue
                 
-                    total_ppl = response_ppl
-                    print('total_ppl:', total_ppl, 'rank:', rank)
-
-            # # 处理并保存该批次的所有结果
-            # for idx in range(len(batch["inputs"])):
-            # # 处理并保存该批次的所有结果
-            # for idx in range(len(batch["inputs"])):
-            #     photo_id = batch["photo_id"][idx]
-            #     true_label = true_labels.get(photo_id)
-                
-            #     # 更新统计信息
-            #     for generation in batch_generations[idx]:
-            #         pred_label = generation["pred_label"]
-            #         if true_label and pred_label:
-            #             if true_label == pred_label:
-            #                 if true_label == "满意":
-            #                     results_stats["true_sat_pred_sat"] += 1
-            #                 else:
-            #                     results_stats["true_unsat_pred_unsat"] += 1
-            #             else:
-            #                 if true_label == "满意":
-            #                     results_stats["true_sat_pred_unsat"] += 1
-            #                 else:
-            #                     results_stats["true_unsat_pred_sat"] += 1
-            #         else:
-            #             results_stats["pred_unknown"] += 1
-            #         results_stats["total_processed"] += 1
-                
-            #     # 保存结果
-            #     result = {
-            #         "photo_id": photo_id,
-            #         "true_label": true_label,
-            #         "prompt": batch["inputs"][idx]["prompt"],
-            #         "rsp": batch_generations[idx]
-            #     }
-            #     f.write(json.dumps(result, ensure_ascii=False) + "\n")
-            #     f.flush()
-
-            # if total_samples % 100 == 0:
-            #     logging.info(f"===debug=== rank {rank} Processed {results_stats['total_processed']} samples...")
-
-            # if FLAGS.num_samples is not None and results_stats["total_processed"] >= FLAGS.num_samples:
-            #     logging.info(f"\nReached sample limit ({FLAGS.num_samples}), stopping...")
-            #     break
-
-    # # 确保文件写入完成
-    # comm.Barrier()
+                    total_ppl = response_ppl/count+total_ppl*(count-1)/count
+                    count += 1
+                    print('response_ppl:', response_ppl)
+        print('==================================================')
+        print('total_ppl:', total_ppl, 'rank:', rank)
+        result = {
+            "total_ppl": total_ppl,
+            "count": count-1,
+            "rank": rank
+        }
+        f.write(json.dumps(result, ensure_ascii=False) + "\n")
+        f.flush()
+    comm.Barrier()
+    if rank == 0:
+        logging.info(f"Results being written to: {FLAGS.output_path}")
     
-    # if rank == 0:
-    #     logging.info(f"Results being written to: {FLAGS.output_path}")
-    
-    # # Merge results from all processes
-    # merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank)
-    
-    # # Gather statistics from all processes
-    # all_stats = comm.gather(results_stats, root=0)
-    
-    # # Only rank 0 computes and prints final metrics
-    # if rank == 0:
-    #     combined_stats = {
-    #         "true_sat_pred_sat": sum(stats["true_sat_pred_sat"] for stats in all_stats),
-    #         "true_unsat_pred_unsat": sum(stats["true_unsat_pred_unsat"] for stats in all_stats),
-    #         "true_sat_pred_unsat": sum(stats["true_sat_pred_unsat"] for stats in all_stats),
-    #         "true_unsat_pred_sat": sum(stats["true_unsat_pred_sat"] for stats in all_stats),
-    #         "pred_unknown": sum(stats["pred_unknown"] for stats in all_stats),
-    #         "total_processed": sum(stats["total_processed"] for stats in all_stats)
-    #     }
-        
-    #     # Print final combined statistics
-    #     logging.info("\n=== Final Combined Statistics ===")
-    #     total_valid = (combined_stats["true_sat_pred_sat"] + 
-    #                   combined_stats["true_unsat_pred_unsat"] + 
-    #                   combined_stats["true_sat_pred_unsat"] + 
-    #                   combined_stats["true_unsat_pred_sat"])
-        
-    #     accuracy = ((combined_stats["true_sat_pred_sat"] + 
-    #                 combined_stats["true_unsat_pred_unsat"]) / total_valid) if total_valid > 0 else 0.0
-        
-    #     # Save final metrics
-    #     if FLAGS.metrics_output_file:
-    #         final_stats = {
-    #             "results_stats": combined_stats,
-    #             "final_accuracy": accuracy
-    #         }
-    #         with open(FLAGS.metrics_output_file, "w", encoding="utf-8") as mf:
-    #             json.dump(final_stats, mf, ensure_ascii=False, indent=2)
-        
-    #     # Clean up temporary files
-    #     for r in range(size):
-    #         temp_file = f"{FLAGS.output_path}.rank{r}.global{FLAGS.global_rank}"
-    #         if os.path.exists(temp_file):
-    #             os.remove(temp_file)
+        # Merge results from all processes
+        merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank)
+
+        for r in range(size):
+            temp_file = f"{FLAGS.output_path}.rank{r}.global{FLAGS.global_rank}"
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
 
 if __name__ == "__main__":
     app.run(main)

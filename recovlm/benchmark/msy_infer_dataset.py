@@ -142,7 +142,7 @@ class MsyInferDataset(ParquetDataset):
     self.max_text_len = max_text_len
     self.max_frames = max_frames
     self.start_id = 151644 
-    self.end_id = 151645
+    self.end_id = 151645#use to locate the answer in the input_ids
     
     if parquet_path.endswith(".parquet"):
       self.total_rows = pq.read_metadata(parquet_path).num_rows

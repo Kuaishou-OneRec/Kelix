@@ -61,21 +61,21 @@ CUDA_VISIBLE_DEVICES=0 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
     python3 recovlm/benchmark/batch_infer_msy.py \
     $COMMON_SCRIPT_PARAMS \
     --global_rank 0 &
-# # 运行MPI任务 (使用GPU1)
-# CUDA_VISIBLE_DEVICES=1 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
-#     python3 recovlm/benchmark/batch_infer_msy.py \
-#     $COMMON_SCRIPT_PARAMS \
-#     --global_rank 1 &
-# # 运行MPI任务 (使用GPU2)
-# CUDA_VISIBLE_DEVICES=2 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
-#     python3 recovlm/benchmark/batch_infer_msy.py \
-#     $COMMON_SCRIPT_PARAMS \
-#     --global_rank 2 &
-# # 运行MPI任务 (使用GPU3)    
-# CUDA_VISIBLE_DEVICES=3 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
-#     python3 recovlm/benchmark/batch_infer_msy.py \
-#     $COMMON_SCRIPT_PARAMS \
-#     --global_rank 3 &
+# 运行MPI任务 (使用GPU1)
+CUDA_VISIBLE_DEVICES=1 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
+    python3 recovlm/benchmark/batch_infer_msy.py \
+    $COMMON_SCRIPT_PARAMS \
+    --global_rank 1 &
+# 运行MPI任务 (使用GPU2)
+CUDA_VISIBLE_DEVICES=2 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
+    python3 recovlm/benchmark/batch_infer_msy.py \
+    $COMMON_SCRIPT_PARAMS \
+    --global_rank 2 &
+# 运行MPI任务 (使用GPU3)    
+CUDA_VISIBLE_DEVICES=3 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
+    python3 recovlm/benchmark/batch_infer_msy.py \
+    $COMMON_SCRIPT_PARAMS \
+    --global_rank 3 &
 
 
 
