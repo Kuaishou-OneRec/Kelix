@@ -20,6 +20,7 @@ import torch
 # 使用正确的相对导入路径
 from dataset import ParquetDataset
 from loader import PromptLoader
+import logging
 
 def is_null(text):
   if not text:
@@ -159,56 +160,68 @@ class MsyInferDataset(ParquetDataset):
   def __iter__(self):
     """重写父类的__iter__方法，处理每个样本"""
     for item in super().__iter__():
-      # try:
-      messages = self.transform_func(item)
-      text = self.processor.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-      )
-      image_inputs, video_inputs = process_vision_info(messages)
-      mm_data = {}
-      if image_inputs is not None:
-        mm_data["images"] = image_inputs
-      if video_inputs is not None:
-        mm_data["videos"] = video_inputs
-      inputs  = self.processor(
-        text=[text],
-        **mm_data,
-        padding=True,
-        return_tensors="pt",
-      )
-      input_ids = inputs["input_ids"]
-      assistant_responses = []
-      for message in messages:
-        if message["role"] == "assistant":
-          assistant_responses.append(message["content"][0]["text"])
-      start_pos_list = []
-      for assistant_response in assistant_responses:
-        assistant_response = assistant_response.tolist()
-        text = assistant_response
-        assistant_tokens = self.processor(
-          text=text,
+      try:
+        messages = self.transform_func(item)
+        text = self.processor.apply_chat_template(
+          messages,
+          tokenize=False,
+          add_generation_prompt=True
+        )
+        image_inputs, video_inputs = process_vision_info(messages)
+        mm_data = {}
+        if image_inputs is not None:
+          mm_data["images"] = image_inputs
+        if video_inputs is not None:
+          mm_data["videos"] = video_inputs
+        inputs = self.processor(
+          text=[text],
+          **mm_data,
           padding=True,
           return_tensors="pt",
-        )["input_ids"][0]
-        assistant_start_pos = None
-        for i in range(len(input_ids[0]) - len(assistant_tokens)):
-            if torch.all(input_ids[0][i:i+len(assistant_tokens)] == assistant_tokens):
-                assistant_start_pos = i
-                break
-        start_pos_list.append(assistant_start_pos)
-        print(start_pos_list)
-      yield {
-        "inputs": inputs,
-        "start_pos_list": start_pos_list
-      }
+        )
+        input_ids = inputs["input_ids"]
+        assistant_responses = []
+        for message in messages:
+          if message["role"] == "assistant":
+            if isinstance(message["content"], list):
+              assistant_responses.append(message["content"][0]["text"])
+            else:
+              assistant_responses.append(message["content"])
         
-      # except Exception as e:
-      #   print(f"Error processing item: {e}")
-      #   yield {
-      #     "inputs": None
-      #   }
+        start_pos_list = []
+        for assistant_response in assistant_responses:
+          assistant_tokens = self.processor(
+            text=[assistant_response],
+            padding=True,
+            return_tensors="pt",
+          )["input_ids"][0]
+          
+          assistant_start_pos = None
+          for i in range(len(input_ids[0]) - len(assistant_tokens)):
+            if torch.all(input_ids[0][i:i+len(assistant_tokens)] == assistant_tokens):
+              assistant_start_pos = i
+              break
+          
+          if assistant_start_pos is not None:
+            start_pos_list.append(assistant_start_pos)
+          else:
+            # 如果找不到匹配位置，使用一个默认值或跳过
+            logging.warning(f"Could not find matching position for assistant response: {assistant_response}")
+            continue
+        
+        if not start_pos_list:
+          # 如果没有找到任何有效的起始位置，跳过这个样本
+          logging.warning("No valid start positions found, skipping sample")
+          continue
+          
+        yield {
+          "inputs": inputs,
+          "start_pos_list": start_pos_list
+        }
+        
+      except Exception as e:
+        logging.error(f"Error processing item: {e}")
+        continue
 
   def __len__(self):
     """返回数据集的总行数"""
