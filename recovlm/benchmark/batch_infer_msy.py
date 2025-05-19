@@ -356,13 +356,13 @@ def main(_):
     # 初始化采样参数
     # Load dataset
     datasetlist = {
-        # "MMBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/en/dev-00000-of-00001.parquet",
+        "MMBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/en/dev-00000-of-00001.parquet",
         # "MMBenchCn":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/cn/dev-00000-of-00001.parquet",
         # "MME":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MME/MME.json",
         # "MMTBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMTBench/mmt_bench_485_hetu_format.json",
         # "MMStar":"/mmu_mllm_hdd/shiyaya/dataset/mm_reasoning/benchmark/MMStar/YuanQi/mmstar.json",
         # "MathVista":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MathVista/mathvista.json",
-        "OCRBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/OCRBench/data/test-00000-of-00001.parquet"
+        #"OCRBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/OCRBench/data/test-00000-of-00001.parquet"
         # "flickr30k":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/flickr30k/flickr30k_karpathy_test.json",
         # "Benchmark_v21":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/Benchmark_v21/Benchmark_v21.json",
         # "ai2d":"/llm_reco_ssd/luoxinchen/dataset/ai2d/ai2d/data/merge/test-00000-of-00001.parquet",
