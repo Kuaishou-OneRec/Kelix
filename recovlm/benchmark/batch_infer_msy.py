@@ -217,7 +217,7 @@ def split_dataset(dataset, comm_size, rank):
 
     return RankedIterableDataset(dataset, rank, comm_size)
 
-def merge_results(local_results_path, comm, rank, output_path, global_rank):
+def merge_results(local_results_path, comm, rank, output_path, global_rank, dataset_name):
     """Merge results from all MPI processes with error handling"""
     try:
         if rank == 0:
@@ -251,7 +251,7 @@ def merge_results(local_results_path, comm, rank, output_path, global_rank):
             logging.info(f"Average PPL across all ranks: {total_ppl_sum:.4f}")
             
             # 写入合并后的结果
-            final_output_path = f"{output_path}.global{global_rank}"
+            final_output_path = f"{output_path}_{dataset_name}.global{global_rank}"
             with open(final_output_path, 'w', encoding='utf-8') as f:
                 # 首先写入平均PPL
                 f.write(json.dumps({"average_ppl": total_ppl_sum, "total_samples": total_count}, ensure_ascii=False) + "\n")
@@ -362,7 +362,7 @@ def main(_):
         # "MMTBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMTBench/mmt_bench_485_hetu_format.json",
         # "MMStar":"/mmu_mllm_hdd/shiyaya/dataset/mm_reasoning/benchmark/MMStar/YuanQi/mmstar.json",
         # "MathVista":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MathVista/mathvista.json",
-        #"OCRBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/OCRBench/data/test-00000-of-00001.parquet"
+        "OCRBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/OCRBench/data/test-00000-of-00001.parquet"
         # "flickr30k":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/flickr30k/flickr30k_karpathy_test.json",
         # "Benchmark_v21":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/Benchmark_v21/Benchmark_v21.json",
         # "ai2d":"/llm_reco_ssd/luoxinchen/dataset/ai2d/ai2d/data/merge/test-00000-of-00001.parquet",
@@ -375,73 +375,73 @@ def main(_):
     for dataset_name, dataset_path in datasetlist.items():
         dataset = MsyInferDataset(dataset_name=dataset_name, parquet_path=dataset_path, model_name_or_path=FLAGS.model_name_or_path, user='mpi')
         local_dataset = split_dataset(dataset, size, rank)
-    
-    
-    # Create local results file for this rank using both local and global rank
-    local_output_path = f"{FLAGS.output_path}.rank{rank}.global{FLAGS.global_rank}"
-    with set_default_dtype(torch.bfloat16):
-        llm = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
-            FLAGS.model_name_or_path,
-            _attn_implementation = 'flash_attention_2',
-            use_cache=False
-        )
+        
+        
+        # Create local results file for this rank using both local and global rank
+        local_output_path = f"{FLAGS.output_path}.rank{rank}.global{FLAGS.global_rank}"
+        with set_default_dtype(torch.bfloat16):
+            llm = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
+                FLAGS.model_name_or_path,
+                _attn_implementation = 'flash_attention_2',
+                use_cache=False
+            )
 
 
-    # Process local chunk of data
-    with open(local_output_path, "w", encoding="utf-8") as f:
-        count = 1
-        total_ppl = 0
-        for batch in tqdm(DataLoader(local_dataset,batch_size=FLAGS.batch_size,
-                                   collate_fn=collate_fn),disable=rank != 0):  # Only rank 0 shows progress bar
-            # 存储该批次所有样本的所有生成结果
-            batch_generations = [[] for _ in range(len(batch["inputs"]))]
-            with torch.no_grad():
-                for idx in range(len(batch["inputs"])):
-                    answer_idx_list = batch["answer_idx_list"][idx]
-                    inputs = batch["inputs"][idx].to(torch.cuda.current_device())
-                    input_ids = inputs["input_ids"]
-                    llm = llm.to(torch.cuda.current_device())
-                    with torch.no_grad():
-                        outputs = llm(**inputs)
-                        logits = outputs.logits 
-                    start_pos, end_pos = answer_idx_list[0]
-                    try:
-                        shift_logits = logits[..., :-1, :].contiguous()
-                        shift_labels = input_ids[..., 1:].contiguous()
+        # Process local chunk of data
+        with open(local_output_path, "w", encoding="utf-8") as f:
+            count = 1
+            total_ppl = 0
+            for batch in tqdm(DataLoader(local_dataset,batch_size=FLAGS.batch_size,
+                                    collate_fn=collate_fn),disable=rank != 0):  # Only rank 0 shows progress bar
+                # 存储该批次所有样本的所有生成结果
+                batch_generations = [[] for _ in range(len(batch["inputs"]))]
+                with torch.no_grad():
+                    for idx in range(len(batch["inputs"])):
+                        answer_idx_list = batch["answer_idx_list"][idx]
+                        inputs = batch["inputs"][idx].to(torch.cuda.current_device())
+                        input_ids = inputs["input_ids"]
+                        llm = llm.to(torch.cuda.current_device())
+                        with torch.no_grad():
+                            outputs = llm(**inputs)
+                            logits = outputs.logits 
+                        start_pos, end_pos = answer_idx_list[0]
+                        try:
+                            shift_logits = logits[..., :-1, :].contiguous()
+                            shift_labels = input_ids[..., 1:].contiguous()
 
-                        loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
-                        loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-                        loss = loss.view(shift_logits.size(0), -1)
+                            loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+                            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                            loss = loss.view(shift_logits.size(0), -1)
 
-                        assistant_loss = loss[0, start_pos-1:end_pos]
-                        response_ppl = torch.exp(assistant_loss.mean())
-                    except Exception as e:
-                        logging.warning(f"Error calculating PPL for position {start_pos}: {e}")
-                        continue
-                
-                    total_ppl = response_ppl/count+total_ppl*(count-1)/count
-                    count += 1
-                    print('response_ppl:', response_ppl)
-        print('==================================================')
-        # 先将tensor转换为float32，再转换为numpy数组
-        total_ppl = float(total_ppl.to(torch.float32).cpu().numpy())
-        print('total_ppl:', total_ppl, 'rank:', rank)
-        result = {
-            "total_ppl": total_ppl,
-            "count": count-1,
-            "rank": rank
-        }
-        f.write(json.dumps(result, ensure_ascii=False) + "\n")
-        f.flush()
-    comm.Barrier()
-    merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank)
-    if rank == 0:
-        # Merge results from all processes
-        logging.info(f"Results being written to: {FLAGS.output_path}")
-        for r in range(size):
-            temp_file = f"{FLAGS.output_path}.rank{r}.global{FLAGS.global_rank}"
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+                            assistant_loss = loss[0, start_pos-1:end_pos]
+                            response_ppl = torch.exp(assistant_loss.mean())
+                        except Exception as e:
+                            logging.warning(f"Error calculating PPL for position {start_pos}: {e}")
+                            continue
+                    
+                        total_ppl = response_ppl/count+total_ppl*(count-1)/count
+                        count += 1
+                        print('response_ppl:', response_ppl)
+            print('==================================================')
+            # 先将tensor转换为float32，再转换为numpy数组
+            total_ppl = float(total_ppl.to(torch.float32).cpu().numpy())
+            print('total_ppl:', total_ppl, 'rank:', rank)
+            result = {
+                "total_ppl": total_ppl,
+                "count": count-1,
+                "rank": rank
+            }
+            f.write(json.dumps(result, ensure_ascii=False) + "\n")
+            f.flush()
+        comm.Barrier()
+        merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank, dataset_name)
+        if rank == 0:
+            # Merge results from all processes
+            logging.info(f"Results being written to: {FLAGS.output_path}_{dataset_name}")
+            for r in range(size):
+                temp_file = f"{FLAGS.output_path}.rank{r}.global{FLAGS.global_rank}"
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
 
 if __name__ == "__main__":
     app.run(main)
