@@ -59,6 +59,7 @@ class ParquetDataset(IterableDataset):
                                 try:
                                     row_dict = {}
                                     for col, val in row.items():
+                                        print('msy',col, val)
                                         if pd.isna(val):
                                             continue
                                         if col in ['images', 'messages', 'videos', 'segments']:
