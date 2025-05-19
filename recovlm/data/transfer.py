@@ -15,42 +15,35 @@ def serialize_tensor_group(tensors: List[torch.Tensor], names: List[str], ds_nam
         ds_data.extend(struct.pack(">I", len(encoded)))
         ds_data.extend(encoded)
     
-    data = bytearray()
-    metadata = []
-    for tensor, name in zip(tensors, names):
+    # 序列化元数据
+    tensor_bytes = bytearray()
+    tensor_bytes.extend(struct.pack(">I", len(tensors)))  # 张量数量
+    
+    for name, tensor in zip(names, tensors):
         dtype = str(tensor.dtype)
         shape = tensor.shape
-        tensor_data = tensor.numpy().tobytes()
-        
-        # 元数据格式：名称长度 + 名称 + dtype长度 + dtype + 维度数 + 维度列表 + 数据长度 + 数据
-        metadata.append((name, dtype, shape, len(tensor_data)))
-        data.extend(tensor_data)
-    
-    # 序列化元数据
-    metadata_bytes = bytearray()
-    metadata_bytes.extend(struct.pack(">I", len(metadata)))  # 张量数量
-    
-    for name, dtype, shape, data_len in metadata:
         # 序列化名称
         name_bytes = name.encode('utf-8')
-        metadata_bytes.extend(struct.pack(">I", len(name_bytes)))
-        metadata_bytes.extend(name_bytes)
+        tensor_bytes.extend(struct.pack(">I", len(name_bytes)))
+        tensor_bytes.extend(name_bytes)
         
         # 序列化数据类型
         dtype_bytes = dtype.encode('utf-8')
-        metadata_bytes.extend(struct.pack(">I", len(dtype_bytes)))
-        metadata_bytes.extend(dtype_bytes)
+        tensor_bytes.extend(struct.pack(">I", len(dtype_bytes)))
+        tensor_bytes.extend(dtype_bytes)
         
         # 序列化形状
-        metadata_bytes.extend(struct.pack(">I", len(shape)))  # 维度数量
-        metadata_bytes.extend(struct.pack(f">{len(shape)}I", *shape))  # 各维度大小
+        tensor_bytes.extend(struct.pack(">I", len(shape)))  # 维度数量
+        tensor_bytes.extend(struct.pack(f">{len(shape)}I", *shape))  # 各维度大小
         
         # 序列化数据长度
-        metadata_bytes.extend(struct.pack(">Q", data_len))
+        tensor_data = tensor.numpy().tobytes()
+        tensor_bytes.extend(struct.pack(">Q", len(tensor_data)))
+        tensor_bytes.extend(tensor_data)
     
     # 组合元数据和张量数据（添加总长度前缀）
-    total_size = len(metadata_bytes) + len(data) + len(ds_data)
-    return struct.pack(">Q", total_size) + bytes(ds_data) + bytes(metadata_bytes) + bytes(data)
+    total_size = len(ds_data) + len(tensor_bytes)
+    return struct.pack(">Q", total_size) + bytes(ds_data) + bytes(tensor_bytes)
 
 
 def deserialize_tensor_group(buffer: bytes) -> Tuple[List[torch.Tensor], List[str]]:
