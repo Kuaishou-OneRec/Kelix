@@ -1,6 +1,7 @@
 #!/bin/bash
 
-hostfile=/etc/mpi/hostfile
+sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
+hostfile=/etc/mpi/hostfile_seq
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=4  # 总进程数改为4
 export HOSTFILE=/etc/mpi/hostfile
@@ -60,6 +61,9 @@ COMMON_SCRIPT_PARAMS="--output_path ${OUTPUT_PATH} \
 CUDA_VISIBLE_DEVICES=0,1,2,3 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
     python3 recovlm/benchmark/batch_infer_msy.py \
     $COMMON_SCRIPT_PARAMS
+
+# 等待所有进程完成
+wait
 
 # 合并最终结果
 cat ${OUTPUT_PATH}.global* > ${OUTPUT_PATH}
