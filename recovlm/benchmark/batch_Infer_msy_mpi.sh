@@ -5,6 +5,12 @@ Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=1  # Changed from 4 to 1 to match available slots
 export HOSTFILE=/etc/mpi/hostfile
 
+# CUDA environment variables
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export CUDA_HOME=/usr/local/cuda
+export PATH=$CUDA_HOME/bin:$PATH
+export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+
 # 设置输出文件路径
 OUTPUT_PATH="msy_infer.jsonl"
 

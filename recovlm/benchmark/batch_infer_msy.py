@@ -284,6 +284,18 @@ def parse_hostfile(hostfile_path):
         raise RuntimeError(f"Failed to parse hostfile {hostfile_path}: {str(e)}")
 
 def main(_):
+    rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+    world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+    local_rank = rank % world_size
+    torch.cuda.set_device(local_rank)
+    # Check CUDA availability
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available. This script requires GPU to run.")
+    device_count = torch.cuda.device_count()
+    logging.info(f"Found {device_count} CUDA devices")
+    for i in range(device_count):
+        logging.info(f"Device {i}: {torch.cuda.get_device_name(i)}")
+    
     # 初始化 MPI
     comm, rank, size, hostname = init_mpi()
     
@@ -375,8 +387,10 @@ def main(_):
             print(len(batch["inputs"]))
             with torch.no_grad():
                 for idx in range(len(batch["inputs"])):
+                    inputs = batch["inputs"][idx].to(torch.cuda.current_device())
+                    llm = llm.to(torch.cuda.current_device())
                     with torch.no_grad():
-                        outputs = llm(**batch["inputs"][idx])
+                        outputs = llm(**inputs)
                         print(outputs)
             # 保存本次生成结果
             # for idx, output in enumerate(outputs):
