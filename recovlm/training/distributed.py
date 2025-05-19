@@ -231,8 +231,11 @@ def shard_model(
     if model_class == 'InternVLChatModel':
         layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
         for m in layers:
-            # if m in layers:
-            #     if dist.get_rank() == 0: print("sharding", n)
+            fully_shard(m, **fsdp_kwargs)
+            num_layers_sharded += 1
+    elif model_class == "Qwen3SiglipForConditionalGeneration_navit":
+        layers = list(model.visual.vision_model.encoder.layers) + list(model.model.layers)
+        for m in layers:
             fully_shard(m, **fsdp_kwargs)
             num_layers_sharded += 1
     else: 
