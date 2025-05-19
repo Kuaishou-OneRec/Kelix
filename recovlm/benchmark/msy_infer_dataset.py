@@ -185,16 +185,23 @@ class MsyInferDataset(ParquetDataset):
         
         answer_idx_list = []
         #input_ids中第三个start id到第三个end id之间的位置
-        start_pos = input_ids[0].index(self.start_id)
-        end_pos = input_ids[0].index(self.end_id)
-        answer_idx_list.append((start_pos,end_pos))
-        print(answer_idx_list)
-        print(input_ids[0])
+        # 将tensor转换为list以便使用index方法
+        input_ids_list = input_ids[0].tolist()
+        try:
+            start_pos = input_ids_list.index(self.start_id)
+            end_pos = input_ids_list.index(self.end_id)
+            answer_idx_list.append((start_pos, end_pos))
+            print("Found positions:", answer_idx_list)
+            print("Input IDs:", input_ids_list)
+        except ValueError as e:
+            logging.warning(f"Could not find start/end tokens in sequence: {e}")
+            continue
+            
         if not answer_idx_list:
-          # 如果没有找到任何有效的起始位置，跳过这个样本
-          logging.warning("No valid start positions found, skipping sample")
-          continue
-          
+            # 如果没有找到任何有效的起始位置，跳过这个样本
+            logging.warning("No valid start positions found, skipping sample")
+            continue
+            
         yield {
           "inputs": inputs,
           "answer_idx_list": answer_idx_list
