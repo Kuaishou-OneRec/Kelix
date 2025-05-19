@@ -413,7 +413,8 @@ def main(_):
                     count += 1
                     print('response_ppl:', response_ppl)
         print('==================================================')
-        total_ppl = float(total_ppl.cpu().numpy())
+        # 先将tensor转换为float32，再转换为numpy数组
+        total_ppl = float(total_ppl.to(torch.float32).cpu().numpy())
         print('total_ppl:', total_ppl, 'rank:', rank)
         result = {
             "total_ppl": total_ppl,
