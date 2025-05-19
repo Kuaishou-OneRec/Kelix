@@ -233,7 +233,7 @@ def shard_model(
         for m in layers:
             fully_shard(m, **fsdp_kwargs)
             num_layers_sharded += 1
-    elif model_class == "Qwen3SiglipForConditionalGeneration_navit":
+    elif model_class == "xxQwen3SiglipForConditionalGeneration_navit":
         layers = list(model.visual.vision_model.encoder.layers) + list(model.model.layers)
         for m in layers:
             fully_shard(m, **fsdp_kwargs)
