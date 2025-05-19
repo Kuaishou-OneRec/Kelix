@@ -97,7 +97,9 @@ def OCRBenchTransform(sample) -> list:
     },
     {
       "role": "assistant",
-      "content": answer  # 直接使用字符串，不要包装成列表
+      "content": [
+        {"type": "text", "text": answer}
+      ]
     }
   ]
   return messages
@@ -182,26 +184,21 @@ class MsyInferDataset(ParquetDataset):
         for message in messages:
           if message["role"] == "assistant":
             if isinstance(message["content"], list):
-              # 如果是列表，取第一个元素的text字段
               assistant_responses.append(message["content"][0]["text"])
             else:
-              # 如果是字符串，直接使用
               assistant_responses.append(message["content"])
         
         start_pos_list = []
         for assistant_response in assistant_responses:
-          # 确保assistant_response是字符串
-          if isinstance(assistant_response, list):
-            assistant_response = assistant_response[0] if assistant_response else ""
-          
+          assistant_response = assistant_response.tolist()
           assistant_tokens = self.processor(
-            text=[assistant_response],  # 包装成列表传给tokenizer
+            text=assistant_response,
             padding=True,
             return_tensors="pt",
           )["input_ids"][0]
           
           assistant_start_pos = None
-          for i in range(len(input_ids[0]) - len(assistant_tokens)):
+          for i in range(len(input_ids[0]) - len(assistant_tokens)+1):
             if torch.all(input_ids[0][i:i+len(assistant_tokens)] == assistant_tokens):
               assistant_start_pos = i
               break
@@ -209,10 +206,12 @@ class MsyInferDataset(ParquetDataset):
           if assistant_start_pos is not None:
             start_pos_list.append(assistant_start_pos)
           else:
+            # 如果找不到匹配位置，使用一个默认值或跳过
             logging.warning(f"Could not find matching position for assistant response: {assistant_response}, original text: {text}")
             continue
         
         if not start_pos_list:
+          # 如果没有找到任何有效的起始位置，跳过这个样本
           logging.warning("No valid start positions found, skipping sample")
           continue
           
