@@ -47,8 +47,7 @@ COMMON_ENV_VARS="-x PYTHONPATH=$PYTHONPATH \
     -x KWS_SERVICE_STAGE=$KWS_SERVICE_STAGE"
 
 # 通用的Python脚本参数
-COMMON_SCRIPT_PARAMS="--tp 4 \
-    --output_path ${OUTPUT_PATH} \
+COMMON_SCRIPT_PARAMS="--output_path ${OUTPUT_PATH} \
     --top_p 0.8 \
     --temperature 0.7 \
     --max_tokens 4096 \

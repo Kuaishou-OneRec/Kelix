@@ -93,7 +93,7 @@ flags.DEFINE_integer(
 )
 
 flags.DEFINE_integer(
-  "tp", 4, "The tensor_parallel_size"
+  "tp", 1, "The tensor_parallel_size"
 )
 
 flags.DEFINE_integer(
