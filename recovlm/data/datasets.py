@@ -3768,13 +3768,14 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
             used.update(selected)
             inputs = [buffer[idx] for idx in selected]
             data_source = [source_list[idx] for idx in selected]
-            self._balance_buf.put((inputs, data_source, [0, 0, 0]))
           else:
             data_source = []
             for sample in selected:
               ds = sample.pop("__ds__")
               data_source.append(ds)
-            self._balance_buf.put((selected, data_source, [0, 0, 0]))
+            inputs = selected
+          stats = balance.exchange_batch_info(inputs, data_source)
+          self._balance_buf.put((inputs, data_source, [stats[0], stats[1], stats[2]]))
         for sends in send_out:
           for idx in sends:
             assert idx not in used
