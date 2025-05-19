@@ -384,26 +384,31 @@ def main(_):
                                    collate_fn=collate_fn),disable=rank != 0):  # Only rank 0 shows progress bar
             # 存储该批次所有样本的所有生成结果
             batch_generations = [[] for _ in range(len(batch["inputs"]))]
-            print(len(batch["inputs"]))
             with torch.no_grad():
                 for idx in range(len(batch["inputs"])):
                     inputs = batch["inputs"][idx].to(torch.cuda.current_device())
+                    input_ids = inputs["input_ids"]
+                    start_pos_list = batch["start_pos_list"][idx]
                     llm = llm.to(torch.cuda.current_device())
                     with torch.no_grad():
                         outputs = llm(**inputs)
-                        print(outputs)
-            # 保存本次生成结果
-            # for idx, output in enumerate(outputs):
-            #     response = output.outputs[0].text
-            #     if response:
-            #         has_response_text_samples += 1
-            #     pred_label = extract_satisfaction(response)
-                
-            #     batch_generations[idx].append({
-            #         "generation_id": gen_idx,
-            #         "pred_label": pred_label,
-            #         "response": response
-            #     })
+                        logits = outputs.logits 
+                    
+                    total_ppl = 0
+                    for start_pos in start_pos_list:
+                        shift_logits = logits[..., :-1, :].contiguous()
+                        shift_labels = input_ids[..., 1:].contiguous()
+
+                        loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+                        loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                        loss = loss.view(shift_logits.size(0), -1)
+
+                        assistant_loss = loss[0, start_pos-1:start_pos+len(input_ids[0])-1]
+                        response_ppl = torch.exp(assistant_loss.mean())
+                        total_ppl += response_ppl
+                    total_ppl /= len(start_pos_list)
+                    print('total_ppl:',total_ppl,'rank:',rank)
+                    
             
             # # 处理并保存该批次的所有结果
             # for idx in range(len(batch["inputs"])):

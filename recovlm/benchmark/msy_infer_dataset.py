@@ -178,8 +178,26 @@ class MsyInferDataset(ParquetDataset):
         padding=True,
         return_tensors="pt",
       )
+      assistant_response = []
+      for message in messages:
+        if message["role"] == "assistant":
+          assistant_response.append(message["content"][0]["text"])
+      start_pos_list = []
+      for assistant_response in assistant_response:
+        assistant_tokens = self.processor(
+          text=[assistant_response],
+          padding=True,
+          return_tensors="pt",
+        )["input_ids"][0]
+        assistant_start_pos = None
+        for i in range(len(input_ids[0]) - len(assistant_tokens)):
+            if torch.all(input_ids[0][i:i+len(assistant_tokens)] == assistant_tokens):
+                assistant_start_pos = i
+                break
+        start_pos_list.append(assistant_start_pos)
       yield {
-        "inputs": inputs
+        "inputs": inputs,
+        "start_pos_list": start_pos_list
       }
         
       # except Exception as e:

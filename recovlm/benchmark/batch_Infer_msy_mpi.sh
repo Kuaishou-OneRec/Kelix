@@ -52,7 +52,7 @@ COMMON_SCRIPT_PARAMS="--tp 4 \
     --top_p 0.8 \
     --temperature 0.7 \
     --max_tokens 4096 \
-    --batch_size 32 \
+    --batch_size 1 \
     --limit_mm_per_prompt 3 \
     --max_frames 10 \
     --num_generations 1"
