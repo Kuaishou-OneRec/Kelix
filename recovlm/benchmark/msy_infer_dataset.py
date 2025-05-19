@@ -184,12 +184,13 @@ class MsyInferDataset(ParquetDataset):
         input_ids = inputs["input_ids"]
         
         answer_idx_list = []
-        #input_ids中第三个start id到第三个end id之间的位置
+        #input_ids中第3个start id到第3个end id之间的位置
         # 将tensor转换为list以便使用index方法
         input_ids_list = input_ids[0].tolist()
         try:
-            start_pos = input_ids_list.index(self.start_id)
-            end_pos = input_ids_list.index(self.end_id)
+            number = 3
+            start_pos = input_ids_list.index(self.start_id, number)
+            end_pos = input_ids_list.index(self.end_id, number)
             answer_idx_list.append((start_pos, end_pos))
             print("Found positions:", answer_idx_list)
             print("Input IDs:", input_ids_list)
