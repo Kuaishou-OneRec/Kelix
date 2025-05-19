@@ -4,7 +4,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 hostfile=/etc/mpi/hostfile_seq
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=4  # 总进程数改为4
-export HOSTFILE=/etc/mpi/hostfile
+export HOSTFILE=/etc/mpi/hostfile_seq
 
 # CUDA environment variables
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
