@@ -372,8 +372,10 @@ def main(_):
                                    collate_fn=collate_fn),disable=rank != 0):  # Only rank 0 shows progress bar
             # 存储该批次所有样本的所有生成结果
             batch_generations = [[] for _ in range(len(batch["inputs"]))]
+            print(len(batch["inputs"]))
+            for idx in range(len(batch["inputs"])):
+                print(batch["inputs"][idx].keys())
             with torch.no_grad():
-                print(batch["inputs"])
                 outputs = llm(**batch["inputs"])
             print(outputs)
             # 保存本次生成结果
