@@ -59,7 +59,6 @@ class ParquetDataset(IterableDataset):
                                 try:
                                     row_dict = {}
                                     for col, val in row.items():
-                                        print('msy',col, val)
                                         if pd.isna(val):
                                             continue
                                         if col in ['images', 'messages', 'videos', 'segments']:
@@ -82,6 +81,7 @@ class ParquetDataset(IterableDataset):
                                     print("Full traceback:")
                                     traceback.print_exc()
                                     print(f"Error processing row: {e}")
+                                    print(col,val)
                                     continue
                 else:
                     print(f"Reading parquet file: {fn}")
