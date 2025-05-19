@@ -722,6 +722,7 @@ class Qwen3SiglipRotaryEmbedding(nn.Module):
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
+            print(inv_freq_expanded.float().shape, position_ids_expanded.float()).transpose(2, 3).shape, 9889457444)
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
