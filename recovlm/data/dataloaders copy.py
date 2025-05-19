@@ -15,10 +15,10 @@ from tqdm import tqdm
 
 from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
     ChatCompletionVisionDataset, ChatCompletionVisionParquetDataset, \
-    ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset,InternVLChatCompletionVisionParquetDataset, \
-    BalanceParquetDataset, \
+    ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset, \
+    InternVLChatCompletionVisionParquetDataset, BalanceParquetDataset, \
     ChatCompletionVisionDataset_moonvit,ChatCompletionVisionParquetDataset_moonvit, \
-    ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip, ChatCompletionVisionParquetDataset_navit, ChatCompletionVisionParquetDataset_keye
+    ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip, ChatCompletionVisionParquetDataset_navit
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
 
@@ -250,15 +250,15 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           video_max_frames=120,
                                           datasource_config={},
                                           **kwargs):
+    print(f"create vision_parquet_dataloader: num_workers={num_workers}")
     model_type = kwargs.get('model_class','Qwen2VLForConditionalGeneration')
-    print('test_cut_to_pad:',kwargs.get('cut_to_pad',False))
     use_balance = kwargs.get("use_flops_balance", False)
+
     ModelDataset = {'Qwen2VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration_moonvit':ChatCompletionVisionParquetDataset_moonvit,
                     'Qwen2_5_VLForConditionalGeneration_siglip':ChatCompletionVisionParquetDataset_siglip,
                     'Qwen3SiglipForConditionalGeneration_navit':ChatCompletionVisionParquetDataset_navit,
-                    'KeyeForConditionalGeneration': ChatCompletionVisionParquetDataset_keye,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
     num_readers = kwargs.get("num_readers", 1)
     shuffle_window = kwargs.get("shuffle_window", 0)
@@ -288,7 +288,6 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
             **kwargs
             )
 
-    ### packing, batching size=1; shuffle in dataset
     if use_balance:
         assert num_workers == 1, f"use_flops_balance requires one dataset process per worker"
         dataset = BalanceParquetDataset(input_creator, model_type)
