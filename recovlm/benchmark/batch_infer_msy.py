@@ -374,7 +374,7 @@ def main(_):
             batch_generations = [[] for _ in range(len(batch["inputs"]))]
             print(len(batch["inputs"]))
             for idx in range(len(batch["inputs"])):
-                print(batch["inputs"][idx].keys())
+                print(batch["inputs"][idx]['input_ids'].shape)
             with torch.no_grad():
                 outputs = llm(**batch["inputs"])
             print(outputs)
