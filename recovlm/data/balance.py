@@ -109,7 +109,7 @@ class InternVLChatModelFlops(ModelFlopsBase):
     def __init__(self, **kwargs):
         flops_range = [185, 200, 225, 250]
         self.kwargs = kwargs
-        super(InternVLChatModelFlops).__init__(flops_range)
+        super(InternVLChatModelFlops, self).__init__(flops_range)
     
     def llm_flops(self, seq_list: List[int]) -> float:
         h = 1536
@@ -135,7 +135,7 @@ class Qwen3SiglipModelFlops(ModelFlopsBase):
     def __init__(self, **kwargs):
         flops_range = [640, 670, 700, 740, 780]
         self.kwargs = kwargs
-        super(Qwen3SiglipModelFlops).__init__(flops_range)
+        super(Qwen3SiglipModelFlops, self).__init__(flops_range)
     
     def llm_flops(self, seq_list: List[int]) -> float:
         h = 4096
