@@ -59,7 +59,13 @@ class ParquetDataset(IterableDataset):
                                 try:
                                     row_dict = {}
                                     for col, val in row.items():
+                                        try:
                                         if pd.isna(val):
+                                            continue
+                                        except Exception as e:
+                                            print(f"Error processing row: {e}")
+                                            print('msy--------------------------------------')
+                                            print(val)
                                             continue
                                         if col in ['images', 'messages', 'videos', 'segments']:
                                             if isinstance(val, str):
