@@ -64,9 +64,3 @@ CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS 
 
 # 等待所有进程完成
 wait
-
-# 合并最终结果
-cat ${OUTPUT_PATH}.global* > ${OUTPUT_PATH}
-
-# 清理临时文件
-rm ${OUTPUT_PATH}.global*

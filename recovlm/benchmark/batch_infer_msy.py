@@ -381,7 +381,7 @@ def main(_):
         dataset = MsyInferDataset(dataset_name=dataset_name, parquet_path=dataset_path, model_name_or_path=FLAGS.model_name_or_path, user='mpi')
         local_dataset = split_dataset(dataset, size, rank)
         # Create local results file for this rank using both local and global rank
-        local_output_path = f"{FLAGS.output_path}_{dataset_name}.jsonl.rank{rank}.global{FLAGS.global_rank}"
+        local_output_path = f"{FLAGS.output_path}_{dataset_name}.jsonl.rank{rank}"
 
         # Process local chunk of data
         with open(local_output_path, "w", encoding="utf-8") as f:
@@ -435,7 +435,7 @@ def main(_):
             # Merge results from all processes
             logging.info(f"Results being written to: {FLAGS.output_path}_{dataset_name}.jsonl")
             for r in range(size):
-                temp_file = f"{FLAGS.output_path}_{dataset_name}.jsonl.rank{r}.global{FLAGS.global_rank}"
+                temp_file = f"{FLAGS.output_path}_{dataset_name}.jsonl.rank{r}"
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
 
