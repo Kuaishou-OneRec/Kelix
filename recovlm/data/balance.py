@@ -120,6 +120,38 @@ class InternVLChatModelFlops(object):
             seq_sum += s * 1024
         return (24 * seq_sum * h * h + attention) * 24 * 3 / 1e12
 
+
+class Qwen3SiglipModelFlops(object):
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+    
+    def llm_flops(self, seq_list: List[int]) -> float:
+        h = 4096
+        intermediate_size = 12288
+        attention = 0
+        seq_sum = 0
+        for s in seq_list:
+            attention += 2 * h * s * s
+            seq_sum += s
+        flops_q_o = 4 * seq_sum * h * h
+        flops_k_v = 4 * seq_num * h * 1024
+        flops_ffn = 3 * 2 seq_sum * h * intermediate_size
+        return (flops_q_o + flops_k_v + flops_ffn + attention)  * 36 * 3 / 1e12
+
+    def vit_flops(self, image_list: List[int]) -> float:
+        h = 1152
+        intermediate_size = 4304
+        attention = 0
+        seq_sum = 0
+        for s in image_list:
+            attention += 4 * h * s * s
+            seq_sum += s
+        flops_qkvo = 4 * 2 * seq_sum * h * h
+        flops_ffn = 2 * 2 * seq_sum * h * intermediate_size
+        return (flops_qkvo + flops_ffn + attention) * 27 * 3 / 1e12
+
+
+
 def flops_diff(flops1, flops2):
     return (flops1[0] - flops2[0]) ** 2 + math.fabs(flops1[1] - flops2[1])
 
@@ -259,7 +291,7 @@ def get_flops_model(model_type, **kwargs) -> ModelFlopsBase:
     if model_type == "InternVLChatModel":
         return InternVLChatModelFlops(**kwargs)
     elif model_type == "Qwen3SiglipForConditionalGeneration_navit":
-        return InternVLChatModelFlops(**kwargs)
+        return Qwen3SiglipModelFlops(**kwargs)
     else:
         raise RuntimeError(f"Not supported flops computation for {model_type}")
 

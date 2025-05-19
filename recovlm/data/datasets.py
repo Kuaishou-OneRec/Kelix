@@ -3743,6 +3743,8 @@ class BalanceParquetDataset(IterableDataset):
     source_list = []
     while True:
       inputs, source_name = self.processed_buffer.get()
+      if self.rank == 0:
+          print(f"rank=0, debug_sample: {inputs}, ds: {source_name}")
       buffer.append(inputs)
       source_list.append(source_name)
       if len(buffer) == self.buffer_size:
