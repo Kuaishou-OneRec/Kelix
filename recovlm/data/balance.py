@@ -90,10 +90,10 @@ def greedy_subsets_without_replacement(nums, N, m):
 
 
 class ModelFlopsBase(object):
-    def llm_flops(seq_list: List[int]) -> float:
+    def llm_flops(self, seq_list: List[int]) -> float:
         raise NotImplemented("llm_flops")
     
-    def vit_flops(image_list: List[int]) -> float:
+    def vit_flops(self, image_list: List[int]) -> float:
         raise NotImplemented("vit_flops")
 
 
@@ -101,7 +101,7 @@ class InternVLChatModelFlops(object):
     def __init__(self, **kwargs):
         self.kwargs = kwargs
     
-    def llm_flops(seq_list: List[int]) -> float:
+    def llm_flops(self, seq_list: List[int]) -> float:
         h = 1536
         intermediate_size = 8960
         attention = 0
@@ -111,7 +111,7 @@ class InternVLChatModelFlops(object):
             seq_sum += s
         return (8 * seq_sum * h * h + attention + 6 * seq_sum * h * intermediate_size)  * 28 * 3 / 1e12
 
-    def vit_flops(image_list: List[int]) -> float:
+    def vit_flops(self, image_list: List[int]) -> float:
         h = 1024
         attention = 0
         seq_sum = 0
