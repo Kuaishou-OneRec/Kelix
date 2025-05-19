@@ -373,11 +373,11 @@ def main(_):
             # 存储该批次所有样本的所有生成结果
             batch_generations = [[] for _ in range(len(batch["inputs"]))]
             print(len(batch["inputs"]))
-            for idx in range(len(batch["inputs"])):
-                print(batch["inputs"][idx]['input_ids'].shape)
             with torch.no_grad():
-                outputs = llm(**batch["inputs"])
-            print(outputs)
+                for idx in range(len(batch["inputs"])):
+                    with torch.no_grad():
+                        outputs = llm(**batch["inputs"][idx])
+                        print(outputs)
             # 保存本次生成结果
             # for idx, output in enumerate(outputs):
             #     response = output.outputs[0].text
