@@ -3634,7 +3634,7 @@ class BalanceParquetDataset(IterableDataset):
           f"errmsg={traceback.format_exc()}")
         continue
       
-  def _balance_global(self, raw_input_ids, raw_image_len, buffer, source_list):
+  def _balance_global(self, raw_input_ids, buffer, source_list):
     t2 = time.perf_counter()
     image_pad_len = getattr(self.input, "image_pad_len", 0)
     candidates = balance.greedy_subsets_without_replacement(
@@ -3749,8 +3749,7 @@ class BalanceParquetDataset(IterableDataset):
       source_list.append(source_name)
       if len(buffer) == self.buffer_size:
         raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
-        raw_image_len = [data["pixel_values"].size(0) for data in buffer]
-        candidates, send_out = self._balance_global(raw_input_ids, raw_image_len, buffer, source_list)
+        candidates, send_out = self._balance_global(raw_input_ids, buffer, source_list)
         used = set()
         for selected, is_local in candidates:
           if is_local:

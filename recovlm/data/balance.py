@@ -273,7 +273,14 @@ def exchange_batch_info(samples, ds_list, m):
     assert len(ds_list) == len(samples)
     N = len(samples)
     input_len = [s["input_ids"].shape[-1] for s in samples]
-    image_len = [s["pixel_values"].size(0) for s in samples]
+    if isinstance(m, InternVLChatModelFlops):
+        image_len = [s["pixel_values"].size(0) for s in samples]
+    elif isinstance(m, Qwen3SiglipModelFlops):
+        image_len = []
+        for s in samples:
+            thw = s["image_grid_thw"]
+            lens = [(thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))]
+            image_len.extend(lens)
     f1 = m.llm_flops(input_len)
     f2 = m.vit_flops(image_len)
     info = [N, sum(input_len), sum(image_len), f1, f2] + ds_list
