@@ -3644,7 +3644,7 @@ class BalanceParquetDataset(IterableDataset):
       raw_input_ids, self.input.max_length - image_pad_len, self.fm)
     ids_list = [[raw_input_ids[i] for i in idx] for idx in candidates]
     seq_lens = [sum(ids) for ids in ids_list]
-    filtered_num = sum(s > 20500 for s in seq_lens)
+    filtered_num = sum(s > self.max_length * 0.98 for s in seq_lens)
     if filtered_num > 0:
       candidates = candidates[:filtered_num]
     # if dist.get_rank() == 0:
