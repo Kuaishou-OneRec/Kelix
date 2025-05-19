@@ -278,6 +278,8 @@ def exchange_batch_info(samples, ds_list, m):
     elif isinstance(m, Qwen3SiglipModelFlops):
         image_len = []
         for s in samples:
+            if "image_grid_thw" not in s:
+                continue
             thw = s["image_grid_thw"]
             lens = [(thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))]
             image_len.extend(lens)
