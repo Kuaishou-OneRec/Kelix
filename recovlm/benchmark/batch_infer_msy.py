@@ -386,9 +386,9 @@ def main(_):
             batch_generations = [[] for _ in range(len(batch["inputs"]))]
             with torch.no_grad():
                 for idx in range(len(batch["inputs"])):
+                    start_pos_list = batch["start_pos_list"][idx]
                     inputs = batch["inputs"][idx].to(torch.cuda.current_device())
                     input_ids = inputs["input_ids"]
-                    start_pos_list = batch["start_pos_list"][idx]
                     llm = llm.to(torch.cuda.current_device())
                     with torch.no_grad():
                         outputs = llm(**inputs)
