@@ -2764,6 +2764,8 @@ class ChatCompletionVisionParquetDataset_navit(ChatCompletionVisionDataset_navit
     self.num_workers = num_workers
     self.num_epochs = num_epochs
     self.cut_to_pad = kargs.get("cut_to_pad", True)
+    self.num_readers = kargs.get("num_readers", 1)
+    self.shuffle_window = kargs.get("shuffle_window", 0)
     super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
@@ -2793,7 +2795,7 @@ class ChatCompletionVisionParquetDataset_navit(ChatCompletionVisionDataset_navit
     if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
 
-    dataset = ParquetDataset(data_file_list, self.num_workers)
+    dataset = ParquetDataset(data_file_list, self.num_workers, self.num_readers, self.shuffle_window)
     return dataset, -1
 
   def state_dict(self, ):
@@ -3545,6 +3547,8 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
     self.rng = random.Random(shuffle_seed)
     self.num_workers = num_workers
     self.num_epochs = num_epochs
+    self.num_readers = kargs.get("num_readers", 1)
+    self.shuffle_window = kargs.get("shuffle_window", 0)
 
     super().__init__(sources, **kargs)
     
@@ -3578,7 +3582,9 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
 
   def _build_source_dataset(self, sources):
     data_file_list = self._get_file_list(sources)
-    dataset = ParquetDataset(data_file_list, self.num_workers)
+    dataset = ParquetDataset(data_file_list, self.num_workers,
+                             num_readers=self.num_readers,
+                             shuffle_window=self.shuffle_window)
 
     return dataset, -1
 
@@ -3589,14 +3595,11 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
     self.dataset.load_state_dict(state_dict)
 
 
-class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
-  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
-    super().__init__(sources, num_workers, shuffle_seed, num_epochs, **kargs)
-    
-  def _build_source_dataset(self, sources):
-    data_file_list = self._get_file_list(sources)
-    dataset = ParquetDataset(data_file_list, self.num_workers, num_readers=8, shuffle_window=10000)
-    return dataset, -1
+class BalanceParquetDataset(IterableDataset):
+  def __init__(self, input_creator, model_type, **kwargs):
+    self.input_creator = input_creator
+    self.model_type = model_type
+    self.buffer_size = kwargs.get("buffer_size", 1000)
     
   def _process_task(self):
     while True:
@@ -3614,17 +3617,17 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       except:
         source_name = "None"
 
-      self.source_sample_cnt.setdefault(source_name, 0)
-      self.source_sample_cnt[source_name] += 1
+      self.input.source_sample_cnt.setdefault(source_name, 0)
+      self.input.source_sample_cnt[source_name] += 1
       
       try:
-        inputs = self._process(sample, source_name)
+        inputs = self.input._process(sample, source_name)
         self.processed_buffer.put((inputs, source_name))
       except:
-        self.source_error_cnt.setdefault(source_name, 0)
-        self.source_error_cnt[source_name] += 1
-        error_ratio = self.source_error_cnt[source_name] * 1.0 / \
-          self.source_sample_cnt[source_name]
+        self.input.source_error_cnt.setdefault(source_name, 0)
+        self.input.source_error_cnt[source_name] += 1
+        error_ratio = self.input.source_error_cnt[source_name] * 1.0 / \
+          self.input.source_sample_cnt[source_name]
         logger.error(
           f"ChatCompletionVisionDataset process sample error. "
           f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, "
@@ -3633,7 +3636,9 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
       
   def _balance_global(self, raw_input_ids, raw_image_len, buffer, source_list):
     t2 = time.perf_counter()
-    candidates = balance.greedy_subsets_without_replacement(raw_input_ids, self.max_length - self.image_pad_len)
+    image_pad_len = getattr(self.input, "image_pad_len", 0)
+    candidates = balance.greedy_subsets_without_replacement(
+      raw_input_ids, self.input.max_length - image_pad_len)
     ids_list = [[raw_input_ids[i] for i in idx] for idx in candidates]
     seq_lens = [sum(ids) for ids in ids_list]
     filtered_num = sum(s > 20500 for s in seq_lens)
@@ -3732,33 +3737,15 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
           found.append((groups[gid][begin + off], True))
       
     return found, send_idx
-  
-  def _balance_local(self, raw_input_ids, raw_image_len):
-    selected_index = balance.find_local_v1(raw_input_ids, self.max_length - self.image_pad_len)
-    num_token, num_img = 0, 0
-    for i in selected_index:
-      num_token += raw_input_ids[i]
-      num_img += raw_image_len[i]
-    local_info = [len(selected_index), num_token, num_img]
-    global_info = [None] * dist.get_world_size()
-    dist.all_gather_object(global_info, local_info)
-    num_samples, num_tokens, num_image_tokens = 0, 0, 0
-    for info in global_info:
-      num_samples += info[0]
-      num_tokens += info[1]
-      num_image_tokens += info[2]
-    if dist.get_rank() == 10:
-      print(f"step_info: {global_info}")
-    return selected_index, [num_samples, num_tokens, num_image_tokens]
 
-  def _balance_task(self, buffer_size: int = 1000, target_count: int = 100):
+  def _balance_task(self):
     buffer = []
     source_list = []
     while True:
       inputs, source_name = self.processed_buffer.get()
       buffer.append(inputs)
       source_list.append(source_name)
-      if len(buffer) == buffer_size:
+      if len(buffer) == self.buffer_size:
         raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
         raw_image_len = [data["pixel_values"].size(0) for data in buffer]
         candidates, send_out = self._balance_global(raw_input_ids, raw_image_len, buffer, source_list)
@@ -3789,7 +3776,7 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
   def _packing_task(self):
     while True:
       inputs, data_source, step_info = self._balance_buf.get()
-      packed_inputs = self._packing(inputs)
+      packed_inputs = self.input._packing(inputs)
       packed_inputs["data_source"] = data_source
       packed_inputs["num_samples"] = step_info[0]
       packed_inputs["num_tokens"] = step_info[1]
@@ -3802,8 +3789,10 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     self.world_size = dist.get_world_size()
     self._balance_buf = queue.Queue(maxsize=32)
     self._result_buf = queue.Queue(maxsize=16)
-    buffer_size = self.kargs.get("balance_buffer_size", 1000)
-    target_count = self.kargs.get("balance_candidate_count", 50)
+    
+    self.input = self.input_creator()
+    self.dataset = self.input.dataset
+    self.fm = balance.get_flops_model(self.model_type)
 
     self.sample_queue = queue.Queue(maxsize=32)
     def reader_task():
@@ -3814,11 +3803,11 @@ class InternVLBalanceParquetDataset(InternVLChatCompletionVisionParquetDataset):
     self.reader_thread = threading.Thread(target=reader_task, daemon=True)
     self.reader_thread.start()
 
-    self.processed_buffer = queue.Queue(buffer_size)
+    self.processed_buffer = queue.Queue(self.buffer_size)
     self.process_threads = [threading.Thread(target=self._process_task, daemon=True) for _ in range(16)]
     for t in self.process_threads:
       t.start()
-    self.balance_thread = threading.Thread(target=self._balance_task, args=(buffer_size, target_count), daemon=True)
+    self.balance_thread = threading.Thread(target=self._balance_task, daemon=True)
     self.packing_thread = threading.Thread(target=self._packing_task, daemon=True)
     self.balance_thread.start()
     self.packing_thread.start()
