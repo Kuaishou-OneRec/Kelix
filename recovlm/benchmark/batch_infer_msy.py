@@ -221,24 +221,42 @@ def merge_results(local_results_path, comm, rank, output_path, global_rank):
     """Merge results from all MPI processes with error handling"""
     try:
         if rank == 0:
+            time.sleep(3)
             all_results = []
+            total_ppl_sum = 0.0
+            total_count = 0
+            
             # 读取主进程的结果
             with open(local_results_path, 'r', encoding='utf-8') as f:
-                all_results.extend([line.strip() for line in f])
+                for line in f:
+                    result = json.loads(line.strip())
+                    if "total_ppl" in result:
+                        total_ppl_sum += result["total_ppl"]
+                        total_count += result.get("count", 1)
+                    all_results.append(line.strip())
             
             # 从其他进程收集结果
             for i in range(1, comm.Get_size()):
                 try:
                     worker_results = comm.recv(source=i, tag=11, status=MPI.Status())
                     if worker_results:
-                        all_results.extend(worker_results)
+                        for result_str in worker_results:
+                            result = json.loads(result_str)
+                            if "total_ppl" in result:
+                                total_count += result["count"]
+                                total_ppl_sum = (total_count-result["count"])/total_count *total_ppl_sum +result["total_ppl"]*result["count"]/total_count
+                            all_results.append(result_str)
                 except Exception as e:
                     logging.error(f"Error receiving results from rank {i}: {e}")
                     continue
+            logging.info(f"Average PPL across all ranks: {total_ppl_sum:.4f}")
             
             # 写入合并后的结果
             final_output_path = f"{output_path}.global{global_rank}"
             with open(final_output_path, 'w', encoding='utf-8') as f:
+                # 首先写入平均PPL
+                f.write(json.dumps({"average_ppl": total_ppl_sum, "total_samples": total_count}, ensure_ascii=False) + "\n")
+                # 然后写入所有详细结果
                 for result in all_results:
                     f.write(result + '\n')
         else:
@@ -426,7 +444,6 @@ def main(_):
     comm.Barrier()
     if rank == 0:
         logging.info(f"Results being written to: {FLAGS.output_path}")
-    
         # Merge results from all processes
         merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank)
 
