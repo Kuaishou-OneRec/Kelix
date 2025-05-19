@@ -221,7 +221,6 @@ def merge_results(local_results_path, comm, rank, output_path, global_rank):
     """Merge results from all MPI processes with error handling"""
     try:
         if rank == 0:
-            time.sleep(3)
             all_results = []
             total_ppl_sum = 0.0
             total_count = 0
