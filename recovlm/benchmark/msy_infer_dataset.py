@@ -178,11 +178,11 @@ class MsyInferDataset(ParquetDataset):
         padding=True,
         return_tensors="pt",
       )
+      input_ids = inputs["input_ids"]
       assistant_responses = []
       for message in messages:
         if message["role"] == "assistant":
           assistant_responses.append(message["content"][0]["text"])
-      print(assistant_responses)#[array(['CENTRE'], dtype=object)]
       start_pos_list = []
       for assistant_response in assistant_responses:
         assistant_response = assistant_response.tolist()
@@ -198,6 +198,7 @@ class MsyInferDataset(ParquetDataset):
                 assistant_start_pos = i
                 break
         start_pos_list.append(assistant_start_pos)
+        print(start_pos_list)
       yield {
         "inputs": inputs,
         "start_pos_list": start_pos_list
