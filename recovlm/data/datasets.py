@@ -3650,23 +3650,12 @@ class BalanceParquetDataset(IterableDataset):
     # 0-185, 185-205, 205-225,225-250, 250-
     num_group = 5
     groups = [[] for _ in range(num_group)]
-    def group_index(f):
-      if f >= 250:
-        return 0
-      elif f >= 225:
-        return 1
-      elif f >= 200:
-        return 2
-      elif f >= 185:
-        return 3
-      else:
-        return 4
 
     flops = [[] for _ in range(num_group)]
     for c in candidates:
       llm_len = [raw_input_ids[i] for i in c]
       llm_flops = self.fm.llm_flops(llm_len)
-      gid = group_index(llm_flops)
+      gid = bisect.bisect_right(self.fm.flops_range, llm_flops)
       groups[gid].append(c)
       flops[gid].append(llm_flops)
     # print(f"local_group: rank={dist.get_rank()}, flops={flops}")
@@ -3743,8 +3732,6 @@ class BalanceParquetDataset(IterableDataset):
     source_list = []
     while True:
       inputs, source_name = self.processed_buffer.get()
-      if self.rank == 0:
-          print(f"rank=0, debug_sample: {inputs}, ds: {source_name}")
       buffer.append(inputs)
       source_list.append(source_name)
       if len(buffer) == self.buffer_size:
