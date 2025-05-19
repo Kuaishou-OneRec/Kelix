@@ -3792,7 +3792,7 @@ class BalanceParquetDataset(IterableDataset):
     
     self.input = self.input_creator()
     self.dataset = self.input.dataset
-    self.fm = balance.get_flops_model(self.model_type)
+    self.fm = balance.get_flops_model(self.model_type)()
 
     self.sample_queue = queue.Queue(maxsize=32)
     def reader_task():
