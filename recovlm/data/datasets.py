@@ -1189,12 +1189,6 @@ class ChatCompletionVisionDataset(IterableDataset):
                              packed_sample_idx: List[torch.Tensor],
                              cu_seqlens: List[int],
                              sample_idx: Optional[int] = None):
-
-    print("=" * 40)
-    print_input_info(inputs, "inputs:")
-    print(inputs["image_grid_thw"])
-    print("=" * 40)
-
     packable_length = self.max_length - cu_seqlens[-1]
     if packable_length == 0: return
     if self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:

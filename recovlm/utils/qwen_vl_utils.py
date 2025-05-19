@@ -66,8 +66,6 @@ def smart_resize(
 
     3. The aspect ratio of the image is maintained as closely as possible.
     """
-    if height < 32 or width < 32:
-        raise ValueError(f"height={height}, width={width}")
     if max(height, width) / min(height, width) > MAX_RATIO:
         raise ValueError(
             f"absolute aspect ratio must be smaller than {MAX_RATIO}, got {max(height, width) / min(height, width)}"
