@@ -27,7 +27,7 @@ PYTHONPATH=.:$PYTHONPATH
 
 # 通用的MPI参数
 COMMON_MPI_PARAMS="--allow-run-as-root -np $np \
-    --hostfile /etc/mpi/hostfile \
+    --hostfile /etc/mpi/hostfile_seq \
     --bind-to none \
     --map-by node"
 
