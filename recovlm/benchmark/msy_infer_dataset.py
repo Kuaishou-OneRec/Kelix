@@ -178,12 +178,12 @@ class MsyInferDataset(ParquetDataset):
         padding=True,
         return_tensors="pt",
       )
-      assistant_response = []
+      assistant_responses = []
       for message in messages:
         if message["role"] == "assistant":
-          assistant_response.append(message["content"][0]["text"])
+          assistant_responses.append(message["content"][0]["text"])
       start_pos_list = []
-      for assistant_response in assistant_response:
+      for assistant_response in assistant_responses:
         assistant_tokens = self.processor(
           text=assistant_response,
           padding=True,
