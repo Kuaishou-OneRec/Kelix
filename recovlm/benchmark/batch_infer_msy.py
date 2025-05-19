@@ -434,11 +434,10 @@ def main(_):
         f.write(json.dumps(result, ensure_ascii=False) + "\n")
         f.flush()
     comm.Barrier()
+    merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank)
     if rank == 0:
-        logging.info(f"Results being written to: {FLAGS.output_path}")
         # Merge results from all processes
-        merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank)
-
+        logging.info(f"Results being written to: {FLAGS.output_path}")
         for r in range(size):
             temp_file = f"{FLAGS.output_path}.rank{r}.global{FLAGS.global_rank}"
             if os.path.exists(temp_file):

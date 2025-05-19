@@ -3,7 +3,7 @@
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1000 > /etc/mpi/hostfile_seq
 hostfile=/etc/mpi/hostfile_seq
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
-np=4  # 总进程数改为4
+np=8  # 总进程数改为8
 export HOSTFILE=/etc/mpi/hostfile_seq
 
 # CUDA environment variables
@@ -58,7 +58,7 @@ COMMON_SCRIPT_PARAMS="--output_path ${OUTPUT_PATH} \
     --num_generations 1"
 
 # 运行单个MPI任务，使用所有GPU
-CUDA_VISIBLE_DEVICES=0,1,2,3 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
     python3 recovlm/benchmark/batch_infer_msy.py \
     $COMMON_SCRIPT_PARAMS
 
