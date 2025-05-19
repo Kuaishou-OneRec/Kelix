@@ -1105,6 +1105,7 @@ def train():
       labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
       ticker.tick("labels=...")
       with Timer("Fwd"):
+        print(f"rank={dist.get_rank(), pixel_values={pixel_values=.shape}, thw={image_grid_thw}}")
         if args.model_class == "InternVLChatModel":
             output = model(
               input_ids = input_ids, attention_mask=attention_mask,
