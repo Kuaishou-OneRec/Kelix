@@ -135,7 +135,7 @@ class Qwen3SiglipModelFlops(object):
             seq_sum += s
         flops_q_o = 4 * seq_sum * h * h
         flops_k_v = 4 * seq_num * h * 1024
-        flops_ffn = 3 * 2 seq_sum * h * intermediate_size
+        flops_ffn = 3 * 2 * seq_sum * h * intermediate_size
         return (flops_q_o + flops_k_v + flops_ffn + attention)  * 36 * 3 / 1e12
 
     def vit_flops(self, image_list: List[int]) -> float:
