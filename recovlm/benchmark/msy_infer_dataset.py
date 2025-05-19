@@ -141,6 +141,8 @@ class MsyInferDataset(ParquetDataset):
     self.model_name_or_path = model_name_or_path
     self.max_text_len = max_text_len
     self.max_frames = max_frames
+    self.start_id = 151644 
+    self.end_id = 151645
     
     if parquet_path.endswith(".parquet"):
       self.total_rows = pq.read_metadata(parquet_path).num_rows
@@ -180,46 +182,22 @@ class MsyInferDataset(ParquetDataset):
           return_tensors="pt",
         )
         input_ids = inputs["input_ids"]
-        assistant_responses = []
-        for message in messages:
-          if message["role"] == "assistant":
-            if isinstance(message["content"], list):
-              assistant_responses.append(message["content"][0]["text"])
-            else:
-              assistant_responses.append(message["content"])
         
-        start_pos_list = []
-        for assistant_response in assistant_responses:
-          assistant_response = assistant_response.tolist()
-          assistant_tokens = self.processor(
-            text=assistant_response,
-            padding=True,
-            return_tensors="pt",
-          )["input_ids"][0]
-          
-          assistant_start_pos = None
-          for i in range(len(input_ids[0]) - len(assistant_tokens)+1):
-            if torch.all(input_ids[0][i:i+len(assistant_tokens)] == assistant_tokens):
-              assistant_start_pos = i
-              break
-          
-          if assistant_start_pos is not None:
-            start_pos_list.append(assistant_start_pos)
-          else:
-            # 如果找不到匹配位置，使用一个默认值或跳过
-            logging.warning(f"Could not find matching position for assistant response: {assistant_response}, original text: {text}")
-            print(assistant_tokens)
-            print(input_ids[0])
-            continue
-        
-        if not start_pos_list:
+        answer_idx_list = []
+        #input_ids中第三个start id到第三个end id之间的位置
+        start_pos = input_ids[0].index(self.start_id)
+        end_pos = input_ids[0].index(self.end_id)
+        answer_idx_list.append((start_pos,end_pos))
+        print(answer_idx_list)
+        print(input_ids[0])
+        if not answer_idx_list:
           # 如果没有找到任何有效的起始位置，跳过这个样本
           logging.warning("No valid start positions found, skipping sample")
           continue
           
         yield {
           "inputs": inputs,
-          "start_pos_list": start_pos_list
+          "answer_idx_list": answer_idx_list
         }
         
       except Exception as e:
