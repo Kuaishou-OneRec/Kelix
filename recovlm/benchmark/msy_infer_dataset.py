@@ -208,6 +208,8 @@ class MsyInferDataset(ParquetDataset):
           else:
             # 如果找不到匹配位置，使用一个默认值或跳过
             logging.warning(f"Could not find matching position for assistant response: {assistant_response}, original text: {text}")
+            print(assistant_tokens)
+            print(input_ids[0])
             continue
         
         if not start_pos_list:
