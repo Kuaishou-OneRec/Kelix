@@ -1029,9 +1029,9 @@ def train():
 
       if show_cnt > 0 and dist.get_rank() == 0:
         with Timer("Show data"):
-          input_text = tokenizer.decode(batch['input_ids'][0])
-          print_rank_0(
-              f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
+          # input_text = tokenizer.decode(batch['input_ids'][0])
+          # print_rank_0(
+          #     f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
           print_rank_0(batch)
           show_cnt -= 1
           
