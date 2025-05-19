@@ -4,6 +4,7 @@ import contextlib
 import gc
 import argparse
 import time
+from collections import defaultdict
 import datetime
 import os
 import glob
@@ -15,7 +16,7 @@ import itertools
 import contextlib
 import multiprocessing as mp
 from functools import partial
-
+from tools.mfu.flops_counter import MFUStats
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
@@ -41,11 +42,11 @@ from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
 from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
-from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration_siglip,Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration_siglip_navit
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
 from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
-
+from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration, KeyeDecoderLayer
+from recovlm.models.keye.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer
 
 from recovlm.models.internvl import InternVLChatModel
 from recovlm.models.qwen2 import Qwen2DecoderLayer
@@ -155,7 +156,7 @@ def get_argument_parser():
                       help="whether adopt balanced vit tokens")
 
   parser.add_argument("--model_class", type=str, default="Qwen2_5_VLForConditionalGeneration_moonvit",
-                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'InternVLChatModel'",)
+                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'KeyeForConditionalGeneration', 'InternVLChatModel'",)
   
   parser.add_argument("--model_processor", type=str, default="Qwen2_5_VLProcessor_moonvit",
                       help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit' or 'Qwen3SiglipProcessor'")
@@ -461,7 +462,7 @@ def freeze_params(args, model):
           param.requires_grad = False
       print_rank_0("=" * 50)
     
-  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit']:
+  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration']:
     if args.freeze_llm:
       print_rank_0("Freeze LLM parameters.")
       for name, param in model.named_parameters():
@@ -725,6 +726,7 @@ def train():
       "Qwen2_5_VLForConditionalGeneration_siglip": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
       "Qwen3SiglipForConditionalGeneration_navit": {Qwen3SiglipDecoderLayer, SiglipEncoderLayer},
       "Qwen2_5_VLForConditionalGeneration_siglip_navit": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
+      "KeyeForConditionalGeneration":  {KeyeDecoderLayer, KeyeSiglipEncoderLayer},
       "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
     }
     set_activation_checkpointing(
@@ -881,10 +883,9 @@ def train():
 
   dist.barrier()
 
-  try: tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
-  except Exception as e:
-    print(f"init tokenizer failed\ne={e}")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
+  tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
+  image_token_id = tokenizer.encode('<im_patch>')[0]  if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|image_pad|>')[0]
+  image_start_id = tokenizer.encode("</image>")[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|vision_start|>')[0]
 
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
@@ -938,6 +939,7 @@ def train():
   acc_valid_num_tokens = 0
   acc_num_image_tokens = 0
   total_num_image_tokens = 0
+  mfu_stats = MFUStats(args)
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
@@ -992,15 +994,13 @@ def train():
       print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
       num_tokens = token_count
       num_samples = (sample_idx.max() + 1).sum()
-      # num_image_tokens = pixel_values.shape[0] * 256 # if args.model_class == "InternVLChatModel" else 0
-      
-      num_image_tokens2 = (input_ids == 151667).sum().item()
-      if num_image_tokens2 == 0: num_image_tokens2 = (input_ids == 151655).sum().item()
 
-      num_image_tokens = num_image_tokens2
+      image_tokens_ids = input_ids == image_token_id
+      num_image_tokens = image_tokens_ids.sum().item()
+      num_image_tokens2 = num_image_tokens
 
-      # print(input_ids, 54544444)
-      # print(f"num_image_tokens111111={num_image_tokens}")
+      num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item()
+      mfu_stats.set(num_image_tokens, num_tokens, num_samples.detach().item(), num_images)
 
       # num_tokens - (sample_idx == -1).sum()
       num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
@@ -1132,7 +1132,7 @@ def train():
           else:
             vision_learning_rate = lr_scheduler.get_lr()[1]
           end_time = time.time()
-          sec_per_step = (end_time - start_time) # / args.gradient_accumulation_steps
+          sec_per_step = (end_time - start_time) / args.logging_per_step # / args.gradient_accumulation_steps
           tokens_per_sec_per_gpu = \
             acc_num_tokens  / (end_time - start_time) / dist.get_world_size()
           samples_per_sec_per_gpu = \
@@ -1156,7 +1156,6 @@ def train():
 
 
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
-          start_time = end_time
           log_dict = {
             # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
             "training/loss": avg_loss,
@@ -1177,20 +1176,20 @@ def train():
             "perf/image_token_ratio_by_valid": image_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
             "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples,
-
+            **mfu_stats.mfu(end_time - start_time, global_step),
             "perf/samples_per_step_per_gpu_v2": samples_per_step_per_gpu_v2,
             "perf/samples_per_sec_per_gpu_v2": samples_per_sec_per_gpu_v2,
             "perf/image_tokens_per_step_per_gpu_v2": image_tokens_per_step_per_gpu_v2,
             "perf/image_tokens_per_sec_per_gpu_v2": image_tokens_per_sec_per_gpu_v2,
             "perf/tokens_per_step_per_gpu_v2": tokens_per_step_per_gpu_v2,
             "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
-
           }
+          start_time = end_time
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
           ticker.tick(f"log_dict*{log_acc_step}")
 
 
-          
+
 
           for name, data in log_dict.items():
             if data is not None and tb_writer:
@@ -1242,7 +1241,8 @@ def train():
             f"Learning Rate: {learning_rate}, "
             f"Grad Norm: {get_global_grad_norm(model).detach().cpu().item()}, "
             f"Sec per Step: {sec_per_step}",
-            format_dict_or_list(log_dict)
+            format_dict_or_list(log_dict),
+            "\n", format_dict_or_list({"mfu_stats": mfu_stats.mfu_per_step_per_gpu, "ticker": ticker.stat()})
         )        
 
           # upload heart_beat to remote

@@ -807,6 +807,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+
 class Qwen2_5_VLAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
@@ -838,12 +839,11 @@ class Qwen2_5_VLAttention(nn.Module):
                 f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
                 f" and `num_heads`: {self.num_heads})."
             )
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.q_norm = Qwen2RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
-        self.k_norm = Qwen2RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
+
         self.rotary_emb = Qwen2_5_VLRotaryEmbedding(config=config)
 
     def forward(
@@ -859,12 +859,12 @@ class Qwen2_5_VLAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_norm(self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
-        key_states = self.k_norm(self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
@@ -944,13 +944,13 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
         cu_seqlens: Optional[torch.Tensor] = None
     ):
         bsz, q_len, _ = hidden_states.size()
-        q= self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
-        query_states = self.q_norm(q)
-        key_states = self.k_norm(self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
@@ -1053,6 +1053,7 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
             attn_weights = None
 
         return attn_output, attn_weights, past_key_value
+
 
 
 class Qwen2_5_VLSdpaAttention(Qwen2_5_VLAttention):
@@ -3540,4 +3541,4 @@ class Projector(nn.Module):
 
 
 
-__all__ = ["Qwen2_5_VLForConditionalGeneration", "Qwen2_5_VLModel", "Qwen2_5_VLPreTrainedModel"]
+__all__ = ["Qwen2_5_VLForConditionalGeneration", "Qwen2_5_VLModel", "Qwen2_5_VLPreTrainedModel", "Qwen2_5_VLForConditionalGeneration_moonvit", "Qwen2_5_VLForConditionalGeneration_siglip"]

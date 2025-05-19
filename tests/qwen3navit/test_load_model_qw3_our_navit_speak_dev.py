@@ -132,12 +132,12 @@ from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2
 
 # from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip, Qwen2_5_VLForConditionalGeneration_siglip_navit
 # /llm_reco/lingzhixin/recovlm_qw0510/recovlm/recovlm/models/qwen3siglip/modeling_qwen3siglip.py
-from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
+from recovlm.models.keye.modeling_keye import Qwen3SiglipForConditionalGeneration_navit
 from recovlm.utils.time_tracker import TimeTracker
 from recipes.inspects import info_params_recursive
 
 # /llm_reco/lingzhixin/recovlm_qw0510/recovlm/recovlm/models/qwen3siglip/processing_qwen3siglip.py
-from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_navit
+from recovlm.models.keye.processing_keye import Qwen3SiglipProcessor_navit
 
 def set_seed(seed: int):
     import random
@@ -215,7 +215,7 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-processor = Qwen3SiglipProcessor_navit.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2')
+processor = Qwen3SiglipProcessor_navit.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip2')
 tokenizer = processor.tokenizer
 
 
@@ -296,7 +296,7 @@ if 1:
     try:
         with set_default_dtype(torch.bfloat16):
             model = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
-                "/llm_reco/liuyang76/train_out/0.0.0/qwen3_2B_stage1_resume_1k/step4000/global_step4000/converted/",
+                "/llm_reco/liuyang76/train_out/0.0.0/qwen3_2B_stage1_resume_1k/step4000/global_step4000/converted2/",
                 torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
                 device_map="cuda:0",
@@ -323,3 +323,4 @@ if 1:
         traceback.print_exc()
         print(e)
         pass
+

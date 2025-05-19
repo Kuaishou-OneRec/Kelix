@@ -3,20 +3,20 @@ git config --global user.name 'lingzhixin'
 
 email=$(git config --get user.email)
 
-# 检查 email 是否为空
+# ��~@�~_� email �~X��~P�为空
 if [[ -z "$email" ]]; then
         echo "Please set you git email:"
         echo "  git config --global user.email 'you@kuaishou.com'"
         exit 1
 else
-        echo "Git user.email: $email"
+        echo "Git user.emal: $email"
 fi
 
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip/
-OUTPUT_DIR=/llm_reco/lingzhixin/exps/qwen3navit/debug_qwen3navit/0.0.2/8B256/
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct # Pretrained/Base model path
+OUTPUT_DIR=/llm_reco/lingzhixin/output/freeze_debug/0.0.4/baselinely_w2
 
 mkdir -p $OUTPUT_DIR
 
@@ -24,7 +24,7 @@ mkdir -p /tmp/_wids_cache
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
-# 注意修改实验内容备注
+# 注�~D~O修�~T���~^��~L�~F~E容��~G注
 comment="version:0.4.1;model_size:72B;GPU_type:H800;data:inner & outer comments"
 
 git add --all
@@ -111,18 +111,18 @@ nohup mpirun --allow-run-as-root \
         -x KAI_FLAG_FILE \
         -x KML_ID \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
-	-x TOKENIZERS_PARALLELISM=false \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_8B256.json \
-                --model_class Qwen3SiglipForConditionalGeneration_navit \
-		--allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
+                --dataset_config examples/vlm/demo0506/qwen_cut_text3.json \
+		--model_processor Qwen2_5_VLProcessor \
+                --model_class Qwen2_5_VLForConditionalGeneration \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 15000 \
+                --monitor_image_tokens \
+		--max_length 14800 \
                 --learning_rate 1e-6 \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
@@ -137,7 +137,6 @@ nohup mpirun --allow-run-as-root \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
                 --merge_checkpoint \
-		--monitor_image_tokens \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
                 --comment "$comment" \
@@ -145,4 +144,3 @@ nohup mpirun --allow-run-as-root \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
-
