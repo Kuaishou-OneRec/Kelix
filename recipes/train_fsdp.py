@@ -1055,9 +1055,10 @@ def train():
       position_ids = batch.get("position_ids", None)
       image_flags = batch.get("image_flags", None)
 
-      print_rank_0(
-        print_input_info(batch, return_str=True)
-      )
+
+      if rank == 0:
+        print_input_info(batch, return_str=False)
+      
 
       # 打印 token 数量
       if not use_flops_balance or True:
