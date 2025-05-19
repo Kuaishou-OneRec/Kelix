@@ -162,7 +162,7 @@ flags.DEFINE_integer(
 flags.DEFINE_string("metrics_output_file", "infer_metric.txt", "Path to the file to output final metrics (accuracy etc.)")
 
 flags.DEFINE_integer(
-  "num_generations", 10, "Number of times to generate response for each sample."
+  "num_generations", 1, "Number of times to generate response for each sample."
 )
 
 flags.DEFINE_float(
@@ -192,144 +192,8 @@ def collate_fn(samples):
       batch[key].append(item)
   return batch
 
-def extract_satisfaction(response: str) -> str:
-    """从响应中提取满意度结果。支持以下两种格式：
-       1. "用户对视频的满意度结果是：满意" 或 "用户对视频的满意度结果是：不满意"，例如：['用户对视频的满意度结果是：满意']
-       2. 包含 "【结果：不满意】" 这样的格式
-    """
-    import re
-    try:
-        patterns = [
-            r"【结果[:：]满意】",
-            r"【结果[:：]不满意】",
-            r"【結果：满意】",
-            r"【結果：不满意】",
-            r"【满意】",
-            r"【不满意】",
-            r"\*\*结果\*\*[:：]满意",
-            r"\*\*结果\*\*[:：]不满意",
-            r"结果[:：]\s*满意",
-            r"结果[:：]\s*不满意"
-        ]
-        for pattern in patterns:
-            match = re.search(pattern, response)
-            if match:
-                return match.group(0)
-        return None
-    except Exception as e:
-        print(f"Error extracting satisfaction: {e}")
-        return None
 
-def parse_prompt(prompt):
-    """解析prompt内容，提取assistant回复
-    
-    Args:
-        prompt (str): 原始prompt文本
-        
-    Returns:
-        str or None: assistant的回复内容
-    """
-    try:
-        # 打印原始prompt内容，用于调试
-        print("\n=== Original Prompt Content ===")
-        print(prompt)
-        print("=============================\n")
-        
-        # 按照对话格式分割
-        parts = prompt.split("<|im_start|>")
-        for part in parts:
-            if "assistant" in part:
-                # 提取assistant部分的内容
-                content = part.split("<|im_end|>")[0].strip()
-                content = content.replace("assistant\n", "").strip()
-                return content
-    except Exception as e:
-        print(f"Error parsing prompt: {e}")
-        print(f"Prompt content: {prompt}")
-    return None
 
-def calculate_accuracy(true_labels: list, pred_labels: list) -> float:
-    """计算准确率"""
-    if len(true_labels) != len(pred_labels) or len(true_labels) == 0:
-        return 0.0
-    correct = sum(1 for t, p in zip(true_labels, pred_labels) if t == p)
-    return correct / len(true_labels)
-
-def extract_photo_id_from_messages(messages: List[dict]) -> str:
-    """从消息中的图片名称提取 photo_id"""
-    try:
-        for msg in messages:
-            if msg.get('role') == 'user':
-                content = msg.get('content', [])
-                if isinstance(content, list):
-                    for item in content:
-                        if item.get('type') == 'video':
-                            video = item.get('video', [])
-                            if video and isinstance(video, list):
-                                first_frame = video[0]
-                                if first_frame.get('type') == 'image':
-                                    image_name = first_frame.get('image', '')
-                                    if '_' in image_name:
-                                        return image_name.split('_')[0]
-        return None
-    except Exception as e:
-        print(f"Error extracting photo_id from messages: {e}")
-        return None
-
-def load_true_labels(parquet_path: str) -> Dict[str, str]:
-    """从parquet文件中加载真实标签"""
-    try:
-        print(f"\nLoading true labels from: {parquet_path}")
-        df = pd.read_parquet(parquet_path)
-        print(f"Total rows: {len(df)}")
-        
-        true_labels = {}
-        error_count = 0
-        
-        for idx, row in df.iterrows():
-            try:
-                messages = row.get('messages', [])
-                
-                if isinstance(messages, str):
-                    try:
-                        messages = json.loads(messages)
-                    except Exception as e:
-                        error_count += 1
-                        continue
-                
-                if not isinstance(messages, list):
-                    error_count += 1
-                    continue
-                
-                # 从消息中提取 photo_id
-                photo_id = extract_photo_id_from_messages(messages)
-                if not photo_id:
-                    error_count += 1
-                    continue
-                
-                # 提取满意度结果
-                for msg in messages:
-                    if msg.get('role') == 'assistant':
-                        content = msg.get('content', '')
-                        label = extract_satisfaction(content)
-                        if label:
-                            true_labels[photo_id] = label
-                        else:
-                            print(f"===debug=== extrace true label fail, content is {content}")                        
-                
-            except Exception as e:
-                error_count += 1
-                continue
-        
-        print(f"\nLabel extraction summary:")
-        print(f"Total rows processed: {len(df)}")
-        print(f"Labels extracted: {len(true_labels)}")
-        print(f"Errors encountered: {error_count}")
-        return true_labels
-        
-    except Exception as e:
-        print(f"Error loading parquet file: {e}")
-        return {}
 
 def split_dataset(dataset, comm_size, rank):
     """Split dataset for MPI processes using IterableDataset approach"""
@@ -468,185 +332,148 @@ def main(_):
     comm.Barrier()
     
     # 初始化采样参数
-    sampling_params = SamplingParams(
-        temperature=FLAGS.temperature,
-        top_p=FLAGS.top_p,
-        max_tokens=FLAGS.max_tokens,
-        repetition_penalty=FLAGS.repetition_penalty
-    )
-    
-    try:
-        llm = LLM(
-            model=FLAGS.model_name_or_path,
-            tensor_parallel_size=FLAGS.tp,
-            gpu_memory_utilization=FLAGS.gpu_memory_utilization,
-            limit_mm_per_prompt={
-                "image": FLAGS.limit_mm_per_prompt,
-                "video": FLAGS.limit_mm_per_prompt
-            }
-        )
-    except Exception as e:
-        logging.error(f"Failed to initialize LLM on rank {rank} ({hostname}): {str(e)}")
-        comm.Abort()
-    
     # Load dataset
     datasetlist = {
-        "MMBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/en/dev-00000-of-00001.parquet",
-        "MMBenchCn":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/cn/dev-00000-of-00001.parquet",
-        "MME":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MME/MME.json",
-        "MMTBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMTBench/mmt_bench_485_hetu_format.json",
-        "MMStar":"/mmu_mllm_hdd/shiyaya/dataset/mm_reasoning/benchmark/MMStar/YuanQi/mmstar.json",
-        "MathVista":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MathVista/mathvista.json",
-        "OCRBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/OCRBench/data/test-00000-of-00001.parquet",
-        "flickr30k":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/flickr30k/flickr30k_karpathy_test.json",
-        "Benchmark_v21":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/Benchmark_v21/Benchmark_v21.json",
-        "ai2d":"/llm_reco_ssd/luoxinchen/dataset/ai2d/ai2d/data/merge/test-00000-of-00001.parquet",
-        "ai2d_no_mask":"/llm_reco_ssd/luoxinchen/dataset/ai2d/ai2d-no-mask/data/merge/test-00000-of-00001.parquet",
-        "infoVQA":"/llm_reco_ssd/luoxinchen/dataset/infoVQA/human_download/infographicsvqa_qas/reconstruct_val.json",
-        "RealWorldQA":"/llm_reco_ssd/luoxinchen/dataset/RealWorldQA/RealWorldQA/data/merge/test-00000-of-00001.parquet"
+        # "MMBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/en/dev-00000-of-00001.parquet",
+        # "MMBenchCn":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMBench/cn/dev-00000-of-00001.parquet",
+        # "MME":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MME/MME.json",
+        # "MMTBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMTBench/mmt_bench_485_hetu_format.json",
+        # "MMStar":"/mmu_mllm_hdd/shiyaya/dataset/mm_reasoning/benchmark/MMStar/YuanQi/mmstar.json",
+        # "MathVista":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MathVista/mathvista.json",
+        "OCRBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/OCRBench/data/test-00000-of-00001.parquet"
+        # "flickr30k":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/flickr30k/flickr30k_karpathy_test.json",
+        # "Benchmark_v21":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/Benchmark_v21/Benchmark_v21.json",
+        # "ai2d":"/llm_reco_ssd/luoxinchen/dataset/ai2d/ai2d/data/merge/test-00000-of-00001.parquet",
+        # "ai2d_no_mask":"/llm_reco_ssd/luoxinchen/dataset/ai2d/ai2d-no-mask/data/merge/test-00000-of-00001.parquet",
+        # "infoVQA":"/llm_reco_ssd/luoxinchen/dataset/infoVQA/human_download/infographicsvqa_qas/reconstruct_val.json",
+        # "RealWorldQA":"/llm_reco_ssd/luoxinchen/dataset/RealWorldQA/RealWorldQA/data/merge/test-00000-of-00001.parquet"
     }
     
     # Split dataset for this MPI rank
     for dataset_name, dataset_path in datasetlist.items():
-        dataset = MsyInferDataset(dataset_path, dataset_name, transform_func=dataset_name)
+        dataset = MsyInferDataset(dataset_name=dataset_name, parquet_path=dataset_path, model_name_or_path=FLAGS.model_name_or_path, user='mpi')
         local_dataset = split_dataset(dataset, size, rank)
     
-    # Load true labels only on rank 0 and broadcast to all processes
-    if rank == 0:
-        true_labels = load_true_labels(FLAGS.parquet_path)
-    else:
-        true_labels = None
-    
-    # Broadcast true_labels from rank 0 to all processes
-    true_labels = comm.bcast(true_labels, root=0)
     
     # Create local results file for this rank using both local and global rank
     local_output_path = f"{FLAGS.output_path}.rank{rank}.global{FLAGS.global_rank}"
-    results_stats = {
-        "true_sat_pred_sat": 0,
-        "true_unsat_pred_unsat": 0,
-        "true_sat_pred_unsat": 0,
-        "true_unsat_pred_sat": 0,
-        "pred_unknown": 0,
-        "total_processed": 0
-    }
+    with set_default_dtype(torch.bfloat16):
+        llm = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
+            FLAGS.model_name_or_path,
+            _attn_implementation = 'flash_attention_2',
+            use_cache=False
+        )
+
 
     # Process local chunk of data
     with open(local_output_path, "w", encoding="utf-8") as f:
-        total_samples = 0
-        has_response_samples = 0
-        has_response_text_samples = 0
         for batch in tqdm(DataLoader(local_dataset,batch_size=FLAGS.batch_size,
                                    collate_fn=collate_fn),disable=rank != 0):  # Only rank 0 shows progress bar
-            total_samples += len(batch["inputs"])
             # 存储该批次所有样本的所有生成结果
             batch_generations = [[] for _ in range(len(batch["inputs"]))]
+            with torch.no_grad():
+                outputs = llm(**batch["inputs"])
+            print(outputs)
+            # 保存本次生成结果
+            # for idx, output in enumerate(outputs):
+            #     response = output.outputs[0].text
+            #     if response:
+            #         has_response_text_samples += 1
+            #     pred_label = extract_satisfaction(response)
+                
+            #     batch_generations[idx].append({
+            #         "generation_id": gen_idx,
+            #         "pred_label": pred_label,
+            #         "response": response
+            #     })
             
-            # 对当前批次进行多次生成
-            for gen_idx in range(FLAGS.num_generations):
-                outputs = llm.generate(batch["inputs"], sampling_params)
-                has_response_samples += len(outputs)
+            # # 处理并保存该批次的所有结果
+            # for idx in range(len(batch["inputs"])):
+            #     photo_id = batch["photo_id"][idx]
+            #     true_label = true_labels.get(photo_id)
                 
-                # 保存本次生成结果
-                for idx, output in enumerate(outputs):
-                    response = output.outputs[0].text
-                    if response:
-                        has_response_text_samples += 1
-                    pred_label = extract_satisfaction(response)
-                    
-                    batch_generations[idx].append({
-                        "generation_id": gen_idx,
-                        "pred_label": pred_label,
-                        "response": response
-                    })
-            
-            # 处理并保存该批次的所有结果
-            for idx in range(len(batch["inputs"])):
-                photo_id = batch["photo_id"][idx]
-                true_label = true_labels.get(photo_id)
+            #     # 更新统计信息
+            #     for generation in batch_generations[idx]:
+            #         pred_label = generation["pred_label"]
+            #         if true_label and pred_label:
+            #             if true_label == pred_label:
+            #                 if true_label == "满意":
+            #                     results_stats["true_sat_pred_sat"] += 1
+            #                 else:
+            #                     results_stats["true_unsat_pred_unsat"] += 1
+            #             else:
+            #                 if true_label == "满意":
+            #                     results_stats["true_sat_pred_unsat"] += 1
+            #                 else:
+            #                     results_stats["true_unsat_pred_sat"] += 1
+            #         else:
+            #             results_stats["pred_unknown"] += 1
+            #         results_stats["total_processed"] += 1
                 
-                # 更新统计信息
-                for generation in batch_generations[idx]:
-                    pred_label = generation["pred_label"]
-                    if true_label and pred_label:
-                        if true_label == pred_label:
-                            if true_label == "满意":
-                                results_stats["true_sat_pred_sat"] += 1
-                            else:
-                                results_stats["true_unsat_pred_unsat"] += 1
-                        else:
-                            if true_label == "满意":
-                                results_stats["true_sat_pred_unsat"] += 1
-                            else:
-                                results_stats["true_unsat_pred_sat"] += 1
-                    else:
-                        results_stats["pred_unknown"] += 1
-                    results_stats["total_processed"] += 1
-                
-                # 保存结果
-                result = {
-                    "photo_id": photo_id,
-                    "true_label": true_label,
-                    "prompt": batch["inputs"][idx]["prompt"],
-                    "rsp": batch_generations[idx]
-                }
-                f.write(json.dumps(result, ensure_ascii=False) + "\n")
-                f.flush()
+            #     # 保存结果
+            #     result = {
+            #         "photo_id": photo_id,
+            #         "true_label": true_label,
+            #         "prompt": batch["inputs"][idx]["prompt"],
+            #         "rsp": batch_generations[idx]
+            #     }
+            #     f.write(json.dumps(result, ensure_ascii=False) + "\n")
+            #     f.flush()
 
-            if total_samples % 100 == 0:
-                logging.info(f"===debug=== rank {rank} Processed {results_stats['total_processed']} samples...")
+            # if total_samples % 100 == 0:
+            #     logging.info(f"===debug=== rank {rank} Processed {results_stats['total_processed']} samples...")
 
-            if FLAGS.num_samples is not None and results_stats["total_processed"] >= FLAGS.num_samples:
-                logging.info(f"\nReached sample limit ({FLAGS.num_samples}), stopping...")
-                break
+            # if FLAGS.num_samples is not None and results_stats["total_processed"] >= FLAGS.num_samples:
+            #     logging.info(f"\nReached sample limit ({FLAGS.num_samples}), stopping...")
+            #     break
 
-    # 确保文件写入完成
-    comm.Barrier()
+    # # 确保文件写入完成
+    # comm.Barrier()
     
-    if rank == 0:
-        logging.info(f"Results being written to: {FLAGS.output_path}")
+    # if rank == 0:
+    #     logging.info(f"Results being written to: {FLAGS.output_path}")
     
-    # Merge results from all processes
-    merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank)
+    # # Merge results from all processes
+    # merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank)
     
-    # Gather statistics from all processes
-    all_stats = comm.gather(results_stats, root=0)
+    # # Gather statistics from all processes
+    # all_stats = comm.gather(results_stats, root=0)
     
-    # Only rank 0 computes and prints final metrics
-    if rank == 0:
-        combined_stats = {
-            "true_sat_pred_sat": sum(stats["true_sat_pred_sat"] for stats in all_stats),
-            "true_unsat_pred_unsat": sum(stats["true_unsat_pred_unsat"] for stats in all_stats),
-            "true_sat_pred_unsat": sum(stats["true_sat_pred_unsat"] for stats in all_stats),
-            "true_unsat_pred_sat": sum(stats["true_unsat_pred_sat"] for stats in all_stats),
-            "pred_unknown": sum(stats["pred_unknown"] for stats in all_stats),
-            "total_processed": sum(stats["total_processed"] for stats in all_stats)
-        }
+    # # Only rank 0 computes and prints final metrics
+    # if rank == 0:
+    #     combined_stats = {
+    #         "true_sat_pred_sat": sum(stats["true_sat_pred_sat"] for stats in all_stats),
+    #         "true_unsat_pred_unsat": sum(stats["true_unsat_pred_unsat"] for stats in all_stats),
+    #         "true_sat_pred_unsat": sum(stats["true_sat_pred_unsat"] for stats in all_stats),
+    #         "true_unsat_pred_sat": sum(stats["true_unsat_pred_sat"] for stats in all_stats),
+    #         "pred_unknown": sum(stats["pred_unknown"] for stats in all_stats),
+    #         "total_processed": sum(stats["total_processed"] for stats in all_stats)
+    #     }
         
-        # Print final combined statistics
-        logging.info("\n=== Final Combined Statistics ===")
-        total_valid = (combined_stats["true_sat_pred_sat"] + 
-                      combined_stats["true_unsat_pred_unsat"] + 
-                      combined_stats["true_sat_pred_unsat"] + 
-                      combined_stats["true_unsat_pred_sat"])
+    #     # Print final combined statistics
+    #     logging.info("\n=== Final Combined Statistics ===")
+    #     total_valid = (combined_stats["true_sat_pred_sat"] + 
+    #                   combined_stats["true_unsat_pred_unsat"] + 
+    #                   combined_stats["true_sat_pred_unsat"] + 
+    #                   combined_stats["true_unsat_pred_sat"])
         
-        accuracy = ((combined_stats["true_sat_pred_sat"] + 
-                    combined_stats["true_unsat_pred_unsat"]) / total_valid) if total_valid > 0 else 0.0
+    #     accuracy = ((combined_stats["true_sat_pred_sat"] + 
+    #                 combined_stats["true_unsat_pred_unsat"]) / total_valid) if total_valid > 0 else 0.0
         
-        # Save final metrics
-        if FLAGS.metrics_output_file:
-            final_stats = {
-                "results_stats": combined_stats,
-                "final_accuracy": accuracy
-            }
-            with open(FLAGS.metrics_output_file, "w", encoding="utf-8") as mf:
-                json.dump(final_stats, mf, ensure_ascii=False, indent=2)
+    #     # Save final metrics
+    #     if FLAGS.metrics_output_file:
+    #         final_stats = {
+    #             "results_stats": combined_stats,
+    #             "final_accuracy": accuracy
+    #         }
+    #         with open(FLAGS.metrics_output_file, "w", encoding="utf-8") as mf:
+    #             json.dump(final_stats, mf, ensure_ascii=False, indent=2)
         
-        # Clean up temporary files
-        for r in range(size):
-            temp_file = f"{FLAGS.output_path}.rank{r}.global{FLAGS.global_rank}"
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
+    #     # Clean up temporary files
+    #     for r in range(size):
+    #         temp_file = f"{FLAGS.output_path}.rank{r}.global{FLAGS.global_rank}"
+    #         if os.path.exists(temp_file):
+    #             os.remove(temp_file)
 
 if __name__ == "__main__":
     app.run(main)
