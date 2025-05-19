@@ -184,18 +184,33 @@ class MsyInferDataset(ParquetDataset):
         input_ids = inputs["input_ids"]
         
         answer_idx_list = []
-        #input_ids中第3个start id到第3个end id之间的位置
         # 将tensor转换为list以便使用index方法
         input_ids_list = input_ids[0].tolist()
         try:
-            number = 3
-            start_pos = input_ids_list.index(self.start_id, number)
-            end_pos = input_ids_list.index(self.end_id, number)
-            answer_idx_list.append((start_pos, end_pos))
-            print("Found positions:", answer_idx_list)
-            print("Input IDs:", input_ids_list)
-        except ValueError as e:
-            logging.warning(f"Could not find start/end tokens in sequence: {e}")
+            # 找到所有start_id的位置
+            start_positions = [i for i, x in enumerate(input_ids_list) if x == self.start_id]
+            # 找到所有end_id的位置
+            end_positions = [i for i, x in enumerate(input_ids_list) if x == self.end_id]
+            
+            # 确保有足够的start和end标记
+            if len(start_positions) >= 3 and len(end_positions) >= 3:
+                # 获取第三对的位置
+                start_pos = start_positions[2]  # 第三个start_id的位置
+                end_pos = end_positions[2]      # 第三个end_id的位置
+                
+                # 验证end_pos在start_pos之后
+                if end_pos > start_pos:
+                    answer_idx_list.append((start_pos, end_pos))
+                    print("Found third pair positions:", answer_idx_list)
+                    print("Input IDs:", input_ids_list)
+                else:
+                    logging.warning("Found end_id before start_id, skipping")
+            else:
+                logging.warning(f"Not enough start/end tokens found. Found {len(start_positions)} start tokens and {len(end_positions)} end tokens")
+                continue
+                
+        except Exception as e:
+            logging.warning(f"Error finding token positions: {e}")
             continue
             
         if not answer_idx_list:
