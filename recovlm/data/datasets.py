@@ -1314,8 +1314,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32)
     }
-    if dist.get_rank() == 0:
-      print(print_input_info(inputs))
+
     return inputs
 
   def __iter__(self):
