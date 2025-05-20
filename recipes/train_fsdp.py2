@@ -23,7 +23,7 @@ import psutil
 import threading
 import queue
 from functools import partial
-from tools.mfu.flops_counter import MFUStats
+# from tools.mfu.flops_counter import MFUStats
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
@@ -939,7 +939,7 @@ def train():
   acc_valid_num_tokens = 0
   acc_num_image_tokens = 0
   total_num_image_tokens = 0
-  mfu_stats = MFUStats(args)
+  # mfu_stats = MFUStats(args)
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
@@ -1076,7 +1076,7 @@ def train():
         num_image_tokens2 = num_image_tokens
 
         num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item()
-        mfu_stats.set(num_image_tokens, num_tokens, num_samples.detach().item(), num_images)
+        # mfu_stats.set(num_image_tokens, num_tokens, num_samples.detach().item(), num_images)
 
         # num_tokens - (sample_idx == -1).sum()
         num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
@@ -1259,7 +1259,7 @@ def train():
             "perf/image_token_ratio_by_valid": image_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
             "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples,
-            **mfu_stats.mfu(end_time - start_time, global_step),
+            # **mfu_stats.mfu(end_time - start_time, global_step),
             "perf/samples_per_step_per_gpu_v2": samples_per_step_per_gpu_v2,
             "perf/samples_per_sec_per_gpu_v2": samples_per_sec_per_gpu_v2,
             "perf/image_tokens_per_step_per_gpu_v2": image_tokens_per_step_per_gpu_v2,
@@ -1309,7 +1309,7 @@ def train():
             f"Grad Norm: {get_global_grad_norm(model).detach().cpu().item()}, "
             f"Sec per Step: {sec_per_step}",
             format_dict_or_list(log_dict),
-            "\n", format_dict_or_list({"mfu_stats": mfu_stats.mfu_per_step_per_gpu, "ticker": ticker.stat()})
+            #"\n", format_dict_or_list({"mfu_stats": mfu_stats.mfu_per_step_per_gpu, "ticker": ticker.stat()})
         )        
 
           # upload heart_beat to remote
