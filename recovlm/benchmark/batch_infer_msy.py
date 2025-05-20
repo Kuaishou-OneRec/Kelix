@@ -10,7 +10,7 @@ import pandas as pd
 from typing import Dict, List
 from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_siglip
-from transformers import AutoModelForCausalLM
+from transformers import Qwen2VLForCausalLM
 import math
 from msy_infer_dataset import MsyInferDataset
 import pyarrow.parquet as pq
@@ -285,7 +285,7 @@ def main(_):
         #     _attn_implementation = 'flash_attention_2',
         #     use_cache=False
         # )
-        llm = AutoModelForCausalLM.from_pretrained(
+        llm = Qwen2VLForCausalLM.from_pretrained(
             '/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct', _attn_implementation="flash_attention_2",
             use_cache=False)
     llm = llm.to(torch.cuda.current_device())
