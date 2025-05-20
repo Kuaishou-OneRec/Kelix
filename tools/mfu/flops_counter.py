@@ -1,11 +1,11 @@
 from functools import lru_cache
-from recovlm.utils.ds_utils import format_dict_or_list
-import platform
-import subprocess
-import os
-import re
-import collections
-from collections import defaultdict
+# # from recovlm.utils.ds_utils import format_dict_or_list
+# import platform
+# import subprocess
+# import os
+# import re
+# import collections
+# from collections import defaultdict
 
 def s(x):
     if isinstance(x, list): return sum(x)
@@ -542,6 +542,10 @@ class MFUStats:
       self.total_mfu = defaultdict(int)
 
   def set(self, num_image_tokens, num_tokens, num_samples, num_images):
+      num_image_tokens = int(num_image_tokens)
+      num_tokens = int(num_tokens)
+      num_samples = int(num_samples)
+      num_images = int(num_images)
       self.tokens_for_mfu["num_image_tokens"] += num_image_tokens
       self.tokens_for_mfu["num_tokens"] += num_tokens
       self.tokens_for_mfu["num_samples"] += num_samples
