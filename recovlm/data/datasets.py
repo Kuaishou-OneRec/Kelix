@@ -16,7 +16,7 @@ from datetime import datetime
 import os.path as osp
 import webdataset as wds
 from recovlm.utils.ds_utils import print_input_info
-
+from recovlm.data.image_augs import AutoAugmentWrapper
 from io import BytesIO
 from PIL import Image
 
@@ -756,6 +756,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
+    self.auto_aug = AutoAugmentWrapper(policy=kargs.get("autoaug_policy", None))
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
 
@@ -860,6 +861,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       image = block["image"]
     if image.mode != "RGB":
       image = image.convert("RGB")
+    image = self.auto_aug(image)
     block["image"] = image
     block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
         (self.spatial_merge_size ** 2)
