@@ -10,8 +10,8 @@ import pandas as pd
 from typing import Dict, List
 from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_siglip
-from recovlm.models.qwen2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
-from recovlm.models.qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
+from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
 import math
 from msy_infer_dataset import MsyInferDataset
 import pyarrow.parquet as pq
