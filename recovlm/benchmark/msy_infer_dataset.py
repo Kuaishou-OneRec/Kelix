@@ -40,6 +40,39 @@ def format_text(doc, max_text_len=1000):
       items.append(f"{key}: {str(text)[:max_text_len]}")
   return "\n".join(items)
 
+def MMETransform(sample) -> list:
+  sample = sample['annotations']
+  sample = json.loads(sample)
+  question = sample['question']
+  answer = sample['answer']
+  image_path = sample['image_path']
+  image = Image.open(image_path)
+  messages = [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image",
+          "image": image
+        },
+        {
+          "type": "text",
+          "text": question
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": answer
+        }
+      ]
+    }
+  ]
+  return messages
+
 def MMBenchTransform(sample) -> list:
   index = sample['index']
   image = sample['image']['bytes']
@@ -78,7 +111,12 @@ def MMBenchTransform(sample) -> list:
       },
       {
         "role": "assistant",
-        "content": answer
+        "content": [
+          {
+            "type": "text",
+            "text": answer
+          }
+        ]
       }
   ] 
   return messages
@@ -107,7 +145,8 @@ def OCRBenchTransform(sample) -> list:
 transform_func_map = {
   "MMBench": MMBenchTransform,
   "OCRBench": OCRBenchTransform,
-  "MMBenchCn": MMBenchTransform
+  "MMBenchCn": MMBenchTransform,
+  "MME": MMETransform
 }
 
 
