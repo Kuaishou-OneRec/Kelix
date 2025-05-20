@@ -1455,6 +1455,8 @@ class ChatCompletionVisionDataset_moonvit(ChatCompletionVisionDataset):
       vision_start_token_id = model_config.vision_start_token_id
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
+
+    self.auto_aug = AutoAugmentWrapper(policy=kargs.get("autoaug_policy", None))
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
@@ -1557,6 +1559,8 @@ class ChatCompletionVisionDataset_siglip(ChatCompletionVisionDataset):
       vision_start_token_id = model_config.vision_start_token_id
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
+
+    self.auto_aug = AutoAugmentWrapper(policy=kargs.get("autoaug_policy", None))
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
@@ -1659,6 +1663,7 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
+    self.auto_aug = AutoAugmentWrapper(policy=kargs.get("autoaug_policy", None))
     self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
@@ -1764,6 +1769,7 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
+    self.auto_aug = AutoAugmentWrapper(policy=kargs.get("autoaug_policy", None))
     self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
