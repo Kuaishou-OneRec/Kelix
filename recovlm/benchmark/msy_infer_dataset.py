@@ -486,6 +486,7 @@ class MsyInferDataset(ParquetDataset):
         answer_idx_list = []
         # 将tensor转换为list以便使用index方法
         input_ids_list = input_ids[0].tolist()
+        print(input_ids_list)
         try:
             # 找到所有start_id的位置
             start_positions = [i for i, x in enumerate(input_ids_list) if x == self.start_id]
