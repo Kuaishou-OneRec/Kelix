@@ -22,17 +22,6 @@ from dataset import ParquetDataset
 from loader import PromptLoader
 import logging
 
-def is_null(text):
-  if not text:
-    return True
-  if isinstance(text, float) and np.isnan(text):
-    return True
-  if text == "null":
-    return True
-  if text == "该视频暂时没有评论":
-    return True
-  return False
-
 def format_text(doc, max_text_len=1000):
   items = []
   for key, text in doc.items():
