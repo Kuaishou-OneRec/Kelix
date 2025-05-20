@@ -15,8 +15,6 @@ from msy_infer_dataset import MsyInferDataset
 import pyarrow.parquet as pq
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
 import time
-from transformers import Qwen2_5_VLForConditionalGeneration
-
 # 设置日志格式
 logging.basicConfig(
     level=logging.INFO,
