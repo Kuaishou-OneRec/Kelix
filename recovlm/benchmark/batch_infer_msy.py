@@ -10,10 +10,7 @@ import pandas as pd
 from typing import Dict, List
 from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_siglip
-from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
-from transformers import Qwen2_5_VLForConditionalGeneration
 import math
-from transformers import AutoModelForCausalLM
 from msy_infer_dataset import MsyInferDataset
 import pyarrow.parquet as pq
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
@@ -74,9 +71,6 @@ FLAGS = flags.FLAGS
 flags.DEFINE_string(
   "model_name_or_path", "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip", "The path or name of model."
 )
-# flags.DEFINE_string(
-#   "model_name_or_path", "/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct", "The path or name of model."
-# )
 
 flags.DEFINE_string(
   "parquet_path", "/llm_reco_ssd/huqigen/dataset/wenjuan_sft/photo_0210_11w_cot_v2/photo_0210_11w_sft_data-test.parquet", "The path or name of model."
@@ -87,7 +81,7 @@ flags.DEFINE_integer(
 )
 
 flags.DEFINE_string(
-  "output_path", "qwen2_5_test", "The path of file to write results." 
+  "output_path", "msy_test", "The path of file to write results." 
 )
 
 flags.DEFINE_integer(
@@ -291,12 +285,6 @@ def main(_):
             _attn_implementation = 'flash_attention_2',
             use_cache=False
         )
-        # 1. AutoCausalLM  2. init_process_group + initilize model parallel
-        # llm = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-        #     FLAGS.model_name_or_path,
-        #     _attn_implementation = 'flash_attention_2',
-        #     use_cache=False
-        # )
     llm = llm.to(torch.cuda.current_device())
     # Split dataset for this MPI rank
     for dataset_name, dataset_path in datasetlist.items():
