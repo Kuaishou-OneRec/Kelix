@@ -114,7 +114,7 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-	bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py2 --model_dir $MODEL_DIR \
+	bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_8B256_bal.json \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
