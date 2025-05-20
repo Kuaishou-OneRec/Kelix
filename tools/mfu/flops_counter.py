@@ -1,5 +1,5 @@
 from functools import lru_cache
-# from recovlm.utils.ds_utils import format_dict_or_list
+from recovlm.utils.ds_utils import format_dict_or_list
 import platform
 import subprocess
 import os
