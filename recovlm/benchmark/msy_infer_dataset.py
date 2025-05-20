@@ -522,7 +522,9 @@ class MsyInferDataset(ParquetDataset):
         }
         
       except Exception as e:
+        import traceback
         logging.error(f"Error processing item: {e}")
+        logging.error(traceback.format_exc())
         continue
 
   def __len__(self):
