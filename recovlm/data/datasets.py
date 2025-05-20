@@ -2465,7 +2465,7 @@ class NaiveParquetDataset(IterableDataset):
     self.data_files = data_files
     self.num_workers = num_workers
     self.n_local_shuffle_files_window = n_local_shuffle_files_window
-    print(f"ParquetDataset set n_local_shuffle_files_window={n_local_shuffle_files_window}, vit_token_balance={vit_token_balance}")
+    # print(f"ParquetDataset set n_local_shuffle_files_window={n_local_shuffle_files_window}, vit_token_balance={vit_token_balance}")
 
     manager = multiprocessing.Manager()
     self.finish_dict_all = manager.dict()
@@ -2895,7 +2895,7 @@ class ParquetDataset(NaiveParquetDataset):
       f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
     )
     
-    self.sample_queue = queue.Queue(maxsize=1024)
+    self.sample_queue = queue.Queue(maxsize=16)
     self.readers = []
     for i in range(self.num_readers):
       reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
