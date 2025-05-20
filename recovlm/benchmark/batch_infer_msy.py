@@ -286,17 +286,17 @@ def main(_):
         "RealWorldQA":"/llm_reco_ssd/luoxinchen/dataset/RealWorldQA/RealWorldQA/data/merge/test-00000-of-00001.parquet"
     }
     with set_default_dtype(torch.bfloat16):
-        # llm = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
-        #     FLAGS.model_name_or_path,
-        #     _attn_implementation = 'flash_attention_2',
-        #     use_cache=False
-        # )
-        # 1. AutoCausalLM  2. init_process_group + initilize model parallel
-        llm = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+        llm = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
             FLAGS.model_name_or_path,
             _attn_implementation = 'flash_attention_2',
             use_cache=False
         )
+        # 1. AutoCausalLM  2. init_process_group + initilize model parallel
+        # llm = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+        #     FLAGS.model_name_or_path,
+        #     _attn_implementation = 'flash_attention_2',
+        #     use_cache=False
+        # )
     llm = llm.to(torch.cuda.current_device())
     # Split dataset for this MPI rank
     for dataset_name, dataset_path in datasetlist.items():
