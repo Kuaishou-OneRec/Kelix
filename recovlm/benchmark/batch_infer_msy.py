@@ -76,40 +76,8 @@ flags.DEFINE_string(
   "parquet_path", "/llm_reco_ssd/huqigen/dataset/wenjuan_sft/photo_0210_11w_cot_v2/photo_0210_11w_sft_data-test.parquet", "The path or name of model."
 )
 
-# flags.DEFINE_string(
-#   "parquet_path", "viewfs://hadoop-lt-cluster/home/reco_wl/mpi/huqigen/recovlm_dataset/wenjuan_sft/0210_11w/photo_0210_11w_sft_data-test.parquet", "The path or name of model."
-# )
-
-flags.DEFINE_float(
-  "top_p", 0.8, "The top_p params"
-)
-
-flags.DEFINE_float(
-  "temperature", 0.7, "The temperature params."
-)
-
-flags.DEFINE_integer(
-  "max_tokens", 4096, "The max tokens to generate."
-)
-
 flags.DEFINE_integer(
   "tp", 1, "The tensor_parallel_size"
-)
-
-flags.DEFINE_integer(
-  "votes", 1, "The number of candidates in majority voting."
-)
-
-flags.DEFINE_string(
-  "system_prompt", None, "The system prompt to use."
-)
-
-flags.DEFINE_string(
-  "input_path", None, "The parquet file path for test data."
-)
-
-flags.DEFINE_integer(
-  "max_samples", 1000, "The maximum num of samples to inference."
 )
 
 flags.DEFINE_string(
@@ -117,39 +85,7 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_integer(
-  "limit_mm_per_prompt", 3, "The maximum images of mm_input per prompt"
-)
-
-flags.DEFINE_integer(
-  "num_images", 20, "The number of images of per instance."
-)
-
-flags.DEFINE_integer(
-  "max_text_len", 3000, "The max text length per field."
-)
-
-flags.DEFINE_integer(
   "batch_size", 1, "The batch size for inference."
-)
-
-flags.DEFINE_float(
-  "repetition_penalty", 1.05, "The maximum images of mm_input per prompt"
-)
-
-flags.DEFINE_string(
-  "hdfs_user", "mpi", "The HDFS user name when reading from HDFS."
-)
-
-flags.DEFINE_integer(
-  "num_samples", None, "Number of samples to infer. If None, process all samples."
-)
-
-flags.DEFINE_integer(
-  "max_frames", 32, "The maximum number of frames in a video."
-)
-
-flags.DEFINE_string(
-  "columns", None, "The columns to include in the dataset."
 )
 
 flags.DEFINE_string(
@@ -157,34 +93,10 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_integer(
-  "limit", 20000, "The maximum number of samples to read from the dataset."
-)
-
-flags.DEFINE_string("metrics_output_file", "infer_metric.txt", "Path to the file to output final metrics (accuracy etc.)")
-
-flags.DEFINE_integer(
-  "num_generations", 1, "Number of times to generate response for each sample."
-)
-
-flags.DEFINE_float(
-    "gpu_memory_utilization", 0.9, 
-    "Maximum GPU memory utilization (0.0 to 1.0)"
-)
-
-flags.DEFINE_integer(
-    "procs_per_node", None,
-    "Number of processes per node. If None, will be calculated based on GPU count and tp size."
-)
-
-flags.DEFINE_integer(
     "global_rank", 0,
     "Global rank for multiple MPI jobs running in parallel"
 )
 
-flags.DEFINE_boolean(
-    "enable_remove_comment", False,
-    "Whether to remove comment content from the prompt"
-)
 
 def collate_fn(samples):
   batch = collections.defaultdict(list)
@@ -192,9 +104,6 @@ def collate_fn(samples):
     for key, item in sample.items():
       batch[key].append(item)
   return batch
-
-
-
 
 def split_dataset(dataset, comm_size, rank):
     """Split dataset for MPI processes using IterableDataset approach"""
@@ -365,9 +274,9 @@ def main(_):
         # "OCRBench":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/OCRBench/data/test-00000-of-00001.parquet"
         # "Benchmark_v21":"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/Benchmark_v21/Benchmark_v21.parquet",
         # "AI2D":"/llm_reco_ssd/luoxinchen/dataset/ai2d/ai2d/data/merge/test-00000-of-00001.parquet",
-        # "AI2D_no_mask":"/llm_reco_ssd/luoxinchen/dataset/ai2d/ai2d-no-mask/data/merge/test-00000-of-00001.parquet"
-        "infoVQA":"/llm_reco_ssd/luoxinchen/dataset/infoVQA/human_download/infographicsvqa_qas/reconstruct_val.parquet"
-        # "RealWorldQA":"/llm_reco_ssd/luoxinchen/dataset/RealWorldQA/RealWorldQA/data/merge/test-00000-of-00001.parquet"
+        # "AI2D_no_mask":"/llm_reco_ssd/luoxinchen/dataset/ai2d/ai2d-no-mask/data/merge/test-00000-of-00001.parquet",
+        #"infoVQA":"/llm_reco_ssd/luoxinchen/dataset/infoVQA/human_download/infographicsvqa_qas/reconstruct_val.parquet",
+        "RealWorldQA":"/llm_reco_ssd/luoxinchen/dataset/RealWorldQA/RealWorldQA/data/merge/test-00000-of-00001.parquet"
     }
     with set_default_dtype(torch.bfloat16):
         llm = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(

@@ -30,6 +30,32 @@ def format_text(doc, max_text_len=1000):
   return "\n".join(items)
 
 
+
+
+def RealWorldQATransform(sample) -> list:
+    question = sample["question"]
+    answer = sample["answer"]
+    image = Image.open(sample["image"]["bytes"])
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "image": image
+                },
+                {"type": "text", "text": "Please answer the question according to the above image.\nQuestion: {}".format(question)},
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": answer}
+            ],
+        },
+    ]
+    return messages
+
 """
 >>> f.annotations[0]
 {'answers': array(['pinterest'], dtype=object), 'image_path': '/llm_reco_ssd/luoxinchen/dataset/infoVQA/human_download/infographicsvqa_images/37313.jpeg', 'question': 'Which social platform has heavy female audience?', 'questionId': 98313}
@@ -376,7 +402,8 @@ transform_func_map = {
   "Benchmark_v21": Benchmark_v21Transform,
   "AI2D": AI2DTransform,
   "AI2D_no_mask": AI2DTransform,
-  "infoVQA": infoVQATransform
+  "infoVQA": infoVQATransform,
+  "RealWorldQA": RealWorldQATransform
 }
 
 
