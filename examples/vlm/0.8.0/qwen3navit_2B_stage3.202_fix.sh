@@ -1,5 +1,5 @@
-git config --global user.email 'liuyang76@kuaishou.com'
-git config --global user.name 'liuyang76'
+git config --global user.email 'lingzhixin@kuaishou.com'
+git config --global user.name 'lingzhixin'
 
 email=$(git config --get user.email)
 
@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip/
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_data_0.3.2/0.8.0/2b/
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_data_0.3.2/0.8.0/202/2b/
 
 mkdir -p $OUTPUT_DIR
 
@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.0.0;model_size:2B;GPU_type:H800;data:inner & outer comments stage1"
+comment="128H_080_201"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -84,7 +84,6 @@ nohup mpirun --allow-run-as-root \
         -x https_proxy="" \
         -x HOROVOD_MPI_THREADS_DISABLE=1 \
         -x MPI_THREAD_SINGLE=1 \
-        -x CUDA_DEVICE_MAX_CONNECTIONS=1 \
         -x NO_COLOR=1 \
         -x TERM=dumb \
         -x COLORTERM=0 \
@@ -111,12 +110,13 @@ nohup mpirun --allow-run-as-root \
         -x KAI_FLAG_FILE \
         -x KML_ID \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
+	-x TOKENIZERS_PARALLELISM=false \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
+        bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/0.0.0_2B_stage3/qwen3navit_2B_stage3.json \
+                --dataset_config examples/vlm/0.8.0/qwen3navit_2B_stage3.202.json \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
@@ -124,26 +124,27 @@ nohup mpirun --allow-run-as-root \
                 --max_length 21000 \
                 --learning_rate 1e-5 \
                 --vision_learning_rate 1e-6 \
-                --min_lr 0 \
+                --min_lr 1e-7 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 250 \
-                --num_training_steps 8500 \
+                --num_training_steps 18000 \
                 --save_checkpoint_per_step 500 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
-                --logging_per_step 5 \
+                --logging_per_step 20 \
                 --fp32_weight \
+		--monitor_image_tokens \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
-                --comment "$comment" \
+                --comment '$comment' \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
                 --resume_from /mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage2_resume_1k/0.8.0/2b/step5000/ \
 		--resume_from_tag global_step5000 \
-                --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+                --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
