@@ -383,7 +383,7 @@ def calculate_llm_flops_from_config(config_path, seq_len, batch_size):
     return calculate_llm_flops(llm_params)
 
 
-@lru_cache(maxsize=32)
+# @lru_cache(maxsize=32)
 def extract_model_params(config_path):
     """
     从模型配置JSON文件中提取Transformer和Vision模块的参数
