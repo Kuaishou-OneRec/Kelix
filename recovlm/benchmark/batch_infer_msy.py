@@ -10,6 +10,7 @@ import pandas as pd
 from typing import Dict, List
 from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_siglip
+from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 import math
 from msy_infer_dataset import MsyInferDataset
 import pyarrow.parquet as pq
@@ -279,14 +280,14 @@ def main(_):
         "RealWorldQA":"/llm_reco_ssd/luoxinchen/dataset/RealWorldQA/RealWorldQA/data/merge/test-00000-of-00001.parquet"
     }
     with set_default_dtype(torch.bfloat16):
-        llm = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
-            FLAGS.model_name_or_path,
-            _attn_implementation = 'flash_attention_2',
-            use_cache=False
-        )
-        # llm = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-        #     "Qwen/Qwen2.5-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+        # llm = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
+        #     FLAGS.model_name_or_path,
+        #     _attn_implementation = 'flash_attention_2',
+        #     use_cache=False
         # )
+        llm = Qwen2VLForConditionalGeneration.from_pretrained(
+            '/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct', _attn_implementation="flash_attention_2",
+            use_cache=False)
     llm = llm.to(torch.cuda.current_device())
     # Split dataset for this MPI rank
     for dataset_name, dataset_path in datasetlist.items():
