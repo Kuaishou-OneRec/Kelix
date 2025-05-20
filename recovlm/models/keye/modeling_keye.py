@@ -371,7 +371,6 @@ class SiglipVisionEmbeddings(nn.Module):
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
         interpolate_pos_encoding=False
     ) -> torch.Tensor:
-        print(pixel_values.shape, pixel_values.dim()); exit()
         if pixel_values.dim() == 4:
             # raise NotImplementedError
             _, _, height, width = pixel_values.shape
