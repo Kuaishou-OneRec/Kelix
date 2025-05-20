@@ -1,7 +1,7 @@
-git config --global user.email 'lingzhixin@kuaishou.com'
-git config --global user.name 'lingzhixin'
-
 email=$(git config --get user.email)
+
+#mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15" 
+#mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "wget https://halo.corp.kuaishou.com/api/cloud-storage/v1/public-objects/user-cloud-storage/xray%2Finstall_xray.sh -O install_xray.sh && bash install_xray.sh" 
 
 # 检查 email 是否为空
 if [[ -z "$email" ]]; then
@@ -9,15 +9,16 @@ if [[ -z "$email" ]]; then
         echo "  git config --global user.email 'you@kuaishou.com'"
         exit 1
 else
-        echo "Git user.email: $email"
+        echo "Git user.emal: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile  | head -n 1000 > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip/
-OUTPUT_DIR=/llm_reco/lingzhixin/output/qwen3navit/hs_balance/0.0.1/8B256/
-
+MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/Megred_model/2B # Pretrained/Base model path
+# MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/OpenGVLab/InternVL2_5-4B
+OUTPUT_DIR=/llm_reco/lingzhixin/exp_outputs/vlm/token_bal/0.0.1/
+rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
@@ -25,10 +26,11 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.4.1;model_size:72B;GPU_type:H800;data:inner&outer_comments"
+comment="run internvl 2b stage1 by ccl"
+
 
 git add --all
-git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
+git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
 git_hash=$(git rev-parse --short HEAD)
 
 set -x
@@ -44,7 +46,6 @@ echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=$PWD:$PYTHONPATH
 
-
 source set_env.sh
 
 hostfile=/etc/mpi/hostfile_seq
@@ -52,11 +53,12 @@ Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
 
-
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
-
+# debug7b_short.json
+# debug7b_fsdp_3p_v1_debug2_orids             
+# --enable_gradient_checkpointing \
 nohup mpirun --allow-run-as-root \
         -hostfile $hostfile \
         -mca btl self,tcp -mca pml ob1 \
@@ -114,25 +116,25 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-	bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
+        bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_8B256_bal.json \
-                --model_class Qwen3SiglipForConditionalGeneration_navit \
-		        --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 15000 \
-                --learning_rate 1e-6 \
+                --dataset_config examples/vlm/token_bal/2b_v0_6_0_internvl_stage2_bal.json \
+		--max_length 21000 \
+                --learning_rate 2e-5 \
+                --model_class InternVLChatModel \
                 --min_lr 0.0 \
-                --weight_decay 0.1 \
+                --weight_decay 0.01 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 500 \
-                --num_training_steps 50000 \
+                --num_training_steps 100000 \
                 --save_checkpoint_per_step 500 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
                 --fp32_weight \
+                --enable_profile \
 		--monitor_image_tokens \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
