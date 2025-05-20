@@ -14,7 +14,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_siglip
-
+from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from torch.utils.data import DataLoader
 from recovlm.utils.qwen_vl_utils import process_vision_info
 import torch
@@ -429,7 +429,7 @@ class MsyInferDataset(ParquetDataset):
     # 初始化 processor
     if model_name_or_path:
       try:
-        self.processor = AutoProcessor.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct')
+        self.processor = Qwen2VLProcessor.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct')
         # self.processor = Qwen3SiglipProcessor_siglip.from_pretrained(model_name_or_path)
       except Exception as e:
         print(f"Error loading processor: {e}")
