@@ -11,7 +11,7 @@ from typing import Dict, List
 from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_siglip
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
-from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
+from transformers import Qwen2_5_VLForConditionalGeneration
 import math
 from transformers import AutoModelForCausalLM
 from msy_infer_dataset import MsyInferDataset
@@ -292,7 +292,7 @@ def main(_):
         #     use_cache=False
         # )
         # 1. AutoCausalLM  2. init_process_group + initilize model parallel
-        llm = AutoModelForCausalLM.from_pretrained(
+        llm = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             FLAGS.model_name_or_path,
             _attn_implementation = 'flash_attention_2',
             use_cache=False
