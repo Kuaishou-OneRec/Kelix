@@ -311,7 +311,7 @@ def exchange_batch_info(samples, ds_list, m):
 def get_flops_model(model_type, **kwargs) -> ModelFlopsBase:
     if model_type == "InternVLChatModel":
         return InternVLChatModelFlops(**kwargs)
-    elif model_type == "Qwen3SiglipForConditionalGeneration_navit":
+    elif model_type in ["Qwen3SiglipForConditionalGeneration_navit", "KeyeForConditionalGeneration"]:
         return Qwen3SiglipModelFlops(**kwargs)
     else:
         raise RuntimeError(f"Not supported flops computation for {model_type}")
