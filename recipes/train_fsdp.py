@@ -1,4 +1,6 @@
+#import torch
 
+#torch.use_deterministic_algorithms(True)
 
 from typing import Dict, Any, Union, Optional
 
@@ -6,6 +8,7 @@ import contextlib
 import gc
 import argparse
 import time
+from collections import defaultdict
 import datetime
 import os
 import glob
@@ -20,7 +23,7 @@ import psutil
 import threading
 import queue
 from functools import partial
-
+from tools.mfu.flops_counter import MFUStats
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
@@ -46,11 +49,11 @@ from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
 
 from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
-from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration_siglip,Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration_siglip_navit
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
 from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
-
+#from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration, KeyeDecoderLayer
+#from recovlm.models.keye.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer
 
 from recovlm.models.internvl import InternVLChatModel
 from recovlm.models.qwen2 import Qwen2DecoderLayer
@@ -93,8 +96,8 @@ from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcess
 
 
 # Logger 初始化
-logging.basicConfig(level=logging.INFO)  # 设置日志级别
-logger = logging.getLogger(__name__)  # 创建 logger 实例
+#logging.basicConfig(level=logging.INFO)  # 设置日志级别
+#logger = logging.getLogger(__name__)  # 创建 logger 实例
 
 def get_argument_parser():
   parser = argparse.ArgumentParser()
@@ -158,7 +161,7 @@ def get_argument_parser():
                       help="The directory to write the trained model")
 
   parser.add_argument("--model_class", type=str, default="Qwen2_5_VLForConditionalGeneration_moonvit",
-                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'InternVLChatModel'",)
+                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'KeyeForConditionalGeneration', 'InternVLChatModel'",)
   
   parser.add_argument("--model_processor", type=str, default="Qwen2_5_VLProcessor_moonvit",
                       help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit' or 'Qwen3SiglipProcessor'")
@@ -293,7 +296,7 @@ def get_argument_parser():
 
 
 
-def _init_profiler(output_dir, start_step=103, end_step=112) -> None:
+def _init_profiler(output_dir) -> None:
     import torch.distributed as D
     import os
     if not os.path.exists(output_dir):
@@ -464,7 +467,7 @@ def freeze_params(args, model):
           param.requires_grad = False
       print_rank_0("=" * 50)
     
-  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit']:
+  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration']:
     if args.freeze_llm:
       print_rank_0("Freeze LLM parameters.")
       for name, param in model.named_parameters():
@@ -508,6 +511,8 @@ def freeze_params(args, model):
     raise NotImplementedError(f"freeze_params Not support model class: {args.model_class}")
 
 
+
+
 class TokenStats:
   def __init__(self):
     self.max_image_tokens = []
@@ -520,7 +525,6 @@ class TokenStats:
       # 收集所有rank的image tokens统计信息
       world_size = dist.get_world_size()
       rank = dist.get_rank()
-
       input_tensor = torch.tensor([num_image_tokens], dtype=torch.long).cuda()
       all_image_tokens = list(torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) if rank == 0 else None
       dist.gather(input_tensor, gather_list=all_image_tokens, dst=0)
@@ -559,7 +563,7 @@ class TokenStats:
       self.std_image_tokens.clear()
       return res
 
-
+  
 def data_func(name, dataset_config, batch_queue, cpu_bind):
   p = psutil.Process(os.getpid())
   p.cpu_affinity(cpu_bind)
@@ -614,7 +618,7 @@ def train():
   assert any([args.save_checkpoint_per_step, args.save_checkpoint_every_epoch]), \
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
       "save_checkpoint_every_epoch should be set."
-      
+
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
@@ -640,6 +644,7 @@ def train():
   # init model params
   os.environ["KML_ID"] = args.kml_id
   os.environ["KML_TASK_ID"] = args.kml_task_id
+
   # torch init
   torch.cuda.set_device(local_rank)
   torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
@@ -732,14 +737,15 @@ def train():
       "Qwen2_5_VLForConditionalGeneration_siglip": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
       "Qwen3SiglipForConditionalGeneration_navit": {Qwen3SiglipDecoderLayer, SiglipEncoderLayer},
       "Qwen2_5_VLForConditionalGeneration_siglip_navit": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
+      # "KeyeForConditionalGeneration":  {KeyeDecoderLayer, KeyeSiglipEncoderLayer},
       "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
     }
     set_activation_checkpointing(
       model, auto_wrap_policy=auto_wrap_policy_mapping[args.model_class]
     )
 
+    
   if args.fp32_weight: model = model.float()
-
   shard_model(
     model=model,
     shard_conditions=[partial(get_shard_conditions, model_class=args.model_class)],
@@ -888,12 +894,10 @@ def train():
 
   dist.barrier()
 
-  try: tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
-  except Exception as e:
-    print(f"init tokenizer failed\ne={e}")
-    tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
-
-  ########
+  tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
+  image_token_id = tokenizer.encode('<im_patch>')[0]  if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|image_pad|>')[0]
+  image_start_id = tokenizer.encode("</image>")[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|vision_start|>')[0]
+  
   if dist.get_rank() == 0:
     with open(os.path.join(args.output_dir,
         f"dataset-{args.commit_id}-{timestamp}.json"), 'w',
@@ -935,11 +939,13 @@ def train():
   acc_valid_num_tokens = 0
   acc_num_image_tokens = 0
   total_num_image_tokens = 0
+  mfu_stats = MFUStats(args)
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
   grad_norm = 0.0
   # get_sequence_parallel_group("gloo")
+
   micro_step = 0
   ticker = TimeTracker(n=args.logging_per_step)
   iter_ticker = TimeTracker(n=args.logging_per_step)
@@ -1014,7 +1020,7 @@ def train():
   if dist.get_rank() == 0:
     tb_writer_t = threading.Thread(target=write_tb_async,args=(tb_writer, tb_metrics_q, args.gradient_accumulation_steps))
     tb_writer_t.start()
-              
+
 
   while True:
     ticker.tick("while_True")
@@ -1026,14 +1032,15 @@ def train():
       try: batch = gpu_batch_q.get() 
       except StopIteration: break
       ticker.tick("next_batch")
+      
 
       micro_step += 1
 
       if show_cnt > 0 and dist.get_rank() == 0:
         with Timer("Show data"):
-          # input_text = tokenizer.decode(batch['input_ids'][0])
-          # print_rank_0(
-          #     f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
+          input_text = tokenizer.decode(batch['input_ids'][0])
+          print_rank_0(
+              f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
           print_rank_0(batch)
           show_cnt -= 1
           
@@ -1053,21 +1060,23 @@ def train():
       image_flags = batch.get("image_flags", None)
 
 
+      if rank == 0:
+        print_input_info(batch, return_str=False)
+      
+
       # 打印 token 数量
-      if not use_flops_balance:
+      if not use_flops_balance or True:
         token_count = input_ids.numel()  # 计算 token 数量
         print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
         num_tokens = token_count
         num_samples = (sample_idx.max() + 1).sum()
-        # num_image_tokens = pixel_values.shape[0] * 256 # if args.model_class == "InternVLChatModel" else 0
 
-        num_image_tokens2 = (input_ids == 151667).sum().item()
-        if num_image_tokens2 == 0: num_image_tokens2 = (input_ids == 151655).sum().item()
+        image_tokens_ids = input_ids == image_token_id
+        num_image_tokens = image_tokens_ids.sum().item()
+        num_image_tokens2 = num_image_tokens
 
-        num_image_tokens = num_image_tokens2
-
-        # print(input_ids, 54544444)
-        # print(f"num_image_tokens111111={num_image_tokens}")
+        num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item()
+        mfu_stats.set(num_image_tokens, num_tokens, num_samples.detach().item(), num_images)
 
         # num_tokens - (sample_idx == -1).sum()
         num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
@@ -1075,7 +1084,7 @@ def train():
           [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda(non_blocking=True)
 
         ticker.tick("token_metrics_init")
-
+        
         dist.all_reduce(
           token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
@@ -1085,7 +1094,6 @@ def train():
         ticker.tick("token_metrics.detach().cpu().numpy()")
       else:
         num_image_tokens2 = (input_ids == 151667).sum().item()
-
         num_tokens = batch.get("num_tokens", 0)
         num_samples = batch.get("num_samples", 0)
         num_valid_tokens = batch.get("num_valid_tokens", num_tokens)
@@ -1135,6 +1143,7 @@ def train():
         loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
 
         ticker.tick("loss_fn")
+
 
       with Timer("bwd"):
         loss.backward(loss)
@@ -1189,16 +1198,13 @@ def train():
         ticker.tick(f"token_stasts*{log_acc_step}")
 
         with Timer("reduce data source metrics"):
-          print_rank_0(f"batch_ds_loss: {batch_data_source_loss}, token: {batch_data_source_tokens}, samples: {local_acc_data_source_samples}")
-          # batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
-          # batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
-          # valid_data_source_tokens = dist_reduce_dict(valid_data_source_tokens)
-          # total_data_source_samples = dist_reduce_dict(
-          #   local_acc_data_source_samples, group=get_data_parallel_group())
-          # for ds_key, ds_num_tokens in batch_data_source_tokens.items():
-          #   total_data_source_tokens[ds_key] += ds_num_tokens
-          total_data_source_samples = local_acc_data_source_samples
-          total_data_source_tokens = batch_data_source_tokens
+          batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
+          batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
+          valid_data_source_tokens = dist_reduce_dict(valid_data_source_tokens)
+          total_data_source_samples = dist_reduce_dict(
+            local_acc_data_source_samples, group=get_data_parallel_group())
+          for ds_key, ds_num_tokens in batch_data_source_tokens.items():
+            total_data_source_tokens[ds_key] += ds_num_tokens
           
 
         if dist.get_rank() == 0:
@@ -1209,7 +1215,7 @@ def train():
           else:
             vision_learning_rate = lr_scheduler.get_lr()[1]
           end_time = time.time()
-          sec_per_step = (end_time - start_time) # / args.gradient_accumulation_steps
+          sec_per_step = (end_time - start_time) / args.logging_per_step # / args.gradient_accumulation_steps
           tokens_per_sec_per_gpu = \
             acc_num_tokens  / (end_time - start_time) / dist.get_world_size()
           samples_per_sec_per_gpu = \
@@ -1233,7 +1239,6 @@ def train():
 
 
           avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
-          start_time = end_time
           log_dict = {
             # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
             "training/loss": avg_loss,
@@ -1247,22 +1252,22 @@ def train():
             "perf/total_num_samples": total_num_samples,
             "perf/num_sample_per_gpu": total_num_samples / dist.get_world_size(),
             "perf/samples_per_step_per_gpu": samples_per_step_per_gpu,
-            "perf/num_sample_per_sec_per_gpu": total_num_samples / sec_per_step / dist.get_world_size(),
+            "perf/num_sample_per_sec_per_gpu": total_num_samples / (end_time - start_time) / dist.get_world_size(),
             "perf/valid_total_num_tokens": total_num_valid_tokens,
             "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
             "perf/image_tokens_per_sec_per_gpu": image_tokens_per_sec_per_gpu,
             "perf/image_token_ratio_by_valid": image_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
             "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples,
-
+            **mfu_stats.mfu(end_time - start_time, global_step),
             "perf/samples_per_step_per_gpu_v2": samples_per_step_per_gpu_v2,
             "perf/samples_per_sec_per_gpu_v2": samples_per_sec_per_gpu_v2,
             "perf/image_tokens_per_step_per_gpu_v2": image_tokens_per_step_per_gpu_v2,
             "perf/image_tokens_per_sec_per_gpu_v2": image_tokens_per_sec_per_gpu_v2,
             "perf/tokens_per_step_per_gpu_v2": tokens_per_step_per_gpu_v2,
             "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
-
           }
+          start_time = end_time
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
           ticker.tick(f"log_dict*{log_acc_step}")
 
@@ -1273,13 +1278,39 @@ def train():
           tb_metrics_q.put(metrics_info)
 
           ticker.tick(f"tb_metrics_q.put")
+
+          if args.monitor_datasource_loss and tb_writer:
+            for key, loss_sum in batch_data_source_loss.items():
+              tb_writer.add_scalar(
+                    f"data_source_loss/{key}",
+                    loss_sum / (valid_data_source_tokens[key] + 1e-6) ,
+                    global_step=global_step,
+                    new_style=True)
+
+          if args.monitor_datasource_cnt and tb_writer:
+            for key, samples in total_data_source_samples.items():
+              tb_writer.add_scalar(
+                  f"data_source_sample_ratio/{key}",
+                  1.0 * samples / total_num_samples,
+                  global_step=global_step,
+                  new_style=True)
+
+            for key, num_tokens in total_data_source_tokens.items():
+              tb_writer.add_scalar(
+                  f"data_source_token_ratio/{key}",
+                  1.0 * num_tokens / total_num_valid_tokens,
+                  global_step=global_step,
+                  new_style=True)
+              
+          ticker.tick(f"tb_writer.add_scalar*{log_acc_step}")
           print_rank_0(
             f"Step: {global_step}, Loss: {avg_loss}, "
             f"Learning Rate: {learning_rate}, "
             f"Grad Norm: {get_global_grad_norm(model).detach().cpu().item()}, "
             f"Sec per Step: {sec_per_step}",
-            format_dict_or_list(log_dict)
-          )        
+            format_dict_or_list(log_dict),
+            "\n", format_dict_or_list({"mfu_stats": mfu_stats.mfu_per_step_per_gpu, "ticker": ticker.stat()})
+        )        
 
           # upload heart_beat to remote
           if args.heartbeat_monitor:
