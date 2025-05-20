@@ -366,7 +366,7 @@ def vis_single():
 
 
 if __name__ == "__main__":
-    vis_single(); exit()
+    # vis_single(); exit()
     augmenter = AutoAugmentWrapper(policy='grounding_ocr_imagenet', fill=255)
     
     # 生成大字体的测试单词（字体大小设为80）
