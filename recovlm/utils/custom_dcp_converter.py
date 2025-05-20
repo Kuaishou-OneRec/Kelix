@@ -108,6 +108,9 @@ def convert(
     output_dir,
     source_dir = "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct/"
 ):
+  """
+  convert比较通用
+  """
   dcp_to_torch_save(
     dcp_checkpoint_dir=checkpoint_dir,
     output_dir=output_dir,
@@ -120,6 +123,27 @@ def convert(
       if not os.path.isfile(os.path.join(source_dir, fn)): continue
       shutil.copy(os.path.join(source_dir, fn), os.path.join(output_dir, fn))
 
+def convert_v2(checkpoint_dir="/llm_reco/liuyang76/train_out/0.0.0/qwen3_2B_stage1/", model_path="step1000", base_model_path="/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip/"):
+    """
+    convert_v2专门用于我们训练得到的ckpt的转化
+    """
+    osp = os.path
+    def convert_dir(checkpoint_dir, model_name):
+        return osp.join(checkpoint_dir, model_name, f"global_{model_name}")
+    real_model_path = convert_dir(checkpoint_dir, model_path)
+    converted_path = f"{real_model_path}/converted"
+    dcp_to_torch_save(real_model_path, converted_path, model_only=True, 
+                                        use_safetensor=True, max_gb_per_shard=1)
+
+    print(f"converted_path={converted_path}")
+
+    # 将模型的配置文件全部复制到converted文件夹中
+    for file in os.listdir(base_model_path):
+        if file == "model.safetensors.index.json":
+            continue
+        if file.endswith('.json') or file.endswith('.py') or file.endswith('.txt'):
+            shutil.copy(osp.join(base_model_path, file), osp.join(converted_path, file))
+    return converted_path
 
 def main():
   import sys

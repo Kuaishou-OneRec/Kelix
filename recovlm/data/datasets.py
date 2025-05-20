@@ -45,6 +45,8 @@ from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViT
 from recipes.ViT.training.models.siglip.configuration_siglip import SiglipConfig
 
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_navit
+from recovlm.models.keye.processing_keye import KeyeProcessor
+from recovlm.models.keye.modeling_keye import KeyeConfig
 
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
@@ -782,9 +784,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.multiple_of = multiple_of
     self.shuffle_size = shuffle_size
     self.shuffle_initial_size = shuffle_initial_size
-    print(3243232111)
     self.dataset, self.total_samples = self._build_source_dataset(sources)
-    print(99999)
 
     # for data_source monitor
     self.source_sample_cnt = {}
@@ -938,8 +938,11 @@ class ChatCompletionVisionDataset(IterableDataset):
     
     # append EOS token
     text += "<|endoftext|>"
-    image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos)
-    inputs = self.processor(
+
+    # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
+    # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
+    image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos, **self.process_vision_info_args)
+    inputs = self.processor( # sig: 32
         text=text,
         images=image_inputs,
         videos=video_inputs,
@@ -1019,7 +1022,10 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # append EOS token
     text += "<|endoftext|>"
-    image_inputs, video_inputs = process_vision_info(messages)
+
+    # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
+    # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
+    image_inputs, video_inputs = process_vision_info(messages, **self.process_vision_info_args)
     inputs = self.processor(
         text=text,
         images=image_inputs,
@@ -1182,12 +1188,15 @@ class ChatCompletionVisionDataset(IterableDataset):
                              packed_video_grid_thw: List[torch.Tensor],
                              packed_sample_idx: List[torch.Tensor],
                              cu_seqlens: List[int],
-                             sample_idx: Optional[int] = None):
+                             sample_idx: Optional[int] = None,
+                             image_pad=False
+                             ):
 
-    
-    packable_length = self.max_length - cu_seqlens[-1]
-    if packable_length == 0: return
-    if self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
+    if not image_pad:
+      packable_length = self.max_length - cu_seqlens[-1]
+      if packable_length == 0: return
+
+    if not image_pad and self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
       import copy
       inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
       inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
@@ -1262,7 +1271,9 @@ class ChatCompletionVisionDataset(IterableDataset):
                                 packed_video_grid_thw,
                                 packed_sample_idx,
                                 cu_seqlens,
-                                sample_idx=-1)
+                                sample_idx=-1,
+                                image_pad=True
+                                )
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
@@ -1593,6 +1604,110 @@ class ChatCompletionVisionDataset_siglip(ChatCompletionVisionDataset):
     self.datasource_config = datasource_config
 
 
+
+class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
+  def __init__(self,
+               sources: Union[str, List[str]],
+               max_length: int = 1024,
+               min_visual_tokens_per_image: int = 4,
+               max_visual_tokens_per_image: int = 512,
+               video_nframe: int = -1,
+               video_fps: float = 2.0,
+               video_min_frames: int = -1,
+               video_max_frames: int = 120,
+               shrink_ratio: float = 0.9,
+               max_retry: int = 5,
+               multiple_of: int = 8,
+               shuffle_size: int = 100000,
+               shuffle_initial_size: int = 20000,
+               base_model_dir: Optional[str] = None,
+               processor: Optional[Qwen2VLProcessor] = None,
+               spatial_merge_size: int = 2,
+               patch_size: int = 14,
+               image_token_id: int = 151655,
+               video_token_id: int = 151656,
+               vision_start_token_id: int = 151652,
+               vision_end_token_id: int = 151653,
+               pad_token_id: int = 151643,
+               datasource_config:Dict[str, Dict[str, Any]] = {},
+               cut_to_pad=True,
+               process_vision_info_args={"image_factor":None},
+               **kwargs
+               ):
+    """
+    datasource_config: 默认覆盖全局配置
+                      key: datasource_name
+                      Dict: datasource config, support params:
+                        min_visual_tokens_per_image
+                        max_visual_tokens_per_image
+                        video_nframe
+                        video_fps
+                        video_min_frames
+                        video_max_frames
+    """
+    if base_model_dir:
+      processor = KeyeProcessor.from_pretrained(base_model_dir)
+      model_config = KeyeConfig.from_pretrained(base_model_dir)
+      spatial_merge_size = model_config.vision_config.spatial_merge_size
+      patch_size = model_config.vision_config.patch_size
+      image_token_id = model_config.image_token_id
+      video_token_id = model_config.video_token_id
+      vision_start_token_id = model_config.vision_start_token_id
+      vision_end_token_id = model_config.vision_end_token_id
+      pad_token_id = model_config.pad_token_id
+
+    self.process_vision_info_args = process_vision_info_args
+    self.cut_to_pad = cut_to_pad
+    print(f"set cut_to_pad={cut_to_pad}")
+    self.processor = processor
+    self.min_visual_tokens_per_image = min_visual_tokens_per_image
+    self.max_visual_tokens_per_image = max_visual_tokens_per_image
+    self.video_nframe = video_nframe
+    self.video_fps = video_fps
+    self.video_min_frames = video_min_frames
+    self.video_max_frames = video_max_frames
+    if video_nframe > 0 and (video_fps > 0 or video_min_frames > 0 or video_max_frames > 0):
+      logger.warning(
+        f"ChatCompletionVisionDataset(video_fps=...): video_fps, video_min_frames, "\
+          f"video_max_frames will be ignored when video_nframe>0 ({video_nframe=})"
+      )
+    self.patch_size = patch_size
+    self.shrink_ratio = shrink_ratio
+    self.max_retry = max_retry
+    self.spatial_merge_size = spatial_merge_size
+    self.image_token_id = image_token_id
+    self.video_token_id = video_token_id
+    self.vision_start_token_id = vision_start_token_id
+    self.vision_end_token_id = vision_end_token_id
+    self.pad_token_id = pad_token_id
+    self.patch_size = patch_size
+    # Pad sequence to multiple of `multiple_of`
+    self.multiple_of = multiple_of
+    self.shuffle_size = shuffle_size
+    self.shuffle_initial_size = shuffle_initial_size
+    self.dataset, self.total_samples = self._build_source_dataset(sources)
+
+    # for data_source monitor
+    self.source_sample_cnt = {}
+    self.source_error_cnt = {}
+
+    self.tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
+    self.img_start_token = "<|vision_start|>"
+    self.img_end_token = "<|vision_end|>"
+    self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
+    self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
+    # self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
+
+    # append image_pad for each packing
+    # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
+    image_pad_len = 6
+    self.max_length = max_length - image_pad_len
+    assert self.max_length > 0
+
+    self.datasource_config = datasource_config
+
+
+
 class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
   def __init__(self,
                sources: Union[str, List[str]],
@@ -1619,6 +1734,7 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
                pad_token_id: int = 151643,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
+               process_vision_info_args={"image_factor": None},
                **kwargs
                ):
     """
@@ -1637,13 +1753,15 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
       processor = Qwen3SiglipProcessor_navit.from_pretrained(base_model_dir)
       model_config = Qwen3SiglipConfig.from_pretrained(base_model_dir)
       vision_config = SiglipConfig.from_pretrained('/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex').vision_config
-      spatial_merge_size = 2 #vision_config.merge_kernel_size[0]
+      spatial_merge_size = 2 # vision_config.merge_kernel_size[0]
       patch_size = vision_config.patch_size
       image_token_id = model_config.image_token_id
       video_token_id = model_config.video_token_id
       vision_start_token_id = model_config.vision_start_token_id
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
+
+    self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
@@ -2342,7 +2460,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
 
 class ParquetDataset(IterableDataset):
-  def __init__(self, data_files, num_workers, n_local_shuffle_files_window=3, vit_token_balance=False):
+  def __init__(self, data_files, num_workers, n_local_shuffle_files_window=3, vit_token_balance=False, **kargs):
     self.data_files = data_files
     self.num_workers = num_workers
     self.vit_token_balance = vit_token_balance
@@ -2877,6 +2995,92 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
   
   def load_state_dict(self, state_dict):
     self.dataset.load_state_dict(state_dict)
+    
+
+class ChatCompletionVisionParquetDataset_keye(ChatCompletionVisionDataset_keye):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
+    self.rng = random.Random(shuffle_seed)
+    self.num_workers = num_workers
+    self.num_epochs = num_epochs
+    self.cut_to_pad = kargs.get("cut_to_pad", True)
+    self.kargs = kargs
+    super().__init__(sources, **kargs)
+
+  def _build_source_dataset(self, sources):
+    data_file_list = []
+    if dist.get_rank() == 0:
+      data_files = []
+      if isinstance(sources, str) and sources.endswith(".json"):
+        with open(sources, "r") as fp:
+          data_files = json.loads(fp.read())
+          data_files = [fn for fn in data_files if fn.endswith(".parquet")]
+      elif isinstance(sources, list):
+        for source in sources:
+          hdfs_files = shell_hdfs_ls(source)
+          data_files += [fn for fn in hdfs_files if fn.endswith(".parquet")]
+      # repeat
+      for i in range(self.num_epochs):
+        data_files.sort()
+        self.rng.shuffle(data_files)
+        data_file_list += [(fn, i) for fn in data_files]
+      logger.error(f"ChatCompletionVisionParquetDataset_keye rank{dist.get_rank()}: ori_file_num={len(data_files)} file_num={len(data_file_list)}")
+
+    t = [data_file_list]
+    dist.broadcast_object_list(t, src=0)
+    data_file_list = t[0]
+
+    logger.error(f"ChatCompletionVisionParquetDataset_keye rank{dist.get_rank()}: file_num={len(data_file_list)}")
+    if len(data_file_list) == 0:
+      raise ValueError(f"no datafile found!")
+
+    dataset = ParquetDataset(data_file_list, self.num_workers, **self.kargs)
+    return dataset, -1
+
+  def state_dict(self, ):
+    return self.dataset.state_dict()
+  
+  def load_state_dict(self, state_dict):
+    self.dataset.load_state_dict(state_dict)
+
+
+
+
+  def _build_source_dataset(self, sources):
+    data_file_list = []
+    if dist.get_rank() == 0:
+      data_files = []
+      if isinstance(sources, str) and sources.endswith(".json"):
+        with open(sources, "r") as fp:
+          data_files = json.loads(fp.read())
+          data_files = [fn for fn in data_files if fn.endswith(".parquet")]
+      elif isinstance(sources, list):
+        for source in sources:
+          hdfs_files = shell_hdfs_ls(source)
+          data_files += [fn for fn in hdfs_files if fn.endswith(".parquet")]
+      # repeat
+      for i in range(self.num_epochs):
+        data_files.sort()
+        self.rng.shuffle(data_files)
+        data_file_list += [(fn, i) for fn in data_files]
+      logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: ori_file_num={len(data_files)} file_num={len(data_file_list)}")
+
+    t = [data_file_list]
+    dist.broadcast_object_list(t, src=0)
+    data_file_list = t[0]
+
+    logger.error(f"ChatCompletionVisionParquetDataset rank{dist.get_rank()}: file_num={len(data_file_list)}")
+    if len(data_file_list) == 0:
+      raise ValueError(f"no datafile found!")
+
+    dataset = ParquetDataset(data_file_list, self.num_workers, **self.kargs)
+    return dataset, -1
+
+  def state_dict(self, ):
+    
+    return self.dataset.state_dict()
+  
+  def load_state_dict(self, state_dict):
+    self.dataset.load_state_dict(state_dict)
 
 
 class ChatCompletionVisionParquetDataset_moonvit(ChatCompletionVisionDataset_moonvit):
@@ -2978,6 +3182,7 @@ class ChatCompletionVisionParquetDataset_navit(ChatCompletionVisionDataset_navit
     self.num_workers = num_workers
     self.num_epochs = num_epochs
     self.cut_to_pad = kargs.get("cut_to_pad", True)
+    self.kargs = kargs
     super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
@@ -3007,7 +3212,7 @@ class ChatCompletionVisionParquetDataset_navit(ChatCompletionVisionDataset_navit
     if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
 
-    dataset = ParquetDataset(data_file_list, self.num_workers)
+    dataset = ParquetDataset(data_file_list, self.num_workers, **self.kargs)
     return dataset, -1
 
   def state_dict(self, ):

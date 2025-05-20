@@ -14,6 +14,13 @@ Qwen-VL-Chat-Int4/
 SimSun.ttf
 hostfile
 
+*.jpg
+*.jpeg
+*.png
+*.deb
+*.swp
+*.txt2
+*.pylintrc
 *.log
 *.err
 *.bin
@@ -22,6 +29,8 @@ hostfile
 *.parquet
 *.swp
 *.xlsx
+*.png
+
 .git
 
 recovlm/benchmark/eval/tmp*

@@ -1,5 +1,5 @@
-git config --global user.email 'lingzhixin@kuaishou.com'
-git config --global user.name 'lingzhixin'
+git config --global user.email 'liuyang76@kuaishou.com'
+git config --global user.name 'liuyang76'
 
 email=$(git config --get user.email)
 
@@ -12,11 +12,11 @@ else
         echo "Git user.email: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile  | head -1 > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip/
-OUTPUT_DIR=/llm_reco/lingzhixin/exps/qwen3navit/debug_qwen3navit/0.0.1/1.7B/
+OUTPUT_DIR=/llm_reco/liuyang76/train_out/0.0.4/qwen3_2B_stage1/
 
 mkdir -p $OUTPUT_DIR
 
@@ -45,7 +45,7 @@ echo "Output: $OUTPUT_DIR"
 export PYTHONPATH=$PWD:$PYTHONPATH
 
 
-source set_env.sh
+# source set_env.sh
 
 hostfile=/etc/mpi/hostfile_seq
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
@@ -111,10 +111,11 @@ nohup mpirun --allow-run-as-root \
         -x KAI_FLAG_FILE \
         -x KML_ID \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
+	-x TOKENIZERS_PARALLELISM=false \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
+	python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_1.7B.json \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
