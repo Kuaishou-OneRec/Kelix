@@ -132,13 +132,12 @@ from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2
 
 # from recovlm.models.qwen_3_vl_2.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_siglip, Qwen2_5_VLForConditionalGeneration_siglip_navit
 # /llm_reco/lingzhixin/recovlm_qw0510/recovlm/recovlm/models/qwen3siglip/modeling_qwen3siglip.py
-from recovlm.models.keye.modeling_keye import Qwen3SiglipForConditionalGeneration_navit
+from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit 
 from recovlm.utils.time_tracker import TimeTracker
 from recipes.inspects import info_params_recursive
 
 # /llm_reco/lingzhixin/recovlm_qw0510/recovlm/recovlm/models/qwen3siglip/processing_qwen3siglip.py
-from recovlm.models.keye.processing_keye import Qwen3SiglipProcessor_navit
-
+from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_navit 
 def set_seed(seed: int):
     import random
     import numpy as np
