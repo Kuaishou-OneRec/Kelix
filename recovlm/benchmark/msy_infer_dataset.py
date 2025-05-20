@@ -29,6 +29,43 @@ def format_text(doc, max_text_len=1000):
       items.append(f"{key}: {str(text)[:max_text_len]}")
   return "\n".join(items)
 
+def MMTBenchTransform(sample) -> list:
+  sample = sample['annotations']
+  # Handle both string and dictionary annotations
+  if isinstance(sample, str):
+    sample = json.loads(sample)
+  question = sample['question']
+  answer = sample['answer']
+  image_path = sample['image_path']
+  image = Image.open(image_path)
+  messages = [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image",
+          "image": image
+        },
+        {
+          "type": "text",
+          "text": question
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": answer
+        }
+      ]
+    }
+  ]
+  return messages
+  
+
+
 def MMETransform(sample) -> list:
   sample = sample['annotations']
   # Handle both string and dictionary annotations
@@ -137,7 +174,8 @@ transform_func_map = {
   "MMBench": MMBenchTransform,
   "OCRBench": OCRBenchTransform,
   "MMBenchCn": MMBenchTransform,
-  "MME": MMETransform
+  "MME": MMETransform,
+  "MMTBench": MMTBenchTransform
 }
 
 
