@@ -110,6 +110,9 @@ class AutoAugmentWrapper:
         kw = {"interpolation": self.interpolation}
         if self.fill is not None:
             kw["fill"] = self.fill
+        else:
+            import numpy as np
+            kw["fill"] = np.random.randint(0, 255)
 
         # 操作映射字典
         op_map = {
@@ -147,7 +150,10 @@ class AutoAugmentWrapper:
     def __call__(self, img: Image.Image) -> Image.Image:
         if self.policy is None:
             return img
-        return self.policy(img)
+        try:
+            return self.policy(img)
+        except Exception as e:
+            raise ValueError(f"Failed to apply augmentation for {img}: {e}")
 
 
 
@@ -221,6 +227,7 @@ def visualize_word_augmentation(augmenter, words, save_prefix='word_augmentation
         y = (img_size[1] + spacing) * (i // grid_cols)
         
         original_grid.paste(img, (x, y))
+        img = img.convert("RGB")
         augmented_img = augmenter(img.copy())
         augmented_grid.paste(augmented_img, (x, y))
     
@@ -365,7 +372,8 @@ def vis_single():
     visualize_single_ops(test_img, "single_op_visualization.jpg")
 
 
-if __name__ == "__main__":
+
+def debug_aug():
     # vis_single(); exit()
     augmenter = AutoAugmentWrapper(policy='grounding_ocr_imagenet', fill=255)
     
@@ -373,3 +381,20 @@ if __name__ == "__main__":
     test_words = create_random_color_words(num=60, text="hello", font_size=80)
     
     visualize_word_augmentation(augmenter, test_words, save_prefix='ocr_word_augment')
+
+
+def debug_shape():
+    # 生成测试图像（需包含"hello"文字）
+    augmenter = AutoAugmentWrapper(policy='grounding_ocr_imagenet', fill=255)
+    for h in range(1, 100):
+        for w in range(1, 100):
+            try:
+                test_img = Image.new('RGB', (h, w), 'white')
+                augmenter(test_img)
+            except Exception as e:
+                print(test_img)
+                print(e); continue
+
+
+if __name__ == "__main__":
+    debug_shape()
