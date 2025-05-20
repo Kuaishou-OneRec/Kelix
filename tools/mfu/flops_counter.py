@@ -1,4 +1,4 @@
-from functools import lru_cache
+# from functools import lru_cache
 # # from recovlm.utils.ds_utils import format_dict_or_list
 # import platform
 # import subprocess
@@ -11,7 +11,7 @@ def s(x):
     if isinstance(x, list): return sum(x)
     else: return x
 
-@lru_cache(maxsize=1)
+# @lru_cache(maxsize=1)
 def get_gpu_model():
     """
     获取当前系统中NVIDIA显卡的型号信息
@@ -86,12 +86,12 @@ def get_gpu_model():
     return "Unknown"
 
 
-@lru_cache(maxsize=1)
+# @lru_cache(maxsize=1)
 def is_h800():
     gpu_model = get_gpu_model()
     return gpu_model.split('\n')[0].strip()=='NVIDIA H800'
 
-@lru_cache(maxsize=1)
+# @lru_cache(maxsize=1)
 def gpu_flops():
     if is_h800():
         return 989e12
