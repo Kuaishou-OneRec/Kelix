@@ -260,8 +260,6 @@ def MMTBenchTransform(sample) -> list:
   question = sample['question']
   answer = sample['answer']
   image_path = sample['image_path']
-  image_id = image_path.split('/')[-1]
-  image_path = f"/llm_reco_ssd/luoxinchen/RecoVLM/Benchmark/dataset/MMTBench/images/{image_id}"
   image = Image.open(image_path)
   messages = [
     {
