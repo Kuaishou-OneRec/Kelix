@@ -71,12 +71,12 @@ from torch.utils.data import DataLoader
 
 FLAGS = flags.FLAGS
 
-# flags.DEFINE_string(
-#   "model_name_or_path", "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip", "The path or name of model."
-# )
 flags.DEFINE_string(
-  "model_name_or_path", "/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct", "The path or name of model."
+  "model_name_or_path", "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip", "The path or name of model."
 )
+# flags.DEFINE_string(
+#   "model_name_or_path", "/llm_reco_ssd/zhouyang12/models/Qwen2.5-VL-7B-Instruct", "The path or name of model."
+# )
 
 flags.DEFINE_string(
   "parquet_path", "/llm_reco_ssd/huqigen/dataset/wenjuan_sft/photo_0210_11w_cot_v2/photo_0210_11w_sft_data-test.parquet", "The path or name of model."
