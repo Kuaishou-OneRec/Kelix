@@ -27,6 +27,7 @@ hostfile
 *.out
 *checkpoint.ipynb
 *.parquet
+*.jpg
 *.swp
 *.xlsx
 *.png
