@@ -68,7 +68,7 @@ from torch.utils.data import DataLoader
 FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
-  "model_name_or_path", "/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip", "The path or name of model."
+  "model_name_or_path", "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/", "The path or name of model."
 )
 
 flags.DEFINE_string(
