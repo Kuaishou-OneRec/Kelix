@@ -121,14 +121,14 @@ nohup mpirun --allow-run-as-root \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 21000 \
+                --max_length 20000 \
                 --learning_rate 1e-5 \
                 --vision_learning_rate 1e-6 \
                 --min_lr 1e-7 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 250 \
-                --num_training_steps 18000 \
+                --num_training_steps 20000 \
                 --save_checkpoint_per_step 500 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
