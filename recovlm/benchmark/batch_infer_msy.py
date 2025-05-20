@@ -13,7 +13,7 @@ from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcess
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration
 import math
-from transformers import AutoCausalLM
+from transformers import AutoModelForCausalLM
 from msy_infer_dataset import MsyInferDataset
 import pyarrow.parquet as pq
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
@@ -292,7 +292,7 @@ def main(_):
         #     use_cache=False
         # )
         # 1. AutoCausalLM  2. init_process_group + initilize model parallel
-        llm = AutoCausalLM.from_pretrained(
+        llm = AutoModelForCausalLM.from_pretrained(
             FLAGS.model_name_or_path,
             _attn_implementation = 'flash_attention_2',
             use_cache=False
