@@ -1147,6 +1147,8 @@ def train():
 
           ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
 
+      if dist.get_rank() == 0:
+          print(f"current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       ########## dataset source monitor ###############
       if args.monitor_datasource_loss:
         # WARN: assume batch_size = 1
