@@ -1058,10 +1058,6 @@ def train():
       sample_idx = batch["sample_idx"]
       position_ids = batch.get("position_ids", None)
       image_flags = batch.get("image_flags", None)
-
-
-      if rank == 0:
-        print_input_info(batch, return_str=False)
       
 
       # 打印 token 数量
