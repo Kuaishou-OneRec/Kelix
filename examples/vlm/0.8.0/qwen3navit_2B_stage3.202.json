@@ -14,6 +14,7 @@
     "num_epochs": 10,
     "cut_to_pad": 1,
     "use_flops_balance": true,
+    "autoaug_policy": "grounding_ocr_imagenet",
     "model_class": "Qwen3SiglipForConditionalGeneration_navit",
     "siglip_vision_config": "/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex"
 }
