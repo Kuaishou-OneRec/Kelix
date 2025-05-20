@@ -138,7 +138,6 @@ nohup mpirun --allow-run-as-root \
 		--monitor_image_tokens \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
-                --vit_token_balance \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
