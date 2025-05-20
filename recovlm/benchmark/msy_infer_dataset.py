@@ -338,7 +338,8 @@ transform_func_map = {
   "MMStar": mmstarTransform,
   "MathVista": MathVistaTransform,
   "Benchmark_v21": Benchmark_v21Transform,
-  "AI2D": AI2DTransform
+  "AI2D": AI2DTransform,
+  "AI2D_no_mask": AI2DTransform
 }
 
 
@@ -396,7 +397,6 @@ class MsyInferDataset(ParquetDataset):
     for item in super().__iter__():
       try:
         messages = self.transform_func(item)
-        print(messages,'msylalalallla')
         text = self.processor.apply_chat_template(
           messages,
           tokenize=False,
