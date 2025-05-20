@@ -1390,6 +1390,774 @@ def train():
                       dist_checkpointer=dist_checkpointer,
                   )
 
+
+
+
+def train():
+  arg_parser = get_argument_parser()
+  args = arg_parser.parse_args()
+
+  # check vision_lr
+  assert args.learning_rate > 0.0
+  if args.vision_learning_rate < 0.0:
+    args.vision_learning_rate = args.learning_rate
+
+  assert all([args.commit_id, args.seed, args.comment]), \
+    "Git commit, seed, and comment is required for reproducibility"
+
+  assert all([args.kml_id, args.kml_task_id]), \
+    "Kml task infomation, for task alive monitor."
+
+  assert any([args.save_checkpoint_per_step, args.save_checkpoint_every_epoch]), \
+      "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
+      "save_checkpoint_every_epoch should be set."
+      
+  rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+  world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+  local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+  local_world_size = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_SIZE", 0))
+  cpu_bind = get_numa_bind_info(local_rank, local_world_size)
+
+  ##############
+  with open(args.dataset_config, encoding="utf-8") as f:
+    dataset_config = json.loads(f.read())
+  dataset = dataset_config.pop("name")
+  dataset_config["model_class"] = args.model_class
+  if args.max_length:
+    dataset_config["max_length"] = args.max_length
+  use_flops_balance = dataset_config.get("use_flops_balance", False)
+
+  if use_flops_balance:
+    batch_queue = mp.Queue(1)
+    data_process = mp.Process(target=data_func, args=(dataset, dataset_config, batch_queue, cpu_bind[:8]))
+    data_process.start()
+  else:
+    batch_queue = None
+    
+  # init model params
+  os.environ["KML_ID"] = args.kml_id
+  os.environ["KML_TASK_ID"] = args.kml_task_id
+  # torch init
+  torch.cuda.set_device(local_rank)
+  torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+  device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
+
+  if use_flops_balance:
+    p = psutil.Process(os.getpid())
+    p.cpu_affinity(cpu_bind[8:])
+    print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind[8:]}")
+
+  ### initialize model parallel group
+  initialize_model_parallel(args.sequence_parallel_size)
+  print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
+
+  set_random_seed(args.seed)
+
+  state_dict = None
+
+  converter = FakeConverter()
+  if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration']:
+      converter = Qwen2VLCheckpointConverter(args.model_dir)
+  elif args.model_class == 'Qwen2_5_VLForConditionalGeneration_moonvit':
+      converter = Qwen2_5_VL_moonvitCheckpointConverter(args.model_dir)
+  elif args.model_class == 'Qwen2_5_VLForConditionalGeneration_siglip':
+      converter = Qwen2_5_VL_siglipCheckpointConverter(args.model_dir)
+  elif args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip_navit":
+      converter = Qwen2_5_VL_siglipCheckpointConverter(args.model_dir)
+  elif args.model_class == 'InternVLChatModel':
+      converter = InternVLCheckpointConverter(args.model_dir)
+
+  if dist.get_rank() == 0:
+    with set_default_dtype(torch.bfloat16):
+      state_dict = load_hf_checkpoint(args.model_dir)
+      state_dict = converter(state_dict)
+
+
+  dist.barrier()
+
+  if dist.get_rank() == 0:
+    args_dict = vars(args)
+    args_str = json.dumps(args_dict, indent=4, ensure_ascii=False)
+    print_rank_0(f"Training Arguments:\n{args_str}")
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+    with open(os.path.join(args.output_dir,
+          f"args-{args.commit_id}-{timestamp}.json"), 'w',
+        encoding="utf-8") as f:
+      f.write(args_str + "\n")
+
+  tb_writer = None
+  if dist.get_rank() == 0:
+    os.makedirs(args.output_dir, exist_ok=True)
+    tb_writer = SummaryWriter(log_dir=os.path.join(args.output_dir, "log"))
+    tb_writer.add_text("comment", args.comment, 0)
+    tb_writer.add_text("comment_id", args.commit_id, 0)
+    tb_writer.add_text("kml_id", args.kml_id, 0)
+    tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
+
+
+  with set_default_dtype(torch.bfloat16), torch.device("meta"):
+    model = eval(args.model_class).from_pretrained(
+      args.model_dir, _attn_implementation="flash_attention_2",use_cache = False, ignore_mismatched_sizes=True
+    )
+    if args.model_class == "Qwen2_5_VLForConditionalGeneration_moonvit":  
+      state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_moonvit_state_dict.pth")
+      model.load_state_dict(state_dict)
+    
+    if args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip":
+      state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip/global_step1000/model_float32.pth", weights_only=True)
+      model.load_state_dict(state_dict)
+    
+    if args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip_navit":
+      state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth", weights_only=True)
+      model.load_state_dict(state_dict)
+    #msyTODO: add siglip
+  
+  # check all param & buffer on meta device 
+  for tensor in itertools.chain(model.parameters(), model.buffers()):
+    assert tensor.device == torch.device("meta")
+
+  if args.enable_gradient_checkpointing:
+    print_rank_0("Enable gradient checkpointing")
+    # 使用FSDP时，hf的gradient_checkpointing_enable()不会生效
+    # model.gradient_checkpointing_enable(
+    #     gradient_checkpointing_kwargs={"use_reentrant": False})
+
+    auto_wrap_policy_mapping = {
+      "Qwen2VLForConditionalGeneration": {Qwen2VLDecoderLayer, Qwen2VLVisionBlock},
+      "Qwen2_5_VLForConditionalGeneration": {Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock},
+      "Qwen2_5_VLForConditionalGeneration_moonvit": {Qwen2_5_VLDecoderLayer, MoonVitEncoderLayer},
+      "Qwen2_5_VLForConditionalGeneration_siglip": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
+      "Qwen3SiglipForConditionalGeneration_navit": {Qwen3SiglipDecoderLayer, SiglipEncoderLayer},
+      "Qwen2_5_VLForConditionalGeneration_siglip_navit": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
+      "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
+    }
+    set_activation_checkpointing(
+      model, auto_wrap_policy=auto_wrap_policy_mapping[args.model_class]
+    )
+
+  if args.fp32_weight: model = model.float()
+
+  shard_model(
+    model=model,
+    shard_conditions=[partial(get_shard_conditions, model_class=args.model_class)],
+    cpu_offload=False,
+    reshard_after_forward=args.reshard_after_forward,
+    dp_mesh=device_mesh,
+    fp32_weight=args.fp32_weight,
+    prefetch_parameters=args.prefetch_parameters,
+    model_class=args.model_class,
+    fp32_reduce=args.fp32_reduce
+  )
+  dist.barrier()
+
+  with Timer("Load state dict"):
+    load_from_full_model_state_dict(model=model, full_sd=state_dict, allow_random_init_params=args.allow_random_init_params) # 这里应该全部转成CUDA了, meta -> CUDA
+
+  if state_dict is not None:
+    del state_dict
+
+  with torch.device(torch.cuda.current_device()):
+    for m in model.modules():
+      # RoPE is not covered in state dict
+      if hasattr(m, "rope_init"):
+        print_rank_0("Initialize RoPE")
+        m.rope_init()
+  
+  # 确保任何参数都被正确初始化
+  for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
+    if name != "visual.vision_model.embeddings.position_ids":
+      assert not tensor.device == torch.device("meta"), \
+        f"{name} not initialized, device={tensor.device}"
+
+  freeze_params(args=args, model=model)
+  
+  # print train params log
+  for name, param in model.named_parameters():
+    if param.requires_grad:
+      print_rank_0(f"params not freeze: {name}")
+  print_rank_0("=" * 50)
+
+  # Split weights in two groups, one with weight decay and the other not.
+  optimizer_grouped_parameters = get_optimizer_grouped_parameters(
+    model,
+    learning_rate=args.learning_rate,
+    vision_learning_rate=args.vision_learning_rate,
+    weight_decay=args.weight_decay,
+    # no_decay_name_list=
+    # [
+    #   "bias", "norm1", "norm2", "visual.merger.ln_q",
+    #   "input_layernorm", "post_attention_layernorm", "model.norm"
+    # ] if args.model_class in ['Qwen2VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit'] else
+    # [
+    #   "bias", "norm1", "norm2", "mlp1.0.weight",
+    #   "input_layernorm", "post_attention_layernorm", "model.norm"
+    # ]
+    # ,
+    vision_learning_rate_layer_dacay=args.vision_lr_layer_decay
+  )
+
+  # prepare optimizer
+  optimizer = torch.optim.AdamW(
+    optimizer_grouped_parameters,
+    lr=args.learning_rate,
+    betas=(args.beta1, args.beta2),
+    eps=1.0e-8
+  )
+
+  lr_scheduler = get_scheduler(
+    name=args.lr_scheduler_type,
+    optimizer=optimizer,
+    num_warmup_steps=args.num_warmup_steps,
+    num_training_steps=args.num_training_steps,
+    min_lr=args.min_lr
+  )
+
+  total_num_tokens = 0
+  total_num_samples = 0
+  total_num_valid_tokens = 0
+  dataloader_state_dict = None
+  local_acc_data_source_samples = collections.defaultdict(int)
+  total_data_source_tokens = collections.defaultdict(int)
+
+  resume_from, ckpt_id, rewrite_resume_flag = get_resume_info(args)
+
+  app_state = AppState(model=model)
+  dist_checkpointer = DistributedCheckpointer()
+
+  if rewrite_resume_flag:
+    args.resume_dataloader = True
+    args.load_weights_only = False
+    print_rank_0(f"WARN: --resume_dataloader is rewrited to True \n" \
+                 f"WARN: --load_weights_only is rewrited to False \n")
+
+
+  if ckpt_id:
+    ckpt_path = os.path.join(resume_from, ckpt_id)
+    global_step = int(ckpt_id.split("step")[-1])
+    print_rank_0(
+      f"Resume from checkpoint: {ckpt_path}, global_step={global_step}"
+      f"load_weights_only={args.load_weights_only}")
+
+    if not os.path.exists(ckpt_path):
+      raise ValueError(f"Checkpoint path {ckpt_path} does not exist")
+
+    # 只加载模型参数，不考虑优化器状态
+    client_state = {}
+
+    # 获取state_dict用于加载
+    state_dict = {"app": app_state.set_call_back(converter.convert)}
+              
+    # 使用DCP API加载分片数据
+    dist_checkpointer.load_checkpoint(
+        state_dict=state_dict,  # 提供state_dict参数
+        checkpoint_dir=resume_from,
+        tag=ckpt_id
+    )
+    
+    print_rank_0(f"Successfully loaded model using distributed checkpoint")
+
+    if args.resume_dataloader:
+      print_rank_0(f"resume_from={resume_from}, len={len(resume_from)}")
+      dataloader_resume_path = os.path.join(resume_from, "dataloader_ckpt", f"rank{dist.get_rank()}.pt")
+      # Add validation for dataloader checkpoint
+      if not os.path.exists(dataloader_resume_path):
+        print_rank_0(f"Warning: Dataloader checkpoint {dataloader_resume_path} does not exist")
+        print_rank_0("Will start training without resuming dataloader state")
+        dataloader_state_dict = None
+      else:
+        try:
+          dataloader_state_dict = torch.load(dataloader_resume_path)["dataloader_state_dict"]
+          print_rank_0(f"Successfully loaded dataloader state from {dataloader_resume_path}")
+        except Exception as e:
+          print_rank_0(f"Error loading dataloader checkpoint: {str(e)}")
+          print_rank_0("Will start training without resuming dataloader state")
+          dataloader_state_dict = None
+
+    if not args.load_weights_only:
+      total_num_tokens = client_state.get("total_num_tokens", 0)
+      total_num_samples = client_state.get("total_num_samples", 0)
+      total_num_valid_tokens = client_state.get("total_num_valid_tokens", 0)
+
+      # accumulate total_data_source_samples to rank0, 0 init others.
+      if dist.get_rank() == 0:
+        local_acc_data_source_samples.update(client_state.get("total_data_source_samples", {}))
+        total_data_source_tokens.update(client_state.get("total_data_source_tokens", {}))
+
+  dist.barrier()
+
+  try: tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
+  except Exception as e:
+    print(f"init tokenizer failed\ne={e}")
+    tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
+
+  ########
+  if dist.get_rank() == 0:
+    with open(os.path.join(args.output_dir,
+        f"dataset-{args.commit_id}-{timestamp}.json"), 'w',
+        encoding="utf-8") as f:
+      f.write(json.dumps(
+        dataset_config, ensure_ascii=False, indent=2) + "\n")
+
+  if not use_flops_balance:
+    with Timer("Build dataloader"):
+      try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
+      except: 
+        import traceback
+        print_rank_0(f"get_dataloader_v2 error: {traceback.format_exc()}")
+        print_rank_0(f"get_dataloader_v2 retry for get_dataloader")
+        traceback.print_exc()
+        dataloader = get_dataloader(name=dataset, **dataset_config)
+      if args.resume_dataloader and dataloader_state_dict is not None:
+        dataloader.load_state_dict(dataloader_state_dict)
+  else:
+    dataloader = None
+
+  ##############
+  torch_profiler = _init_profiler(output_dir=os.path.join(args.output_dir, "torch_profile"))
+
+  loss_fn = CrossEntropyLoss(
+    ignore_index=-100, return_token_loss=True, shift_labels=False)
+
+  start_time = time.time()
+  start_time0 = start_time
+  show_cnt = 1
+  global_step = 0
+
+
+  # Metrics, acc_ account for gradient accumulation
+  # TODO: use mestrics manager
+  acc_avg_loss = 0.0
+  acc_num_tokens = 0
+  acc_num_samples = 0
+  acc_valid_num_tokens = 0
+  acc_num_image_tokens = 0
+  total_num_image_tokens = 0
+  batch_data_source_loss = collections.defaultdict(float)
+  batch_data_source_tokens = collections.defaultdict(int)
+  valid_data_source_tokens = collections.defaultdict(int)
+  grad_norm = 0.0
+  # get_sequence_parallel_group("gloo")
+  micro_step = 0
+  ticker = TimeTracker(n=args.logging_per_step)
+  iter_ticker = TimeTracker(n=args.logging_per_step)
+  token_stasts = TokenStats()
+
+  gpu_batch_q = queue.Queue(maxsize=2)
+  def prefetch_to_gpu(input_fn, output_q, dev):
+    while True:
+      try:
+        batch = input_fn()
+        to_device(batch, dev, True)
+        output_q.put(batch)
+      except StopIteration:
+        break
+
+  if use_flops_balance:
+    input_fn = lambda: batch_queue.get()
+  else:
+    data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
+    input_fn =  lambda: next(data_iter)
+  prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
+  prefetch_t.start()
+
+  tb_metrics_q = queue.Queue(maxsize=8)
+  def write_tb_async(tb_writer, metrics_queue, grad_acc_steps):
+    while True:
+      metrics = metrics_queue.get()
+      global_step, log_dict, ticker_stats, ds_loss, ds_tokens, ds_samples = metrics_queue.get()
+      total_num_samples = log_dict["perf/total_num_samples"]
+      total_num_valid_tokens = log_dict["perf/valid_total_num_tokens"]
+      for name, data in log_dict.items():
+        if data is not None and tb_writer:
+          tb_writer.add_scalar(
+              name,
+              data,
+              global_step=global_step,
+              new_style=True)
+
+          # log metric by valid tokens
+          if name.startswith("training/"):
+            tb_writer.add_scalar(
+              f"x_token_{name}",
+              data,
+              global_step=total_num_valid_tokens / grad_acc_steps,
+              new_style=True
+            )
+
+      for name, data in ticker_stats.items():
+        tb_writer.add_scalar(f"ticker/{name}", data, global_step=global_step, new_style=True)
+
+      for key, loss_sum in ds_loss.items():
+        tb_writer.add_scalar(
+              f"data_source_loss/{key}",
+              loss_sum / (ds_tokens[key] + 1e-6) ,
+              global_step=global_step,
+              new_style=True)
+
+      for key, samples in ds_samples.items():
+        tb_writer.add_scalar(
+            f"data_source_sample_ratio/{key}",
+            1.0 * samples / total_num_samples,
+            global_step=global_step,
+            new_style=True)
+
+      for key, num_tokens in ds_tokens.items():
+        tb_writer.add_scalar(
+            f"data_source_token_ratio/{key}",
+            1.0 * num_tokens / total_num_valid_tokens,
+            global_step=global_step,
+            new_style=True)
+
+  if dist.get_rank() == 0:
+    tb_writer_t = threading.Thread(target=write_tb_async,args=(tb_writer, tb_metrics_q, args.gradient_accumulation_steps))
+    tb_writer_t.start()
+              
+
+  while True:
+    ticker.tick("while_True")
+    with contextlib.ExitStack() as ctx:
+
+      if torch_profiler: ctx.enter_context(torch_profiler)
+
+      ticker.tick("enter_context(torch_profiler)")
+      try: batch = gpu_batch_q.get() 
+      except StopIteration: break
+      ticker.tick("next_batch")
+
+      micro_step += 1
+
+      if show_cnt > 0 and dist.get_rank() == 0:
+        with Timer("Show data"):
+          # input_text = tokenizer.decode(batch['input_ids'][0])
+          # print_rank_0(
+          #     f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
+          print_rank_0(batch)
+          show_cnt -= 1
+          
+      data_source = batch.pop("data_source", None) # dataset source list cur batch
+      ticker.tick("to_cuda(batch)")
+
+      input_ids = batch["input_ids"]
+      loss_mask = batch["loss_mask"]
+      attention_mask = batch.get("attention_mask", None)
+      pixel_values = batch.get("pixel_values", None)
+      pixel_values_videos = batch.get("pixel_values_videos", None)
+      image_grid_thw = batch.get("image_grid_thw", None)
+      video_grid_thw = batch.get("video_grid_thw", None)
+      cu_seqlens = batch.get("cu_seqlens", None)
+      sample_idx = batch["sample_idx"]
+      position_ids = batch.get("position_ids", None)
+      image_flags = batch.get("image_flags", None)
+
+
+      # 打印 token 数量
+      if not use_flops_balance:
+        token_count = input_ids.numel()  # 计算 token 数量
+        print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
+        num_tokens = token_count
+        num_samples = (sample_idx.max() + 1).sum()
+        # num_image_tokens = pixel_values.shape[0] * 256 # if args.model_class == "InternVLChatModel" else 0
+
+        num_image_tokens2 = (input_ids == 151667).sum().item()
+        if num_image_tokens2 == 0: num_image_tokens2 = (input_ids == 151655).sum().item()
+
+        num_image_tokens = num_image_tokens2
+
+        # print(input_ids, 54544444)
+        # print(f"num_image_tokens111111={num_image_tokens}")
+
+        # num_tokens - (sample_idx == -1).sum()
+        num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
+        token_metrics = torch.tensor(
+          [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda(non_blocking=True)
+
+        ticker.tick("token_metrics_init")
+
+        dist.all_reduce(
+          token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+
+        ticker.tick("token_metrics_reduce")
+
+        num_tokens, num_samples, num_valid_tokens, num_image_tokens = token_metrics.detach().cpu().numpy()
+        ticker.tick("token_metrics.detach().cpu().numpy()")
+      else:
+        num_image_tokens2 = (input_ids == 151667).sum().item()
+
+        num_tokens = batch.get("num_tokens", 0)
+        num_samples = batch.get("num_samples", 0)
+        num_valid_tokens = batch.get("num_valid_tokens", num_tokens)
+        num_image_tokens = batch.get("num_image_tokens", 0)
+        print_rank_0(f"Iteration {micro_step}: Token count = {num_tokens}")
+
+      total_num_samples += num_samples
+      total_num_tokens += num_tokens
+      total_num_valid_tokens += num_valid_tokens
+      total_num_image_tokens += num_image_tokens
+
+      acc_num_samples += num_samples
+      acc_num_tokens += num_tokens
+      acc_valid_num_tokens += num_valid_tokens
+      acc_num_image_tokens += num_image_tokens
+      ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
+
+      input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
+      labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
+      ticker.tick("labels=...")
+      with Timer("Fwd"):
+        if args.model_class == "InternVLChatModel":
+            output = model(
+              input_ids = input_ids, attention_mask=attention_mask,
+              pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+              image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+              image_flags = image_flags,
+              cu_seqlens=cu_seqlens
+            )
+        else:
+            output = model(
+              input_ids = input_ids, attention_mask=attention_mask,
+              pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
+              image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
+              cu_seqlens=cu_seqlens
+            )
+        ticker.tick("model.forward")
+
+        # (b, N/P, V)
+        logits = output.logits
+
+        # 提前shift logits & labels
+        pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
+            dtype=labels.dtype).to(device=labels.device, non_blocking=True)
+        labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
+        local_labels = get_local_sequence(labels, seq_idx=1)
+        loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
+
+        ticker.tick("loss_fn")
+
+      with Timer("bwd"):
+        loss.backward(loss)
+        clip_grad_by_value(model, args.clip_range)
+        ticker.tick("loss.backward")
+
+        if (micro_step + 1) % args.gradient_accumulation_steps == 0:
+          optimizer.step()
+          lr_scheduler.step()
+          optimizer.zero_grad()
+          global_step += 1
+
+          ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
+
+      ########## dataset source monitor ###############
+      if args.monitor_datasource_loss:
+        # WARN: assume batch_size = 1
+        local_sample_idx = get_local_sequence(sample_idx).squeeze()
+
+        unique_sample_idx = local_sample_idx.unique()
+        for s_idx in unique_sample_idx:
+          if s_idx < 0:
+            continue
+          mask = local_sample_idx == s_idx
+          sum_loss = per_token_loss[mask].sum()
+
+          key = data_source[int(s_idx.item())]
+          batch_data_source_loss[key] += sum_loss.item()
+          batch_data_source_tokens[key] += mask.sum().item()
+          valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
+        ticker.tick("monitor_datasource_loss")
+
+      if args.monitor_datasource_cnt:
+        for data_source_name in data_source:
+          local_acc_data_source_samples[data_source_name] += 1
+        ticker.tick("monitor_datasource_cnt")
+    
+      #########################################
+      avg_loss = loss.detach() # torch.tensor(loss.item()).cuda()
+      dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
+      avg_loss = avg_loss.item() / dist.get_world_size()
+      acc_avg_loss += avg_loss
+
+      ticker.tick("reduce_acc_avg_loss")
+      log_acc_step = args.logging_per_step * args.gradient_accumulation_steps
+      if global_step % args.logging_per_step == 0 and \
+              (micro_step + 1) % args.gradient_accumulation_steps == 0:
+
+        if args.monitor_image_tokens: 
+          token_stasts.collect_image_token_stats(num_image_tokens2)
+          colleced_token_stasts = token_stasts.stats()         
+        ticker.tick(f"token_stasts*{log_acc_step}")
+
+        with Timer("reduce data source metrics"):
+          print_rank_0(f"batch_ds_loss: {batch_data_source_loss}, token: {batch_data_source_tokens}, samples: {local_acc_data_source_samples}")
+          # batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
+          # batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
+          # valid_data_source_tokens = dist_reduce_dict(valid_data_source_tokens)
+          # total_data_source_samples = dist_reduce_dict(
+          #   local_acc_data_source_samples, group=get_data_parallel_group())
+          # for ds_key, ds_num_tokens in batch_data_source_tokens.items():
+          #   total_data_source_tokens[ds_key] += ds_num_tokens
+          total_data_source_samples = local_acc_data_source_samples
+          total_data_source_tokens = batch_data_source_tokens
+          
+
+        if dist.get_rank() == 0:
+          model_lrs = lr_scheduler.get_last_lr()
+          learning_rate = model_lrs[0]
+          if len(model_lrs) > 2:
+            vision_learning_rate = lr_scheduler.get_lr()[2]
+          else:
+            vision_learning_rate = lr_scheduler.get_lr()[1]
+          end_time = time.time()
+          sec_per_step = (end_time - start_time) # / args.gradient_accumulation_steps
+          tokens_per_sec_per_gpu = \
+            acc_num_tokens  / (end_time - start_time) / dist.get_world_size()
+          samples_per_sec_per_gpu = \
+            acc_num_samples  / (end_time - start_time) / dist.get_world_size()
+          samples_per_step_per_gpu = \
+            acc_num_samples  / dist.get_world_size()
+          valid_tokens_per_sec_per_gpu = \
+            acc_valid_num_tokens / (end_time - start_time) / dist.get_world_size()
+          image_tokens_per_sec_per_gpu = \
+            acc_num_image_tokens / (end_time - start_time) / dist.get_world_size()
+
+
+          samples_per_step_per_gpu_v2 = total_num_samples / dist.get_world_size() / global_step
+          samples_per_sec_per_gpu_v2 = total_num_samples / dist.get_world_size() / (end_time - start_time0)
+
+          image_tokens_per_step_per_gpu_v2 = total_num_image_tokens / dist.get_world_size() / global_step
+          image_tokens_per_sec_per_gpu_v2 = total_num_image_tokens / dist.get_world_size() / (end_time - start_time0)
+
+          tokens_per_step_per_gpu_v2 = total_num_tokens / dist.get_world_size() / global_step
+          tokens_per_sec_per_gpu_v2 = total_num_tokens / dist.get_world_size() / (end_time - start_time0)
+
+
+          avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
+          start_time = end_time
+          log_dict = {
+            # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
+            "training/loss": avg_loss,
+            f"training/grad_norm": get_global_grad_norm(model).detach().cpu().item(),
+            "training/learning_rate": learning_rate,
+            "training/vision_learning_rate": vision_learning_rate,
+            "perf/sec_per_step": sec_per_step,
+            "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
+            "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
+            "perf/total_num_tokens": total_num_tokens,
+            "perf/total_num_samples": total_num_samples,
+            "perf/num_sample_per_gpu": total_num_samples / dist.get_world_size(),
+            "perf/samples_per_step_per_gpu": samples_per_step_per_gpu,
+            "perf/num_sample_per_sec_per_gpu": total_num_samples / sec_per_step / dist.get_world_size(),
+            "perf/valid_total_num_tokens": total_num_valid_tokens,
+            "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
+            "perf/image_tokens_per_sec_per_gpu": image_tokens_per_sec_per_gpu,
+            "perf/image_token_ratio_by_valid": image_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
+            "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
+            "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples,
+
+            "perf/samples_per_step_per_gpu_v2": samples_per_step_per_gpu_v2,
+            "perf/samples_per_sec_per_gpu_v2": samples_per_sec_per_gpu_v2,
+            "perf/image_tokens_per_step_per_gpu_v2": image_tokens_per_step_per_gpu_v2,
+            "perf/image_tokens_per_sec_per_gpu_v2": image_tokens_per_sec_per_gpu_v2,
+            "perf/tokens_per_step_per_gpu_v2": tokens_per_step_per_gpu_v2,
+            "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
+
+          }
+          if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
+          ticker.tick(f"log_dict*{log_acc_step}")
+
+          ticker_stats = {}
+          for t in [ticker, iter_ticker]:
+              ticker_stats.update(t.stat())
+          metrics_info = (global_step, log_dict, ticker_stats, batch_data_source_loss, batch_data_source_tokens, total_data_source_samples)
+          tb_metrics_q.put(metrics_info)
+
+          ticker.tick(f"tb_metrics_q.put")
+          print_rank_0(
+            f"Step: {global_step}, Loss: {avg_loss}, "
+            f"Learning Rate: {learning_rate}, "
+            f"Grad Norm: {get_global_grad_norm(model).detach().cpu().item()}, "
+            f"Sec per Step: {sec_per_step}",
+            format_dict_or_list(log_dict)
+          )        
+
+          # upload heart_beat to remote
+          if args.heartbeat_monitor:
+            heart_beat(int(acc_num_tokens))
+
+        acc_avg_loss = 0.0
+        acc_num_samples = 0
+        acc_num_tokens = 0
+        acc_valid_num_tokens = 0
+        acc_num_image_tokens = 0
+        batch_data_source_loss = collections.defaultdict(float)
+        batch_data_source_tokens = collections.defaultdict(int)
+        valid_data_source_tokens = collections.defaultdict(int)
+
+      if global_step % args.save_checkpoint_per_step == 0 and \
+          global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
+        
+        torch.cuda.empty_cache()
+
+        with Timer("save checkpoint"):
+          save_model_checkpoint(
+                      model=model,
+                      save_dir=args.output_dir,
+                      tag=f"step{global_step}",
+                      global_step=global_step,
+                      client_state={
+                          "total_num_valid_tokens": total_num_valid_tokens,
+                          "total_num_tokens": total_num_tokens,
+                          "total_num_samples": total_num_samples,
+                          "total_data_source_samples": total_data_source_samples,
+                          "total_data_source_tokens": total_data_source_tokens,
+                      },
+                      dataloader=dataloader,
+                      app_state=app_state.set_call_back(converter.revert), # app_state.set_call_back(state_dict), # no need to convert 
+                      dist_checkpointer=dist_checkpointer
+                  )
+          try:
+            dataloader_state_dict = {
+              "dataloader_state_dict": dataloader.state_dict()
+            }
+          except:
+            dataloader_state_dict = None
+            logging.error(f"Dataloader cannot dump state_dict!!!!!!!!")
+          if dataloader_state_dict is not None:
+            # dataloader ckpt
+            dataloader_path = os.path.join(args.output_dir, "dataloader_ckpt")
+            if dist.get_rank() == 0:
+              os.makedirs(dataloader_path, exist_ok=True)
+            dist.barrier()
+            torch.save(
+              dataloader_state_dict,
+              os.path.join(
+                dataloader_path,
+                f"rank{dist.get_rank()}_global_step{global_step}.pth")
+              )
+        ticker.tick(f"save_ckpt*{args.save_checkpoint_per_step * args.gradient_accumulation_steps}") 
+
+      print_rank_0(f"ticker_info: {ticker.stat()}")
+      iter_ticker.tick("iter_ticker")
+      if torch_profiler: torch_profiler.step()
+
+
+  save_model_checkpoint(
+                      model=model,
+                      save_dir=args.output_dir,
+                      tag=f"step{global_step}",
+                      global_step=global_step,
+                      client_state={
+                          "total_num_valid_tokens": total_num_valid_tokens,
+                          "total_num_tokens": total_num_tokens,
+                          "total_num_samples": total_num_samples,
+                          "total_data_source_samples": total_data_source_samples,
+                          "total_data_source_tokens": total_data_source_tokens,
+                      },
+                      dataloader=dataloader,
+                      app_state=app_state.set_call_back(converter.revert), # app_state.set_call_back(state_dict),
+                      dist_checkpointer=dist_checkpointer,
+                  )
+
+
+
 if __name__ == "__main__":
   train()
 
