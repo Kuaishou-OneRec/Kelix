@@ -30,6 +30,42 @@ def format_text(doc, max_text_len=1000):
   return "\n".join(items)
 
 
+"""
+>>> f.annotations[0]
+{'answers': array(['pinterest'], dtype=object), 'image_path': '/llm_reco_ssd/luoxinchen/dataset/infoVQA/human_download/infographicsvqa_images/37313.jpeg', 'question': 'Which social platform has heavy female audience?', 'questionId': 98313}
+"""
+def infoVQATransform(sample) -> list:
+  sample = sample['annotations']
+  answer = sample['answers']#array(['pinterest'], dtype=object)
+  answer = str(answer.tolist()[0])
+  question = sample['question']
+  image_path = sample['image_path']
+  image = Image.open(image_path)
+  messages = [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image",
+          "image": image
+        },
+        {
+          "type": "text",
+          "text": question
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": answer
+        }
+      ]
+    }
+  ]
+  return messages
 
 def parse_options_and_answer(options, answer):
     if all([len(option) == 1 and option.isalpha() for option in options]):
@@ -339,7 +375,8 @@ transform_func_map = {
   "MathVista": MathVistaTransform,
   "Benchmark_v21": Benchmark_v21Transform,
   "AI2D": AI2DTransform,
-  "AI2D_no_mask": AI2DTransform
+  "AI2D_no_mask": AI2DTransform,
+  "infoVQA": infoVQATransform
 }
 
 
