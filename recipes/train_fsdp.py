@@ -1393,6 +1393,603 @@ def train():
 
 
 
+
+from typing import Dict, Any, Union, Optional
+
+import contextlib
+import gc
+import argparse
+import time
+import datetime
+import os
+import glob
+import json
+import logging
+import collections
+import pickle
+import itertools
+import contextlib
+import multiprocessing as mp
+import psutil
+import threading
+import queue
+from functools import partial
+
+
+from recovlm.training.checkpoint import AppState, DistributedCheckpointer
+from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
+from recovlm.models.internvl.checkpoint import InternVLCheckpointConverter
+from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VL_moonvitCheckpointConverter
+from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VL_siglipCheckpointConverter
+
+
+from recovlm.utils.ds_utils import print_input_info
+
+import torch
+import torch.nn as nn
+import torch.distributed as dist
+import torch.nn.functional as F
+import numpy as np
+
+from pathlib import Path
+from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
+
+from transformers import AutoTokenizer
+from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
+
+from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
+from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration_siglip,Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration_siglip_navit
+from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
+from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
+
+
+from recovlm.models.internvl import InternVLChatModel
+from recovlm.models.qwen2 import Qwen2DecoderLayer
+from recovlm.models.internvl import InternVisionEncoderLayer
+
+from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
+from recovlm.data.dataloaders import get_dataloader
+
+from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
+from recovlm.utils.numa_bind import get_numa_bind_info
+from recovlm.losses import CrossEntropyLoss
+from recovlm.utils.common import set_random_seed, to_cuda, to_device, print_rank_0, \
+  get_optimizer_grouped_parameters, dist_reduce_dict, Timer, heart_beat
+from recovlm.training.lr_schedulers import get_scheduler
+
+from recovlm.training.parallel import get_sequence_parallel_group, \
+  get_sequence_parallel_rank, get_sequence_parallel_world_size, \
+  get_local_sequence_boundary, initialize_model_parallel, gather_by_group, \
+  get_local_sequence, get_data_parallel_group, get_data_parallel_world_size, \
+  get_data_parallel_rank
+
+from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
+
+from recovlm.training.distributed import shard_model, get_shard_conditions, \
+  load_from_full_model_state_dict
+from recovlm.training.checkpoint import load_hf_checkpoint
+
+from recovlm.training.activations import set_activation_checkpointing
+
+from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
+
+from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
+from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
+from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipDecoderLayer
+from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitEncoderLayer
+from recipes.ViT.training.models.siglip.modeling_siglip import SiglipEncoderLayer
+from recovlm.utils.time_tracker import TimeTracker
+from recovlm.utils.ds_utils import format_dict_or_list
+from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor
+
+
+# Logger 初始化
+logging.basicConfig(level=logging.INFO)  # 设置日志级别
+logger = logging.getLogger(__name__)  # 创建 logger 实例
+
+def get_argument_parser():
+  parser = argparse.ArgumentParser()
+
+  ############ Checkpoint args ############
+  parser.add_argument("--model_dir", type=str, default=None,
+                      help="The directory of the pretrained model.")
+
+  parser.add_argument("--resume_from", type=str, default=None,
+                      help="Specify the checkpoint directory to resume from.")
+
+  parser.add_argument("--resume_from_tag", type=str, default=None,
+                      help="Specify the checkpoint tag to resume from.")
+  
+  parser.add_argument("--resume_dataloader", action="store_true",
+                      help="Whether to resume dataloader checkpoint")
+  
+  parser.add_argument("--auto_resume_local_latest", action="store_true",
+                      help="Auto resume checkpoint from output dir if the latest ckpt exists." \
+                            "Note: If the latest ckpt exists and the this option is enabled, " \
+                            "the --resume_dataloader switch will be turned on, " \
+                            "while the --load_weights_only option will be turned off.")
+  
+  parser.add_argument("--fp32_weight", action="store_true",
+                      help="Whether use fp32 for model weight updating")
+
+
+
+  parser.add_argument("--fp32_reduce", action="store_true",
+                      help="Whether use fp32 for model gradient reduction")
+
+  parser.add_argument("--reshard_after_forward", action="store_true",
+                      help="enable reshard_after_forward to enable Zero3 (default)")
+
+  parser.add_argument("--save_checkpoint_per_step", type=int, default=1000,
+                      help="The number of steps to save a checkpoint")
+
+  parser.add_argument("--save_checkpoint_every_epoch", action="store_true",
+                      help="Save checkpoint at the end of every epoch")
+  
+  parser.add_argument("--load_weights_only", action="store_true",
+                      help="Only load model weights.")
+
+  parser.add_argument("--compile", action="store_true",
+                      help="compile model.")
+
+  parser.add_argument("--merge_checkpoint", action="store_true",
+                      help="Merge the checkpoint files into a single file")
+
+  parser.add_argument("--merge_checkpoint_dtype", type=str, default="fp16",
+                      choices=["fp32", "fp16", "bf16"],
+                      help="The dtype of the merged checkpoint file")
+
+  parser.add_argument(
+      "--merge_checkpoint_output_file",
+      type=str,
+      default="pytorch_model.bin",
+      help="The name of the merged checkpoint file")
+  
+  parser.add_argument("--output_dir", type=str, default=None,
+                      help="The directory to write the trained model")
+
+  parser.add_argument("--model_class", type=str, default="Qwen2_5_VLForConditionalGeneration_moonvit",
+                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'InternVLChatModel'",)
+  
+  parser.add_argument("--model_processor", type=str, default="Qwen2_5_VLProcessor_moonvit",
+                      help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit' or 'Qwen3SiglipProcessor'")
+
+  ############ Dataset args ############
+  parser.add_argument("--dataset_config", type=str, default=None,
+                      help="The comma seperated path of indexed json file.")
+
+  parser.add_argument("--dataset", type=str, default=None,
+                      help="The comma seperated path of indexed json file.")
+  
+  parser.add_argument("--data_format", type=str, default="chatml",
+                      help="The data format of training, one of `chatml` and `completion`")
+
+  parser.add_argument("--min_visual_tokens", type=int, default=16,
+                      help="The max visual tokens to use")
+
+  parser.add_argument("--max_visual_tokens", type=int, default=512,
+                      help="The max visual tokens to use")
+
+  parser.add_argument("--max_length", type=int, default=None,
+                      help="Max tokens per sentence in corpus")
+
+  ############ Learning Rate Args ############
+  parser.add_argument("--lr_scheduler_type", type=str, default="cosine_with_min_lr",
+                      help="The type of learning rate scheduler.")
+
+  parser.add_argument("--num_warmup_steps", type=int, default=0,
+                      help="The number of warmup steps to do.")
+  
+  parser.add_argument("--num_decay_steps", type=int, default=1000,
+                      help="The number of steps to decay.")
+
+  parser.add_argument("--num_training_steps", type=int, default=1000,
+                      help="The number of training steps to do.")
+
+  parser.add_argument("--num_epochs", type=int, default=1,
+                      help="Number of epochs to train, no effect for pretraining.")
+  
+  parser.add_argument("--min_lr", type=float, default=1e-6,
+                      help="The minimum learning rate to reach after the cosine schedule.")
+
+  ############ Optimizer Args ############
+  parser.add_argument("--learning_rate", type=float, default=2e-4,
+                      help="The peak learning rate for optimizer.")
+  
+  parser.add_argument("--vision_learning_rate", type=float, default=-1.0,
+                      help="The peak vit learning rate for optimizer." \
+                           "Note: vision_learning_rate will be set to learning_rate if vision_learning_rate < 0.0")
+  
+  parser.add_argument("--vision_lr_layer_decay", type=float, default=1.0,
+                      help="Decay vit learning rate by layers.")
+
+  parser.add_argument("--weight_decay", type=float, default=0.1,
+                      help="The weight decay for Adam Optimizer")
+  
+  parser.add_argument("--beta1", type=float, default=0.9,
+                      help="beta1 for Adam Optimizer")
+
+  parser.add_argument("--beta2", type=float, default=0.95,
+                      help="beta2 for Adam Optimizer")
+
+  ############ Training Args ############
+
+  parser.add_argument("--clip_range", type=float, default=None,
+                      help="The gradient clip range.")
+
+  parser.add_argument("--freeze_llm", action="store_true",
+                      help="Freeze all LLM parameters (language model weights will not be updated during training).")
+
+  parser.add_argument("--freeze_visual", action="store_true",
+                      help="Freeze all visual encoder parameters except visual projector layers.")
+  
+  parser.add_argument("--freeze_projector", action="store_true",
+                      help="Freeze visual projector layers.")
+
+  parser.add_argument("--use_flash_attention_2", action="store_true",
+                      help="Whether to use flash attention 2")
+
+  parser.add_argument("--enable_gradient_checkpointing", action="store_true",
+                      help="Enable gradient checkpointing during training")
+
+  parser.add_argument("--prefetch_parameters", action="store_true",
+                      help="prefetch fsdp parameters")
+
+  parser.add_argument("--gradient_accumulation_steps", type=int, default=1,
+                      help="Gradient accumulation steps.")
+
+  parser.add_argument("--allow_random_init_params", type=str, default='',
+                      help="-")
+  
+  parser.add_argument("--sequence_parallel_size", type=int, default=1,
+                      help="Enable gradient checkpointing during training")
+
+  parser.add_argument("--logging_per_step", type=int, default=100,
+                      help="The number of steps to log training info")
+
+  parser.add_argument("--comment", type=str, default=None,
+                      help="Comment of this experiment.")
+
+  parser.add_argument("--commit_id", type=str, default=None,
+                      help="Git commit id for experiment.")
+
+  parser.add_argument("--seed", type=int, default=123,
+                      help="Manual seed for RNG")
+
+  parser.add_argument("--monitor_datasource_loss", action="store_true",
+                      help="Whether to monitor loss of each datasource")
+
+  parser.add_argument("--monitor_datasource_cnt", action="store_true",
+                      help="Whether to monitor cnt of each datasource")
+
+  parser.add_argument("--monitor_image_tokens", action="store_true",
+                      help="Whether to monitor image tokens. Note that this involves with an gather operation, which is time-consuming")
+
+
+  ############ System Vars ############
+
+  parser.add_argument("--kml_id", type=str, default=None,
+                      help="KML_ID")
+
+  parser.add_argument("--enable_profile", action="store_true",
+                      help="init torch profile")
+
+  parser.add_argument("--kml_task_id", type=str, default=None,
+                      help="KML_TASK_ID")
+  
+  parser.add_argument("--heartbeat_monitor", action="store_true",
+                      help="Whether to upload heartbeat to remote")
+  
+  return parser
+
+
+
+def _init_profiler(output_dir, start_step=103, end_step=112) -> None:
+    import torch.distributed as D
+    import os
+    if not os.path.exists(output_dir):
+        if D.get_rank() == 0:
+            os.makedirs(output_dir, exist_ok=True)
+
+    def trace_handler(prof):
+        if D.get_rank() == 0:
+            prof.export_chrome_trace(
+                os.path.join(output_dir, str(prof.step_num) + ".json")
+            )
+
+    torch_profiler = torch.profiler.profile(
+        activities=[
+            torch.profiler.ProfilerActivity.CPU,
+            torch.profiler.ProfilerActivity.CUDA,
+        ],
+        schedule=torch.profiler.schedule(
+           wait=20,
+           warmup=1,
+           active=5,
+           repeat=1,
+        ),
+        on_trace_ready=trace_handler,
+    )
+    return torch_profiler
+
+def save_model_checkpoint(
+    model,
+    save_dir: str,
+    tag: str = None,
+    client_state: dict = None,
+    dataloader = None,
+    app_state: AppState = None,
+    dist_checkpointer: DistributedCheckpointer = None,
+    global_step: int = None,
+):
+    """保存FSDP+TP模型的checkpoint
+
+    Args:
+        model: FSDP wrapped model
+        save_dir: 保存目录
+        tag: checkpoint标签，如果不指定则使用时间戳
+        client_state: 需要保存的额外状态信息
+        dataloader: 可选的dataloader，用于保存数据加载状态
+    """
+    from torch.distributed.fsdp import (
+        FullyShardedDataParallel as FSDP,
+        StateDictType,
+        FullStateDictConfig,
+    )
+    
+    if dist.get_rank() == 0:
+        os.makedirs(save_dir, exist_ok=True)
+    
+    # 生成checkpoint标签
+    if tag is None:
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        tag = f"checkpoint_{timestamp}"
+    
+    ckpt_path = os.path.join(save_dir, tag)
+    if dist.get_rank() == 0:
+        os.makedirs(ckpt_path, exist_ok=True)
+        
+        # 更新latest文件
+        with open(os.path.join(save_dir, "latest"), "w") as f:
+            f.write(tag)
+    
+    # 配置FSDP state_dict
+    full_state_dict_config = FullStateDictConfig(
+        offload_to_cpu=True,
+        rank0_only=True,
+    )
+    
+    try:
+        dist_checkpointer.save_checkpoint(
+                    state_dict={"app": app_state},
+                    output_dir=ckpt_path,           
+                    tag=str(global_step)
+                )
+
+        # 保存dataloader状态（如果有）
+        if dataloader is not None:
+            try:
+                dataloader_state = {
+                    "dataloader_state_dict": dataloader.state_dict()
+                }
+                dataloader_path = os.path.join(ckpt_path, "dataloader_ckpt")
+                if dist.get_rank() == 0:
+                    os.makedirs(dataloader_path, exist_ok=True)
+                dist.barrier()
+                
+                # 每个rank保存自己的dataloader状态
+                torch.save(
+                    dataloader_state,
+                    os.path.join(dataloader_path, f"rank{dist.get_rank()}.pt")
+                )
+                print_rank_0(f"Saved dataloader state to {dataloader_path}")
+            except:
+                logging.error("Failed to save dataloader state!")
+    
+    except Exception as e:
+        logging.error(f"Failed to save checkpoint: {str(e)}")
+        raise e
+    
+    finally:
+        # 确保所有进程同步
+        dist.barrier()
+
+
+def get_resume_info(args):
+  # return: ckpt_folder, ckpt_tag, rewrite_flag
+  if not args.auto_resume_local_latest:
+    # Add validation for manual resume path
+    if args.resume_from and not os.path.exists(args.resume_from):
+      raise ValueError(f"Resume checkpoint directory {args.resume_from} does not exist")
+    
+    if args.resume_from and args.resume_from_tag:
+      ckpt_path = os.path.join(args.resume_from, args.resume_from_tag)
+      if not os.path.exists(ckpt_path):
+        raise ValueError(f"Resume checkpoint path {ckpt_path} does not exist")
+      
+    return args.resume_from, args.resume_from_tag, False
+  else:
+    # check local ckpt
+    latest_file = os.path.join(args.output_dir, "latest")
+    if os.path.exists(latest_file):
+      with open(latest_file, encoding="utf-8") as f:
+        ckpt_id = f.read().strip()  # Add strip() to remove whitespace
+      
+      # Validate checkpoint exists
+      ckpt_path = os.path.join(args.output_dir, ckpt_id)
+      if not os.path.exists(ckpt_path):
+        raise ValueError(f"Latest checkpoint path {ckpt_path} does not exist")
+        
+      print_rank_0(f"Check output_ckpt exists, auto resume from output_folder." \
+                   f"checkpoint: resume_from={args.output_dir}, resume_tag={ckpt_id}")
+      return args.output_dir, ckpt_id, True
+    else:
+      return args.resume_from, args.resume_from_tag, False
+
+
+def freeze_params(args, model):
+
+  #### qwen
+  if args.model_class in  ["Qwen2VLForConditionalGeneration", "Qwen2_5_VLForConditionalGeneration"]:
+    if args.freeze_llm:
+      print_rank_0("Freeze LLM parameters.")
+      for name, param in model.named_parameters():
+        if not name.startswith("visual"):
+          print_rank_0(f"Disable LLM grad: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
+
+    if args.freeze_projector:
+      print_rank_0("Freeze visual encoder parameters.")
+      for name, param in model.named_parameters():
+        if name.startswith("visual.merger."):
+          print_rank_0(f"Disable visual encoder grad: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
+
+    if args.freeze_visual:
+      print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
+      for name, param in model.named_parameters():
+        if name.startswith("visual") and not name.startswith("visual.merger."):
+          print_rank_0(f"Disable visual encoder grad: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
+    
+  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit']:
+    if args.freeze_llm:
+      print_rank_0("Freeze LLM parameters.")
+      for name, param in model.named_parameters():
+        if not (name.startswith("visual") or name.startswith("mlp_AR")):
+          print_rank_0(f"Disable LLM grad: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
+    if args.freeze_projector:
+      print_rank_0("Freeze visual encoder parameters.")
+      for name, param in model.named_parameters():
+        if name.startswith("mlp_AR"):
+          print_rank_0(f"Disable visual encoder grad: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
+    if args.freeze_visual:
+      print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
+      for name, param in model.named_parameters():
+        if name.startswith("visual") and not name.startswith("mlp_AR"):
+          print_rank_0(f"Disable visual encoder grad: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
+  #### InternVLChatModel
+  # 结构： language_model + ( vision_model + mlp )
+  elif args.model_class == 'InternVLChatModel':
+    if args.freeze_llm:
+      for name, param in model.named_parameters():
+        if name.startswith("language_model"): 
+          print_rank_0(f"Disable InternVLChatModel language_model grad: {name}")
+          param.requires_grad = False
+    if args.freeze_projector:
+      for name, param in model.named_parameters():
+        if name.startswith("mlp"): 
+          print_rank_0(f"Disable InternVLChatModel visual encoder grad: {name}")
+          param.requires_grad = False
+    if args.freeze_visual:
+      for name, param in model.named_parameters():
+        if name.startswith("vision_model"):
+          print_rank_0(f"Disable InternVLChatModel visual encoder(but mot adapter) grad: {name}")
+          param.requires_grad = False
+  else:
+    raise NotImplementedError(f"freeze_params Not support model class: {args.model_class}")
+
+
+class TokenStats:
+  def __init__(self):
+    self.max_image_tokens = []
+    self.min_image_tokens = []
+    self.mean_image_tokens = []
+    self.std_image_tokens = []
+
+  
+  def collect_image_token_stats(self, num_image_tokens):
+      # 收集所有rank的image tokens统计信息
+      world_size = dist.get_world_size()
+      rank = dist.get_rank()
+
+      input_tensor = torch.tensor([num_image_tokens], dtype=torch.long).cuda()
+      all_image_tokens = list(torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) if rank == 0 else None
+      dist.gather(input_tensor, gather_list=all_image_tokens, dst=0)
+
+      if rank == 0:
+          all_image_tokens = [x.item() for x in all_image_tokens]
+          # 计算统计指标
+          max_image_tokens = max(all_image_tokens)
+          min_image_tokens = min(all_image_tokens)
+          mean_image_tokens = sum(all_image_tokens) / world_size
+          std_image_tokens = (sum((x - mean_image_tokens)**2 for x in all_image_tokens) / world_size)**0.5
+      else:
+          max_image_tokens = 0
+          min_image_tokens = 0
+          mean_image_tokens = 0
+          std_image_tokens = 0
+
+      self.max_image_tokens.append(max_image_tokens)
+      self.min_image_tokens.append(min_image_tokens)
+      self.mean_image_tokens.append(mean_image_tokens)
+      self.std_image_tokens.append(std_image_tokens)
+      return max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
+
+  def stats(self):
+      res = np.max(self.max_image_tokens), np.min(self.min_image_tokens),\
+             np.mean(self.mean_image_tokens), np.mean(self.std_image_tokens)
+      res = {
+        "perf/max_image_tokens": res[0],
+        "perf/min_image_tokens": res[1],
+        "perf/mean_image_tokens": res[2],
+        "perf/std_image_tokens": res[3]
+      }
+      self.max_image_tokens.clear()
+      self.min_image_tokens.clear()
+      self.mean_image_tokens.clear()
+      self.std_image_tokens.clear()
+      return res
+
+
+def data_func(name, dataset_config, batch_queue, cpu_bind):
+  p = psutil.Process(os.getpid())
+  p.cpu_affinity(cpu_bind)
+  master_port = int(os.environ["MASTER_PORT"]) + 1
+  os.environ["MASTER_PORT"] = str(master_port)
+  rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+  world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+  dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+  print(f"dataset_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind}")
+
+  # with Timer("Build dataloader"):
+  try:  dataloader = get_dataloader_v2(name=name, **dataset_config)
+  except: 
+    import traceback
+    print(f"get_dataloader_v2 error: {traceback.format_exc()}")
+    print(f"get_dataloader_v2 retry for get_dataloader")
+    traceback.print_exc()
+    dataloader = get_dataloader(name=name, **dataset_config)
+
+  for batch in dataloader:
+    batch_queue.put(batch)
+
+class FakeConverter:
+  def __init__(self, model_path_or_name: str = None):
+    self.model_path_or_name = model_path_or_name
+
+  def __call__(self, state_dict):
+     return self.convert(state_dict)
+
+  def convert(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    return state_dict
+
+  def revert(self, state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    return state_dict
+
+
 def train():
   arg_parser = get_argument_parser()
   args = arg_parser.parse_args()
@@ -2156,11 +2753,8 @@ def train():
                       dist_checkpointer=dist_checkpointer,
                   )
 
-
-
 if __name__ == "__main__":
   train()
-
 
 
 
