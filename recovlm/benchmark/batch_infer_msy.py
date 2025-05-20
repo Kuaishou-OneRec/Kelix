@@ -375,6 +375,7 @@ def main(_):
             _attn_implementation = 'flash_attention_2',
             use_cache=False
         )
+    llm = llm.to(torch.cuda.current_device())
     # Split dataset for this MPI rank
     for dataset_name, dataset_path in datasetlist.items():
         dataset = MsyInferDataset(dataset_name=dataset_name, parquet_path=dataset_path, model_name_or_path=FLAGS.model_name_or_path, user='mpi')
@@ -395,7 +396,6 @@ def main(_):
                         answer_idx_list = batch["answer_idx_list"][idx]
                         inputs = batch["inputs"][idx].to(torch.cuda.current_device())
                         input_ids = inputs["input_ids"]
-                        llm = llm.to(torch.cuda.current_device())
                         with torch.no_grad():
                             outputs = llm(**inputs)
                             logits = outputs.logits 
