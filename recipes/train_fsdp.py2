@@ -1,6 +1,6 @@
-import torch
+#import torch
 
-torch.use_deterministic_algorithms(True)
+#torch.use_deterministic_algorithms(True)
 
 from typing import Dict, Any, Union, Optional
 
@@ -23,7 +23,7 @@ import psutil
 import threading
 import queue
 from functools import partial
-#from tools.mfu.flops_counter import MFUStats
+from tools.mfu.flops_counter import MFUStats
 
 from recovlm.training.checkpoint import AppState, DistributedCheckpointer
 from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
