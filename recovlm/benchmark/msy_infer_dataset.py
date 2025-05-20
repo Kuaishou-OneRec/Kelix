@@ -29,6 +29,43 @@ def format_text(doc, max_text_len=1000):
       items.append(f"{key}: {str(text)[:max_text_len]}")
   return "\n".join(items)
 
+
+def MathVistaTransform(sample) -> list:
+  sample = sample['annotations']
+  # Handle both string and dictionary annotations
+  if isinstance(sample, str):
+    sample = json.loads(sample)
+  question = sample['question']
+  answer = sample['answer']
+  image_path = sample['image_path']
+  image = Image.open(image_path)
+  messages = [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image",
+          "image": image
+        },
+        {
+          "type": "text",
+          "text": question
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": answer
+        }
+      ]
+    }
+  ]
+  return messages
+  
+
 def mmstarTransform(sample) -> list:
   image = sample['image']
   question = sample['question']
@@ -206,7 +243,8 @@ transform_func_map = {
   "MMBenchCn": MMBenchTransform,
   "MME": MMETransform,
   "MMTBench": MMTBenchTransform,
-  "MMStar": mmstarTransform
+  "MMStar": mmstarTransform,
+  "MathVista": MathVistaTransform
 }
 
 
