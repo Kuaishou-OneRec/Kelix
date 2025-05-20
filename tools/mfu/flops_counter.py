@@ -1,17 +1,17 @@
-# from functools import lru_cache
-# # from recovlm.utils.ds_utils import format_dict_or_list
-# import platform
-# import subprocess
-# import os
-# import re
-# import collections
-# from collections import defaultdict
+from functools import lru_cache
+# from recovlm.utils.ds_utils import format_dict_or_list
+import platform
+import subprocess
+import os
+import re
+import collections
+from collections import defaultdict
 
 def s(x):
     if isinstance(x, list): return sum(x)
     else: return x
 
-# @lru_cache(maxsize=1)
+@lru_cache(maxsize=1)
 def get_gpu_model():
     """
     获取当前系统中NVIDIA显卡的型号信息
@@ -86,12 +86,12 @@ def get_gpu_model():
     return "Unknown"
 
 
-# @lru_cache(maxsize=1)
+@lru_cache(maxsize=1)
 def is_h800():
     gpu_model = get_gpu_model()
     return gpu_model.split('\n')[0].strip()=='NVIDIA H800'
 
-# @lru_cache(maxsize=1)
+@lru_cache(maxsize=1)
 def gpu_flops():
     if is_h800():
         return 989e12
@@ -383,7 +383,7 @@ def calculate_llm_flops_from_config(config_path, seq_len, batch_size):
     return calculate_llm_flops(llm_params)
 
 
-# @lru_cache(maxsize=32)
+@lru_cache(maxsize=32)
 def extract_model_params(config_path):
     """
     从模型配置JSON文件中提取Transformer和Vision模块的参数
@@ -758,49 +758,49 @@ mfu= 3%
 
 
 
-import torch
-import torch.nn as nn
-from tqdm import tqdm
-# a = torch.LongTensor([3, 4, 4]).unbind(0)
-# print(torch.arange(a[0], device="cpu"))
+# import torch
+# import torch.nn as nn
+# from tqdm import tqdm
+# # a = torch.LongTensor([3, 4, 4]).unbind(0)
+# # print(torch.arange(a[0], device="cpu"))
 
 
 
-for _ in tqdm(range(100)):
-    a = torch.rand(size=(100, 512)).double()
-    b = torch.rand(size=(64, 512)).double()
-    c = torch.concat([a, b], dim=0)
-    linear = nn.Linear(512, 4).cuda().double()
-    d = linear(a.cuda())
-    e = linear(b.cuda())
-    f = linear(c.cuda())
-    _max = (torch.concat([d, e], dim=0) - f).abs().max()
-    if _max.item() > 0:
-        print(_max)
+# for _ in tqdm(range(100)):
+#     a = torch.rand(size=(100, 512)).double()
+#     b = torch.rand(size=(64, 512)).double()
+#     c = torch.concat([a, b], dim=0)
+#     linear = nn.Linear(512, 4).cuda().double()
+#     d = linear(a.cuda())
+#     e = linear(b.cuda())
+#     f = linear(c.cuda())
+#     _max = (torch.concat([d, e], dim=0) - f).abs().max()
+#     if _max.item() > 0:
+#         print(_max)
 
 
-import os
-os.environ["NVIDIA_TF32_OVERRIDE"] = "0" 
+# import os
+# os.environ["NVIDIA_TF32_OVERRIDE"] = "0" 
 
 
-import torch
-torch.use_deterministic_algorithms(True)
-torch.backends.cuda.matmul.allow_tf32 = False
-torch.backends.cudnn.allow_tf32 = False
+# import torch
+# torch.use_deterministic_algorithms(True)
+# torch.backends.cuda.matmul.allow_tf32 = False
+# torch.backends.cudnn.allow_tf32 = False
 
 
-import torch.nn as nn
-from tqdm import tqdm
+# import torch.nn as nn
+# from tqdm import tqdm
 
-with torch.cuda.amp.autocast(enabled=False):
-    for _ in tqdm(range(100)):
-        a = torch.rand(size=(100, 512))
-        b = torch.rand(size=(64, 512))
-        c = torch.concat([a, b], dim=0)
-        linear = nn.Linear(512, 4).cuda()
-        d = linear(a.cuda())
-        e = linear(b.cuda())
-        f = linear(c.cuda())
-        _max = (torch.concat([d, e], dim=0) - f).abs().max()
-        if _max.item() > 0:
-            print(_max)
+# with torch.cuda.amp.autocast(enabled=False):
+#     for _ in tqdm(range(100)):
+#         a = torch.rand(size=(100, 512))
+#         b = torch.rand(size=(64, 512))
+#         c = torch.concat([a, b], dim=0)
+#         linear = nn.Linear(512, 4).cuda()
+#         d = linear(a.cuda())
+#         e = linear(b.cuda())
+#         f = linear(c.cuda())
+#         _max = (torch.concat([d, e], dim=0) - f).abs().max()
+#         if _max.item() > 0:
+#             print(_max)
