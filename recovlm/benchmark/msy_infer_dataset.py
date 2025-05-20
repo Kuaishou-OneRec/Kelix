@@ -14,7 +14,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_siglip
-from recovlm.models.qwen2
+
 from torch.utils.data import DataLoader
 from recovlm.utils.qwen_vl_utils import process_vision_info
 import torch
