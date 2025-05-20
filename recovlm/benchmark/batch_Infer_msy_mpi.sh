@@ -49,13 +49,7 @@ COMMON_ENV_VARS="-x PYTHONPATH=$PYTHONPATH \
 
 # 通用的Python脚本参数
 COMMON_SCRIPT_PARAMS="--output_path ${OUTPUT_PATH} \
-    --top_p 0.8 \
-    --temperature 0.7 \
-    --max_tokens 4096 \
     --batch_size 1 \
-    --limit_mm_per_prompt 3 \
-    --max_frames 10 \
-    --num_generations 1"
 
 # 运行单个MPI任务，使用所有GPU
 CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7 mpirun $COMMON_MPI_PARAMS $COMMON_ENV_VARS \
