@@ -30,6 +30,98 @@ def format_text(doc, max_text_len=1000):
   return "\n".join(items)
 
 
+
+def parse_options_and_answer(options, answer):
+    if all([len(option) == 1 and option.isalpha() for option in options]):
+        options = [option.upper() for option in options]
+
+    options_list = list()
+    for idx, option in enumerate(options):
+        ch = chr(ord('A') + idx)
+        options_list.append("{}. {}".format(ch, option))
+    answer = int(answer)
+    assert answer in [0, 1, 2, 3], str(type(answer)) + "   " + str(answer)
+    return "\n".join(options_list), chr(ord('A') + answer)
+
+def AI2DTransform(sample) -> list:
+  question = sample['question']
+  answer = sample['answer']
+  options = sample['options']
+  image_bytes = sample['image']['bytes']
+  options_str, answer = parse_options_and_answer(options, answer)
+  messages = [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image",
+          "image": Image.open(BytesIO(image_bytes))
+        },
+        {
+          "type": "text",
+          "text": question
+        },
+        {
+          "type": "text",
+          "text": options_str
+        },
+        {
+          "type": "text",
+          "text": "\n Answer with the letter."
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": answer
+        }
+      ]
+    }
+  ]
+  return messages
+  
+
+
+def Benchmark_v21Transform(sample) -> list:
+  sample = sample['annotations']
+  # Handle both string and dictionary annotations
+  if isinstance(sample, str):
+    sample = json.loads(sample)
+  question = sample['question']
+  answer = sample['answer']
+  image_path = sample['image_path']
+  image = Image.open(image_path)
+  messages = [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "image",
+          "image": image
+        },
+        {
+          "type": "text",
+          "text": question
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": answer
+        }
+      ]
+    }
+  ]
+  return messages
+  
+  
+
 def MathVistaTransform(sample) -> list:
   sample = sample['annotations']
   # Handle both string and dictionary annotations
@@ -244,7 +336,9 @@ transform_func_map = {
   "MME": MMETransform,
   "MMTBench": MMTBenchTransform,
   "MMStar": mmstarTransform,
-  "MathVista": MathVistaTransform
+  "MathVista": MathVistaTransform,
+  "Benchmark_v21": Benchmark_v21Transform,
+  "AI2D": AI2DTransform
 }
 
 
@@ -302,6 +396,7 @@ class MsyInferDataset(ParquetDataset):
     for item in super().__iter__():
       try:
         messages = self.transform_func(item)
+        print(messages,'msylalalallla')
         text = self.processor.apply_chat_template(
           messages,
           tokenize=False,
