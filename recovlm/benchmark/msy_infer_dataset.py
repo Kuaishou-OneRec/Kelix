@@ -429,7 +429,8 @@ class MsyInferDataset(ParquetDataset):
     # 初始化 processor
     if model_name_or_path:
       try:
-        self.processor = Qwen3SiglipProcessor_siglip.from_pretrained(model_name_or_path)
+        self.processor = AutoProcessor.from_pretrained('/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct')
+        # self.processor = Qwen3SiglipProcessor_siglip.from_pretrained(model_name_or_path)
       except Exception as e:
         print(f"Error loading processor: {e}")
         print("Using default chat template")
