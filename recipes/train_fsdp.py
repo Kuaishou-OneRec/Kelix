@@ -310,9 +310,9 @@ def _init_profiler(output_dir, start_step=103, end_step=112) -> None:
             torch.profiler.ProfilerActivity.CUDA,
         ],
         schedule=torch.profiler.schedule(
-           wait=20,
+           wait=350,
            warmup=1,
-           active=5,
+           active=10,
            repeat=1,
         ),
         on_trace_ready=trace_handler,
