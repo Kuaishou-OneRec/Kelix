@@ -35,7 +35,8 @@ def format_text(doc, max_text_len=1000):
 def RealWorldQATransform(sample) -> list:
     question = sample["question"]
     answer = sample["answer"]
-    image = Image.open(sample["image"]["bytes"])
+    image = sample["image"]["bytes"]
+    image = Image.open(BytesIO(image))
     messages = [
         {
             "role": "user",
