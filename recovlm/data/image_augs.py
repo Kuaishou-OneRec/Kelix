@@ -12,49 +12,47 @@ class AutoAugmentWrapper:
         fill: 填充值，用于边界外填充
     """
     def __init__(self, 
-                 policy: str = 'imagenet', 
+                 policy: str = 'grounding_ocr_imagenet', 
                  interpolation: transforms.InterpolationMode = transforms.InterpolationMode.BILINEAR,
                  fill: int = None):
         # 选择对应数据集的预训练策略
-        if policy.lower() == 'imagenet':
-            # policy = transforms.AutoAugmentPolicy.IMAGENET
-            policy = [
-                (("Posterize", 0.4, 8), ("Rotate", 0.6, 9)),
-                (("Solarize", 0.6, 5), ("AutoContrast", 0.6, None)),
+        if policy.lower() == 'grounding_ocr_imagenet':
+            grounding_ocr_imagenet_policy = [
+                # 亮度/对比度调整组合
+                (("AutoContrast", 0.6, None), ("Brightness", 0.4, 8)),
+                (("Contrast", 0.8, 7), ("Equalize", 0.6, None)),
+                (("AutoContrast", 0.8, None), ("Sharpness", 0.4, 9)),
+                (("Brightness", 0.6, 6), ("Contrast", 0.6, 6)),
+                
+                # 颜色空间变换（保留文字形状）
+                (("Solarize", 0.3, 5), ("AutoContrast", 0.7, None)),  # 降低Solarize概率
+                (("Posterize", 0.3, 6), ("Equalize", 0.7, None)),    # 降低Posterize强度
+                (("Color", 0.5, 4), ("Contrast", 0.8, 8)),           # 调整色彩饱和度
+                
+                # 轻微几何变换（小角度旋转，无翻转）
+                (("Rotate", 0.3, 3), ("AutoContrast", 0.7, None)),   # 仅小角度旋转
+                (("ShearX", 0.2, 2), ("Equalize", 0.8, None)),       # 极轻微水平剪切
+                
+                # 噪声和模糊（模拟扫描缺陷）
+                (("GaussianBlur", 0.2, 1), ("AutoContrast", 0.8, None)),  # 新增模糊
+                (("Noise", 0.3, 10), ("Equalize", 0.7, None)),           # 新增噪声（假设自定义实现）
+                
+                # 直方图均衡化组合
                 (("Equalize", 0.8, None), ("Equalize", 0.6, None)),
-                (("Posterize", 0.6, 7), ("Posterize", 0.6, 6)),
-                (("Equalize", 0.4, None), ("Solarize", 0.2, 4)),
-                (("Equalize", 0.4, None), ("Rotate", 0.8, 8)),
-                (("Solarize", 0.6, 3), ("Equalize", 0.6, None)),
-                (("Posterize", 0.8, 5), ("Equalize", 1.0, None)),
-                (("Rotate", 0.2, 3), ("Solarize", 0.6, 8)),
-                (("Equalize", 0.6, None), ("Posterize", 0.4, 6)),
-                (("Rotate", 0.8, 8), ("Color", 0.4, 0)),
-                (("Rotate", 0.4, 9), ("Equalize", 0.6, None)),
-                (("Equalize", 0.0, None), ("Equalize", 0.8, None)),
-                (("Invert", 0.6, None), ("Equalize", 1.0, None)),
-                (("Color", 0.6, 4), ("Contrast", 1.0, 8)),
-                (("Rotate", 0.8, 8), ("Color", 1.0, 2)),
-                (("Color", 0.8, 8), ("Solarize", 0.8, 7)),
-                (("Sharpness", 0.4, 7), ("Invert", 0.6, None)),
-                (("ShearX", 0.6, 5), ("Equalize", 1.0, None)),
-                (("Color", 0.4, 0), ("Equalize", 0.6, None)),
-                (("Equalize", 0.4, None), ("Solarize", 0.2, 4)),
-                (("Solarize", 0.6, 5), ("AutoContrast", 0.6, None)),
-                (("Invert", 0.6, None), ("Equalize", 1.0, None)),
-                (("Color", 0.6, 4), ("Contrast", 1.0, 8)),
-                (("Equalize", 0.8, None), ("Equalize", 0.6, None)),
+                (("Equalize", 0.6, None), ("AutoContrast", 0.6, None)),
+                
+                # 保留但调整强度的组合
+                (("Color", 0.4, 3), ("Contrast", 0.9, 7)),
+                (("Solarize", 0.2, 6), ("Sharpness", 0.6, 8)),
+                (("Posterize", 0.2, 7), ("Brightness", 0.6, 7)),
             ]
-            # elif policy.lower() == 'cifar10':
-            #     policy = transforms.AutoAugmentPolicy.CIFAR10
-            # elif policy.lower() == 'svhn':
-            #     policy = transforms.AutoAugmentPolicy.SVHN
+            _policy = grounding_ocr_imagenet_policy
         else:
-            raise ValueError(f"Unsupported policy: {policy}. Available: 'imagenet', 'cifar10', 'svhn'")
+            raise ValueError(f"Unsupported policy: {policy}->{_policy}. Available: 'grounding_ocr_imagenet'")
         
         # 创建AutoAugment增强器
         self.augmenter = transforms.AutoAugment(
-            policy=policy,
+            policy=_policy,
             interpolation=interpolation,
             fill=fill
         )
@@ -99,50 +97,77 @@ def create_test_images(size=(200, 200)):
     return circle_img, square_img, word_img
 
 
-def visualize_augmentation(augmenter, save_path='augmentation_demo.jpg'):
-    """可视化增强效果：创建原始和增强图像并拼接展示"""
-    # 创建测试图像
-    circle, square, word = create_test_images()
+from torchvision import transforms
+from PIL import Image, ImageDraw, ImageFont
+import os
+import random
+
+
+
+def create_random_color_words(num=60, size=(200, 200), text="AI"):
+    """生成指定数量的随机颜色单词图像"""
+    images = []
+    for _ in range(num):
+        # 生成随机颜色（非白色）
+        r, g, b = random.randint(0, 200), random.randint(0, 200), random.randint(0, 200)
+        while r + g + b > 550:  # 确保非亮色
+            r, g, b = random.randint(0, 200), random.randint(0, 200), random.randint(0, 200)
+        
+        img = Image.new('RGB', size, color='white')
+        draw = ImageDraw.Draw(img)
+        try:
+            font = ImageFont.truetype("arial.ttf", 40)
+        except IOError:
+            font = ImageFont.load_default()
+        
+        # 计算文本位置
+        text_width, text_height = draw.textsize(text, font=font)
+        x = (size[0] - text_width) // 2
+        y = (size[1] - text_height) // 2
+        draw.text((x, y), text, fill=(r, g, b), font=font)
+        images.append(img)
+    return images
+
+
+def visualize_word_augmentation(augmenter, words, save_prefix='word_augmentation'):
+    """可视化单词增强效果，生成原始和增强图像网格"""
+    grid_rows = 10
+    grid_cols = 6
+    img_size = words[0].size
+    spacing = 10
     
-    # 应用增强
-    augmented_circle = augmenter(circle)
-    augmented_square = augmenter(square)
-    augmented_word = augmenter(word)
+    # 计算总尺寸
+    total_width = grid_cols * img_size[0] + (grid_cols - 1) * spacing
+    total_height = grid_rows * img_size[1] + (grid_rows - 1) * spacing
     
-    # 创建拼接图像
-    total_width = 620  # 3张图，每张200宽，间隔10
-    total_height = 420  # 2行，每行200高，间隔20
+    # 创建原始图像网格
+    original_grid = Image.new('RGB', (total_width, total_height), color='white')
+    augmented_grid = Image.new('RGB', (total_width, total_height), color='white')
     
-    combined_img = Image.new('RGB', (total_width, total_height), color='white')
-    
-    # 第一行：原始图像
-    combined_img.paste(circle, (10, 10))
-    combined_img.paste(square, (220, 10))
-    combined_img.paste(word, (430, 10))
-    
-    # 第二行：增强图像
-    combined_img.paste(augmented_circle, (10, 230))  # 修正位置
-    combined_img.paste(augmented_square, (220, 230))
-    combined_img.paste(augmented_word, (430, 230))
-    
-    # 添加标题
-    draw = ImageDraw.Draw(combined_img)
-    try:
-        font = ImageFont.truetype("arial.ttf", 20)
-    except IOError:
-        font = ImageFont.load_default()
-    
-    draw.text((90, 220), "Original", fill='black', font=font)
-    draw.text((90, 440), "Augmented", fill='black', font=font)  # 修正位置
+    for i in range(grid_rows * grid_cols):
+        img = words[i]
+        x = (img_size[0] + spacing) * (i % grid_cols)
+        y = (img_size[1] + spacing) * (i // grid_cols)
+        
+        # 原始图像
+        original_grid.paste(img, (x, y))
+        
+        # 增强图像
+        augmented_img = augmenter(img.copy())
+        augmented_grid.paste(augmented_img, (x, y))
     
     # 保存图像
-    combined_img.save(save_path)
-    print(f"增强效果对比图已保存至: {save_path}")
+    original_grid.save(f"{save_prefix}_original.jpg")
+    augmented_grid.save(f"{save_prefix}_augmented.jpg")
+    print(f"图像已保存：{save_prefix}_original.jpg 和 {save_prefix}_augmented.jpg")
 
 
 if __name__ == "__main__":
-    # 创建CIFAR10预训练策略的增强器
-    augmenter = AutoAugmentWrapper(policy='cifar10', fill=128)
+    # 创建增强器
+    augmenter = AutoAugmentWrapper(policy='grounding_ocr_imagenet', fill=255)
+    
+    # 生成60个随机颜色单词
+    test_words = create_random_color_words(num=60, text="hello")
     
     # 可视化增强效果
-    visualize_augmentation(augmenter)
+    visualize_word_augmentation(augmenter, test_words, save_prefix='ocr_word_augment')
