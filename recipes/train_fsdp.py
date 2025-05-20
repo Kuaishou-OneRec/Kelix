@@ -1368,7 +1368,7 @@ def train():
               )
         ticker.tick(f"save_ckpt*{args.save_checkpoint_per_step * args.gradient_accumulation_steps}") 
 
-      print_rank_0(f"ticker_info: {ticker.stat()}")
+      # print_rank_0(f"ticker_info: { format ticker.stat()}")
       iter_ticker.tick("iter_ticker")
       if torch_profiler: torch_profiler.step()
 
