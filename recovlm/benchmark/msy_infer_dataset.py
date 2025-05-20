@@ -31,7 +31,9 @@ def format_text(doc, max_text_len=1000):
 
 def MMETransform(sample) -> list:
   sample = sample['annotations']
-  sample = json.loads(sample)
+  # Handle both string and dictionary annotations
+  if isinstance(sample, str):
+    sample = json.loads(sample)
   question = sample['question']
   answer = sample['answer']
   image_path = sample['image_path']
