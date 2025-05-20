@@ -153,7 +153,11 @@ class AutoAugmentWrapper:
         try:
             return self.policy(img)
         except Exception as e:
-            raise ValueError(f"Failed to apply augmentation for {img}: {e}")
+            import numpy as np
+            if np.random.rand() < 0.01:
+                print(f"Report_ratio=0.01. Failed to apply augmentation for {img}: {e}")
+            return img
+            # raise ValueError(f"Failed to apply augmentation for {img}: {e}")
 
 
 
