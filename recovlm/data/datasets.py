@@ -4004,6 +4004,9 @@ class BalanceParquetDataset(IterableDataset):
     self.model_type = model_type
     self.buffer_size = kwargs.get("buffer_size", 1000)
     self.base_model_dir = base_model_dir
+    with open(os.path.join(self.base_model_dir, "config.json"), "r") as fp:
+      config = json.load(fp)
+      self.arch = config["architectures"]
     
   def _process_task(self):
     while True:
@@ -4152,7 +4155,8 @@ class BalanceParquetDataset(IterableDataset):
               ds = sample.pop("__ds__")
               data_source.append(ds)
             inputs = selected
-          stats = balance.exchange_batch_info(inputs, data_source, self.fm)
+          stats = balance.exchange_batch_info(inputs, data_source, # self.fm, 
+                                              self.arch)
           if self.rank == 0:
             print(f"rank=0, step_stats={stats}")
           self._balance_buf.put((inputs, data_source, [stats[0], stats[1], stats[2]]))
