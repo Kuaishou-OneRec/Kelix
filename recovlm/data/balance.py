@@ -202,7 +202,7 @@ class CustomModelFlops(ModelFlopsBase):
         super(CustomModelFlops, self).__init__(flops_range)
 
     def llm_flops(self, seq_list: List[int]) -> float:
-        return calculate_llm_flops_from_config(self.basebase_model_config_model_dir, seq_list, None) / 1e12
+        return calculate_llm_flops_from_config(self.base_model_config, seq_list, None) / 1e12
 
     def vit_flops(self, image_list: List[int]) -> float:
         return calculate_llm_flops_from_config(self.base_model_config, image_list, None) / 1e12
