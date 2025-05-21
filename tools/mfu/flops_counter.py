@@ -98,7 +98,7 @@ def gpu_flops():
     else:
         return 312e12
 
-def calculate_decoder_flops_v1(num_head, head_dim, hidden_size, intermediate_size, kv_heads=None, is_causal=False, seq_len=1, batch_size=1, linear_factor=2, ffn_layers=2):
+def calculate_decoder_flops_v1(num_head, head_dim, hidden_size, intermediate_size, kv_heads=None, is_causal=False, seq_len=1, batch_size=1, linear_factor=2, attn_output_layers=2):
     """
     计算Transformer解码器层的FLOPs
     
@@ -147,7 +147,7 @@ def calculate_decoder_flops_v1(num_head, head_dim, hidden_size, intermediate_siz
     attn_v_flops = attn_scores_flops
 
     # 注意力输出投影 (不受batch_size影响)
-    attn_out_flops = linear_factor * s_seq_len * (num_head * head_dim) * hidden_size * ffn_layers
+    attn_out_flops = linear_factor * s_seq_len * (num_head * head_dim) * hidden_size * attn_output_layers
     
     # 注意力总FLOPs
     attention_flops = q_flops + k_flops + v_flops + attn_scores_flops + attn_v_flops + attn_out_flops
@@ -189,7 +189,7 @@ import easydict
 
 def calculate_decoder_layers_flops(num_head, head_dim, hidden_size, intermediate_size,
                                  kv_heads=None, is_causal=False, seq_len=1, num_layers=1,
-                                 linear_factor=2, batch_size=1, ffn_layers=2):
+                                 linear_factor=2, batch_size=1, attn_output_layers=2):
     """
     计算多层Transformer解码器的FLOPs
     
@@ -222,7 +222,7 @@ def calculate_decoder_layers_flops(num_head, head_dim, hidden_size, intermediate
             seq_len=seq_len,
             linear_factor=linear_factor,
             batch_size=batch_size,
-            ffn_layers=ffn_layers
+            attn_output_layers=attn_output_layers
         )
         layers_flops.append({
             'layer_index': layer_idx,
@@ -285,7 +285,7 @@ def calculate_vlm_flops(vit_params, llm_params, linear_factor=2, _gpu_flops=None
         seq_len=vit_params.seq_len,
         batch_size=vit_params.get('batch_size', 1),
         linear_factor=linear_factor,
-        ffn_layers=2
+        attn_output_layers=2
     )
 
     vit2llm_flops = linear_factor * s(vit_params.seq_len) * (vit_params.hidden_size * llm_params.hidden_size + llm_params.hidden_size * llm_params.hidden_size)
@@ -304,7 +304,7 @@ def calculate_vlm_flops(vit_params, llm_params, linear_factor=2, _gpu_flops=None
         seq_len=llm_params.seq_len,
         batch_size=llm_params.get('batch_size', 1),
         linear_factor=linear_factor,
-        ffn_layers=3
+        attn_output_layers=3
     )
     
     lm_head_flops = linear_factor * s(llm_params.seq_len) * (llm_params.hidden_size * llm_params.vocab_size)
@@ -326,6 +326,61 @@ def calculate_vlm_flops(vit_params, llm_params, linear_factor=2, _gpu_flops=None
         'total_flops/gpu_flops': total_flops * 3 / _gpu_flops,
         'gpu_flops': _gpu_flops
     }
+
+
+def calculate_vit_flops(vit_params):
+    linear_factor = 2
+    vit_flops = calculate_decoder_layers_flops(
+        num_head=vit_params.num_head,
+        head_dim=vit_params.head_dim,
+        hidden_size=vit_params.hidden_size,
+        intermediate_size=vit_params.intermediate_size,
+        num_layers=vit_params.num_layers,
+        kv_heads=vit_params.get('kv_heads', None),
+        is_causal=False,  # ViT通常不使用因果注意力
+        seq_len=vit_params.seq_len,
+        batch_size=vit_params.get('batch_size', 1),
+        linear_factor=linear_factor,
+        attn_output_layers=2
+    )
+
+    vit2llm_flops = linear_factor * s(vit_params.seq_len) * (vit_params.hidden_size * llm_params.hidden_size + llm_params.hidden_size * llm_params.hidden_size)
+    vit_flops['total_flops'] += vit2llm_flops
+    vit_flops['vit2llm_flops'] = vit2llm_flops
+    return vit_flops
+
+
+
+
+
+def calculate_llm_flops(llm_params):
+    linear_factor = 2
+    # 计算LLM的计算量
+    llm_flops = calculate_decoder_layers_flops(
+        num_head=llm_params.num_head,
+        head_dim=llm_params.head_dim,
+        hidden_size=llm_params.hidden_size,
+        intermediate_size=llm_params.intermediate_size,
+        num_layers=llm_params.num_layers,
+        kv_heads=llm_params.get('kv_heads', None),
+        is_causal=llm_params.get('is_causal', True),
+        seq_len=llm_params.seq_len,
+        batch_size=llm_params.get('batch_size', 1),
+        linear_factor=linear_factor,
+        attn_output_layers=3
+    )
+    
+    lm_head_flops = linear_factor * s(llm_params.seq_len) * (llm_params.hidden_size * llm_params.vocab_size)
+    llm_flops['total_flops'] += lm_head_flops
+    llm_flops['lm_head_flops'] = lm_head_flops
+    return llm_flops
+
+
+def calculate_llm_flops_from_config(config_path, seq_len, batch_size):
+    llm_params = extract_model_params(config_path)[0]
+    llm_params.seq_len = seq_len
+    llm_params.batch_size = batch_size
+    return calculate_llm_flops(llm_params)
 
 
 @lru_cache(maxsize=32)
@@ -441,7 +496,7 @@ def extract_model_params(config_path):
         }
         vision_params = {k: v for k, v in vision_params.items() if v is not None}
     
-    return transformer_params, vision_params
+    return easydict.EasyDict(transformer_params), easydict.EasyDict(vision_params)
     
 
 
@@ -487,6 +542,10 @@ class MFUStats:
       self.total_mfu = defaultdict(int)
 
   def set(self, num_image_tokens, num_tokens, num_samples, num_images):
+      num_image_tokens = int(num_image_tokens)
+      num_tokens = int(num_tokens)
+      num_samples = int(num_samples)
+      num_images = int(num_images)
       self.tokens_for_mfu["num_image_tokens"] += num_image_tokens
       self.tokens_for_mfu["num_tokens"] += num_tokens
       self.tokens_for_mfu["num_samples"] += num_samples
@@ -667,12 +726,14 @@ def demo_intern_vl():
     )
     # 打印结果
     print('图片比例(256/21000)VLM FLOPs计算结果:')
-    # print(format_dict_or_list(mfu))
+    print(format_dict_or_list(mfu))
     print(mfu['mfu'])
 
 
+    print(caclculate_vit_flops_from_config('/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/internvl3_2b.json'))
+
 if __name__=='__main__':
-    draw_intern_vl_mfu_by_im_token_ratio()
+    demo_intern_vl()
 
 '''
 2B 模型
@@ -694,3 +755,52 @@ mfu= 3%
   
 
 '''
+
+
+
+# import torch
+# import torch.nn as nn
+# from tqdm import tqdm
+# # a = torch.LongTensor([3, 4, 4]).unbind(0)
+# # print(torch.arange(a[0], device="cpu"))
+
+
+
+# for _ in tqdm(range(100)):
+#     a = torch.rand(size=(100, 512)).double()
+#     b = torch.rand(size=(64, 512)).double()
+#     c = torch.concat([a, b], dim=0)
+#     linear = nn.Linear(512, 4).cuda().double()
+#     d = linear(a.cuda())
+#     e = linear(b.cuda())
+#     f = linear(c.cuda())
+#     _max = (torch.concat([d, e], dim=0) - f).abs().max()
+#     if _max.item() > 0:
+#         print(_max)
+
+
+# import os
+# os.environ["NVIDIA_TF32_OVERRIDE"] = "0" 
+
+
+# import torch
+# torch.use_deterministic_algorithms(True)
+# torch.backends.cuda.matmul.allow_tf32 = False
+# torch.backends.cudnn.allow_tf32 = False
+
+
+# import torch.nn as nn
+# from tqdm import tqdm
+
+# with torch.cuda.amp.autocast(enabled=False):
+#     for _ in tqdm(range(100)):
+#         a = torch.rand(size=(100, 512))
+#         b = torch.rand(size=(64, 512))
+#         c = torch.concat([a, b], dim=0)
+#         linear = nn.Linear(512, 4).cuda()
+#         d = linear(a.cuda())
+#         e = linear(b.cuda())
+#         f = linear(c.cuda())
+#         _max = (torch.concat([d, e], dim=0) - f).abs().max()
+#         if _max.item() > 0:
+#             print(_max)

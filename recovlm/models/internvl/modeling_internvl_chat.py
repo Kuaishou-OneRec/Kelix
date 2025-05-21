@@ -199,6 +199,7 @@ class InternVLChatModel(PreTrainedModel):
         # max_seqlen = None
         # if cu_seqlens:
         #     max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+        print(f'rank={torch.distributed.get_rank()}, vit_inputs={pixel_values.shape}, llm_inputs={input_embeds.shape}')
         outputs = self.language_model(
             inputs_embeds=input_embeds,
             attention_mask=attention_mask,

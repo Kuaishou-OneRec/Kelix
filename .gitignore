@@ -27,10 +27,12 @@ hostfile
 *.out
 *checkpoint.ipynb
 *.parquet
+*.jpg
 *.swp
 *.xlsx
 *.png
-
+*.txt
+*.ttf
 .git
 
 recovlm/benchmark/eval/tmp*

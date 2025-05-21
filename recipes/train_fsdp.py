@@ -1,3 +1,7 @@
+#import torch
+
+#torch.use_deterministic_algorithms(True)
+
 from typing import Dict, Any, Union, Optional
 
 import contextlib
@@ -15,6 +19,9 @@ import pickle
 import itertools
 import contextlib
 import multiprocessing as mp
+import psutil
+import threading
+import queue
 from functools import partial
 from tools.mfu.flops_counter import MFUStats
 
@@ -56,8 +63,9 @@ from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
 from recovlm.data.dataloaders import get_dataloader
 
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
+from recovlm.utils.numa_bind import get_numa_bind_info
 from recovlm.losses import CrossEntropyLoss
-from recovlm.utils.common import set_random_seed, to_cuda, print_rank_0, \
+from recovlm.utils.common import set_random_seed, to_cuda, to_device, print_rank_0, \
   get_optimizer_grouped_parameters, dist_reduce_dict, Timer, heart_beat
 from recovlm.training.lr_schedulers import get_scheduler
 
@@ -88,8 +96,8 @@ from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcess
 
 
 # Logger 初始化
-logging.basicConfig(level=logging.INFO)  # 设置日志级别
-logger = logging.getLogger(__name__)  # 创建 logger 实例
+#logging.basicConfig(level=logging.INFO)  # 设置日志级别
+#logger = logging.getLogger(__name__)  # 创建 logger 实例
 
 def get_argument_parser():
   parser = argparse.ArgumentParser()
@@ -151,9 +159,6 @@ def get_argument_parser():
   
   parser.add_argument("--output_dir", type=str, default=None,
                       help="The directory to write the trained model")
-
-  parser.add_argument("--vit_token_balance", action="store_true",
-                      help="whether adopt balanced vit tokens")
 
   parser.add_argument("--model_class", type=str, default="Qwen2_5_VLForConditionalGeneration_moonvit",
                       help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'KeyeForConditionalGeneration', 'InternVLChatModel'",)
@@ -291,7 +296,7 @@ def get_argument_parser():
 
 
 
-def _init_profiler(output_dir, start_step=103, end_step=112) -> None:
+def _init_profiler(output_dir) -> None:
     import torch.distributed as D
     import os
     if not os.path.exists(output_dir):
@@ -310,10 +315,10 @@ def _init_profiler(output_dir, start_step=103, end_step=112) -> None:
             torch.profiler.ProfilerActivity.CUDA,
         ],
         schedule=torch.profiler.schedule(
-            wait=1,
-            warmup=start_step - 1,
-            active=end_step - start_step,
-            repeat=1,
+           wait=20,
+           warmup=1,
+           active=5,
+           repeat=1,
         ),
         on_trace_ready=trace_handler,
     )
@@ -520,7 +525,6 @@ class TokenStats:
       # 收集所有rank的image tokens统计信息
       world_size = dist.get_world_size()
       rank = dist.get_rank()
-
       input_tensor = torch.tensor([num_image_tokens], dtype=torch.long).cuda()
       all_image_tokens = list(torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) if rank == 0 else None
       dist.gather(input_tensor, gather_list=all_image_tokens, dst=0)
@@ -560,36 +564,27 @@ class TokenStats:
       return res
 
   
-def data_func(dataset_config, model_class, max_length, batch_queue, args):
+def data_func(name, dataset_config, batch_queue, cpu_bind):
+  p = psutil.Process(os.getpid())
+  p.cpu_affinity(cpu_bind)
   master_port = int(os.environ["MASTER_PORT"]) + 1
   os.environ["MASTER_PORT"] = str(master_port)
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
   dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
-  
-  ##############
-  with open(dataset_config, encoding="utf-8") as f:
-    dataset_config = json.loads(f.read())
-  dataset = dataset_config.pop("name")
-  dataset_config["model_class"] = model_class
-  if max_length:
-    print(
-      f"Overwrite max_length in dataset_config: "
-      f"{dataset_config['max_length']} -> {max_length}")
-    dataset_config["max_length"] = max_length
-  
+  print(f"dataset_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind}")
+
   # with Timer("Build dataloader"):
-  try:  dataloader = get_dataloader_v2(name=dataset, vit_token_balance=args.vit_token_balance, **dataset_config)
+  try:  dataloader = get_dataloader_v2(name=name, **dataset_config)
   except: 
     import traceback
     print(f"get_dataloader_v2 error: {traceback.format_exc()}")
     print(f"get_dataloader_v2 retry for get_dataloader")
     traceback.print_exc()
-    dataloader = get_dataloader(name=dataset, vit_token_balance=args.vit_token_balance, **dataset_config)
+    dataloader = get_dataloader(name=name, **dataset_config)
 
   for batch in dataloader:
     batch_queue.put(batch)
-
 
 class FakeConverter:
   def __init__(self, model_path_or_name: str = None):
@@ -624,25 +619,41 @@ def train():
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
       "save_checkpoint_every_epoch should be set."
 
-  if args.vit_token_balance:
-    batch_queue = mp.Queue(4)
-    dataset_config = args.dataset_config
-    data_process = mp.Process(
-        target=data_func,
-        args=(dataset_config, args.model_class, args.max_length, batch_queue, args))
+  rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+  world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+  local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+  local_world_size = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_SIZE", 0))
+  cpu_bind = get_numa_bind_info(local_rank, local_world_size)
+
+  ##############
+  with open(args.dataset_config, encoding="utf-8") as f:
+    dataset_config = json.loads(f.read())
+  dataset = dataset_config.pop("name")
+  dataset_config["model_class"] = args.model_class
+  if args.max_length:
+    dataset_config["max_length"] = args.max_length
+  use_flops_balance = dataset_config.get("use_flops_balance", False)
+
+  if use_flops_balance:
+    batch_queue = mp.Queue(1)
+    data_process = mp.Process(target=data_func, args=(dataset, dataset_config, batch_queue, cpu_bind[:8]))
     data_process.start()
-    print(f"data process started")
+  else:
+    batch_queue = None
     
   # init model params
   os.environ["KML_ID"] = args.kml_id
   os.environ["KML_TASK_ID"] = args.kml_task_id
-  rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
-  world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
-  local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+
   # torch init
   torch.cuda.set_device(local_rank)
   torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
+
+  if use_flops_balance:
+    p = psutil.Process(os.getpid())
+    p.cpu_affinity(cpu_bind[8:])
+    print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind[8:]}")
 
   ### initialize model parallel group
   initialize_model_parallel(args.sequence_parallel_size)
@@ -886,17 +897,6 @@ def train():
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
   image_token_id = tokenizer.encode('<im_patch>')[0]  if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|image_pad|>')[0]
   image_start_id = tokenizer.encode("</image>")[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|vision_start|>')[0]
-
-  ##############
-  with open(args.dataset_config, encoding="utf-8") as f:
-    dataset_config = json.loads(f.read())
-  dataset = dataset_config.pop("name")
-  dataset_config["model_class"] = args.model_class
-  if args.max_length:
-    print_rank_0(
-      f"Overwrite max_length in dataset_config: "
-      f"{dataset_config['max_length']} -> {args.max_length}")
-    dataset_config["max_length"] = args.max_length
   
   if dist.get_rank() == 0:
     with open(os.path.join(args.output_dir,
@@ -905,15 +905,15 @@ def train():
       f.write(json.dumps(
         dataset_config, ensure_ascii=False, indent=2) + "\n")
 
-  if not args.vit_token_balance:
+  if not use_flops_balance:
     with Timer("Build dataloader"):
-      try:  dataloader = get_dataloader_v2(name=dataset, vit_token_balance=args.vit_token_balance, **dataset_config)
+      try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
       except: 
         import traceback
         print_rank_0(f"get_dataloader_v2 error: {traceback.format_exc()}")
         print_rank_0(f"get_dataloader_v2 retry for get_dataloader")
         traceback.print_exc()
-        dataloader = get_dataloader(name=dataset, vit_token_balance=args.vit_token_balance, **dataset_config)
+        dataloader = get_dataloader(name=dataset, **dataset_config)
       if args.resume_dataloader and dataloader_state_dict is not None:
         dataloader.load_state_dict(dataloader_state_dict)
   else:
@@ -945,11 +945,83 @@ def train():
   valid_data_source_tokens = collections.defaultdict(int)
   grad_norm = 0.0
   # get_sequence_parallel_group("gloo")
-  if not args.vit_token_balance: data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
+
   micro_step = 0
   ticker = TimeTracker(n=args.logging_per_step)
   iter_ticker = TimeTracker(n=args.logging_per_step)
   token_stasts = TokenStats()
+
+  gpu_batch_q = queue.Queue(maxsize=2)
+  def prefetch_to_gpu(input_fn, output_q, dev):
+    while True:
+      try:
+        batch = input_fn()
+        to_device(batch, dev, True)
+        output_q.put(batch)
+      except StopIteration:
+        break
+
+  if use_flops_balance:
+    input_fn = lambda: batch_queue.get()
+  else:
+    data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
+    input_fn =  lambda: next(data_iter)
+  prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
+  prefetch_t.start()
+
+  tb_metrics_q = queue.Queue(maxsize=8)
+  def write_tb_async(tb_writer, metrics_queue, grad_acc_steps):
+    while True:
+      metrics = metrics_queue.get()
+      global_step, log_dict, ticker_stats, ds_loss, ds_tokens, ds_samples = metrics_queue.get()
+      total_num_samples = log_dict["perf/total_num_samples"]
+      total_num_valid_tokens = log_dict["perf/valid_total_num_tokens"]
+      for name, data in log_dict.items():
+        if data is not None and tb_writer:
+          tb_writer.add_scalar(
+              name,
+              data,
+              global_step=global_step,
+              new_style=True)
+
+          # log metric by valid tokens
+          if name.startswith("training/"):
+            tb_writer.add_scalar(
+              f"x_token_{name}",
+              data,
+              global_step=total_num_valid_tokens / grad_acc_steps,
+              new_style=True
+            )
+
+      for name, data in ticker_stats.items():
+        tb_writer.add_scalar(f"ticker/{name}", data, global_step=global_step, new_style=True)
+
+      for key, loss_sum in ds_loss.items():
+        tb_writer.add_scalar(
+              f"data_source_loss/{key}",
+              loss_sum / (ds_tokens[key] + 1e-6) ,
+              global_step=global_step,
+              new_style=True)
+
+      for key, samples in ds_samples.items():
+        tb_writer.add_scalar(
+            f"data_source_sample_ratio/{key}",
+            1.0 * samples / total_num_samples,
+            global_step=global_step,
+            new_style=True)
+
+      for key, num_tokens in ds_tokens.items():
+        tb_writer.add_scalar(
+            f"data_source_token_ratio/{key}",
+            1.0 * num_tokens / total_num_valid_tokens,
+            global_step=global_step,
+            new_style=True)
+
+  if dist.get_rank() == 0:
+    tb_writer_t = threading.Thread(target=write_tb_async,args=(tb_writer, tb_metrics_q, args.gradient_accumulation_steps))
+    tb_writer_t.start()
+
+
   while True:
     ticker.tick("while_True")
     with contextlib.ExitStack() as ctx:
@@ -957,9 +1029,9 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = batch_queue.get() if args.vit_token_balance else next(data_iter) 
+      try: batch = gpu_batch_q.get() 
       except StopIteration: break
-      ticker.tick("next(data_iter)")
+      ticker.tick("next_batch")
       
 
       micro_step += 1
@@ -973,7 +1045,6 @@ def train():
           show_cnt -= 1
           
       data_source = batch.pop("data_source", None) # dataset source list cur batch
-      to_cuda(batch, non_blocking=True)
       ticker.tick("to_cuda(batch)")
 
       input_ids = batch["input_ids"]
@@ -987,35 +1058,43 @@ def train():
       sample_idx = batch["sample_idx"]
       position_ids = batch.get("position_ids", None)
       image_flags = batch.get("image_flags", None)
-
+      
 
       # 打印 token 数量
-      token_count = input_ids.numel()  # 计算 token 数量
-      print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
-      num_tokens = token_count
-      num_samples = (sample_idx.max() + 1).sum()
+      if not use_flops_balance or True:
+        token_count = input_ids.numel()  # 计算 token 数量
+        print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
+        num_tokens = token_count
+        num_samples = (sample_idx.max() + 1).sum()
 
-      image_tokens_ids = input_ids == image_token_id
-      num_image_tokens = image_tokens_ids.sum().item()
-      num_image_tokens2 = num_image_tokens
+        image_tokens_ids = input_ids == image_token_id
+        num_image_tokens = image_tokens_ids.sum().item()
+        num_image_tokens2 = num_image_tokens
 
-      num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item()
-      mfu_stats.set(num_image_tokens, num_tokens, num_samples.detach().item(), num_images)
+        num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item()
+        mfu_stats.set(num_image_tokens, num_tokens, num_samples.detach().item(), num_images)
 
-      # num_tokens - (sample_idx == -1).sum()
-      num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
-      token_metrics = torch.tensor(
-        [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda(non_blocking=True)
+        # num_tokens - (sample_idx == -1).sum()
+        num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
+        token_metrics = torch.tensor(
+          [num_tokens, num_samples, num_valid_tokens, num_image_tokens]).cuda(non_blocking=True)
 
-      ticker.tick("token_metrics_init")
-      
-      dist.all_reduce(
-        token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
+        ticker.tick("token_metrics_init")
+        
+        dist.all_reduce(
+          token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
 
-      ticker.tick("token_metrics_reduce")
+        ticker.tick("token_metrics_reduce")
 
-      num_tokens, num_samples, num_valid_tokens, num_image_tokens = token_metrics.detach().cpu().numpy()
-      ticker.tick("token_metrics.detach().cpu().numpy()")
+        num_tokens, num_samples, num_valid_tokens, num_image_tokens = token_metrics.detach().cpu().numpy()
+        ticker.tick("token_metrics.detach().cpu().numpy()")
+      else:
+        num_image_tokens2 = (input_ids == 151667).sum().item()
+        num_tokens = batch.get("num_tokens", 0)
+        num_samples = batch.get("num_samples", 0)
+        num_valid_tokens = batch.get("num_valid_tokens", num_tokens)
+        num_image_tokens = batch.get("num_image_tokens", 0)
+        print_rank_0(f"Iteration {micro_step}: Token count = {num_tokens}")
 
       total_num_samples += num_samples
       total_num_tokens += num_tokens
@@ -1188,29 +1267,13 @@ def train():
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
           ticker.tick(f"log_dict*{log_acc_step}")
 
-
-
-
-          for name, data in log_dict.items():
-            if data is not None and tb_writer:
-              tb_writer.add_scalar(
-                  name,
-                  data,
-                  global_step=global_step,
-                  new_style=True)
-
-              # log metric by valid tokens
-              if name.startswith("training/"):
-                tb_writer.add_scalar(
-                  f"x_token_{name}",
-                  data,
-                  global_step=total_num_valid_tokens / args.gradient_accumulation_steps,
-                  new_style=True
-                )
-
+          ticker_stats = {}
           for t in [ticker, iter_ticker]:
-            for name, data in t.stat().items():
-              tb_writer.add_scalar(f"ticker/{name}", data, global_step=global_step, new_style=True)
+              ticker_stats.update(t.stat())
+          metrics_info = (global_step, log_dict, ticker_stats, batch_data_source_loss, batch_data_source_tokens, total_data_source_samples)
+          tb_metrics_q.put(metrics_info)
+
+          ticker.tick(f"tb_metrics_q.put")
 
           if args.monitor_datasource_loss and tb_writer:
             for key, loss_sum in batch_data_source_loss.items():
@@ -1301,6 +1364,7 @@ def train():
               )
         ticker.tick(f"save_ckpt*{args.save_checkpoint_per_step * args.gradient_accumulation_steps}") 
 
+      # print_rank_0(f"ticker_info: { format ticker.stat()}")
       iter_ticker.tick("iter_ticker")
       if torch_profiler: torch_profiler.step()
 

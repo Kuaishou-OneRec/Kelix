@@ -117,8 +117,8 @@ def smart_resize(
     """
     #if height < factor or width < factor:
     #    raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    if int(height < factor//2) + int(width < factor//2):
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor//2}")
+    if int(height < factor//4) + int(width < factor//4):
+        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor//4}")
 
     if height < factor:
         print(f"smart_resize: height={height} < factor={factor}, reset height=factor")
@@ -214,6 +214,7 @@ class SiglipImageProcessor(BaseImageProcessor):
         self.merge_size = merge_size
         self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
         self.do_convert_rgb = do_convert_rgb
+        
     def mvit_rescale(
         self, image: Image.Image, merge_size: int = 2
     ) -> Image.Image:

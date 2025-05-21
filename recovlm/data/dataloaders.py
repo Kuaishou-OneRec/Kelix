@@ -16,6 +16,7 @@ from tqdm import tqdm
 from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
     ChatCompletionVisionDataset, ChatCompletionVisionParquetDataset, \
     ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset,InternVLChatCompletionVisionParquetDataset, \
+    BalanceParquetDataset, \
     ChatCompletionVisionDataset_moonvit,ChatCompletionVisionParquetDataset_moonvit, \
     ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip, ChatCompletionVisionParquetDataset_navit, ChatCompletionVisionParquetDataset_keye
 
@@ -248,11 +249,10 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           video_min_frames=2,
                                           video_max_frames=120,
                                           datasource_config={},
-                                          vit_token_balance=False,
                                           **kwargs):
     model_type = kwargs.get('model_class','Qwen2VLForConditionalGeneration')
     print('test_cut_to_pad:',kwargs.get('cut_to_pad',False))
-    cut_to_pad = kwargs.get('cut_to_pad',False)
+    use_balance = kwargs.get("use_flops_balance", False)
     ModelDataset = {'Qwen2VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration_moonvit':ChatCompletionVisionParquetDataset_moonvit,
@@ -260,31 +260,38 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                     'Qwen3SiglipForConditionalGeneration_navit':ChatCompletionVisionParquetDataset_navit,
                     'KeyeForConditionalGeneration': ChatCompletionVisionParquetDataset_keye,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
-    print(f"get dataloader vit_token_balance={vit_token_balance}")
-    if vit_token_balance: assert num_workers == 1
-    dataset = ModelDataset[model_type](
-        sources = sources,
-        num_workers = num_workers,
-        num_epochs = num_epochs,
-        shuffle_seed = shuffle_seed,
-        max_length = max_length,
-        min_visual_tokens_per_image = min_visual_tokens_per_image,
-        max_visual_tokens_per_image = max_visual_tokens_per_image,
-        video_nframe=video_nframe,
-        video_fps=video_fps,
-        video_min_frames=video_min_frames,
-        video_max_frames=video_max_frames,
-        base_model_dir=base_model_dir,
-        shrink_ratio=shrink_ratio,
-        max_retry=max_retry,
-        multiple_of=multiple_of,
-        datasource_config=datasource_config,
-        vit_token_balance=vit_token_balance,
-        **kwargs
-        )
+    num_readers = kwargs.get("num_readers", 1)
+    shuffle_window = kwargs.get("shuffle_window", 0)
+    if use_balance:
+        num_readers = kwargs.get("num_readers", 4)
+        shuffle_window = kwargs.get("shuffle_window", 3600)
+    def input_creator():
+        return ModelDataset[model_type](
+            sources = sources,
+            num_workers = num_workers,
+            num_epochs = num_epochs,
+            shuffle_seed = shuffle_seed,
+            max_length = max_length,
+            min_visual_tokens_per_image = min_visual_tokens_per_image,
+            max_visual_tokens_per_image = max_visual_tokens_per_image,
+            video_nframe=video_nframe,
+            video_fps=video_fps,
+            video_min_frames=video_min_frames,
+            video_max_frames=video_max_frames,
+            base_model_dir=base_model_dir,
+            shrink_ratio=shrink_ratio,
+            max_retry=max_retry,
+            multiple_of=multiple_of,
+            datasource_config=datasource_config,
+            num_readers=num_readers,
+            shuffle_window=shuffle_window,
+            **kwargs
+            )
 
     ### packing, batching size=1; shuffle in dataset
-    if vit_token_balance :
+    if use_balance:
+        assert num_workers == 1, f"use_flops_balance requires one dataset process per worker"
+        dataset = BalanceParquetDataset(input_creator, model_type, base_model_dir=base_model_dir)
         dataloader = DataLoader(
             dataset=dataset,
             shuffle=False,
@@ -293,12 +300,13 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
             collate_fn=lambda x: x[0],
         )
     else:
+        dataset = input_creator()
         dataloader = StatefulDataLoader(
             dataset=dataset,
             shuffle=False,
             batch_size=1,
             num_workers=num_workers,
-            collate_fn=lambda x: x[0]
+            collate_fn=lambda x: x[0],
         )
     return dataloader
 
@@ -373,38 +381,4 @@ def get_dataloader(name: str, **kwargs):
     else:
         raise NotImplementedError("Unsupported dataloader.")
 
-if __name__ == '__main__':
-  # source=[
-  #     "/llm_reco_ssd/luoxinchen/dataset/cc12m/cc12m-index.json",
-  #     "/llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json"
-  # ],
-  # source = "/llm_reco_ssd/luoxinchen/dataset/cc12m/cc12m-index.json"
-  sources = [
-    "/llm_reco_ssd/luoxinchen/dataset/datacomp/large/index.json",
-    "/llm_reco_ssd/luoxinchen/dataset/coyo-700m-webdataset/coyo-700m-index.json"
-  ]
-  processor = AutoProcessor.from_pretrained(
-      "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct")
-  dataloader = get_indexed_dataloader(
-      sources=sources,
-      processor=processor,
-      batch_size=32,
-      num_workers=4,
-      shuffle=True,
-      max_length=1024,
-      rank=1)
-  for s in tqdm(dataloader):
-    print(s["pixel_values"].shape)
-    print(s["image_grid_thw"].shape)
-    print(s["image_grid_thw"][0])
-    print(s["image_grid_thw"].prod())
-    t = 0
-    for a, b, c in s["image_grid_thw"]:
-        t += (a * b * c)
-    print("sssss", t)
-    assert t == s["pixel_values"].shape[0]
-    assert s["pixel_values"].shape[0] == s["image_grid_thw"].prod(dim)
-    # for input_ids in s["input_ids"]:
-    #   print(processor.tokenizer.decode(input_ids))
-    #   print("=" * 10)
-    break
+
