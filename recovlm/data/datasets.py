@@ -4189,6 +4189,7 @@ class BalanceParquetDataset(IterableDataset):
   def _packing_task(self):
     while True:
       inputs, data_source, step_info = self._balance_buf.get()
+      if dist.get_rank() == 0: print("packed0....")
       packed_inputs = self.input._packing(inputs)
       packed_inputs["data_source"] = data_source
       packed_inputs["num_samples"] = step_info[0]
@@ -4232,8 +4233,8 @@ class BalanceParquetDataset(IterableDataset):
     result = self._result_buf.get()
     while True:
         t1 = time.perf_counter()
-        if i % 500 == 0:
-          result = self._result_buf.get()
+        # if i % 500 == 0:
+        result = self._result_buf.get()
         t2 = time.perf_counter()
         i += 1
         yield result
