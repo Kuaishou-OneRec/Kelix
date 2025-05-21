@@ -1247,9 +1247,10 @@ class ChatCompletionVisionDataset(IterableDataset):
     packed_video_grid_thw: List[torch.Tensor] = []
     packed_sample_idx: List[torch.Tensor] = []
     cu_seqlens: List[int] = [0]
-
+    epochs = []
     valid_seq_len = 0
     for _, inputs in enumerate(buffer):
+      epochs.append(inputs.get("epoch_idx", None))
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
                                       packed_position_ids,
@@ -1305,6 +1306,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
       cu_seqlens.append(cu_seqlens[-1] + padding_len)
 
+    epochs = [x for x in epochs if x is not None]
     inputs = {
       "input_ids": packed_input_ids,
       "position_ids": packed_position_ids,
@@ -1314,7 +1316,8 @@ class ChatCompletionVisionDataset(IterableDataset):
       "pixel_values_videos": packed_pixel_values_videos,
       "video_grid_thw": packed_video_grid_thw,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
-      "sample_idx": packed_sample_idx.to(torch.int32)
+      "sample_idx": packed_sample_idx.to(torch.int32),
+      "epoch_idx": sum(epochs) / len(epochs),
     }
 
     return inputs
@@ -2623,6 +2626,7 @@ class NaiveParquetDataset(IterableDataset):
 
             try:
               sample = self._parser(row, fn)
+              sample['epoch_idx'] = epoch_idx
               if sample is not None:
                 yield sample
               offset_dict[fn_group_key] = row_idx
@@ -2678,6 +2682,7 @@ class NaiveParquetDataset(IterableDataset):
             fn, epoch_idx = parquet_files_list[file_index]
             logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
             df = load_parquet_file(fn).read_row_group(0).to_pandas()
+            df['epoch_idx'] = epoch_idx
             row_counts.append(len(df))
             all_rows.append(df)
 
@@ -2690,6 +2695,7 @@ class NaiveParquetDataset(IterableDataset):
             for i, (_, row) in enumerate(all_rows.iterrows()):
                 try:
                   sample = self._parser(row, "tmp")
+                  sample['epoch_idx'] = row['epoch_idx']
                   if sample is not None:
                     yield sample
 
@@ -2842,6 +2848,7 @@ class ParquetDataset(NaiveParquetDataset):
 
                 try:
                   sample = self._parser(row, fn)
+                  sample['epoch_idx'] = epoch_idx
                   if sample is not None:
                     # yield sample
                     self.sample_queue.put(sample)
@@ -3781,8 +3788,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     packed_image_flags:List[torch.Tensor] = []
     cu_seqlens: List[int] = [0]
     valid_seq_len = 0
-
+    epochs = []
     for _, inputs in enumerate(buffer):
+      epochs.append(inputs.get("epoch_idx", None))
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
                                       packed_position_ids,
@@ -3850,6 +3858,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
       packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
       cu_seqlens.append(cu_seqlens[-1] + padding_len)
+
+    epochs = [x for x in epochs if x is not None]
     inputs = {
       "input_ids": packed_input_ids,
       "position_ids": packed_position_ids,
@@ -3860,7 +3870,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       "video_grid_thw": packed_video_grid_thw,
       "image_flags":packed_image_flags,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
-      "sample_idx": packed_sample_idx.to(torch.int32)
+      "sample_idx": packed_sample_idx.to(torch.int32),
+      "epoch_idx": sum(epochs) / len(epochs),
     }
     if packed_input_ids.flatten().shape[0] < packed_pixel_values.shape[0] * 256:
       print_input_info(inputs, "inputs111: ")

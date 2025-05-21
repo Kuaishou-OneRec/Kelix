@@ -1058,7 +1058,7 @@ def train():
       sample_idx = batch["sample_idx"]
       position_ids = batch.get("position_ids", None)
       image_flags = batch.get("image_flags", None)
-      
+      epoch_idx = np.mean(batch.get("epoch_idx", [0]))
 
       # 打印 token 数量
       if not use_flops_balance or True:
@@ -1262,6 +1262,7 @@ def train():
             "perf/image_tokens_per_sec_per_gpu_v2": image_tokens_per_sec_per_gpu_v2,
             "perf/tokens_per_step_per_gpu_v2": tokens_per_step_per_gpu_v2,
             "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
+            "perf/epoch_idx": epoch_idx,
           }
           start_time = end_time
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
