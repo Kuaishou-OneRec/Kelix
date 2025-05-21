@@ -1,6 +1,7 @@
 email=$(git config --get user.email)
 
 mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15" 
+mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "http_proxy=http://oversea-squid4.sgp.txyun:11080 https_proxy=http://oversea-squid4.sgp.txyun:11080 apt-get install -y numactl" 
 
 # 检查 email 是否为空
 if [[ -z "$email" ]]; then
@@ -26,7 +27,6 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
 comment="run internvl 2b 0.7.0 stage1 by lzx, use stage1.5-0.6.0 data"
-
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
@@ -85,7 +85,6 @@ nohup mpirun --allow-run-as-root \
         -x https_proxy="" \
         -x HOROVOD_MPI_THREADS_DISABLE=1 \
         -x MPI_THREAD_SINGLE=1 \
-        -x CUDA_DEVICE_MAX_CONNECTIONS=1 \
         -x NO_COLOR=1 \
         -x TERM=dumb \
         -x COLORTERM=0 \
@@ -115,7 +114,7 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
+	bash -c "unset http_proxy && unset https_proxy && bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
@@ -142,12 +141,12 @@ nohup mpirun --allow-run-as-root \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
-                --comment "$comment" \
+                --comment $comment \
                 --commit_id $git_hash \
 		--logging_per_step 10 \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+                --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
 
 
