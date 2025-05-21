@@ -363,6 +363,7 @@ def exchange_batch_info(samples, ds_list, m):
     return (num_samples, num_input_ids, num_images, llm_flops_list, vit_flops_list)
 
 
+
 def get_flops_model(model_type, **kwargs) -> ModelFlopsBase:
     if model_type == "InternVLChatModel":
         return InternVLChatModelFlops(**kwargs)
