@@ -3995,6 +3995,9 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
     self.dataset.load_state_dict(state_dict)
 
 
+
+
+
 class BalanceParquetDataset(IterableDataset):
   def __init__(self, input_creator, model_type, **kwargs):
     self.input_creator = input_creator
@@ -4179,7 +4182,8 @@ class BalanceParquetDataset(IterableDataset):
     
     self.input = self.input_creator()
     self.dataset = self.input.dataset
-    self.fm = balance.get_flops_model(self.model_type)
+    image_pad_len = getattr(self.input, "image_pad_len", 0)
+    self.fm = balance.get_flops_model(self.model_type, max_length=(self.input.max_length - image_pad_len))
 
     self.sample_queue = queue.Queue(maxsize=32)
     def reader_task():
@@ -4199,11 +4203,12 @@ class BalanceParquetDataset(IterableDataset):
     self.balance_thread.start()
     self.packing_thread.start()
 
+    i = 1
+    result = self._result_buf.get()
     while True:
         t1 = time.perf_counter()
-        result = self._result_buf.get()
+        if i % 500 == 0:
+          result = self._result_buf.get()
         t2 = time.perf_counter()
+        i += 1
         yield result
-
-
-
