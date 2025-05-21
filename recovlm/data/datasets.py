@@ -4160,12 +4160,12 @@ class BalanceParquetDataset(IterableDataset):
         used = set()
         for selected, is_local in candidates:
           if is_local:
-            print("llllll")
+            if self.rank == 0: print("llllll", selected)
             used.update(selected)
             inputs = [buffer[idx] for idx in selected]
             data_source = [source_list[idx] for idx in selected]
           else:
-            print("nnnnnn")
+            if self.rank == 0: print("nnnnnn")
             data_source = []
             for sample in selected:
               ds = sample.pop("__ds__")
