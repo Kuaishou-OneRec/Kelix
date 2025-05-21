@@ -343,10 +343,9 @@ def calculate_vit_flops(vit_params):
         linear_factor=linear_factor,
         attn_output_layers=2
     )
-
-    vit2llm_flops = linear_factor * s(vit_params.seq_len) * (vit_params.hidden_size * llm_params.hidden_size + llm_params.hidden_size * llm_params.hidden_size)
-    vit_flops['total_flops'] += vit2llm_flops
-    vit_flops['vit2llm_flops'] = vit2llm_flops
+    #vit2llm_flops = linear_factor * s(vit_params.seq_len) * (vit_params.hidden_size * llm_params.hidden_size + llm_params.hidden_size * llm_params.hidden_size)
+    #vit_flops['total_flops'] += vit2llm_flops
+    #vit_flops['vit2llm_flops'] = vit2llm_flops
     return vit_flops
 
 
