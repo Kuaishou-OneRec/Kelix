@@ -3999,10 +3999,11 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
 
 
 class BalanceParquetDataset(IterableDataset):
-  def __init__(self, input_creator, model_type, **kwargs):
+  def __init__(self, input_creator, model_type, base_model_dir=None, **kwargs):
     self.input_creator = input_creator
     self.model_type = model_type
     self.buffer_size = kwargs.get("buffer_size", 1000)
+    self.base_model_dir = base_model_dir
     
   def _process_task(self):
     while True:
@@ -4185,7 +4186,7 @@ class BalanceParquetDataset(IterableDataset):
     image_pad_len = getattr(self.input, "image_pad_len", 0)
     # self.fm = balance.get_flops_model(self.model_type, max_length=(self.input.max_length - image_pad_len))
     from recovlm.data.balance import CustomModelFlops
-    self.fm = CustomModelFlops(base_model_dir=os.path.join(self.base_model_dir, "config.json"), max_length=(self.input.max_length - image_pad_len))
+    self.fm = CustomModelFlops(base_model_config=os.path.join(self.base_model_dir, "config.json"), max_length=(self.input.max_length - image_pad_len))
 
     self.sample_queue = queue.Queue(maxsize=32)
     def reader_task():

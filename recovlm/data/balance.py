@@ -190,8 +190,8 @@ class Qwen3SiglipModelFlops(ModelFlopsBase):
 
 from tools.mfu.flops_counter import calculate_llm_flops_from_config, calculate_llm_flops_from_config
 class CustomModelFlops(ModelFlopsBase):
-    def __init__(self, base_model_dir, **kwargs):
-        self.base_model_dir = base_model_dir
+    def __init__(self, base_model_config, **kwargs):
+        self.base_model_config = base_model_config
         max_len = kwargs["max_length"]
         max_flops = self.llm_flops([max_len])
         max_sample = kwargs.get("max_sample_num", 1000)
@@ -202,10 +202,10 @@ class CustomModelFlops(ModelFlopsBase):
         super(CustomModelFlops, self).__init__(flops_range)
 
     def llm_flops(self, seq_list: List[int]) -> float:
-        return calculate_llm_flops_from_config(self.base_model_dir, seq_list, None) / 1e12
+        return calculate_llm_flops_from_config(self.basebase_model_config_model_dir, seq_list, None) / 1e12
 
     def vit_flops(self, image_list: List[int]) -> float:
-        return calculate_llm_flops_from_config(self.base_model_dir, image_list, None) / 1e12
+        return calculate_llm_flops_from_config(self.base_model_config, image_list, None) / 1e12
 
 
 def flops_diff(flops1, flops2):
