@@ -385,9 +385,10 @@ def main(_):
                             total_ppl = response_ppl/count+total_ppl*(count-1)/count
                             count += 1
                             print('response_ppl:', response_ppl)
-                            otherinputslist = batch["otherinputslist"][idx].to(torch.cuda.current_device())
+                            otherinputslist = batch["otherinputslist"][idx]
                             other_response_ppl_list = []
                             for otherinput in otherinputslist:
+                                otherinput = otherinput.to(torch.cuda.current_device())
                                 other_input_ids = otherinput["input_ids"]
                                 with torch.no_grad():
                                     outputs = llm(**otherinput)
