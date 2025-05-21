@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip/
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/debug_2b_navits/qwen3navit_2B_stage3.201_debug
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_data_0.3.2/0.8.0/204/2b/
 
 mkdir -p $OUTPUT_DIR
 
@@ -116,7 +116,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/0.8.0/qwen3navit_2B_stage3.201.json \
+                --dataset_config examples/vlm/0.8.0/qwen3navit_2B_stage3.204.json \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
@@ -124,11 +124,11 @@ nohup mpirun --allow-run-as-root \
                 --max_length 16000 \
                 --learning_rate 1e-5 \
                 --vision_learning_rate 1e-6 \
-                --min_lr 1e-7 \
+                --min_lr 1e-6 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 250 \
-                --num_training_steps 24000 \
+                --num_training_steps 26000 \
                 --save_checkpoint_per_step 500 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
@@ -144,5 +144,7 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
+                --resume_from /mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage2_resume_1k/0.8.0/2b/step5000/ \
+		--resume_from_tag global_step5000 \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
