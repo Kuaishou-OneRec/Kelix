@@ -171,7 +171,7 @@ def merge_results(local_results_path, comm, rank, output_path, global_rank, data
                 if total_correct_count == 0:
                     f.write(json.dumps({"average_ppl": total_ppl_sum, "total_samples": total_count,}, ensure_ascii=False) + "\n")
                 else:
-                    f.write(json.dumps({"average_ppl": total_ppl_sum, "total_samples": total_count, "correct_count": total_correct_count}, ensure_ascii=False) + "\n")
+                    f.write(json.dumps({"average_ppl": total_ppl_sum, "total_samples": total_count, "correct_count": total_correct_count, "correct_rate": total_correct_count/total_count}, ensure_ascii=False) + "\n")
                 # 然后写入所有详细结果
                 for result in all_results:
                     f.write(result + '\n')
