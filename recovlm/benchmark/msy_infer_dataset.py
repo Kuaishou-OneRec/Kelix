@@ -589,7 +589,7 @@ if __name__ == "__main__":
     user='mpi'
   )
 
-  for batch in DataLoader(dataset, batch_size=1, shuffle=False):
+  for batch in DataLoader(dataset, batch_size=4, shuffle=False):
     print("Batch type:", type(batch))
     print("Batch contents:", batch)
     for idx, item in enumerate(batch):
