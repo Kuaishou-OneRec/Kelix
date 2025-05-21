@@ -466,6 +466,7 @@ class MsyInferDataset(ParquetDataset):
     if limit is not None:
       self.total_rows = min(self.total_rows, limit)
     self.enable_remove_comment = enable_remove_comment
+    self.dataset_name = dataset_name
     try:
       self.transform_func = transform_func_map[dataset_name]
     except KeyError:
@@ -551,7 +552,7 @@ class MsyInferDataset(ParquetDataset):
             # 如果没有找到任何有效的起始位置，跳过这个样本
             logging.warning("No valid start positions found, skipping sample")
             continue
-        if dataset_name in self.dataset_has_choices:
+        if self.dataset_name in self.dataset_has_choices:
           yield {
             "inputs": inputs,
             "answer_idx_list": answer_idx_list,
