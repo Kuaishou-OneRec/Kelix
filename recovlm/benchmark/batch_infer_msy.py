@@ -386,7 +386,7 @@ def main(_):
                             count += 1
 
                             otherinputslist = batch["otherinputslist"][idx]
-                            other_response_ppl_list = []
+                            other_response_loss_list = []
                             for otherinput in otherinputslist:
                                 otherinput = otherinput.to(torch.cuda.current_device())
                                 other_input_ids = otherinput["input_ids"]
@@ -402,12 +402,14 @@ def main(_):
                                     loss = loss.view(shift_logits.size(0), -1)
 
                                     assistant_loss = loss[0, start_pos-1:end_pos]
-                                    other_response_ppl = torch.exp(assistant_loss.mean())
+                                    other_response_loss_list.append(assistant_loss.mean())
+                                    #other_response_ppl = torch.exp(assistant_loss.mean())
                                 except Exception as e:
                                     logging.warning(f"Error calculating PPL for position {start_pos}: {e}")
                                     continue
-                                other_response_ppl_list.append(other_response_ppl)
-                            other_response_ppl_mean = sum(other_response_ppl_list)/len(other_response_ppl_list)
+                                #other_response_ppl_list.append(other_response_ppl)
+                            other_response_loss_mean = sum(other_response_loss_list)/len(other_response_loss_list)
+                            other_response_ppl_mean = torch.exp(other_response_loss_mean)
                             print('response_ppl:', response_ppl, 'other_response_ppl_mean:', other_response_ppl_mean)
                             total_other_ppl = other_response_ppl_mean/count+total_other_ppl*(count-1)/count
                 print('==================================================')
