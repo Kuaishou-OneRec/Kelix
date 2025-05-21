@@ -133,8 +133,8 @@ class InternVLChatModelFlops(ModelFlopsBase):
 
 class Qwen3SiglipModelFlops(ModelFlopsBase):
     def __init__(self, **kwargs):
-        # flops_range = [640, 670, 700, 740, 780]
-        flops_range = [820, 840, 870, 910, 950, 1000]
+        flops_range = [640, 670, 700, 740, 780]
+        # flops_range = [820, 840, 870, 910, 950, 1000]
         self.kwargs = kwargs
         super(Qwen3SiglipModelFlops, self).__init__(flops_range)
     
