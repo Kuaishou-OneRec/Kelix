@@ -3807,8 +3807,8 @@ class BalanceParquetDataset(IterableDataset):
     result = self._result_buf.get()
     while True:
         t1 = time.perf_counter()
-        if i % 500 == 0:
-          result = self._result_buf.get()
-        t2 = time.perf_counter()
+        # if i % 500 == 0:
+        #   result = self._result_buf.get()
+        # t2 = time.perf_counter()
         i += 1
         yield result
