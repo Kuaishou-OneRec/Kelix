@@ -338,7 +338,7 @@ def main(_):
                         
                             total_ppl = response_ppl/count+total_ppl*(count-1)/count
                             count += 1
-                            print('response_ppl:', response_ppl)
+                            print('response_ppl:', float(response_ppl.to(torch.float32).cpu().numpy()))
                 print('==================================================')
                 # 先将tensor转换为float32，再转换为numpy数组
                 total_ppl = float(total_ppl.to(torch.float32).cpu().numpy())
@@ -424,7 +424,7 @@ def main(_):
                                 correct_count += 1
                                 correct_flag = True
                             other_response_ppl_mean = torch.exp(other_response_loss_mean)
-                            print('response_ppl:', response_ppl, 'other_response_ppl_mean:', other_response_ppl_mean, 'correct_flag:', correct_flag)
+                            print('response_ppl:', float(response_ppl.to(torch.float32).cpu().numpy()), 'other_response_ppl_mean:', float(other_response_ppl_mean.to(torch.float32).cpu().numpy())  , 'correct_flag:', correct_flag)
                             total_other_ppl = other_response_ppl_mean/count+total_other_ppl*(count-1)/count
                 print('==================================================')
                 # 先将tensor转换为float32，再转换为numpy数组
