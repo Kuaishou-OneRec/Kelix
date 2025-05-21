@@ -1630,7 +1630,7 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
                base_model_dir: Optional[str] = None,
                processor: Optional[Qwen2VLProcessor] = None,
                spatial_merge_size: int = 2,
-               patch_size: int = 14,
+               patch_size: int = 16,
                image_token_id: int = 151655,
                video_token_id: int = 151656,
                vision_start_token_id: int = 151652,
@@ -1735,7 +1735,7 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
                base_model_dir: Optional[str] = None,
                processor: Optional[Qwen2VLProcessor] = None,
                spatial_merge_size: int = 2,
-               patch_size: int = 14,
+               patch_size: int = 16,
                image_token_id: int = 151655,
                video_token_id: int = 151656,
                vision_start_token_id: int = 151652,
@@ -4007,7 +4007,7 @@ class BalanceParquetDataset(IterableDataset):
     self.base_model_dir = base_model_dir
     with open(os.path.join(self.base_model_dir, "config.json"), "r") as fp:
       config = json.load(fp)
-      self.arch = config["architectures"]
+      self.arch = config["architectures"][0]
     
   def _process_task(self):
     while True:

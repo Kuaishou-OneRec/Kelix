@@ -197,7 +197,7 @@ class CustomModelFlops(ModelFlopsBase):
         import json
         with open(os.path.join(self.base_model_config), "r") as fp:
             config = json.load(fp)
-            self.arch = config["architectures"]
+            self.arch = config["architectures"][0]
 
         print(f"self.arch={self.arch}")
         max_len = kwargs["max_length"]
