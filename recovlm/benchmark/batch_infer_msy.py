@@ -298,59 +298,138 @@ def main(_):
         local_output_path = f"{FLAGS.output_path}_{dataset_name}.jsonl.rank{rank}"
 
         # Process local chunk of data
-        with open(local_output_path, "w", encoding="utf-8") as f:
-            count = 1
-            total_ppl = 0
-            for batch in tqdm(DataLoader(local_dataset,batch_size=FLAGS.batch_size,
-                                    collate_fn=collate_fn),disable=rank != 0):  # Only rank 0 shows progress bar
-                # 存储该批次所有样本的所有生成结果
-                batch_generations = [[] for _ in range(len(batch["inputs"]))]
-                with torch.no_grad():
-                    for idx in range(len(batch["inputs"])):
-                        answer_idx_list = batch["answer_idx_list"][idx]
-                        inputs = batch["inputs"][idx].to(torch.cuda.current_device())
-                        input_ids = inputs["input_ids"]
-                        with torch.no_grad():
-                            outputs = llm(**inputs)
-                            logits = outputs.logits 
-                        start_pos, end_pos = answer_idx_list[0]
-                        try:
-                            shift_logits = logits[..., :-1, :].contiguous()
-                            shift_labels = input_ids[..., 1:].contiguous()
+        if dataset_name not in dataset_has_choices:
+            with open(local_output_path, "w", encoding="utf-8") as f:
+                count = 1
+                total_ppl = 0
+                for batch in tqdm(DataLoader(local_dataset,batch_size=FLAGS.batch_size,
+                                        collate_fn=collate_fn),disable=rank != 0):  # Only rank 0 shows progress bar
+                    # 存储该批次所有样本的所有生成结果
+                    with torch.no_grad():
+                        for idx in range(len(batch["inputs"])):
+                            answer_idx_list = batch["answer_idx_list"][idx]
+                            inputs = batch["inputs"][idx].to(torch.cuda.current_device())
+                            input_ids = inputs["input_ids"]
+                            with torch.no_grad():
+                                outputs = llm(**inputs)
+                                logits = outputs.logits 
+                            start_pos, end_pos = answer_idx_list[0]
+                            try:
+                                shift_logits = logits[..., :-1, :].contiguous()
+                                shift_labels = input_ids[..., 1:].contiguous()
 
-                            loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
-                            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
-                            loss = loss.view(shift_logits.size(0), -1)
+                                loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+                                loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                                loss = loss.view(shift_logits.size(0), -1)
 
-                            assistant_loss = loss[0, start_pos-1:end_pos]
-                            response_ppl = torch.exp(assistant_loss.mean())
-                        except Exception as e:
-                            logging.warning(f"Error calculating PPL for position {start_pos}: {e}")
-                            continue
-                    
-                        total_ppl = response_ppl/count+total_ppl*(count-1)/count
-                        count += 1
-                        print('response_ppl:', response_ppl)
-            print('==================================================')
-            # 先将tensor转换为float32，再转换为numpy数组
-            total_ppl = float(total_ppl.to(torch.float32).cpu().numpy())
-            print('total_ppl:', total_ppl, 'rank:', rank)
-            result = {
-                "total_ppl": total_ppl,
-                "count": count-1,
-                "rank": rank
-            }
-            f.write(json.dumps(result, ensure_ascii=False) + "\n")
-            f.flush()
-        comm.Barrier()
-        merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank, dataset_name)
-        if rank == 0:
-            # Merge results from all processes
-            logging.info(f"Results being written to: {FLAGS.output_path}_{dataset_name}.jsonl")
-            for r in range(size):
-                temp_file = f"{FLAGS.output_path}_{dataset_name}.jsonl.rank{r}"
-                if os.path.exists(temp_file):
-                    os.remove(temp_file)
+                                assistant_loss = loss[0, start_pos-1:end_pos]
+                                response_ppl = torch.exp(assistant_loss.mean())
+                            except Exception as e:
+                                logging.warning(f"Error calculating PPL for position {start_pos}: {e}")
+                                continue
+                        
+                            total_ppl = response_ppl/count+total_ppl*(count-1)/count
+                            count += 1
+                            print('response_ppl:', response_ppl)
+                print('==================================================')
+                # 先将tensor转换为float32，再转换为numpy数组
+                total_ppl = float(total_ppl.to(torch.float32).cpu().numpy())
+                print('total_ppl:', total_ppl, 'rank:', rank)
+                result = {
+                    "total_ppl": total_ppl,
+                    "count": count-1,
+                    "rank": rank
+                }
+                f.write(json.dumps(result, ensure_ascii=False) + "\n")
+                f.flush()
+            comm.Barrier()
+            merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank, dataset_name)
+            if rank == 0:
+                # Merge results from all processes
+                logging.info(f"Results being written to: {FLAGS.output_path}_{dataset_name}.jsonl")
+                for r in range(size):
+                    temp_file = f"{FLAGS.output_path}_{dataset_name}.jsonl.rank{r}"
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
+        else:
+            with open(local_output_path, "w", encoding="utf-8") as f:
+                count = 1
+                total_ppl = 0
+                total_other_ppl = 0
+                for batch in tqdm(DataLoader(local_dataset,batch_size=FLAGS.batch_size,
+                                        collate_fn=collate_fn),disable=rank != 0):  # Only rank 0 shows progress bar
+                    # 存储该批次所有样本的所有生成结果
+                    with torch.no_grad():
+                        for idx in range(len(batch["inputs"])):
+                            answer_idx_list = batch["answer_idx_list"][idx]
+                            inputs = batch["inputs"][idx].to(torch.cuda.current_device())
+                            input_ids = inputs["input_ids"]
+                            with torch.no_grad():
+                                outputs = llm(**inputs)
+                                logits = outputs.logits 
+                            start_pos, end_pos = answer_idx_list[0]
+                            try:
+                                shift_logits = logits[..., :-1, :].contiguous()
+                                shift_labels = input_ids[..., 1:].contiguous()
+
+                                loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+                                loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                                loss = loss.view(shift_logits.size(0), -1)
+
+                                assistant_loss = loss[0, start_pos-1:end_pos]
+                                response_ppl = torch.exp(assistant_loss.mean())
+                            except Exception as e:
+                                logging.warning(f"Error calculating PPL for position {start_pos}: {e}")
+                                continue
+                        
+                            total_ppl = response_ppl/count+total_ppl*(count-1)/count
+                            count += 1
+                            print('response_ppl:', response_ppl)
+                            otherinputslist = batch["otherinputslist"][idx]
+                            other_response_ppl_list = []
+                            for otherinput in otherinputslist:
+                                other_input_ids = otherinput["input_ids"]
+                                with torch.no_grad():
+                                    outputs = llm(**otherinput)
+                                    logits = outputs.logits 
+                                try:
+                                    shift_logits = logits[..., :-1, :].contiguous()
+                                    shift_labels = other_input_ids[..., 1:].contiguous()
+
+                                    loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+                                    loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+                                    loss = loss.view(shift_logits.size(0), -1)
+
+                                    assistant_loss = loss[0, start_pos-1:end_pos]
+                                    other_response_ppl = torch.exp(assistant_loss.mean())
+                                except Exception as e:
+                                    logging.warning(f"Error calculating PPL for position {start_pos}: {e}")
+                                    continue
+                                other_response_ppl_list.append(other_response_ppl)
+                            other_response_ppl_mean = sum(other_response_ppl_list)/len(other_response_ppl_list)
+                            print('other_response_ppl_mean:', other_response_ppl_mean)
+                            total_other_ppl = other_response_ppl_mean/count+total_other_ppl*(count-1)/count
+                print('==================================================')
+                # 先将tensor转换为float32，再转换为numpy数组
+                total_ppl = float(total_ppl.to(torch.float32).cpu().numpy())
+                print('total_ppl:', total_ppl, 'rank:', rank, 'total_other_ppl:', total_other_ppl)
+                result = {
+                    "total_ppl": total_ppl,
+                    "count": count-1,
+                    "rank": rank,
+                    "total_other_ppl": total_other_ppl
+                }
+                f.write(json.dumps(result, ensure_ascii=False) + "\n")
+                f.flush()
+            comm.Barrier()
+            merge_results(local_output_path, comm, rank, FLAGS.output_path, FLAGS.global_rank, dataset_name)
+            if rank == 0:
+                # Merge results from all processes
+                logging.info(f"Results being written to: {FLAGS.output_path}_{dataset_name}.jsonl")
+                for r in range(size):
+                    temp_file = f"{FLAGS.output_path}_{dataset_name}.jsonl.rank{r}"
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
 
 if __name__ == "__main__":
     app.run(main)
