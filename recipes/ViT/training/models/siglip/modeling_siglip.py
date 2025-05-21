@@ -31,8 +31,9 @@ from transformers.utils import is_flash_attn_2_available
 from transformers.activations import ACT2FN
 from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from transformers.modeling_utils import PreTrainedModel
+# from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+# from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from transformers.utils import (
     ModelOutput,
     add_start_docstrings,
