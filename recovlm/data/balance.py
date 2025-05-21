@@ -188,7 +188,7 @@ class Qwen3SiglipModelFlops(ModelFlopsBase):
         return (flops_qkvo + flops_ffn + attention) * 27 * 3 / 1e12
 
 
-from recovlm.tools.mfu.flops_counter import calculate_llm_flops_from_config, calculate_llm_flops_from_config
+from tools.mfu.flops_counter import calculate_llm_flops_from_config, calculate_llm_flops_from_config
 class CustomModelFlops(ModelFlopsBase):
     def __init__(self, base_model_dir, **kwargs):
         self.base_model_dir = base_model_dir
