@@ -188,6 +188,25 @@ class Qwen3SiglipModelFlops(ModelFlopsBase):
         return (flops_qkvo + flops_ffn + attention) * 27 * 3 / 1e12
 
 
+from recovlm.tools.mfu.flops_counter import calculate_llm_flops_from_config, calculate_llm_flops_from_config
+class CustomModelFlops(ModelFlopsBase):
+    def __init__(self, base_model_dir, **kwargs):
+        self.base_model_dir = base_model_dir
+        max_len = kwargs["max_length"]
+        max_flops = self.llm_flops([max_len])
+        max_sample = kwargs.get("max_sample_num", 1000)
+        diff_ratio = kwargs.get("diff_ratio", 0.05)
+        flops_range = self.calculate_llm_flops_range(max_len, diff_ratio, max_sample)
+        print(f"CustomModelFlops range: {flops_range}")
+        self.kwargs = kwargs
+        super(CustomModelFlops, self).__init__(flops_range)
+
+    def llm_flops(self, seq_list: List[int]) -> float:
+        return calculate_llm_flops_from_config(self.base_model_dir, seq_list, None) / 1e12
+
+    def vit_flops(self, image_list: List[int]) -> float:
+        return calculate_llm_flops_from_config(self.base_model_dir, image_list, None) / 1e12
+
 
 def flops_diff(flops1, flops2):
     return (flops1[0] - flops2[0]) ** 2 + math.fabs(flops1[1] - flops2[1])
