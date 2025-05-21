@@ -214,6 +214,7 @@ class SiglipImageProcessor(BaseImageProcessor):
         self.merge_size = merge_size
         self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
         self.do_convert_rgb = do_convert_rgb
+        
     def mvit_rescale(
         self, image: Image.Image, merge_size: int = 2
     ) -> Image.Image:

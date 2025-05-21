@@ -195,7 +195,7 @@ class CustomModelFlops(ModelFlopsBase):
 
         import os
         import json
-        with open(os.path.join(self.base_model_dir, "config.json"), "r") as fp:
+        with open(os.path.join(self.base_model_config), "r") as fp:
             config = json.load(fp)
             self.arch = config["architectures"]
 
