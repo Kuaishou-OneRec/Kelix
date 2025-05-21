@@ -133,6 +133,7 @@ def merge_results(local_results_path, comm, rank, output_path, global_rank, data
             all_results = []
             total_ppl_sum = 0.0
             total_count = 0
+            total_correct_count = 0
             
             # 读取主进程的结果
             with open(local_results_path, 'r', encoding='utf-8') as f:
@@ -141,6 +142,8 @@ def merge_results(local_results_path, comm, rank, output_path, global_rank, data
                     if "total_ppl" in result:
                         total_ppl_sum += result["total_ppl"]
                         total_count += result.get("count", 1)
+                    if "correct_count" in result:
+                        total_correct_count += result["correct_count"]
                     all_results.append(line.strip())
             
             # 从其他进程收集结果
@@ -153,6 +156,8 @@ def merge_results(local_results_path, comm, rank, output_path, global_rank, data
                             if "total_ppl" in result:
                                 total_count += result["count"]
                                 total_ppl_sum = (total_count-result["count"])/total_count *total_ppl_sum +result["total_ppl"]*result["count"]/total_count
+                            if "correct_count" in result:
+                                total_correct_count += result["correct_count"]
                             all_results.append(result_str)
                 except Exception as e:
                     logging.error(f"Error receiving results from rank {i}: {e}")
@@ -163,7 +168,10 @@ def merge_results(local_results_path, comm, rank, output_path, global_rank, data
             final_output_path = f"{output_path}_{dataset_name}.jsonl"
             with open(final_output_path, 'w', encoding='utf-8') as f:
                 # 首先写入平均PPL
-                f.write(json.dumps({"average_ppl": total_ppl_sum, "total_samples": total_count}, ensure_ascii=False) + "\n")
+                if total_correct_count == 0:
+                    f.write(json.dumps({"average_ppl": total_ppl_sum, "total_samples": total_count,}, ensure_ascii=False) + "\n")
+                else:
+                    f.write(json.dumps({"average_ppl": total_ppl_sum, "total_samples": total_count, "correct_count": total_correct_count}, ensure_ascii=False) + "\n")
                 # 然后写入所有详细结果
                 for result in all_results:
                     f.write(result + '\n')
@@ -356,6 +364,7 @@ def main(_):
                 count = 1
                 total_ppl = 0
                 total_other_ppl = 0
+                correct_count = 0
                 for batch in tqdm(DataLoader(local_dataset,batch_size=FLAGS.batch_size,
                                         collate_fn=collate_fn),disable=rank != 0):  # Only rank 0 shows progress bar
                     # 存储该批次所有样本的所有生成结果
@@ -377,6 +386,7 @@ def main(_):
                                 loss = loss.view(shift_logits.size(0), -1)
 
                                 assistant_loss = loss[0, start_pos-1:end_pos]
+                                true_answer_loss = assistant_loss.mean()
                                 response_ppl = torch.exp(assistant_loss.mean())
                             except Exception as e:
                                 logging.warning(f"Error calculating PPL for position {start_pos}: {e}")
@@ -409,6 +419,8 @@ def main(_):
                                     continue
                                 #other_response_ppl_list.append(other_response_ppl)
                             other_response_loss_mean = sum(other_response_loss_list)/len(other_response_loss_list)
+                            if true_answer_loss < min(other_response_loss_list):
+                                correct_count += 1
                             other_response_ppl_mean = torch.exp(other_response_loss_mean)
                             print('response_ppl:', response_ppl, 'other_response_ppl_mean:', other_response_ppl_mean)
                             total_other_ppl = other_response_ppl_mean/count+total_other_ppl*(count-1)/count
@@ -421,7 +433,8 @@ def main(_):
                     "total_ppl": total_ppl,
                     "count": count-1,
                     "rank": rank,
-                    "total_other_ppl": total_other_ppl
+                    "total_other_ppl": total_other_ppl,
+                    "correct_count": correct_count
                 }
                 f.write(json.dumps(result, ensure_ascii=False) + "\n")
                 f.flush()
