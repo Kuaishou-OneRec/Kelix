@@ -104,11 +104,31 @@ class ModelFlopsBase(object):
     def vit_flops(self, image_list: List[int]) -> float:
         raise NotImplemented("vit_flops")
 
+    def calculate_llm_flops_range(self, maxlen, ratio, max_sample_num):
+        assert max_sample_num > 0
+        max_f = self.llm_flops([maxlen])
+        min_len_per_sample = int(maxlen // max_sample_num)
+        min_f = self.llm_flops([min_len_per_sample] * max_sample_num + [maxlen % max_sample_num])
+        flops = []
+        flops.append(max_f)
+        assert ratio < 1 and ratio > 0
+        flops_size = int(1 // ratio)
+        for i in range(flops_size):
+            next_f = int(flops[-1] * (1 - ratio))
+            if next_f < min_f:
+                break
+            flops.append(next_f)
+        return sorted(flops[1:])
+
 
 class InternVLChatModelFlops(ModelFlopsBase):
     def __init__(self, **kwargs):
-        flops_range = [185, 200, 225, 250]
-        self.kwargs = kwargs
+        max_len = kwargs["max_length"]
+        max_flops = self.llm_flops([max_len])
+        max_sample = kwargs.get("max_sample_num", 1000)
+        diff_ratio = kwargs.get("diff_ratio, 0.05")
+        flops_range = self.calculate_llm_flops_range(max_len, ratio_step, max_sample)
+        print(f"InternVLChatModelFlops range: {flops_range}")
         super(InternVLChatModelFlops, self).__init__(flops_range)
     
     def llm_flops(self, seq_list: List[int]) -> float:
@@ -133,8 +153,12 @@ class InternVLChatModelFlops(ModelFlopsBase):
 
 class Qwen3SiglipModelFlops(ModelFlopsBase):
     def __init__(self, **kwargs):
-        flops_range = [640, 670, 700, 740, 780]
-        # flops_range = [820, 840, 870, 910, 950, 1000]
+        max_len = kwargs["max_length"]
+        max_flops = self.llm_flops([max_len])
+        max_sample = kwargs.get("max_sample_num", 1000)
+        diff_ratio = kwargs.get("diff_ratio, 0.05")
+        flops_range = self.calculate_llm_flops_range(max_len, ratio_step, max_sample)
+        print(f"Qwen3SiglipModelFlops range: {flops_range}")
         self.kwargs = kwargs
         super(Qwen3SiglipModelFlops, self).__init__(flops_range)
     
