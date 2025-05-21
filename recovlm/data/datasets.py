@@ -2627,7 +2627,7 @@ class NaiveParquetDataset(IterableDataset):
 
             try:
               sample = self._parser(row, fn)
-              sample['epoch_idx'] = epoch_idx
+              sample['epoch_idx'] = torch.tensor(epoch_idx)
               if sample is not None:
                 yield sample
               offset_dict[fn_group_key] = row_idx
@@ -2696,7 +2696,7 @@ class NaiveParquetDataset(IterableDataset):
             for i, (_, row) in enumerate(all_rows.iterrows()):
                 try:
                   sample = self._parser(row, "tmp")
-                  sample['epoch_idx'] = row['epoch_idx']
+                  sample['epoch_idx'] = torch.tensor(row['epoch_idx'])
                   if sample is not None:
                     yield sample
 
@@ -2849,7 +2849,7 @@ class ParquetDataset(NaiveParquetDataset):
 
                 try:
                   sample = self._parser(row, fn)
-                  sample['epoch_idx'] = epoch_idx
+                  sample['epoch_idx'] = torch.tensor(epoch_idx)
                   if sample is not None:
                     # yield sample
                     self.sample_queue.put(sample)
