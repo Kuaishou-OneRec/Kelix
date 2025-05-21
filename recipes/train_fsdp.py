@@ -645,9 +645,9 @@ def train():
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
 
   if use_flops_balance:
-    # p = psutil.Process(os.getpid())
-    # p.cpu_affinity(cpu_bind[8:])
-    print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind[:]}")
+    p = psutil.Process(os.getpid())
+    p.cpu_affinity(cpu_bind[8:])
+    print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind[8:]}")
 
   ### initialize model parallel group
   initialize_model_parallel(args.sequence_parallel_size)
@@ -1300,6 +1300,7 @@ def train():
           global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
         
         torch.cuda.empty_cache()
+        gc.collect()
 
         with Timer("save checkpoint"):
           save_model_checkpoint(
