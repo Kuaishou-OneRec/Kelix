@@ -1317,7 +1317,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_grid_thw": packed_video_grid_thw,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32),
-      "epoch_idx": sum(epochs) / len(epochs),
+      "epoch_idx": torch.tensor([sum(epochs) / len(epochs)], dtype=torch.float32),
     }
 
     return inputs
@@ -3873,7 +3873,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       "image_flags":packed_image_flags,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32),
-      "epoch_idx": sum(epochs) / len(epochs),
+      "epoch_idx": torch.tensor([sum(epochs) / len(epochs)], dtype=torch.float32),
     }
     if packed_input_ids.flatten().shape[0] < packed_pixel_values.shape[0] * 256:
       print_input_info(inputs, "inputs111: ")

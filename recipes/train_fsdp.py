@@ -1058,7 +1058,7 @@ def train():
       sample_idx = batch["sample_idx"]
       position_ids = batch.get("position_ids", None)
       image_flags = batch.get("image_flags", None)
-      epoch_idx = np.mean(batch.get("epoch_idx", [0]))
+      epoch_idx = batch.get("epoch_idx", torch.tensor([0])).cpu().item()
 
       # 打印 token 数量
       if not use_flops_balance or True:
