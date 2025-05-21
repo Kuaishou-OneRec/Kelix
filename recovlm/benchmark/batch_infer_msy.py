@@ -415,6 +415,7 @@ def main(_):
                 print('==================================================')
                 # 先将tensor转换为float32，再转换为numpy数组
                 total_ppl = float(total_ppl.to(torch.float32).cpu().numpy())
+                total_other_ppl = float(total_other_ppl.to(torch.float32).cpu().numpy())
                 print('total_ppl:', total_ppl, 'rank:', rank, 'total_other_ppl:', total_other_ppl)
                 result = {
                     "total_ppl": total_ppl,
