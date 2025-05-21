@@ -188,7 +188,7 @@ class Qwen3SiglipModelFlops(ModelFlopsBase):
         return (flops_qkvo + flops_ffn + attention) * 27 * 3 / 1e12
 
 
-from tools.mfu.flops_counter import calculate_llm_flops_from_config, calculate_llm_flops_from_config
+from tools.mfu.flops_counter import calculate_llm_flops_from_config, calculate_vit_flops_from_config
 class CustomModelFlops(ModelFlopsBase):
     def __init__(self, base_model_config, **kwargs):
         self.base_model_config = base_model_config
@@ -213,7 +213,7 @@ class CustomModelFlops(ModelFlopsBase):
         return calculate_llm_flops_from_config(self.base_model_config, seq_list, None)['total_flops'] / 1e12
 
     def vit_flops(self, image_list: List[int]) -> float:
-        return calculate_llm_flops_from_config(self.base_model_config, image_list, None)['total_flops'] / 1e12
+        return calculate_vit_flops_from_config(self.base_model_config, image_list, None)['total_flops'] / 1e12
 
 
 def flops_diff(flops1, flops2):
@@ -343,6 +343,7 @@ def exchange_batch_info(samples, ds_list, m):
     elif isinstance(m, Qwen3SiglipModelFlops) or (
             isinstance(m, CustomModelFlops) and (
             m.arch == "Qwen3SiglipModel" or m.arch == "KeyeForConditionalGeneration" or m.arch == "Qwen3ForCausalLM")):
+        print("maaaaaaaa")
         image_len = []
         for s in samples:
             if "image_grid_thw" not in s:
