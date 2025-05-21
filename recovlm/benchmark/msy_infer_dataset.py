@@ -496,7 +496,7 @@ class MsyInferDataset(ParquetDataset):
         )
         input_ids = inputs["input_ids"]
         #如果数据集有choices 就遍历choices
-        if dataset_name in self.dataset_has_choices:
+        if self.dataset_name in self.dataset_has_choices:
           otheranswerlist=[]
           otherinputslist=[]
           truechoice = messages[1]["content"][0]["text"]
