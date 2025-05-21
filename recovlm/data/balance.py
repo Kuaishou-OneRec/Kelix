@@ -343,7 +343,6 @@ def exchange_batch_info(samples, ds_list, m):
     elif isinstance(m, Qwen3SiglipModelFlops) or (
             isinstance(m, CustomModelFlops) and (
             m.arch == "Qwen3SiglipModel" or m.arch == "KeyeForConditionalGeneration" or m.arch == "Qwen3ForCausalLM")):
-        print("maaaaaaaa")
         image_len = []
         for s in samples:
             if "image_grid_thw" not in s:
