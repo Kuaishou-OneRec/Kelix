@@ -2,7 +2,6 @@ from typing import Dict, Any, Union, Optional
 
 import contextlib
 import gc
-gc.disable()
 import argparse
 import time
 import datetime
