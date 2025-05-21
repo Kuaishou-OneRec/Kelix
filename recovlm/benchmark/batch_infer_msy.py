@@ -384,7 +384,7 @@ def main(_):
                         
                             total_ppl = response_ppl/count+total_ppl*(count-1)/count
                             count += 1
-                            print('response_ppl:', response_ppl)
+
                             otherinputslist = batch["otherinputslist"][idx]
                             other_response_ppl_list = []
                             for otherinput in otherinputslist:
@@ -408,7 +408,7 @@ def main(_):
                                     continue
                                 other_response_ppl_list.append(other_response_ppl)
                             other_response_ppl_mean = sum(other_response_ppl_list)/len(other_response_ppl_list)
-                            print('other_response_ppl_mean:', other_response_ppl_mean)
+                            print('response_ppl:', response_ppl, 'other_response_ppl_mean:', other_response_ppl_mean)
                             total_other_ppl = other_response_ppl_mean/count+total_other_ppl*(count-1)/count
                 print('==================================================')
                 # 先将tensor转换为float32，再转换为numpy数组
