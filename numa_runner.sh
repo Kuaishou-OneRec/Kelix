@@ -32,4 +32,3 @@ numa_id=$(($local_rank / $ranks_per_numa))
 # 
 # numactl --all -m $numa_id -C $cores $@
 numactl --all -m $numa_id -N $numa_id $@
-
