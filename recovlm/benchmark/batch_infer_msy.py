@@ -370,6 +370,7 @@ def main(_):
                     # 存储该批次所有样本的所有生成结果
                     with torch.no_grad():
                         for idx in range(len(batch["inputs"])):
+                            correct_flag = False
                             answer_idx_list = batch["answer_idx_list"][idx]
                             inputs = batch["inputs"][idx].to(torch.cuda.current_device())
                             input_ids = inputs["input_ids"]
@@ -421,8 +422,9 @@ def main(_):
                             other_response_loss_mean = sum(other_response_loss_list)/len(other_response_loss_list)
                             if true_answer_loss < min(other_response_loss_list):
                                 correct_count += 1
+                                correct_flag = True
                             other_response_ppl_mean = torch.exp(other_response_loss_mean)
-                            print('response_ppl:', response_ppl, 'other_response_ppl_mean:', other_response_ppl_mean)
+                            print('response_ppl:', response_ppl, 'other_response_ppl_mean:', other_response_ppl_mean, 'correct_flag:', correct_flag)
                             total_other_ppl = other_response_ppl_mean/count+total_other_ppl*(count-1)/count
                 print('==================================================')
                 # 先将tensor转换为float32，再转换为numpy数组
