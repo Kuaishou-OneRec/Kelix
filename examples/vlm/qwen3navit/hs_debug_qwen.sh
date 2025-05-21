@@ -118,7 +118,7 @@ nohup mpirun --allow-run-as-root \
                 --output_dir $OUTPUT_DIR \
                 --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_8B256.json \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
-		--allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
+		--allow_random_init_params "mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias" \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --max_length 15000 \
@@ -138,7 +138,7 @@ nohup mpirun --allow-run-as-root \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
-                --comment '$comment' \
+                --comment "$comment" \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
