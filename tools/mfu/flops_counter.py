@@ -496,7 +496,7 @@ def extract_model_params(config_path):
         }
         vision_params = {k: v for k, v in vision_params.items() if v is not None}
     
-    return transformer_params, vision_params
+    return easydict.EasyDict(transformer_params), easydict.EasyDict(vision_params)
     
 
 
