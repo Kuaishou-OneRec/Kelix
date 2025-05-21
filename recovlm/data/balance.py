@@ -199,6 +199,7 @@ class CustomModelFlops(ModelFlopsBase):
             config = json.load(fp)
             self.arch = config["architectures"]
 
+        print(f"self.arch={self.arch}")
         max_len = kwargs["max_length"]
         max_flops = self.llm_flops([max_len])
         max_sample = kwargs.get("max_sample_num", 1000)
@@ -336,7 +337,6 @@ def exchange_batch_info(samples, ds_list, m):
     assert len(ds_list) == len(samples)
     N = len(samples)
     input_len = [s["input_ids"].shape[-1] for s in samples]
-    
     if isinstance(m, InternVLChatModelFlops) or (
             isinstance(m, CustomModelFlops) and m == "InternVLChatModel"):
         image_len = [s["pixel_values"].size(0) for s in samples]
