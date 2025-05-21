@@ -4185,7 +4185,7 @@ class BalanceParquetDataset(IterableDataset):
     image_pad_len = getattr(self.input, "image_pad_len", 0)
     # self.fm = balance.get_flops_model(self.model_type, max_length=(self.input.max_length - image_pad_len))
     from recovlm.data.balance import CustomModelFlops
-    self.fm = CustomModelFlops(base_model_dir=self.base_model_dir, max_length=(self.input.max_length - image_pad_len))
+    self.fm = CustomModelFlops(base_model_dir=os.path.join(self.base_model_dir, "config.json"), max_length=(self.input.max_length - image_pad_len))
 
     self.sample_queue = queue.Queue(maxsize=32)
     def reader_task():
