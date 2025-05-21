@@ -1638,7 +1638,7 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
                pad_token_id: int = 151643,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
-               process_vision_info_args={"image_factor":None},
+               process_vision_info_args={"image_factor":32},
                **kwargs
                ):
     """
@@ -1664,6 +1664,7 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
       pad_token_id = model_config.pad_token_id
 
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
+
     self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
@@ -1742,7 +1743,7 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
                pad_token_id: int = 151643,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
-               process_vision_info_args={"image_factor": None},
+               process_vision_info_args={"image_factor": 32},
                **kwargs
                ):
     """
