@@ -2,6 +2,7 @@ from typing import Dict, Any, Union, Optional
 
 import contextlib
 import gc
+gc.disable()
 import argparse
 import time
 import datetime
@@ -559,8 +560,8 @@ class TokenStats:
 
 
 def data_func(name, dataset_config, batch_queue, cpu_bind):
-  # p = psutil.Process(os.getpid())
-  # p.cpu_affinity(cpu_bind)
+  p = psutil.Process(os.getpid())
+  p.cpu_affinity(cpu_bind)
   master_port = int(os.environ["MASTER_PORT"]) + 1
   os.environ["MASTER_PORT"] = str(master_port)
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
@@ -646,7 +647,7 @@ def train():
   if use_flops_balance:
     # p = psutil.Process(os.getpid())
     # p.cpu_affinity(cpu_bind[8:])
-    print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind[8:]}")
+    print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind[:]}")
 
   ### initialize model parallel group
   initialize_model_parallel(args.sequence_parallel_size)
