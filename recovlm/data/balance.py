@@ -338,11 +338,11 @@ def exchange_batch_info(samples, ds_list, m):
     N = len(samples)
     input_len = [s["input_ids"].shape[-1] for s in samples]
     if isinstance(m, InternVLChatModelFlops) or (
-            isinstance(m, CustomModelFlops) and m == "InternVLChatModel"):
+            isinstance(m, CustomModelFlops) and m.arch == "InternVLChatModel"):
         image_len = [s["pixel_values"].size(0) for s in samples]
     elif isinstance(m, Qwen3SiglipModelFlops) or (
             isinstance(m, CustomModelFlops) and (
-            m.arch == "Qwen3SiglipModel" or m == "KeyeForConditionalGeneration" or m == "Qwen3ForCausalLM")):
+            m.arch == "Qwen3SiglipModel" or m.arch == "KeyeForConditionalGeneration" or m.arch == "Qwen3ForCausalLM")):
         image_len = []
         for s in samples:
             if "image_grid_thw" not in s:
