@@ -383,6 +383,13 @@ def calculate_llm_flops_from_config(config_path, seq_len, batch_size):
     return calculate_llm_flops(llm_params)
 
 
+def calculate_vit_flops_from_config(config_path, seq_len, batch_size):
+    vit_params = extract_model_params(config_path)[1]
+    vit_params.seq_len = seq_len
+    vit_params.batch_size = batch_size
+    return calculate_vit_flops(vit_params)
+
+
 @lru_cache(maxsize=32)
 def extract_model_params(config_path):
     """
@@ -729,8 +736,7 @@ def demo_intern_vl():
     print(format_dict_or_list(mfu))
     print(mfu['mfu'])
 
-
-    print(caclculate_vit_flops_from_config('/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/internvl3_2b.json'))
+    print(calculate_vit_flops_from_config('/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/internvl3_2b.json'))
 
 if __name__=='__main__':
     demo_intern_vl()
