@@ -127,7 +127,7 @@ class InternVLChatModelFlops(ModelFlopsBase):
         max_flops = self.llm_flops([max_len])
         max_sample = kwargs.get("max_sample_num", 1000)
         diff_ratio = kwargs.get("diff_ratio, 0.05")
-        flops_range = self.calculate_llm_flops_range(max_len, ratio_step, max_sample)
+        flops_range = self.calculate_llm_flops_range(max_len, diff_ratio, max_sample)
         print(f"InternVLChatModelFlops range: {flops_range}")
         super(InternVLChatModelFlops, self).__init__(flops_range)
     
@@ -157,7 +157,7 @@ class Qwen3SiglipModelFlops(ModelFlopsBase):
         max_flops = self.llm_flops([max_len])
         max_sample = kwargs.get("max_sample_num", 1000)
         diff_ratio = kwargs.get("diff_ratio, 0.05")
-        flops_range = self.calculate_llm_flops_range(max_len, ratio_step, max_sample)
+        flops_range = self.calculate_llm_flops_range(max_len, diff_ratio, max_sample)
         print(f"Qwen3SiglipModelFlops range: {flops_range}")
         self.kwargs = kwargs
         super(Qwen3SiglipModelFlops, self).__init__(flops_range)
