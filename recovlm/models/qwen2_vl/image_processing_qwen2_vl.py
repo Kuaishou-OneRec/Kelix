@@ -1281,3 +1281,8 @@ class Qwen2VLImageProcessor_Navit(Qwen2VLImageProcessor_siglip):
 
 
     
+
+
+
+bash run_eval_scripts/run_more_eval/eval_custom.sh config/config256_more_navit.json /mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_data_0.3.2/0.8.0/201/2b/ /llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip > /mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_data_0.3.2/0.8.0/201/2b/eval.out 2>&1 &
+bash run_eval_scripts/run_more_eval/eval_custom.sh config/config256_more_navit.json /mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_data_0.3.2/0.8.0/202/2b/ /llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip > /mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_data_0.3.2/0.8.0/202/2b/eval.out 2>&1 &
