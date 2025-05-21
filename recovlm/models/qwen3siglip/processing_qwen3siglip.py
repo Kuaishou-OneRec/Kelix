@@ -446,7 +446,7 @@ class Qwen3SiglipProcessor_siglip(ProcessorMixin):
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
         #self.image_processor = KimiVLImageProcessor_for_qwen3siglip()
-        self.image_processor = Qwen2VLImageProcessor_Navit()
+        self.image_processor = Qwen2VLImageProcessor_siglip()
 
     def __call__(
         self,

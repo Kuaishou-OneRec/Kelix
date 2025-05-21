@@ -170,7 +170,6 @@ with set_default_dtype(torch.bfloat16):
 
 
 def debug_model_inference(model):
-    # processor = Qwen2VLProcessor.from_pretrained(MODEL_DIR)
     MODEL_DIR2="/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip"
     processor = Qwen3SiglipProcessor_siglip.from_pretrained(MODEL_DIR2)
     messages = [
@@ -179,55 +178,114 @@ def debug_model_inference(model):
             "content": [
                 {"type": "text", "text": "Give me a short introduction to large language model."},
             ],
+        },
+        {
+            "role": "assistant",
+            "content":[
+                {
+                  "type":"text",
+                  "text":"A large language model (LLM) is an AI system lalallallalal alal al a a ll alla l al la l a"
+                }
+            ]
         }
+        # {
+        #     "role": "user",
+        #     "content": [
+        #         {"type": "text", "text": "What are its main applications?"},
+        #     ],
+        # },
+        # {
+        #     "role": "assistant",
+        #     "content":[
+        #         {
+        #           "type":"text",
+        #           "text":"LLMs are used for tasks like text generation, translation, summarization, and question answering."
+        #         }
+        #     ]
+        # }
     ]
-    # Preparation for inference
+    
+    # Get the full conversation text
     text = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True
     )
-    # image_inputs, video_inputs = process_vision_info(messages)
     
+    # Tokenize the full conversation
     inputs = processor(
         text=[text],
         padding=True,
         return_tensors="pt",
     )
-    print_rank_0(inputs)
+    
+    # Move to GPU
     inputs = inputs.to(torch.cuda.current_device())
     model = model.to(torch.cuda.current_device())
 
-
-    # print_input_info({
-    #     "inputs": inputs,
-    # })
-    # print_rank_0("=" * 100)
-
-    output = model(**inputs)
-    print_rank_0("output")
-    logits = output.logits
-    print_rank_0(logits , logits.shape)
-    # Convert BFloat16 tensor to float32 before numpy conversion
-    # logits_np = logits.detach().cpu().float().numpy().tolist()
-    # json.dump(logits_np, open("logits8B-siglip.json", "w"))
-    # generated_ids = model.generate(**inputs, max_new_tokens=128)
-    # generated_ids_trimmed = [
-    #     out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
-    # ]
-    # output_text = processor.batch_decode(
-    #     generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
-    # )
-    # print_rank_0(output_text)
-    # #print_rank_0(output)
+    # Get model outputs
+    with torch.no_grad():
+        outputs = model(**inputs)
     
-    exit()
-    generation_config = GenerationConfig(
-    max_new_tokens=128,
-    do_sample=True,
-    top_p=0.95,
-    temperature=0.7,
-    )
-
-
-
+    # Get the logits and input ids
+    logits = outputs.logits
+    input_ids = inputs["input_ids"]
+    
+    # Find all assistant responses in the messages
+    assistant_responses = []
+    for i, msg in enumerate(messages):
+        if msg["role"] == "assistant":
+            assistant_responses.append({
+                "text": msg["content"][0]["text"],
+                "index": i
+            })
+    
+    # Calculate PPL for each assistant response
+    total_ppl = 0
+    for assistant_response in assistant_responses:
+        # Get assistant's response text
+        assistant_text = assistant_response["text"]
+        
+        # Tokenize the assistant's response
+        assistant_tokens = processor(
+            text=[assistant_text],
+            padding=True,
+            return_tensors="pt",
+        )["input_ids"][0]
+        assistant_tokens = assistant_tokens.to(torch.cuda.current_device())
+        
+        # Find the start position of this assistant's response in the full sequence
+        assistant_start_pos = None
+        for i in range(len(input_ids[0]) - len(assistant_tokens)):
+            if torch.all(input_ids[0][i:i+len(assistant_tokens)] == assistant_tokens):
+                assistant_start_pos = i
+                break
+        
+        if assistant_start_pos is None:
+            print_rank_0(f"Could not find assistant's response in the sequence: {assistant_text}")
+            continue
+        
+        # Calculate PPL for this assistant's response
+        shift_logits = logits[..., :-1, :].contiguous()
+        shift_labels = input_ids[..., 1:].contiguous()
+        
+        # Calculate loss
+        loss_fct = torch.nn.CrossEntropyLoss(reduction='none')
+        loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+        loss = loss.view(shift_logits.size(0), -1)
+        
+        # Calculate PPL for this response
+        assistant_loss = loss[0, assistant_start_pos-1:assistant_start_pos+len(assistant_tokens)-1]
+        response_ppl = torch.exp(assistant_loss.mean())
+        
+        print_rank_0(f"\nAssistant response {assistant_response['index']}: {assistant_text}")
+        print_rank_0(f"Perplexity: {response_ppl.item():.4f}")
+        
+        total_ppl += response_ppl.item()
+    
+    # Calculate average PPL across all responses
+    avg_ppl = total_ppl / len(assistant_responses)
+    print_rank_0(f"\nFull conversation: {text}")
+    print_rank_0(f"Average Perplexity across all responses: {avg_ppl:.4f}")
+    
+    return avg_ppl
 
 debug_model_inference(model)
