@@ -4021,7 +4021,7 @@ class BalanceParquetDataset(IterableDataset):
     with open(os.path.join(self.base_model_dir, "config.json"), "r") as fp:
       config = json.load(fp)
       self.arch = config["architectures"][0]
-    
+
   def _process_task(self):
     while True:
       sample = self.sample_queue.get()
@@ -4193,7 +4193,6 @@ class BalanceParquetDataset(IterableDataset):
       packed_inputs["num_samples"] = step_info[0]
       packed_inputs["num_tokens"] = step_info[1]
       packed_inputs["num_image_tokens"] = step_info[2]
-      
       self._result_buf.put(packed_inputs)
 
   def __iter__(self):
