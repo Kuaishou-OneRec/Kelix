@@ -1164,7 +1164,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       else:
         raise NotImplementedError(
             f"Unsupported dataset format `{data_format}`")
-
+      inputs['epoch_idx'] = sample['epoch_idx']
       if not inputs:
         raise ValueError("Empty inputs, skip")
 
@@ -2267,6 +2267,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
       if data_format == "chatml":
         chosen_inputs = self._process_chat(sample, "chosen", source_conf)
         rejected_inputs = self._process_chat(sample, "rejected", source_conf)
+        inputs['epoch_idx'] = sample['epoch_idx']
         inputs = {
           "chosen_input": chosen_inputs,
           "rejected_input": rejected_inputs,
@@ -3684,6 +3685,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       else:
         raise NotImplementedError(
             f"Unsupported dataset format `{data_format}`")
+      inputs['epoch_idx'] = sample['epoch_idx']
 
       if not inputs:
         raise ValueError("Empty inputs, skip")
