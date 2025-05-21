@@ -4176,7 +4176,7 @@ class BalanceParquetDataset(IterableDataset):
             print(f"rank=0, step_stats={stats}")
           
           if dist.get_rank() == 0:
-            print_input_info(inputs, "xxx")
+            print_input_info(inputs, f"is_local{is_local}")
           self._balance_buf.put((inputs, data_source, [stats[0], stats[1], stats[2]]))
         for sends in send_out:
           for idx in sends:
