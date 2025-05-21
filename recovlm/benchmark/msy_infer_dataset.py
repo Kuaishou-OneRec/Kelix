@@ -338,6 +338,7 @@ def MMBenchTransform(sample) -> list:
   answer = sample['answer']
   hint = sample['hint'] if sample['hint'] else 'N/A'
   question = sample['question']
+  multiple_choices = ['A', 'B', 'C', 'D','E','F','G','H']
 
   # choices = sample['choices']
   # choice_list = []
