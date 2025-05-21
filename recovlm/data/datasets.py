@@ -4155,8 +4155,7 @@ class BalanceParquetDataset(IterableDataset):
               ds = sample.pop("__ds__")
               data_source.append(ds)
             inputs = selected
-          stats = balance.exchange_batch_info(inputs, data_source, # self.fm, 
-                                              self.arch)
+          stats = balance.exchange_batch_info(inputs, data_source, self.fm)
           if self.rank == 0:
             print(f"rank=0, step_stats={stats}")
           self._balance_buf.put((inputs, data_source, [stats[0], stats[1], stats[2]]))

@@ -98,7 +98,7 @@ def gpu_flops():
     else:
         return 312e12
 
-def calculate_decoder_flops_v1(num_head, head_dim, hidden_size, intermediate_size, kv_heads=None, is_causal=False, seq_len=1, batch_size=1, linear_factor=2, ffn_layers=2):
+def calculate_decoder_flops_v1(num_head, head_dim, hidden_size, intermediate_size, kv_heads=None, is_causal=False, seq_len=1, batch_size=1, linear_factor=2, attn_output_layers=2):
     """
     计算Transformer解码器层的FLOPs
     
@@ -147,7 +147,7 @@ def calculate_decoder_flops_v1(num_head, head_dim, hidden_size, intermediate_siz
     attn_v_flops = attn_scores_flops
 
     # 注意力输出投影 (不受batch_size影响)
-    attn_out_flops = linear_factor * s_seq_len * (num_head * head_dim) * hidden_size * ffn_layers
+    attn_out_flops = linear_factor * s_seq_len * (num_head * head_dim) * hidden_size * attn_output_layers
     
     # 注意力总FLOPs
     attention_flops = q_flops + k_flops + v_flops + attn_scores_flops + attn_v_flops + attn_out_flops
@@ -189,7 +189,7 @@ import easydict
 
 def calculate_decoder_layers_flops(num_head, head_dim, hidden_size, intermediate_size,
                                  kv_heads=None, is_causal=False, seq_len=1, num_layers=1,
-                                 linear_factor=2, batch_size=1, ffn_layers=2):
+                                 linear_factor=2, batch_size=1, attn_output_layers=2):
     """
     计算多层Transformer解码器的FLOPs
     
@@ -222,7 +222,7 @@ def calculate_decoder_layers_flops(num_head, head_dim, hidden_size, intermediate
             seq_len=seq_len,
             linear_factor=linear_factor,
             batch_size=batch_size,
-            ffn_layers=ffn_layers
+            attn_output_layers=attn_output_layers
         )
         layers_flops.append({
             'layer_index': layer_idx,
@@ -285,7 +285,7 @@ def calculate_vlm_flops(vit_params, llm_params, linear_factor=2, _gpu_flops=None
         seq_len=vit_params.seq_len,
         batch_size=vit_params.get('batch_size', 1),
         linear_factor=linear_factor,
-        ffn_layers=2
+        attn_output_layers=2
     )
 
     vit2llm_flops = linear_factor * s(vit_params.seq_len) * (vit_params.hidden_size * llm_params.hidden_size + llm_params.hidden_size * llm_params.hidden_size)
@@ -304,7 +304,7 @@ def calculate_vlm_flops(vit_params, llm_params, linear_factor=2, _gpu_flops=None
         seq_len=llm_params.seq_len,
         batch_size=llm_params.get('batch_size', 1),
         linear_factor=linear_factor,
-        ffn_layers=3
+        attn_output_layers=3
     )
     
     lm_head_flops = linear_factor * s(llm_params.seq_len) * (llm_params.hidden_size * llm_params.vocab_size)
@@ -341,7 +341,7 @@ def calculate_vit_flops(vit_params):
         seq_len=vit_params.seq_len,
         batch_size=vit_params.get('batch_size', 1),
         linear_factor=linear_factor,
-        ffn_layers=2
+        attn_output_layers=2
     )
 
     vit2llm_flops = linear_factor * s(vit_params.seq_len) * (vit_params.hidden_size * llm_params.hidden_size + llm_params.hidden_size * llm_params.hidden_size)
@@ -367,7 +367,7 @@ def calculate_llm_flops(llm_params):
         seq_len=llm_params.seq_len,
         batch_size=llm_params.get('batch_size', 1),
         linear_factor=linear_factor,
-        ffn_layers=3
+        attn_output_layers=3
     )
     
     lm_head_flops = linear_factor * s(llm_params.seq_len) * (llm_params.hidden_size * llm_params.vocab_size)

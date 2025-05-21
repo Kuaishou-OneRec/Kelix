@@ -192,6 +192,13 @@ from tools.mfu.flops_counter import calculate_llm_flops_from_config, calculate_l
 class CustomModelFlops(ModelFlopsBase):
     def __init__(self, base_model_config, **kwargs):
         self.base_model_config = base_model_config
+
+        import os
+        import json
+        with open(os.path.join(self.base_model_dir, "config.json"), "r") as fp:
+            config = json.load(fp)
+            self.arch = config["architectures"]
+
         max_len = kwargs["max_length"]
         max_flops = self.llm_flops([max_len])
         max_sample = kwargs.get("max_sample_num", 1000)
@@ -329,9 +336,13 @@ def exchange_batch_info(samples, ds_list, m):
     assert len(ds_list) == len(samples)
     N = len(samples)
     input_len = [s["input_ids"].shape[-1] for s in samples]
-    if isinstance(m, InternVLChatModelFlops) or m == "InternVLChatModel":
+    
+    if isinstance(m, InternVLChatModelFlops) or (
+            isinstance(m, CustomModelFlops) and m == "InternVLChatModel"):
         image_len = [s["pixel_values"].size(0) for s in samples]
-    elif isinstance(m, Qwen3SiglipModelFlops) or m == "Qwen3SiglipModel" or m == "KeyeForConditionalGeneration" or m == "Qwen3ForCausalLM":
+    elif isinstance(m, Qwen3SiglipModelFlops) or (
+            isinstance(m, CustomModelFlops) and (
+            m.arch == "Qwen3SiglipModel" or m == "KeyeForConditionalGeneration" or m == "Qwen3ForCausalLM")):
         image_len = []
         for s in samples:
             if "image_grid_thw" not in s:
