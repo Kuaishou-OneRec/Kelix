@@ -237,6 +237,10 @@ def mmstarTransform(sample) -> list:
         {
           "type": "text",
           "text": question
+        },
+        {
+          "type": "text",
+          "text": "\n Answer with the letter."
         }
       ]
     },
@@ -309,6 +313,10 @@ def MMETransform(sample) -> list:
         {
           "type": "text",
           "text": question
+        },
+        {
+          "type": "text",
+          "text": "\n Answer with the letter."
         }
       ]
     },
@@ -330,7 +338,6 @@ def MMBenchTransform(sample) -> list:
   answer = sample['answer']
   hint = sample['hint'] if sample['hint'] else 'N/A'
   question = sample['question']
-  multiple_choices = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
 
   # choices = sample['choices']
   # choice_list = []
@@ -357,6 +364,10 @@ def MMBenchTransform(sample) -> list:
                   "type": "text", 
                   "text": prompt
               },
+              {
+                "type": "text",
+                "text": "\n Answer with the letter."
+              }
           ]
 
       },
@@ -437,7 +448,8 @@ class MsyInferDataset(ParquetDataset):
         self.processor = None
     else:
       self.processor = None
-      
+    self.dataset_has_choices = ['MMBench','MMBenchCn','MMTBench','MMStar','AI2D','AI2D_no_mask']
+    self.choices_list = ['A', 'B', 'C', 'D']
     self.model_name_or_path = model_name_or_path
     self.max_text_len = max_text_len
     self.max_frames = max_frames
@@ -469,7 +481,7 @@ class MsyInferDataset(ParquetDataset):
           tokenize=False,
           add_generation_prompt=True
         )
-        image_inputs, video_inputs = process_vision_info(messages)
+        image_inputs, video_inputs = process_vision_info(messages,image_factor=None)
         mm_data = {}
         if image_inputs is not None:
           mm_data["images"] = image_inputs
@@ -482,7 +494,28 @@ class MsyInferDataset(ParquetDataset):
           return_tensors="pt",
         )
         input_ids = inputs["input_ids"]
-        
+        #如果数据集有choices 就遍历choices
+        if dataset_name in self.dataset_has_choices:
+          otheranswerlist=[]
+          otherinputslist=[]
+          truechoice = messages[1]["content"][0]["text"]
+          for c in self.choices_list:
+            if c != truechoice:
+              otheranswerlist.append(c)
+          for c in otheranswerlist:
+            messages[1]["content"][0]["text"] = c
+            text = self.processor.apply_chat_template(
+              messages,
+              tokenize=False,
+              add_generation_prompt=True
+            )
+            inputsother = self.processor(
+              text=[text],
+              **mm_data,
+              padding=True,
+              return_tensors="pt",
+            )
+            otherinputslist.append(inputsother)
         answer_idx_list = []
         # 将tensor转换为list以便使用index方法
         input_ids_list = input_ids[0].tolist()
@@ -518,11 +551,18 @@ class MsyInferDataset(ParquetDataset):
             # 如果没有找到任何有效的起始位置，跳过这个样本
             logging.warning("No valid start positions found, skipping sample")
             continue
-            
-        yield {
-          "inputs": inputs,
-          "answer_idx_list": answer_idx_list
-        }
+        if dataset_name in self.dataset_has_choices:
+          yield {
+            "inputs": inputs,
+            "answer_idx_list": answer_idx_list,
+            "otherinputslist": otherinputslist
+          }
+        else:
+          yield {
+            "inputs": inputs,
+            "answer_idx_list": answer_idx_list
+          }
+
         
       except Exception as e:
         import traceback
@@ -554,8 +594,7 @@ if __name__ == "__main__":
     for idx, item in enumerate(batch):
       print("Item type:", type(item))
       print("Item contents:", item)
-      if isinstance(item, dict):
-        print("Inputs:", item.get('inputs'))
-      else:
-        print("Item is not a dictionary:", item)
+      print("Inputs:", item.get('inputs'))
+      print("answer_idx_list:", item.get('answer_idx_list'))
+      print("otherinputslist:", item.get('otherinputslist'))
     break

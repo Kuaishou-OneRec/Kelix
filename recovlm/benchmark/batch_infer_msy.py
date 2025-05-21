@@ -279,6 +279,7 @@ def main(_):
         "infoVQA":"/llm_reco_ssd/luoxinchen/dataset/infoVQA/human_download/infographicsvqa_qas/reconstruct_val.parquet",
         "RealWorldQA":"/llm_reco_ssd/luoxinchen/dataset/RealWorldQA/RealWorldQA/data/merge/test-00000-of-00001.parquet"
     }
+    dataset_has_choices=['MMBench','MMBenchCn','MMTBench','MMStar','AI2D','AI2D_no_mask']
     with set_default_dtype(torch.bfloat16):
         llm = Qwen3SiglipForConditionalGeneration_navit.from_pretrained(
             FLAGS.model_name_or_path,
