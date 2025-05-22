@@ -15,8 +15,8 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile  | head -n 1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip/
-OUTPUT_DIR=/llm_reco/lingzhixin/output/qwen3navit/hs_balance/0.1.0/2B256/
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip/
+OUTPUT_DIR=/llm_reco/lingzhixin/output/qwen3navit/hs_balance/0.2.0/8B256/
 
 mkdir -p $OUTPUT_DIR
 
@@ -121,7 +121,7 @@ nohup mpirun --allow-run-as-root \
 		        --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 20000 \
+                --max_length 15000 \
                 --learning_rate 1e-6 \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
