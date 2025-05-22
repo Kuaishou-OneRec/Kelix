@@ -141,6 +141,7 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     """
     # 创建一个新的图像对象
     image = Image.new('RGB', size, color=(255, 255, 255))
+    print(image)
     draw = ImageDraw.Draw(image)
     # 计算圆的坐标（图像中心为圆心）
     x_center, y_center = size[0] // 2, size[1] // 2
@@ -175,6 +176,8 @@ def make_inputs(a,b):
         messages, tokenize=False, add_generation_prompt=False
     )
     image_inputs, video_inputs = process_vision_info(messages, image_factor=None)
+    print(processor.image_processor.max_pixels)
+    #print(processor.image_processor.width)
 
     inputs = processor(
         text=[text],
@@ -183,7 +186,12 @@ def make_inputs(a,b):
         padding=True,
         return_tensors="pt",
     )
+    print(inputs)
+    print((inputs['input_ids'] == 151655).sum())
     return messages, inputs
+
+
+messages, inputs = make_inputs(3000,3000); exit()
 
 
 def load_from_full_model_state_dict(model, full_sd: Dict[str, Any], allow_random_init_params="mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias"):
@@ -243,7 +251,7 @@ if 1:
 
             # load_from_full_model_state_dict(model, load_hf_checkpoint("/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2"))
             # model = model.cuda()
-            messages, inputs = make_inputs(100,100)
+            
             for k in inputs: inputs[k] = inputs[k].cuda()
 
             generated = model.generate(**inputs, max_new_tokens=32768)

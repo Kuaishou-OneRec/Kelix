@@ -117,8 +117,8 @@ def smart_resize(
     """
     #if height < factor or width < factor:
     #    raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    if int(height < factor//4) + int(width < factor//4):
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor//4}")
+    # if int(height < factor//4) + int(width < factor//4):
+    #     raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor//4}")
 
     if height < factor:
         print(f"smart_resize: height={height} < factor={factor}, reset height=factor")

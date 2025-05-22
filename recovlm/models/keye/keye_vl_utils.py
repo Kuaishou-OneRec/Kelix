@@ -25,14 +25,14 @@ import os.path as osp
 
 logger = logging.getLogger(__name__)
 
-IMAGE_FACTOR = 28
-MIN_PIXELS = 4 * 28 * 28
-MAX_PIXELS = 16384 * 28 * 28
+IMAGE_FACTOR = 32
+MIN_PIXELS = 4 * 32 * 32
+MAX_PIXELS = 16384 * 32 * 32
 MAX_RATIO = 200
 
-VIDEO_MIN_PIXELS = 128 * 28 * 28
-VIDEO_MAX_PIXELS = 768 * 28 * 28
-VIDEO_TOTAL_PIXELS = 24576 * 28 * 28
+VIDEO_MIN_PIXELS = 128 * 32 * 32
+VIDEO_MAX_PIXELS = 768 * 32 * 32
+VIDEO_TOTAL_PIXELS = 24576 * 32 * 32
 FRAME_FACTOR = 2
 FPS = 2.0
 FPS_MIN_FRAMES = 4
@@ -66,8 +66,8 @@ def smart_resize(
 
     3. The aspect ratio of the image is maintained as closely as possible.
     """
-    # if int(height < factor//4) + int(width < factor//4) != 0:
-    #   raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor//4}")
+    # if int(height < factor//4) + int(width < factor//4):
+    #     raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor//4}")
 
     if max(height, width) / min(height, width) > MAX_RATIO:
         raise ValueError(
@@ -108,32 +108,6 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
     if image_obj is None:
         raise ValueError(f"Unrecognized image input, support local path, http url, base64 and PIL.Image, got {image}")
     image = image_obj.convert("RGB")
-
-    # no resize, 这个脚本的resize factor写死了28。 qwen走这支没问题（只会resize一次），如果是siglip走这个resize，可能会损失分辨率。
-    # 比如123的图片会resize到112，再到96，会损失一定的分辨率。
-    if size_factor is None: 
-        return image
-
-    ## resize
-    if "resized_height" in ele and "resized_width" in ele:
-        resized_height, resized_width = smart_resize(
-            ele["resized_height"],
-            ele["resized_width"],
-            factor=size_factor,
-        )
-    else:
-        width, height = image.size
-        min_pixels = ele.get("min_pixels", MIN_PIXELS)
-        max_pixels = ele.get("max_pixels", MAX_PIXELS)
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=size_factor,
-            min_pixels=min_pixels,
-            max_pixels=max_pixels,
-        )
-    image = image.resize((resized_width, resized_height))
-
     return image
 
 
@@ -381,7 +355,6 @@ def process_vision_info(
                     path = path.replace("480p_60s_4fps_v2", "480p_60s_4fps_0215_0316/{}".format(post))
                 vision_info["video"] = path
             video_inputs.append(fetch_video(vision_info, image_factor))
-
         else:
             raise ValueError("image, image_url or video should in content.")
     if len(image_inputs) == 0:

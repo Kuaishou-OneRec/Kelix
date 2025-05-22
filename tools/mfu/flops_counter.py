@@ -343,10 +343,9 @@ def calculate_vit_flops(vit_params):
         linear_factor=linear_factor,
         attn_output_layers=2
     )
-
-    vit2llm_flops = linear_factor * s(vit_params.seq_len) * (vit_params.hidden_size * llm_params.hidden_size + llm_params.hidden_size * llm_params.hidden_size)
-    vit_flops['total_flops'] += vit2llm_flops
-    vit_flops['vit2llm_flops'] = vit2llm_flops
+    #vit2llm_flops = linear_factor * s(vit_params.seq_len) * (vit_params.hidden_size * llm_params.hidden_size + llm_params.hidden_size * llm_params.hidden_size)
+    #vit_flops['total_flops'] += vit2llm_flops
+    #vit_flops['vit2llm_flops'] = vit2llm_flops
     return vit_flops
 
 
@@ -381,6 +380,13 @@ def calculate_llm_flops_from_config(config_path, seq_len, batch_size):
     llm_params.seq_len = seq_len
     llm_params.batch_size = batch_size
     return calculate_llm_flops(llm_params)
+
+
+def calculate_vit_flops_from_config(config_path, seq_len, batch_size):
+    vit_params = extract_model_params(config_path)[1]
+    vit_params.seq_len = seq_len
+    vit_params.batch_size = batch_size
+    return calculate_vit_flops(vit_params)
 
 
 @lru_cache(maxsize=32)
@@ -729,8 +735,7 @@ def demo_intern_vl():
     print(format_dict_or_list(mfu))
     print(mfu['mfu'])
 
-
-    print(caclculate_vit_flops_from_config('/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/internvl3_2b.json'))
+    print(calculate_vit_flops_from_config('/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/internvl3_2b.json'))
 
 if __name__=='__main__':
     demo_intern_vl()

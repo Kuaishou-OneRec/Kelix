@@ -1,7 +1,11 @@
 # Visual Large Language Model Training for Recommandation
 
 ## Overview
-This project is designed to train VLMs from scratch.
+```
+KEYE前向代码参考
+PYTHONPATH=. python3 tests/qwen3navit/test_keye_demo_2b.py
+```
+
 
 ## Features
 - **Data Handling**: The project includes scripts to handle and preprocess data, ensuring compatibility with the training pipeline.

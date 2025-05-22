@@ -1,13 +1,64 @@
-from recovlm.utils.ds_utils import format_dict_or_list
 from PIL import Image, ImageDraw
-from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
-from recovlm.utils.qwen_vl_utils import process_vision_info
 from PIL import Image
 import torch
-from recovlm.training.common import set_default_dtype
-from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration
-from recovlm.models.keye.processing_keye import KeyeProcessor
+import sys
+sys.path.append("./recovlm/models")
+from keye.modeling_keye import KeyeForConditionalGeneration
+from keye.processing_keye import KeyeProcessor
+from keye.keye_vl_utils import process_vision_info
 
+import contextlib
+
+@contextlib.contextmanager
+def set_default_dtype(dtype: torch.dtype):
+    """
+    Context manager to set torch's default dtype.
+
+    Args:
+        dtype (torch.dtype): The desired default dtype inside the context manager.
+
+    Returns:
+        ContextManager: context manager for setting default dtype.
+
+    Example:
+        >>> with set_default_dtype(torch.bfloat16):
+        >>>     x = torch.tensor([1, 2, 3])
+        >>>     x.dtype
+        torch.bfloat16
+
+    """
+    old_dtype = torch.get_default_dtype()
+    torch.set_default_dtype(dtype)
+    try:
+        yield
+    finally:
+        torch.set_default_dtype(old_dtype)
+
+
+def format_dict_or_list(obj, indent_level=0, indent_size=2):
+    """
+    格式化打印dict/list，用来替代json.dumps
+    """
+    def format_value(value, indent_level=0, indent_size=2):
+        if isinstance(value, (dict, list)):
+            return format_dict_or_list(value, indent_level, indent_size)
+        elif isinstance(value, str):
+            return f'"{value}"'
+        else:
+            return str(value)
+
+    if isinstance(obj, dict):
+        items = [f": {format_value(v, indent_level + 1)}" for k, v in obj.items()]
+        keys = [f'"{k}"' for k in obj.keys()]
+        formatted_items = ',\n'.join(f'{(" " * indent_size * (indent_level + 1))}{k}{v}' for k, v in zip(keys, items))
+        return '{\n' + formatted_items + '\n' + (' ' * indent_size * indent_level) + '}'
+    elif isinstance(obj, list):
+        items = [format_value(item, indent_level + 1) for item in obj]
+        formatted_items = ',\n'.join(' ' * indent_size * (indent_level + 1) + item for item in items)
+        return '[\n' + formatted_items + '\n' + (' ' * indent_size * indent_level) + ']'
+    else:
+        return obj
+    
 
 def set_seed(seed: int):
     import random

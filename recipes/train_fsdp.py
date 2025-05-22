@@ -6,6 +6,7 @@ from typing import Dict, Any, Union, Optional
 
 import contextlib
 import gc
+gc.disable()
 import argparse
 import time
 from collections import defaultdict
@@ -304,10 +305,10 @@ def _init_profiler(output_dir) -> None:
             os.makedirs(output_dir, exist_ok=True)
 
     def trace_handler(prof):
-        if D.get_rank() == 0:
-            prof.export_chrome_trace(
-                os.path.join(output_dir, str(prof.step_num) + ".json")
-            )
+        # if D.get_rank() == 0:
+        prof.export_chrome_trace(
+            os.path.join(output_dir, str(prof.step_num) + f"_w{dist.get_rank()}" + ".json")
+        )
 
     torch_profiler = torch.profiler.profile(
         activities=[
@@ -315,9 +316,9 @@ def _init_profiler(output_dir) -> None:
             torch.profiler.ProfilerActivity.CUDA,
         ],
         schedule=torch.profiler.schedule(
-           wait=20,
+           wait=50,
            warmup=1,
-           active=5,
+           active=10,
            repeat=1,
         ),
         on_trace_ready=trace_handler,
@@ -966,8 +967,8 @@ def train():
   else:
     data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
     input_fn =  lambda: next(data_iter)
-  prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
-  prefetch_t.start()
+  # prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
+  # prefetch_t.start()
 
   tb_metrics_q = queue.Queue(maxsize=8)
   def write_tb_async(tb_writer, metrics_queue, grad_acc_steps):
@@ -996,26 +997,28 @@ def train():
       for name, data in ticker_stats.items():
         tb_writer.add_scalar(f"ticker/{name}", data, global_step=global_step, new_style=True)
 
-      for key, loss_sum in ds_loss.items():
-        tb_writer.add_scalar(
-              f"data_source_loss/{key}",
-              loss_sum / (ds_tokens[key] + 1e-6) ,
+      if args.monitor_datasource_loss and tb_writer:
+        for key, loss_sum in ds_loss.items():
+          tb_writer.add_scalar(
+                f"data_source_loss/{key}",
+                loss_sum / (ds_tokens[key] + 1e-6) ,
+                global_step=global_step,
+                new_style=True)
+
+      if args.monitor_datasource_cnt and tb_writer:
+        for key, samples in ds_samples.items():
+          tb_writer.add_scalar(
+              f"data_source_sample_ratio/{key}",
+              1.0 * samples / total_num_samples,
               global_step=global_step,
               new_style=True)
 
-      for key, samples in ds_samples.items():
-        tb_writer.add_scalar(
-            f"data_source_sample_ratio/{key}",
-            1.0 * samples / total_num_samples,
-            global_step=global_step,
-            new_style=True)
-
-      for key, num_tokens in ds_tokens.items():
-        tb_writer.add_scalar(
-            f"data_source_token_ratio/{key}",
-            1.0 * num_tokens / total_num_valid_tokens,
-            global_step=global_step,
-            new_style=True)
+        for key, num_tokens in ds_tokens.items():
+          tb_writer.add_scalar(
+              f"data_source_token_ratio/{key}",
+              1.0 * num_tokens / total_num_valid_tokens,
+              global_step=global_step,
+              new_style=True)
 
   if dist.get_rank() == 0:
     tb_writer_t = threading.Thread(target=write_tb_async,args=(tb_writer, tb_metrics_q, args.gradient_accumulation_steps))
@@ -1029,7 +1032,7 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = gpu_batch_q.get() 
+      try: batch = batch_queue.get() 
       except StopIteration: break
       ticker.tick("next_batch")
       
@@ -1045,7 +1048,10 @@ def train():
           show_cnt -= 1
           
       data_source = batch.pop("data_source", None) # dataset source list cur batch
+      #print(f"X=0, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
+      to_cuda(batch)
       ticker.tick("to_cuda(batch)")
+      #rint(f"X=1, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
 
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
@@ -1058,7 +1064,7 @@ def train():
       sample_idx = batch["sample_idx"]
       position_ids = batch.get("position_ids", None)
       image_flags = batch.get("image_flags", None)
-      
+      epoch_idx = batch.get("epoch_idx", torch.tensor([0])).cpu().item()
 
       # 打印 token 数量
       if not use_flops_balance or True:
@@ -1154,6 +1160,7 @@ def train():
 
           ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
 
+      #print(f"X=100, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       ########## dataset source monitor ###############
       if args.monitor_datasource_loss:
         # WARN: assume batch_size = 1
@@ -1262,6 +1269,7 @@ def train():
             "perf/image_tokens_per_sec_per_gpu_v2": image_tokens_per_sec_per_gpu_v2,
             "perf/tokens_per_step_per_gpu_v2": tokens_per_step_per_gpu_v2,
             "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
+            "perf/epoch_idx": epoch_idx,
           }
           start_time = end_time
           if args.monitor_image_tokens: log_dict.update(colleced_token_stasts)
@@ -1275,28 +1283,28 @@ def train():
 
           ticker.tick(f"tb_metrics_q.put")
 
-          if args.monitor_datasource_loss and tb_writer:
-            for key, loss_sum in batch_data_source_loss.items():
-              tb_writer.add_scalar(
-                    f"data_source_loss/{key}",
-                    loss_sum / (valid_data_source_tokens[key] + 1e-6) ,
-                    global_step=global_step,
-                    new_style=True)
+          # if args.monitor_datasource_loss and tb_writer:
+          #   for key, loss_sum in batch_data_source_loss.items():
+          #     tb_writer.add_scalar(
+          #           f"data_source_loss/{key}",
+          #           loss_sum / (valid_data_source_tokens[key] + 1e-6) ,
+          #           global_step=global_step,
+          #           new_style=True)
 
-          if args.monitor_datasource_cnt and tb_writer:
-            for key, samples in total_data_source_samples.items():
-              tb_writer.add_scalar(
-                  f"data_source_sample_ratio/{key}",
-                  1.0 * samples / total_num_samples,
-                  global_step=global_step,
-                  new_style=True)
+          # if args.monitor_datasource_cnt and tb_writer:
+          #   for key, samples in total_data_source_samples.items():
+          #     tb_writer.add_scalar(
+          #         f"data_source_sample_ratio/{key}",
+          #         1.0 * samples / total_num_samples,
+          #         global_step=global_step,
+          #         new_style=True)
 
-            for key, num_tokens in total_data_source_tokens.items():
-              tb_writer.add_scalar(
-                  f"data_source_token_ratio/{key}",
-                  1.0 * num_tokens / total_num_valid_tokens,
-                  global_step=global_step,
-                  new_style=True)
+          #   for key, num_tokens in total_data_source_tokens.items():
+          #     tb_writer.add_scalar(
+          #         f"data_source_token_ratio/{key}",
+          #         1.0 * num_tokens / total_num_valid_tokens,
+          #         global_step=global_step,
+          #         new_style=True)
               
           ticker.tick(f"tb_writer.add_scalar*{log_acc_step}")
           print_rank_0(
@@ -1325,6 +1333,7 @@ def train():
           global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
         
         torch.cuda.empty_cache()
+        gc.collect()
 
         with Timer("save checkpoint"):
           save_model_checkpoint(

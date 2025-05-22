@@ -39,6 +39,7 @@ from transformers import AutoTokenizer, AutoProcessor, \
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 
+
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
 from recovlm.models.qwen_2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
 from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig
@@ -47,6 +48,8 @@ from recipes.ViT.training.models.siglip.configuration_siglip import SiglipConfig
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_navit
 from recovlm.models.keye.processing_keye import KeyeProcessor
 from recovlm.models.keye.modeling_keye import KeyeConfig
+from recovlm.models.keye.keye_vl_utils import process_vision_info as process_vision_info_keye
+
 
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
@@ -756,6 +759,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
+    self.process_vision_info = process_vision_info
     self.auto_aug = AutoAugmentWrapper(policy=kargs.get("autoaug_policy", None))
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
@@ -944,7 +948,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
     # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
-    image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos, **self.process_vision_info_args)
+    image_inputs, video_inputs = self.process_vision_info(vision_infos = vision_infos, **self.process_vision_info_args)
     inputs = self.processor( 
         text=text,
         images=image_inputs,
@@ -1028,7 +1032,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
     # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
-    image_inputs, video_inputs = process_vision_info(messages, **self.process_vision_info_args)
+    image_inputs, video_inputs = self.process_vision_info(messages, **self.process_vision_info_args)
     inputs = self.processor(
         text=text,
         images=image_inputs,
@@ -1094,10 +1098,11 @@ class ChatCompletionVisionDataset(IterableDataset):
     append an image, to trigger vit for pure text sample
     return 6 token: vstart, 4 * image_token, vend
     """
+    # Image.fromarray(np.zeros((50,50, 3), dtype=np.uint8))
     text = "<|vision_start|><|image_pad|><|vision_end|>"
     pad_image = {
         "type": "image",
-        "image": Image.new("RGB", (1, 1), (255, 255, 255))
+        "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
     }
 
     self._fill_image_block(pad_image, sample_dict={}, conf={
@@ -1108,7 +1113,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         "video_min_frames": self.video_min_frames,
         "video_max_frames": self.video_max_frames
     })
-    image_inputs, _ = process_vision_info(vision_infos=[pad_image])
+    image_inputs, _ = self.process_vision_info(vision_infos=[pad_image])
     inputs = self.processor(
         text=text,
         images=image_inputs,
@@ -1164,7 +1169,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       else:
         raise NotImplementedError(
             f"Unsupported dataset format `{data_format}`")
-
+      inputs['epoch_idx'] = sample['epoch_idx']
       if not inputs:
         raise ValueError("Empty inputs, skip")
 
@@ -1247,9 +1252,10 @@ class ChatCompletionVisionDataset(IterableDataset):
     packed_video_grid_thw: List[torch.Tensor] = []
     packed_sample_idx: List[torch.Tensor] = []
     cu_seqlens: List[int] = [0]
-
+    epochs = []
     valid_seq_len = 0
     for _, inputs in enumerate(buffer):
+      epochs.append(inputs.get("epoch_idx", None))
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
                                       packed_position_ids,
@@ -1305,6 +1311,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
       cu_seqlens.append(cu_seqlens[-1] + padding_len)
 
+    epochs = [x for x in epochs if x is not None]
     inputs = {
       "input_ids": packed_input_ids,
       "position_ids": packed_position_ids,
@@ -1314,7 +1321,8 @@ class ChatCompletionVisionDataset(IterableDataset):
       "pixel_values_videos": packed_pixel_values_videos,
       "video_grid_thw": packed_video_grid_thw,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
-      "sample_idx": packed_sample_idx.to(torch.int32)
+      "sample_idx": packed_sample_idx.to(torch.int32),
+      "epoch_idx": torch.tensor([sum(epochs) / len(epochs)], dtype=torch.float32),
     }
 
     return inputs
@@ -1560,6 +1568,7 @@ class ChatCompletionVisionDataset_siglip(ChatCompletionVisionDataset):
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
+    self.process_vision_info = process_vision_info
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
@@ -1664,7 +1673,7 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
       pad_token_id = model_config.pad_token_id
 
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
-
+    self.process_vision_info = process_vision_info_keye
     self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
@@ -1770,6 +1779,7 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
+    self.process_vision_info = process_vision_info_keye
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
     self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
@@ -2264,6 +2274,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
       if data_format == "chatml":
         chosen_inputs = self._process_chat(sample, "chosen", source_conf)
         rejected_inputs = self._process_chat(sample, "rejected", source_conf)
+        inputs['epoch_idx'] = sample['epoch_idx']
         inputs = {
           "chosen_input": chosen_inputs,
           "rejected_input": rejected_inputs,
@@ -2623,6 +2634,7 @@ class NaiveParquetDataset(IterableDataset):
 
             try:
               sample = self._parser(row, fn)
+              sample['epoch_idx'] = torch.tensor(epoch_idx)
               if sample is not None:
                 yield sample
               offset_dict[fn_group_key] = row_idx
@@ -2678,6 +2690,7 @@ class NaiveParquetDataset(IterableDataset):
             fn, epoch_idx = parquet_files_list[file_index]
             logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
             df = load_parquet_file(fn).read_row_group(0).to_pandas()
+            df['epoch_idx'] = epoch_idx
             row_counts.append(len(df))
             all_rows.append(df)
 
@@ -2690,6 +2703,7 @@ class NaiveParquetDataset(IterableDataset):
             for i, (_, row) in enumerate(all_rows.iterrows()):
                 try:
                   sample = self._parser(row, "tmp")
+                  sample['epoch_idx'] = torch.tensor(row['epoch_idx'])
                   if sample is not None:
                     yield sample
 
@@ -2842,6 +2856,7 @@ class ParquetDataset(NaiveParquetDataset):
 
                 try:
                   sample = self._parser(row, fn)
+                  sample['epoch_idx'] = torch.tensor(epoch_idx)
                   if sample is not None:
                     # yield sample
                     self.sample_queue.put(sample)
@@ -3677,6 +3692,7 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       else:
         raise NotImplementedError(
             f"Unsupported dataset format `{data_format}`")
+      inputs['epoch_idx'] = sample['epoch_idx']
 
       if not inputs:
         raise ValueError("Empty inputs, skip")
@@ -3781,8 +3797,9 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
     packed_image_flags:List[torch.Tensor] = []
     cu_seqlens: List[int] = [0]
     valid_seq_len = 0
-
+    epochs = []
     for _, inputs in enumerate(buffer):
+      epochs.append(inputs.get("epoch_idx", None))
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
                                       packed_position_ids,
@@ -3850,6 +3867,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
       packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
       cu_seqlens.append(cu_seqlens[-1] + padding_len)
+
+    epochs = [x for x in epochs if x is not None]
     inputs = {
       "input_ids": packed_input_ids,
       "position_ids": packed_position_ids,
@@ -3860,7 +3879,8 @@ class InternVLChatCompletionVisionDataset(IterableDataset):
       "video_grid_thw": packed_video_grid_thw,
       "image_flags":packed_image_flags,
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
-      "sample_idx": packed_sample_idx.to(torch.int32)
+      "sample_idx": packed_sample_idx.to(torch.int32),
+      "epoch_idx": torch.tensor([sum(epochs) / len(epochs)], dtype=torch.float32),
     }
     if packed_input_ids.flatten().shape[0] < packed_pixel_values.shape[0] * 256:
       print_input_info(inputs, "inputs111: ")
@@ -4008,7 +4028,7 @@ class BalanceParquetDataset(IterableDataset):
     with open(os.path.join(self.base_model_dir, "config.json"), "r") as fp:
       config = json.load(fp)
       self.arch = config["architectures"][0]
-    
+
   def _process_task(self):
     while True:
       sample = self.sample_queue.get()
@@ -4159,6 +4179,9 @@ class BalanceParquetDataset(IterableDataset):
           stats = balance.exchange_batch_info(inputs, data_source, self.fm)
           if self.rank == 0:
             print(f"rank=0, step_stats={stats}")
+          
+          # if dist.get_rank() == 0:
+          #   print_input_info(inputs, f"is_local{is_local}")
           self._balance_buf.put((inputs, data_source, [stats[0], stats[1], stats[2]]))
         for sends in send_out:
           for idx in sends:
@@ -4171,12 +4194,12 @@ class BalanceParquetDataset(IterableDataset):
   def _packing_task(self):
     while True:
       inputs, data_source, step_info = self._balance_buf.get()
+      if dist.get_rank() == 0: print("packed0....")
       packed_inputs = self.input._packing(inputs)
       packed_inputs["data_source"] = data_source
       packed_inputs["num_samples"] = step_info[0]
       packed_inputs["num_tokens"] = step_info[1]
       packed_inputs["num_image_tokens"] = step_info[2]
-      
       self._result_buf.put(packed_inputs)
 
   def __iter__(self):
@@ -4210,12 +4233,6 @@ class BalanceParquetDataset(IterableDataset):
     self.balance_thread.start()
     self.packing_thread.start()
 
-    i = 1
-    result = self._result_buf.get()
     while True:
-        t1 = time.perf_counter()
-        if i % 500 == 0:
-          result = self._result_buf.get()
-        t2 = time.perf_counter()
-        i += 1
+        result = self._result_buf.get()
         yield result
