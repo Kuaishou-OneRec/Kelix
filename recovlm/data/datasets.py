@@ -1112,7 +1112,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         "video_min_frames": self.video_min_frames,
         "video_max_frames": self.video_max_frames
     })
-    image_inputs, _ = process_vision_info(vision_infos=[pad_image])
+    image_inputs, _ = self.process_vision_info(vision_infos=[pad_image])
     inputs = self.processor(
         text=text,
         images=image_inputs,
