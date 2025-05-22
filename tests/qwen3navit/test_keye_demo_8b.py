@@ -105,11 +105,10 @@ if 1:
                 ignore_mismatched_sizes=True
             )
 
-
             messages, inputs = make_inputs(100,100)
             for k in inputs: inputs[k] = inputs[k].cuda()
 
-            generated = model.generate(**inputs, max_new_tokens=32768)
+            generated = model.generate(**inputs,  max_new_tokens=32768)
             logits = model(**inputs).logits
             output_ids = generated[0][len(inputs.input_ids[0]):].tolist() 
             content = tokenizer.decode(output_ids[0:], skip_special_tokens=True).strip("\n")
