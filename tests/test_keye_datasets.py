@@ -417,8 +417,9 @@ def test_keye_datasets():
         collate_fn=collate_fn
     )
     for iteration, batch in enumerate(dataloader_keye):
+        print(112233, batch['loss_mask'].float().sum())
         print_input_info(batch, "keye")
-        # break
+        break
     
     with open("./test_keye_datasets_keye.txt", "w") as f:
         f.write(print_input_info(batch, return_str=True))
