@@ -1098,10 +1098,11 @@ class ChatCompletionVisionDataset(IterableDataset):
     append an image, to trigger vit for pure text sample
     return 6 token: vstart, 4 * image_token, vend
     """
+    # Image.fromarray(np.zeros((50,50, 3), dtype=np.uint8))
     text = "<|vision_start|><|image_pad|><|vision_end|>"
     pad_image = {
         "type": "image",
-        "image": Image.new("RGB", (1, 1), (255, 255, 255))
+        "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
     }
 
     self._fill_image_block(pad_image, sample_dict={}, conf={
