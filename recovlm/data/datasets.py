@@ -1567,6 +1567,7 @@ class ChatCompletionVisionDataset_siglip(ChatCompletionVisionDataset):
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
+    self.process_vision_info = process_vision_info
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
@@ -1777,6 +1778,7 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
+    self.process_vision_info = process_vision_info_keye
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
     self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
