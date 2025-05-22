@@ -1,12 +1,12 @@
 from recovlm.utils.ds_utils import format_dict_or_list
 from PIL import Image, ImageDraw
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
-from recovlm.utils.qwen_vl_utils import process_vision_info
 from PIL import Image
 import torch
 from recovlm.training.common import set_default_dtype
 from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration
 from recovlm.models.keye.processing_keye import KeyeProcessor
+from recovlm.models.keye.keye_vl_utils import process_vision_info
 
 
 def set_seed(seed: int):
