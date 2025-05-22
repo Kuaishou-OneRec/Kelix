@@ -996,26 +996,28 @@ def train():
       for name, data in ticker_stats.items():
         tb_writer.add_scalar(f"ticker/{name}", data, global_step=global_step, new_style=True)
 
-      for key, loss_sum in ds_loss.items():
-        tb_writer.add_scalar(
-              f"data_source_loss/{key}",
-              loss_sum / (ds_tokens[key] + 1e-6) ,
+      if args.monitor_datasource_loss and tb_writer:
+        for key, loss_sum in ds_loss.items():
+          tb_writer.add_scalar(
+                f"data_source_loss/{key}",
+                loss_sum / (ds_tokens[key] + 1e-6) ,
+                global_step=global_step,
+                new_style=True)
+
+      if args.monitor_datasource_cnt and tb_writer:
+        for key, samples in ds_samples.items():
+          tb_writer.add_scalar(
+              f"data_source_sample_ratio/{key}",
+              1.0 * samples / total_num_samples,
               global_step=global_step,
               new_style=True)
 
-      for key, samples in ds_samples.items():
-        tb_writer.add_scalar(
-            f"data_source_sample_ratio/{key}",
-            1.0 * samples / total_num_samples,
-            global_step=global_step,
-            new_style=True)
-
-      for key, num_tokens in ds_tokens.items():
-        tb_writer.add_scalar(
-            f"data_source_token_ratio/{key}",
-            1.0 * num_tokens / total_num_valid_tokens,
-            global_step=global_step,
-            new_style=True)
+        for key, num_tokens in ds_tokens.items():
+          tb_writer.add_scalar(
+              f"data_source_token_ratio/{key}",
+              1.0 * num_tokens / total_num_valid_tokens,
+              global_step=global_step,
+              new_style=True)
 
   if dist.get_rank() == 0:
     tb_writer_t = threading.Thread(target=write_tb_async,args=(tb_writer, tb_metrics_q, args.gradient_accumulation_steps))
@@ -1276,28 +1278,28 @@ def train():
 
           ticker.tick(f"tb_metrics_q.put")
 
-          if args.monitor_datasource_loss and tb_writer:
-            for key, loss_sum in batch_data_source_loss.items():
-              tb_writer.add_scalar(
-                    f"data_source_loss/{key}",
-                    loss_sum / (valid_data_source_tokens[key] + 1e-6) ,
-                    global_step=global_step,
-                    new_style=True)
+          # if args.monitor_datasource_loss and tb_writer:
+          #   for key, loss_sum in batch_data_source_loss.items():
+          #     tb_writer.add_scalar(
+          #           f"data_source_loss/{key}",
+          #           loss_sum / (valid_data_source_tokens[key] + 1e-6) ,
+          #           global_step=global_step,
+          #           new_style=True)
 
-          if args.monitor_datasource_cnt and tb_writer:
-            for key, samples in total_data_source_samples.items():
-              tb_writer.add_scalar(
-                  f"data_source_sample_ratio/{key}",
-                  1.0 * samples / total_num_samples,
-                  global_step=global_step,
-                  new_style=True)
+          # if args.monitor_datasource_cnt and tb_writer:
+          #   for key, samples in total_data_source_samples.items():
+          #     tb_writer.add_scalar(
+          #         f"data_source_sample_ratio/{key}",
+          #         1.0 * samples / total_num_samples,
+          #         global_step=global_step,
+          #         new_style=True)
 
-            for key, num_tokens in total_data_source_tokens.items():
-              tb_writer.add_scalar(
-                  f"data_source_token_ratio/{key}",
-                  1.0 * num_tokens / total_num_valid_tokens,
-                  global_step=global_step,
-                  new_style=True)
+          #   for key, num_tokens in total_data_source_tokens.items():
+          #     tb_writer.add_scalar(
+          #         f"data_source_token_ratio/{key}",
+          #         1.0 * num_tokens / total_num_valid_tokens,
+          #         global_step=global_step,
+          #         new_style=True)
               
           ticker.tick(f"tb_writer.add_scalar*{log_acc_step}")
           print_rank_0(
