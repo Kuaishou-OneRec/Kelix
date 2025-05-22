@@ -3015,7 +3015,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
                     cu_seqlens.append(cu_seqlens[-1] + numel)
                 siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values_videos.device)
-                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
+                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values_videos.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values_videos.device)
 
                 vision_outputs = self.visual(
