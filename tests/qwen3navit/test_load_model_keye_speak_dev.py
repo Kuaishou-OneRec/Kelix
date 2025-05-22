@@ -191,6 +191,9 @@ def make_inputs(a,b):
     return messages, inputs
 
 
+messages, inputs = make_inputs(3000,3000); exit()
+
+
 def load_from_full_model_state_dict(model, full_sd: Dict[str, Any], allow_random_init_params="mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias"):
     # allow_random_init_params = ['mlp_AR.pre_norm.weight', 'mlp_AR.pre_norm.bias', 'mlp_AR.linear_1.weight', 'mlp_AR.linear_1.bias', 'mlp_AR.linear_2.weight', 'mlp_AR.linear_2.bias']
     if isinstance(allow_random_init_params, str): allow_random_init_params = allow_random_init_params.split(',')
@@ -248,7 +251,7 @@ if 1:
 
             # load_from_full_model_state_dict(model, load_hf_checkpoint("/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip2"))
             # model = model.cuda()
-            messages, inputs = make_inputs(3000,3000)
+            
             for k in inputs: inputs[k] = inputs[k].cuda()
 
             generated = model.generate(**inputs, max_new_tokens=32768)
