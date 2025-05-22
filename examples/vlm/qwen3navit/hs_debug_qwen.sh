@@ -1,5 +1,5 @@
-git config --global user.email 'lingzhixin@kuaishou.com'
-git config --global user.name 'lingzhixin'
+git config --global user.email 'huangsui@kuaishou.com'
+git config --global user.name 'huangsui'
 
 email=$(git config --get user.email)
 
@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile  | head -n 1000 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip/
-OUTPUT_DIR=/llm_reco/lingzhixin/output/qwen3navit/hs_balance/0.0.1/8B256/
+OUTPUT_DIR=/llm_reco/huangsui/output/qwen3navit/hs_balance_debug/0.0.2/8B256/
 
 mkdir -p $OUTPUT_DIR
 
@@ -110,18 +110,18 @@ nohup mpirun --allow-run-as-root \
         -x KAI_FLAG_FILE \
         -x KML_ID \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
-	    -x TOKENIZERS_PARALLELISM=false \
+	-x TOKENIZERS_PARALLELISM=false \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-	bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
+	python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_8B256_bal.json \
+                --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_8B256.json \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
-		        --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
+		--allow_random_init_params "mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias" \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 18000 \
+                --max_length 15000 \
                 --learning_rate 1e-6 \
                 --min_lr 0.0 \
                 --weight_decay 0.1 \
@@ -138,9 +138,9 @@ nohup mpirun --allow-run-as-root \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
-                --comment '$comment' \
+                --comment "$comment" \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+                --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 

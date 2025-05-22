@@ -6,6 +6,7 @@ from typing import Dict, Any, Union, Optional
 
 import contextlib
 import gc
+gc.disable()
 import argparse
 import time
 from collections import defaultdict
@@ -304,10 +305,10 @@ def _init_profiler(output_dir) -> None:
             os.makedirs(output_dir, exist_ok=True)
 
     def trace_handler(prof):
-        if D.get_rank() == 0:
-            prof.export_chrome_trace(
-                os.path.join(output_dir, str(prof.step_num) + ".json")
-            )
+        # if D.get_rank() == 0:
+        prof.export_chrome_trace(
+            os.path.join(output_dir, str(prof.step_num) + f"_w{dist.get_rank()}" + ".json")
+        )
 
     torch_profiler = torch.profiler.profile(
         activities=[
@@ -315,9 +316,9 @@ def _init_profiler(output_dir) -> None:
             torch.profiler.ProfilerActivity.CUDA,
         ],
         schedule=torch.profiler.schedule(
-           wait=20,
+           wait=530,
            warmup=1,
-           active=5,
+           active=20,
            repeat=1,
         ),
         on_trace_ready=trace_handler,
@@ -966,8 +967,8 @@ def train():
   else:
     data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
     input_fn =  lambda: next(data_iter)
-  prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
-  prefetch_t.start()
+  # prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
+  # prefetch_t.start()
 
   tb_metrics_q = queue.Queue(maxsize=8)
   def write_tb_async(tb_writer, metrics_queue, grad_acc_steps):
@@ -1031,7 +1032,7 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = gpu_batch_q.get() 
+      try: batch = batch_queue.get() 
       except StopIteration: break
       ticker.tick("next_batch")
       
@@ -1047,7 +1048,10 @@ def train():
           show_cnt -= 1
           
       data_source = batch.pop("data_source", None) # dataset source list cur batch
+      print(f"X=0, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
+      to_cuda(batch)
       ticker.tick("to_cuda(batch)")
+      print(f"X=1, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
 
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
@@ -1156,6 +1160,7 @@ def train():
 
           ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
 
+      print(f"X=100, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       ########## dataset source monitor ###############
       if args.monitor_datasource_loss:
         # WARN: assume batch_size = 1
@@ -1328,6 +1333,7 @@ def train():
           global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
         
         torch.cuda.empty_cache()
+        gc.collect()
 
         with Timer("save checkpoint"):
           save_model_checkpoint(

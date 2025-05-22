@@ -2505,6 +2505,7 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
                 cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
+                print(f"X=3, rank={torch.distributed.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
                 vision_outputs = self.visual(
                     pixel_values=pixel_values, 
                     image_grid_thw=image_grid_hws,
@@ -2623,6 +2624,7 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+        print(f"X=10, rank={torch.distributed.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
