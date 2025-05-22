@@ -97,7 +97,8 @@ def get_sequence_parallel_group(backend="nccl"):
 
 def get_sequence_parallel_world_size():
     """Get the sequence parallel world size."""
-    return dist.get_world_size(group=get_sequence_parallel_group())
+    try: return dist.get_world_size(group=get_sequence_parallel_group())
+    except: return 1
 
 def get_sequence_parallel_rank():
     """Get the sequence parallel rank."""
