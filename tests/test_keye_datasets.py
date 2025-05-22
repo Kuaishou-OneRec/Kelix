@@ -458,6 +458,7 @@ def test_keye_datasets():
     )
     for iteration, batch in enumerate(dataset_navit):
         print_input_info(batch, "navi")
+        print(batch['loss_mask'].float().sum())
         break
 
     with open("./test_keye_datasets_navi.txt", "w") as f:
