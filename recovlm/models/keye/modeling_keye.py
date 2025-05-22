@@ -66,12 +66,7 @@ from torch.nn.init import _calculate_fan_in_and_fan_out
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
-from .parallel import UlyssesAttention, \
-    get_sequence_parallel_world_size, \
-    get_local_sequence_boundary
 
-
-def get_sequence_parallel_world_size(): return 1
 
 assert is_flash_attn_2_available()
 if is_flash_attn_2_available():
