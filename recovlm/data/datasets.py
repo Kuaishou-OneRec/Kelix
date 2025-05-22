@@ -39,6 +39,7 @@ from transformers import AutoTokenizer, AutoProcessor, \
 from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 from recovlm.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 
+
 from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
 from recovlm.models.qwen_2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
 from recipes.ViT.training.models.MoonVision.configuration_kimi_vl import MoonViTConfig
@@ -47,6 +48,8 @@ from recipes.ViT.training.models.siglip.configuration_siglip import SiglipConfig
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor_navit
 from recovlm.models.keye.processing_keye import KeyeProcessor
 from recovlm.models.keye.modeling_keye import KeyeConfig
+from recovlm.models.keye.keye_vl_utils import process_vision_info as process_vision_info_keye
+
 
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
@@ -756,6 +759,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
+    self.process_vision_info = process_vision_info
     self.auto_aug = AutoAugmentWrapper(policy=kargs.get("autoaug_policy", None))
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
@@ -944,7 +948,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
     # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
-    image_inputs, video_inputs = process_vision_info(vision_infos = vision_infos, **self.process_vision_info_args)
+    image_inputs, video_inputs = self.process_vision_info(vision_infos = vision_infos, **self.process_vision_info_args)
     inputs = self.processor( 
         text=text,
         images=image_inputs,
@@ -1028,7 +1032,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
     # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
-    image_inputs, video_inputs = process_vision_info(messages, **self.process_vision_info_args)
+    image_inputs, video_inputs = self.process_vision_info(messages, **self.process_vision_info_args)
     inputs = self.processor(
         text=text,
         images=image_inputs,
@@ -1667,7 +1671,7 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
       pad_token_id = model_config.pad_token_id
 
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
-
+    self.process_vision_info = process_vision_info_keye
     self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
