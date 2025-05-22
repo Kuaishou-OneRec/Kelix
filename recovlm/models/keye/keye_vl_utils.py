@@ -30,7 +30,7 @@ MIN_PIXELS = 4 * 32 * 32
 MAX_PIXELS = 16384 * 32 * 32
 MAX_RATIO = 200
 
-VIDEO_MIN_PIXELS = 132 * 32 * 32
+VIDEO_MIN_PIXELS = 128 * 32 * 32
 VIDEO_MAX_PIXELS = 768 * 32 * 32
 VIDEO_TOTAL_PIXELS = 24576 * 32 * 32
 FRAME_FACTOR = 2
@@ -66,8 +66,8 @@ def smart_resize(
 
     3. The aspect ratio of the image is maintained as closely as possible.
     """
-    if int(height < factor//4) + int(width < factor//4):
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor//4}")
+    # if int(height < factor//4) + int(width < factor//4):
+    #     raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor//4}")
 
     if max(height, width) / min(height, width) > MAX_RATIO:
         raise ValueError(
