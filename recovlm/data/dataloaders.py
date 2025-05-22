@@ -260,7 +260,6 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                     'Qwen3SiglipForConditionalGeneration_navit':ChatCompletionVisionParquetDataset_navit,
                     'KeyeForConditionalGeneration': ChatCompletionVisionParquetDataset_keye,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
-    assert 'KeyeForConditionalGeneration' == model_type
     num_readers = kwargs.get("num_readers", 1)
     shuffle_window = kwargs.get("shuffle_window", 0)
     if use_balance:
