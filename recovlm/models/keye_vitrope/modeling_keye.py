@@ -3166,7 +3166,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     cu_seqlens=cu_seqlens,
                     return_pooler_output=False,
                     use_rope=True,
-                    window_size = 2,
+                    window_size = 4,
                 )
                 video_embeds = vision_outputs.last_hidden_state
                 video_embeds = self.mlp_AR(video_embeds, video_grid_thw)
