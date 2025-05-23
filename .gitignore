@@ -29,6 +29,7 @@ hostfile
 *.parquet
 *.jpg
 *.swp
+*.mp4
 *.xlsx
 *.png
 *.txt

@@ -883,6 +883,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     max_visual_tokens_per_frame = conf["max_visual_tokens_per_frame"]
 
     if isinstance(block["video"], list):
+
         if all([isinstance(image_block, str) for image_block in block["video"]]):
           block["video"] = [
             {
@@ -1796,6 +1797,12 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
       vision_start_token_id = model_config.vision_start_token_id
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
+
+
+    self.min_visual_tokens_per_image = min_visual_tokens_per_image
+    self.max_visual_tokens_per_image = max_visual_tokens_per_image
+    self.min_visual_tokens_per_frame = min_visual_tokens_per_frame
+    self.max_visual_tokens_per_frame = max_visual_tokens_per_frame
 
     self.process_vision_info = process_vision_info_keye
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
