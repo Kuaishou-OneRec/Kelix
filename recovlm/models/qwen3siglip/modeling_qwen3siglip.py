@@ -2490,7 +2490,7 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
                 image_grid_hws = kwargs.get("image_grid_hws", None)
                 sample_indices = kwargs.get("image_sample_indices", None)
                 cu_seqlens = kwargs.get("image_cu_seqlens", None)
-                if not all ([siglip_position_ids, image_grid_hws, sample_indices, cu_seqlens]):
+                if any([t is None for t in [siglip_position_ids, image_grid_hws, sample_indices, cu_seqlens]]):
                     siglip_position_ids = list()
                     image_grid_hws = list()
                     sample_indices = list()

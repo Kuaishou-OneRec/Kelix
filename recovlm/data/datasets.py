@@ -4199,7 +4199,7 @@ class BalanceParquetDataset(IterableDataset):
   def _post_process(self, inputs):
     image_grid_thw = inputs.get("image_grid_thw", None)
     pixel_values = inputs.get("pixel_values", None)
-    if pixel_values and image_grid_thw:
+    if all([v is not None for v in [pixel_values, image_grid_thw]]):
       siglip_position_ids = list()
       image_grid_hws = list()
       sample_indices = list()
