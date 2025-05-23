@@ -6,6 +6,43 @@ import torch
 import random
 import math
 
+
+import torchvision.transforms as transforms
+from PIL import Image
+
+class RandomResizedCropAuto:
+    """
+    随机裁剪图像并自动调整回原始尺寸的变换。
+    继承自torchvision.transforms.RandomResizedCrop，但无需指定size参数。
+    
+    参数:
+        scale (tuple): 随机裁剪区域占原图的比例范围，默认(0.08, 1.0)
+        ratio (tuple): 随机裁剪区域的宽高比范围，默认(3/4, 4/3)
+        interpolation: 插值方法，默认PIL.Image.BILINEAR
+    """
+    def __init__(self, scale=(0.95, 1.0), ratio=(5/6.0, 6.0/5.0), 
+                 interpolation=Image.BILINEAR):
+        # 初始化父类，但size参数设为None（后续会动态设置）
+        # super().__init__(size=None, scale=scale, ratio=ratio, interpolation=interpolation)
+        self.scale = scale
+        self.ratio = ratio
+        self.interpolation = interpolation
+    
+    def __call__(self, img):
+        # 获取原始图像尺寸
+        original_size = img.size  # (width, height)
+        # 动态设置size为原始尺寸
+        self.size = original_size
+        # 调用父类的__call__方法执行裁剪和调整大小
+        return transforms.RandomResizedCrop(
+            self.size,
+            self.scale,
+            self.ratio,
+            self.interpolation
+        )(img)
+    
+
+
 class CustomNoise:
     """自定义高斯噪声 (PIL图像版)"""
     def __init__(self, intensity=10):
@@ -57,7 +94,7 @@ class AutoAugmentWrapper:
                 
                 # 颜色空间变换（降低强度和概率）
                 # (("Solarize", 0.05, 1), ("AutoContrast", 0.7, None),),    # 原0.3,5→0.1,2
-                (("Posterize", 0.3, 7), ("Equalize", 0., None)),       # 原0.3,6→0.1,7（保留更多位）
+                (("Posterize", 0.3, 5), ("Equalize", 0., None)),       # 原0.3,6→0.1,7（保留更多位）
                 (("Color", 0.2, 2), ("Contrast", 0.8, 3)),              # 原0.5,4→0.2,2
                 
                 # 几何变换（不影响颜色）
@@ -78,41 +115,42 @@ class AutoAugmentWrapper:
                 # 其他组合（降低颜色强度）
                 (("Color", 0.2, 2), ("Contrast", 0.9, 3)),              # 原0.4,3→0.2,2
                 (("Solarize", 0.0, 2), ("Sharpness", 0.9, 8),),          # 原0.2,6→0.1,2
-                (("Posterize", 0.1, 7), ("Brightness", 0.6, 3)),        # 原0.2,7→0.1,7
+                (("Posterize", 0.1, 5), ("Brightness", 0.6, 3)),        # 原0.2,7→0.1,7
             ]
         elif self.policy_name == 'grounding_ocr_imagenet2':
             # 降低颜色相关操作的强度
             policy = [
+                
                 # 亮度/对比度调整（降低强度）
-                (("AutoContrast", 0., None), ("Brightness", 0.8, 5),),  # 原8→3
-                (("Contrast", 1, 5), ("Equalize", 0., None)),        # 原7→3
-                (("AutoContrast", 0.0, None),  ("Sharpness", 0.9, 9),),   # 锐度不影响颜色
+                (("AutoContrast", 0.6, 0.5), ("Brightness", 0.8, 5),),  # 原8→3
+                (("Contrast", 1, 5), ("Equalize", 0.6, 0.5)),        # 原7→3
+                (("AutoContrast", 0.5, 0.5),  ("Sharpness", 0.9, 9),),   # 锐度不影响颜色
                 (("Brightness", 0.8, 5), ("Contrast", 0.8, 5)),         # 原6→3
                 
                 # 颜色空间变换（降低强度和概率）
-                # (("Solarize", 0.05, 1), ("AutoContrast", 0.7, None),),    # 原0.3,5→0.1,2
-                (("Posterize", 0.5, 7), ("Equalize", 0., None)),       # 原0.3,6→0.1,7（保留更多位）
+                (("Solarize", 0.0, 100), ("AutoContrast", 0.7, None),),    # 原0.3,5→0.1,2
+                (("Posterize", 0.8, 5), ("RandomResizedCrop", 0.4, 0.1)),       # 原0.3,6→0.1,7（保留更多位）
                 (("Color", 0.5, 4), ("Contrast", 0.8, 5)),              # 原0.5,4→0.2,2
                 
                 # 几何变换（不影响颜色）
-                (("Rotate", 0.9, 8), ("AutoContrast", 0.0, None)),
-                (("ShearX", 0.9, 6), ("Equalize", 0., None)),
-                (("ShearY", 0.9, 6), ("Equalize", 0., None)),
-
+                (("Rotate", 0.9, 8), ("AutoContrast", 0.6, 0.5)),
+                (("ShearX", 0.9, 6), ("Equalize", 0.8, 0.5)),
+                (("ShearY", 0.9, 6), ("Equalize", 0.8, 0.5)),
+                ( ("RandomResizedCrop", 0.9, 0.1),),
                 # 噪声模糊（不影响颜色）
-                # (("GaussianBlur", 0.6, 1), ("AutoContrast", 0.0, None)
+                (("GaussianBlur", 0.6, 20),  ("RandomResizedCrop", 0.4, 0.1)),
+                (("GaussianBlur", 0.8, 5),  ("RandomResizedCrop", 0.4, 0.1)),
                 #  ),
-                # (("Noise", 0.8, 10), ("Equalize", 0., None)),
-                
+                (("Noise", 0.8, 10), ("RandomResizedCrop", 0.4, 0.1), ("Brightness", 0.8, 5)),
                 # 直方图均衡（保留但降低概率）
-                #(("Equalize", 0., None), ("Equalize", 0., None)),     # 原0.8→0.5
-                # (("Equalize", 0., None), ("AutoContrast", 0.0, None)
-                #  ), # 原0.6→0.4
+                (("Equalize", 0.8, 0.5), ("Equalize", 0.8, 0.5)),     # 原0.8→0.5
+                (("Equalize", 0.8, 0.5), ("AutoContrast", 0.6, 0.5)),
                 
                 # 其他组合（降低颜色强度）
                 (("Color", 0.5, 4), ("Contrast", 0.9, 4)),              # 原0.4,3→0.2,2
-                # (("Solarize", 0.0, 2), ("Sharpness", 0.9, 8),),          # 原0.2,6→0.1,2
-                (("Posterize", 0.2, 7), ("Brightness", 0.8, 5)),        # 原0.2,7→0.1,7
+                (("Solarize", 0.0, 100), ("Sharpness", 0.9, 8),),          # 原0.2,6→0.1,2
+                (("Posterize", 0.8, 5), ("Brightness", 0.8, 5)),        # 原0.2,7→0.1,7
+            
             ]
         else:
             raise ValueError(f"Unsupported policy: {self.policy_name}")
@@ -122,7 +160,6 @@ class AutoAugmentWrapper:
         for sub_policy in policy:
             transforms_list = []
             for op in sub_policy:
-                print(op)
                 t = self._create_operation(
                     name=op[0],
                     p=op[1],
@@ -150,8 +187,8 @@ class AutoAugmentWrapper:
 
         # 操作映射字典
         op_map = {
-            "AutoContrast": lambda: transforms.RandomAutocontrast(p=1),
-            "Equalize": lambda: transforms.RandomEqualize(p=1),
+            "AutoContrast": lambda: transforms.RandomApply([transforms.RandomAutocontrast(p=magnitude)], p=p),
+            "Equalize": lambda: transforms.RandomApply([transforms.RandomEqualize(p=magnitude)], p=p),
             "Brightness": lambda: transforms.RandomApply(
                 [transforms.ColorJitter(brightness=(1-(magnitude/10), 1+(magnitude/10)))], p=p),
             "Contrast": lambda: transforms.RandomApply(
@@ -173,9 +210,9 @@ class AutoAugmentWrapper:
             "GaussianBlur": lambda: transforms.RandomApply(
                 [transforms.GaussianBlur(kernel_size=max(3, magnitude*2+1))], p=p),
             "Noise": lambda: transforms.RandomApply(
-                [CustomNoise(intensity=magnitude)], p=p)
+                [CustomNoise(intensity=magnitude)], p=p),
+            "RandomResizedCrop": lambda: transforms.RandomApply([RandomResizedCropAuto(scale=(1-magnitude,1))], p=p),
         }
-
         if name not in op_map:
             raise ValueError(f"Unsupported operation: {name}")
 
@@ -209,7 +246,7 @@ def create_test_images(size=(200, 200), font_size=80):
     word_img = Image.new('RGB', size, color='white')
     draw = ImageDraw.Draw(word_img)
     try:
-        font = ImageFont.truetype("Arial.ttf", font_size)  # 增加字体大小参数
+        font = ImageFont.truetype("arial.ttf", font_size)  # 增加字体大小参数
     except IOError:
         font = ImageFont.load_default()
     
@@ -279,6 +316,10 @@ from PIL import Image, ImageDraw, ImageFont
 import torchvision.transforms as transforms
 from torchvision.transforms import InterpolationMode
 
+
+
+
+
 def visualize_single_ops(img: Image.Image, save_path: str, spacing: int = 10):
     """
     对每个数据增强操作单独应用并可视化结果
@@ -288,6 +329,7 @@ def visualize_single_ops(img: Image.Image, save_path: str, spacing: int = 10):
         save_path: 结果保存路径
         spacing: 图片间距（像素）
     """
+    print("开始执行visualize_single_ops...")
     # 定义操作信息（名称，对应强度值）
     op_info = [
         ("AutoContrast", None),
@@ -302,15 +344,12 @@ def visualize_single_ops(img: Image.Image, save_path: str, spacing: int = 10):
         ("ShearX", 5),
         ("ShearY", 5),
         ("GaussianBlur", 1),
+        ("RandomResizedCrop", 0.1),  # 添加RandomResizedCrop操作
         ("Noise", 10),
     ]
     
-    # 公共变换参数
-    transform_kwargs = {
-        "interpolation": InterpolationMode.BILINEAR,
-        "fill": 255  # 填充颜色为白色
-    }
-    
+    img_size = img.size
+
     # 创建变换列表
     transforms_list = []
     for name, mag in op_info:
@@ -331,29 +370,33 @@ def visualize_single_ops(img: Image.Image, save_path: str, spacing: int = 10):
         elif name == "Color":
             t = transforms.ColorJitter(saturation=(1 - mag/10, 1 + mag/10))
         elif name == "Rotate":
-            t = transforms.RandomRotation(degrees=(-mag, mag), **transform_kwargs)
+            t = transforms.RandomRotation(degrees=(-mag, mag))
         elif name == "ShearX":
-            t = transforms.RandomAffine(degrees=0, shear=(-mag, mag, 0, 0), **transform_kwargs)
+            t = transforms.RandomAffine(degrees=0, shear=(-mag, mag, 0, 0))
         elif name == "ShearY":
-            t = transforms.RandomAffine(degrees=0, shear=(0, 0, -mag, mag), **transform_kwargs)
+            t = transforms.RandomAffine(degrees=0, shear=(0, 0, -mag, mag))
         elif name == "GaussianBlur":
             t = transforms.GaussianBlur(kernel_size=max(3, mag*2+1))
         elif name == "Noise":
             t = CustomNoise(intensity=mag)
+        elif name == "RandomResizedCrop":
+            t = RandomResizedCropAuto(
+                scale=(1-mag,1),
+            )
         else:
             raise ValueError(f"不支持的操作: {name}")
         
         transforms_list.append((name, t))
     
     # 图像基础信息
-    img_size = img.size
+    
     total_ops = len(transforms_list)
     rows = 6  # 每个操作生成6张图片
     font = ImageFont.truetype("arial.ttf", 80) 
 
     # 计算网格尺寸
     grid_width = total_ops * (img_size[0] + spacing) - spacing
-    grid_height = rows * (img_size[1] + spacing) - spacing + 20  # 预留标签空间
+    grid_height = rows * (img_size[1] + spacing) - spacing + 40  # 预留标签空间
     grid = Image.new('RGB', (grid_width, grid_height), 'white')
     grid_draw = ImageDraw.Draw(grid)  # 用于在网格上绘制的draw对象
     
@@ -368,7 +411,7 @@ def visualize_single_ops(img: Image.Image, save_path: str, spacing: int = 10):
         
         # 在网格顶部绘制操作名称
         grid_draw.text(
-            (x + (img_size[0] - text_w) // 2, 5),  # 居中显示
+            (x + (img_size[0] - text_w) // 2, 10),  # 居中显示
             op_name,
             font=ImageFont.truetype("arial.ttf", 20) ,
             fill='black'
@@ -383,6 +426,7 @@ def visualize_single_ops(img: Image.Image, save_path: str, spacing: int = 10):
     # 保存结果
     grid.save(save_path)
     print(f"可视化结果已保存至: {save_path}")
+    print("visualize_single_ops执行完成")
 
 
 def vis_single():
@@ -413,7 +457,7 @@ def vis_single():
 
 def debug_aug():
     # vis_single(); exit()
-    augmenter = AutoAugmentWrapper(policy='grounding_ocr_imagenet', fill=255)
+    augmenter = AutoAugmentWrapper(policy='grounding_ocr_imagenet2', fill=255)
     
     # 生成大字体的测试单词（字体大小设为80）
     test_words = create_random_color_words(num=60, text="hello", font_size=80)
@@ -435,4 +479,6 @@ def debug_shape():
 
 
 if __name__ == "__main__":
-    debug_shape()
+    # debug_shape()
+    # vis_single()
+    debug_aug()
