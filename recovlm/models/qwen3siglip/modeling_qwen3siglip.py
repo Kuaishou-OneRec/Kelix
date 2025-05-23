@@ -1375,6 +1375,7 @@ class Qwen3SiglipModel(Qwen3SiglipPreTrainedModel):
         next_decoder_cache = None
 
         for i, decoder_layer in enumerate(self.layers):
+            print(f"LLM_{i}, rank={torch.distributed.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
 
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -2485,25 +2486,30 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
                 pixel_values = pixel_values.unsqueeze(0)
-                siglip_position_ids = list()
-                image_grid_hws = list()
-                sample_indices = list()
-                cu_seqlens = [0]
+                siglip_position_ids = kwargs.get("image_position_ids", None)
+                image_grid_hws = kwargs.get("image_grid_hws", None)
+                sample_indices = kwargs.get("image_sample_indices", None)
+                cu_seqlens = kwargs.get("image_cu_seqlens", None)
+                if not all ([siglip_position_ids, image_grid_hws, sample_indices, cu_seqlens]):
+                    siglip_position_ids = list()
+                    image_grid_hws = list()
+                    sample_indices = list()
+                    cu_seqlens = [0]
 
-                #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
-                pro = 0
-                for idx, thw in enumerate(image_grid_thw):
-                    thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
-                    numel = np.prod(thw_tuple)
-                    image_grid_hws.append(thw_tuple)
-                    image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
-                    siglip_position_ids.append(image_position_ids)
-                    sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
-                    cu_seqlens.append(cu_seqlens[-1] + numel)
-                    
-                siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
-                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
-                sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
+                    #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
+                    pro = 0
+                    for idx, thw in enumerate(image_grid_thw):
+                        thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
+                        numel = np.prod(thw_tuple)
+                        image_grid_hws.append(thw_tuple)
+                        image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+                        siglip_position_ids.append(image_position_ids)
+                        sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
+                        cu_seqlens.append(cu_seqlens[-1] + numel)
+                        
+                    siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
+                    cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
+                    sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
                 print(f"X=3, rank={torch.distributed.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
                 vision_outputs = self.visual(

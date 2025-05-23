@@ -316,9 +316,9 @@ def _init_profiler(output_dir) -> None:
             torch.profiler.ProfilerActivity.CUDA,
         ],
         schedule=torch.profiler.schedule(
-           wait=530,
+           wait=80,
            warmup=1,
-           active=20,
+           active=10,
            repeat=1,
         ),
         on_trace_ready=trace_handler,
@@ -1126,11 +1126,17 @@ def train():
               cu_seqlens=cu_seqlens
             )
         else:
+            image_position_ids = batch.get("image_position_ids", None)
+            image_grid_hws = batch.get("image_grid_hws", None)
+            image_sample_indices = batch.get("image_sample_indices", None)
+            image_cu_seqlens = batch.get("image_cu_seqlens", None)
             output = model(
               input_ids = input_ids, attention_mask=attention_mask,
               pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
               image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-              cu_seqlens=cu_seqlens
+              cu_seqlens=cu_seqlens, image_position_ids=image_position_ids,
+              image_grid_hws=image_grid_hws, image_sample_indices=image_sample_indices,
+              image_cu_seqlens=image_cu_seqlens
             )
         ticker.tick("model.forward")
 
