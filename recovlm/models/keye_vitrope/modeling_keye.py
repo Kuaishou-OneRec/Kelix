@@ -3116,7 +3116,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     cu_seqlens=cu_seqlens,
                     return_pooler_output=False,
                     use_rope=True,
-                    window_size =2,
+                    window_size =8,
                 )
                 image_embeds = vision_outputs.last_hidden_state
 
