@@ -80,6 +80,40 @@ class AutoAugmentWrapper:
                 (("Solarize", 0.0, 2), ("Sharpness", 0.9, 8),),          # 原0.2,6→0.1,2
                 (("Posterize", 0.1, 7), ("Brightness", 0.6, 3)),        # 原0.2,7→0.1,7
             ]
+        elif self.policy_name == 'grounding_ocr_imagenet2':
+            # 降低颜色相关操作的强度
+            policy = [
+                # 亮度/对比度调整（降低强度）
+                (("AutoContrast", 0., None), ("Brightness", 0.8, 5),),  # 原8→3
+                (("Contrast", 1, 5), ("Equalize", 0., None)),        # 原7→3
+                (("AutoContrast", 0.0, None),  ("Sharpness", 0.9, 9),),   # 锐度不影响颜色
+                (("Brightness", 0.8, 5), ("Contrast", 0.8, 5)),         # 原6→3
+                
+                # 颜色空间变换（降低强度和概率）
+                # (("Solarize", 0.05, 1), ("AutoContrast", 0.7, None),),    # 原0.3,5→0.1,2
+                (("Posterize", 0.5, 7), ("Equalize", 0., None)),       # 原0.3,6→0.1,7（保留更多位）
+                (("Color", 0.5, 4), ("Contrast", 0.8, 5)),              # 原0.5,4→0.2,2
+                
+                # 几何变换（不影响颜色）
+                (("Rotate", 0.9, 8), ("AutoContrast", 0.0, None)),
+                (("ShearX", 0.9, 6), ("Equalize", 0., None)),
+                (("ShearY", 0.9, 6), ("Equalize", 0., None)),
+
+                # 噪声模糊（不影响颜色）
+                # (("GaussianBlur", 0.6, 1), ("AutoContrast", 0.0, None)
+                #  ),
+                # (("Noise", 0.8, 10), ("Equalize", 0., None)),
+                
+                # 直方图均衡（保留但降低概率）
+                #(("Equalize", 0., None), ("Equalize", 0., None)),     # 原0.8→0.5
+                # (("Equalize", 0., None), ("AutoContrast", 0.0, None)
+                #  ), # 原0.6→0.4
+                
+                # 其他组合（降低颜色强度）
+                (("Color", 0.5, 4), ("Contrast", 0.9, 4)),              # 原0.4,3→0.2,2
+                # (("Solarize", 0.0, 2), ("Sharpness", 0.9, 8),),          # 原0.2,6→0.1,2
+                (("Posterize", 0.2, 7), ("Brightness", 0.8, 5)),        # 原0.2,7→0.1,7
+            ]
         else:
             raise ValueError(f"Unsupported policy: {self.policy_name}")
 

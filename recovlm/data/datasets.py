@@ -1772,6 +1772,8 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
                process_vision_info_args={"image_factor": 32},
+               min_visual_tokens_per_frame: int = 4,
+               max_visual_tokens_per_frame: int = 512,
                **kwargs
                ):
     """
