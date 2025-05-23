@@ -12,6 +12,7 @@ import time
 from collections import defaultdict
 import datetime
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import glob
 import json
 import logging
