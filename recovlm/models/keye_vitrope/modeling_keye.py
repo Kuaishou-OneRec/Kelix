@@ -1219,6 +1219,7 @@ class SiglipEncoder(nn.Module):
             if use_window_attn:
                 print(666666, window_size)
                 window_indices, cu_seqlens_within_windows = self.build_window_index(flatten_image_grid_thw, window_size, device)
+                print(777777, cu_seqlens_within_windows)
                 reversed_window_indices = window_indices.argsort()
                 height_position_ids = height_position_ids[window_indices]
                 width_position_ids = width_position_ids[window_indices]
@@ -1247,6 +1248,8 @@ class SiglipEncoder(nn.Module):
             hidden_states = hidden_states[:, window_indices, :]
         else:
             attn_cu_seqlens = cu_seqlens
+
+        print(99999999, attn_cu_seqlens)
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + ((hidden_states[:, reversed_window_indices, :],) if use_window_attn else (hidden_states, ))
