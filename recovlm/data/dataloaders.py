@@ -249,6 +249,8 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                                           video_min_frames=2,
                                           video_max_frames=120,
                                           datasource_config={},
+                                          min_visual_tokens_per_frame=4,
+                                          max_visual_tokens_per_frame=512,
                                           **kwargs):
     model_type = kwargs.get('model_class','Qwen2VLForConditionalGeneration')
     print('test_cut_to_pad:',kwargs.get('cut_to_pad',False))
@@ -285,6 +287,8 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
             datasource_config=datasource_config,
             num_readers=num_readers,
             shuffle_window=shuffle_window,
+            min_visual_tokens_per_frame = min_visual_tokens_per_frame,
+            max_visual_tokens_per_frame = max_visual_tokens_per_frame, 
             **kwargs
             )
 
