@@ -874,7 +874,6 @@ class SiglipEncoder(nn.Module):
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
 
         for i, encoder_layer in enumerate(self.layers):
-            print(f"VIT_{i}, rank={torch.distributed.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
