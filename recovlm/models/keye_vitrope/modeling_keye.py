@@ -1272,7 +1272,10 @@ class SiglipEncoder(nn.Module):
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
+
+        print(99999, use_window_attn)
         if use_window_attn:
+            print(reversed_window_indices)
             hidden_states = hidden_states[:, reversed_window_indices, :]
 
         if output_hidden_states:
@@ -2143,7 +2146,8 @@ class KeyeFlashAttention2(KeyeAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        cu_seqlens: Optional[torch.Tensor] = None
+        cu_seqlens: Optional[torch.Tensor] = None,
+        sliding_window = -1
     ):
         bsz, q_len, _ = hidden_states.size()
         q= self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
@@ -2199,7 +2203,8 @@ class KeyeFlashAttention2(KeyeAttention):
         value_states = value_states.transpose(1, 2)
 
         if (
-            self.config.use_sliding_window
+            sliding_window == -1
+            and self.config.use_sliding_window
             and getattr(self.config, "sliding_window", None) is not None
             and self.layer_idx >= self.config.max_window_layers
         ):
