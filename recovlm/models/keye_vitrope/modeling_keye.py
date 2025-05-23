@@ -1186,7 +1186,7 @@ class SiglipEncoder(nn.Module):
         assert vision_or_text in ["vision", "text"]
         use_window_attn = (window_size > 0 and vision_or_text == "vision")
         use_rope = (use_rope is True) and (vision_or_text == "vision")
-        print(3333333, window_size, use_window_attn)
+        print(3333333, window_size, use_window_attn, use_rope)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
