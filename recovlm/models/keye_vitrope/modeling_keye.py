@@ -800,6 +800,7 @@ class SiglipAttention(nn.Module):
             keys = keys.transpose(1, 2)
             values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
+        print("zzzzzzz", use_flash_attn)
         if not use_flash_attn:
             attention_interface: Callable = eager_attention_forward
             if self.config._attn_implementation != "eager":
