@@ -348,8 +348,15 @@ def exchange_batch_info(samples, ds_list, m):
             if "image_grid_thw" not in s:
                 continue
             thw = s["image_grid_thw"]
-            lens = [(thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))]
+            lens = [(thw[i][0] * thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))]
             image_len.extend(lens)
+        for s in samples:
+            if "video_grid_thw" not in s:
+                continue
+            thw = s["video_grid_thw"]
+            lens = [(thw[i][0] * thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))]
+            image_len.extend(lens)
+
     f1 = m.llm_flops(input_len)
     f2 = m.vit_flops(image_len)
     info = [N, sum(input_len), sum(image_len), f1, f2] + ds_list
