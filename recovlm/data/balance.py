@@ -345,20 +345,13 @@ def exchange_batch_info(samples, ds_list, m):
             m.arch == "Qwen3SiglipModel" or m.arch == "KeyeForConditionalGeneration" or m.arch == "Qwen3ForCausalLM")):
         image_len = []
 
-        # 原来的代码
-        # for s in samples:
-        #     if "image_grid_thw" not in s:
-        #         continue
-        #     thw = s["image_grid_thw"]
-        #     lens = [(thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))]
-        #     image_len.extend(lens)
-
         for s in samples:
             if "image_grid_thw" not in s:
                 continue
             thw = s["image_grid_thw"]
-            lens = [(thw[i][0] * thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))]
+            lens = [(thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))]
             image_len.extend(lens)
+
         for s in samples:
             if "video_grid_thw" not in s:
                 continue
