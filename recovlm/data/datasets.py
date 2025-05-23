@@ -735,8 +735,9 @@ class ChatCompletionVisionDataset(IterableDataset):
                pad_token_id: int = 151643,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
-               **kargs
-               ):
+               min_visual_tokens_per_frame: int = 4,
+               max_visual_tokens_per_frame: int = 512,
+               **kargs):
     """
     datasource_config: 默认覆盖全局配置
                       key: datasource_name
@@ -767,6 +768,8 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.processor = processor
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
+    self.min_visual_tokens_per_frame = min_visual_tokens_per_frame
+    self.max_visual_tokens_per_frame = max_visual_tokens_per_frame
     self.video_nframe = video_nframe
     self.video_fps = video_fps
     self.video_min_frames = video_min_frames
@@ -876,8 +879,8 @@ class ChatCompletionVisionDataset(IterableDataset):
                         sample_dict: Dict[str, Any],
                         conf: Dict[str, Any]):
 
-    min_visual_tokens_per_image = conf["min_visual_tokens_per_image"]
-    max_visual_tokens_per_image = conf["max_visual_tokens_per_image"]
+    min_visual_tokens_per_frame = conf["min_visual_tokens_per_frame"]
+    max_visual_tokens_per_frame = conf["max_visual_tokens_per_frame"]
 
     if isinstance(block["video"], list):
         if all([isinstance(image_block, str) for image_block in block["video"]]):
@@ -897,9 +900,9 @@ class ChatCompletionVisionDataset(IterableDataset):
       if isinstance(block["video"], str) and block["video"] in sample_dict:
         block["video"] = sample_dict[block["video"]]
       # fill other params
-      block["min_pixels"] = min_visual_tokens_per_image * (self.patch_size ** 2) * \
+      block["min_pixels"] = min_visual_tokens_per_frame * (self.patch_size ** 2) * \
           (self.spatial_merge_size ** 2)
-      block["max_pixels"] = max_visual_tokens_per_image * (self.patch_size ** 2) * \
+      block["max_pixels"] = max_visual_tokens_per_frame * (self.patch_size ** 2) * \
           (self.spatial_merge_size ** 2)
       # video split params
       if conf["video_nframe"] > 0:
@@ -920,6 +923,8 @@ class ChatCompletionVisionDataset(IterableDataset):
     assert "segments" in sample["json"]
     data_conf["max_visual_tokens_per_image"] = max(
         data_conf["max_visual_tokens_per_image"], data_conf["min_visual_tokens_per_image"])
+    data_conf["max_visual_tokens_per_frame"] = max(
+        data_conf["max_visual_tokens_per_frame"], data_conf["min_visual_tokens_per_frame"]) 
 
     text = ""
     vision_infos = []
@@ -998,6 +1003,9 @@ class ChatCompletionVisionDataset(IterableDataset):
     assert "message" in sample["json"] or "messages" in sample["json"]
     data_conf["max_visual_tokens_per_image"] = max(
         data_conf["max_visual_tokens_per_image"], data_conf["min_visual_tokens_per_image"])
+    
+    data_conf["max_visual_tokens_per_frame"] = max(
+        data_conf["max_visual_tokens_per_frame"], data_conf["min_visual_tokens_per_frame"])
     
     msg_key = "message" if "message" in sample["json"] else "messages"
     messages = sample["json"][msg_key]
@@ -1149,6 +1157,8 @@ class ChatCompletionVisionDataset(IterableDataset):
     source_conf = {
       "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
       "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
+      "min_visual_tokens_per_frame": self.min_visual_tokens_per_frame,
+      "max_visual_tokens_per_frame": self.max_visual_tokens_per_frame, 
       "video_nframe": self.video_nframe,
       "video_fps": self.video_fps,
       "video_min_frames": self.video_min_frames,
@@ -1176,6 +1186,8 @@ class ChatCompletionVisionDataset(IterableDataset):
       if inputs["input_ids"].shape[-1] > self.max_length:
         source_conf["max_visual_tokens_per_image"] = (
             source_conf["max_visual_tokens_per_image"] * self.shrink_ratio)
+        source_conf["max_visual_tokens_per_frame"] = (
+            source_conf["max_visual_tokens_per_frame"] * self.shrink_ratio)
         continue
       else:
         assert inputs["input_ids"].shape[-1] <= self.max_length, "inputs too long"
@@ -1648,6 +1660,8 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
                process_vision_info_args={"image_factor":32},
+               min_visual_tokens_per_frame: int = 4,
+               max_visual_tokens_per_frame: int = 512,
                **kwargs
                ):
     """
@@ -1678,8 +1692,12 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
+
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
+    self.min_visual_tokens_per_frame = min_visual_tokens_per_frame
+    self.max_visual_tokens_per_frame = max_visual_tokens_per_frame
+
     self.video_nframe = video_nframe
     self.video_fps = video_fps
     self.video_min_frames = video_min_frames
