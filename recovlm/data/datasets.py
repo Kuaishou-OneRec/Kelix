@@ -4167,7 +4167,7 @@ class BalanceParquetDataset(IterableDataset):
           send_data[t[1]].append(samples)
         begin += t[2]
       
-      print_input_info(send_data, "send_data")
+      # print_input_info(send_data, "send_data")
       recvs = transfer.exchange_batch_data(scheme, send_data)
       if self_r < v:
         assert self_r + len(recvs) == v, f"{self_r}, {recvs}, {v}"
