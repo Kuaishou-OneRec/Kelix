@@ -1032,7 +1032,7 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = batch_queue.get() 
+      try: batch = batch_queue.get() if batch_queue is not None else input_fn() 
       except StopIteration: break
       ticker.tick("next_batch")
       

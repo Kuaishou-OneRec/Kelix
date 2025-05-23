@@ -107,7 +107,26 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
         image_obj = Image.open(image)
     if image_obj is None:
         raise ValueError(f"Unrecognized image input, support local path, http url, base64 and PIL.Image, got {image}")
-    image = image_obj.convert("RGB")
+    image = image_obj.convert("RGB")    ## resize
+    if "resized_height" in ele and "resized_width" in ele:
+        resized_height, resized_width = smart_resize(
+            ele["resized_height"],
+            ele["resized_width"],
+            factor=size_factor,
+        )
+    else:
+        width, height = image.size
+        min_pixels = ele.get("min_pixels", MIN_PIXELS)
+        max_pixels = ele.get("max_pixels", MAX_PIXELS)
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            factor=size_factor,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+        )
+    image = image.resize((resized_width, resized_height))
+
     return image
 
 

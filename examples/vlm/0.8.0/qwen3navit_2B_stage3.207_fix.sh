@@ -12,11 +12,11 @@ else
         echo "Git user.email: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile  | head -n 1000 > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B-siglip/
-OUTPUT_DIR=/llm_reco/lingzhixin/output/qwen3navit/hs_balance/0.0.2/2B256/
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_data_0.3.2/0.8.0/207/2b/
 
 mkdir -p $OUTPUT_DIR
 
@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.4.1;model_size:72B;GPU_type:H800;data:inner&outer_comments"
+comment="128H_080_201"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -110,28 +110,29 @@ nohup mpirun --allow-run-as-root \
         -x KAI_FLAG_FILE \
         -x KML_ID \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
-	    -x TOKENIZERS_PARALLELISM=false \
+	-x TOKENIZERS_PARALLELISM=false \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-	bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
+        bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_8B256_bal.json \
+                --dataset_config examples/vlm/0.8.0/qwen3navit_2B_stage3.207.json \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
-		        --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
+                --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 15000 \
-                --learning_rate 1e-6 \
-                --min_lr 0.0 \
+                --max_length 21000 \
+                --learning_rate 2e-5 \
+                --vision_learning_rate 2e-6 \
+                --min_lr 0 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --num_warmup_steps 500 \
-                --num_training_steps 50000 \
+                --num_warmup_steps 250 \
+                --num_training_steps 8000 \
                 --save_checkpoint_per_step 500 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
-                --logging_per_step 10 \
+                --logging_per_step 20 \
                 --fp32_weight \
 		--monitor_image_tokens \
                 --seed 19260817 \
@@ -143,5 +144,7 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
+                --resume_from /mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage2_0.4.2/0.8.0/2b/step7000 \
+		--resume_from_tag global_step7000 \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
