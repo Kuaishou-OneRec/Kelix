@@ -1346,15 +1346,9 @@ class Qwen3SiglipModel(Qwen3SiglipPreTrainedModel):
         elif position_ids.dim() == 2:
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
-        _print("ststststsstss", attention_mask)
-        _print("ooooooooo", output_attentions)
-        _print("inputs_embeds", inputs_embeds)
-        _print("cache_position", cache_position)
-        _print("past_key_values", past_key_values)
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
-        _print("ssssssss", causal_mask)
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
@@ -2560,7 +2554,7 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
                     sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
                     cu_seqlens.append(cu_seqlens[-1] + numel)
                 siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values_videos.device)
-                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
+                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values_videos.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values_videos.device)
 
                 vision_outputs = self.visual(
