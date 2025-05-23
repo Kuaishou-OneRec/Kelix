@@ -20,8 +20,8 @@ def serialize_tensor_group(tensors: List[torch.Tensor], names: List[str], ds_nam
     tensor_bytes.extend(struct.pack(">I", len(tensors)))  # 张量数量
     
     for name, tensor in zip(names, tensors):
-        if isinstance(tensor, list): tensor = torch.stack(tensor)
-
+        # if isinstance(tensor, list): tensor = torch.stack(tensor)
+        print(233333, tensor)
         dtype = str(tensor.dtype)
         shape = tensor.shape
         # 序列化名称
