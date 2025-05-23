@@ -4166,6 +4166,8 @@ class BalanceParquetDataset(IterableDataset):
             samples[-1][pivot] = source_list[sid]
           send_data[t[1]].append(samples)
         begin += t[2]
+      
+      print_input_info(send_data)
       recvs = transfer.exchange_batch_data(scheme, send_data)
       if self_r < v:
         assert self_r + len(recvs) == v, f"{self_r}, {recvs}, {v}"
@@ -4188,7 +4190,6 @@ class BalanceParquetDataset(IterableDataset):
       source_list.append(source_name)
       if len(buffer) == self.buffer_size:
         raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
-        print_input_info(source_list, "source_list")
         candidates, send_out = self._balance_global(raw_input_ids, buffer, source_list)
         used = set()
         for selected, is_local in candidates:
