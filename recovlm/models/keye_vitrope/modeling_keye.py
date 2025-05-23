@@ -1198,7 +1198,6 @@ class SiglipEncoder(nn.Module):
         hidden_states = inputs_embeds
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
         if use_rope is True:
-            print('llalalalalallmsy_use_rope',use_rope)
             flatten_image_grid_thw = self.flatten_list(image_grid_thw)
             assert sum([np.prod(x) for x in flatten_image_grid_thw]) == hidden_states.shape[1], (flatten_image_grid_thw, hidden_states.shape)
 
@@ -3165,7 +3164,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     cu_seqlens=cu_seqlens,
                     return_pooler_output=False,
                     use_rope=True,
-                    window_size = 3,
+                    window_size = 2,
                 )
                 video_embeds = vision_outputs.last_hidden_state
                 video_embeds = self.mlp_AR(video_embeds, video_grid_thw)
