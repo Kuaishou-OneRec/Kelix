@@ -2486,10 +2486,10 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
                 pixel_values = pixel_values.unsqueeze(0)
-                siglip_position_ids = kwargs.get("image_position_ids", None)
-                image_grid_hws = kwargs.get("image_grid_hws", None)
-                sample_indices = kwargs.get("image_sample_indices", None)
-                cu_seqlens = kwargs.get("image_cu_seqlens", None)
+                siglip_position_ids = kwargs.pop("image_position_ids", None)
+                image_grid_hws = kwargs.pop("image_grid_hws", None)
+                sample_indices = kwargs.pop("image_sample_indices", None)
+                cu_seqlens = kwargs.pop("image_cu_seqlens", None)
                 if any([t is None for t in [siglip_position_ids, image_grid_hws, sample_indices, cu_seqlens]]):
                     siglip_position_ids = list()
                     image_grid_hws = list()
