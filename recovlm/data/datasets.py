@@ -4188,6 +4188,7 @@ class BalanceParquetDataset(IterableDataset):
       source_list.append(source_name)
       if len(buffer) == self.buffer_size:
         raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
+        print_input_info(source_list, "source_list")
         candidates, send_out = self._balance_global(raw_input_ids, buffer, source_list)
         used = set()
         for selected, is_local in candidates:
