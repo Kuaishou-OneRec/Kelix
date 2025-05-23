@@ -122,7 +122,7 @@ def make_inputs(a,b):
         {
             "role": "user",
             "content": [
-                # {"type": "image", "image": generate_circle_image((a,b),) },
+                {"type": "image", "image": generate_circle_image((a,b),) },
                 {"type": "video", "video": "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/tests/qwen3navit/2.mp4"},
                 {"type": "text", "text": "what's in the image"},
             ],
@@ -134,7 +134,10 @@ def make_inputs(a,b):
         messages, tokenize=False, add_generation_prompt=False
     )
     image_inputs, video_inputs = process_vision_info(messages)
-    print(video_inputs[0])
+    print(video_inputs, type(video_inputs), type(video_inputs[0]))
+    print(image_inputs, type(image_inputs), type(image_inputs[0]))
+    exit()
+
     print(type(video_inputs[0]), video_inputs[0].shape, (video_inputs[0] == 151656).sum())
     print_input_info(video_inputs, "video_inputs")
     # print(image_inputs, video_inputs)
@@ -150,6 +153,7 @@ def make_inputs(a,b):
     return messages, inputs
 
 
+make_inputs(100,100)
 logits_all = []
 if 1:
     try:
