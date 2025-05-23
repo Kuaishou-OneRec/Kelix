@@ -800,7 +800,6 @@ class SiglipAttention(nn.Module):
             keys = keys.transpose(1, 2)
             values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        print("zzzzzzz", use_flash_attn)
         if not use_flash_attn:
             attention_interface: Callable = eager_attention_forward
             if self.config._attn_implementation != "eager":
@@ -1187,7 +1186,6 @@ class SiglipEncoder(nn.Module):
         assert vision_or_text in ["vision", "text"]
         use_window_attn = (window_size > 0 and vision_or_text == "vision")
         use_rope = (use_rope is True) and (vision_or_text == "vision")
-        print(3333333, window_size, use_window_attn, use_rope)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1218,9 +1216,7 @@ class SiglipEncoder(nn.Module):
             window_indices, cu_seqlens_within_windows = None, None
 
             if use_window_attn:
-                print(666666, window_size)
                 window_indices, cu_seqlens_within_windows = self.build_window_index(flatten_image_grid_thw, window_size, device)
-                print(777777, cu_seqlens_within_windows)
                 reversed_window_indices = window_indices.argsort()
                 height_position_ids = height_position_ids[window_indices]
                 width_position_ids = width_position_ids[window_indices]
@@ -1250,7 +1246,6 @@ class SiglipEncoder(nn.Module):
         else:
             attn_cu_seqlens = cu_seqlens
 
-        print(99999999, attn_cu_seqlens)
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + ((hidden_states[:, reversed_window_indices, :],) if use_window_attn else (hidden_states, ))
@@ -1277,9 +1272,7 @@ class SiglipEncoder(nn.Module):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
-        print(99999, use_window_attn)
         if use_window_attn:
-            print(reversed_window_indices)
             hidden_states = hidden_states[:, reversed_window_indices, :]
 
         if output_hidden_states:
@@ -1352,7 +1345,6 @@ class SiglipVisionTransformer(nn.Module):
         #     dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
         # )
         # cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-        print(222222, window_size)
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
