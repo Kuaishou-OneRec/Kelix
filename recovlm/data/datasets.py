@@ -2607,7 +2607,7 @@ class NaiveParquetDataset(IterableDataset):
               image = Image.open(image_b64)
               samples[image_name] = image
           except Exception as e:
-              raise ValueError(f"Failed to load image from path {image_b64}: {str(e)}")
+              raise ValueError(f"Failed to load image from path {image_b64}: {str(e)}, image_b64={image_b64[:100]}")
       # 否则按base64处理
       else:
           try:
@@ -2616,7 +2616,7 @@ class NaiveParquetDataset(IterableDataset):
               image = Image.open(image_bytes_stream)
               samples[image_name] = image
           except Exception as e:
-              raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}")
+              raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}, image_b64={image_b64[:100]}")
 
   def read_fn(self, epoch_fn):
     rank, world_size, worker, num_workers = pytorch_worker_info()
