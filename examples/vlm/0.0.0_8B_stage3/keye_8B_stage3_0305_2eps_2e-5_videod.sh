@@ -113,6 +113,7 @@ nohup mpirun --allow-run-as-root \
         -x KML_ID \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
 	-x TOKENIZERS_PARALLELISM=false \
+	-x _DATASET_SKIP_MM=SKIP_VI \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \

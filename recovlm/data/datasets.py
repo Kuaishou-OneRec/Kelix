@@ -70,7 +70,7 @@ from recovlm.services.clients import PidInfoClient
 
 
 _DATASET_SKIP_MM = os.environ.get("_DATASET_SKIP_MM", "")
-assert _DATASET_SKIP_MM in ["", "SKIP_MM"]
+assert _DATASET_SKIP_MM in ["", "SKIP_MM", "SKIP_VI"]
 print(f"_DATASET_SKIP_MM={_DATASET_SKIP_MM}")
 
 
@@ -933,6 +933,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     
     for segment in segments:
       if _DATASET_SKIP_MM == "SKIP_MM" and segment["type"] != "text": continue
+      if _DATASET_SKIP_MM == "SKIP_VI" and segment["type"] != "video": continue
 
       if segment["type"] == "text":
         text += segment["text"]
@@ -1017,6 +1018,7 @@ class ChatCompletionVisionDataset(IterableDataset):
           continue
         for block in content:
           if _DATASET_SKIP_MM == "SKIP_MM" and block["type"] != "text": continue
+          if _DATASET_SKIP_MM == "SKIP_VI" and segment["type"] != "video": continue
 
           if block["type"] == "image":
             self._fill_image_block(block, sample, 
@@ -1140,7 +1142,47 @@ class ChatCompletionVisionDataset(IterableDataset):
         video_token_id=self.video_token_id,
         vision_start_token_id=self.vision_start_token_id
     )
+    inputs.pop("attention_mask")
+    return inputs
 
+  def _gen_vid_pad(self):
+    """
+    append an image, to trigger vit for pure text sample
+    return 6 token: vstart, 4 * image_token, vend
+    """
+    # Image.fromarray(np.zeros((50,50, 3), dtype=np.uint8))
+    text = "<|vision_start|><|image_pad|><|vision_end|>"
+    pad_image = {
+        "type": "image",
+        "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
+    }
+
+    self._fill_image_block(pad_image, sample_dict={}, conf={
+        "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
+        "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
+        "video_nframe": self.video_nframe,
+        "video_fps": self.video_fps,
+        "video_min_frames": self.video_min_frames,
+        "video_max_frames": self.video_max_frames
+    })
+    image_inputs, _ = self.process_vision_info(vision_infos=[pad_image])
+    inputs = self.processor(
+        text=text,
+        images=image_inputs,
+        videos=None,
+        return_tensors="pt"
+    )
+
+    inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
+    inputs["position_ids"] = get_rope_index(
+        inputs["input_ids"],
+        image_grid_thw=inputs.get("image_grid_thw"),
+        video_grid_thw=inputs.get("video_grid_thw"),
+        spatial_merge_size=self.spatial_merge_size,
+        image_token_id=self.image_token_id,
+        video_token_id=self.video_token_id,
+        vision_start_token_id=self.vision_start_token_id
+    )
     inputs.pop("attention_mask")
     return inputs
 
