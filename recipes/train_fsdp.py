@@ -1039,12 +1039,14 @@ def train():
 
       micro_step += 1
 
-      if show_cnt > 0 and dist.get_rank() == 0:
+      if show_cnt > 0 and dist.get_rank() <= 8:
         with Timer("Show data"):
           input_text = tokenizer.decode(batch['input_ids'][0])
-          print_rank_0(
+          import time
+          time.sleep(float(dist.get_rank()) * 0.3)
+          print(
               f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
-          print_rank_0(batch)
+          print_input_info(batch, f"rank{dist.get_rank()}")
           show_cnt -= 1
           
       data_source = batch.pop("data_source", None) # dataset source list cur batch
