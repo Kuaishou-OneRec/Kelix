@@ -136,7 +136,7 @@ def make_inputs(a,b):
     image_inputs, video_inputs = process_vision_info(messages)
     print(video_inputs, type(video_inputs), type(video_inputs[0]))
     print(image_inputs, type(image_inputs), type(image_inputs[0]))
-    exit()
+    # exit()
 
     print(type(video_inputs[0]), video_inputs[0].shape, (video_inputs[0] == 151656).sum())
     print_input_info(video_inputs, "video_inputs")
