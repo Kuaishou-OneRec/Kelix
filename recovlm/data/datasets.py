@@ -1129,8 +1129,8 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_min_frames": self.video_min_frames,
       "video_max_frames": self.video_max_frames
     }
-    self._fill_image_block(pad_image, sample_dict={}, conf=source_conf})
-    self._fill_video_block(pad_video, sample_dict={}, conf=source_conf})
+    self._fill_image_block(pad_image, sample_dict={}, conf=source_conf)
+    self._fill_video_block(pad_video, sample_dict={}, conf=source_conf)
     image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video])
     inputs = self.processor(
         text=text,
