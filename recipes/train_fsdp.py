@@ -1147,7 +1147,7 @@ def train():
 
         ticker.tick("loss_fn")
 
-
+       print(f"X=111, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       with Timer("bwd"):
         loss.backward(loss)
         clip_grad_by_value(model, args.clip_range)
