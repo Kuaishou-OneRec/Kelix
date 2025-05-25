@@ -933,7 +933,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     
     for segment in segments:
       if _DATASET_SKIP_MM == "SKIP_MM" and segment["type"] != "text": continue
-      if _DATASET_SKIP_MM == "SKIP_VI" and segment["type"] != "video": continue
+      if _DATASET_SKIP_MM == "SKIP_VI" and segment["type"] == "video": continue
 
       if segment["type"] == "text":
         text += segment["text"]
@@ -1018,7 +1018,7 @@ class ChatCompletionVisionDataset(IterableDataset):
           continue
         for block in content:
           if _DATASET_SKIP_MM == "SKIP_MM" and block["type"] != "text": continue
-          if _DATASET_SKIP_MM == "SKIP_VI" and block["type"] != "video": continue
+          if _DATASET_SKIP_MM == "SKIP_VI" and block["type"] == "video": continue
 
           if block["type"] == "image":
             self._fill_image_block(block, sample, 
