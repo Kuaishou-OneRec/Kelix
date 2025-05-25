@@ -146,7 +146,7 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --resume_from /mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage2_0.4.4/0.8.0/8b/step13000/step13000/ \
+                --resume_from /mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage2_0.4.4/0.8.0/8b/step13000/ \
 		--resume_from_tag global_step13000 \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
