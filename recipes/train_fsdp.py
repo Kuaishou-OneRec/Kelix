@@ -1147,7 +1147,7 @@ def train():
 
         ticker.tick("loss_fn")
 
-      print(f"X=111, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
+      # print(f"X=111, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       with Timer("bwd"):
         loss.backward(loss)
         clip_grad_by_value(model, args.clip_range)
@@ -1160,7 +1160,7 @@ def train():
           global_step += 1
 
           ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
-      print(f"X=100, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
+      # print(f"X=100, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       #print(f"X=100, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       ########## dataset source monitor ###############
       if args.monitor_datasource_loss:
