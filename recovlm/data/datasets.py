@@ -1110,12 +1110,15 @@ class ChatCompletionVisionDataset(IterableDataset):
     return 6 token: vstart, 4 * image_token, vend
     """
     # Image.fromarray(np.zeros((50,50, 3), dtype=np.uint8))
-    text = "<|vision_start|><|image_pad|><|vision_end|>"
+    text = "<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|video_pad|><|vision_end|>"
     pad_image = {
         "type": "image",
         "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
     }
-
+    pad_video = {
+        "type": "video",
+        "video": [{"type": "image", "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8))}],
+    }
     self._fill_image_block(pad_image, sample_dict={}, conf={
         "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
         "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
@@ -1124,11 +1127,19 @@ class ChatCompletionVisionDataset(IterableDataset):
         "video_min_frames": self.video_min_frames,
         "video_max_frames": self.video_max_frames
     })
-    image_inputs, _ = self.process_vision_info(vision_infos=[pad_image])
+    self._fill_video_block(pad_video, sample_dict={}, conf={
+        "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
+        "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
+        "video_nframe": self.video_nframe,
+        "video_fps": self.video_fps,
+        "video_min_frames": self.video_min_frames,
+        "video_max_frames": self.video_max_frames
+    })
+    image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video])
     inputs = self.processor(
         text=text,
         images=image_inputs,
-        videos=None,
+        videos=video_inputs,
         return_tensors="pt"
     )
 
@@ -1145,46 +1156,46 @@ class ChatCompletionVisionDataset(IterableDataset):
     inputs.pop("attention_mask")
     return inputs
 
-  def _gen_vid_pad(self):
-    """
-    append an image, to trigger vit for pure text sample
-    return 6 token: vstart, 4 * image_token, vend
-    """
-    # Image.fromarray(np.zeros((50,50, 3), dtype=np.uint8))
-    text = "<|vision_start|><|image_pad|><|vision_end|>"
-    pad_image = {
-        "type": "image",
-        "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
-    }
+  # def _gen_vid_pad(self):
+  #   """
+  #   append an image, to trigger vit for pure text sample
+  #   return 6 token: vstart, 4 * image_token, vend
+  #   """
+  #   # Image.fromarray(np.zeros((50,50, 3), dtype=np.uint8))
+  #   text = "<|vision_start|><|image_pad|><|vision_end|>"
+  #   pad_image = {
+  #       "type": "image",
+  #       "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
+  #   }
 
-    self._fill_image_block(pad_image, sample_dict={}, conf={
-        "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
-        "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
-        "video_nframe": self.video_nframe,
-        "video_fps": self.video_fps,
-        "video_min_frames": self.video_min_frames,
-        "video_max_frames": self.video_max_frames
-    })
-    image_inputs, _ = self.process_vision_info(vision_infos=[pad_image])
-    inputs = self.processor(
-        text=text,
-        images=image_inputs,
-        videos=None,
-        return_tensors="pt"
-    )
+  #   self._fill_image_block(pad_image, sample_dict={}, conf={
+  #       "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
+  #       "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
+  #       "video_nframe": self.video_nframe,
+  #       "video_fps": self.video_fps,
+  #       "video_min_frames": self.video_min_frames,
+  #       "video_max_frames": self.video_max_frames
+  #   })
+  #   image_inputs, _ = self.process_vision_info(vision_infos=[pad_image])
+  #   inputs = self.processor(
+  #       text=text,
+  #       images=image_inputs,
+  #       videos=None,
+  #       return_tensors="pt"
+  #   )
 
-    inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
-    inputs["position_ids"] = get_rope_index(
-        inputs["input_ids"],
-        image_grid_thw=inputs.get("image_grid_thw"),
-        video_grid_thw=inputs.get("video_grid_thw"),
-        spatial_merge_size=self.spatial_merge_size,
-        image_token_id=self.image_token_id,
-        video_token_id=self.video_token_id,
-        vision_start_token_id=self.vision_start_token_id
-    )
-    inputs.pop("attention_mask")
-    return inputs
+  #   inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
+  #   inputs["position_ids"] = get_rope_index(
+  #       inputs["input_ids"],
+  #       image_grid_thw=inputs.get("image_grid_thw"),
+  #       video_grid_thw=inputs.get("video_grid_thw"),
+  #       spatial_merge_size=self.spatial_merge_size,
+  #       image_token_id=self.image_token_id,
+  #       video_token_id=self.video_token_id,
+  #       vision_start_token_id=self.vision_start_token_id
+  #   )
+  #   inputs.pop("attention_mask")
+  #   return inputs
 
   def _process(self, sample, source_name=None):
     # self._may_filter(sample)
