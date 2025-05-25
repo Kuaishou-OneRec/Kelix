@@ -808,7 +808,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
-    image_pad_len = 6
+    image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
 
@@ -1119,22 +1119,18 @@ class ChatCompletionVisionDataset(IterableDataset):
         "type": "video",
         "video": [{"type": "image", "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8))}],
     }
-    self._fill_image_block(pad_image, sample_dict={}, conf={
-        "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
-        "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
-        "video_nframe": self.video_nframe,
-        "video_fps": self.video_fps,
-        "video_min_frames": self.video_min_frames,
-        "video_max_frames": self.video_max_frames
-    })
-    self._fill_video_block(pad_video, sample_dict={}, conf={
-        "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
-        "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
-        "video_nframe": self.video_nframe,
-        "video_fps": self.video_fps,
-        "video_min_frames": self.video_min_frames,
-        "video_max_frames": self.video_max_frames
-    })
+    source_conf = {
+      "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
+      "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
+      "min_visual_tokens_per_frame": self.min_visual_tokens_per_frame,
+      "max_visual_tokens_per_frame": self.max_visual_tokens_per_frame, 
+      "video_nframe": self.video_nframe,
+      "video_fps": self.video_fps,
+      "video_min_frames": self.video_min_frames,
+      "video_max_frames": self.video_max_frames
+    }
+    self._fill_image_block(pad_image, sample_dict={}, conf=source_conf})
+    self._fill_video_block(pad_video, sample_dict={}, conf=source_conf})
     image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video])
     inputs = self.processor(
         text=text,
