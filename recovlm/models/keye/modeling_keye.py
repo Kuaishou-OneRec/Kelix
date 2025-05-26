@@ -2942,7 +2942,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
-            inputs_embeds = self.model.embed_tokens(input_ids)
+            inputs_embeds = self.model.embed_tokens(input_ids) # l x 1024, l来自多条样本
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
                 pixel_values = pixel_values.unsqueeze(0)
@@ -2966,6 +2966,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
+
+                # pixel_values: n x 3 x 16 x 16
                 vision_outputs = self.visual(
                     pixel_values=pixel_values, 
                     image_grid_thw=image_grid_hws,
@@ -2976,6 +2978,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     cu_seqlens=cu_seqlens,
                     return_pooler_output=False,
                 )
+                # vision_outputs: n x 1024
                 image_embeds = vision_outputs.last_hidden_state
 
                 image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
