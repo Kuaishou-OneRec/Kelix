@@ -96,8 +96,9 @@ def get_sequence_parallel_group(backend="nccl"):
         raise NotImplementedError(f"Unsupport sequence parallel backend: {backend}")
 
 def get_sequence_parallel_world_size():
-    return 1
+    # return 1
     """Get the sequence parallel world size."""
+    print(f"dist.get_world_size(group=get_sequence_parallel_group())=", dist.get_world_size(group=get_sequence_parallel_group()))
     try: return dist.get_world_size(group=get_sequence_parallel_group())
     except: return 1
 
