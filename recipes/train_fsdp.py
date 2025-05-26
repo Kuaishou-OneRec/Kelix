@@ -16,7 +16,6 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import glob
 import json
 import logging
-import collections
 import pickle
 import itertools
 import contextlib
