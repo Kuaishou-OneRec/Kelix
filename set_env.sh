@@ -38,5 +38,5 @@ mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 
 
 export http_proxy=http://oversea-squid2.ko.txyun:11080 https_proxy=http://oversea-squid2.ko.txyun:11080 no_proxy=localhost,127.0.0.1,localaddress,localdomain.com,internal,corp.kuaishou.com,test.gifshow.com,staging.kuaishou.com
 apt install net-tools
-mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "wget https://halo.corp.kuaishou.com/api/cloud-storage/v1/public-objects/user-cloud-storage/xray%2Finstall_xray.sh -O install_xray.sh && bash install_xray.sh"
+#mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "wget https://halo.corp.kuaishou.com/api/cloud-storage/v1/public-objects/user-cloud-storage/xray%2Finstall_xray.sh -O install_xray.sh && bash install_xray.sh"
 
