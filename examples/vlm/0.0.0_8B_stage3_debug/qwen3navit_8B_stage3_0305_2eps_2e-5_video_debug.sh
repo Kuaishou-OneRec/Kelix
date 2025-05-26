@@ -113,7 +113,6 @@ nohup mpirun --allow-run-as-root \
 	-x TOKENIZERS_PARALLELISM=false \
         -x http_proxy=\
         -x https_proxy=\
-        with_nccl_local_env \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --dataset_config examples/vlm/0.0.0_8B_stage3_debug/keye_8B_stage3_0305debug.json \
