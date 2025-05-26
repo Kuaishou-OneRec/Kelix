@@ -1150,7 +1150,7 @@ def train():
         local_labels = get_local_sequence(labels, seq_idx=1)
         # loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
         print(f"logits: {logits.shape}, labels: {labels.shape}, local_labels: {local_labels.shape}")
-        loss = loss_fn(logits, labels)
+        loss = loss_fn(logits.float().reshape(-1, logits.shape[-1]), labels.reshape(-1))
 
         ticker.tick("loss_fn")
 
