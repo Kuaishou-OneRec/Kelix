@@ -1147,7 +1147,8 @@ def train():
             dtype=labels.dtype).to(device=labels.device, non_blocking=True)
         labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
         local_labels = get_local_sequence(labels, seq_idx=1)
-        loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
+        # loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
+        loss = torch.sum(logits) / logits.numel()
 
         ticker.tick("loss_fn")
 
