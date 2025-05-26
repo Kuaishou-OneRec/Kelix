@@ -1049,15 +1049,12 @@ def train():
           show_cnt -= 1
           
       data_source = batch.pop("data_source", None) # dataset source list cur batch
-<<<<<<< HEAD
+
       #print(f"X=0, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       to_cuda(batch)
       ticker.tick("to_cuda(batch)")
       #rint(f"X=1, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
-=======
-      to_cuda(batch)
-      ticker.tick("to_cuda(batch)")
->>>>>>> 0.8.0_lzx_0522
+
 
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
