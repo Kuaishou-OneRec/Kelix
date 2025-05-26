@@ -924,8 +924,9 @@ def train():
   ##############
   torch_profiler = _init_profiler(output_dir=os.path.join(args.output_dir, "torch_profile"))
 
-  loss_fn = CrossEntropyLoss(
-    ignore_index=-100, return_token_loss=True, shift_labels=False)
+  # loss_fn = CrossEntropyLoss(
+  #   ignore_index=-100, return_token_loss=True, shift_labels=False)
+  loss_fn = torch.nn.CrossEntropyLoss(ignore_index=-100)
 
   start_time = time.time()
   start_time0 = start_time
@@ -1147,7 +1148,9 @@ def train():
             dtype=labels.dtype).to(device=labels.device, non_blocking=True)
         labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
         local_labels = get_local_sequence(labels, seq_idx=1)
-        loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
+        # loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
+        print(f"logits: {logits.shape}, labels: {labels.shape}, local_labels: {local_labels.shape}")
+        loss = loss_fn(logits, labels)
 
         ticker.tick("loss_fn")
 

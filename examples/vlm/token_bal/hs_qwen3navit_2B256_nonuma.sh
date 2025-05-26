@@ -119,7 +119,6 @@ nohup mpirun --allow-run-as-root \
                 --dataset_config examples/vlm/qwen3navit/debug_qwen3navit_8B256_bal.json \
                 --model_class Qwen3SiglipForConditionalGeneration_navit \
 		--allow_random_init_params "mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias" \
-                --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --max_length 28500 \
                 --learning_rate 1e-6 \
@@ -132,6 +131,7 @@ nohup mpirun --allow-run-as-root \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 10 \
+		--fp32_weight \
 		--monitor_image_tokens \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
