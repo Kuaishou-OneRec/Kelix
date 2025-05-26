@@ -72,7 +72,7 @@ from recovlm.training.parallel import UlyssesAttention, \
     get_local_sequence
 
 
-def get_sequence_parallel_world_size(): return 1
+# def get_sequence_parallel_world_size(): return 1
 
 
 if is_flash_attn_2_available():
@@ -613,6 +613,8 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
+
+
         for layer_num, blk in enumerate(self.blocks):
             if layer_num in self.fullatt_block_indexes:
                 cu_seqlens_now = cu_seqlens
@@ -805,7 +807,6 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
 
 
 class Qwen2_5_VLAttention(nn.Module):
@@ -1055,7 +1056,6 @@ class Qwen2_5_VLFlashAttention2(Qwen2_5_VLAttention):
         return attn_output, attn_weights, past_key_value
 
 
-
 class Qwen2_5_VLSdpaAttention(Qwen2_5_VLAttention):
     """
     Qwen2 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -1094,12 +1094,12 @@ class Qwen2_5_VLSdpaAttention(Qwen2_5_VLAttention):
 
         bsz, q_len, _ = hidden_states.size()
 
-        query_states = self.q_norm(self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
-        key_states = self.k_norm(self.k_proj(hidden_states).view(bsz, q_len, -1, self.head_dim))
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
         value_states = self.v_proj(hidden_states)
 
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
+        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
@@ -1164,8 +1164,6 @@ class Qwen2_5_VLDecoderLayer(nn.Module):
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."
             )
-        # config._attn_implementation = "eager"
-        assert config._attn_implementation == "flash_attention_2", f"config._attn_implementation is {config._attn_implementation}"
         self.self_attn = QWEN2_5_VL_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
         self.mlp = Qwen2MLP(config)
         self.input_layernorm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1950,7 +1948,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
-
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 n_image_features = image_embeds.shape[0]
                 if n_image_tokens != n_image_features:
@@ -2228,6 +2225,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
 
         return input_ids, model_kwargs
+
 
 
 
