@@ -2402,12 +2402,12 @@ class Qwen3Model(Qwen3PreTrainedModel):
 
         # shard hidden_states & position_embeddings for sequence parallel
         if get_sequence_parallel_world_size() > 1:
-            print("bbbbbb_split", hidden_states.shapes)
+            print("bbbbbb_split", hidden_states.shape)
             start, end = get_local_sequence_boundary(hidden_states.shape[1])
             sin, cos = position_embeddings
             position_embeddings = (sin[:, :, start:end, :], cos[:, :, start:end, :])
             hidden_states = hidden_states[:, start:end, :]
-            print("aaaaaaa_split", hidden_states.shapes)
+            print("aaaaaaa_split", hidden_states.shape)
 
 
 
