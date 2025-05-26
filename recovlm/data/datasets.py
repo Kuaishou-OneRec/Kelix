@@ -4253,6 +4253,6 @@ class BalanceParquetDataset(IterableDataset):
     self.balance_thread.start()
     self.packing_thread.start()
 
-    result = self._result_buf.get()
     while True:
+        result = self._result_buf.get()
         yield result
