@@ -123,15 +123,15 @@ nohup mpirun --allow-run-as-root \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
 		--monitor_image_tokens \
-                --max_length 15000 \
+                --max_length 16000 \
                 --learning_rate 2e-5 \
                 --vision_learning_rate 2e-6 \
                 --min_lr 1e-6 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --num_warmup_steps 1200 \
-                --num_training_steps 13000 \
-                --save_checkpoint_per_step 1000 \
+                --num_warmup_steps 1100 \
+                --num_training_steps 12500 \
+                --save_checkpoint_per_step 800 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 20 \
