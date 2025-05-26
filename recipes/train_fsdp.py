@@ -1172,13 +1172,7 @@ def train():
           global_step += 1
 
           ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
-<<<<<<< HEAD
-      # print(f"X=100, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
-      #print(f"X=100, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
-=======
 
-      print_rank_0(f"rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
->>>>>>> 0.8.0_lzx_0522
       ########## dataset source monitor ###############
       if args.monitor_datasource_loss:
         # WARN: assume batch_size = 1
