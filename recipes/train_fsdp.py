@@ -1074,16 +1074,16 @@ def train():
 
       # 打印 token 数量
       if not use_flops_balance or True:
-        token_count = input_ids.numel()  # 计算 token 数量
+        token_count = input_ids.numel() / args.sequence_parallel_size  # 计算 token 数量
         print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
-        num_tokens = token_count
-        num_samples = (sample_idx.max() + 1).sum()
+        num_tokens = token_count  
+        num_samples = (sample_idx.max() + 1).sum()  / args.sequence_parallel_size
 
         image_tokens_ids = input_ids == image_token_id
-        num_image_tokens = image_tokens_ids.sum().item()
+        num_image_tokens = image_tokens_ids.sum().item() / args.sequence_parallel_size
         num_image_tokens2 = num_image_tokens
 
-        num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item()
+        num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item() / args.sequence_parallel_size
         mfu_stats.set(num_image_tokens, num_tokens, num_samples.detach().item(), num_images)
 
         # num_tokens - (sample_idx == -1).sum()

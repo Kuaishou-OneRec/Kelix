@@ -98,7 +98,6 @@ def get_sequence_parallel_group(backend="nccl"):
 def get_sequence_parallel_world_size():
     # return 1
     """Get the sequence parallel world size."""
-    print(f"dist.get_world_size(group=get_sequence_parallel_group())=", dist.get_world_size(group=get_sequence_parallel_group()))
     try: return dist.get_world_size(group=get_sequence_parallel_group())
     except: return 1
 
@@ -1219,7 +1218,6 @@ class SiglipVisionTransformer(nn.Module):
         Returns:
 
         """
-        print(1111111, pixel_values.shape)
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1230,7 +1228,7 @@ class SiglipVisionTransformer(nn.Module):
             position_ids=position_ids,
             image_grid_thw=image_grid_thw
         )
-        print(2222222, hidden_states.shape)
+
 
         # cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
         #     dim=0,
@@ -2402,12 +2400,10 @@ class Qwen3Model(Qwen3PreTrainedModel):
 
         # shard hidden_states & position_embeddings for sequence parallel
         if get_sequence_parallel_world_size() > 1:
-            print("bbbbbb_split", hidden_states.shape)
             start, end = get_local_sequence_boundary(hidden_states.shape[1])
             sin, cos = position_embeddings
             position_embeddings = (sin[:, :, start:end, :], cos[:, :, start:end, :])
             hidden_states = hidden_states[:, start:end, :]
-            print("aaaaaaa_split", hidden_states.shape)
 
 
 
@@ -2976,7 +2972,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
                     sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
 
-                print("conditionalgen", pixel_values.shape)
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
                 vision_outputs = self.visual(
                     pixel_values=pixel_values, 
