@@ -26,6 +26,7 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
 comment="version:0.0.0;model_size:2B;GPU_type:H800;data:inner & outer comments stage1"
+comment="v"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
