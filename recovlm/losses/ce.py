@@ -68,7 +68,7 @@ class CrossEntropyLoss(torch.nn.Module):
       labels = labels[:, 1:]
     per_token_loss = F.cross_entropy(
       logits.float().reshape(-1, vocab_size),
-      labels.reshape(-1), #ignore_index=self.ignore_index,
+      labels.reshape(-1), ignore_index=self.ignore_index,
       reduction="none"
     )
     if dist.get_rank() == 0:
