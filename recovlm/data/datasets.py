@@ -4255,7 +4255,7 @@ class BalanceParquetDataset(IterableDataset):
               data_source.append(ds)
             inputs = selected
           stats = balance.exchange_batch_info(inputs, data_source, self.fm)
-          if self.rank == 0:
+          if self.rank == 0 and np.random.rand() < 0.05:
             print(f"rank=0, step_stats={stats}")
           
           # if dist.get_rank() == 0:
