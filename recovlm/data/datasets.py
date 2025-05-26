@@ -4278,7 +4278,34 @@ class BalanceParquetDataset(IterableDataset):
       packed_inputs["num_samples"] = step_info[0]
       packed_inputs["num_tokens"] = step_info[1]
       packed_inputs["num_image_tokens"] = step_info[2]
+      self._post_process(packed_inputs)
       self._result_buf.put(packed_inputs)
+
+  def _post_process(self, inputs):
+    image_grid_thw = inputs.get("image_grid_thw", None)
+    pixel_values = inputs.get("pixel_values", None)
+    if all([v is not None for v in [pixel_values, image_grid_thw]]):
+      siglip_position_ids = list()
+      image_grid_hws = list()
+      sample_indices = list()
+      cu_seqlens = [0]
+
+      for idx, thw in enumerate(image_grid_thw):
+          thw_tuple = tuple(thw.numpy().tolist())
+          numel = np.prod(thw_tuple)
+          image_grid_hws.append(thw_tuple)
+          image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+          siglip_position_ids.append(image_position_ids)
+          sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
+          cu_seqlens.append(cu_seqlens[-1] + numel)
+        
+      siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
+      cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
+      sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
+      inputs["image_grid_hws"] = image_grid_hws
+      inputs["image_position_ids"] = siglip_position_ids
+      inputs["image_cu_seqlens"] = cu_seqlens
+      inputs["image_sample_indices"] = sample_indices
 
   def __iter__(self):
     self.rank = dist.get_rank()

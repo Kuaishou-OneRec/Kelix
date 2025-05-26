@@ -12,6 +12,7 @@ import time
 from collections import defaultdict
 import datetime
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 import glob
 import json
 import logging
@@ -1049,10 +1050,15 @@ def train():
           show_cnt -= 1
           
       data_source = batch.pop("data_source", None) # dataset source list cur batch
+<<<<<<< HEAD
       #print(f"X=0, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       to_cuda(batch)
       ticker.tick("to_cuda(batch)")
       #rint(f"X=1, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
+=======
+      to_cuda(batch)
+      ticker.tick("to_cuda(batch)")
+>>>>>>> 0.8.0_lzx_0522
 
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
@@ -1127,11 +1133,17 @@ def train():
               cu_seqlens=cu_seqlens
             )
         else:
+            image_position_ids = batch.get("image_position_ids", None)
+            image_grid_hws = batch.get("image_grid_hws", None)
+            image_sample_indices = batch.get("image_sample_indices", None)
+            image_cu_seqlens = batch.get("image_cu_seqlens", None)
             output = model(
               input_ids = input_ids, attention_mask=attention_mask,
               pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
               image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-              cu_seqlens=cu_seqlens
+              cu_seqlens=cu_seqlens, image_position_ids=image_position_ids,
+              image_grid_hws=image_grid_hws, image_sample_indices=image_sample_indices,
+              image_cu_seqlens=image_cu_seqlens
             )
         ticker.tick("model.forward")
 
@@ -1160,8 +1172,13 @@ def train():
           global_step += 1
 
           ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
+<<<<<<< HEAD
       # print(f"X=100, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       #print(f"X=100, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
+=======
+
+      print_rank_0(f"rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
+>>>>>>> 0.8.0_lzx_0522
       ########## dataset source monitor ###############
       if args.monitor_datasource_loss:
         # WARN: assume batch_size = 1
