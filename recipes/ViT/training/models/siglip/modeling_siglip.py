@@ -873,7 +873,7 @@ class SiglipEncoder(nn.Module):
         hidden_states = inputs_embeds
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
 
-        for i, encoder_layer in enumerate(self.layers):
+        for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
