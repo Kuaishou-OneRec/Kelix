@@ -121,7 +121,7 @@ nohup mpirun --allow-run-as-root \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 15000 \
+                --max_length 10000 \
                 --learning_rate 2e-5 \
                 --vision_learning_rate 2e-6 \
                 --min_lr 0 \
