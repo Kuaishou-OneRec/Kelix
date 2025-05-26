@@ -66,12 +66,14 @@ class CrossEntropyLoss(torch.nn.Module):
     if self.shift_labels:
       logits = logits[:, :-1, :]
       labels = labels[:, 1:]
-    #per_token_loss = F.cross_entropy(
-    #  logits.float().reshape(-1, vocab_size),
-    #  labels.reshape(-1), ignore_index=self.ignore_index,
-    #  reduction="none"
-    #)
-    per_token_loss = logits.sum() / logits.numel()
+    if dist.get_rank() == 0:
+        print(f"logits: {logits.shape}, labels: {labels.shape}")
+    per_token_loss = F.cross_entropy(
+      logits.float().reshape(-1, vocab_size),
+      labels.reshape(-1), #ignore_index=self.ignore_index,
+      reduction="none"
+    )
+    #per_token_loss = logits.sum() / logits.numel()
     loss = per_token_loss.sum()
     if self.reduction == "mean" and total_elements > 0:
       loss /= total_elements
