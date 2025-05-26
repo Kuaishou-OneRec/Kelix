@@ -1786,7 +1786,7 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
 
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
-    image_pad_len = 6
+    image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
 
@@ -1901,7 +1901,7 @@ class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):
 
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
-    image_pad_len = 6
+    image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
 
