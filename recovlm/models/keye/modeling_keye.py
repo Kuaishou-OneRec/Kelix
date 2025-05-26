@@ -2942,32 +2942,35 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
-            inputs_embeds = self.model.embed_tokens(input_ids) # l x 1024, l来自多条样本
+            inputs_embeds = self.model.embed_tokens(input_ids)
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
                 pixel_values = pixel_values.unsqueeze(0)
-                siglip_position_ids = list()
-                image_grid_hws = list()
-                sample_indices = list()
-                cu_seqlens = [0]
+                siglip_position_ids = kwargs.pop("image_position_ids", None)
+                image_grid_hws = kwargs.pop("image_grid_hws", None)
+                sample_indices = kwargs.pop("image_sample_indices", None)
+                cu_seqlens = kwargs.pop("image_cu_seqlens", None)
+                if any([t is None for t in [siglip_position_ids, image_grid_hws, sample_indices, cu_seqlens]]):
+                    siglip_position_ids = list()
+                    image_grid_hws = list()
+                    sample_indices = list()
+                    cu_seqlens = [0]
 
-                #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
-                pro = 0
-                for idx, thw in enumerate(image_grid_thw):
-                    thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
-                    numel = np.prod(thw_tuple)
-                    image_grid_hws.append(thw_tuple)
-                    image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
-                    siglip_position_ids.append(image_position_ids)
-                    sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
-                    cu_seqlens.append(cu_seqlens[-1] + numel)
-                    
-                siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
-                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
-                sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
+                    #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
+                    pro = 0
+                    for idx, thw in enumerate(image_grid_thw):
+                        thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
+                        numel = np.prod(thw_tuple)
+                        image_grid_hws.append(thw_tuple)
+                        image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+                        siglip_position_ids.append(image_position_ids)
+                        sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
+                        cu_seqlens.append(cu_seqlens[-1] + numel)
+                        
+                    siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
+                    cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
+                    sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
-
-                # pixel_values: n x 3 x 16 x 16
                 vision_outputs = self.visual(
                     pixel_values=pixel_values, 
                     image_grid_thw=image_grid_hws,
@@ -2978,7 +2981,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     cu_seqlens=cu_seqlens,
                     return_pooler_output=False,
                 )
-                # vision_outputs: n x 1024
                 image_embeds = vision_outputs.last_hidden_state
 
                 image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
