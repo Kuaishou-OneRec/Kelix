@@ -13,7 +13,8 @@ Qwen-VL-Chat/
 Qwen-VL-Chat-Int4/
 SimSun.ttf
 hostfile
-
+tools/data_helpers/datasets/ocr_ds/data
+tools/data_helpers/datasets/ocr_ds/data2
 *.jpg
 *.jpeg
 *.png
