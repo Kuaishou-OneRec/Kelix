@@ -2008,8 +2008,10 @@ class KeyeFlashAttention2(KeyeAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        cu_seqlens: Optional[torch.Tensor] = None
+        cu_seqlens: Optional[torch.Tensor] = None,
+        **kargs
     ):
+        assert cu_seqlens is not None
         bsz, q_len, _ = hidden_states.size()
         q= self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
         query_states = self.q_norm(q)
