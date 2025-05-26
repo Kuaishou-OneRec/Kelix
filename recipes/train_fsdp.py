@@ -3,12 +3,15 @@
 #torch.use_deterministic_algorithms(True)
 
 from typing import Dict, Any, Union, Optional
+import datetime
+process_group_timeout = datetime.timedelta(minutes=60*24)
 
 import contextlib
 import gc
 gc.disable()
 import argparse
 import time
+import collections
 from collections import defaultdict
 import datetime
 import os
@@ -572,7 +575,7 @@ def data_func(name, dataset_config, batch_queue, cpu_bind):
   os.environ["MASTER_PORT"] = str(master_port)
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
-  dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+  dist.init_process_group(backend="gloo", rank=rank, world_size=world_size, timeout=process_group_timeout)
   print(f"dataset_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind}")
 
   # with Timer("Build dataloader"):
@@ -648,7 +651,7 @@ def train():
 
   # torch init
   torch.cuda.set_device(local_rank)
-  torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size)
+  torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size, timeout=process_group_timeout)
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
 
   if use_flops_balance:
