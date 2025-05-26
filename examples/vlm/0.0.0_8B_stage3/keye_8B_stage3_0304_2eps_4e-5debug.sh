@@ -150,5 +150,4 @@ nohup mpirun --allow-run-as-root \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_0.3.5_2pes_2e-5/0.8.0/8b
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_0.3.4_2pes_2e-5/0.8.0/8b
+
