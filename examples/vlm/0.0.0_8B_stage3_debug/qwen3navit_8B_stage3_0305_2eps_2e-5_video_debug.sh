@@ -45,7 +45,7 @@ echo "Output: $OUTPUT_DIR"
 export PYTHONPATH=$PWD:$PYTHONPATH
 
 
-source set_env.sh
+#source set_env.sh
 
 hostfile=/etc/mpi/hostfile_seq
 Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
