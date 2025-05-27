@@ -828,9 +828,7 @@ class SiglipAttention(nn.Module):
             values = values.transpose(1, 2).squeeze(0)
 
             from flash_attn import flash_attn_func, flash_attn_varlen_func
-            max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
+
             if get_sequence_parallel_world_size() > 1:
                 attn_output = self._dist_attn(
                     query=queries.unsqueeze(0),
@@ -839,6 +837,9 @@ class SiglipAttention(nn.Module):
                     cu_seqlens=cu_seqlens
                 ).reshape(seq_length, -1)
             else:
+                max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
                 attn_output = flash_attn_varlen_func(
                     queries,
                     keys,
