@@ -1121,9 +1121,9 @@ class ChatCompletionVisionDataset(IterableDataset):
         "video": [{"type": "image", "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8))}],
     }
     source_conf = {
-      "min_visual_tokens_per_image": 1, # self.min_visual_tokens_per_image,
+      "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
       "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
-      "min_visual_tokens_per_frame": 1, #self.min_visual_tokens_per_frame,
+      "min_visual_tokens_per_frame": self.min_visual_tokens_per_frame,
       "max_visual_tokens_per_frame": self.max_visual_tokens_per_frame, 
       "video_nframe": self.video_nframe,
       "video_fps": self.video_fps,
@@ -1807,8 +1807,8 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
     assert self.max_length > 0
 
     if dist.get_rank() == 0:
-      for h in list(range(2,32+2,2)):
-        for w in list(range(2,32+2,2)):
+      for h in list(range(4,64+2,4)):
+        for w in list(range(4,64+2,4)):
           g = self._gen_img_pad(sz=(h,w), with_vid=False)
           print(h,w,g['input_ids'].shape, g['pixel_values'].shape)
     exit()
