@@ -824,7 +824,6 @@ class SiglipAttention(nn.Module):
             )
             attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         else:
-            print("bbwef3233333", queries.shape)
             assert batch_size == 1, hidden_states.shape
             queries = queries.transpose(1, 2).squeeze(0)
             keys = keys.transpose(1, 2).squeeze(0)
@@ -833,7 +832,6 @@ class SiglipAttention(nn.Module):
             from flash_attn import flash_attn_func, flash_attn_varlen_func
 
             if get_sequence_parallel_world_size() > 1:
-                print(111111, "uatttt_shape", queries.shape, keys.shape)
                 attn_output = self._dist_attn(
                     query=queries.unsqueeze(0),
                     key=keys.unsqueeze(0),
@@ -842,12 +840,8 @@ class SiglipAttention(nn.Module):
                     causal=self.is_causal,
                     dropout=0.0 if not self.training else self.dropout,
                 ).reshape(seq_length, -1)
-                print(attn_output)
-                print(99999988, attn_output.shape)
                 attn_output = attn_output[None]
-                # print(222222, attn_output.shape)
                 # attn_output = attn_output.flatten(-2).unsqueeze(0)
-                # print(33333, attn_output.shape)
                 attn_weights = None
             else:
                 max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
@@ -866,7 +860,6 @@ class SiglipAttention(nn.Module):
                 attn_output = attn_output.flatten(-2).unsqueeze(0)
                 attn_weights = None
         
-        print(121333, "attn_output", attn_output.shape)
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
@@ -886,9 +879,7 @@ class SiglipMLP(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
-        print(998111, "acccc", hidden_states.shape)
         hidden_states = self.activation_fn(hidden_states)
-        print(998111, "acccc_doonnee", hidden_states.shape)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
 
@@ -1173,9 +1164,7 @@ class SiglipEncoder(nn.Module):
 
 
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
-        print(11111, hidden_states.shape)
         hidden_states = get_local_sequence(hidden_states, seq_idx=1)
-        print(22222, hidden_states.shape)
         # rotary_pos_emb = get_local_sequence(rotary_pos_emb, seq_idx=1)
 
         for encoder_layer in self.layers:
