@@ -864,7 +864,8 @@ class SiglipAttention(nn.Module):
                 )
                 attn_output = attn_output.flatten(-2).unsqueeze(0)
                 attn_weights = None
-
+        
+        print(121333, "attn_output", attn_output.shape)
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
@@ -1344,12 +1345,12 @@ class SiglipVisionTransformer(nn.Module):
             )
         
         sample_hidden_state = list()
-        assert cu_seqlens is not None
-        for i in range(cu_seqlens.shape[0] - 1):
-            start = cu_seqlens[i]
-            end = cu_seqlens[i + 1]
-            tensor = last_hidden_state[:, start: end, :].squeeze(0)
-            sample_hidden_state.append(tensor)
+        if: cu_seqlens is not None:
+            for i in range(cu_seqlens.shape[0] - 1):
+                start = cu_seqlens[i]
+                end = cu_seqlens[i + 1]
+                tensor = last_hidden_state[:, start: end, :].squeeze(0)
+                sample_hidden_state.append(tensor)
         
         return BaseModelOutputWithPooling(
             last_hidden_state=sample_hidden_state,
