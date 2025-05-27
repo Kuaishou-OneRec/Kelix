@@ -147,6 +147,5 @@ nohup mpirun --allow-run-as-root \
                 --kml_task_id $KML_TASK_ID \
 		--resume_from /mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_0.3.4_resume1500/0.8.0/8b/step1500 \
 		--resume_from_tag global_step1500 \
-		--resume_dataloader \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
