@@ -131,10 +131,10 @@ nohup mpirun --allow-run-as-root \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 1100 \
                 --num_training_steps 80000 \
-                --save_checkpoint_per_step 8 \
+                --save_checkpoint_per_step 10 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
-                --logging_per_step 20 \
+                --logging_per_step 5 \
                 --fp32_weight \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
