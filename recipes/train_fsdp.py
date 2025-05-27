@@ -1096,9 +1096,10 @@ def train():
 
         ticker.tick("token_metrics_init")
         
+        print(2222, token_metrics)
         dist.all_reduce(
           token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-
+        print(3333, token_metrics)
         ticker.tick("token_metrics_reduce")
 
         num_tokens, num_samples, num_valid_tokens, num_image_tokens = token_metrics.detach().cpu().numpy()
