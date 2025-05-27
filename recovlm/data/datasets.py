@@ -1131,7 +1131,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     }
     self._fill_image_block(pad_image, sample_dict={}, conf=source_conf)
     self._fill_video_block(pad_video, sample_dict={}, conf=source_conf)
-    image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video] if with_vid else None else [pad_image])
+    image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video] if with_vid else [pad_image])
     inputs = self.processor(
         text=text,
         images=image_inputs,
