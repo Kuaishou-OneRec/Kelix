@@ -1104,13 +1104,13 @@ class ChatCompletionVisionDataset(IterableDataset):
     inputs.pop("attention_mask")
     return inputs
   
-  def _gen_img_pad(self):
+  def _gen_img_pad(self, with_vid=True):
     """
     append an image, to trigger vit for pure text sample
     return 6 token: vstart, 4 * image_token, vend
     """
     # Image.fromarray(np.zeros((50,50, 3), dtype=np.uint8))
-    text = "<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|video_pad|><|vision_end|>"
+    text = "<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|video_pad|><|vision_end|>" if with_vid else "<|vision_start|><|image_pad|><|vision_end|>"
     pad_image = {
         "type": "image",
         "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
@@ -1131,11 +1131,11 @@ class ChatCompletionVisionDataset(IterableDataset):
     }
     self._fill_image_block(pad_image, sample_dict={}, conf=source_conf)
     self._fill_video_block(pad_video, sample_dict={}, conf=source_conf)
-    image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video])
+    image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video] if with_vid else None else [pad_image])
     inputs = self.processor(
         text=text,
         images=image_inputs,
-        videos=video_inputs,
+        videos=video_inputs if with_vid else None,
         return_tensors="pt"
     )
 
@@ -1316,8 +1316,12 @@ class ChatCompletionVisionDataset(IterableDataset):
     cu_seqlens: List[int] = [0]
     epochs = []
     valid_seq_len = 0
+    mm_len = 0
     for _, inputs in enumerate(buffer):
-      epochs.append(inputs.get("epoch_idx", None))
+      print(88883333444, inputs["pixel_values"].shape, inputs["pixel_values_video"], self._gen_img_pad(with_vid=False)["input_ids"].shape, self._gen_img_pad(with_vid=False)["pixel_values"].shape)
+      # mm_len += inputs["pixel_values"]
+      # mm_len += inputs
+      epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
                                       packed_position_ids,
