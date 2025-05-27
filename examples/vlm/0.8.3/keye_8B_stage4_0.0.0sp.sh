@@ -129,7 +129,7 @@ nohup mpirun --allow-run-as-root \
                 --min_lr 1e-6 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --num_warmup_steps 500 \
+                --num_warmup_steps 2500 \
                 --num_training_steps  \
                 --save_checkpoint_per_step 35000 \
                 --sequence_parallel_size 4 \
