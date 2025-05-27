@@ -1102,7 +1102,7 @@ def train():
         print(3333, token_metrics)
         ticker.tick("token_metrics_reduce")
 
-        num_tokens, num_samples, num_valid_tokens, num_image_tokens = token_metrics.detach().cpu().numpy()
+        num_tokens, num_samples, num_valid_tokens, num_image_tokens = token_metrics.detach().cpu().numpy() * args.sequence_parallel_size
         ticker.tick("token_metrics.detach().cpu().numpy()")
       else:
         num_image_tokens2 = (input_ids == 151667).sum().item()
