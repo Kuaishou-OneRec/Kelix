@@ -1138,7 +1138,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs if with_vid else None,
         return_tensors="pt"
     )
-
+    print(f"inputtttttt", inputs["input_ids"])
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
     inputs["position_ids"] = get_rope_index(
         inputs["input_ids"],
@@ -1318,9 +1318,8 @@ class ChatCompletionVisionDataset(IterableDataset):
     valid_seq_len = 0
     n_pixels = 0
     for _, inputs in enumerate(buffer):
-      # 88883333444 torch.Size([1, 6]) torch.Size([16, 3, 16, 16]) 888888 torch.Size([1, 8]) torch.Size([24, 3, 16, 16])
-      # 88883333444 torch.Size([1, 6]) torch.Size([16, 3, 16, 16]) 888888 torch.Size([1, 8]) torch.Size([24, 3, 16, 16])
-      print(88883333444, self._gen_img_pad(with_vid=False)["input_ids"].shape, self._gen_img_pad(with_vid=False)["pixel_values"].shape, 888888, self._gen_img_pad(with_vid=False,sz=(16, 32))["input_ids"].shape, self._gen_img_pad(with_vid=False,sz=(16, 32))["pixel_values"].shape, 99999, self._gen_img_pad(with_vid=False,sz=(16, 24))["input_ids"].shape, self._gen_img_pad(with_vid=False,sz=(16, 24))["pixel_values"].shape)
+      # 88883333444 torch.Size([1, 6]) torch.Size([16, 3, 16, 16]) 888888 torch.Size([1, 6]) torch.Size([16, 3, 16, 16]) 99999 torch.Size([1, 6]) torch.Size([16, 3, 16, 16])
+      # print(88883333444, self._gen_img_pad(with_vid=False)["input_ids"].shape, self._gen_img_pad(with_vid=False)["pixel_values"].shape, 888888, self._gen_img_pad(with_vid=False,sz=(16, 32))["input_ids"].shape, self._gen_img_pad(with_vid=False,sz=(16, 32))["pixel_values"].shape, 99999, self._gen_img_pad(with_vid=False,sz=(16, 24))["input_ids"].shape, self._gen_img_pad(with_vid=False,sz=(16, 24))["pixel_values"].shape)
       if "pixel_values" in inputs: n_pixels += inputs["pixel_values"].shape[0]
         # mm_len += inputs["pixel_values"]
       if "pixel_values_videos" in inputs: n_pixels += inputs["pixel_values_videos"].shape[0] # pixel_values torch.Size([600, 3, 16, 16])
