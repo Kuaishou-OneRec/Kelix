@@ -1093,7 +1093,6 @@ def train():
 
         num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item() / args.sequence_parallel_size
 
-        print("mfu_statsmfu_statsmfu_stats", num_image_tokens, num_tokens)
         mfu_stats.set(max(num_image_tokens, 0), max(num_tokens, 0), num_samples.detach().item(), num_images)
 
         # num_tokens - (sample_idx == -1).sum()

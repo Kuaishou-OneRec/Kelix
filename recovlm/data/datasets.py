@@ -1319,11 +1319,8 @@ class ChatCompletionVisionDataset(IterableDataset):
     valid_seq_len = 0
     n_pixels = 0
     for _, inputs in enumerate(buffer):
-      # 88883333444 torch.Size([1, 6]) torch.Size([16, 3, 16, 16]) 888888 torch.Size([1, 6]) torch.Size([16, 3, 16, 16]) 99999 torch.Size([1, 6]) torch.Size([16, 3, 16, 16])
-      # print(88883333444, self._gen_img_pad(with_vid=False)["input_ids"].shape, self._gen_img_pad(with_vid=False)["pixel_values"].shape, 888888, self._gen_img_pad(with_vid=False,sz=(16, 32))["input_ids"].shape, self._gen_img_pad(with_vid=False,sz=(16, 32))["pixel_values"].shape, 99999, self._gen_img_pad(with_vid=False,sz=(16, 24))["input_ids"].shape, self._gen_img_pad(with_vid=False,sz=(16, 24))["pixel_values"].shape)
       if "pixel_values" in inputs: n_pixels += inputs["pixel_values"].shape[0]
-        # mm_len += inputs["pixel_values"]
-      if "pixel_values_videos" in inputs: n_pixels += inputs["pixel_values_videos"].shape[0] # pixel_values torch.Size([600, 3, 16, 16])
+      if "pixel_values_videos" in inputs: n_pixels += inputs["pixel_values_videos"].shape[0]
       
       epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
       valid_seq_len += self._append_sample_packing(inputs,
@@ -1340,14 +1337,6 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # 
     # append a pad image sequence to trigger ViT
-
-    # 4 4 torch.Size([1, 6]) torch.Size([16, 3, 16, 16])
-    # 4 8 torch.Size([1, 8]) torch.Size([24, 3, 16, 16])
-    # 4 12 torch.Size([1, 10]) torch.Size([32, 3, 16, 16])
-    # 4 16 torch.Size([1, 6]) torch.Size([16, 3, 16, 16])
-    # 4 20 torch.Size([1, 7]) torch.Size([20, 3, 16, 16])
-    # 4 24 torch.Size([1, 7]) torch.Size([20, 3, 16, 16])
-    # patch_size
     image_pad = self._gen_img_pad() if n_pixels % 8 == 0 else self._gen_img_pad(sz=(4, round(self.patch_size * 1.4))) # 1.4 处于 (1.25 ~ 1.5)之间
     self._append_sample_packing(image_pad,
                                 packed_input_ids,
