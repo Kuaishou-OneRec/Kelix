@@ -1147,7 +1147,7 @@ class SiglipEncoder(nn.Module):
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
 
         hidden_states = get_local_sequence(hidden_states, seq_idx=1)
-        rotary_pos_emb = get_local_sequence(rotary_pos_emb, seq_idx=1)
+        # rotary_pos_emb = get_local_sequence(rotary_pos_emb, seq_idx=1)
 
         for encoder_layer in self.layers:
             if output_hidden_states:
