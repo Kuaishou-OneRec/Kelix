@@ -518,11 +518,12 @@ def freeze_params(args, model):
 
 
 class TokenStats:
-  def __init__(self):
+  def __init__(self, args):
     self.max_image_tokens = []
     self.min_image_tokens = []
     self.mean_image_tokens = []
     self.std_image_tokens = []
+    self.args = args
 
   
   def collect_image_token_stats(self, num_image_tokens):
@@ -532,6 +533,7 @@ class TokenStats:
       input_tensor = torch.tensor([num_image_tokens], dtype=torch.long).cuda()
       all_image_tokens = list(torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) if rank == 0 else None
       dist.gather(input_tensor, gather_list=all_image_tokens, dst=0)
+      print("cccccc", world_size, all_image_tokens, input_tensor)
 
       if rank == 0:
           all_image_tokens = [x.item() for x in all_image_tokens]
@@ -954,7 +956,7 @@ def train():
   micro_step = 0
   ticker = TimeTracker(n=args.logging_per_step)
   iter_ticker = TimeTracker(n=args.logging_per_step)
-  token_stasts = TokenStats()
+  token_stasts = TokenStats(args)
 
   gpu_batch_q = queue.Queue(maxsize=2)
   def prefetch_to_gpu(input_fn, output_q, dev):
@@ -1079,7 +1081,6 @@ def train():
         print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
         num_tokens = token_count
 
-        print(111111111, dist.get_rank(), sample_idx.max(), (sample_idx.max() + 1).sum(), args.sequence_parallel_size)  
         num_samples = (sample_idx.max() + 1).sum()  / args.sequence_parallel_size
 
         image_tokens_ids = input_ids == image_token_id
@@ -1096,10 +1097,8 @@ def train():
 
         ticker.tick("token_metrics_init")
         
-        print(2222, token_metrics)
         dist.all_reduce(
           token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-        print(3333, token_metrics)
         ticker.tick("token_metrics_reduce")
 
         num_tokens, num_samples, num_valid_tokens, num_image_tokens = token_metrics.detach().cpu().numpy() * args.sequence_parallel_size
