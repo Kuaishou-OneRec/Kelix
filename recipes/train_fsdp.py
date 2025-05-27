@@ -781,12 +781,10 @@ def train():
       assert not tensor.device == torch.device("meta"), \
         f"{name} not initialized, device={tensor.device}"
 
-  model = torch.compile(model)
+  # model = torch.compile(model)
 
   if state_dict is not None:
     del state_dict
-
-
   
 
 
