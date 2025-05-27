@@ -131,7 +131,7 @@ nohup mpirun --allow-run-as-root \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 500 \
                 --num_training_steps  \
-                --save_checkpoint_per_step 47000 \
+                --save_checkpoint_per_step 35000 \
                 --sequence_parallel_size 4 \
                 --use_flash_attention_2 \
                 --logging_per_step 2 \
@@ -145,8 +145,8 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-		--resume_from /mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage2_resume_1k/0.8.0/2b/step5000 \
-		--resume_from_tag global_step5000 \
+		--resume_from /mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_0.3.4_resume1500/0.8.0/8b/step1500 \
+		--resume_from_tag global_step1500 \
 		--resume_dataloader \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
