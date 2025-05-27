@@ -1104,7 +1104,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     inputs.pop("attention_mask")
     return inputs
   
-  def _gen_img_pad(self, with_vid=True, sz=16):
+  def _gen_img_pad(self, with_vid=True, sz=(16,16)):
     """
     append an image, to trigger vit for pure text sample
     return 6 token: vstart, 4 * image_token, vend
@@ -1113,11 +1113,11 @@ class ChatCompletionVisionDataset(IterableDataset):
     text = "<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|video_pad|><|vision_end|>" if with_vid else "<|vision_start|><|image_pad|><|vision_end|>"
     pad_image = {
         "type": "image",
-        "image": Image.fromarray(np.zeros((sz,sz, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
+        "image": Image.fromarray(np.zeros((*sz, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
     }
     pad_video = {
         "type": "video",
-        "video": [{"type": "image", "image": Image.fromarray(np.zeros((sz,sz, 3), dtype=np.uint8))}],
+        "video": [{"type": "image", "image": Image.fromarray(np.zeros((*sz, 3), dtype=np.uint8))}],
     }
     source_conf = {
       "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
@@ -1318,7 +1318,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     valid_seq_len = 0
     mm_len = 0
     for _, inputs in enumerate(buffer):
-      print(88883333444, self._gen_img_pad(with_vid=False)["input_ids"].shape, self._gen_img_pad(with_vid=False)["pixel_values"].shape)
+      print(88883333444, self._gen_img_pad(with_vid=False)["input_ids"].shape, self._gen_img_pad(with_vid=False)["pixel_values"].shape, 888888, self._gen_img_pad(with_vid=False,sz=(16, 32))["input_ids"].shape, self._gen_img_pad(with_vid=False,sz=(16, 32))["pixel_values"].shape)
       if "pixel_values" in inputs:
         print("pixel_values", inputs["pixel_values"].shape)
         # mm_len += inputs["pixel_values"]
