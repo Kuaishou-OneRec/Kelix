@@ -1152,7 +1152,7 @@ class SiglipEncoder(nn.Module):
 
         hidden_states = inputs_embeds
         assert hidden_states.shape[0] % get_sequence_parallel_world_size() == 0, \
-            f"Sequence length should be dividable by sp_world_size={get_sequence_parallel_world_size()}"
+            f"Sequence length should be dividable by sp_world_size={get_sequence_parallel_world_size()}, hidden_states={hidden_states.shape}"
 
 
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
