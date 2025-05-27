@@ -1086,7 +1086,9 @@ def train():
         num_image_tokens2 = num_image_tokens
 
         num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item() / args.sequence_parallel_size
-        mfu_stats.set(num_image_tokens, num_tokens, num_samples.detach().item(), num_images)
+
+        print("mfu_statsmfu_statsmfu_stats", num_image_tokens, num_tokens)
+        mfu_stats.set(max(num_image_tokens, 0), max(num_tokens, 0), num_samples.detach().item(), num_images)
 
         # num_tokens - (sample_idx == -1).sum()
         num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
