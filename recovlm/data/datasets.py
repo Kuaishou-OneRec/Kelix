@@ -1120,9 +1120,9 @@ class ChatCompletionVisionDataset(IterableDataset):
         "video": [{"type": "image", "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8))}],
     }
     source_conf = {
-      "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
+      "min_visual_tokens_per_image": 1, # self.min_visual_tokens_per_image,
       "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
-      "min_visual_tokens_per_frame": self.min_visual_tokens_per_frame,
+      "min_visual_tokens_per_frame": 1, #self.min_visual_tokens_per_frame,
       "max_visual_tokens_per_frame": self.max_visual_tokens_per_frame, 
       "video_nframe": self.video_nframe,
       "video_fps": self.video_fps,
