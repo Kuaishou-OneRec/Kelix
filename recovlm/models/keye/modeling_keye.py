@@ -1508,55 +1508,55 @@ def apply_rotary_pos_emb_flashatt(
     return q_embed, k_embed
 
 
-class KeyeVisionFlashAttention2(nn.Module):
-    def __init__(self, dim: int, num_heads: int = 16) -> None:
-        super().__init__()
-        self.num_heads = num_heads
-        self.qkv = nn.Linear(dim, dim * 3, bias=True)
-        self.proj = nn.Linear(dim, dim)
-        self._dist_attn = UlyssesAttention(scatter_idx=2, gather_idx=1)
+# class KeyeVisionFlashAttention2(nn.Module):
+#     def __init__(self, dim: int, num_heads: int = 16) -> None:
+#         super().__init__()
+#         self.num_heads = num_heads
+#         self.qkv = nn.Linear(dim, dim * 3, bias=True)
+#         self.proj = nn.Linear(dim, dim)
+#         self._dist_attn = UlyssesAttention(scatter_idx=2, gather_idx=1)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        rotary_pos_emb: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-    ) -> torch.Tensor:
-        seq_length = hidden_states.shape[0]
-        # q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        q, k, v = self.qkv(hidden_states).reshape(seq_length, self.num_heads, 3, -1).permute(2, 0, 1, 3).unbind(0)
-        if position_embeddings is None:
-            logger.warning_once(
-                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
-                "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
-                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
-                "removed and `position_embeddings` will be mandatory."
-            )
-            emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-        else:
-            cos, sin = position_embeddings
-        q, k = apply_rotary_pos_emb_flashatt(q.unsqueeze(0), k.unsqueeze(0), cos, sin)
-        q = q.squeeze(0)
-        k = k.squeeze(0)
+#     def forward(
+#         self,
+#         hidden_states: torch.Tensor,
+#         cu_seqlens: torch.Tensor,
+#         rotary_pos_emb: Optional[torch.Tensor] = None,
+#         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+#     ) -> torch.Tensor:
+#         seq_length = hidden_states.shape[0]
+#         # q, k, v = self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+#         q, k, v = self.qkv(hidden_states).reshape(seq_length, self.num_heads, 3, -1).permute(2, 0, 1, 3).unbind(0)
+#         if position_embeddings is None:
+#             logger.warning_once(
+#                 "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
+#                 "through `rotary_pos_emb` (2D tensor of RoPE theta values), to using externally computed "
+#                 "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.54 `rotary_pos_emb` will be "
+#                 "removed and `position_embeddings` will be mandatory."
+#             )
+#             emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+#             cos = emb.cos()
+#             sin = emb.sin()
+#         else:
+#             cos, sin = position_embeddings
+#         q, k = apply_rotary_pos_emb_flashatt(q.unsqueeze(0), k.unsqueeze(0), cos, sin)
+#         q = q.squeeze(0)
+#         k = k.squeeze(0)
 
-        if get_sequence_parallel_world_size() > 1:
-            attn_output = self._dist_attn(
-                query=q.unsqueeze(0),
-                key=k.unsqueeze(0),
-                value=v.unsqueeze(0),
-                cu_seqlens=cu_seqlens
-            ).reshape(seq_length, -1)
-        else:
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
-                seq_length, -1
-            )
+#         if get_sequence_parallel_world_size() > 1:
+#             attn_output = self._dist_attn(
+#                 query=q.unsqueeze(0),
+#                 key=k.unsqueeze(0),
+#                 value=v.unsqueeze(0),
+#                 cu_seqlens=cu_seqlens
+#             ).reshape(seq_length, -1)
+#         else:
+#             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+#             attn_output = flash_attn_varlen_func(q, k, v, cu_seqlens, cu_seqlens, max_seqlen, max_seqlen).reshape(
+#                 seq_length, -1
+#             )
 
-        attn_output = self.proj(attn_output)
-        return attn_output
+#         attn_output = self.proj(attn_output)
+#         return attn_output
 
 
 def rotate_half(x):

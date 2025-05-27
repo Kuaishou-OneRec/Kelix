@@ -132,7 +132,7 @@ nohup mpirun --allow-run-as-root \
                 --num_warmup_steps 1100 \
                 --num_training_steps 80000 \
                 --save_checkpoint_per_step 800 \
-                --sequence_parallel_size 4 \
+                --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 2 \
                 --fp32_weight \
