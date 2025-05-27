@@ -81,6 +81,8 @@ else:
 
 
 try:
+    if not dist.is_initialized(): raise Exception("Dist not init")
+
     from recovlm.training import parallel as mpu
     from recovlm.training.parallel import get_sequence_parallel_group, \
     get_sequence_parallel_world_size, \
@@ -840,7 +842,7 @@ class SiglipAttention(nn.Module):
                     value=values.unsqueeze(0),
                     cu_seqlens=cu_seqlens
                 ).reshape(seq_length, -1)
-                print(99999988, attn_output)
+                print(99999988, attn_output.shape)
                 attn_output = attn_output[None]
                 # print(222222, attn_output.shape)
                 # attn_output = attn_output.flatten(-2).unsqueeze(0)
@@ -1200,11 +1202,12 @@ class SiglipEncoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
-        hidden_states = mpu.AllGather.apply(
-            hidden_states,
-            get_sequence_parallel_group(),
-            1
-        )
+        if get_sequence_parallel_world_size() > 1:
+            hidden_states = mpu.AllGather.apply(
+                hidden_states,
+                get_sequence_parallel_group(),
+                1
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=encoder_states,
