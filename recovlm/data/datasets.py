@@ -1320,7 +1320,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     for _, inputs in enumerate(buffer):
       # 88883333444 torch.Size([1, 6]) torch.Size([16, 3, 16, 16]) 888888 torch.Size([1, 8]) torch.Size([24, 3, 16, 16])
       # 88883333444 torch.Size([1, 6]) torch.Size([16, 3, 16, 16]) 888888 torch.Size([1, 8]) torch.Size([24, 3, 16, 16])
-      # print(88883333444, self._gen_img_pad(with_vid=False)["input_ids"].shape, self._gen_img_pad(with_vid=False)["pixel_values"].shape, 888888, self._gen_img_pad(with_vid=False,sz=(16, 32))["input_ids"].shape, self._gen_img_pad(with_vid=False,sz=(16, 32))["pixel_values"].shape)
+      print(88883333444, self._gen_img_pad(with_vid=False)["input_ids"].shape, self._gen_img_pad(with_vid=False)["pixel_values"].shape, 888888, self._gen_img_pad(with_vid=False,sz=(16, 32))["input_ids"].shape, self._gen_img_pad(with_vid=False,sz=(16, 32))["pixel_values"].shape, 99999, self._gen_img_pad(with_vid=False,sz=(16, 24))["input_ids"].shape, self._gen_img_pad(with_vid=False,sz=(16, 24))["pixel_values"].shape)
       if "pixel_values" in inputs: n_pixels += inputs["pixel_values"].shape[0]
         # mm_len += inputs["pixel_values"]
       if "pixel_values_videos" in inputs: n_pixels += inputs["pixel_values_videos"].shape[0] # pixel_values torch.Size([600, 3, 16, 16])
@@ -1341,7 +1341,11 @@ class ChatCompletionVisionDataset(IterableDataset):
     # 
     # append a pad image sequence to trigger ViT
     print(f"n_pixels={n_pixels}")
-    image_pad = self._gen_img_pad() if n_pixels % (8 * 2) == 0 else self._gen_img_pad(sz=(16, 32)) # torch.Size([16, 3, 16, 16])
+    n_pixel_tokens = n_pixels // 4 # n_pixel_tokens % 8只会是0和4。 24 -> 6
+    assert (n_pixel_tokens // 4) % 2 in [0, 1], f"n_pixel_tokens={n_pixel_tokens}, (n_pixel_tokens // 4) % 8={(n_pixel_tokens // 4) % 2}"
+
+
+    image_pad = self._gen_img_pad() if (n_pixel_tokens // 4) % 8 == 0 else self._gen_img_pad(sz=(16, 32)) # torch.Size([24, 3, 16, 16])
     self._append_sample_packing(image_pad,
                                 packed_input_ids,
                                 packed_position_ids,
