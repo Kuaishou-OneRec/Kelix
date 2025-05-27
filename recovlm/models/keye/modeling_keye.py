@@ -3069,7 +3069,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     return_pooler_output=False,
                 )
                 video_embeds = vision_outputs.last_hidden_state
+                print("video_embeds1",video_embeds.shape)
                 video_embeds = self.mlp_AR(video_embeds, video_grid_thw)
+                print("video_embeds2",video_embeds.shape)
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 video_embeds = torch.cat(video_embeds,dim=0)
                 n_video_features = video_embeds.shape[0]
