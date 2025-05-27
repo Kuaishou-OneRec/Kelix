@@ -1341,14 +1341,14 @@ class ChatCompletionVisionDataset(IterableDataset):
     # 
     # append a pad image sequence to trigger ViT
 
-  # 4 4 torch.Size([1, 6]) torch.Size([16, 3, 16, 16])
-  # 4 8 torch.Size([1, 8]) torch.Size([24, 3, 16, 16])
-  # 4 12 torch.Size([1, 10]) torch.Size([32, 3, 16, 16])
-  # 4 16 torch.Size([1, 6]) torch.Size([16, 3, 16, 16])
-  # 4 20 torch.Size([1, 7]) torch.Size([20, 3, 16, 16])
-  # 4 24 torch.Size([1, 7]) torch.Size([20, 3, 16, 16])
-  # patch_size
-    image_pad = self._gen_img_pad() if n_pixel_tokens % 8 == 0 else self._gen_img_pad(sz=(4, round(self.patch_size * 1.4))) # 1.4 处于 (1.25 ~ 1.5)之间
+    # 4 4 torch.Size([1, 6]) torch.Size([16, 3, 16, 16])
+    # 4 8 torch.Size([1, 8]) torch.Size([24, 3, 16, 16])
+    # 4 12 torch.Size([1, 10]) torch.Size([32, 3, 16, 16])
+    # 4 16 torch.Size([1, 6]) torch.Size([16, 3, 16, 16])
+    # 4 20 torch.Size([1, 7]) torch.Size([20, 3, 16, 16])
+    # 4 24 torch.Size([1, 7]) torch.Size([20, 3, 16, 16])
+    # patch_size
+    image_pad = self._gen_img_pad() if n_pixels % 8 == 0 else self._gen_img_pad(sz=(4, round(self.patch_size * 1.4))) # 1.4 处于 (1.25 ~ 1.5)之间
     self._append_sample_packing(image_pad,
                                 packed_input_ids,
                                 packed_position_ids,
