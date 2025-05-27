@@ -1345,7 +1345,7 @@ class SiglipVisionTransformer(nn.Module):
             )
         
         sample_hidden_state = list()
-        if: cu_seqlens is not None:
+        if cu_seqlens is not None:
             for i in range(cu_seqlens.shape[0] - 1):
                 start = cu_seqlens[i]
                 end = cu_seqlens[i + 1]
