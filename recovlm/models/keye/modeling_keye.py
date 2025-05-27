@@ -822,6 +822,7 @@ class SiglipAttention(nn.Module):
             )
             attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         else:
+            print("bbwef3233333", queries.shape)
             assert batch_size == 1, hidden_states.shape
             queries = queries.transpose(1, 2).squeeze(0)
             keys = keys.transpose(1, 2).squeeze(0)
@@ -837,9 +838,11 @@ class SiglipAttention(nn.Module):
                     value=values.unsqueeze(0),
                     cu_seqlens=cu_seqlens
                 ).reshape(seq_length, -1)
-                print(222222, attn_output.shape)
-                attn_output = attn_output.flatten(-2).unsqueeze(0)
-                print(33333, attn_output.shape)
+                print(99999988, attn_output)
+                attn_output = attn_output[None]
+                # print(222222, attn_output.shape)
+                # attn_output = attn_output.flatten(-2).unsqueeze(0)
+                # print(33333, attn_output.shape)
                 attn_weights = None
             else:
                 max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
