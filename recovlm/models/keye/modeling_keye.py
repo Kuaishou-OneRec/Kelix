@@ -844,6 +844,7 @@ class SiglipAttention(nn.Module):
                     causal=self.is_causal,
                     dropout=0.0 if not self.training else self.dropout,
                 ).reshape(seq_length, -1)
+                print(attn_output)
                 print(99999988, attn_output.shape)
                 attn_output = attn_output[None]
                 # print(222222, attn_output.shape)
