@@ -810,6 +810,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
     image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
 
+    print("rrrrrrrrr")
     if dist.get_rank() == 0:
       for h in list(range(2,32+2,2)):
         for w in list(range(2,32+2,2)):
