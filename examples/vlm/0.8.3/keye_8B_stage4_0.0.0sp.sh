@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="24卡Stage4 长文本比例不足"
+comment="24H800Stage4"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -130,7 +130,7 @@ nohup mpirun --allow-run-as-root \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 2000 \
-                --num_training_steps  35000\
+                --num_training_steps  35000 \
                 --save_checkpoint_per_step 500 \
                 --sequence_parallel_size 4 \
                 --use_flash_attention_2 \
