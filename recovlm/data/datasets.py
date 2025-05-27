@@ -3145,6 +3145,7 @@ class ChatCompletionVisionParquetDataset_keye(ChatCompletionVisionDataset_keye):
     return self.dataset.state_dict()
   
   def load_state_dict(self, state_dict):
+    print(f"load_state_dict {state_dict}")
     self.dataset.load_state_dict(state_dict)
 
 
@@ -4255,7 +4256,7 @@ class BalanceParquetDataset(IterableDataset):
               data_source.append(ds)
             inputs = selected
           stats = balance.exchange_batch_info(inputs, data_source, self.fm)
-          if self.rank == 0 and np.random.rand() < 0.05:
+          if self.rank == 0:
             print(f"rank=0, step_stats={stats}")
           
           # if dist.get_rank() == 0:
