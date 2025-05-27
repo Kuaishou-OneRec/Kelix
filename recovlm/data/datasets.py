@@ -1318,7 +1318,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     valid_seq_len = 0
     mm_len = 0
     for _, inputs in enumerate(buffer):
-      print(88883333444, inputs["pixel_values"].shape, inputs["pixel_values_videos"], self._gen_img_pad(with_vid=False)["input_ids"].shape, self._gen_img_pad(with_vid=False)["pixel_values"].shape)
+      print(88883333444, inputs["pixel_values"].shape, self._gen_img_pad(with_vid=False)["input_ids"].shape, self._gen_img_pad(with_vid=False)["pixel_values"].shape)
       # mm_len += inputs["pixel_values"]
       # mm_len += inputs
       epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
