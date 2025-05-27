@@ -1340,12 +1340,15 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # 
     # append a pad image sequence to trigger ViT
-    print(f"n_pixels={n_pixels}")
-    n_pixel_tokens = n_pixels // 4 # n_pixel_tokens % 8只会是0和4。 24 -> 6
-    assert (n_pixel_tokens // 4) % 2 in [0, 1], f"n_pixel_tokens={n_pixel_tokens}, (n_pixel_tokens // 4) % 8={(n_pixel_tokens // 4) % 2}"
 
-
-    image_pad = self._gen_img_pad() if (n_pixel_tokens // 4) % 8 == 0 else self._gen_img_pad(sz=(16, 32)) # torch.Size([24, 3, 16, 16])
+  # 4 4 torch.Size([1, 6]) torch.Size([16, 3, 16, 16])
+  # 4 8 torch.Size([1, 8]) torch.Size([24, 3, 16, 16])
+  # 4 12 torch.Size([1, 10]) torch.Size([32, 3, 16, 16])
+  # 4 16 torch.Size([1, 6]) torch.Size([16, 3, 16, 16])
+  # 4 20 torch.Size([1, 7]) torch.Size([20, 3, 16, 16])
+  # 4 24 torch.Size([1, 7]) torch.Size([20, 3, 16, 16])
+  # patch_size
+    image_pad = self._gen_img_pad() if n_pixel_tokens % 8 == 0 else self._gen_img_pad(sz=(4, round(self.patch_size * 1.4))) # 1.4 处于 (1.25 ~ 1.5)之间
     self._append_sample_packing(image_pad,
                                 packed_input_ids,
                                 packed_position_ids,
@@ -1806,12 +1809,6 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
 
-    if dist.get_rank() == 0:
-      for h in list(range(4,64+2,4)):
-        for w in list(range(4,64+2,4)):
-          g = self._gen_img_pad(sz=(h,w), with_vid=False)
-          print(h,w,g['input_ids'].shape, g['pixel_values'].shape)
-    exit()
     self.datasource_config = datasource_config
 
 
