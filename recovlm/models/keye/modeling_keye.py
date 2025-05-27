@@ -837,6 +837,7 @@ class SiglipAttention(nn.Module):
                     value=values.unsqueeze(0),
                     cu_seqlens=cu_seqlens
                 )# .reshape(seq_length, -1)
+                print(222222, attn_output.shape)
                 attn_output = attn_output.flatten(-2).unsqueeze(0)
                 attn_weights = None
             else:
