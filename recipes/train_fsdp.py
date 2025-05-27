@@ -1077,7 +1077,9 @@ def train():
       if not use_flops_balance or True:
         token_count = input_ids.numel() / args.sequence_parallel_size  # 计算 token 数量
         print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
-        num_tokens = token_count  
+        num_tokens = token_count
+
+        print(111111111, dist.get_rank(), sample_idx.max(), (sample_idx.max() + 1).sum(), args.sequence_parallel_size)  
         num_samples = (sample_idx.max() + 1).sum()  / args.sequence_parallel_size
 
         image_tokens_ids = input_ids == image_token_id
