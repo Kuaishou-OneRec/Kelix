@@ -1,3 +1,6 @@
+import os
+print(os.environ['TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS'], "TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS")
+
 #import torch
 
 #torch.use_deterministic_algorithms(True)
