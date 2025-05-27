@@ -810,14 +810,6 @@ class ChatCompletionVisionDataset(IterableDataset):
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
     image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
 
-    print("rrrrrrrrr")
-    if dist.get_rank() == 0:
-      for h in list(range(2,32+2,2)):
-        for w in list(range(2,32+2,2)):
-          g = self._gen_img_pad((h,w))
-          print(g['input_ids'].shape, g['pixel_values'].shape)
-    exit()
-
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
 
@@ -1814,7 +1806,14 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
     image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
-
+    
+    print("rrrrrrrrr")
+    if dist.get_rank() == 0:
+      for h in list(range(2,32+2,2)):
+        for w in list(range(2,32+2,2)):
+          g = self._gen_img_pad((h,w))
+          print(g['input_ids'].shape, g['pixel_values'].shape)
+    exit()
     self.datasource_config = datasource_config
 
 
