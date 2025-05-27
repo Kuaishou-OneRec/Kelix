@@ -3145,7 +3145,6 @@ class ChatCompletionVisionParquetDataset_keye(ChatCompletionVisionDataset_keye):
     return self.dataset.state_dict()
   
   def load_state_dict(self, state_dict):
-    print(f"load_state_dict {state_dict}")
     self.dataset.load_state_dict(state_dict)
 
 

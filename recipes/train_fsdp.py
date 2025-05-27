@@ -750,6 +750,7 @@ def train():
 
     
   if args.fp32_weight: model = model.float()
+  model = torch.compile(model)
   shard_model(
     model=model,
     shard_conditions=[partial(get_shard_conditions, model_class=args.model_class)],
