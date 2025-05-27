@@ -88,7 +88,7 @@ try:
     get_sequence_parallel_world_size, \
     get_local_sequence_boundary, \
     get_local_sequence
-
+    print(33333, "get_sequence_parallel_world_size", get_sequence_parallel_world_size())
     print(f"import recovlm.training.parallel done")
 except:
     _SEQUENCE_PARALLEL_GROUP = None
