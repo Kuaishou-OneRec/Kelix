@@ -835,12 +835,14 @@ class SiglipAttention(nn.Module):
             from flash_attn import flash_attn_func, flash_attn_varlen_func
 
             if get_sequence_parallel_world_size() > 1:
-                print(111111, queries.shape, keys.shape)
+                print(111111, "uatttt_shape", queries.shape, keys.shape)
                 attn_output = self._dist_attn(
                     query=queries.unsqueeze(0),
                     key=keys.unsqueeze(0),
                     value=values.unsqueeze(0),
-                    cu_seqlens=cu_seqlens
+                    cu_seqlens=cu_seqlens,
+                    causal=self.is_causal,
+                    dropout=0.0 if not self.training else self.dropout,
                 ).reshape(seq_length, -1)
                 print(99999988, attn_output.shape)
                 attn_output = attn_output[None]
