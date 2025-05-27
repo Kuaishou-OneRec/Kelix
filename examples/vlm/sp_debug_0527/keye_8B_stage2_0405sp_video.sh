@@ -123,7 +123,7 @@ nohup mpirun --allow-run-as-root \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
 		--monitor_image_tokens \
-                --max_length 36000 \
+                --max_length 64000 \
                 --learning_rate 1e-5 \
                 --vision_learning_rate 1e-6 \
                 --min_lr 1e-6 \
@@ -132,7 +132,7 @@ nohup mpirun --allow-run-as-root \
                 --num_warmup_steps 1100 \
                 --num_training_steps 80000 \
                 --save_checkpoint_per_step 800 \
-                --sequence_parallel_size 4 \
+                --sequence_parallel_size 8 \
                 --use_flash_attention_2 \
                 --logging_per_step 20 \
                 --fp32_weight \
@@ -145,5 +145,4 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
-
+                --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log
