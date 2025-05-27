@@ -614,6 +614,8 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
 
+        hidden_states = get_local_sequence(hidden_states, seq_idx=0)
+        rotary_pos_emb = get_local_sequence(rotary_pos_emb, seq_idx=0)
 
         for layer_num, blk in enumerate(self.blocks):
             if layer_num in self.fullatt_block_indexes:
