@@ -765,7 +765,7 @@ class SiglipAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
-
+        self._dist_attn = UlyssesAttention(scatter_idx=2, gather_idx=1)
         if self.config._attn_implementation != 'flash_attention_2':
             print(f"SiglipAttention flash_attention_2 is not set!!!!!! Get {self.config._attn_implementation}")
 
@@ -831,16 +831,23 @@ class SiglipAttention(nn.Module):
             max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
-
-            attn_output = flash_attn_varlen_func(
-                queries,
-                keys,
-                values,
-                cu_seqlens,
-                cu_seqlens,
-                max_seqlen_q,
-                max_seqlen_k,
-                causal=False,
+            if get_sequence_parallel_world_size() > 1:
+                attn_output = self._dist_attn(
+                    query=queries.unsqueeze(0),
+                    key=keys.unsqueeze(0),
+                    value=values.unsqueeze(0),
+                    cu_seqlens=cu_seqlens
+                ).reshape(seq_length, -1)
+            else:
+                attn_output = flash_attn_varlen_func(
+                    queries,
+                    keys,
+                    values,
+                    cu_seqlens,
+                    cu_seqlens,
+                    max_seqlen_q,
+                    max_seqlen_k,
+                    causal=False,
             )
             attn_output = attn_output.flatten(-2).unsqueeze(0)
             attn_weights = None
@@ -1144,9 +1151,14 @@ class SiglipEncoder(nn.Module):
         all_attentions = () if output_attentions else None
 
         hidden_states = inputs_embeds
-        attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
+        assert hidden_states.shape[0] % get_sequence_parallel_world_size() == 0, \
+            f"Sequence length should be dividable by sp_world_size={get_sequence_parallel_world_size()}"
 
+
+        attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
+        print(11111, hidden_states.shape)
         hidden_states = get_local_sequence(hidden_states, seq_idx=1)
+        print(22222, hidden_states.shape)
         # rotary_pos_emb = get_local_sequence(rotary_pos_emb, seq_idx=1)
 
         for encoder_layer in self.layers:
