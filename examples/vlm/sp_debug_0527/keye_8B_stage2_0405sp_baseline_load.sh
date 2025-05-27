@@ -143,7 +143,7 @@ nohup mpirun --allow-run-as-root \
                 --merge_checkpoint_output_file pytorch_model.bin \
                 --comment '$comment' \
                 --commit_id $git_hash \
-		--resume_from /mmu_mllm_hdd_2/lingzhixin/output/Keye/spdebug_sp_baseline/0.0.1/8b/step10 \
+		--resume_from /mmu_mllm_hdd_2/lingzhixin/output/Keye/spdebug_sp_baseline_save/0.0.1/8b/step10 \
 		--resume_from_tag global_step10 \
 		--resume_dataloader \
                 --kml_id $KML_ID \
