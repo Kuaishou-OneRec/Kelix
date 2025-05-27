@@ -885,7 +885,9 @@ class SiglipMLP(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
+        print(998111, "acccc", hidden_states.shape)
         hidden_states = self.activation_fn(hidden_states)
+        print(998111, "acccc_doonnee", hidden_states.shape)
         hidden_states = self.fc2(hidden_states)
         return hidden_states
 
@@ -2048,7 +2050,7 @@ class KeyeFlashAttention2(KeyeAttention):
         cu_seqlens: Optional[torch.Tensor] = None,
         **kargs
     ):
-        assert cu_seqlens is not None
+        # assert cu_seqlens is not None
         bsz, q_len, _ = hidden_states.size()
         q= self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
         query_states = self.q_norm(q)
