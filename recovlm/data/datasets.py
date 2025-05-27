@@ -1117,7 +1117,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     }
     pad_video = {
         "type": "video",
-        "video": [{"type": "image", "image": Image.fromarray(np.zeros((*sz, 3), dtype=np.uint8))}],
+        "video": [{"type": "image", "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8))}],
     }
     source_conf = {
       "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
@@ -1316,14 +1316,14 @@ class ChatCompletionVisionDataset(IterableDataset):
     cu_seqlens: List[int] = [0]
     epochs = []
     valid_seq_len = 0
-    mm_len = 0
+    n_pixels = 0
     for _, inputs in enumerate(buffer):
-      print(88883333444, self._gen_img_pad(with_vid=False)["input_ids"].shape, self._gen_img_pad(with_vid=False)["pixel_values"].shape, 888888, self._gen_img_pad(with_vid=False,sz=(16, 32))["input_ids"].shape, self._gen_img_pad(with_vid=False,sz=(16, 32))["pixel_values"].shape)
-      if "pixel_values" in inputs:
-        print("pixel_values", inputs["pixel_values"].shape)
+      # 88883333444 torch.Size([1, 6]) torch.Size([16, 3, 16, 16]) 888888 torch.Size([1, 8]) torch.Size([24, 3, 16, 16])
+      # 88883333444 torch.Size([1, 6]) torch.Size([16, 3, 16, 16]) 888888 torch.Size([1, 8]) torch.Size([24, 3, 16, 16])
+      # print(88883333444, self._gen_img_pad(with_vid=False)["input_ids"].shape, self._gen_img_pad(with_vid=False)["pixel_values"].shape, 888888, self._gen_img_pad(with_vid=False,sz=(16, 32))["input_ids"].shape, self._gen_img_pad(with_vid=False,sz=(16, 32))["pixel_values"].shape)
+      if "pixel_values" in inputs: n_pixels += inputs["pixel_values"].shape[0]
         # mm_len += inputs["pixel_values"]
-      if "pixel_values_videos" in inputs:
-        print("pixel_values_videos", inputs["pixel_values_videos"].shape)
+      if "pixel_values_videos" in inputs: n_pixels += inputs["pixel_values_videos"].shape[0] # pixel_values torch.Size([600, 3, 16, 16])
       
       epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
       valid_seq_len += self._append_sample_packing(inputs,
@@ -1338,7 +1338,7 @@ class ChatCompletionVisionDataset(IterableDataset):
                                       cu_seqlens)
 
     # append a pad image sequence to trigger ViT
-    image_pad = self._gen_img_pad()
+    image_pad = self._gen_img_pad() if n_pixels % 8 == 0 else self._gen_img_pad(sz=(16, 32)) # torch.Size([16, 3, 16, 16])
     self._append_sample_packing(image_pad,
                                 packed_input_ids,
                                 packed_position_ids,
@@ -1352,6 +1352,7 @@ class ChatCompletionVisionDataset(IterableDataset):
                                 sample_idx=-1,
                                 image_pad=True
                                 )
+    
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
