@@ -1340,6 +1340,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # 
     # append a pad image sequence to trigger ViT
+    print(f"n_pixels={n_pixels}")
     image_pad = self._gen_img_pad() if n_pixels % (8 * 2) == 0 else self._gen_img_pad(sz=(16, 32)) # torch.Size([16, 3, 16, 16])
     self._append_sample_packing(image_pad,
                                 packed_input_ids,
