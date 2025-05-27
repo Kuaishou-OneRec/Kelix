@@ -852,9 +852,9 @@ class SiglipAttention(nn.Module):
                     max_seqlen_q,
                     max_seqlen_k,
                     causal=False,
-            )
-            attn_output = attn_output.flatten(-2).unsqueeze(0)
-            attn_weights = None
+                )
+                attn_output = attn_output.flatten(-2).unsqueeze(0)
+                attn_weights = None
 
         attn_output = self.out_proj(attn_output)
 
