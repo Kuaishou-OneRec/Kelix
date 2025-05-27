@@ -1139,7 +1139,6 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs if with_vid else None,
         return_tensors="pt"
     )
-    print(f"inputtttttt", inputs["input_ids"])
     # tensor([[151652, 151655, 151655, 151655, 151655, 151653, 151652, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151653]])
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
     inputs["position_ids"] = get_rope_index(
@@ -1806,13 +1805,12 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
     image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
-    
-    print("rrrrrrrrr")
+
     if dist.get_rank() == 0:
       for h in list(range(2,32+2,2)):
         for w in list(range(2,32+2,2)):
-          g = self._gen_img_pad((h,w))
-          print(g['input_ids'].shape, g['pixel_values'].shape)
+          g = self._gen_img_pad(sz=(h,w), with_vid=False)
+          print(h,w,g['input_ids'].shape, g['pixel_values'].shape)
     exit()
     self.datasource_config = datasource_config
 
