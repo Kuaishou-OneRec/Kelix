@@ -525,7 +525,6 @@ class TokenStats:
     self.std_image_tokens = []
     self.args = args
 
-  
   def collect_image_token_stats(self, num_image_tokens):
       # 收集所有rank的image tokens统计信息
       world_size = dist.get_world_size()
