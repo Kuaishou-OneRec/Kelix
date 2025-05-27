@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/Keye/spdebug_sp_baseline_save/0.0.1/8b
+OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/Keye/spdebug_sp_baseline2/0.0.1/8b
 
 mkdir -p $OUTPUT_DIR
 
@@ -131,7 +131,7 @@ nohup mpirun --allow-run-as-root \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 1100 \
                 --num_training_steps 80000 \
-                --save_checkpoint_per_step 8 \
+                --save_checkpoint_per_step 800 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 20 \
