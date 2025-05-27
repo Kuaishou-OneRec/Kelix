@@ -78,17 +78,9 @@ else:
     apply_rotary_emb = None
 
 
-if not dist.is_initialized(): raise Exception("Dist not init")
 
-from recovlm.training import parallel as mpu
-from recovlm.training.parallel import get_sequence_parallel_group, \
-get_sequence_parallel_world_size, \
-get_local_sequence_boundary, \
-get_local_sequence
 
 try:
-    if not dist.is_initialized(): raise Exception("Dist not init")
-
     from recovlm.training import parallel as mpu
     from recovlm.training.parallel import get_sequence_parallel_group, \
     get_sequence_parallel_world_size, \
