@@ -766,6 +766,12 @@ def train():
   with Timer("Load state dict"):
     load_from_full_model_state_dict(model=model, full_sd=state_dict, allow_random_init_params=args.allow_random_init_params) # 这里应该全部转成CUDA了, meta -> CUDA
 
+  # 确保任何参数都被正确初始化
+  for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
+    if name != "visual.vision_model.embeddings.position_ids":
+      assert not tensor.device == torch.device("meta"), \
+        f"{name} not initialized, device={tensor.device}"
+        
   model = torch.compile(model)
 
   if state_dict is not None:
@@ -778,11 +784,7 @@ def train():
         print_rank_0("Initialize RoPE")
         m.rope_init()
   
-  # 确保任何参数都被正确初始化
-  for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
-    if name != "visual.vision_model.embeddings.position_ids":
-      assert not tensor.device == torch.device("meta"), \
-        f"{name} not initialized, device={tensor.device}"
+
 
   freeze_params(args=args, model=model)
   
