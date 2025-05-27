@@ -15,7 +15,7 @@
     "multiple_of": 8,
     "num_workers": 4,
     "num_epochs": 1,
-    "cut_to_pad": 1,
+    "cut_to_pad": 0,
     "model_class": "KeyeForConditionalGeneration",
     "siglip_vision_config": "/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch16-naflex",
     "use_flops_balance": false
