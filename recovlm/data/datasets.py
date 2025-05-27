@@ -1113,7 +1113,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     text = "<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|video_pad|><|vision_end|>" if with_vid else "<|vision_start|><|image_pad|><|vision_end|>"
     pad_image = {
         "type": "image",
-        "image": Image.fromarray(np.zeros((sz,zs, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
+        "image": Image.fromarray(np.zeros((sz,sz, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
     }
     pad_video = {
         "type": "video",
