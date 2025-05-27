@@ -81,10 +81,12 @@ else:
 
 
 try:
+    from recovlm.training import parallel as mpu
     from recovlm.training.parallel import get_sequence_parallel_group, \
     get_sequence_parallel_world_size, \
     get_local_sequence_boundary, \
     get_local_sequence
+
     print(f"import recovlm.training.parallel done")
 except:
     _SEQUENCE_PARALLEL_GROUP = None
