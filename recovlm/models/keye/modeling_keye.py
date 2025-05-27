@@ -836,9 +836,10 @@ class SiglipAttention(nn.Module):
                     key=keys.unsqueeze(0),
                     value=values.unsqueeze(0),
                     cu_seqlens=cu_seqlens
-                )# .reshape(seq_length, -1)
+                ).reshape(seq_length, -1)
                 print(222222, attn_output.shape)
                 attn_output = attn_output.flatten(-2).unsqueeze(0)
+                print(33333, attn_output.shape)
                 attn_weights = None
             else:
                 max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
