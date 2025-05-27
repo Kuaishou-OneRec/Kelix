@@ -587,30 +587,6 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
           retry=retry
       )
 
-
-class SampleTooLongError(Exception):
-    """Exception raised when a sample exceeds maximum allowed length."""
-    
-    def __init__(self, sample, max_length, retry):
-        self.sample = sample
-        self.max_length = max_length
-        self.retry = retry
-        message = (f"Unable to generate sample within max_length={max_length} "
-                  f"after {retry} retries. Sample length: {len(sample)}")
-        super().__init__(message)
-        
-    def get_sample(self):
-        """Get the problematic sample."""
-        return self.sample
-        
-    def get_max_length(self):
-        """Get the maximum allowed length."""
-        return self.max_length
-        
-    def get_retry_count(self):
-        """Get the number of retries attempted."""
-        return self.retry
-  
     def _packing(self, buffer: List[Dict[str, torch.Tensor]] ):
       packed_input_ids = []
       packed_position_ids = []
@@ -672,6 +648,32 @@ class SampleTooLongError(Exception):
         else:
           buffer.append(inputs)
           cur_length += sample_length
+
+
+class SampleTooLongError(Exception):
+    """Exception raised when a sample exceeds maximum allowed length."""
+    
+    def __init__(self, sample, max_length, retry):
+        self.sample = sample
+        self.max_length = max_length
+        self.retry = retry
+        message = (f"Unable to generate sample within max_length={max_length} "
+                  f"after {retry} retries. Sample length: {len(sample)}")
+        super().__init__(message)
+        
+    def get_sample(self):
+        """Get the problematic sample."""
+        return self.sample
+        
+    def get_max_length(self):
+        """Get the maximum allowed length."""
+        return self.max_length
+        
+    def get_retry_count(self):
+        """Get the number of retries attempted."""
+        return self.retry
+  
+
 
 def get_assistant_mask(batch_input_ids: torch.Tensor,
                        start_pattern: Optional[List[int]],
@@ -954,6 +956,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     # append EOS token
     text += "<|endoftext|>"
 
+    time0 = time.time()
     # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
     # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
     image_inputs, video_inputs = self.process_vision_info(vision_infos = vision_infos, **self.process_vision_info_args)
@@ -963,6 +966,8 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
+    if time.time() - time0 > 0.5:
+      print(f"long process time source={sample['json']['source']}, it consumes {time.time() - time0} secs", )
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
@@ -1044,6 +1049,8 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
     # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
+
+    time0 = time.time()
     image_inputs, video_inputs = self.process_vision_info(messages, **self.process_vision_info_args)
     inputs = self.processor(
         text=text,
@@ -1051,6 +1058,8 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
+    if time.time() - time0 > 0.5: 
+      print(f"long process time source={sample['json']['source']}, it consumes {time.time() - time0} secs", )
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
