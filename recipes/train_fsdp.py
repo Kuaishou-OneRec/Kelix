@@ -750,7 +750,6 @@ def train():
 
     
   if args.fp32_weight: model = model.float()
-  model = torch.compile(model)
   shard_model(
     model=model,
     shard_conditions=[partial(get_shard_conditions, model_class=args.model_class)],
@@ -766,6 +765,8 @@ def train():
 
   with Timer("Load state dict"):
     load_from_full_model_state_dict(model=model, full_sd=state_dict, allow_random_init_params=args.allow_random_init_params) # 这里应该全部转成CUDA了, meta -> CUDA
+
+  model = torch.compile(model)
 
   if state_dict is not None:
     del state_dict
