@@ -2868,12 +2868,30 @@ class ParquetDataset(NaiveParquetDataset):
     rank, world_size, worker, num_workers = pytorch_worker_info()
 
     if dist.get_rank() == 0:
+      import time
+      time.sleep(int(dist.get_rank()) * 0.5)
       print_input_info({
         "ckpt_state_dict": state_dict,
         "current_state_dict": self.state_dict()
-      }, "load_state_dict: ")
+      }, f"load_state_dict_rank{dist.get_rank()}: ")
+    """
+    load_state_dict: Dict: keys=2
+    load_state_dict: 'ckpt_state_dict':
+    load_state_dict:   Dict: keys=2
+    load_state_dict:   'finish_dict':
+    load_state_dict:     Dict: keys=0
+    load_state_dict:   'offset_dict':
+    load_state_dict:     Dict: keys=1
+    load_state_dict:     '('viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/datasets/Docmatrix/0.1.1/rank453-18.parquet', 0, 0)':
+    load_state_dict:       int: 64
+    load_state_dict: 'current_state_dict':
+    load_state_dict:   Dict: keys=2
+    load_state_dict:   'finish_dict':
+    load_state_dict:     Dict: keys=0
+    load_state_dict:   'offset_dict':
+    load_state_dict:     Dict: keys=0
+    """
 
-      
     finish_dict = state_dict["finish_dict"]
     offset_dict = state_dict["offset_dict"]
 
