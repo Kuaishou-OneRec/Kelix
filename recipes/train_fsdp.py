@@ -971,6 +971,7 @@ def train():
         batch = input_fn()
         to_device(batch, dev, True)
         output_q.put(batch)
+        print(f"put__donnnnnn")
       except StopIteration:
         break
 
