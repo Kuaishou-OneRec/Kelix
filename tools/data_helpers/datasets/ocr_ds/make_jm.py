@@ -157,7 +157,8 @@ def base64_to_jpg(base64_str: str, output_path: str) -> bool:
 '''
 if __name__ == "__main__":
     import os.path as osp
-    parent_dir = osp.dirname(osp.abspath(__file__))
+    # parent_dir = osp.dirname(osp.abspath(__file__))
+    parent_dir = '/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515'
     ds_dir = osp.join(parent_dir, 'data')
     os.makedirs(ds_dir, exist_ok=True)
 
@@ -184,6 +185,7 @@ if __name__ == "__main__":
 
 
     n_ids = len(os.listdir(ds_dir)) // 2
+    print(ds_dir, n_ids)
     for i in range(n_ids, len(source_jsonls)):
 
         # 请求Body，按照接口文档中填入即可
