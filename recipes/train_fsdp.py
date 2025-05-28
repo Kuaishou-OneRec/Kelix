@@ -976,13 +976,20 @@ def train():
         break
 
   if use_flops_balance:
-    input_fn = lambda: batch_queue.get()
+    # input_fn = lambda: batch_queue.get()
+    data_iter = iter(gather_batches(batch_queue.get(), get_sequence_parallel_group()))
+    class dataloader_fn:
+      def __iter__(self): yield batch_queue.get()
+    new_dataloader = dataloader_fn()
+    data_iter = iter(gather_by_group(new_dataloader, get_sequence_parallel_group()))
+    input_fn =  lambda: next(data_iter)
+
   else:
     data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
     input_fn =  lambda: next(data_iter)
 
-  prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
-  prefetch_t.start()
+  # prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
+  # prefetch_t.start()
 
   tb_metrics_q = queue.Queue(maxsize=8)
   def write_tb_async(tb_writer, metrics_queue, grad_acc_steps):
