@@ -979,11 +979,11 @@ def train():
     # input_fn = lambda: batch_queue.get()
     # data_iter = iter(gather_batches(batch_queue.get(), get_sequence_parallel_group()))
     class dataloader_fn:
-      def __iter__(self): yield batch_queue.get()
+      def __iter__(self): 
+        while True: yield batch_queue.get()
     new_dataloader = dataloader_fn()
     data_iter = iter(gather_by_group(new_dataloader, get_sequence_parallel_group()))
     input_fn =  lambda: next(data_iter)
-
   else:
     data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
     input_fn =  lambda: next(data_iter)
