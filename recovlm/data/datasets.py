@@ -2866,6 +2866,14 @@ class ParquetDataset(NaiveParquetDataset):
   
   def load_state_dict(self, state_dict):
     rank, world_size, worker, num_workers = pytorch_worker_info()
+
+    if dist.get_rank() == 0:
+      print_input_info({
+        "ckpt_state_dict": state_dict,
+        "current_state_dict": self.state_dict()
+      }, "load_state_dict: ")
+
+      
     finish_dict = state_dict["finish_dict"]
     offset_dict = state_dict["offset_dict"]
 
