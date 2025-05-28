@@ -980,6 +980,7 @@ def train():
   else:
     data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
     input_fn =  lambda: next(data_iter)
+
   prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
   prefetch_t.start()
 
@@ -1045,7 +1046,7 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = gpu_batch_q.get() # input_fn() 
+      try: batch = input_fn() # gpu_batch_q.get() # input_fn() 
       except StopIteration: break
       ticker.tick("next_batch")
       
