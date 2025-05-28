@@ -265,8 +265,8 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
     num_readers = kwargs.get("num_readers", 1)
     shuffle_window = kwargs.get("shuffle_window", 0)
     if use_balance:
-        num_readers = kwargs.get("num_readers", 4)
-        shuffle_window = kwargs.get("shuffle_window", 3600)
+        num_readers = kwargs.get("num_readers", 4) // 2
+        shuffle_window = kwargs.get("shuffle_window", 3600) // 4
         print("num_readers", num_readers, shuffle_window)
     def input_creator():
         return ModelDataset[model_type](
