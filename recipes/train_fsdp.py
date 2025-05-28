@@ -1053,7 +1053,7 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = gpu_batch_q.get() if prefetch_t is not None else input_fn()
+      try: batch = input_fn() # gpu_batch_q.get() if prefetch_t is not None else input_fn()
       except StopIteration: break
       ticker.tick("next_batch")
       
