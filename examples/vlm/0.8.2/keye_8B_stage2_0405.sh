@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/
-OUTPUT_DIR=/llm_reco/lingzhixin/output/Keye/Stage2_0.4.5/0.8.0/8b
+OUTPUT_DIR=/llm_reco/lingzhixin/output/Keye/Stage2_0.4.5/0.8.2/8b
 
 mkdir -p $OUTPUT_DIR
 
