@@ -966,7 +966,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
-    if time.time() - time0 > 1:
+    if time.time() - time0 > 2:
       print(f"long process time source={sample['json']['source']}, it consumes {time.time() - time0} secs", )
 
     # For the Warning: (add by zzx)
@@ -1058,7 +1058,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
-    if time.time() - time0 > 1: 
+    if time.time() - time0 > 2: 
       print(f"long process time source={sample['json']['source']}, it consumes {time.time() - time0} secs", )
 
     # For the Warning: (add by zzx)
