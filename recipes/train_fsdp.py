@@ -981,8 +981,8 @@ def train():
     data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
     input_fn =  lambda: next(data_iter)
 
-  prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
-  prefetch_t.start()
+  # prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
+  # prefetch_t.start()
 
   tb_metrics_q = queue.Queue(maxsize=8)
   def write_tb_async(tb_writer, metrics_queue, grad_acc_steps):
