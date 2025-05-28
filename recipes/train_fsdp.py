@@ -963,6 +963,8 @@ def train():
   token_stasts = TokenStats(args)
 
   gpu_batch_q = queue.Queue(maxsize=2)
+
+
   def prefetch_to_gpu(input_fn, output_q, dev):
     while True:
       try:
@@ -977,8 +979,8 @@ def train():
   else:
     data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
     input_fn =  lambda: next(data_iter)
-  # prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
-  # prefetch_t.start()
+  prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
+  prefetch_t.start()
 
   tb_metrics_q = queue.Queue(maxsize=8)
   def write_tb_async(tb_writer, metrics_queue, grad_acc_steps):
@@ -1042,7 +1044,7 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = batch_queue.get() if batch_queue is not None else input_fn() 
+      try: batch = gpu_batch_q.get() # input_fn() 
       except StopIteration: break
       ticker.tick("next_batch")
       
