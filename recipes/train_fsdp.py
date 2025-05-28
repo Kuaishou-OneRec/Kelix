@@ -977,7 +977,7 @@ def train():
 
   if use_flops_balance:
     # input_fn = lambda: batch_queue.get()
-    data_iter = iter(gather_batches(batch_queue.get(), get_sequence_parallel_group()))
+    # data_iter = iter(gather_batches(batch_queue.get(), get_sequence_parallel_group()))
     class dataloader_fn:
       def __iter__(self): yield batch_queue.get()
     new_dataloader = dataloader_fn()
