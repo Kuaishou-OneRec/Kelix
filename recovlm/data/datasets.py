@@ -2867,7 +2867,7 @@ class ParquetDataset(NaiveParquetDataset):
   def load_state_dict(self, state_dict):
     rank, world_size, worker, num_workers = pytorch_worker_info()
 
-    if dist.get_rank() == 0:
+    if dist.get_rank() == 0 or True:
       import time
       time.sleep(int(dist.get_rank()) * 0.5)
       print_input_info({
@@ -2875,21 +2875,23 @@ class ParquetDataset(NaiveParquetDataset):
         "current_state_dict": self.state_dict()
       }, f"load_state_dict_rank{dist.get_rank()}: ")
     """
-    load_state_dict: Dict: keys=2
-    load_state_dict: 'ckpt_state_dict':
-    load_state_dict:   Dict: keys=2
-    load_state_dict:   'finish_dict':
-    load_state_dict:     Dict: keys=0
-    load_state_dict:   'offset_dict':
-    load_state_dict:     Dict: keys=1
-    load_state_dict:     '('viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/datasets/Docmatrix/0.1.1/rank453-18.parquet', 0, 0)':
-    load_state_dict:       int: 64
-    load_state_dict: 'current_state_dict':
-    load_state_dict:   Dict: keys=2
-    load_state_dict:   'finish_dict':
-    load_state_dict:     Dict: keys=0
-    load_state_dict:   'offset_dict':
-    load_state_dict:     Dict: keys=0
+load_state_dict_rank0: Dict: keys=2
+load_state_dict_rank0: 'ckpt_state_dict':
+load_state_dict_rank0:   Dict: keys=2
+load_state_dict_rank0:   'finish_dict':
+load_state_dict_rank0:     Dict: keys=0
+load_state_dict_rank0:   'offset_dict':
+load_state_dict_rank0:     Dict: keys=1
+load_state_dict_rank0:     '('viewfs://hadoop-lt-cluster/home/reco_wl/mpi/zhouyang12/datasets/Docmatrix/0.1.1/rank453-18.parquet', 0, 0)':
+load_state_dict_rank0:       int: 64
+load_state_dict_rank0: 'current_state_dict':
+load_state_dict_rank0:   Dict: keys=2
+load_state_dict_rank0:   'finish_dict':
+load_state_dict_rank0:     Dict: keys=0
+load_state_dict_rank0:   'offset_dict':
+load_state_dict_rank0:     Dict: keys=0
+
+
     """
 
     finish_dict = state_dict["finish_dict"]
