@@ -587,30 +587,6 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
           retry=retry
       )
 
-
-class SampleTooLongError(Exception):
-    """Exception raised when a sample exceeds maximum allowed length."""
-    
-    def __init__(self, sample, max_length, retry):
-        self.sample = sample
-        self.max_length = max_length
-        self.retry = retry
-        message = (f"Unable to generate sample within max_length={max_length} "
-                  f"after {retry} retries. Sample length: {len(sample)}")
-        super().__init__(message)
-        
-    def get_sample(self):
-        """Get the problematic sample."""
-        return self.sample
-        
-    def get_max_length(self):
-        """Get the maximum allowed length."""
-        return self.max_length
-        
-    def get_retry_count(self):
-        """Get the number of retries attempted."""
-        return self.retry
-  
     def _packing(self, buffer: List[Dict[str, torch.Tensor]] ):
       packed_input_ids = []
       packed_position_ids = []
@@ -672,6 +648,32 @@ class SampleTooLongError(Exception):
         else:
           buffer.append(inputs)
           cur_length += sample_length
+
+
+class SampleTooLongError(Exception):
+    """Exception raised when a sample exceeds maximum allowed length."""
+    
+    def __init__(self, sample, max_length, retry):
+        self.sample = sample
+        self.max_length = max_length
+        self.retry = retry
+        message = (f"Unable to generate sample within max_length={max_length} "
+                  f"after {retry} retries. Sample length: {len(sample)}")
+        super().__init__(message)
+        
+    def get_sample(self):
+        """Get the problematic sample."""
+        return self.sample
+        
+    def get_max_length(self):
+        """Get the maximum allowed length."""
+        return self.max_length
+        
+    def get_retry_count(self):
+        """Get the number of retries attempted."""
+        return self.retry
+  
+
 
 def get_assistant_mask(batch_input_ids: torch.Tensor,
                        start_pattern: Optional[List[int]],
@@ -809,6 +811,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
     image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
+
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
 
@@ -953,6 +956,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     # append EOS token
     text += "<|endoftext|>"
 
+    time0 = time.time()
     # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
     # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
     image_inputs, video_inputs = self.process_vision_info(vision_infos = vision_infos, **self.process_vision_info_args)
@@ -962,6 +966,8 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
+    if time.time() - time0 > 0.5:
+      print(f"long process time source={sample['json']['source']}, it consumes {time.time() - time0} secs", )
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
@@ -1043,6 +1049,8 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     # 这里做一个调整，process_vision_info_args默认为空字典（不会生效）
     # 但是允许用户传入process_vision_info_args相关参数，主要是navit的时候，可以传入image_factor=None,从而不对图片进行resize，而是让self.processor负责resize
+
+    time0 = time.time()
     image_inputs, video_inputs = self.process_vision_info(messages, **self.process_vision_info_args)
     inputs = self.processor(
         text=text,
@@ -1050,6 +1058,8 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
+    if time.time() - time0 > 0.5: 
+      print(f"long process time source={sample['json']['source']}, it consumes {time.time() - time0} secs", )
 
     # For the Warning: (add by zzx)
     #   Token indices sequence length is longer than the specified maximum 
@@ -1104,16 +1114,16 @@ class ChatCompletionVisionDataset(IterableDataset):
     inputs.pop("attention_mask")
     return inputs
   
-  def _gen_img_pad(self):
+  def _gen_img_pad(self, with_vid=True, sz=(16,16)):
     """
     append an image, to trigger vit for pure text sample
     return 6 token: vstart, 4 * image_token, vend
     """
     # Image.fromarray(np.zeros((50,50, 3), dtype=np.uint8))
-    text = "<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|video_pad|><|vision_end|>"
+    text = "<|vision_start|><|image_pad|><|vision_end|><|vision_start|><|video_pad|><|vision_end|>" if with_vid else "<|vision_start|><|image_pad|><|vision_end|>"
     pad_image = {
         "type": "image",
-        "image": Image.fromarray(np.zeros((16,16, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
+        "image": Image.fromarray(np.zeros((*sz, 3), dtype=np.uint8)) # Image.new("RGB", (3, 1, 1), (255, 255, 255))
     }
     pad_video = {
         "type": "video",
@@ -1131,14 +1141,14 @@ class ChatCompletionVisionDataset(IterableDataset):
     }
     self._fill_image_block(pad_image, sample_dict={}, conf=source_conf)
     self._fill_video_block(pad_video, sample_dict={}, conf=source_conf)
-    image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video])
+    image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video] if with_vid else [pad_image])
     inputs = self.processor(
         text=text,
         images=image_inputs,
-        videos=video_inputs,
+        videos=video_inputs if with_vid else None,
         return_tensors="pt"
     )
-
+    # tensor([[151652, 151655, 151655, 151655, 151655, 151653, 151652, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151653]])
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
     inputs["position_ids"] = get_rope_index(
         inputs["input_ids"],
@@ -1316,8 +1326,12 @@ class ChatCompletionVisionDataset(IterableDataset):
     cu_seqlens: List[int] = [0]
     epochs = []
     valid_seq_len = 0
+    n_pixels = 0
     for _, inputs in enumerate(buffer):
-      epochs.append(inputs.get("epoch_idx", None))
+      if "pixel_values" in inputs: n_pixels += inputs["pixel_values"].shape[0]
+      if "pixel_values_videos" in inputs: n_pixels += inputs["pixel_values_videos"].shape[0]
+      
+      epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
                                       packed_position_ids,
@@ -1329,8 +1343,10 @@ class ChatCompletionVisionDataset(IterableDataset):
                                       packed_sample_idx,
                                       cu_seqlens)
 
+
+    # 
     # append a pad image sequence to trigger ViT
-    image_pad = self._gen_img_pad()
+    image_pad = self._gen_img_pad() if n_pixels % 8 == 0 else self._gen_img_pad(sz=(4, round(self.patch_size * 1.4))) # 1.4 处于 (1.25 ~ 1.5)之间
     self._append_sample_packing(image_pad,
                                 packed_input_ids,
                                 packed_position_ids,
@@ -1344,6 +1360,7 @@ class ChatCompletionVisionDataset(IterableDataset):
                                 sample_idx=-1,
                                 image_pad=True
                                 )
+    
 
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
@@ -3145,7 +3162,6 @@ class ChatCompletionVisionParquetDataset_keye(ChatCompletionVisionDataset_keye):
     return self.dataset.state_dict()
   
   def load_state_dict(self, state_dict):
-    print(f"load_state_dict {state_dict}")
     self.dataset.load_state_dict(state_dict)
 
 

@@ -1,3 +1,5 @@
+import os
+
 #import torch
 
 #torch.use_deterministic_algorithms(True)
@@ -766,21 +768,25 @@ def train():
   with Timer("Load state dict"):
     load_from_full_model_state_dict(model=model, full_sd=state_dict, allow_random_init_params=args.allow_random_init_params) # 这里应该全部转成CUDA了, meta -> CUDA
 
-  if state_dict is not None:
-    del state_dict
-
   with torch.device(torch.cuda.current_device()):
     for m in model.modules():
       # RoPE is not covered in state dict
       if hasattr(m, "rope_init"):
         print_rank_0("Initialize RoPE")
         m.rope_init()
-  
+
   # 确保任何参数都被正确初始化
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
     if name != "visual.vision_model.embeddings.position_ids":
       assert not tensor.device == torch.device("meta"), \
         f"{name} not initialized, device={tensor.device}"
+
+  # model = torch.compile(model)
+
+  if state_dict is not None:
+    del state_dict
+  
+
 
   freeze_params(args=args, model=model)
   
@@ -1087,8 +1093,7 @@ def train():
 
         num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item() / args.sequence_parallel_size
 
-        print("mfu_statsmfu_statsmfu_stats", num_image_tokens, num_tokens)
-        mfu_stats.set(max(num_image_tokens, 0), max(num_tokens, 0), num_samples.detach().item(), num_images)
+        mfu_stats.set(max(num_image_tokens, 1), max(num_tokens, 1), max(1, num_samples.detach().item()), max(num_images, 1))
 
         # num_tokens - (sample_idx == -1).sum()
         num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
