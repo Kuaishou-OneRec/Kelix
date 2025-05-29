@@ -31,12 +31,12 @@ echo "Loaded environment variables from ${ENV_FILE}:"
 cat "${ENV_FILE}"
 
 nohup rm -rf hs_err_pid*.log &
-# mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile -x http_proxy=http://oversea-squid1.jp.txyun:11080 -x https_proxy=http://oversea-squid1.jp.txyun:11080 --pernode bash -c  "apt-get install numactl"
-# mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install easydict"
-# mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15"
-# mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install fastparquet==2024.2.0"
+mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile -x http_proxy=http://oversea-squid1.jp.txyun:11080 -x https_proxy=http://oversea-squid1.jp.txyun:11080 --pernode bash -c  "apt-get install numactl"
+mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install easydict"
+mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15"
+mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install fastparquet==2024.2.0"
 
 export http_proxy=http://oversea-squid2.ko.txyun:11080 https_proxy=http://oversea-squid2.ko.txyun:11080 no_proxy=localhost,127.0.0.1,localaddress,localdomain.com,internal,corp.kuaishou.com,test.gifshow.com,staging.kuaishou.com
 apt install net-tools
-# mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "wget https://halo.corp.kuaishou.com/api/cloud-storage/v1/public-objects/user-cloud-storage/xray%2Finstall_xray.sh -O install_xray.sh && bash install_xray.sh"
+mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "wget https://halo.corp.kuaishou.com/api/cloud-storage/v1/public-objects/user-cloud-storage/xray%2Finstall_xray.sh -O install_xray.sh && bash install_xray.sh"
 
