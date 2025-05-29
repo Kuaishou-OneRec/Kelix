@@ -653,7 +653,7 @@ def train():
 
   # torch init
   torch.cuda.set_device(local_rank)
-  torch.distributed.init_process_group(backend="nccl", rank=rank, world_size=world_size, timeout=process_group_timeout)
+  torch.distributed.init_process_group(rank=rank, world_size=world_size, timeout=process_group_timeout)
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
 
   if use_flops_balance:
