@@ -11,7 +11,7 @@
     "base_model_dir": "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/",
     "pretrained_model_name_or_path":"/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/",
     "shrink_ratio": 0.7,
-    "max_retry": 10,
+    "max_retry": 1,
     "multiple_of": 8,
     "num_workers": 16,
     "num_epochs": 1,
