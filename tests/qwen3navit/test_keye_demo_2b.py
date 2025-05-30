@@ -1,3 +1,6 @@
+import os
+import os
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNING"] = "1"
 from PIL import Image, ImageDraw
 from PIL import Image
 import torch
@@ -110,11 +113,12 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
                  width=outline_width)
     return image
 
+from transformers import AutoTokenizer, AutoModel, AutoProcessor
 
 MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-2B-demo/"
-processor = KeyeProcessor.from_pretrained(MODEL_DIR)
+# MODEL_DIR = "/llm_reco/lingzhixin/models/Keye-2B-demo_dev"
+processor = AutoProcessor.from_pretrained(MODEL_DIR, trust_remote_code=True)
 tokenizer = processor.tokenizer
-
 
 def make_inputs(a,b):
     messages = [
@@ -143,7 +147,8 @@ def make_inputs(a,b):
     return messages, inputs
 
 
-
+make_inputs(100, 100)
+exit()
 logits_all = []
 if 1:
     try:
@@ -153,7 +158,7 @@ if 1:
                 torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
                 device_map="cuda:0",
-                ignore_mismatched_sizes=True
+                ignore_mismatched_sizes=True,
             )
 
 
