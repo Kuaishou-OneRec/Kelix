@@ -1,0 +1,1341 @@
+[2025-05-30 02:43:36,508] [INFO] [real_accelerator.py:222:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+prev_from_pt <class 'recovlm.models.keye.processing_keye.KeyeProcessor'> {'cache_dir': None, 'force_download': False, 'local_files_only': False, 'revision': 'main'}
+1111111 /llm_reco/lingzhixin/models/Keye-8B-demo_dev 
+
+ {'cache_dir': None, 'force_download': False, 'local_files_only': False, 'revision': 'main'} 
+
+ [SiglipImageProcessor {
+  "auto_map": {
+    "AutoImageProcessor": "image_processing_keye.SiglipImageProcessor",
+    "AutoProcessor": "processing_keye.KeyeProcessor"
+  },
+  "do_convert_rgb": null,
+  "do_normalize": true,
+  "do_rescale": true,
+  "do_resize": true,
+  "image_mean": [
+    0.48145466,
+    0.4578275,
+    0.40821073
+  ],
+  "image_processor_type": "SiglipImageProcessor",
+  "image_std": [
+    0.26862954,
+    0.26130258,
+    0.27577711
+  ],
+  "max_pixels": 16777216,
+  "merge_size": 2,
+  "min_pixels": 4096,
+  "patch_size": 16,
+  "processor_class": "KeyeProcessor",
+  "resample": 3,
+  "rescale_factor": 0.00392156862745098,
+  "size": {
+    "height": 224,
+    "width": 224
+  },
+  "temporal_patch_size": 1
+}
+, Qwen2TokenizerFast(name_or_path='/llm_reco/lingzhixin/models/Keye-8B-demo_dev', vocab_size=151643, model_max_length=131072, is_fast=True, padding_side='right', truncation_side='right', special_tokens={'eos_token': '<|im_end|>', 'pad_token': '<|endoftext|>', 'additional_special_tokens': ['<|im_start|>', '<|im_end|>', '<|vision_start|>', '<|vision_end|>', '<|vision_pad|>', '<|image_pad|>', '<|video_pad|>']}, clean_up_tokenization_spaces=False, added_tokens_decoder={
+	151643: AddedToken("<|endoftext|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+	151644: AddedToken("<|im_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+	151645: AddedToken("<|im_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+	151646: AddedToken("<|object_ref_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151647: AddedToken("<|object_ref_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151648: AddedToken("<|box_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151649: AddedToken("<|box_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151650: AddedToken("<|quad_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151651: AddedToken("<|quad_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151652: AddedToken("<|vision_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+	151653: AddedToken("<|vision_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+	151654: AddedToken("<|vision_pad|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+	151655: AddedToken("<|image_pad|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+	151656: AddedToken("<|video_pad|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=True),
+	151657: AddedToken("<tool_call>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151658: AddedToken("</tool_call>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151659: AddedToken("<|fim_prefix|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151660: AddedToken("<|fim_middle|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151661: AddedToken("<|fim_suffix|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151662: AddedToken("<|fim_pad|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151663: AddedToken("<|repo_name|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151664: AddedToken("<|file_sep|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151665: AddedToken("<tool_response>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151666: AddedToken("</tool_response>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151667: AddedToken("<think>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151668: AddedToken("</think>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151669: AddedToken("<|point_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151670: AddedToken("<|point_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151671: AddedToken("<|ocr_text_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151672: AddedToken("<|ocr_text_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151673: AddedToken("<|clip_time_start|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+	151674: AddedToken("<|clip_time_end|>", rstrip=False, lstrip=False, single_word=False, normalized=False, special=False),
+}
+)]
+
+
+ <class 'recovlm.models.keye.processing_keye.KeyeProcessor'>
+2222222 {'chat_template': "{% set image_count = namespace(value=0) %}{% set video_count = namespace(value=0) %}{% for message in messages %}{% if loop.first and message['role'] != 'system' %}<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n{% endif %}<|im_start|>{{ message['role'] }}\n{% if message['content'] is string %}{{ message['content'] }}<|im_end|>\n{% else %}{% for content in message['content'] %}{% if content['type'] == 'image' or 'image' in content or 'image_url' in content %}{% set image_count.value = image_count.value + 1 %}{% if add_vision_id %}Picture {{ image_count.value }}: {% endif %}<|vision_start|><|image_pad|><|vision_end|>{% elif content['type'] == 'video' or 'video' in content %}{% set video_count.value = video_count.value + 1 %}{% if add_vision_id %}Video {{ video_count.value }}: {% endif %}<|vision_start|><|video_pad|><|vision_end|>{% elif 'text' in content %}{{ content['text'] }}{% endif %}{% endfor %}<|im_end|>\n{% endif %}{% endfor %}{% if add_generation_prompt %}<|im_start|>assistant\n{% endif %}"} 
+
+ {}
+<class 'recovlm.models.keye.processing_keye.KeyeProcessor'>
+下面每行的格式为:
+当前深度-<模型类型>(模型名称): 参数数量		p0:第一个参数名:第一个参数均值
+-- 0-<class 'recovlm.models.keye.modeling_keye.KeyeForConditionalGeneration'>(): 8074161344		p0:mlp_AR.linear_1.bias:-1.4528632164001465e-06
+---- 1-<class 'recovlm.models.keye.modeling_keye.Projector'>(mlp_AR): 40119040		p0:linear_1.bias:-1.4528632164001465e-06
+------ 2-<class 'torch.nn.modules.normalization.LayerNorm'>(pre_norm): 2304		p0:bias:1.646578311920166e-06
+------ 2-<class 'torch.nn.modules.linear.Linear'>(linear_1): 21238272		p0:bias:-1.4528632164001465e-06
+------ 2-<class 'transformers.activations.GELUActivation'>(act): 0		p0:None:None
+------ 2-<class 'torch.nn.modules.linear.Linear'>(linear_2): 18878464		p0:bias:-4.675239324569702e-07
+---- 1-<class 'recovlm.models.keye.modeling_keye.SiglipVisionModel'>(visual): 465636800		p0:vision_model.embeddings.packing_position_embedding.weight:0.0
+------ 2-<class 'recovlm.models.keye.modeling_keye.SiglipVisionTransformer'>(vision_model): 465636800		p0:embeddings.packing_position_embedding.weight:0.0
+-------- 3-<class 'recovlm.models.keye.modeling_keye.SiglipVisionEmbeddings'>(embeddings): 38929536		p0:packing_position_embedding.weight:0.0
+---------- 4-<class 'torch.nn.modules.conv.Conv2d'>(patch_embedding): 885888		p0:bias:0.0108642578125
+---------- 4-<class 'torch.nn.modules.sparse.Embedding'>(position_embedding): 294912		p0:weight:0.0020599365234375
+---------- 4-<class 'torch.nn.modules.sparse.Embedding'>(packing_position_embedding): 37748736		p0:weight:0.0
+-------- 3-<class 'recovlm.models.keye.modeling_keye.SiglipEncoder'>(encoder): 411466608		p0:layers.0.layer_norm1.bias:0.00151824951171875
+---------- 4-<class 'torch.nn.modules.container.ModuleList'>(layers): 411466608		p0:0.layer_norm1.bias:0.00151824951171875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(0): 15239504		p0:layer_norm1.bias:0.00151824951171875
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.00151824951171875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:-0.0341796875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:-0.0341796875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.000881195068359375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.057373046875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:-0.00469970703125
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:0.006103515625
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-2.40625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-2.40625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.0069580078125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(1): 15239504		p0:layer_norm1.bias:0.006805419921875
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.006805419921875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.00958251953125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.00958251953125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.0001583099365234375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.006500244140625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:-0.011474609375
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.0023040771484375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.7734375
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.7734375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.010986328125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(2): 15239504		p0:layer_norm1.bias:0.00616455078125
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.00616455078125
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:-0.00750732421875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:-0.00750732421875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.001678466796875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.031494140625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:-0.005218505859375
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.00115203857421875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.8203125
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.8203125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.00726318359375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(3): 15239504		p0:layer_norm1.bias:0.0034027099609375
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.0034027099609375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.006103515625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.006103515625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.00167083740234375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.022705078125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:-0.0022735595703125
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.000514984130859375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-2.09375
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-2.09375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.004425048828125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(4): 15239504		p0:layer_norm1.bias:0.002899169921875
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.002899169921875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.0064697265625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.0064697265625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.000408172607421875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.03759765625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:-0.0013580322265625
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.0062255859375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-2.203125
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-2.203125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.00061798095703125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(5): 15239504		p0:layer_norm1.bias:-0.00173187255859375
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:-0.00173187255859375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:-0.01129150390625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:-0.01129150390625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.000492095947265625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.009521484375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:-0.0034942626953125
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.00482177734375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-2.1875
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-2.1875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:-0.0029754638671875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(6): 15239504		p0:layer_norm1.bias:0.00188446044921875
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.00188446044921875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:-0.01611328125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:-0.01611328125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.0020294189453125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.01220703125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:-0.0027618408203125
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.0035552978515625
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.953125
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.953125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:-0.0019073486328125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(7): 15239504		p0:layer_norm1.bias:0.00138092041015625
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.00138092041015625
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:-0.00083160400390625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:-0.00083160400390625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.000286102294921875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.00185394287109375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:-0.0029449462890625
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.0025177001953125
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.8515625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.8515625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:-0.00347900390625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(8): 15239504		p0:layer_norm1.bias:0.00121307373046875
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.00121307373046875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.00439453125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.00439453125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.00201416015625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.021484375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:-0.00109100341796875
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.0018768310546875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.7109375
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.7109375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:-0.0027313232421875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(9): 15239504		p0:layer_norm1.bias:0.0015716552734375
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.0015716552734375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.01556396484375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.01556396484375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.002471923828125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.0289306640625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:-0.00019550323486328125
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:0.00061798095703125
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.6640625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.6640625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:-0.00141143798828125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(10): 15239504		p0:layer_norm1.bias:0.00311279296875
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.00311279296875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.01031494140625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.01031494140625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.002410888671875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.0032806396484375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:-0.00049591064453125
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.0016326904296875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.65625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.65625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:-0.00013828277587890625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(11): 15239504		p0:layer_norm1.bias:0.0027313232421875
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.0027313232421875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.0301513671875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.0301513671875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.00052642822265625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.057861328125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.00125885009765625
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.00147247314453125
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.640625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.640625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:-4.9114227294921875e-05
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(12): 15239504		p0:layer_norm1.bias:0.0010223388671875
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.0010223388671875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.0034942626953125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.0034942626953125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.0023040771484375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.002471923828125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.00140380859375
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.020751953125
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.5625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.5625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.0025634765625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(13): 15239504		p0:layer_norm1.bias:0.0026702880859375
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.0026702880859375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:-0.005889892578125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:-0.005889892578125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.0022430419921875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.0045166015625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.0001010894775390625
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.005035400390625
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:-0.0003871917724609375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(14): 15239504		p0:layer_norm1.bias:0.0012054443359375
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.0012054443359375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.00469970703125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.00469970703125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.0023345947265625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.0017547607421875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.0023956298828125
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.087890625
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.2890625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.2890625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.001007080078125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(15): 15239504		p0:layer_norm1.bias:0.00087738037109375
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.00087738037109375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:-0.01220703125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:-0.01220703125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.00238037109375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.00970458984375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.0035400390625
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.1337890625
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.34375
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.34375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.00116729736328125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(16): 15239504		p0:layer_norm1.bias:0.003692626953125
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.003692626953125
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:-0.0091552734375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:-0.0091552734375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.0027008056640625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.04248046875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.005889892578125
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.08642578125
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.203125
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.203125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.002716064453125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(17): 15239504		p0:layer_norm1.bias:0.0035552978515625
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.0035552978515625
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.017822265625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.017822265625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.00174713134765625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.01531982421875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.0030975341796875
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.12353515625
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.171875
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.171875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.0007171630859375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(18): 15239504		p0:layer_norm1.bias:0.0023193359375
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.0023193359375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:-0.01068115234375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:-0.01068115234375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.0023040771484375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.052001953125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.003082275390625
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.154296875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.1640625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.1640625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:-0.000377655029296875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(19): 15239504		p0:layer_norm1.bias:0.004913330078125
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.004913330078125
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.006805419921875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.006805419921875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.001708984375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.00543212890625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.002288818359375
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.1708984375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.1484375
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.1484375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.00011968612670898438
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(20): 15239504		p0:layer_norm1.bias:0.00750732421875
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.00750732421875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:-0.007049560546875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:-0.007049560546875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.0033721923828125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.00738525390625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.00299072265625
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.1357421875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.1875
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.1875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.0009613037109375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(21): 15239504		p0:layer_norm1.bias:0.00872802734375
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.00872802734375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:-0.0184326171875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:-0.0184326171875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.000385284423828125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.00775146484375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.002593994140625
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.28125
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.1796875
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.1796875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.0032501220703125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(22): 15239504		p0:layer_norm1.bias:0.009765625
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.009765625
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.005584716796875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.005584716796875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.005950927734375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.0233154296875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.00775146484375
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.244140625
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.140625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.140625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.01007080078125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(23): 15239504		p0:layer_norm1.bias:0.00872802734375
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.00872802734375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.005584716796875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.005584716796875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.005767822265625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.0238037109375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.005950927734375
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.1728515625
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.140625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.140625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.00830078125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(24): 15239504		p0:layer_norm1.bias:0.00872802734375
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.00872802734375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:-0.004119873046875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:-0.004119873046875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.0030975341796875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.00567626953125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.00567626953125
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.263671875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.15625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.15625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:0.0079345703125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(25): 15239504		p0:layer_norm1.bias:0.00010824203491210938
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:0.00010824203491210938
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.0031890869140625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.0031890869140625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:0.0091552734375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:-0.0341796875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:0.00311279296875
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.1875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.078125
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.078125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:-0.0089111328125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.SiglipEncoderLayer'>(26): 15239504		p0:layer_norm1.bias:-0.004730224609375
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm1): 2304		p0:bias:-0.004730224609375
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipAttention'>(self_attn): 5313024		p0:k_proj.bias:0.0030364990234375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(k_proj): 1328256		p0:bias:0.0030364990234375
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(v_proj): 1328256		p0:bias:-0.000652313232421875
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(q_proj): 1328256		p0:bias:0.038330078125
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(out_proj): 1328256		p0:bias:-0.0216064453125
+---------------- 7-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+-------------- 6-<class 'torch.nn.modules.normalization.LayerNorm'>(layer_norm2): 2304		p0:bias:-0.1748046875
+-------------- 6-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.015625
+---------------- 7-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.015625
+---------------- 7-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:-0.01318359375
+-------- 3-<class 'torch.nn.modules.normalization.LayerNorm'>(post_layernorm): 2304		p0:bias:0.041748046875
+-------- 3-<class 'recovlm.models.keye.modeling_keye.SiglipMultiheadAttentionPoolingHead'>(head): 15238352		p0:attention.in_proj_bias:0.0029144287109375
+---------- 4-<class 'torch.nn.modules.activation.MultiheadAttention'>(attention): 5313024		p0:in_proj_bias:0.0029144287109375
+------------ 5-<class 'torch.nn.modules.linear.NonDynamicallyQuantizableLinear'>(out_proj): 1328256		p0:bias:-0.11767578125
+---------- 4-<class 'torch.nn.modules.normalization.LayerNorm'>(layernorm): 2304		p0:bias:-0.022216796875
+---------- 4-<class 'recovlm.models.keye.modeling_keye.SiglipMLP'>(mlp): 9921872		p0:fc1.bias:-1.3671875
+------------ 5-<class 'transformers.activations.PytorchGELUTanh'>(activation_fn): 0		p0:None:None
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(fc1): 4962512		p0:bias:-1.3671875
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(fc2): 4959360		p0:bias:-0.016845703125
+---- 1-<class 'recovlm.models.keye.modeling_keye.Qwen3Model'>(model): 7568405504		p0:embed_tokens.weight:1.5079975128173828e-05
+------ 2-<class 'torch.nn.modules.sparse.Embedding'>(embed_tokens): 622329856		p0:weight:1.5079975128173828e-05
+------ 2-<class 'torch.nn.modules.container.ModuleList'>(layers): 6946071552		p0:0.input_layernorm.weight:0.0113525390625
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(0): 192946432		p0:input_layernorm.weight:0.0113525390625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:2.15625
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:2.7567148208618164e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:1.3262033462524414e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-1.436471939086914e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-9.298324584960938e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.7109375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:2.15625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-4.470348358154297e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:1.055002212524414e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-3.9637088775634766e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-4.470348358154297e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.0113525390625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.12060546875
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(1): 192946432		p0:input_layernorm.weight:0.0240478515625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.6796875
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-1.0311603546142578e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-2.2530555725097656e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-1.7762184143066406e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-5.841255187988281e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.5625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.6796875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-3.680586814880371e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:-2.7060508728027344e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-1.5124678611755371e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-3.680586814880371e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.0240478515625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.33984375
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(2): 192946432		p0:input_layernorm.weight:0.0400390625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.5625
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:2.995133399963379e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-5.066394805908203e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:1.7404556274414062e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-4.5299530029296875e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.5546875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.5625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-2.86102294921875e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:-9.298324584960938e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-1.3709068298339844e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-2.86102294921875e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.0400390625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.5234375
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(3): 192946432		p0:input_layernorm.weight:0.04833984375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.7578125
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:1.245737075805664e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-8.52346420288086e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:9.000301361083984e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-8.52346420288086e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.6796875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.7578125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:1.4726538211107254e-08
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:-2.3126602172851562e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:2.4586915969848633e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:1.4726538211107254e-08
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.04833984375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.447265625
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(4): 192946432		p0:input_layernorm.weight:0.06884765625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.7265625
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-1.2040138244628906e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-2.5890767574310303e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:3.874301910400391e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:7.808208465576172e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.640625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.7265625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-4.082918167114258e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:-3.218650817871094e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:2.428889274597168e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-4.082918167114258e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.06884765625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.376953125
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(5): 192946432		p0:input_layernorm.weight:0.0693359375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:3.078125
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-9.894371032714844e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:2.4437904357910156e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:1.811981201171875e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:4.805624485015869e-07
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.1015625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:3.078125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:1.1874362826347351e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:-9.059906005859375e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-3.546476364135742e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:1.1874362826347351e-07
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.0693359375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.298828125
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(6): 192946432		p0:input_layernorm.weight:0.09375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.6875
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:9.179115295410156e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-1.3053417205810547e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:2.2649765014648438e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-5.5730342864990234e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.59375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.6875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:1.1324882507324219e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:-5.0067901611328125e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:1.8551945686340332e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:1.1324882507324219e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.09375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.328125
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(7): 192946432		p0:input_layernorm.weight:0.1318359375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.796875
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:1.4960765838623047e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-6.221234798431396e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:1.341104507446289e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-4.351139068603516e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.7734375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.796875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-1.1781230568885803e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:-5.984306335449219e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-5.125999450683594e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-1.1781230568885803e-07
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.1318359375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.365234375
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(8): 192946432		p0:input_layernorm.weight:0.173828125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.609375
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:1.0654330253601074e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-5.632638931274414e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:4.380941390991211e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:4.380941390991211e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.5859375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.609375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:2.4437904357910156e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:7.68899917602539e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:1.3187527656555176e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:2.4437904357910156e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.173828125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.34375
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(9): 192946432		p0:input_layernorm.weight:0.171875
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.5625
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-5.662441253662109e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:9.417533874511719e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-1.633167266845703e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:4.023313522338867e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.609375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.5625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-9.909272193908691e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:1.633167266845703e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-2.562999725341797e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-9.909272193908691e-07
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.171875
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.376953125
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(10): 192946432		p0:input_layernorm.weight:0.2578125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.5703125
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-7.62939453125e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:2.9206275939941406e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:1.7881393432617188e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-6.318092346191406e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.4765625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.5703125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:2.4139881134033203e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:9.655952453613281e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-2.1904706954956055e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:2.4139881134033203e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.2578125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.375
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(11): 192946432		p0:input_layernorm.weight:0.18359375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.7421875
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:3.516674041748047e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:2.8759241104125977e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:1.3828277587890625e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:8.344650268554688e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.703125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.7421875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-4.887580871582031e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:3.337860107421875e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-2.726912498474121e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-4.887580871582031e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.18359375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.380859375
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(12): 192946432		p0:input_layernorm.weight:0.1953125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.6875
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:7.599592208862305e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:1.5974044799804688e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-4.857778549194336e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-3.3676624298095703e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.6328125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.6875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:4.023313522338867e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:1.2934207916259766e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:2.60770320892334e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:4.023313522338867e-07
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.1953125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.38671875
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(13): 192946432		p0:input_layernorm.weight:0.1787109375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.671875
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-7.987022399902344e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-2.9087066650390625e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:8.285045623779297e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-2.5480985641479492e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.7265625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.671875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-1.1101365089416504e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:2.6106834411621094e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-1.4677643775939941e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-1.1101365089416504e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.1787109375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.392578125
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(14): 192946432		p0:input_layernorm.weight:0.24609375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.765625
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:8.225440979003906e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-3.7066638469696045e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-7.927417755126953e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-1.7583370208740234e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.6796875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.765625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:8.165836334228516e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:2.8967857360839844e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:3.9637088775634766e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:8.165836334228516e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.24609375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.40625
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(15): 192946432		p0:input_layernorm.weight:0.2578125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.8046875
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:2.5033950805664062e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:1.138448715209961e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:2.4437904357910156e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-6.467103958129883e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.71875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.8046875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:5.736947059631348e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:2.6464462280273438e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:7.152557373046875e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:5.736947059631348e-07
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.2578125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.41796875
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(16): 192946432		p0:input_layernorm.weight:0.37109375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.6640625
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-2.8870999813079834e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-1.150369644165039e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:6.8247318267822266e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:8.121132850646973e-07
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.5703125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.6640625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-3.9637088775634766e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:2.205371856689453e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-2.8908252716064453e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-3.9637088775634766e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.37109375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.4296875
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(17): 192946432		p0:input_layernorm.weight:0.357421875
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.75
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-6.794929504394531e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-7.241964340209961e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-2.86102294921875e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-3.159046173095703e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.6953125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.75
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-1.2442469596862793e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:2.3365020751953125e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:8.344650268554688e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-1.2442469596862793e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.357421875
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.42578125
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(18): 192946432		p0:input_layernorm.weight:0.375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.75
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-1.9222497940063477e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:3.3229589462280273e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-2.3245811462402344e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:4.738569259643555e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.6953125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.75
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:5.334615707397461e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:-1.4379620552062988e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:7.361173629760742e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:5.334615707397461e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.4375
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(19): 192946432		p0:input_layernorm.weight:0.486328125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.8359375
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:3.844499588012695e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:1.2040138244628906e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:1.043081283569336e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-3.933906555175781e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.765625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.8359375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:6.109476089477539e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:-9.73232090473175e-08
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:1.1101365089416504e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:6.109476089477539e-07
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.486328125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.4453125
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(20): 192946432		p0:input_layernorm.weight:0.44921875
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.828125
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-6.973743438720703e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-5.692243576049805e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-1.4435499906539917e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-2.592802047729492e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.7578125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.828125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-2.8759241104125977e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:-9.5367431640625e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-5.841255187988281e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-2.8759241104125977e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.44921875
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.46875
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(21): 192946432		p0:input_layernorm.weight:0.50390625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.8203125
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-2.384185791015625e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-1.4454126358032227e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-3.632158041000366e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:6.645917892456055e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.765625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.8203125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:4.26173210144043e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:3.993511199951172e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:3.0994415283203125e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:4.26173210144043e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.50390625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.494140625
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(22): 192946432		p0:input_layernorm.weight:0.703125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.765625
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:7.987022399902344e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-1.1861324310302734e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-1.2099742889404297e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:4.76837158203125e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.65625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.765625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:8.344650268554688e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:3.1441450119018555e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:1.9371509552001953e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:8.344650268554688e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.703125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.5078125
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(23): 192946432		p0:input_layernorm.weight:0.6875
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.9453125
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:8.285045623779297e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:1.1026859283447266e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:7.867813110351562e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:1.2159347534179688e-05
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.8125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.9453125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-2.16066837310791e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:1.9550323486328125e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-1.3113021850585938e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-2.16066837310791e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.6875
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.5390625
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(24): 192946432		p0:input_layernorm.weight:0.859375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.734375
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:2.4586915969848633e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:1.0669231414794922e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:9.59634780883789e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-1.4185905456542969e-05
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.71875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.734375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-2.1010637283325195e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:3.337860107421875e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-2.868473529815674e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-2.1010637283325195e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.859375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.58203125
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(25): 192946432		p0:input_layernorm.weight:0.8359375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.8203125
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-1.895427703857422e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-1.5422701835632324e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-5.692243576049805e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:4.976987838745117e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.765625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.8203125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-2.3543834686279297e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:3.7670135498046875e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:1.6391277313232422e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-2.3543834686279297e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:0.8359375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.6171875
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(26): 192946432		p0:input_layernorm.weight:1.0703125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.640625
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:3.635883331298828e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:2.777576446533203e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:4.470348358154297e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:1.4230608940124512e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.6640625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.640625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:3.382563591003418e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:5.602836608886719e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:4.76837158203125e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:3.382563591003418e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:1.0703125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.66796875
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(27): 192946432		p0:input_layernorm.weight:1.15625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.578125
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-6.020069122314453e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-8.344650268554688e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:1.6689300537109375e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:2.3990869522094727e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.6328125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.578125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:4.649162292480469e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:5.936622619628906e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-1.6167759895324707e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:4.649162292480469e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:1.15625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.70703125
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(28): 192946432		p0:input_layernorm.weight:1.1015625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.7265625
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:6.48200511932373e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:9.000301361083984e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-9.655952453613281e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:2.775341272354126e-07
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.71875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.7265625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:1.0244548320770264e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:7.200241088867188e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-4.023313522338867e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:1.0244548320770264e-07
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:1.1015625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.75
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(29): 192946432		p0:input_layernorm.weight:1.53125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.578125
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-1.3113021850585938e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:1.7523765563964844e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-1.1265277862548828e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:5.6461431086063385e-09
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.59375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.578125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-2.6971101760864258e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:6.198883056640625e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-7.808208465576172e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-2.6971101760864258e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:1.53125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.80859375
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(30): 192946432		p0:input_layernorm.weight:1.8671875
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.765625
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-4.291534423828125e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:2.9802322387695312e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:2.8252601623535156e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:4.678964614868164e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.8125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.765625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-2.518296241760254e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:5.0067901611328125e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-2.339482307434082e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-2.518296241760254e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:1.8671875
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.85546875
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(31): 192946432		p0:input_layernorm.weight:2.0625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.7109375
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-8.64267349243164e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:2.130866050720215e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-8.64267349243164e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:1.9837170839309692e-07
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.6640625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.7109375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:5.781650543212891e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:3.1948089599609375e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-6.556510925292969e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:5.781650543212891e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:2.0625
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.8984375
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(32): 192946432		p0:input_layernorm.weight:2.484375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.6953125
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-1.8924474716186523e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:5.327165126800537e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:-6.318092346191406e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:9.417533874511719e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.6953125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.6953125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:1.1995434761047363e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:2.3484230041503906e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-5.699694156646729e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:1.1995434761047363e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:2.484375
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.9453125
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(33): 192946432		p0:input_layernorm.weight:3.078125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.53125
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-8.285045623779297e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:1.823902130126953e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:1.800060272216797e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:-4.291534423828125e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.5390625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.53125
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-1.7434358596801758e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:8.165836334228516e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:1.1846423149108887e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-1.7434358596801758e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:3.078125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:0.99609375
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(34): 192946432		p0:input_layernorm.weight:3.53125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.7109375
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:-7.189810276031494e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:8.404254913330078e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:2.562999725341797e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:9.059906005859375e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.671875
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.7109375
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:-1.55717134475708e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:1.341104507446289e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-1.019798219203949e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:-1.55717134475708e-06
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:3.53125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:1.1171875
+-------- 3-<class 'recovlm.models.keye.modeling_keye.KeyeDecoderLayer'>(35): 192946432		p0:input_layernorm.weight:3.453125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.KeyeFlashAttention2'>(self_attn): 41943296		p0:k_norm.weight:1.7265625
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(q_proj): 16777216		p0:weight:1.8030405044555664e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(k_proj): 4194304		p0:weight:-5.632638931274414e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(v_proj): 4194304		p0:weight:7.867813110351562e-06
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(o_proj): 16777216		p0:weight:7.3015689849853516e-06
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(q_norm): 128		p0:weight:1.515625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(k_norm): 128		p0:weight:1.7265625
+------------ 5-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+------------ 5-<class 'recovlm.models.keye.modeling_keye.UlyssesAttention'>(_dist_attn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3MLP'>(mlp): 150994944		p0:down_proj.weight:6.221234798431396e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(gate_proj): 50331648		p0:weight:-4.291534423828125e-05
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(up_proj): 50331648		p0:weight:-1.7043203115463257e-07
+------------ 5-<class 'torch.nn.modules.linear.Linear'>(down_proj): 50331648		p0:weight:6.221234798431396e-07
+------------ 5-<class 'torch.nn.modules.activation.SiLU'>(act_fn): 0		p0:None:None
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(input_layernorm): 4096		p0:weight:3.453125
+---------- 4-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(post_attention_layernorm): 4096		p0:weight:1.5390625
+------ 2-<class 'recovlm.models.keye.modeling_keye.Qwen3RMSNorm'>(norm): 4096		p0:weight:2.015625
+------ 2-<class 'recovlm.models.keye.modeling_keye.KeyeRotaryEmbedding'>(rotary_emb): 0		p0:None:None
+---- 1-<class 'torch.nn.modules.linear.Linear'>(lm_head): 622329856		p0:weight:1.5079975128173828e-05
+
+{
+  "role": "user",
+  "content": ";
+);
+);
+)
+);
+);
+);
+);
+)
+);
+;
+;
+;
+;
+;
+;
+;
+)
+
+)
+;
+;
+;
+;
+
+
+
+;
+);
+
+
+);
+
+
+)
+)
+
+
+
+
+
+;
+
+;
+
+)
+
+
+
+;
+
+
+
+
+
+
+
+
+;
+
+;
+
+;
+
+
+
+;
+
+;
+;
+
+
+
+
+
+;
+;
+)
+
+
+
+;
+;
+;
+;
+
+;
+;
+
+
+
+
+
+ {
+);
+;
+;
+;
+.
+)
+);
+;
+}。。
+
+
+
+
+
+
+。
+
+
+.
+
+
+
+
+.
+
+.
+
+。
+
+
+。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.
+。
+
+。
+.
+.
+
+
+
+
+.
+.
+.
+
+
+.
+.
+
+.
+.
+.
+
+
+
+)
+
+
+
+
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+
+
+
+
+
+
+.
+>
+.
+
+
+
+.
+.
+.
+.
+
+.
+
+
+
+.
+}
+
+
+
+
+
+
+
+
+
+
+.
+;
+)
+
+
+
+
+.
+.
+.
+.
+.
+.
+.
+。
+
+
+
+.
+
+
+.
+
+.
+
+.
+.
+.
+.
+.
+.
+)
+.
+.
+.",
+  "logits": tensor([[[ 0.5000,  5.5625, -5.5625,  ..., -0.7617,  0.4219, -0.3203],
+         [ 4.7188,  3.0000,  5.7500,  ..., -0.7891, -0.6367,  0.1562],
+         [ 0.8711, -0.1299,  2.5312,  ...,  1.1641,  0.5625,  1.1094],
+         ...,
+         [ 5.8438, 10.5000,  8.4375,  ..., -1.9844,  1.6641, -1.8672],
+         [ 0.7695, -2.5000,  2.7500,  ..., -0.7656,  1.4297, -0.4160],
+         [ 7.5625, 14.5625,  6.6250,  ..., -0.6133, -0.1084,  0.4414]]],
+       device='cuda:0', grad_fn=<UnsafeViewBackward0>)
+}

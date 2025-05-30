@@ -1,3 +1,35 @@
+import torch 
+import torch.nn as nn
+
+
+def num_params(model):
+    return sum([x.numel() for x in model.parameters()])
+
+
+def info_params_recursive(model, name="", max_depth=5, curr_depth=0):
+    """
+    from torchvision import models
+    print(info_params_recursive(models.resnet18()))
+    """
+    res = ""
+    if curr_depth == 0:
+        res += "下面每行的格式为:\n当前深度-<模型类型>(模型名称): 参数数量\t\tp0:第一个参数名:第一个参数均值\n"
+    if curr_depth == max_depth: return ""
+    #
+    indent = '--' * (curr_depth + 1)
+    named_params = list(model.named_parameters())
+    if len(named_params):
+        pname, pparam = sorted(named_params)[0]
+        pparam = pparam.detach().mean().item()
+    else:
+        pname, pparam = None, None
+    res += "{} {}-{}({}): {}\t\tp0:{}:{}\n".format(indent, curr_depth, type(model), name, num_params(model), pname, pparam)
+    for name, model in model.named_children():
+        if isinstance(model, nn.Module):
+            res += info_params_recursive(model, name, max_depth, curr_depth + 1)
+    return res
+
+
 from recovlm.utils.ds_utils import format_dict_or_list
 from PIL import Image, ImageDraw
 from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value
@@ -62,6 +94,8 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
 
 
 MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/"
+MODEL_DIR = "/llm_reco/lingzhixin/models/Keye-8B-demo_dev"
+
 processor = KeyeProcessor.from_pretrained(MODEL_DIR)
 tokenizer = processor.tokenizer
 
@@ -71,7 +105,8 @@ def make_inputs(a,b):
         {
             "role": "user",
             "content": [
-                {"type": "image", "image": generate_circle_image((a,b),) },
+                {"type": "video", "video": "/llm_reco/lingzhixin/recovlm_data/tests/2.mp4"},
+                # {"type": "image", "image": generate_circle_image((a,b),) },
                 {"type": "text", "text": "what's in the image"},
             ],
         }
@@ -81,8 +116,9 @@ def make_inputs(a,b):
     text = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=False
     )
+    # print(text)
     image_inputs, video_inputs = process_vision_info(messages)
-    print(image_inputs, video_inputs)
+    # print(image_inputs, video_inputs)
     inputs = processor(
         text=[text],
         images=image_inputs,
@@ -90,6 +126,7 @@ def make_inputs(a,b):
         padding=True,
         return_tensors="pt",
     )
+    # print(inputs)
     return messages, inputs
 
 
@@ -102,13 +139,14 @@ if 1:
                 torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
                 device_map="cuda:0",
-                ignore_mismatched_sizes=True
+                ignore_mismatched_sizes=False
             )
+            print(info_params_recursive(model, max_depth=10))
 
             messages, inputs = make_inputs(100,100)
             for k in inputs: inputs[k] = inputs[k].cuda()
 
-            generated = model.generate(**inputs,  max_new_tokens=32768)
+            generated = model.generate(**inputs,  max_new_tokens=256)
             logits = model(**inputs).logits
             output_ids = generated[0][len(inputs.input_ids[0]):].tolist() 
             content = tokenizer.decode(output_ids[0:], skip_special_tokens=True).strip("\n")
@@ -124,3 +162,22 @@ if 1:
         print(e)
         pass
 
+
+
+'''
+{'input_ids': tensor([[151644,   8948,    198,   2610,    525,    264,  10950,  17847,     13,
+         151645,    198, 151644,    872,    198,  12555,    594,    304,    279,
+           2168, 151645,    198]]), 'attention_mask': tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])}
+{
+  "role": "user",
+  "content": "The image shows a close-up view of a person's hand holding a glass of a beverage, likely a cocktail or a mixed drink. The person's hand is holding the glass in a way that suggests they are taking a sip. The drink appears to have a colorful, possibly fruity appearance, and there are some droplets on the rim of the glass, indicating that the drink might be carbonated or has a strong flavor that causes it to foam or bubble when poured. The background is blurred, which focuses attention on the hand and the drink.",
+  "logits": tensor([[[ 6.1875,  5.6562,  4.2812,  ..., -0.7617, -0.7617, -0.7617],
+         [-1.1094,  2.6094,  4.6875,  ..., -3.0625, -3.0625, -3.0625],
+         [-3.7812,  0.2227,  6.4375,  ..., -3.5469, -3.5469, -3.5469],
+         ...,
+         [10.6250,  9.8750,  9.1250,  ..., -1.6641, -1.6641, -1.6641],
+         [ 2.2344,  1.3281, -3.7344,  ..., -1.0391, -1.0391, -1.0391],
+         [ 4.9688, 10.8750,  9.5000,  ..., -0.6680, -0.6680, -0.6680]]],
+       device='cuda:0', grad_fn=<UnsafeViewBackward0>)
+}
+'''

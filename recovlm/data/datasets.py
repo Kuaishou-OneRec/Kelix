@@ -1744,6 +1744,7 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
     """
     if base_model_dir:
       processor = KeyeProcessor.from_pretrained(base_model_dir)
+      print(processor); exit()
       model_config = KeyeConfig.from_pretrained(base_model_dir)
       spatial_merge_size = model_config.vision_config.spatial_merge_size
       patch_size = model_config.vision_config.patch_size
@@ -2875,6 +2876,7 @@ class ParquetDataset(NaiveParquetDataset):
         "current_state_dict": self.state_dict()
       }, f"load_state_dict_rank{dist.get_rank()}: ")
     """
+demo输出
 load_state_dict_rank0: Dict: keys=2
 load_state_dict_rank0: 'ckpt_state_dict':
 load_state_dict_rank0:   Dict: keys=2
@@ -2890,8 +2892,12 @@ load_state_dict_rank0:   'finish_dict':
 load_state_dict_rank0:     Dict: keys=0
 load_state_dict_rank0:   'offset_dict':
 load_state_dict_rank0:     Dict: keys=0
-
-
+load_state_dict_rank1: Dict: keys=2
+load_state_dict_rank1: 'ckpt_state_dict':
+load_state_dict_rank1:   Dict: keys=2
+load_state_dict_rank1:   'finish_dict':
+load_state_dict_rank1:     Dict: keys=0
+...
     """
 
     finish_dict = state_dict["finish_dict"]
@@ -4310,6 +4316,7 @@ class BalanceParquetDataset(IterableDataset):
           for idx in sends:
             assert idx not in used
             used.add(idx)
+
 
         buffer = [x for i, x in enumerate(buffer) if i not in used]
         source_list = [x for i, x in enumerate(source_list) if i not in used]

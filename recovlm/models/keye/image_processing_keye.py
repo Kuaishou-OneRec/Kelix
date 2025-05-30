@@ -356,6 +356,7 @@ class SiglipImageProcessor(BaseImageProcessor):
             patches = np.tile(patches, (self.temporal_patch_size, 1, 1, 1))
         init_patches = patches
         channel = patches.shape[1]
+
         grid_t = patches.shape[0] // self.temporal_patch_size
         grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
         patches = patches.reshape(

@@ -15,8 +15,8 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/
-OUTPUT_DIR=/llm_reco/lingzhixin/output/Keye/Stage2_0.4.5/0.8.2/8b
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-2B-demo_fix_improc/
+OUTPUT_DIR=/llm_reco/lingzhixin/output/Keye/Stage2_0.4.5_demo_fix_improc_debug/0.8.2/2b
 
 mkdir -p $OUTPUT_DIR
 
@@ -116,13 +116,13 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/0.8.2/keye_8B_stage2_0405.json \
+                --dataset_config examples/vlm/exp_fix_improc/keye_8B_stage2_0405.json \
                 --model_class KeyeForConditionalGeneration \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
 		--monitor_image_tokens \
-                --max_length 16500 \
+                --max_length 20000 \
                 --learning_rate 2e-5 \
                 --vision_learning_rate 2e-6 \
                 --min_lr 1e-6 \
@@ -144,7 +144,5 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --resume_from /llm_reco/liuyang76/train_out/0.0.0/qwen3_8B_stage1_resume_5k/step5000/ \
-		--resume_from_tag global_step5000 \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
