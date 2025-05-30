@@ -996,10 +996,13 @@ def train():
     while True:
       metrics = metrics_queue.get()
       global_step, log_dict, ticker_stats, ds_loss, ds_tokens, ds_samples = metrics_queue.get()
+      print(f"get_in_{global_step}", global_step, log_dict, ticker_stats, ds_loss, ds_tokens, ds_samples)
       total_num_samples = log_dict["perf/total_num_samples"]
       total_num_valid_tokens = log_dict["perf/valid_total_num_tokens"]
       for name, data in log_dict.items():
         if data is not None and tb_writer:
+          print(f"add_data_{global_step}", global_step, log_dict, ticker_stats, ds_loss, ds_tokens, ds_samples)
+
           tb_writer.add_scalar(
               name,
               data,
@@ -1222,6 +1225,8 @@ def train():
 
       ticker.tick("reduce_acc_avg_loss")
       log_acc_step = args.logging_per_step * args.gradient_accumulation_steps
+
+      if dist.get_rank() == 0: print(333333, "1111logging.....", global_step, args.logging_per_step, micro_step, global_step % args.logging_per_step == 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0)
       if global_step % args.logging_per_step == 0 and \
               (micro_step + 1) % args.gradient_accumulation_steps == 0:
 
@@ -1309,6 +1314,8 @@ def train():
           for t in [ticker, iter_ticker]:
               ticker_stats.update(t.stat())
           metrics_info = (global_step, log_dict, ticker_stats, batch_data_source_loss, batch_data_source_tokens, total_data_source_samples)
+
+          print(f"put metrics at {global_step}, logging_per_step={args.logging_per_step}, args.gradient_accumulation_steps={args.gradient_accumulation_steps}")
           tb_metrics_q.put(metrics_info)
 
           ticker.tick(f"tb_metrics_q.put")
@@ -1344,7 +1351,7 @@ def train():
             f"Sec per Step: {sec_per_step}",
             format_dict_or_list(log_dict),
             "\n", format_dict_or_list({"mfu_stats": mfu_stats.mfu_per_step_per_gpu, "ticker": ticker.stat()})
-        )        
+          )        
 
           # upload heart_beat to remote
           if args.heartbeat_monitor:
