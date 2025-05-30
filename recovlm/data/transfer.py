@@ -21,7 +21,12 @@ def serialize_tensor_group(tensors: List[torch.Tensor], names: List[str], ds_nam
     
     for name, tensor in zip(names, tensors):
         # if isinstance(tensor, list): tensor = torch.stack(tensor)
-        dtype = str(tensor.dtype)
+        try:
+            dtype = str(tensor.dtype)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"error with \nname={name}\n,tensor={tensor}")
         shape = tensor.shape
         # 序列化名称
         name_bytes = name.encode('utf-8')
