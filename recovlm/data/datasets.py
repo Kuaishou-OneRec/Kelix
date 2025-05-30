@@ -1743,7 +1743,7 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
                         video_max_frames
     """
     if base_model_dir:
-      processor = KeyeProcessor.from_pretrained(base_model_dir)
+      processor = AutoProcessor.from_pretrained(base_model_dir, trust_remote_code=True)
       model_config = KeyeConfig.from_pretrained(base_model_dir)
       spatial_merge_size = model_config.vision_config.spatial_merge_size
       patch_size = model_config.vision_config.patch_size
