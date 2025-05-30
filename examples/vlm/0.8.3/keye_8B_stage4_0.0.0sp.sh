@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/Keye/Stage4_0.0.0/0.8.0d/8B/
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage4_0.0.0/0.8.0/8B/
 
 mkdir -p $OUTPUT_DIR
 
@@ -84,7 +84,6 @@ nohup mpirun --allow-run-as-root \
         -x https_proxy="" \
         -x HOROVOD_MPI_THREADS_DISABLE=1 \
         -x MPI_THREAD_SINGLE=1 \
-        -x CUDA_DEVICE_MAX_CONNECTIONS=1 \
         -x NO_COLOR=1 \
         -x TERM=dumb \
         -x COLORTERM=0 \
@@ -129,8 +128,8 @@ nohup mpirun --allow-run-as-root \
                 --min_lr 1e-6 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --num_warmup_steps 2000 \
-                --num_training_steps  35000 \
+                --num_warmup_steps 450 \
+                --num_training_steps  9000 \
                 --save_checkpoint_per_step 500 \
                 --sequence_parallel_size 8 \
                 --use_flash_attention_2 \
