@@ -1000,7 +1000,7 @@ def train():
       total_num_valid_tokens = log_dict["perf/valid_total_num_tokens"]
       for name, data in log_dict.items():
         if data is not None and tb_writer:
-          print(f"add_data_{global_step}", global_step, log_dict, ticker_stats, ds_loss, ds_tokens, ds_samples)
+          # print(f"add_data_{global_step}", global_step, log_dict, ticker_stats, ds_loss, ds_tokens, ds_samples)
 
           tb_writer.add_scalar(
               name,
