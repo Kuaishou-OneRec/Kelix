@@ -966,7 +966,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
-    if time.time() - time0 > 0.5:
+    if time.time() - time0 > 2:
       print(f"long process time source={sample['json']['source']}, it consumes {time.time() - time0} secs", )
 
     # For the Warning: (add by zzx)
@@ -1058,7 +1058,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         videos=video_inputs,
         return_tensors="pt"
     )
-    if time.time() - time0 > 0.5: 
+    if time.time() - time0 > 2: 
       print(f"long process time source={sample['json']['source']}, it consumes {time.time() - time0} secs", )
 
     # For the Warning: (add by zzx)
@@ -4359,3 +4359,10 @@ class BalanceParquetDataset(IterableDataset):
         result = self._result_buf.get()
         yield result
 
+
+
+
+git filter-repo --commit-callback 
+    if commit.author_email == b"root@aiplatform-wlf2-ge27-44.idchb2az2.hb2.kwaidc.com":
+        commit.author_name = b"lingzhixin"
+        commit.author_email = b"lingzhixin@kuaishou.com"

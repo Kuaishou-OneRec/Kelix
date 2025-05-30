@@ -963,20 +963,31 @@ def train():
   token_stasts = TokenStats(args)
 
   gpu_batch_q = queue.Queue(maxsize=2)
+
+  prefetch_t = None
   def prefetch_to_gpu(input_fn, output_q, dev):
     while True:
       try:
         batch = input_fn()
         to_device(batch, dev, True)
         output_q.put(batch)
+        print(f"put__donnnnnn")
       except StopIteration:
         break
 
   if use_flops_balance:
-    input_fn = lambda: batch_queue.get()
+    # input_fn = lambda: batch_queue.get()
+    # data_iter = iter(gather_batches(batch_queue.get(), get_sequence_parallel_group()))
+    class dataloader_fn:
+      def __iter__(self): 
+        while True: yield batch_queue.get()
+    new_dataloader = dataloader_fn()
+    data_iter = iter(gather_by_group(new_dataloader, get_sequence_parallel_group()))
+    input_fn =  lambda: next(data_iter)
   else:
     data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
     input_fn =  lambda: next(data_iter)
+
   # prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
   # prefetch_t.start()
 
@@ -1042,7 +1053,7 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = batch_queue.get() if batch_queue is not None else input_fn() 
+      try: batch = gpu_batch_q.get() if prefetch_t is not None else input_fn()
       except StopIteration: break
       ticker.tick("next_batch")
       

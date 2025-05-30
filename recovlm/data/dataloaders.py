@@ -259,6 +259,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration_moonvit':ChatCompletionVisionParquetDataset_moonvit,
                     'Qwen2_5_VLForConditionalGeneration_siglip':ChatCompletionVisionParquetDataset_siglip,
+                    
                     'Qwen3SiglipForConditionalGeneration_navit':ChatCompletionVisionParquetDataset_navit,
                     'KeyeForConditionalGeneration': ChatCompletionVisionParquetDataset_keye,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
@@ -267,6 +268,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
     if use_balance:
         num_readers = kwargs.get("num_readers", 4)
         shuffle_window = kwargs.get("shuffle_window", 3600)
+
     def input_creator():
         return ModelDataset[model_type](
             sources = sources,
