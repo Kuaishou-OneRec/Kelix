@@ -1744,7 +1744,6 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
     """
     if base_model_dir:
       processor = KeyeProcessor.from_pretrained(base_model_dir)
-      print(processor); exit()
       model_config = KeyeConfig.from_pretrained(base_model_dir)
       spatial_merge_size = model_config.vision_config.spatial_merge_size
       patch_size = model_config.vision_config.patch_size
