@@ -20,6 +20,8 @@ def serialize_tensor_group(tensors: List[torch.Tensor], names: List[str], ds_nam
     tensor_bytes.extend(struct.pack(">I", len(tensors)))  # 张量数量
     
     for name, tensor in zip(names, tensors):
+        if name == "second_per_grid_ts":
+            tensor = torch.tensor(tensor)
         # if isinstance(tensor, list): tensor = torch.stack(tensor)
         try:
             dtype = str(tensor.dtype)
