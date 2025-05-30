@@ -297,7 +297,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
     ### packing, batching size=1; shuffle in dataset
     if use_balance:
         assert num_workers == 1, f"use_flops_balance requires one dataset process per worker"
-        dataset = BalanceParquetDataset(input_creator, model_type, base_model_dir=base_model_dir)
+        dataset = BalanceParquetDataset(input_creator, model_type, base_model_dir=base_model_dir, **kwargs)
         dataloader = DataLoader(
             dataset=dataset,
             shuffle=False,

@@ -2841,6 +2841,51 @@ class NaiveParquetDataset(IterableDataset):
         if sample is None: continue
         yield sample
 
+  def state_dict(self,):
+    rank, world_size, worker, num_workers = pytorch_worker_info()
+
+    state_dict = {
+      "finish_dict": dict(self.finish_dict_all[worker]),
+      "offset_dict": dict(self.offset_dict_all[worker])
+    }
+    return state_dict
+  
+  def load_state_dict(self, state_dict):
+    rank, world_size, worker, num_workers = pytorch_worker_info()
+    finish_dict = state_dict["finish_dict"]
+    offset_dict = state_dict["offset_dict"]
+
+    # support old ckpt format
+    tmp_finish_dict = dict()
+    tmp_offset_dict = dict()
+
+    for k, v in finish_dict.items():
+      if isinstance(k, str):
+        tmp_finish_dict[(k, 0)] = v
+      elif isinstance(k, tuple) and len(k) == 2:
+        tmp_finish_dict[k] = v
+      else:
+        raise NotImplementedError(f"Unsupported dataloader checkpoint format. {tmp_finish_dict}") 
+    
+    for k, v in offset_dict.items():
+      if isinstance(k, str):
+        fn, group_idx = k.split("|")
+        group_idx = int(group_idx)
+        tmp_offset_dict[(fn, 0, group_idx)] = v
+      elif isinstance(k, tuple) and len(k) == 3:
+        tmp_offset_dict[k] = v
+      else:
+        raise NotImplementedError(f"Unsupported dataloader checkpoint format. {tmp_offset_dict}") 
+
+    # clear cur state
+    self.finish_dict_all[worker].clear()
+    self.offset_dict_all[worker].clear()
+
+    # update
+    self.finish_dict_all[worker].update(tmp_finish_dict)
+    self.offset_dict_all[worker].update(tmp_offset_dict)
+    logger.warning(f"[rank{rank}-woker{worker}] load checkpoint success.")
+
 
 class ParquetDataset(NaiveParquetDataset):
   def __init__(self, data_files, num_workers, num_readers=1, shuffle_window=0, **kargs):
@@ -3062,6 +3107,9 @@ load_state_dict_rank1:     Dict: keys=0
     while True:
       sample = input_q.get()
       yield sample
+
+
+ParquetDataset = NaiveParquetDataset
 
 
 class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
@@ -4150,6 +4198,7 @@ class BalanceParquetDataset(IterableDataset):
     self.input_creator = input_creator
     self.model_type = model_type
     self.buffer_size = kwargs.get("buffer_size", 1000)
+    self.shuffle_group = kwags.get("shuffle_group", False)
     self.base_model_dir = base_model_dir
     with open(os.path.join(self.base_model_dir, "config.json"), "r") as fp:
       config = json.load(fp)
