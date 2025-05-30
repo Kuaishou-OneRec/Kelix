@@ -1744,6 +1744,7 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
     """
     if base_model_dir:
       processor = KeyeProcessor.from_pretrained(base_model_dir)
+      print(processor); exit()
       model_config = KeyeConfig.from_pretrained(base_model_dir)
       spatial_merge_size = model_config.vision_config.spatial_merge_size
       patch_size = model_config.vision_config.patch_size
@@ -4393,10 +4394,3 @@ class BalanceParquetDataset(IterableDataset):
         result = self._result_buf.get()
         yield result
 
-
-
-
-git filter-repo --commit-callback 
-    if commit.author_email == b"root@aiplatform-wlf2-ge27-44.idchb2az2.hb2.kwaidc.com":
-        commit.author_name = b"lingzhixin"
-        commit.author_email = b"lingzhixin@kuaishou.com"
