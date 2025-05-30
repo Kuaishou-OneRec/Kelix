@@ -1744,7 +1744,6 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
     """
     if base_model_dir:
       processor = KeyeProcessor.from_pretrained(base_model_dir)
-      print(processor); exit()
       model_config = KeyeConfig.from_pretrained(base_model_dir)
       spatial_merge_size = model_config.vision_config.spatial_merge_size
       patch_size = model_config.vision_config.patch_size
@@ -4245,6 +4244,7 @@ class BalanceParquetDataset(IterableDataset):
     found = []
     send_idx = []
     pivot = "__ds__"
+    found_by_group = [[] for _ in range(len(all_groups))]
     for gid, size_list in enumerate(all_groups):
       v, scheme = balance.calculate_transfer_scheme(size_list)
       if self.rank == 0:
@@ -4274,13 +4274,21 @@ class BalanceParquetDataset(IterableDataset):
       if self_r < v:
         assert self_r + len(recvs) == v, f"{self_r}, {recvs}, {v}"
         for off in range(self_r):
-          found.append((groups[gid][begin + off], True))
+          # found.append((groups[gid][begin + off], True))
+          found_by_group[gid].append((groups[gid][begin + off], True))
+
         for recv in recvs:
           found.append((recv, False))
+          found_by_group[gid].append((recv, False))
+
       else:
         for off in range(v):
-          found.append((groups[gid][begin + off], True))
+          # found.append((groups[gid][begin + off], True))
+          found_by_group[gid].append((groups[gid][begin + off], True))
       
+      for group in found_by_group:
+        np.random.shuffle(group)
+      found = sum(found_by_group, [])
     return found, send_idx
 
   def _balance_task(self):

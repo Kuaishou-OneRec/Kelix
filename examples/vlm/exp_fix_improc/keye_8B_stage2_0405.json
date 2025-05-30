@@ -8,8 +8,8 @@
     "max_visual_tokens_per_frame": 256,
     "video_fps": 1.0,
     "video_max_frames": 64,
-    "base_model_dir": "/llm_reco_ssd/zhouyang12/models/Keye-2B-demo/",
-    "pretrained_model_name_or_path":"/llm_reco_ssd/zhouyang12/models/Keye-2B-demo/",
+    "base_model_dir": "/llm_reco_ssd/zhouyang12/models/Keye-2B-demo_fix_improc/",
+    "pretrained_model_name_or_path":"/llm_reco_ssd/zhouyang12/models/Keye-2B-demo_fix_improc/",
     "shrink_ratio": 0.7,
     "max_retry": 10,
     "multiple_of": 8,
@@ -17,5 +17,5 @@
     "num_epochs": 1,
     "cut_to_pad": 0,
     "model_class": "KeyeForConditionalGeneration",
-    "use_flops_balance": false
+    "use_flops_balance": true
 }

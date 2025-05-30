@@ -202,8 +202,8 @@ class CustomModelFlops(ModelFlopsBase):
         print(f"self.arch={self.arch}")
         max_len = kwargs["max_length"]
         max_flops = self.llm_flops([max_len])
-        max_sample = kwargs.get("max_sample_num", 1000)
-        diff_ratio = kwargs.get("diff_ratio", 0.05)
+        max_sample = kwargs.get("max_sample_num", 100)
+        diff_ratio = kwargs.get("diff_ratio", 0.1)
         flops_range = self.calculate_llm_flops_range(max_len, diff_ratio, max_sample)
         print(f"CustomModelFlops range: {flops_range}")
         self.kwargs = kwargs
