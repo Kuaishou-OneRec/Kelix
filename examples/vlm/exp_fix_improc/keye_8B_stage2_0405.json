@@ -17,5 +17,5 @@
     "num_epochs": 1,
     "cut_to_pad": 0,
     "model_class": "KeyeForConditionalGeneration",
-    "use_flops_balance": false
+    "use_flops_balance": true
 }
