@@ -2577,7 +2577,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
 
 
 class NaiveParquetDataset(IterableDataset):
-  def __init__(self, data_files, num_workers, n_local_shuffle_files_window=3, **kargs):
+  def __init__(self, data_files, num_workers, n_local_shuffle_files_window=5, **kargs):
     self.data_files = data_files
     self.num_workers = num_workers
     self.n_local_shuffle_files_window = n_local_shuffle_files_window
@@ -3239,7 +3239,7 @@ class ChatCompletionVisionParquetDataset_keye(ChatCompletionVisionDataset_keye):
     if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
 
-    dataset = ParquetDataset(data_file_list, self.num_workers, self.shuffle_window)
+    dataset = ParquetDataset(data_file_list, self.num_workers, shuffle_window=self.shuffle_window)
     return dataset, -1
 
   def state_dict(self, ):
@@ -3384,7 +3384,7 @@ class ChatCompletionVisionParquetDataset_navit(ChatCompletionVisionDataset_navit
     if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
 
-    dataset = ParquetDataset(data_file_list, self.num_workers, self.shuffle_window)
+    dataset = ParquetDataset(data_file_list, self.num_workers, shuffle_window=self.shuffle_window)
     return dataset, -1
 
   def state_dict(self, ):
