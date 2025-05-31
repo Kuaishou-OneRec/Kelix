@@ -3238,7 +3238,7 @@ class ChatCompletionVisionParquetDataset_keye(ChatCompletionVisionDataset_keye):
     if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
 
-    dataset = ParquetDataset(data_file_list, self.num_workers, self.num_readers, self.shuffle_window)
+    dataset = ParquetDataset(data_file_list, self.num_workers, self.shuffle_window)
     return dataset, -1
 
   def state_dict(self, ):
@@ -3383,7 +3383,7 @@ class ChatCompletionVisionParquetDataset_navit(ChatCompletionVisionDataset_navit
     if len(data_file_list) == 0:
       raise ValueError(f"no datafile found!")
 
-    dataset = ParquetDataset(data_file_list, self.num_workers, self.num_readers, self.shuffle_window)
+    dataset = ParquetDataset(data_file_list, self.num_workers, self.shuffle_window)
     return dataset, -1
 
   def state_dict(self, ):
