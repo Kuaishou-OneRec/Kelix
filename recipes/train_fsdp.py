@@ -939,7 +939,8 @@ def train():
   start_time = time.time()
   start_time0 = start_time
   show_cnt = 1
-  global_step = 0
+  if not args.resume_dataloader:
+    global_step = 0
 
 
   # Metrics, acc_ account for gradient accumulation

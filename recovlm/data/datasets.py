@@ -1622,6 +1622,9 @@ class ChatCompletionVisionDataset_siglip(ChatCompletionVisionDataset):
                pad_token_id: int = 151643,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
+               process_vision_info_args={"image_factor": 32},
+               min_visual_tokens_per_frame: int = 4,
+               max_visual_tokens_per_frame: int = 512,
                **kwargs
                ):
     """
@@ -3109,7 +3112,6 @@ load_state_dict_rank1:     Dict: keys=0
       yield sample
 
 
-ParquetDataset = NaiveParquetDataset
 
 
 class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
@@ -3157,6 +3159,7 @@ class ChatCompletionVisionParquetDataset(ChatCompletionVisionDataset):
   def load_state_dict(self, state_dict):
     self.dataset.load_state_dict(state_dict)
     
+ParquetDataset = NaiveParquetDataset
 
 class ChatCompletionVisionParquetDataset_keye(ChatCompletionVisionDataset_keye):
   def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
@@ -3298,6 +3301,9 @@ class ChatCompletionVisionParquetDataset_siglip(ChatCompletionVisionDataset_sigl
     self.num_workers = num_workers
     self.num_epochs = num_epochs
     self.cut_to_pad = kargs.get("cut_to_pad", True)
+    self.kargs = kargs
+    self.num_readers = kargs.get("num_readers", 1)
+    self.shuffle_window = kargs.get("shuffle_window", 0)
     super().__init__(sources, **kargs)
 
   def _build_source_dataset(self, sources):
