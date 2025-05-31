@@ -2782,6 +2782,7 @@ class NaiveParquetDataset(IterableDataset):
         all_rows = []
         # 一开始读取 n_buffer_files 个文件
         # while file_index < n_buffer_files and file_index < len(parquet_files_list):
+        assert min(n_buffer_files len(parquet_files_list)) != 0, f"n_buffer_files={n_buffer_files}, len(parquet_files_list)={len(parquet_files_list)}"
         for file_index in  tqdm.tqdm(range(min(n_buffer_files, len(parquet_files_list)))):
             fn, epoch_idx = parquet_files_list[file_index]
             logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
