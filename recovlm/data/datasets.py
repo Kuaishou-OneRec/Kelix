@@ -4343,7 +4343,7 @@ class BalanceParquetDataset(IterableDataset):
           found_by_group[gid].append((groups[gid][begin + off], True))
       
       for group in found_by_group:
-        pass # np.random.shuffle(group)
+        if self.shuffle_group: np.random.shuffle(group)
       found = sum(found_by_group, [])
     return found, send_idx
 

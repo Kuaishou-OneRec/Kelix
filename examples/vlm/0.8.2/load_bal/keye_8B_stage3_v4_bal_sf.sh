@@ -1,5 +1,5 @@
-git config --global user.email 'lingzhixin@kuaishou.com'
-git config --global user.name 'lingzhixin'
+git config --global user.email 'huajingyun@kuaishou.com'
+git config --global user.name 'huajingyun'
 
 email=$(git config --get user.email)
 
@@ -13,10 +13,10 @@ else
 fi
 
 sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/
 
-# MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-2B-demo_fix_improc/
-OUTPUT_DIR=/llm_reco/lingzhixin/output/Keye/Stage2_0.4.5_demo_fix_improc_debug/0.8.2/2b
+# MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip-w-grounding-v1
+OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/model/Keye/8b/Stage3/0.3.6/v0530_balance_shuffle_v1
 
 mkdir -p $OUTPUT_DIR
 
@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="128H_080_201"
+comment="Keye/8b/Stage3/0.3.6/v0530_balance_false_v1"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -84,6 +84,7 @@ nohup mpirun --allow-run-as-root \
         -x https_proxy="" \
         -x HOROVOD_MPI_THREADS_DISABLE=1 \
         -x MPI_THREAD_SINGLE=1 \
+        -x CUDA_DEVICE_MAX_CONNECTIONS=1 \
         -x NO_COLOR=1 \
         -x TERM=dumb \
         -x COLORTERM=0 \
@@ -116,21 +117,21 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/exp_fix_improc/keye_8B_tmp.json \
+                --dataset_config examples/vlm/0.8.2/load_bal/keye_8B_stage3_v4_load_bal_shuffle.json \
                 --model_class KeyeForConditionalGeneration \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
 		--monitor_image_tokens \
-                --max_length 20000 \
-                --learning_rate 2e-5 \
-                --vision_learning_rate 2e-6 \
-                --min_lr 1e-6 \
+                --max_length 15000 \
+                --learning_rate 4e-5 \
+                --vision_learning_rate 4e-6 \
+                --min_lr 1e-8 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --num_warmup_steps 1100 \
-                --num_training_steps 10500 \
-                --save_checkpoint_per_step 800 \
+                --num_warmup_steps 1000 \
+                --num_training_steps 10000 \
+                --save_checkpoint_per_step 500 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 20 \
@@ -144,5 +145,8 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
+                --resume_from /llm_reco/lingzhixin/output/Keye/Stage2_0.4.5/0.8.2/8b/step9600/ \
+	        --resume_from_tag global_step9600 \
+		--resume_dataloader \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
