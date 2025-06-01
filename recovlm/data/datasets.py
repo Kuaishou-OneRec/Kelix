@@ -2783,10 +2783,16 @@ class NaiveParquetDataset(IterableDataset):
         # 一开始读取 n_buffer_files 个文件
         # while file_index < n_buffer_files and file_index < len(parquet_files_list):
         assert min(n_buffer_files,len(parquet_files_list)) != 0, f"n_buffer_files={n_buffer_files}, len(parquet_files_list)={len(parquet_files_list)}"
-        for file_index in  tqdm.tqdm(range(min(n_buffer_files, len(parquet_files_list)))):
+        # for file_index in  tqdm.tqdm(range(min(n_buffer_files, len(parquet_files_list)))):
+        while len(all_rows) < min(n_buffer_files, len(parquet_files_list)):
             fn, epoch_idx = parquet_files_list[file_index]
             logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
-            df = load_parquet_file(fn).read_row_group(0).to_pandas()
+            try:
+                df = load_parquet_file(fn).read_row_group(0).to_pandas()
+            except Exception as e:
+                logger.error(str(e))
+                logger.error(f"load parquet file {fn} failed")
+                continue
             df['epoch_idx'] = epoch_idx
             row_counts.append(len(df))
             all_rows.append(df)
