@@ -2839,6 +2839,7 @@ class NaiveParquetDataset(IterableDataset):
               rows_processed = 0
               file_index += 1
             except Exception as e:
+              file_index += 1
               print(e)
               print("error in ParquetDataset!!!")
               print(traceback.format_exc())
