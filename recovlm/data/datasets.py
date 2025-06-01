@@ -2786,16 +2786,16 @@ class NaiveParquetDataset(IterableDataset):
         # for file_index in  tqdm.tqdm(range(min(n_buffer_files, len(parquet_files_list)))):
         file_index = 0
         while len(all_rows) < min(n_buffer_files, len(parquet_files_list)):
-            
             fn, epoch_idx = parquet_files_list[file_index]
             logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
+            file_index += 1
             try:
                 df = load_parquet_file(fn).read_row_group(0).to_pandas()
             except Exception as e:
+                
                 logger.error(str(e))
                 logger.error(f"load parquet file {fn} failed")
                 continue
-            file_index += 1
             df['epoch_idx'] = epoch_idx
             row_counts.append(len(df))
             all_rows.append(df)
@@ -2829,20 +2829,27 @@ class NaiveParquetDataset(IterableDataset):
                   break
             
             try:
-              fn, epoch_idx = parquet_files_list[file_index]
-              new_df = load_parquet_file(fn).read_row_group(0).to_pandas()
+              while True:
+                fn, epoch_idx = parquet_files_list[file_index]
+                file_index += 1
+                try:
+                  new_df = load_parquet_file(fn).read_row_group(0).to_pandas()
+                  break
+                except Exception as e:
+                  logger.error(f"Error processing fn {fn}\n{str(e)}")
+                
               logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
               all_rows = pd.concat([all_rows[i + 1:], new_df], ignore_index=True)
               all_rows = all_rows.sample(frac=1).reset_index(drop=True)
               row_counts.pop(0)
               row_counts.append(len(new_df))
               rows_processed = 0
-              file_index += 1
             except Exception as e:
-              file_index += 1
+              
               print(e)
               print("error in ParquetDataset!!!")
               print(traceback.format_exc())
+            
             # 如果已经处理完所有文件且当前数据都已处理完，则退出循环
             if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
                 break
