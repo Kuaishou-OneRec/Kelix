@@ -453,4 +453,6 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=5, parquet_backend='fast
                 time.sleep(2 + np.random.randint(0, 5))
                 
                 if r == retry - 1:
+                    import traceback
+                    traceback.print_exc()
                     raise Exception(f"Failed to load parquet file from both original path and cache.\nOriginal error: {e}\nCache error: {e2}")
