@@ -147,6 +147,5 @@ nohup mpirun --allow-run-as-root \
                 --kml_task_id $KML_TASK_ID \
                 --resume_from /llm_reco/lingzhixin/output/Keye/Stage2_0.4.5/0.8.2/8b/step9600/ \
 	        --resume_from_tag global_step9600 \
-		--resume_dataloader \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
