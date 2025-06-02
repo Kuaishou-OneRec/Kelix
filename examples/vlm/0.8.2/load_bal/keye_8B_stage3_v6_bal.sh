@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/
 
 # MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip-w-grounding-v1
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/model/Keye/8b/Stage3/0.3.6/v0530_balance_shuffle_v1
+OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/model/Keye/8b/Stage3/0.3.6/v5
 
 mkdir -p $OUTPUT_DIR
 
@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="Keye/8b/Stage3/0.3.6/v0530_balance_false_v1"
+comment="keye_8B_stage3_v6_bal"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -117,7 +117,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/0.8.2/load_bal/keye_8B_stage3_v4_load_bal_shuffle.json \
+                --dataset_config examples/vlm/0.8.2/load_bal/keye_8B_stage3_v6_load_bal.json \
                 --model_class KeyeForConditionalGeneration \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
