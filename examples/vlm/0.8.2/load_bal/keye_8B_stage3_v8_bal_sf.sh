@@ -13,10 +13,10 @@ else
 fi
 
 sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf/
 
 # MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Qwen3-8B-siglip-w-grounding-v1
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/model/Keye/8b/Stage3/0.3.6/v7
+OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/model/Keye/8b/Stage3/0.3.6/v8
 
 mkdir -p $OUTPUT_DIR
 
