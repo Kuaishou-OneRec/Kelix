@@ -1022,8 +1022,10 @@ class ChatCompletionVisionDataset(IterableDataset):
         content = turn["content"]
         if isinstance(content, str):
           continue
+
+        if _DATASET_SKIP_MM == "SKIP_MM": content = [x for x in content if x['type'] == 'text']
         for block in content:
-          if _DATASET_SKIP_MM == "SKIP_MM" and block["type"] != "text": continue
+          # if _DATASET_SKIP_MM == "SKIP_MM" and block["type"] != "text": continue
           if _DATASET_SKIP_MM == "SKIP_VI" and block["type"] == "video": continue
 
           if block["type"] == "image":
