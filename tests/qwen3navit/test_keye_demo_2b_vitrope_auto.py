@@ -4,9 +4,9 @@ import torch
 import sys
 sys.path.append("./recovlm/models")
 from keye_vitrope.modeling_keye import KeyeForConditionalGeneration
-from keye_vitrope.processing_keye import KeyeProcessor
+# from keye_vitrope.processing_keye import KeyeProcessor
 from keye_vitrope.keye_vl_utils import process_vision_info
-
+from transformers import AutoTokenizer, AutoProcessor, PreTrainedTokenizer, PreTrainedTokenizerFast
 import contextlib
 
 @contextlib.contextmanager
