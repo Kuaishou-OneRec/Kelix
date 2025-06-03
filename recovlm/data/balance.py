@@ -89,7 +89,7 @@ def greedy_subsets_without_replacement(nums, N, m):
     
     # sorted_result = sorted(result, key=lambda x: -sum(v[0] for v in x))
     # np.random.rand() * 100
-    sorted_result = sorted(result, key=lambda x: np.random.rand() * 20 - m.llm_flops([v[0] for v in x]) ) # 最大的在最上面
+    sorted_result = sorted(result, key=lambda x: np.random.rand() * 30 - 15 - m.llm_flops([v[0] for v in x]) ) # 最大的在最上面
     result_index = [[v[1] for v in res] for res in sorted_result]
     if 0: print_input_info(
         {
