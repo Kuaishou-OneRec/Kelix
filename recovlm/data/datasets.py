@@ -4373,6 +4373,7 @@ class BalanceParquetDataset(IterableDataset):
     return found, send_idx
 
   def _balance_task(self):
+    # processed_buffer -> _balance_buf -> _result_buf
     buffer = []
     source_list = []
     while True:
@@ -4395,7 +4396,7 @@ class BalanceParquetDataset(IterableDataset):
               data_source.append(ds)
             inputs = selected
           stats = balance.exchange_batch_info(inputs, data_source, self.fm)
-          if self.rank == 0:
+          if self.rank == 0: # 这里就没救了，VIT出现了眼中的周期性
             print(f"rank=0, step_stats={stats}/{np.mean(stats[-2])}/{np.mean(stats[-1])}")
           
           # if dist.get_rank() == 0:

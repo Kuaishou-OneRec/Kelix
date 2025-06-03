@@ -51,6 +51,7 @@ def greedy_subsets_nearst_sum(nums, N):
     
 
 def greedy_subsets_without_replacement(nums, N, m):
+    # nums是样本的长度
     ordered = sorted([(num, idx) for idx, num in enumerate(nums)], key=lambda x: x[0])
     values = [x[0] for x in ordered]
     result = []
@@ -87,9 +88,10 @@ def greedy_subsets_without_replacement(nums, N, m):
             result.append(current)
     
     # sorted_result = sorted(result, key=lambda x: -sum(v[0] for v in x))
-    sorted_result = sorted(result, key=lambda x: -m.llm_flops([v[0] for v in x]))
+    # np.random.rand() * 100
+    sorted_result = sorted(result, key=lambda x: np.random.rand() * 1000 - m.llm_flops([v[0] for v in x]) ) # 最大的在最上面
     result_index = [[v[1] for v in res] for res in sorted_result]
-    print_input_info(
+    if 0: print_input_info(
         {
             "nums": nums,
             "N": N,
@@ -98,6 +100,130 @@ def greedy_subsets_without_replacement(nums, N, m):
             "result_index": result_index
         }
     )
+    '''
+'nums':
+  List: length=1000
+  [0]:
+    int: 715
+  [1]:
+    int: 377
+  [2]:
+    int: 922
+  [3]:
+    int: 464
+  [4]:
+    int: 580
+  [5]:
+    int: 578
+  [6]:
+    int: 657
+  [7]:
+    int: 871
+  [8]:
+    int: 805
+  [9]:
+    int: 856
+  [10]:
+    int: 886
+  [11]:
+    int: 1151
+  [12]:
+    int: 943
+  [13]:
+    int: 926
+  [14]:
+    int: 1303
+  [15]:
+    int: 1131
+  [16]:
+    int: 731
+  [17]:
+    int: 571
+  [18]:
+    int: 635
+  [19]:
+    int: 590
+  [20]:
+    int: 1374
+  [21]:
+    int: 501
+  [22]:
+    int: 1378
+...
+  [983]:
+    int: 855
+  [984]:
+    int: 1746
+  [985]:
+    int: 808
+  [986]:
+    int: 1370
+  [987]:
+    int: 944
+  [988]:
+    int: 557
+  [989]:
+    int: 489
+  [990]:
+    int: 95
+  [991]:
+    int: 902
+  [992]:
+    int: 414
+  [993]:
+    int: 3854
+  [994]:
+    int: 5084
+  [995]:
+    int: 367
+  [996]:
+    int: 1263
+  [997]:
+    int: 3588
+  [998]:
+    int: 3962
+  [999]:
+    int: 924
+'N':
+  int: 14984
+'m':
+long process time source=ShareGPT4VPSFT, it consumes 4.312857627868652 secs
+  Other type (CustomModelFlops): <rec...160>
+'sorted_result':
+  List: length=82
+  [0]:
+    Dict: keys=3
+    '8468':
+      int: 532
+    '6253':
+      int: 120
+    '263':
+      int: 459
+  [1]:
+    Dict: keys=3
+    '7408':
+      int: 141
+    '7393':
+      int: 286
+    '178':
+      int: 429
+  [2]:
+    Dict: keys=3
+    '7379':
+      int: 399
+    '6970':
+      int: 497
+    '635':
+      int: 18
+  [3]:
+    Dict: keys=3
+    '6689':
+      int: 161
+    '6632':
+      int: 695
+    '1661':
+      int: 838
+    '''
     return result_index
 
 
