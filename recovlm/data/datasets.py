@@ -932,8 +932,9 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     text = ""
     vision_infos = []
+    
+    if _DATASET_SKIP_MM == "SKIP_MM": sample["json"]["segments"] = [x for x in sample["json"]["segments"] if x['type'] == 'text']
     segments = sample["json"]["segments"]
-    if _DATASET_SKIP_MM == "SKIP_MM": segments = [x for x in segments if x['type'] == 'text']
     for segment in segments:
       # if _DATASET_SKIP_MM == "SKIP_MM" and segment["type"] != "text": continue
       if _DATASET_SKIP_MM == "SKIP_VI" and segment["type"] == "video": continue
@@ -1019,11 +1020,12 @@ class ChatCompletionVisionDataset(IterableDataset):
     messages = sample["json"][msg_key]
     for turn in messages:
       try:
+        if _DATASET_SKIP_MM == "SKIP_MM": turn["content"] = [x for x in turn["content"] if x['type'] == 'text']
         content = turn["content"]
         if isinstance(content, str):
           continue
 
-        if _DATASET_SKIP_MM == "SKIP_MM": content = [x for x in content if x['type'] == 'text']
+        
         for block in content:
           # if _DATASET_SKIP_MM == "SKIP_MM" and block["type"] != "text": continue
           if _DATASET_SKIP_MM == "SKIP_VI" and block["type"] == "video": continue
