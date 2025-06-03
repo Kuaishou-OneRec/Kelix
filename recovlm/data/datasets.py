@@ -1039,7 +1039,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       except Exception as e:
         print(f"sample process error, messages={str(messages)[:50]}\n, sample=\n{str(sample)[:50]}")
         raise e
-
+    print(messages)
     text = self.processor.apply_chat_template(
       messages, tokenize=False, add_generation_prompt=False
     )
