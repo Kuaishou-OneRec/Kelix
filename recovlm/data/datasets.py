@@ -2734,10 +2734,10 @@ class NaiveParquetDataset(IterableDataset):
               if sample is not None:
                 yield sample
               offset_dict[fn_group_key] = row_idx
-            except GeneratorExit:
-              # 正确处理生成器退出
-              logger.warning(f"Generator exited at {fn}-epoch{epoch_idx}-group{group_idx}-row{row_idx}")
-              return
+              # except GeneratorExit:
+              #   # 正确处理生成器退出
+              #   logger.warning(f"Generator exited at {fn}-epoch{epoch_idx}-group{group_idx}-row{row_idx}")
+              #   return
             except Exception as e:
               logger.error(f"Error processing row {row_idx}: {str(e)}")
               continue
@@ -2749,10 +2749,10 @@ class NaiveParquetDataset(IterableDataset):
           logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx}-group{group_idx} finish.")
           offset_dict[fn_group_key] = -1
           
-        except GeneratorExit:
-          # 正确处理生成器退出
-          logger.warning(f"Generator exited during group processing")
-          return
+          # except GeneratorExit:
+          #   # 正确处理生成器退出
+          #   logger.warning(f"Generator exited during group processing")
+          #   return
         except Exception as e:
           logger.error(f"Error processing group {group_idx}: {str(e)}")
           continue
@@ -3091,7 +3091,7 @@ load_state_dict_rank1:     Dict: keys=0
     buffer = []
     while True:
       buffer.append(self.sample_queue.get())
-      if len(buffer) == window:
+      if len(buffer) == window: # 每3k shuffle。
         random.shuffle(buffer)
         for sample in buffer:
           self.shuffled_queue.put(sample)
@@ -4360,7 +4360,10 @@ class BalanceParquetDataset(IterableDataset):
           found_by_group[gid].append((groups[gid][begin + off], True))
       
       for group in found_by_group:
-        if self.shuffle_group: np.random.shuffle(group)
+        if self.shuffle_group: 
+          print(1122334455, "shuffle_group", self.shuffle_group)
+          np.random.shuffle(group)
+
       found = sum(found_by_group, [])
     return found, send_idx
 
