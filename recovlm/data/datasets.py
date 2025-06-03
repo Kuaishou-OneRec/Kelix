@@ -1761,6 +1761,7 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
+    self.process_vision_info = process_vision_info_keye
 
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
