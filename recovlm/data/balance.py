@@ -89,7 +89,7 @@ def greedy_subsets_without_replacement(nums, N, m):
     
     # sorted_result = sorted(result, key=lambda x: -sum(v[0] for v in x))
     # np.random.rand() * 100
-    sorted_result = sorted(result, key=lambda x: np.random.rand() * 1000 - m.llm_flops([v[0] for v in x]) ) # 最大的在最上面
+    sorted_result = sorted(result, key=lambda x: np.random.rand() * 20 - m.llm_flops([v[0] for v in x]) ) # 最大的在最上面
     result_index = [[v[1] for v in res] for res in sorted_result]
     if 0: print_input_info(
         {
@@ -342,8 +342,8 @@ class CustomModelFlops(ModelFlopsBase):
         print(f"self.arch={self.arch}")
         max_len = kwargs["max_length"]
         max_flops = self.llm_flops([max_len])
-        max_sample = kwargs.get("max_sample_num", 100)
-        diff_ratio = kwargs.get("diff_ratio", 0.1)
+        max_sample = kwargs.get("max_sample_num", 30)
+        diff_ratio = kwargs.get("diff_ratio", 0.02)
         flops_range = self.calculate_llm_flops_range(max_len, diff_ratio, max_sample)
         print(f"CustomModelFlops range: {flops_range}")
         self.kwargs = kwargs
