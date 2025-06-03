@@ -60,8 +60,8 @@ from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor
 from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
 from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration, KeyeDecoderLayer
 from recovlm.models.keye.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer
-from recovlm.models.keye.modeling_keye_vitrope import KeyeForConditionalGeneration as KeyeForConditionalGeneration_vitrope, KeyeDecoderLayer as KeyeDecoderLayer_vitrope
-from recovlm.models.keye.modeling_keye_vitrope import SiglipEncoderLayer as KeyeSiglipEncoderLayer_vitrope
+from recovlm.models.keye_vitrope.modeling_keye import KeyeForConditionalGeneration as KeyeForConditionalGeneration_vitrope, KeyeDecoderLayer as KeyeDecoderLayer_vitrope
+from recovlm.models.keye_vitrope.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer_vitrope
 from recovlm.models.internvl import InternVLChatModel
 from recovlm.models.qwen2 import Qwen2DecoderLayer
 from recovlm.models.internvl import InternVisionEncoderLayer
