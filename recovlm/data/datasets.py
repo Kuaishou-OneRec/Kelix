@@ -4396,7 +4396,7 @@ class BalanceParquetDataset(IterableDataset):
             inputs = selected
           stats = balance.exchange_batch_info(inputs, data_source, self.fm)
           if self.rank == 0:
-            print(f"rank=0, step_stats={stats}")
+            print(f"rank=0, step_stats={stats}/{np.mean(stats[-2])}/{np.mean(stats[-1])}")
           
           # if dist.get_rank() == 0:
           #   print_input_info(inputs, f"is_local{is_local}")

@@ -5,6 +5,9 @@ import bisect
 import sys
 import torch.distributed as dist
 from typing import List
+from recovlm.utils.ds_utils import print_input_info
+
+
 
 def sampling(input_ids_len, target_size=200, n_bins=20):
     input_ids_len = np.array(input_ids_len, dtype=np.int64)
@@ -86,6 +89,15 @@ def greedy_subsets_without_replacement(nums, N, m):
     # sorted_result = sorted(result, key=lambda x: -sum(v[0] for v in x))
     sorted_result = sorted(result, key=lambda x: -m.llm_flops([v[0] for v in x]))
     result_index = [[v[1] for v in res] for res in sorted_result]
+    print_input_info(
+        {
+            "nums": nums,
+            "N": N,
+            "m": m,
+            "sorted_result": sorted_result,
+            "result_index": result_index
+        }
+    )
     return result_index
 
 
