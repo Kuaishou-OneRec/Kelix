@@ -49,7 +49,7 @@ from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcess
 from recovlm.models.keye.processing_keye import KeyeProcessor
 from recovlm.models.keye.modeling_keye import KeyeConfig
 from recovlm.models.keye.keye_vl_utils import process_vision_info as process_vision_info_keye
-
+from recovlm.models.keye_vitrope.image_processing_keye import process_vision_info as process_vision_info_keye_vitrope
 
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
@@ -1809,6 +1809,118 @@ class ChatCompletionVisionDataset_keye(ChatCompletionVisionDataset):
     image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
+
+    self.datasource_config = datasource_config
+
+class ChatCompletionVisionDataset_keye_vitrope(ChatCompletionVisionDataset):
+  def __init__(self,
+               sources: Union[str, List[str]],
+               max_length: int = 1024,
+               min_visual_tokens_per_image: int = 4,
+               max_visual_tokens_per_image: int = 512,
+               video_nframe: int = -1,
+               video_fps: float = 2.0,
+               video_min_frames: int = -1,
+               video_max_frames: int = 120,
+               shrink_ratio: float = 0.9,
+               max_retry: int = 5,
+               multiple_of: int = 8,
+               shuffle_size: int = 100000,
+               shuffle_initial_size: int = 20000,
+               base_model_dir: Optional[str] = None,
+               processor: Optional[Qwen2VLProcessor] = None,
+               spatial_merge_size: int = 2,
+               patch_size: int = 16,
+               image_token_id: int = 151655,
+               video_token_id: int = 151656,
+               vision_start_token_id: int = 151652,
+               vision_end_token_id: int = 151653,
+               pad_token_id: int = 151643,
+               datasource_config:Dict[str, Dict[str, Any]] = {},
+               cut_to_pad=True,
+               process_vision_info_args={"image_factor":28},
+               min_visual_tokens_per_frame: int = 4,
+               max_visual_tokens_per_frame: int = 512,
+               **kwargs
+               ):
+    """
+    datasource_config: 默认覆盖全局配置
+                      key: datasource_name
+                      Dict: datasource config, support params:
+                        min_visual_tokens_per_image
+                        max_visual_tokens_per_image
+                        video_nframe
+                        video_fps
+                        video_min_frames
+                        video_max_frames
+    """
+    if base_model_dir:
+      processor = AutoProcessor.from_pretrained(base_model_dir, trust_remote_code=True)
+      model_config = KeyeConfig.from_pretrained(base_model_dir)
+      spatial_merge_size = model_config.vision_config.spatial_merge_size
+      patch_size = model_config.vision_config.patch_size
+      image_token_id = model_config.image_token_id
+      video_token_id = model_config.video_token_id
+      vision_start_token_id = model_config.vision_start_token_id
+      vision_end_token_id = model_config.vision_end_token_id
+      pad_token_id = model_config.pad_token_id
+
+    self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
+    self.process_vision_info = process_vision_info_keye_vitrope
+    self.process_vision_info_args = process_vision_info_args
+    self.cut_to_pad = cut_to_pad
+    print(f"set cut_to_pad={cut_to_pad}")
+    self.processor = processor
+
+    self.min_visual_tokens_per_image = min_visual_tokens_per_image
+    self.max_visual_tokens_per_image = max_visual_tokens_per_image
+    self.min_visual_tokens_per_frame = min_visual_tokens_per_frame
+    self.max_visual_tokens_per_frame = max_visual_tokens_per_frame
+
+    self.video_nframe = video_nframe
+    self.video_fps = video_fps
+    self.video_min_frames = video_min_frames
+    self.video_max_frames = video_max_frames
+    if video_nframe > 0 and (video_fps > 0 or video_min_frames > 0 or video_max_frames > 0):
+      logger.warning(
+        f"ChatCompletionVisionDataset(video_fps=...): video_fps, video_min_frames, "\
+          f"video_max_frames will be ignored when video_nframe>0 ({video_nframe=})"
+      )
+    self.patch_size = patch_size
+    self.shrink_ratio = shrink_ratio
+    self.max_retry = max_retry
+    self.spatial_merge_size = spatial_merge_size
+    self.image_token_id = image_token_id
+    self.video_token_id = video_token_id
+    self.vision_start_token_id = vision_start_token_id
+    self.vision_end_token_id = vision_end_token_id
+    self.pad_token_id = pad_token_id
+    self.patch_size = patch_size
+    # Pad sequence to multiple of `multiple_of`
+    self.multiple_of = multiple_of
+    self.shuffle_size = shuffle_size
+    self.shuffle_initial_size = shuffle_initial_size
+    self.dataset, self.total_samples = self._build_source_dataset(sources)
+
+    # for data_source monitor
+    self.source_sample_cnt = {}
+    self.source_error_cnt = {}
+
+    self.tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
+    self.img_start_token = "<|vision_start|>"
+    self.img_end_token = "<|vision_end|>"
+    self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
+    self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
+    # self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
+
+    # append image_pad for each packing
+    # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
+    image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
+    self.max_length = max_length - image_pad_len
+    assert self.max_length > 0
+    print(f"patch_size: {patch_size}")
+    print(f"processor: {self.processor}")
+    print(f"self.process_vision_info: {self.process_vision_info}")
 
     self.datasource_config = datasource_config
 
