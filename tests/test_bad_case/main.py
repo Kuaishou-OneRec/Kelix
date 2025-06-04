@@ -82,9 +82,9 @@ def parse_xlsx(file_path, output_path=None):
     # 加载工作簿并获取指定sheet
     wb = openpyxl.load_workbook(file_path)
     try:
-        sheet = wb['劣化case']
+        sheet = wb['Sheet1']
     except KeyError:
-        print(f"Error: Sheet '劣化case' not found in {file_path}")
+        print(f"Error: Sheet 'Sheet1' not found in {file_path}")
         print(f"Available sheets: {wb.sheetnames}")
         return
     
