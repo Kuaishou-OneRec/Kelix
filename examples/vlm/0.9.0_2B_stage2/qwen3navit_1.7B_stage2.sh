@@ -142,7 +142,7 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --resume_from /llm_reco/maosiyang/train_out/0.9.0/keye_2B_stage1/ \
-		--resume_from_tag global_step7000 \
+                --resume_from /llm_reco/maosiyang/train_out/0.9.0/keye_2B_stage1/step12000 \
+		--resume_from_tag global_step12000 \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
