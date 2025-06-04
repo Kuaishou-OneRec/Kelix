@@ -151,6 +151,7 @@ if 1:
                 MODEL_DIR,
                 torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
+                trust_remote_code=True,
                 device_map="cuda:0"
             )
 
@@ -166,7 +167,7 @@ if 1:
             messages = messages[0]
             messages["content"] = content
             messages["logits"] = logits
-            print(format_dict_or_list(messages))
+            print(messages["content"])
 
     except Exception as e:
         import traceback
