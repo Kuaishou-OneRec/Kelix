@@ -40,7 +40,7 @@ generate_config = {
 generate_config = {}
 tag = "default"
 
-def model_forward2(prompt, image_url):
+def model_forward(prompt, image_url):
     mm = [{"type": "image", "image": image_url }]
     messages = [
         {
