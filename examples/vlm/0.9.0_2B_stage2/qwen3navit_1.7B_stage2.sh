@@ -15,8 +15,8 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-2B-demo_hf_vitrope
-OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.0/keye_2B_stage2/
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-2B_vitrope_0604
+OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage2/
 
 mkdir -p $OUTPUT_DIR
 
@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.0.0;model_size:2B;GPU_type:H800;data:inner & outer comments stage2"
+comment="version:0.9.0;model_size:2B;GPU_type:H800;data:inner & outer comments stage2"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -142,7 +142,7 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --resume_from /llm_reco/maosiyang/train_out/0.9.0/keye_2B_stage1/step12000 \
+                --resume_from /llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/step12000 \
 		--resume_from_tag global_step12000 \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 

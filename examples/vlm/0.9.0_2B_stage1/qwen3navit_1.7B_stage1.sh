@@ -15,7 +15,7 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-2B-demo_hf_vitrope
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-2B_vitrope_0604
 OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
 
 mkdir -p $OUTPUT_DIR
@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.9.0;model_size:2B;GPU_type:H800;data:inner & outer comments stage1"
+comment="version:0.9.1;model_size:2B;GPU_type:H800;data:inner & outer comments stage1"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
