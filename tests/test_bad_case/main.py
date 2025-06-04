@@ -34,6 +34,7 @@ generate_config = {
     "do_sample": True,
     "max_length": 256,
     "top_p": 0.9,
+    "num_beams": 1,
     "top_k": 1,
     "temperature": 0.01,
 }
@@ -41,6 +42,11 @@ generate_config = {}
 tag = "default"
 
 def model_forward(prompt, image_url):
+    print(f"forwarding ... ")
+    print(f"prompt=\n{prompt}")
+    print(f"image_url=\n{image_url}")
+    print(f"generate_config=\n{generate_config}")
+
     mm = [{"type": "image", "image": image_url }]
     messages = [
         {
