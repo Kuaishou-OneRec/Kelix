@@ -705,12 +705,13 @@ class SiglipVisionEmbeddings(nn.Module):
                 tmp_embeddings = list()
                 for image_grid in image_grid_thw:
                     t, h, w = image_grid
-                    for _ in range(t):
-                        end = start + h * w
-                        image_embeddings = embeddings[start: end, :]
-                        image_embeddings = image_embeddings + self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0)
-                        tmp_embeddings.append(image_embeddings)
-                        start = end
+                    end = start + t * h * w
+                    image_embeddings = embeddings[start: end, :]
+                    position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0).repeat(
+                        t, 1)
+                    image_embeddings = image_embeddings + position_embedding
+                    tmp_embeddings.append(image_embeddings)
+                    start = end
                 embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
             else:
                 embeddings = embeddings + self.packing_position_embedding(position_ids)
