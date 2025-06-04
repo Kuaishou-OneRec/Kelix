@@ -156,7 +156,7 @@ if 1:
             )
 
 
-            messages, inputs = make_inputs(56,56)
+            messages, inputs = make_inputs(100,100)
             for k in inputs: inputs[k] = inputs[k].cuda()
 
             generated = model.generate(**inputs, max_new_tokens=255)
