@@ -116,6 +116,7 @@ MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-2B-demo/"
 processor = KeyeProcessor.from_pretrained(MODEL_DIR)
 tokenizer = processor.tokenizer
 
+from transformers import AutoTokenizer, AutoModel, AutoProcessor
 
 def make_inputs(a,b):
     messages = [

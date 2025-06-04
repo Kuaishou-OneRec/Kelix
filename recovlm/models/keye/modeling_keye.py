@@ -2844,6 +2844,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                             second_per_grid_t = second_per_grid_ts[video_index]
                         else:
                             second_per_grid_t = 1.0
+                        
                         video_index += 1
                         remain_videos -= 1
                         ed = ed_video
