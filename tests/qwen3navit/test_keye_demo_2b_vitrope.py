@@ -111,7 +111,7 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-2B-demo/"
+MODEL_DIR = "/llm_reco/maosiyang/train_out/0.9.0/keye_2B_stage1/step14000/global_step14000/converted"
 processor = KeyeProcessor.from_pretrained(MODEL_DIR)
 tokenizer = processor.tokenizer
 
@@ -151,8 +151,7 @@ if 1:
                 MODEL_DIR,
                 torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
-                device_map="cuda:0",
-                ignore_mismatched_sizes=True
+                device_map="cuda:0"
             )
 
 
