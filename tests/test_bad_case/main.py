@@ -30,6 +30,15 @@ device_map="cuda:0",
 trust_remote_code=True)
 processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
 tokenizer = processor.tokenizer
+generate_config = {
+    "do_sample": True,
+    "max_length": 256,
+    "top_p": 0.9,
+    "top_k": 1,
+    "temperature": 0.01,
+}
+generate_config = {}
+tag = "default"
 
 def model_forward2(prompt, image_url):
     mm = [{"type": "image", "image": image_url }]
@@ -68,7 +77,7 @@ def parse_xlsx(file_path, output_path=None):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         output_path = os.path.join(
             os.path.dirname(__file__),
-            f"processed_results_{timestamp}.xlsx"
+            f"processed_results_{tag}_{timestamp}.xlsx"
         )
     # 加载工作簿并获取指定sheet
     wb = openpyxl.load_workbook(file_path)
@@ -128,5 +137,5 @@ def parse_xlsx(file_path, output_path=None):
 
 if __name__ == "__main__":
     # 替换为实际的xlsx文件路径
-    xlsx_file = "/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tests/test_bad_case/reproduce_forward.xlsx"
+    xlsx_file = "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/tests/test_bad_case/reproduce_forward.xlsx"
     parse_xlsx(xlsx_file)
