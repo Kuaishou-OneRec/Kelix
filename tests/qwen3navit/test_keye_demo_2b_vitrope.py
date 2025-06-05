@@ -162,7 +162,7 @@ if 1:
             print(inputs.keys())
             print(inputs['second_per_grid_ts'])
             print('--------------------------------')
-            for k in inputs: inputs[k] = inputs[k].cuda()
+            #for k in inputs: inputs[k] = inputs[k].cuda()
 
             generated = model.generate(**inputs, max_new_tokens=255)
             logits = model(**inputs).logits
