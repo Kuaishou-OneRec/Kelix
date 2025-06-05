@@ -3005,7 +3005,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     device=input_ids.device,
                     dtype=input_ids.dtype,
                 )
-            
 
             return position_ids, mrope_position_deltas
 
