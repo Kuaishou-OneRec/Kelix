@@ -125,8 +125,8 @@ def make_inputs(a,b):
         {
             "role": "user",
             "content": [
-                {"type": "image", "image": generate_circle_image((a,b),) },
-                {"type": "text", "text": "what's in the image"},
+                # {"type": "image", "image": generate_circle_image((a,b),) },
+                {"type": "text", "text": "what's LLM"},
             ],
         }
     ]
