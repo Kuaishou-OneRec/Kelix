@@ -2948,6 +2948,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                             video_grid_thw[video_index][2],
                         )
                         if second_per_grid_ts is not None:
+                            print('allalalalla--------------------------------')
+                            print(second_per_grid_ts[video_index])
+                            print('--------------------------------')
                             second_per_grid_t = second_per_grid_ts[video_index]
                         else:
                             second_per_grid_t = 1.0
@@ -2986,6 +2989,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
                 mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
             mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
+            print(position_ids.shape)
+            print('--------------------------------')
             return position_ids, mrope_position_deltas
         else:
             if attention_mask is not None:
@@ -3005,6 +3010,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     device=input_ids.device,
                     dtype=input_ids.dtype,
                 )
+            
 
             return position_ids, mrope_position_deltas
 

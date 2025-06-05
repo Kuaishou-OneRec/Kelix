@@ -160,6 +160,7 @@ if 1:
             messages, inputs = make_inputs(200,200)
             print('--------------------------------')
             print(inputs.keys())
+            print(inputs['second_per_grid_ts'])
             print('--------------------------------')
             for k in inputs: inputs[k] = inputs[k].cuda()
 
@@ -171,7 +172,7 @@ if 1:
             messages = messages[0]
             messages["content"] = content
             messages["logits"] = logits
-            print(messages["content"])
+            #print(messages["content"])
 
     except Exception as e:
         import traceback
