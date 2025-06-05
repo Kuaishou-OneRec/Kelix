@@ -165,7 +165,7 @@ if 1:
             messages, inputs = make_inputs(400,400)
             for k in inputs: inputs[k] = inputs[k].cuda()
 
-            generated = model.generate(**inputs, max_new_tokens=256)
+            generated = model.generate(**inputs, max_new_tokens=2048)
             logits = model(**inputs).logits
             output_ids = generated[0][len(inputs.input_ids[0]):].tolist() 
             content = tokenizer.decode(output_ids[0:], skip_special_tokens=True).strip("\n")
