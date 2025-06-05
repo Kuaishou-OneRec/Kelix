@@ -115,7 +115,7 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
 
 from transformers import AutoTokenizer, AutoModel, AutoProcessor
 
-MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-2B-demo/"
+MODEL_DIR = "/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/step11000/global_step11000/hf"
 # MODEL_DIR = "/llm_reco/lingzhixin/models/Keye-2B-demo_dev"
 processor = AutoProcessor.from_pretrained(MODEL_DIR, trust_remote_code=True)
 tokenizer = processor.tokenizer
@@ -162,10 +162,10 @@ if 1:
             )
 
 
-            messages, inputs = make_inputs(400,400)
+            messages, inputs = make_inputs(200,200)
             for k in inputs: inputs[k] = inputs[k].cuda()
 
-            generated = model.generate(**inputs, max_new_tokens=32768)
+            generated = model.generate(**inputs, max_new_tokens=256)
             logits = model(**inputs).logits
             output_ids = generated[0][len(inputs.input_ids[0]):].tolist() 
             content = tokenizer.decode(output_ids[0:], skip_special_tokens=True).strip("\n")

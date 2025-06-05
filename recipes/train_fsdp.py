@@ -1160,13 +1160,14 @@ def train():
             image_grid_hws = batch.get("image_grid_hws", None)
             image_sample_indices = batch.get("image_sample_indices", None)
             image_cu_seqlens = batch.get("image_cu_seqlens", None)
+            second_per_grid_ts = batch.get("second_per_grid_ts", None)
             output = model(
               input_ids = input_ids, attention_mask=attention_mask,
               pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
               image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
               cu_seqlens=cu_seqlens, image_position_ids=image_position_ids,
               image_grid_hws=image_grid_hws, image_sample_indices=image_sample_indices,
-              image_cu_seqlens=image_cu_seqlens
+              image_cu_seqlens=image_cu_seqlens, second_per_grid_ts=second_per_grid_ts
             )
         ticker.tick("model.forward")
 
