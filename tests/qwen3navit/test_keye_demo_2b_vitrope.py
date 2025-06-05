@@ -162,8 +162,11 @@ if 1:
             print(inputs.keys())
             print(inputs['second_per_grid_ts'])
             print('--------------------------------')
-            #for k in inputs: inputs[k] = inputs[k].cuda()
-
+            for k in inputs:
+                if isinstance(inputs[k], torch.Tensor):
+                    inputs[k] = inputs[k].cuda()
+                elif isinstance(inputs[k], list):
+                    inputs[k] = [x.cuda() if isinstance(x, torch.Tensor) else x for x in inputs[k]]
             generated = model.generate(**inputs, max_new_tokens=255)
             logits = model(**inputs).logits
             output_ids = generated[0][len(inputs.input_ids[0]):].tolist() 
