@@ -30,7 +30,7 @@ from transformers.feature_extraction_utils import BatchFeature
 from transformers.image_utils import ImageInput, VideoInput
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
-from .image_processing_keye import SiglipImageProcessor
+
 import torch
 
 class KeyeVideosProcessorKwargs(VideosKwargs, total=False):
@@ -61,7 +61,7 @@ class KeyeProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
+    valid_kwargs = ["chat_template","image_std", "min_pixels", "image_mean", "merge_size", "image_processor_type", "temporal_patch_size", "patch_size", "max_pixels"]
 
     image_processor_class = "AutoImageProcessor"
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
@@ -70,7 +70,7 @@ class KeyeProcessor(ProcessorMixin):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
-        self.image_processor = SiglipImageProcessor()
+
 
     def __call__(
         self,
