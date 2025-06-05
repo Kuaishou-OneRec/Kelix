@@ -116,6 +116,7 @@ class KeyeProcessor(ProcessorMixin):
             - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
             - **second_per_grid_ts** -- List of video seconds per time grid. Returned when `videos` is not `None`.
         """
+        print('msymsymsyllallalall')
         output_kwargs = self._merge_kwargs(
             KeyeProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
