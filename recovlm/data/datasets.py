@@ -1312,6 +1312,9 @@ class ChatCompletionVisionDataset(IterableDataset):
     if "pixel_values_videos" in inputs:
       packed_pixel_values_videos.append(inputs["pixel_values_videos"])
       packed_video_grid_thw.append(inputs["video_grid_thw"])
+      print('--------------------------------')
+      print(inputs["second_per_grid_ts"])
+      print('--------------------------------')
       packed_second_per_grid_ts.append(inputs["second_per_grid_ts"])
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     return len(inputs["input_ids"][0])
