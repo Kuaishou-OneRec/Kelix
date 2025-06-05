@@ -122,7 +122,7 @@ def make_inputs(a,b):
         {
             "role": "user",
             "content": [
-                {"type": "video", "video":"1.mp4" },
+                {"type": "video", "video":"/llm_reco/maosiyang/dev/recovlm/1.mp4" },
                 {"type": "text", "text": "what's in this video"},
             ],
         }
