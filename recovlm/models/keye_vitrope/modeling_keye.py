@@ -2949,9 +2949,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         )
                         if second_per_grid_ts is not None:
                             second_per_grid_t = second_per_grid_ts[video_index]
-                            print('--------------------------------')
-                            print(second_per_grid_t)
-                            print('--------------------------------')
                         else:
                             second_per_grid_t = 1.0
                         video_index += 1
