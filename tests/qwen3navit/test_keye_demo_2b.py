@@ -173,7 +173,8 @@ if 1:
             messages = messages[0]
             messages["content"] = content
             messages["logits"] = logits
-            print(format_dict_or_list(messages))
+            print(messages["content"])
+            print('--------------------------------')
 
     except Exception as e:
         import traceback
