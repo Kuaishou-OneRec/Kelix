@@ -133,7 +133,7 @@ def make_inputs(a,b):
         messages, tokenize=False, add_generation_prompt=False
     )
     image_inputs, video_inputs = process_vision_info(messages)
-    print(image_inputs, video_inputs)
+    #print(image_inputs, video_inputs)
     inputs = processor(
         text=[text],
         images=image_inputs,
