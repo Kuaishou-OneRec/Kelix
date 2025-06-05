@@ -1373,6 +1373,9 @@ class ChatCompletionVisionDataset(IterableDataset):
     packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
     packed_second_per_grid_ts = None if len(packed_second_per_grid_ts) == 0 else \
       torch.cat(packed_second_per_grid_ts, dim=0)
+    print('--------------------------------')
+    print(packed_second_per_grid_ts)
+    print('--------------------------------')
     packed_pixel_values = None if len(packed_pixel_values) == 0 else \
       torch.cat(packed_pixel_values, dim=0)
     packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else \
