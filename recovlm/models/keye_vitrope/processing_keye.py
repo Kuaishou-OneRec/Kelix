@@ -132,9 +132,6 @@ class KeyeProcessor(ProcessorMixin):
 
 
         if videos is not None:
-            print('--------------------------------')
-            print('msy_code video')
-            print('--------------------------------')
             #TODO: add video processing
             videos_inputs = self.image_processor(images=None, videos=videos, **output_kwargs["images_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
