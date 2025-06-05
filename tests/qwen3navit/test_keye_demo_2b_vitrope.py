@@ -122,8 +122,8 @@ def make_inputs(a,b):
         {
             "role": "user",
             "content": [
-                {"type": "image", "image": generate_circle_image((a,b),) },
-                {"type": "text", "text": "what's in the image"},
+                {"type": "video", "video":"1.mp4" },
+                {"type": "text", "text": "what's in this video"},
             ],
         }
     ]
@@ -158,6 +158,9 @@ if 1:
 
 
             messages, inputs = make_inputs(200,200)
+            print('--------------------------------')
+            print(inputs.keys())
+            print('--------------------------------')
             for k in inputs: inputs[k] = inputs[k].cuda()
 
             generated = model.generate(**inputs, max_new_tokens=255)
