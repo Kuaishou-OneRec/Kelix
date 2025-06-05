@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-2B_vitrope_0604
-OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage2/
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage2/2b/0.0.1/
 
 mkdir -p $OUTPUT_DIR
 
@@ -142,7 +142,7 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --resume_from /llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/step12000 \
+                --resume_from /mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage1/2b/0.0.1/step12000 \
 		--resume_from_tag global_step12000 \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 

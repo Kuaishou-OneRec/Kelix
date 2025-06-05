@@ -138,8 +138,7 @@ class KeyeProcessor(ProcessorMixin):
 
             fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
 
-            print(111233433, )
-            print(111233433, self.image_processor.temporal_patch_size)
+
             if isinstance(fps, (int, float)):
                 second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(video_grid_thw)
             elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
