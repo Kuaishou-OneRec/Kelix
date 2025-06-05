@@ -1091,6 +1091,7 @@ def train():
       video_grid_thw = batch.get("video_grid_thw", None)
       cu_seqlens = batch.get("cu_seqlens", None)
       sample_idx = batch["sample_idx"]
+      second_per_grid_ts = batch.get("second_per_grid_ts", None)
       position_ids = batch.get("position_ids", None)
       image_flags = batch.get("image_flags", None)
       epoch_idx = batch.get("epoch_idx", torch.tensor([0])).cpu().item()

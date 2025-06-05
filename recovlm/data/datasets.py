@@ -1268,6 +1268,7 @@ class ChatCompletionVisionDataset(IterableDataset):
                              packed_video_grid_thw: List[torch.Tensor],
                              packed_sample_idx: List[torch.Tensor],
                              cu_seqlens: List[int],
+                             packed_second_per_grid_ts: List[torch.Tensor],
                              sample_idx: Optional[int] = None,
                              image_pad: bool = False):
 
@@ -1311,6 +1312,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     if "pixel_values_videos" in inputs:
       packed_pixel_values_videos.append(inputs["pixel_values_videos"])
       packed_video_grid_thw.append(inputs["video_grid_thw"])
+      packed_second_per_grid_ts.append(inputs["second_per_grid_ts"])
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     return len(inputs["input_ids"][0])
 
@@ -1323,6 +1325,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     packed_image_gird_thw: List[torch.Tensor] = []
     packed_video_grid_thw: List[torch.Tensor] = []
     packed_sample_idx: List[torch.Tensor] = []
+    packed_second_per_grid_ts: List[torch.Tensor] = []
     cu_seqlens: List[int] = [0]
     epochs = []
     valid_seq_len = 0
@@ -1341,7 +1344,8 @@ class ChatCompletionVisionDataset(IterableDataset):
                                       packed_image_gird_thw,
                                       packed_video_grid_thw,
                                       packed_sample_idx,
-                                      cu_seqlens)
+                                      cu_seqlens,
+                                      packed_second_per_grid_ts)
 
 
     # 
@@ -1357,6 +1361,7 @@ class ChatCompletionVisionDataset(IterableDataset):
                                 packed_video_grid_thw,
                                 packed_sample_idx,
                                 cu_seqlens,
+                                packed_second_per_grid_ts,
                                 sample_idx=-1,
                                 image_pad=True
                                 )
@@ -1366,6 +1371,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
     packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
+    packed_second_per_grid_ts = torch.cat(packed_second_per_grid_ts, dim=0).unsqueeze(0)
     packed_pixel_values = None if len(packed_pixel_values) == 0 else \
       torch.cat(packed_pixel_values, dim=0)
     packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else \
@@ -1402,6 +1408,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32),
       "epoch_idx": torch.tensor([sum(epochs) / len(epochs)], dtype=torch.float32),
+      "second_per_grid_ts": packed_second_per_grid_ts,
     }
 
     return inputs
