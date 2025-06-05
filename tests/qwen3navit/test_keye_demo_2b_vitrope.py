@@ -111,7 +111,7 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-MODEL_DIR = "/llm_reco/maosiyang/train_out/0.9.0/keye_2B_stage2/step1000/global_step1000/hf/"
+MODEL_DIR = "/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/step11000/global_step11000/hf"
 processor = KeyeProcessor.from_pretrained(MODEL_DIR,
                                           trust_remote_code=True)
 tokenizer = processor.tokenizer
