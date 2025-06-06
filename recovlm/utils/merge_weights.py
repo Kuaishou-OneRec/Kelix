@@ -41,7 +41,7 @@ def main():
   #   print("================================================")
   pt2 = {}
   for i in range(1, 6):
-      with safe_open("/llm_reco_ssd/zhouyang12/models/Qwen3-8B/model-0000" + str(i) + "-of-00006.safetensors", framework="pt", device="cpu") as f:
+      with safe_open("/llm_reco_ssd/zhouyang12/models/Qwen3-8B/model-0000" + str(i) + "-of-00005.safetensors", framework="pt", device="cpu") as f:
           for key in f.keys():
               pt2[key] = f.get_tensor(key)
   print('lalallalalallal')
