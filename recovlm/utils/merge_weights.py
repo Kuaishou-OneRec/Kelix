@@ -40,14 +40,14 @@ def main():
   #   print(pt1[key].shape)
   #   print("================================================")
   pt2 = {}
-  for i in range(1, 3):
-      with safe_open("/llm_reco_ssd/zhouyang12/models/Qwen3-1.7B/model-0000" + str(i) + "-of-00002.safetensors", framework="pt", device="cpu") as f:
+  for i in range(1, 6):
+      with safe_open("/llm_reco_ssd/zhouyang12/models/Qwen3-8B/model-0000" + str(i) + "-of-00006.safetensors", framework="pt", device="cpu") as f:
           for key in f.keys():
               pt2[key] = f.get_tensor(key)
   print('lalallalalallal')
   for key in pt1.keys():
     pt2[key] = pt1[key]
-  outputdir = "/llm_reco_ssd/zhouyang12/models/Keye-2B_vitrope_0604"
+  outputdir = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope"
   os.makedirs(outputdir, exist_ok=True)
   #merge pt1 and pt2
   save_file(pt2, outputdir + "/model.safetensors",metadata={"format": "pt"})
