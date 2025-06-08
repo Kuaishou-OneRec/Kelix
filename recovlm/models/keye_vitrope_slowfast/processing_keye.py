@@ -245,14 +245,25 @@ class KeyeProcessor(ProcessorMixin):
                             fast_videos_frame_nums[current_index].append(fast_video_grid_thw.size(0))
                         ###########################
 
-            total_slow_pixel_values_videos = all_slow_videos[0]["pixel_values_videos"]
-            total_slow_video_grid_thw = all_slow_videos[0]["video_grid_thw"]
-            total_slow_second_per_grid_ts = all_slow_videos[0]["second_per_grid_ts"]
-            for i in range(len(all_slow_videos)):
-                if i > 0:
-                    total_slow_pixel_values_videos = torch.cat([total_slow_pixel_values_videos, all_slow_videos[i]["pixel_values_videos"]], dim = 0)
-                    total_slow_video_grid_thw = torch.cat([total_slow_video_grid_thw, all_slow_videos[i]["video_grid_thw"]], dim = 0)
-                    total_slow_second_per_grid_ts = torch.cat([total_slow_second_per_grid_ts, all_slow_videos[i]["second_per_grid_ts"]], dim = 0)
+            # todo: zdj debug 多次concat速度会慢很多
+            slow_pixel_values_videos_list = [single_slow_video["pixel_values_videos"] for single_slow_video in all_slow_videos]
+            slow_video_grid_thw_list = [single_slow_video["video_grid_thw"] for single_slow_video in all_slow_videos]
+            slow_second_per_grid_ts_list = [single_slow_video["second_per_grid_ts"] for single_slow_video in all_slow_videos]
+
+            total_slow_pixel_values_videos = torch.concat(slow_pixel_values_videos_list, dim=0)
+            total_slow_video_grid_thw = torch.concat(slow_video_grid_thw_list, dim=0)
+            total_slow_second_per_grid_ts = litorch.concat(slow_second_per_grid_ts_list, dim=0)
+            # todo: zdj debug end
+
+            # total_slow_pixel_values_videos = all_slow_videos[0]["pixel_values_videos"]
+            # total_slow_video_grid_thw = all_slow_videos[0]["video_grid_thw"]
+            # total_slow_second_per_grid_ts = all_slow_videos[0]["second_per_grid_ts"]
+            # for i in range(len(all_slow_videos)):
+            #     if i > 0:
+            #         total_slow_pixel_values_videos = torch.cat([total_slow_pixel_values_videos, all_slow_videos[i]["pixel_values_videos"]], dim = 0)
+            #         total_slow_video_grid_thw = torch.cat([total_slow_video_grid_thw, all_slow_videos[i]["video_grid_thw"]], dim = 0)
+            #         total_slow_second_per_grid_ts = torch.cat([total_slow_second_per_grid_ts, all_slow_videos[i]["second_per_grid_ts"]], dim = 0)
+
 
             videos_inputs = {
                 "pixel_values_videos": total_slow_pixel_values_videos,
@@ -262,14 +273,26 @@ class KeyeProcessor(ProcessorMixin):
             video_grid_thw = videos_inputs["video_grid_thw"]
 
             if self.slowfast:
-                total_fast_pixel_values_videos = all_fast_videos[0]["pixel_values_videos"]
-                total_fast_video_grid_thw = all_fast_videos[0]["video_grid_thw"]
-                total_fast_second_per_grid_ts = all_fast_videos[0]["second_per_grid_ts"]
-                for i in range(len(all_fast_videos)):
-                    if i > 0:
-                        total_fast_pixel_values_videos = torch.cat([total_fast_pixel_values_videos, all_fast_videos[i]["pixel_values_videos"]], dim = 0)
-                        total_fast_video_grid_thw = torch.cat([total_fast_video_grid_thw, all_fast_videos[i]["video_grid_thw"]], dim = 0)
-                        total_fast_second_per_grid_ts = torch.cat([total_slow_second_per_grid_ts, all_fast_videos[i]["second_per_grid_ts"]], dim = 0)
+                # todo: zdj debug 多次concat速度会慢很多
+                fast_pixel_values_videos_list = [single_fast_video["pixel_values_videos"] for single_fast_video in all_fast_videos]
+                fast_video_grid_thw_list = [single_fast_video["video_grid_thw"] for single_fast_video in all_fast_videos]
+                fast_second_per_grid_ts_list = [single_fast_video["second_per_grid_ts"] for single_fast_video in all_fast_videos]
+                # fast_second_per_grid_ts = torch.tensor(list(chain(*fast_second_per_grid_ts_list)))
+
+                videos_inputs["fast_pixel_values_videos"] = torch.concat(fast_pixel_values_videos_list, dim=0)
+                videos_inputs["fast_video_grid_thw"] = torch.concat(fast_video_grid_thw_list, dim=0)
+                videos_inputs["fast_second_per_grid_ts"] = torch.concat(fast_second_per_grid_ts_list, dim=0)
+                # todo: zdj debug end
+
+
+                # total_fast_pixel_values_videos = all_fast_videos[0]["pixel_values_videos"]
+                # total_fast_video_grid_thw = all_fast_videos[0]["video_grid_thw"]
+                # total_fast_second_per_grid_ts = all_fast_videos[0]["second_per_grid_ts"]
+                # for i in range(len(all_fast_videos)):
+                #     if i > 0:
+                #         total_fast_pixel_values_videos = torch.cat([total_fast_pixel_values_videos, all_fast_videos[i]["pixel_values_videos"]], dim = 0)
+                #         total_fast_video_grid_thw = torch.cat([total_fast_video_grid_thw, all_fast_videos[i]["video_grid_thw"]], dim = 0)
+                #         total_fast_second_per_grid_ts = torch.cat([total_slow_second_per_grid_ts, all_fast_videos[i]["second_per_grid_ts"]], dim = 0)
 
                 videos_inputs["fast_pixel_values_videos"] = total_fast_pixel_values_videos
                 videos_inputs["fast_video_grid_thw"] = total_fast_video_grid_thw
