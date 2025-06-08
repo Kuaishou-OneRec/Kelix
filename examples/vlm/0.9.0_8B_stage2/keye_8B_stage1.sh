@@ -17,7 +17,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope
 #OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage1/8b/0.0.1
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage2/8b/0.0.1
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.9.1;model_size:8B;GPU_type:H800;data:inner & outer comments stage1"
+comment="version:0.9.1;model_size:8B;GPU_type:H800;data:inner & outer comments stage2"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -115,18 +115,19 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/0.9.0_8B_stage1/keye_stage1.json \
+                --dataset_config examples/vlm/0.9.0_8B_stage2/keye_stage2.json \
                 --model_class KeyeForConditionalGeneration_vitrope \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --max_length 15000 \
-                --learning_rate 1e-3 \
-                --min_lr 5e-5 \
+                --learning_rate 1e-5 \
+                --vision_learning_rate 1e-6 \
+                --min_lr 1e-6 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --num_warmup_steps 4000 \
-                --num_training_steps 39000 \
+                --num_warmup_steps 2625 \
+                --num_training_steps 26250 \
                 --save_checkpoint_per_step 1000 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
@@ -141,7 +142,7 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --freeze_llm \
-                --freeze_visual \
+                --resume_from /mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage1/8b/0.0.1/step39000 \
+                --resume_from_tag global_step39000 \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
