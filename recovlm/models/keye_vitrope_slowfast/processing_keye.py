@@ -331,7 +331,8 @@ class KeyeProcessor(ProcessorMixin):
                         video_place_holder_tempale += "<|slow_video_start|>" + "<|placeholder|>" * (slow_videos_token_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size) + "<|slow_video_end|>"
                         if self.slowfast:
                             # 这里是为了保证每一帧的token都被分割开
-                            video_place_holder_tempale += ("<|fast_video_start|>" + ("<|placeholder|>" * (fast_videos_token_nums[index][j]//fast_videos_frame_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size)) + "<|fast_video_end|>") * fast_videos_frame_nums[index][j]
+                            # video_place_holder_tempale += ("<|fast_video_start|>" + ("<|placeholder|>" * (fast_videos_token_nums[index][j]//fast_videos_frame_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size)) + "<|fast_video_end|>") * fast_videos_frame_nums[index][j]
+                            video_place_holder_tempale += "<|fast_video_start|>" + ("<|placeholder|>" * (fast_videos_token_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size)) + "<|fast_video_end|>"
                     text[i] = text[i].replace(
                         self.video_token,
                         video_place_holder_tempale,

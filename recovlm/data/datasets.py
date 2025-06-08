@@ -2216,6 +2216,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       torch.cat(packed_fast_pixel_values, dim=0)
     packed_fast_image_grid_thw = None if len(packed_fast_image_grid_thw) == 0 else \
       torch.cat(packed_fast_image_grid_thw, dim=0)
+    print([x.shape for x in packed_fast_pixel_values_videos])
     packed_fast_pixel_values_videos = None if len(packed_fast_pixel_values_videos) == 0 else \
       torch.cat(packed_fast_pixel_values_videos, dim=0)
     packed_fast_video_grid_thw = None if len(packed_fast_video_grid_thw) == 0 else \
