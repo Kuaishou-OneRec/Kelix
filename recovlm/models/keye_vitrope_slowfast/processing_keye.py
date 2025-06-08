@@ -259,7 +259,6 @@ class KeyeProcessor(ProcessorMixin):
                 "video_grid_thw": total_slow_video_grid_thw,
                 "second_per_grid_ts": total_slow_second_per_grid_ts,   
             }
-            videos_inputs["second_per_grid_ts"] = torch.tensor(videos_inputs["second_per_grid_ts"])
             video_grid_thw = videos_inputs["video_grid_thw"]
 
             if self.slowfast:
