@@ -22,7 +22,6 @@ import traceback
 import io as py_io
 import os.path as osp
 
-
 logger = logging.getLogger(__name__)
 
 IMAGE_FACTOR = 28
@@ -39,6 +38,9 @@ FPS_MIN_FRAMES = 4
 FPS_MAX_FRAMES = 768
 
 SLOWFAST_RATIO = 5
+FAST_HEIGHT = 224
+FAST_WIDTH = 224
+
 
 def round_by_factor(number: int, factor: int) -> int:
     """Returns the closest integer to 'number' that is divisible by 'factor'."""
@@ -56,7 +58,7 @@ def floor_by_factor(number: int, factor: int) -> int:
 
 
 def smart_resize(
-    height: int, width: int, factor: int = IMAGE_FACTOR, min_pixels: int = MIN_PIXELS, max_pixels: int = MAX_PIXELS
+        height: int, width: int, factor: int = IMAGE_FACTOR, min_pixels: int = MIN_PIXELS, max_pixels: int = MAX_PIXELS
 ) -> tuple[int, int]:
     """
     Rescales the image so that the following conditions are met:
@@ -108,7 +110,7 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
         image_obj = Image.open(image)
     if image_obj is None:
         raise ValueError(f"Unrecognized image input, support local path, http url, base64 and PIL.Image, got {image}")
-    image = image_obj.convert("RGB")    ## resize
+    image = image_obj.convert("RGB")  ## resize
     if "resized_height" in ele and "resized_width" in ele:
         resized_height, resized_width = smart_resize(
             ele["resized_height"],
@@ -132,9 +134,9 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
 
 
 def smart_nframes(
-    ele: dict,
-    total_frames: int,
-    video_fps: int | float,
+        ele: dict,
+        total_frames: int,
+        video_fps: int | float,
 ) -> int:
     """calculate the number of frames for video used for model inputs.
 
@@ -170,7 +172,7 @@ def smart_nframes(
 
 
 def _read_video_torchvision(
-    ele: dict,
+        ele: dict,
 ) -> torch.Tensor:
     """read video using torchvision.io.read_video
 
@@ -214,7 +216,7 @@ def _read_video_torchvision(
         video = torch.stack(video)
         total_frames, video_fps = video.size(0), video_meta["fps"][-1]
         logger.info(f"torchvision:  {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-    
+
     nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
     idx = torch.linspace(0, total_frames - 1, nframes).round().long()
     video = video[idx]
@@ -227,73 +229,8 @@ def is_decord_available() -> bool:
     return importlib.util.find_spec("decord") is not None
 
 
-
-
-def _read_video_decord_slowfast(
-    ele: dict,
-) -> torch.Tensor:
-    """read video using decord.VideoReader
-
-    Args:
-        ele (dict): a dict contains the configuration of video.
-        support keys:
-            - video: the path of video. support "file://", "http://", "https://" and local path.
-            - video_start: the start time of video.
-            - video_end: the end time of video.
-    Returns:
-        torch.Tensor: the video tensor with shape (T, C, H, W).
-    """
-    import decord
-    st = time.time()
-    if isinstance(ele["video"], bytes):
-        video_path = ""
-        fp = py_io.BytesIO(ele["video"])
-        vr = decord.VideoReader(fp)
-    else:
-        video_path = ele["video"]
-        vr = decord.VideoReader(video_path)
-    # TODO: support start_pts and end_pts
-    if 'video_start' in ele or 'video_end' in ele:
-        raise NotImplementedError("not support start_pts and end_pts in decord for now.")
-    total_frames, video_fps = len(vr), vr.get_avg_fps()
-    logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-    nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
-    idx = torch.linspace(0, total_frames - 1, nframes).round().long().tolist()
-    slow_idx = []
-    fast_idx = []
-    # SLOWFAST_RATIO rate should be setting in dataset config？
-    for index, video_index in enumerate(idx):
-        if index % SLOWFAST_RATIO:
-            fast_idx[-1].append(video_index)
-        else:
-            slow_idx.append(video_index)
-            fast_idx.append([])
-
-    if len(fast_idx[-1]) == 0:
-        fast_idx[-1].append(slow_idx[-1])
-        # slow_idx = slow_idx[:len(slow_idx) - 1]
-        # fast_idx = fast_idx[:len(fast_idx) - 1]
-
-    slow_frame_list = list()
-    fast_frame_list = list()
-
-    for i in range(len(slow_idx)):
-        slow_video = vr.get_batch([slow_idx[i]]).asnumpy()
-        slow_video = torch.tensor(slow_video).permute(0, 3, 1, 2)  # Convert to TCHW format
-        slow_frame_list.append(slow_video)
-
-    for i in range(len(fast_idx)):
-        fast_video = vr.get_batch(fast_idx[i]).asnumpy()
-        fast_video = torch.tensor(fast_video).permute(0, 3, 1, 2)  # Convert to TCHW 
-        fast_frame_list.append(fast_video)
-    return slow_frame_list, fast_frame_list
-
-
-
-
-
 def _read_video_decord(
-    ele: dict,
+        ele: dict,
 ) -> torch.Tensor:
     """read video using decord.VideoReader
 
@@ -327,6 +264,48 @@ def _read_video_decord(
     return video
 
 
+def _read_video_decord_slowfast(
+        ele: dict,
+) -> torch.Tensor:
+    """read video using decord.VideoReader
+
+    Args:
+        ele (dict): a dict contains the configuration of video.
+        support keys:
+            - video: the path of video. support "file://", "http://", "https://" and local path.
+            - video_start: the start time of video.
+            - video_end: the end time of video.
+    Returns:
+        torch.Tensor: the video tensor with shape (T, C, H, W).
+    """
+    import decord
+    st = time.time()
+    if isinstance(ele["video"], bytes):
+        video_path = ""
+        fp = py_io.BytesIO(ele["video"])
+        vr = decord.VideoReader(fp)
+    else:
+        video_path = ele["video"]
+        vr = decord.VideoReader(video_path)
+    # TODO: support start_pts and end_pts
+    if 'video_start' in ele or 'video_end' in ele:
+        raise NotImplementedError("not support start_pts and end_pts in decord for now.")
+    total_frames, video_fps = len(vr), vr.get_avg_fps()
+    logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
+    nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+
+    indices = torch.linspace(0, total_frames - 1, nframes).round().long()
+
+    if indices.shape[0] % SLOWFAST_RATIO == 1:
+        indices = torch.concat([indices, indices[-1:]], dim=0)
+    slow_mask = torch.remainder(torch.arange(indices.shape[0]), SLOWFAST_RATIO) == 0
+    frames = vr.get_batch(indices.tolist()).asnumpy()
+    frames = torch.tensor(frames).permute(0, 3, 1, 2)
+    slow_frames = frames[slow_mask]
+    fast_frames = frames[~slow_mask]
+    return slow_frames, fast_frames
+
+
 VIDEO_READER_BACKENDS = {
     "decord": _read_video_decord,
     "torchvision": _read_video_torchvision,
@@ -346,59 +325,58 @@ def get_video_reader_backend() -> str:
         video_reader_backend = "torchvision"
     print(f"qwen-vl-utils using {video_reader_backend} to read video.", file=sys.stderr)
     # return video_reader_backend
-
     # Hack
     return "slowfast_decord"
 
 
 def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = True) -> torch.Tensor | list[Image.Image]:
-    if isinstance(ele["video"], str) or isinstance(ele["video"], bytes): 
+    if isinstance(ele["video"], str) or isinstance(ele["video"], bytes):
         video_reader_backend = get_video_reader_backend()
-        slow_video_list, fast_video_list = VIDEO_READER_BACKENDS[video_reader_backend](ele)
+        slow_frames, fast_frames = VIDEO_READER_BACKENDS[video_reader_backend](ele)
         if image_factor is None:
             return None
 
-        #### slow part ######
-        for index, video in enumerate(slow_video_list):
-            nframes, _, height, width = video.shape
+        nframes, _, height, width = slow_frames.shape
 
-            min_pixels = ele.get("min_pixels", VIDEO_MIN_PIXELS)
-            total_pixels = ele.get("total_pixels", VIDEO_TOTAL_PIXELS)
-            max_pixels = max(min(VIDEO_MAX_PIXELS, total_pixels / nframes * FRAME_FACTOR), int(min_pixels * 1.05))
-            max_pixels = ele.get("max_pixels", max_pixels)
-            if "resized_height" in ele and "resized_width" in ele:
-                resized_height, resized_width = smart_resize(
-                    ele["resized_height"],
-                    ele["resized_width"],
-                    factor=image_factor,
-                )
-            else:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=image_factor,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels,
-                )
-            video = transforms.functional.resize(
-                video,
-                [resized_height, resized_width],
-                interpolation=InterpolationMode.BICUBIC,
-                antialias=True,
-            ).float()
-            slow_video_list[index] = video
+        #### slow part ######
+        min_pixels = ele.get("min_pixels", VIDEO_MIN_PIXELS)
+        total_pixels = ele.get("total_pixels", VIDEO_TOTAL_PIXELS)
+        max_pixels = max(min(VIDEO_MAX_PIXELS, total_pixels / nframes * FRAME_FACTOR), int(min_pixels * 1.05))
+        max_pixels = ele.get("max_pixels", max_pixels)
+        if "resized_height" in ele and "resized_width" in ele:
+            resized_height, resized_width = smart_resize(
+                ele["resized_height"],
+                ele["resized_width"],
+                factor=image_factor,
+            )
+        else:
+            resized_height, resized_width = smart_resize(
+                height,
+                width,
+                factor=image_factor,
+                min_pixels=min_pixels,
+                max_pixels=max_pixels,
+            )
+        slow_frames = transforms.functional.resize(
+            slow_frames,
+            [resized_height, resized_width],
+            interpolation=InterpolationMode.BICUBIC,
+            antialias=True,
+        ).float()
+        slow_frames = list(slow_frames.split(1, dim=0))
 
         #### fast part ######
-        for index, video in enumerate(fast_video_list):
-            video = transforms.functional.resize(
-                video,
-                [224, 224],
-                interpolation=InterpolationMode.BICUBIC,
-                antialias=True,
-            ).float()
-            fast_video_list[index] = video
+        fast_frames = transforms.functional.resize(
+            fast_frames,
+            [FAST_HEIGHT, FAST_WIDTH],
+            interpolation=InterpolationMode.BICUBIC,
+            antialias=True,
+        ).float()
+        fast_frames = list(fast_frames.split(SLOWFAST_RATIO - 1, dim=0))
+        assert len(slow_frames) == len(fast_frames)
 
-        return [slow_video_list, fast_video_list]
+        return slow_frames, fast_frames
+
     else:
         assert isinstance(ele["video"], (list, tuple))
         process_info = ele.copy()
@@ -428,17 +406,18 @@ def extract_vision_info(conversations: list[dict] | list[list[dict]]) -> list[di
             if isinstance(message["content"], list):
                 for ele in message["content"]:
                     if (
-                        "image" in ele
-                        or "image_url" in ele
-                        or "video" in ele
-                        or ele["type"] in ("image", "image_url", "video")
+                            "image" in ele
+                            or "image_url" in ele
+                            or "video" in ele
+                            or ele["type"] in ("image", "image_url", "video")
                     ):
                         vision_infos.append(ele)
     return vision_infos
 
 
 def process_vision_info(
-    conversations: list[dict] | list[list[dict]] = None, vision_infos: list[dict] = None, image_factor: int = IMAGE_FACTOR
+        conversations: list[dict] | list[list[dict]] = None, vision_infos: list[dict] = None,
+        image_factor: int = IMAGE_FACTOR
 ) -> tuple[list[Image.Image] | None, list[torch.Tensor | list[Image.Image]] | None]:
     assert conversations is not None or vision_infos is not None
 
