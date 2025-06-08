@@ -3164,6 +3164,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     sample_indices=fast_sample_indices,
                     cu_seqlens=fast_cu_seqlens,
                     return_pooler_output=False,
+                    use_rope=False,
+                    window_size =-1,
                 )
                 fast_image_embeds = fast_vision_outputs.last_hidden_state
                 fast_image_embeds = self.fast_mlp_AR(fast_image_embeds, fast_image_grid_hws)
@@ -3267,6 +3269,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     sample_indices=fast_sample_indices,
                     cu_seqlens=fast_cu_seqlens,
                     return_pooler_output=False,
+                    use_rope=False,
+                    window_size =-1,
                 )
                 fast_video_embeds = fast_vision_outputs.last_hidden_state
                 fast_video_embeds = self.fast_mlp_AR(fast_video_embeds, fast_video_grid_thw)
