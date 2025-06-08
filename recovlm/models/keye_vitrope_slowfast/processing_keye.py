@@ -225,7 +225,7 @@ class KeyeProcessor(ProcessorMixin):
                         ####### fast part #########
                         if self.slowfast:
                             if kwargs.get("image_video_pad", False):
-                                fast_videos_inputs = self.fast_image_processor.preprocess(images=None, videos=[each_image], **output_kwargs["images_kwargs"])
+                                fast_videos_inputs = self.fast_image_processor.preprocess(images=None, videos=[each_image], size = {"height": 224, "width": 224}, **output_kwargs["images_kwargs"])
                             else:
                                 fast_videos_inputs = self.fast_image_processor.preprocess(images=None, videos=[each_image], size = {"height": 224, "width": 224}, **output_kwargs["images_kwargs"])
                             fast_video_grid_thw = fast_videos_inputs["video_grid_thw"]
@@ -294,9 +294,9 @@ class KeyeProcessor(ProcessorMixin):
                 #         total_fast_video_grid_thw = torch.cat([total_fast_video_grid_thw, all_fast_videos[i]["video_grid_thw"]], dim = 0)
                 #         total_fast_second_per_grid_ts = torch.cat([total_slow_second_per_grid_ts, all_fast_videos[i]["second_per_grid_ts"]], dim = 0)
 
-                videos_inputs["fast_pixel_values_videos"] = total_fast_pixel_values_videos
-                videos_inputs["fast_video_grid_thw"] = total_fast_video_grid_thw
-                videos_inputs["fast_second_per_grid_ts"] = total_fast_second_per_grid_ts
+                # videos_inputs["fast_pixel_values_videos"] = total_fast_pixel_values_videos
+                # videos_inputs["fast_video_grid_thw"] = total_fast_video_grid_thw
+                # videos_inputs["fast_second_per_grid_ts"] = total_fast_second_per_grid_ts
 
                 videos_inputs["all_video_grid_thw"] = torch.stack(list(chain.from_iterable(zip(videos_inputs["video_grid_thw"], videos_inputs["fast_video_grid_thw"]))), dim = 0)
                 videos_inputs["all_second_per_grid_ts"] = torch.stack(list(chain.from_iterable(zip(videos_inputs["second_per_grid_ts"], videos_inputs["fast_second_per_grid_ts"]))), dim = 0)
