@@ -3806,6 +3806,92 @@ class ChatCompletionVisionParquetDataset_keye_vitrope(ChatCompletionVisionDatase
 
 
 
+
+class ChatCompletionVisionParquetDataset_keye_vitrope_slowfast(ChatCompletionVisionDataset_keye_vitrope_slowfast):
+  def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
+    self.rng = random.Random(shuffle_seed)
+    self.num_workers = num_workers
+    self.num_epochs = num_epochs
+    self.cut_to_pad = kargs.get("cut_to_pad", True)
+    self.kargs = kargs
+    self.num_readers = kargs.get("num_readers", 1)
+    self.shuffle_window = kargs.get("shuffle_window", 0)
+    super().__init__(sources, **kargs)
+
+  def _build_source_dataset(self, sources):
+    data_file_list = []
+    if dist.get_rank() == 0:
+      data_files = []
+      if isinstance(sources, str) and sources.endswith(".json"):
+        with open(sources, "r") as fp:
+          data_files = json.loads(fp.read())
+          data_files = [fn for fn in data_files if fn.endswith(".parquet")]
+      elif isinstance(sources, list):
+        for source in sources:
+          hdfs_files = shell_hdfs_ls(source)
+          data_files += [fn for fn in hdfs_files if fn.endswith(".parquet")]
+      # repeat
+      for i in range(self.num_epochs):
+        data_files.sort()
+        self.rng.shuffle(data_files)
+        data_file_list += [(fn, i) for fn in data_files]
+      logger.error(f"ChatCompletionVisionParquetDataset_keye_vitrope_slowfast rank{dist.get_rank()}: ori_file_num={len(data_files)} file_num={len(data_file_list)}")
+
+    t = [data_file_list]
+    dist.broadcast_object_list(t, src=0)
+    data_file_list = t[0]
+
+    logger.error(f"ChatCompletionVisionParquetDataset_keye_vitrope_slowfast rank{dist.get_rank()}: file_num={len(data_file_list)}")
+    if len(data_file_list) == 0:
+      raise ValueError(f"no datafile found!")
+
+    dataset = ParquetDataset(data_file_list, self.num_workers, **self.kargs)
+    return dataset, -1
+
+  def state_dict(self, ):
+    return self.dataset.state_dict()
+  
+  def load_state_dict(self, state_dict):
+    self.dataset.load_state_dict(state_dict)
+
+  def _build_source_dataset(self, sources):
+    data_file_list = []
+    if dist.get_rank() == 0:
+      data_files = []
+      if isinstance(sources, str) and sources.endswith(".json"):
+        with open(sources, "r") as fp:
+          data_files = json.loads(fp.read())
+          data_files = [fn for fn in data_files if fn.endswith(".parquet")]
+      elif isinstance(sources, list):
+        for source in sources:
+          hdfs_files = shell_hdfs_ls(source)
+          data_files += [fn for fn in hdfs_files if fn.endswith(".parquet")]
+      # repeat
+      for i in range(self.num_epochs):
+        data_files.sort()
+        self.rng.shuffle(data_files)
+        data_file_list += [(fn, i) for fn in data_files]
+      logger.error(f"ChatCompletionVisionParquetDataset_keye_vitrope rank{dist.get_rank()}: ori_file_num={len(data_files)} file_num={len(data_file_list)}")
+
+    t = [data_file_list]
+    dist.broadcast_object_list(t, src=0)
+    data_file_list = t[0]
+
+    logger.error(f"ChatCompletionVisionParquetDataset_keye_vitrope rank{dist.get_rank()}: file_num={len(data_file_list)}")
+    if len(data_file_list) == 0:
+      raise ValueError(f"no datafile found!")
+
+    dataset = ParquetDataset(data_file_list, self.num_workers, shuffle_window=self.shuffle_window)
+    return dataset, -1
+
+  def state_dict(self, ):
+    
+    return self.dataset.state_dict()
+  
+  def load_state_dict(self, state_dict):
+    self.dataset.load_state_dict(state_dict)
+
+
 class ChatCompletionVisionParquetDataset_moonvit(ChatCompletionVisionDataset_moonvit):
   def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
     self.rng = random.Random(shuffle_seed)
