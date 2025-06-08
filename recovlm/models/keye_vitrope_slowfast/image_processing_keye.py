@@ -259,6 +259,7 @@ class SiglipImageProcessor(BaseImageProcessor):
         self,
         images: Union[ImageInput, VideoInput],
         do_resize: bool = None,
+        size: Dict[str, int] = None,
         resample: PILImageResampling = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
@@ -327,13 +328,16 @@ class SiglipImageProcessor(BaseImageProcessor):
         for image in images:
             # image = self.mvit_rescale(image, merge_size=self.merge_size)
             if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=self.patch_size * self.merge_size,
-                    min_pixels=self.min_pixels,
-                    max_pixels=self.max_pixels,
-                )
+                if size is not None and "height" in size.keys():
+                    resized_height, resized_width = size["height"], size["width"]
+                else:
+                    resized_height, resized_width = smart_resize(
+                        height,
+                        width,
+                        factor=self.patch_size * self.merge_size,
+                        min_pixels=self.min_pixels,
+                        max_pixels=self.max_pixels,
+                    )
                 image = resize(
                     image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
                 )
@@ -477,6 +481,7 @@ class SiglipImageProcessor(BaseImageProcessor):
                 patches, image_grid_thw = self._preprocess(
                     image,
                     do_resize=do_resize,
+                    size = size,
                     resample=resample,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,
@@ -499,6 +504,7 @@ class SiglipImageProcessor(BaseImageProcessor):
                 patches, video_grid_thw = self._preprocess(
                     images,
                     do_resize=do_resize,
+                    size = size,
                     resample=resample,
                     do_rescale=do_rescale,
                     rescale_factor=rescale_factor,

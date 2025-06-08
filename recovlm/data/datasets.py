@@ -50,6 +50,7 @@ from recovlm.models.keye.processing_keye import KeyeProcessor
 from recovlm.models.keye.modeling_keye import KeyeConfig
 from recovlm.models.keye.keye_vl_utils import process_vision_info as process_vision_info_keye
 from recovlm.models.keye_vitrope.keye_vl_utils import process_vision_info as process_vision_info_keye_vitrope
+from recovlm.models.keye_vitrope_slowfast.keye_vl_utils import process_vision_info as process_vision_info_keye_slowfast
 
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
@@ -1146,7 +1147,8 @@ class ChatCompletionVisionDataset(IterableDataset):
         text=text,
         images=image_inputs,
         videos=video_inputs if with_vid else None,
-        return_tensors="pt"
+        return_tensors="pt",
+        image_video_pad=True,
     )
     # tensor([[151652, 151655, 151655, 151655, 151655, 151653, 151652, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151653]])
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
@@ -1932,6 +1934,337 @@ class ChatCompletionVisionDataset_keye_vitrope(ChatCompletionVisionDataset):
 
     self.datasource_config = datasource_config
 
+
+
+
+class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionDataset):
+  def __init__(self,
+               sources: Union[str, List[str]],
+               max_length: int = 1024,
+               min_visual_tokens_per_image: int = 4,
+               max_visual_tokens_per_image: int = 512,
+               video_nframe: int = -1,
+               video_fps: float = 2.0,
+               video_min_frames: int = -1,
+               video_max_frames: int = 120,
+               shrink_ratio: float = 0.9,
+               max_retry: int = 5,
+               multiple_of: int = 8,
+               shuffle_size: int = 100000,
+               shuffle_initial_size: int = 20000,
+               base_model_dir: Optional[str] = None,
+               processor: Optional[Qwen2VLProcessor] = None,
+               spatial_merge_size: int = 2,
+               patch_size: int = 16,
+               image_token_id: int = 151655,
+               video_token_id: int = 151656,
+               vision_start_token_id: int = 151652,
+               vision_end_token_id: int = 151653,
+               pad_token_id: int = 151643,
+               datasource_config:Dict[str, Dict[str, Any]] = {},
+               cut_to_pad=True,
+               process_vision_info_args={"image_factor":28},
+               min_visual_tokens_per_frame: int = 4,
+               max_visual_tokens_per_frame: int = 512,
+               **kwargs
+               ):
+    """
+    datasource_config: 默认覆盖全局配置
+                      key: datasource_name
+                      Dict: datasource config, support params:
+                        min_visual_tokens_per_image
+                        max_visual_tokens_per_image
+                        video_nframe
+                        video_fps
+                        video_min_frames
+                        video_max_frames
+    """
+    if base_model_dir:
+      processor = AutoProcessor.from_pretrained(base_model_dir, trust_remote_code=True)
+      model_config = KeyeConfig.from_pretrained(base_model_dir)
+      spatial_merge_size = model_config.vision_config.spatial_merge_size
+      patch_size = model_config.vision_config.patch_size
+      image_token_id = model_config.image_token_id
+      video_token_id = model_config.video_token_id
+      vision_start_token_id = model_config.vision_start_token_id
+      vision_end_token_id = model_config.vision_end_token_id
+      pad_token_id = model_config.pad_token_id
+
+    self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
+    self.process_vision_info = process_vision_info_keye_vitrope_slowfast
+    self.process_vision_info_args = process_vision_info_args
+    self.cut_to_pad = cut_to_pad
+    print(f"set cut_to_pad={cut_to_pad}")
+    self.processor = processor
+
+    self.min_visual_tokens_per_image = min_visual_tokens_per_image
+    self.max_visual_tokens_per_image = max_visual_tokens_per_image
+    self.min_visual_tokens_per_frame = min_visual_tokens_per_frame
+    self.max_visual_tokens_per_frame = max_visual_tokens_per_frame
+
+    self.video_nframe = video_nframe
+    self.video_fps = video_fps
+    self.video_min_frames = video_min_frames
+    self.video_max_frames = video_max_frames
+    if video_nframe > 0 and (video_fps > 0 or video_min_frames > 0 or video_max_frames > 0):
+      logger.warning(
+        f"ChatCompletionVisionDataset_keye_vitrope_slowfast(video_fps=...): video_fps, video_min_frames, "\
+          f"video_max_frames will be ignored when video_nframe>0 ({video_nframe=})"
+      )
+    self.patch_size = patch_size
+    self.shrink_ratio = shrink_ratio
+    self.max_retry = max_retry
+    self.spatial_merge_size = spatial_merge_size
+    self.image_token_id = image_token_id
+    self.video_token_id = video_token_id
+    self.vision_start_token_id = vision_start_token_id
+    self.vision_end_token_id = vision_end_token_id
+    self.pad_token_id = pad_token_id
+    self.patch_size = patch_size
+    # Pad sequence to multiple of `multiple_of`
+    self.multiple_of = multiple_of
+    self.shuffle_size = shuffle_size
+    self.shuffle_initial_size = shuffle_initial_size
+    self.dataset, self.total_samples = self._build_source_dataset(sources)
+
+    # for data_source monitor
+    self.source_sample_cnt = {}
+    self.source_error_cnt = {}
+
+    self.tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
+    self.img_start_token = "<|vision_start|>"
+    self.img_end_token = "<|vision_end|>"
+    self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
+    self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
+    # self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
+
+    # append image_pad for each packing
+    # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
+    image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
+    self.max_length = max_length - image_pad_len
+    assert self.max_length > 0
+    print(f"patch_size: {patch_size}")
+    print(f"processor: {self.processor}")
+    print(f"self.process_vision_info: {self.process_vision_info}")
+
+    self.datasource_config = datasource_config
+
+  def _append_sample_packing(self,
+                             inputs: Dict[str, torch.Tensor],
+                             packed_input_ids: List[torch.Tensor],
+                             packed_position_ids: List[torch.Tensor],
+                             packed_loss_mask: List[torch.Tensor],
+                             packed_pixel_values: List[torch.Tensor],
+                             packed_pixel_values_videos: List[torch.Tensor],
+                             packed_image_gird_thw: List[torch.Tensor],
+                             packed_video_grid_thw: List[torch.Tensor],
+                             packed_sample_idx: List[torch.Tensor],
+                             cu_seqlens: List[int],
+                             packed_second_per_grid_ts: List[torch.Tensor],
+                             packed_fast_pixel_values: List[torch.Tensor],
+                             packed_fast_image_grid_thw: List[torch.Tensor],
+                             packed_fast_pixel_values_videos: List[torch.Tensor],
+                             packed_fast_video_grid_thw: List[torch.Tensor],
+                             packed_all_image_grid_thw: List[torch.Tensor],
+                             packed_all_video_grid_thw: List[torch.Tensor],
+                             packed_all_second_per_grid_ts: List[torch.Tensor],
+                             sample_idx: Optional[int] = None,
+                             image_pad: bool = False):
+
+    if not image_pad:
+      packable_length = self.max_length - cu_seqlens[-1]
+      if packable_length == 0: return
+
+    if not image_pad and self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
+      import copy
+      inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
+      inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
+
+      inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
+
+      vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
+      vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
+      if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
+        inputs["input_ids"][:, vision_starts[-1]:] = 0 # 随便什么id都可以
+        inputs["loss_mask"][:, vision_starts[-1]:] = 0
+
+      if 'image_grid_thw' in inputs: # 如果有图片
+        n_tokens = 0
+        for i in range(len(vision_ends), len(inputs["image_grid_thw"])):
+          n_tokens_hw = inputs["image_grid_thw"][i]
+          n_tokens += n_tokens_hw[1] * n_tokens_hw[2]
+
+        if n_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
+        inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
+
+    packed_input_ids.append(inputs["input_ids"].flatten())
+    packed_loss_mask.append(inputs["loss_mask"].flatten())
+    packed_position_ids.append(inputs["position_ids"])
+    if sample_idx is None:
+      sample_idx = len(cu_seqlens) - 1
+    packed_sample_idx.append(
+      torch.full_like(packed_input_ids[-1], sample_idx))
+
+    if "pixel_values" in inputs and len(inputs["pixel_values"]):
+      packed_pixel_values.append(inputs["pixel_values"])
+      packed_image_gird_thw.append(inputs["image_grid_thw"])
+      ##### fast #####
+      packed_fast_pixel_values.append(inputs["fast_pixel_values"])
+      packed_fast_image_grid_thw.append(inputs["fast_image_grid_thw"])
+      packed_all_image_grid_thw.append(inputs["all_image_grid_thw"])
+    if "pixel_values_videos" in inputs:
+      packed_pixel_values_videos.append(inputs["pixel_values_videos"])
+      packed_video_grid_thw.append(inputs["video_grid_thw"])
+      packed_second_per_grid_ts.append(inputs["second_per_grid_ts"])
+      ##### fast #####
+      packed_fast_pixel_values_videos.append(inputs["fast_pixel_values_videos"])
+      packed_fast_video_grid_thw.append(inputs["fast_video_grid_thw"])
+      packed_all_video_grid_thw.append(inputs["all_video_grid_thw"])
+      packed_all_second_per_grid_ts.append(inputs["all_second_per_grid_ts"])
+    cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
+    return len(inputs["input_ids"][0])
+
+  def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
+    packed_input_ids: List[torch.Tensor] = []
+    packed_position_ids: List[torch.Tensor] = []
+    packed_loss_mask: List[torch.Tensor] = []
+    packed_pixel_values: List[torch.Tensor] = []
+    packed_pixel_values_videos: List[torch.Tensor] = []
+    packed_image_gird_thw: List[torch.Tensor] = []
+    packed_video_grid_thw: List[torch.Tensor] = []
+    packed_sample_idx: List[torch.Tensor] = []
+    packed_second_per_grid_ts: List[torch.Tensor] = []
+    packed_fast_pixel_values: List[torch.Tensor] = []
+    packed_fast_image_grid_thw: List[torch.Tensor] = []
+    packed_fast_pixel_values_videos: List[torch.Tensor] = []
+    packed_fast_video_grid_thw: List[torch.Tensor] = []
+    packed_all_image_grid_thw: List[torch.Tensor] = []
+    packed_all_video_grid_thw: List[torch.Tensor] = []
+    packed_all_second_per_grid_ts: List[torch.Tensor] = []
+    cu_seqlens: List[int] = [0]
+    epochs = []
+    valid_seq_len = 0
+    n_pixels = 0
+    for _, inputs in enumerate(buffer):
+      if "pixel_values" in inputs: n_pixels += inputs["pixel_values"].shape[0]
+      if "pixel_values_videos" in inputs: n_pixels += inputs["pixel_values_videos"].shape[0]
+      
+      epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
+      valid_seq_len += self._append_sample_packing(inputs,
+                                      packed_input_ids,
+                                      packed_position_ids,
+                                      packed_loss_mask,
+                                      packed_pixel_values,
+                                      packed_pixel_values_videos,
+                                      packed_image_gird_thw,
+                                      packed_video_grid_thw,
+                                      packed_sample_idx,
+                                      cu_seqlens,
+                                      packed_second_per_grid_ts,
+                                      packed_fast_pixel_values,
+                                      packed_fast_image_grid_thw,
+                                      packed_fast_pixel_values_videos,
+                                      packed_fast_video_grid_thw,
+                                      packed_all_image_grid_thw,
+                                      packed_all_video_grid_thw,
+                                      packed_all_second_per_grid_ts,)
+
+
+    # 
+    # append a pad image sequence to trigger ViT
+    image_pad = self._gen_img_pad() if n_pixels % 8 == 0 else self._gen_img_pad(sz=(4, round(self.patch_size * 1.4))) # 1.4 处于 (1.25 ~ 1.5)之间
+    self._append_sample_packing(image_pad,
+                                packed_input_ids,
+                                packed_position_ids,
+                                packed_loss_mask,
+                                packed_pixel_values,
+                                packed_pixel_values_videos,
+                                packed_image_gird_thw,
+                                packed_video_grid_thw,
+                                packed_sample_idx,
+                                cu_seqlens,
+                                packed_second_per_grid_ts,
+                                packed_fast_pixel_values,
+                                packed_fast_image_grid_thw,
+                                packed_fast_pixel_values_videos,
+                                packed_fast_video_grid_thw,
+                                packed_all_image_grid_thw,
+                                packed_all_video_grid_thw,
+                                packed_all_second_per_grid_ts,
+                                sample_idx=-1,
+                                image_pad=True
+                                )
+    
+
+    packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
+    packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
+    packed_position_ids = torch.cat(packed_position_ids, dim=-1)
+    packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
+    packed_second_per_grid_ts = None if len(packed_second_per_grid_ts) == 0 else \
+      torch.cat(packed_second_per_grid_ts, dim=0)
+    packed_pixel_values = None if len(packed_pixel_values) == 0 else \
+      torch.cat(packed_pixel_values, dim=0)
+    packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else \
+      torch.cat(packed_image_gird_thw, dim=0)
+    packed_pixel_values_videos = \
+      None if len(packed_pixel_values_videos) == 0 else \
+        torch.cat(packed_pixel_values_videos, dim=0)
+    packed_video_grid_thw = None if len(packed_video_grid_thw) == 0 else \
+      torch.cat(packed_video_grid_thw, dim=0)
+    ####fast####
+    packed_fast_pixel_values = None if len(packed_fast_pixel_values) == 0 else \
+      torch.cat(packed_fast_pixel_values, dim=0)
+    packed_fast_image_grid_thw = None if len(packed_fast_image_grid_thw) == 0 else \
+      torch.cat(packed_fast_image_grid_thw, dim=0)
+    packed_fast_pixel_values_videos = None if len(packed_fast_pixel_values_videos) == 0 else \
+      torch.cat(packed_fast_pixel_values_videos, dim=0)
+    packed_fast_video_grid_thw = None if len(packed_fast_video_grid_thw) == 0 else \
+      torch.cat(packed_fast_video_grid_thw, dim=0)
+    packed_all_image_grid_thw = None if len(packed_all_image_grid_thw) == 0 else \
+      torch.cat(packed_all_image_grid_thw, dim=0)
+    packed_all_video_grid_thw = None if len(packed_all_video_grid_thw) == 0 else \
+      torch.cat(packed_all_video_grid_thw, dim=0)
+    packed_all_second_per_grid_ts = None if len(packed_all_second_per_grid_ts) == 0 else \
+      torch.cat(packed_all_second_per_grid_ts, dim=0)
+    ############
+
+    # pad seq len to multiple_of
+    if (
+      self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
+    ):
+      padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+      packed_input_ids = F.pad(
+        packed_input_ids, (0, padding_len),
+        value=self.processor.tokenizer.pad_token_id)
+      packed_sample_idx = F.pad(
+        packed_sample_idx, (0, padding_len), value=-1)
+      packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
+      packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
+      cu_seqlens.append(cu_seqlens[-1] + padding_len)
+
+    epochs = [x for x in epochs if x is not None]
+    inputs = {
+      "input_ids": packed_input_ids,
+      "position_ids": packed_position_ids,
+      "loss_mask": packed_loss_mask,
+      "pixel_values": packed_pixel_values,
+      "image_grid_thw": packed_image_gird_thw, # 
+      "pixel_values_videos": packed_pixel_values_videos,
+      "video_grid_thw": packed_video_grid_thw,
+      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
+      "sample_idx": packed_sample_idx.to(torch.int32),
+      "epoch_idx": torch.tensor([sum(epochs) / len(epochs)], dtype=torch.float32),
+      "second_per_grid_ts": packed_second_per_grid_ts,
+      "fast_pixel_values": packed_fast_pixel_values,
+      "fast_image_grid_thw": packed_fast_image_grid_thw,
+      "fast_pixel_values_videos": packed_fast_pixel_values_videos,
+      "fast_video_grid_thw": packed_fast_video_grid_thw,
+      "all_image_grid_thw": packed_all_image_grid_thw,
+      "all_video_grid_thw": packed_all_video_grid_thw,
+      "packed_all_second_per_grid_ts": packed_all_second_per_grid_ts
+    }
+
+    return inputs
 
 
 class ChatCompletionVisionDataset_navit(ChatCompletionVisionDataset):

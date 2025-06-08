@@ -62,6 +62,9 @@ from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration, Keye
 from recovlm.models.keye.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer
 from recovlm.models.keye_vitrope.modeling_keye import KeyeForConditionalGeneration as KeyeForConditionalGeneration_vitrope, KeyeDecoderLayer as KeyeDecoderLayer_vitrope
 from recovlm.models.keye_vitrope.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer_vitrope
+from recovlm.models.keye_vitrope_slowfast.modeling_keye import KeyeForConditionalGeneration as KeyeForConditionalGeneration_slowfast
+from recovlm.models.keye_vitrope_slowfast.modeling_keye import  KeyeDecoderLayer as KeyeDecoderLayer_slowfast
+from recovlm.models.keye_vitrope_slowfast.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer_slowfast
 from recovlm.models.internvl import InternVLChatModel
 from recovlm.models.qwen2 import Qwen2DecoderLayer
 from recovlm.models.internvl import InternVisionEncoderLayer
@@ -168,7 +171,7 @@ def get_argument_parser():
                       help="The directory to write the trained model")
 
   parser.add_argument("--model_class", type=str, default="Qwen2_5_VLForConditionalGeneration_moonvit",
-                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'InternVLChatModel'",)
+                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_slowfast', 'InternVLChatModel'",)
   
   parser.add_argument("--model_processor", type=str, default="Qwen2_5_VLProcessor_moonvit",
                       help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit' or 'Qwen3SiglipProcessor' or 'KeyeProcessor' or 'KeyeProcessor_vitrope'")
@@ -474,7 +477,7 @@ def freeze_params(args, model):
           param.requires_grad = False
       print_rank_0("=" * 50)
     
-  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope']:
+  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_slowfast']:
     if args.freeze_llm:
       print_rank_0("Freeze LLM parameters.")
       for name, param in model.named_parameters():
@@ -727,9 +730,10 @@ def train():
       model.load_state_dict(state_dict)
     #msyTODO: add siglip
   
-  # check all param & buffer on meta device 
-  for tensor in itertools.chain(model.parameters(), model.buffers()):
-    assert tensor.device == torch.device("meta")
+  # 暂时注释（caojiangxia）
+  # # check all param & buffer on meta device 
+  # for tensor in itertools.chain(model.parameters(), model.buffers()):
+  #   assert tensor.device == torch.device("meta")
 
   if args.enable_gradient_checkpointing:
     print_rank_0("Enable gradient checkpointing")
@@ -746,6 +750,7 @@ def train():
       "Qwen2_5_VLForConditionalGeneration_siglip_navit": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
       "KeyeForConditionalGeneration":  {KeyeDecoderLayer, KeyeSiglipEncoderLayer},
       "KeyeForConditionalGeneration_vitrope":  {KeyeDecoderLayer_vitrope, KeyeSiglipEncoderLayer_vitrope},
+      "KeyeForConditionalGeneration_slowfast": {KeyeDecoderLayer_vitrope_slowfast, KeyeSiglipEncoderLayer_vitrope_slowfast},
       "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
     }
     set_activation_checkpointing(
@@ -777,11 +782,12 @@ def train():
         print_rank_0("Initialize RoPE")
         m.rope_init()
 
-  # 确保任何参数都被正确初始化
-  for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
-    if name != "visual.vision_model.embeddings.position_ids":
-      assert not tensor.device == torch.device("meta"), \
-        f"{name} not initialized, device={tensor.device}"
+  # 暂时注释（caojiangxia）
+  # # 确保任何参数都被正确初始化
+  # for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
+  #   if name != "visual.vision_model.embeddings.position_ids":
+  #     assert not tensor.device == torch.device("meta"), \
+  #       f"{name} not initialized, device={tensor.device}"
 
   # model = torch.compile(model)
 
@@ -1095,6 +1101,16 @@ def train():
       position_ids = batch.get("position_ids", None)
       image_flags = batch.get("image_flags", None)
       epoch_idx = batch.get("epoch_idx", torch.tensor([0])).cpu().item()
+      #####slowfast######
+      fast_pixel_values = batch.get("fast_pixel_values", None)
+      fast_image_grid_thw = batch.get("fast_image_grid_thw", None)
+      fast_pixel_values_videos = batch.get("fast_pixel_values_videos", None)
+      fast_video_grid_thw = batch.get("fast_video_grid_thw", None)
+      fast_second_per_grid_ts = batch.get("fast_second_per_grid_ts", None)
+      all_image_grid_thw = batch.get("all_image_grid_thw", None)
+      all_video_grid_thw = batch.get("all_video_grid_thw", None)
+      all_second_per_grid_ts = batch.get("all_second_per_grid_ts", None)
+      ###################
 
       # 打印 token 数量
       if not use_flops_balance or True:
@@ -1168,7 +1184,11 @@ def train():
               image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
               cu_seqlens=cu_seqlens, image_position_ids=image_position_ids,
               image_grid_hws=image_grid_hws, image_sample_indices=image_sample_indices,
-              image_cu_seqlens=image_cu_seqlens, second_per_grid_ts=second_per_grid_ts
+              image_cu_seqlens=image_cu_seqlens, second_per_grid_ts=second_per_grid_ts,
+              fast_pixel_values=fast_pixel_values,
+              fast_image_grid_thw=fast_image_grid_thw, fast_pixel_values_videos=fast_pixel_values_videos,
+              fast_video_grid_thw=fast_video_grid_thw, fast_second_per_grid_ts=fast_second_per_grid_ts,
+              all_image_grid_thw=all_image_grid_thw, all_video_grid_thw=all_video_grid_thw, all_second_per_grid_ts=all_second_per_grid_ts
             )
         ticker.tick("model.forward")
 

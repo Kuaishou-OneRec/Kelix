@@ -18,7 +18,7 @@ from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
     ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset,InternVLChatCompletionVisionParquetDataset, \
     BalanceParquetDataset, \
     ChatCompletionVisionDataset_moonvit,ChatCompletionVisionParquetDataset_moonvit, \
-    ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip, ChatCompletionVisionParquetDataset_navit, ChatCompletionVisionParquetDataset_keye, ChatCompletionVisionParquetDataset_keye_vitrope
+    ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip, ChatCompletionVisionParquetDataset_navit, ChatCompletionVisionParquetDataset_keye, ChatCompletionVisionParquetDataset_keye_vitrope, ChatCompletionVisionParquetDataset_keye_slowfast
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
 
@@ -262,6 +262,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                     'Qwen3SiglipForConditionalGeneration_navit':ChatCompletionVisionParquetDataset_navit,
                     'KeyeForConditionalGeneration': ChatCompletionVisionParquetDataset_keye,
                     'KeyeForConditionalGeneration_vitrope': ChatCompletionVisionParquetDataset_keye_vitrope,
+                    'KeyeForConditionalGeneration_vitrope_slowfast': ChatCompletionVisionParquetDataset_keye_vitrope_slowfast,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
     num_readers = kwargs.get("num_readers", 1)
     shuffle_window = kwargs.get("shuffle_window", 0)

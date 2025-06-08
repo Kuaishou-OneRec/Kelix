@@ -174,7 +174,7 @@ class KeyeConfig(PretrainedConfig):
     ```"""
 
     model_type = "Keye"
-    sub_configs = {"vision_config": KeyeVisionConfig}
+    sub_configs = {"vision_config": KeyeVisionConfig, "fast_vision_config": KeyeVisionConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `Keye`
     base_model_tp_plan = {
@@ -213,12 +213,18 @@ class KeyeConfig(PretrainedConfig):
         attention_dropout=0.0,
         vision_config=None,
         rope_scaling=None,
+        fast_vision_config=None,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
+
+        if isinstance(fast_vision_config, dict):
+            self.fast_vision_config = self.sub_configs["fast_vision_config"](**fast_vision_config)
+        elif fast_vision_config is None:
+            self.fast_vision_config = self.sub_configs["fast_vision_config"]()
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
