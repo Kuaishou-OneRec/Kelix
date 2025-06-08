@@ -3318,7 +3318,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     input_ids,
                     all_image_grid_thw if all_image_grid_thw is not None else image_grid_thw,
                     all_video_grid_thw if all_video_grid_thw is not None else video_grid_thw,
-                    # all_second_per_grid_ts if all_second_per_grid_ts is not None else second_per_grid_ts,
+                    all_second_per_grid_ts if all_second_per_grid_ts is not None else second_per_grid_ts,
                     attention_mask,
                 )
                 self.rope_deltas = rope_deltas
