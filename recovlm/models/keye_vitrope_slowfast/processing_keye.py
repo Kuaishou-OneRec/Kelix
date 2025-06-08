@@ -135,6 +135,7 @@ class KeyeProcessor(ProcessorMixin):
                 if kwargs.get("image_video_pad", False):
                     fast_image_inputs = self.fast_image_processor.preprocess(
                                     images=images,
+                                    size = {"height": 32, "width": 32},
                                     return_tensors="pt")
                 else:
                     fast_image_inputs = self.fast_image_processor.preprocess(
@@ -225,7 +226,7 @@ class KeyeProcessor(ProcessorMixin):
                         ####### fast part #########
                         if self.slowfast:
                             if kwargs.get("image_video_pad", False):
-                                fast_videos_inputs = self.fast_image_processor.preprocess(images=None, videos=[each_image], size = {"height": 224, "width": 224}, **output_kwargs["images_kwargs"])
+                                fast_videos_inputs = self.fast_image_processor.preprocess(images=None, videos=[each_image], size = {"height": 32, "width": 32}, **output_kwargs["images_kwargs"])
                             else:
                                 fast_videos_inputs = self.fast_image_processor.preprocess(images=None, videos=[each_image], size = {"height": 224, "width": 224}, **output_kwargs["images_kwargs"])
                             fast_video_grid_thw = fast_videos_inputs["video_grid_thw"]
