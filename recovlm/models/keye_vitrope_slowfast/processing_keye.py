@@ -253,7 +253,7 @@ class KeyeProcessor(ProcessorMixin):
 
             total_slow_pixel_values_videos = torch.concat(slow_pixel_values_videos_list, dim=0)
             total_slow_video_grid_thw = torch.concat(slow_video_grid_thw_list, dim=0)
-            total_slow_second_per_grid_ts = litorch.concat(slow_second_per_grid_ts_list, dim=0)
+            total_slow_second_per_grid_ts = torch.concat(slow_second_per_grid_ts_list, dim=0)
             # todo: zdj debug end
 
             # total_slow_pixel_values_videos = all_slow_videos[0]["pixel_values_videos"]
