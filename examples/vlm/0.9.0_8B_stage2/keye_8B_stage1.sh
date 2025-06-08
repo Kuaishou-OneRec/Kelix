@@ -110,10 +110,11 @@ nohup mpirun --allow-run-as-root \
         -x KAI_FLAG_FILE \
         -x KML_ID \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
+        -x TOKENIZERS_PARALLELISM=false \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
+        bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --dataset_config examples/vlm/0.9.0_8B_stage2/keye_stage2.json \
                 --model_class KeyeForConditionalGeneration_vitrope \
@@ -123,11 +124,11 @@ nohup mpirun --allow-run-as-root \
                 --max_length 15000 \
                 --learning_rate 1e-5 \
                 --vision_learning_rate 1e-6 \
-                --min_lr 1e-6 \
+                --min_lr 5e-7 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --num_warmup_steps 2625 \
-                --num_training_steps 26250 \
+                --num_warmup_steps 3435 \
+                --num_training_steps 34350 \
                 --save_checkpoint_per_step 1000 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
