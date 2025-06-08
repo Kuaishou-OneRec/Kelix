@@ -185,14 +185,14 @@ class KeyeProcessor(ProcessorMixin):
 
                     ####### fast part #########
                     if self.slowfast:
-                        fast_videos_inputs = self.image_processor(images=None, videos=current_video[1], **output_kwargs["images_kwargs"])
+                        fast_videos_inputs = self.fast_image_processor(images=None, videos=current_video[1], **output_kwargs["images_kwargs"])
                         fast_video_grid_thw = fast_videos_inputs["video_grid_thw"]
 
                         fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
                         if isinstance(fps, (int, float)):
-                            second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(fast_video_grid_thw)
+                            second_per_grid_ts = [self.fast_image_processor.temporal_patch_size / fps] * len(fast_video_grid_thw)
                         elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-                            second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
+                            second_per_grid_ts = [self.fast_image_processor.temporal_patch_size / tmp for tmp in fps]
                         else:
                             raise ValueError(
                                 f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(fast_video_grid_thw)}) or fps should be a single number."
