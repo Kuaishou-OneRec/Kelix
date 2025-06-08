@@ -18,7 +18,7 @@ from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
     ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset,InternVLChatCompletionVisionParquetDataset, \
     BalanceParquetDataset, \
     ChatCompletionVisionDataset_moonvit,ChatCompletionVisionParquetDataset_moonvit, \
-    ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip, ChatCompletionVisionParquetDataset_navit, ChatCompletionVisionParquetDataset_keye, ChatCompletionVisionParquetDataset_keye_vitrope, ChatCompletionVisionParquetDataset_keye_slowfast
+    ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip, ChatCompletionVisionParquetDataset_navit, ChatCompletionVisionParquetDataset_keye, ChatCompletionVisionParquetDataset_keye_vitrope, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
 

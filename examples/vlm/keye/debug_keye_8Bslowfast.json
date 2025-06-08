@@ -16,6 +16,6 @@
     "num_workers": 1,
     "num_epochs": 1,
     "cut_to_pad": 0,
-    "model_class": "KeyeForConditionalGeneration_slowfast",
+    "model_class": "KeyeForConditionalGeneration_vitrope_slowfast",
     "use_flops_balance": false
 }
