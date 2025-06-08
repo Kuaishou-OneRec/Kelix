@@ -14,9 +14,9 @@ class ViTParquetDataset(IterableDataset):
         self.rng = random.Random(shuffle_seed)
         self.num_workers = num_workers
         self.num_epochs = num_epochs
-        self.dataset, _ = self._build_source_dataset(sources)
+        self.dataset, _ = self._build_source_dataset(sources, **kwargs)
 
-    def _build_source_dataset(self, sources):
+    def _build_source_dataset(self, sources, **kwargs):
         data_file_list = []
         if dist.get_rank() == 0:
             if isinstance(sources, str) and sources.endswith(".json"):
@@ -42,7 +42,7 @@ class ViTParquetDataset(IterableDataset):
         if len(data_file_list) == 0:
             raise ValueError(f"no datafile found!")
 
-        dataset = ParquetDataset(data_file_list, self.num_workers)
+        dataset = ParquetDataset(data_file_list, self.num_workers, **kwargs)
         return dataset, -1
 
     def state_dict(self, ):

@@ -17,8 +17,9 @@
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple, Union
+from typing import Any, Callable, Optional, Tuple, Union, List
 
+from einops import rearrange
 import numpy as np
 import torch
 import torch.utils.checkpoint
@@ -26,10 +27,13 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
+from transformers.utils import is_flash_attn_2_available
 from transformers.activations import ACT2FN
 from transformers.modeling_attn_mask_utils import _prepare_4d_attention_mask
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from transformers.modeling_utils import PreTrainedModel
+# from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+# from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from transformers.utils import (
     ModelOutput,
     add_start_docstrings,
@@ -40,6 +44,11 @@ from transformers.utils import (
     torch_int,
 )
 from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
+
+if is_flash_attn_2_available():
+    from flash_attn import flash_attn_varlen_func
+else:
+    flash_attn_varlen_func = None
 
 
 logger = logging.get_logger(__name__)
@@ -260,10 +269,14 @@ class SiglipVisionEmbeddings(nn.Module):
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
+        self.cache_position_embedding = dict()
+        self.cache_position_count = dict()
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.packing_position_embedding = nn.Embedding(32768, self.embed_dim)
+
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int, is_after_patchify: bool = False) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
         images. This method is also adapted to support torch.jit tracing and no class embeddings.
@@ -284,8 +297,12 @@ class SiglipVisionEmbeddings(nn.Module):
 
         dim = embeddings.shape[-1]
 
-        new_height = height // self.patch_size
-        new_width = width // self.patch_size
+        if is_after_patchify:
+            new_height = height
+            new_width = width
+        else:
+            new_height = height // self.patch_size
+            new_width = width // self.patch_size
 
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
@@ -294,24 +311,90 @@ class SiglipVisionEmbeddings(nn.Module):
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
             size=(new_height, new_width),
-            mode="bicubic",
+            mode="bilinear",
             align_corners=False,
         )
 
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
-        _, _, height, width = pixel_values.shape
-        target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-        embeddings = patch_embeds.flatten(2).transpose(1, 2)
+    @staticmethod
+    def flatten_list(image_grid_thw):
+        tmp_image_grid_thw = list()
+        for image_grid in image_grid_thw:
+            if isinstance(image_grid, list):
+                tmp_image_grid_thw.extend(image_grid)
+            else:
+                tmp_image_grid_thw.append(image_grid)
+        return tmp_image_grid_thw
 
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+    def fetch_position_embedding_lfu_cache(self, embeddings, h, w, max_cache=20):
+        grid = (h, w)
+        if grid in self.cache_position_embedding:
+            self.cache_position_count[grid] += 1
+            return self.cache_position_embedding[grid]
+        
+        if len(self.cache_position_embedding) >= max_cache:
+            min_hit_grid = min(self.cache_position_count, key=self.cache_position_count.get)
+            self.cache_position_count.pop(min_hit_grid)
+            self.cache_position_embedding.pop(min_hit_grid)
+        
+        position_embedding = self.interpolate_pos_encoding(embeddings, h, w, True)
+        self.cache_position_count[grid] = 1
+        self.cache_position_embedding[grid] = position_embedding
+        return position_embedding
+
+    def forward(
+        self, 
+        pixel_values: torch.FloatTensor, 
+        position_ids: Optional[torch.Tensor] = None,
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
+        interpolate_pos_encoding=False
+    ) -> torch.Tensor:
+        if pixel_values.dim() == 4:
+            # raise NotImplementedError
+            _, _, height, width = pixel_values.shape
+            target_dtype = self.patch_embedding.weight.dtype
+            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+            embeddings = patch_embeds.flatten(2).transpose(1, 2)
+
+            if interpolate_pos_encoding:
+                embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+            else:
+                embeddings = embeddings + self.position_embedding(self.position_ids)
+            return embeddings
+        elif pixel_values.dim() == 5:
+            assert position_ids is not None
+            batch_size, squence_len, channel, height, width = pixel_values.shape
+            target_dtype = self.patch_embedding.weight.dtype
+            pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
+            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+            embeddings = patch_embeds.flatten(-2).squeeze(-1)
+            embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=squence_len)
+
+            # todo: not dubug
+            if interpolate_pos_encoding and image_grid_thw is not None:
+                flatten_image_grid_thw = self.flatten_list(image_grid_thw)
+                assert batch_size == 1
+                start = 0
+                image_embedding_list = list()
+                assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (flatten_image_grid_thw, embeddings.shape)
+                embeddings = embeddings.squeeze(0)
+                tmp_embeddings = list()
+                for image_grid in image_grid_thw:
+                    t, h, w = image_grid
+                    for _ in range(t):
+                        end = start + h * w
+                        image_embeddings = embeddings[start: end, :]
+                        image_embeddings = image_embeddings + self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0)
+                        tmp_embeddings.append(image_embeddings)
+                        start = end
+                embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
+            else:
+                embeddings = embeddings + self.packing_position_embedding(position_ids)
+            return embeddings
         else:
-            embeddings = embeddings + self.position_embedding(self.position_ids)
-        return embeddings
+            raise NotImplementedError(str(pixel_values.shape))
 
 
 # Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->Siglip
@@ -401,11 +484,17 @@ class SiglipAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
+        if self.config._attn_implementation != 'flash_attention_2':
+            print(f"SiglipAttention flash_attention_2 is not set!!!!!! Get {self.config._attn_implementation}")
+
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        rope_freqs_cis: Optional[torch.Tensor] = None,
+        # cu_seqlens = None
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -415,32 +504,65 @@ class SiglipAttention(nn.Module):
         keys = self.k_proj(hidden_states)
         values = self.v_proj(hidden_states)
 
-        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        assert rope_freqs_cis is None
+        if rope_freqs_cis is None:
+            queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+            keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+            values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        else:
+            queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim)
+            keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim)
+            queries, keys = apply_rope(queries, keys, rope_freqs_cis)
+            queries = queries.transpose(1, 2)
+            keys = keys.transpose(1, 2)
+            values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        if cu_seqlens is None:
+            attention_interface: Callable = eager_attention_forward
+            if self.config._attn_implementation != "eager":
+                if self.config._attn_implementation == "sdpa" and output_attentions:
+                    logger.warning_once(
+                        "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                        'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                    )
+                else:
+                    attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            queries,
-            keys,
-            values,
-            attention_mask,
-            is_causal=self.is_causal,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
-        )
+            attn_output, attn_weights = attention_interface(
+                self,
+                queries,
+                keys,
+                values,
+                attention_mask,
+                is_causal=self.is_causal,
+                scaling=self.scale,
+                dropout=0.0 if not self.training else self.dropout,
+            )
+            attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        else:
+            assert batch_size == 1, hidden_states.shape
+            queries = queries.transpose(1, 2).squeeze(0)
+            keys = keys.transpose(1, 2).squeeze(0)
+            values = values.transpose(1, 2).squeeze(0)
 
-        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+            from flash_attn import flash_attn_func, flash_attn_varlen_func
+            max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
+
+            attn_output = flash_attn_varlen_func(
+                queries,
+                keys,
+                values,
+                cu_seqlens,
+                cu_seqlens,
+                max_seqlen_q,
+                max_seqlen_k,
+                causal=False,
+            )
+            attn_output = attn_output.flatten(-2).unsqueeze(0)
+            attn_weights = None
+
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
@@ -479,6 +601,9 @@ class SiglipEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        rope_freqs_cis: Optional[torch.Tensor] = None,
+        # cu_seqlens = None,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -497,6 +622,9 @@ class SiglipEncoderLayer(nn.Module):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
+            cu_seqlens=cu_seqlens,
+            rope_freqs_cis=rope_freqs_cis,
+            # cu_seqlens=cu_seqlens
         )
         hidden_states = residual + hidden_states
 
@@ -708,6 +836,9 @@ class SiglipEncoder(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        use_mrope: Optional[bool] = None,
+        # cu_seqlens: Optional[List[torch.Tensor]] = None,
     ) -> BaseModelOutput:
         r"""
         Args:
@@ -740,6 +871,8 @@ class SiglipEncoder(nn.Module):
         all_attentions = () if output_attentions else None
 
         hidden_states = inputs_embeds
+        attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
+
         for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
@@ -749,12 +882,15 @@ class SiglipEncoder(nn.Module):
                     hidden_states,
                     attention_mask,
                     output_attentions,
+                    None, # rope_freqs_cis
+                    cu_seqlens
                 )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
                     output_attentions=output_attentions,
+                    cu_seqlens=cu_seqlens
                 )
 
             hidden_states = layer_outputs[0]
@@ -799,6 +935,7 @@ class SiglipTextTransformer(nn.Module):
         Returns:
 
         """
+        init_attention_mask = attention_mask
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -829,7 +966,14 @@ class SiglipTextTransformer(nn.Module):
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
         # Assuming "sticky" EOS tokenization, last token is always EOS.
-        pooled_output = last_hidden_state[:, -1, :]
+        if attention_mask is None:
+            pooled_output = last_hidden_state[:, -1, :]
+        else:
+            out_dim = last_hidden_state.shape[-1]
+            eos_token_indices = init_attention_mask.argmin(dim=1, keepdim=True)
+            eos_token_indices = eos_token_indices.unsqueeze(-1).repeat(1, 1, out_dim)
+            pooled_output = torch.gather(last_hidden_state, 1, eos_token_indices).squeeze(1)
+
         pooled_output = self.head(pooled_output)
 
         return BaseModelOutputWithPooling(
@@ -920,6 +1064,17 @@ class SiglipVisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: Optional[bool] = False,
+        attention_mask: Optional[torch.Tensor] = None,
+        sample_indices: Optional[torch.Tensor] = None,
+        image_indices: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        height_position_ids: Optional[torch.Tensor] = None,
+        width_position_ids: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        vision_return_embed_list: Optional[bool] = False,
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
+        return_pooler_output: Optional[bool] = True,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -929,23 +1084,102 @@ class SiglipVisionTransformer(nn.Module):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        hidden_states = self.embeddings(
+            pixel_values, 
+            interpolate_pos_encoding=interpolate_pos_encoding, 
+            position_ids=position_ids,
+            image_grid_thw=image_grid_thw
+        )
 
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        # cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+        #     dim=0,
+        #     # Select dtype based on the following factors:
+        #     #  - FA2 requires that cu_seqlens_q must have dtype int32
+        #     #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+        #     # See https://github.com/huggingface/transformers/pull/34852 for more information
+        #     dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+        # )
+        # cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
         encoder_outputs: BaseModelOutput = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            attention_mask=attention_mask,
+            cu_seqlens=cu_seqlens,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        pooler_output = self.head(last_hidden_state) if self.use_head else None
+        if return_pooler_output is True:
+            if sample_indices is not None:
+                assert self.use_head is True
+                dim = last_hidden_state.shape[-1]
+                sample_hidden_state_list = list()
 
+                hidden_state = last_hidden_state.squeeze(0)
+                sample_index = sample_indices
+                # for hidden_state, sample_index in zip(last_hidden_state_list, sample_index_list):
+                unique_sample_index = torch.unique(sample_index).sort().values.unbind(0)
+                unique_sample_index = list(unique_sample_index)
+                if len(unique_sample_index) > 0 and unique_sample_index[0] == -1:
+                    unique_sample_index = unique_sample_index[1:]
+                for sample_idx in unique_sample_index:
+                    token_indices = (sample_index == sample_idx).nonzero().flatten()
+                    sample_hidden_state = hidden_state[token_indices]
+                    sample_hidden_state_list.append(sample_hidden_state)
+                
+                if not vision_return_embed_list:
+                    max_length = max([_state.shape[0] for _state in sample_hidden_state_list])
+                    tmp_sample_hidden_state_list = list()
+                    padding_mask = list()
+                    for idx, _state in enumerate(sample_hidden_state_list):
+                        padding_length = max_length - _state.shape[0]
+                        mask = _state.new_zeros(size=(max_length, ), dtype=torch.int64)
+                        mask[-padding_length: ] = 1
+                        padding_mask.append(mask)
+                        padding = _state.new_zeros(size=(padding_length, dim))
+                        new_state = torch.concat([_state, padding], dim=0)
+                        tmp_sample_hidden_state_list.append(new_state)
+                    sample_hidden_state = torch.stack(tmp_sample_hidden_state_list, dim=0)
+                    padding_mask = torch.stack(padding_mask, dim=0).float().to(last_hidden_state.dtype)
+                    pooler_output = self.head(sample_hidden_state, key_padding_mask=padding_mask)
+                else:
+                    pooler_output = list()
+                    for state in sample_hidden_state_list:
+                        sample_pooler_output = self.head(state.unsqueeze(0))
+                        pooler_output.append(sample_pooler_output)
+                    pooler_output = torch.concat(pooler_output, dim=0)
+                    sample_hidden_state = sample_hidden_state_list
+
+                return BaseModelOutputWithPooling(
+                    last_hidden_state=sample_hidden_state,
+                    pooler_output=pooler_output,
+                    hidden_states=encoder_outputs.hidden_states,
+                    attentions=encoder_outputs.attentions,
+                )
+            else:
+                pooler_output = self.head(last_hidden_state) if self.use_head else None
+
+            return BaseModelOutputWithPooling(
+                last_hidden_state=last_hidden_state,
+                pooler_output=pooler_output,
+                hidden_states=encoder_outputs.hidden_states,
+                attentions=encoder_outputs.attentions,
+            )
+        
+        sample_hidden_state = list()
+        assert cu_seqlens is not None
+        for i in range(cu_seqlens.shape[0] - 1):
+            start = cu_seqlens[i]
+            end = cu_seqlens[i + 1]
+            tensor = last_hidden_state[:, start: end, :].squeeze(0)
+            sample_hidden_state.append(tensor)
+        
         return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooler_output,
+            last_hidden_state=sample_hidden_state,
+            pooler_output=None,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -962,11 +1196,11 @@ class SiglipMultiheadAttentionPoolingHead(nn.Module):
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = SiglipMLP(config)
 
-    def forward(self, hidden_state):
+    def forward(self, hidden_state, key_padding_mask=None):
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
 
-        hidden_state = self.attention(probe, hidden_state, hidden_state)[0]
+        hidden_state = self.attention(probe, hidden_state, hidden_state, key_padding_mask=key_padding_mask)[0]
 
         residual = hidden_state
         hidden_state = self.layernorm(hidden_state)
@@ -1000,9 +1234,15 @@ class SiglipVisionModel(SiglipPreTrainedModel):
     def forward(
         self,
         pixel_values,
+        sample_indices: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        position_ids: Optional[torch.Tensor] = None,
+        vision_return_embed_list: Optional[bool] = False,
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        return_pooler_output: Optional[bool] = True,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -1032,6 +1272,12 @@ class SiglipVisionModel(SiglipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            position_ids=position_ids,
+            vision_return_embed_list=vision_return_embed_list,
+            image_grid_thw=image_grid_thw,
+            sample_indices=sample_indices,
+            cu_seqlens=cu_seqlens,
+            return_pooler_output=return_pooler_output
         )
 
 
@@ -1055,8 +1301,15 @@ class SiglipModel(SiglipPreTrainedModel):
             )
 
         assert not hasattr(self, "hidden_size")
+        from recovlm.utils.ds_utils import format_dict_or_list
+        print("*" * 300)
+        print(config)
+        print(format_dict_or_list(config))
+        print("*" * 300)
+
         self.hidden_size = config.vision_config.hidden_size
         self.vocab_size = config.text_config.vocab_size
+        self.patch_size = config.vision_config.patch_size
 
         text_config = config.text_config
         vision_config = config.vision_config
@@ -1074,6 +1327,20 @@ class SiglipModel(SiglipPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    # def patch_merger(self, image_features, image_grid_thw):
+
+    #     from einops import rearrange
+    #     merged_embed = list()
+    #     for image_feature, grid_thw_list in zip(image_features, image_grid_thw):
+    #         assert sum([np.prod(grid_thw) for grid_thw in grid_thw_list]) == image_feature.shape[0]
+    #         for 
+    #         _, h, w = image_grid
+    #         image_feature = rearrange(image_feature, "(h w) d -> h w d", h=h, w=w)
+    #         image_feature = rearrange(image_feature, "(h p1) (w p2) d -> (h w) (p1 p2) d", p1=self.merge_size, p2=self.merge_size)
+    #         image_feature = rearrange(image_feature, "n p d -> n (p d)")
+    #         merged_embed.append(image_feature)
+    #     return merged_embed
 
     @add_start_docstrings_to_model_forward(SIGLIP_TEXT_INPUTS_DOCSTRING)
     def get_text_features(
@@ -1128,6 +1395,18 @@ class SiglipModel(SiglipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+
+        sample_indices: Optional[torch.Tensor] = None,
+        image_indices: Optional[torch.Tensor] = None,
+        image_position_ids: Optional[torch.Tensor] = None,
+        height_position_ids: Optional[torch.Tensor] = None,
+        width_position_ids: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        image_attention_mask: Optional[torch.Tensor] = None,
+        vision_return_embed_list: Optional[bool] = None,
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
+        return_pooler_output: Optional[bool] = True,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1164,6 +1443,18 @@ class SiglipModel(SiglipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
+
+            sample_indices=sample_indices,
+            image_indices=image_indices,
+            position_ids=image_position_ids,
+            height_position_ids=height_position_ids,
+            width_position_ids=width_position_ids,
+            cu_seqlens=cu_seqlens,
+            padding_mask=padding_mask,
+            attention_mask=image_attention_mask,
+            vision_return_embed_list=vision_return_embed_list,
+            image_grid_thw=image_grid_thw,
+            return_pooler_output=return_pooler_output,
         )
 
         pooled_output = vision_outputs.pooler_output
@@ -1183,6 +1474,16 @@ class SiglipModel(SiglipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
+        sample_indices: Optional[torch.Tensor] = None,
+        image_indices: Optional[torch.Tensor] = None,
+        image_position_ids: Optional[torch.Tensor] = None,
+        height_position_ids: Optional[torch.Tensor] = None,
+        width_position_ids: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        image_attention_mask: Optional[torch.Tensor] = None,
+        vision_return_embed_list: Optional[bool] = False,
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
     ) -> SiglipOutput:
         r"""
         Returns:
@@ -1224,6 +1525,17 @@ class SiglipModel(SiglipPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
+
+            sample_indices=sample_indices,
+            image_indices=image_indices,
+            position_ids=image_position_ids,
+            height_position_ids=height_position_ids,
+            width_position_ids=width_position_ids,
+            cu_seqlens=cu_seqlens,
+            padding_mask=padding_mask,
+            attention_mask=image_attention_mask,
+            vision_return_embed_list=vision_return_embed_list,
+            image_grid_thw=image_grid_thw
         )
 
         text_outputs: BaseModelOutputWithPooling = self.text_model(

@@ -2,6 +2,7 @@ import os
 import os.path as osp
 import torch
 import time
+import json
 import deepspeed
 from PIL import Image
 import torch.nn as nn
@@ -12,9 +13,10 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, IterableDataset
 from recipes.ViT.helpers.context import Context, DistributedContext
 import argparse
+from collections import Counter
 import logging
 from omegaconf import OmegaConf
-from recipes.ViT.training.models import KimiViT
+from recipes.ViT.training.models import KimiViT, KimiViTSigLIP, KimiViTMoonViT
 from recipes.ViT.data.dataset import build_dataloader
 from recipes.ViT.training.lr_scheduler import build_scheduler
 from recipes.ViT.training.optimizer import build_optimizer
@@ -121,7 +123,7 @@ class MonitorDecorator(object):
                 name=name,
                 method=getattr(self, "calcul_{}".format(name)),
                 init_buffer=self._get_default_init_buffer(),
-                report_name="pref/{}".format(name),
+                report_name="perf/{}".format(name),
                 report_per_step=config.report.report_per_step,
                 verbose_per_step=config.verbose.verbose_per_step,
                 reset_step=config.report.report_per_step,
@@ -142,13 +144,42 @@ class MonitorDecorator(object):
                 name=name,
                 method=getattr(self, "calcul_{}".format(name)),
                 init_buffer=self._get_default_init_buffer(),
-                report_name="pref/{}".format(name),
+                report_name="perf/{}".format(name),
                 report_per_step=config.report.report_per_step,
                 verbose_per_step=config.verbose.verbose_per_step,
                 reset_step=config.report.report_per_step,
             )
     
-    def collect(self, outputs, rets, elapsed, **kwargs):
+    def montior_dataset(self, config, rets):
+
+        monitor = self.monitor
+        if "source" in rets:
+            count_format = "source/{}"
+            sources = [count_format.format(src) for src in rets.source]
+            sources_list = [None for _ in range(self.ctx.world_size)]
+            dist.all_gather_object(sources_list, sources)
+            tmp_sources = list()
+            for iter_sources in sources_list:
+                tmp_sources.extend(iter_sources)
+            sources = tmp_sources
+
+            source_dict = dict(Counter(sources))
+            for source_name in source_dict:
+                dataset_name = source_name
+                if dataset_name not in monitor.metrics_names:
+                    monitor.register_metric(
+                        name=dataset_name,
+                        init_value=0,
+                        method="add",
+                        report_per_step=config.report.report_per_step,
+                        verbose_per_step=self.inf,
+                        can_skip_update=True
+                    )
+            return source_dict
+
+        return dict()
+
+    def collect(self, config, rets, elapsed, **kwargs):
         model = self.model
         monitor = self.monitor
         ctx = self.ctx
@@ -186,14 +217,30 @@ class MonitorDecorator(object):
             total_text_num_valid_tokens=total_text_num_valid_tokens,
             total_num_samples=total_num_samples,
             total_num_tokens=total_num_tokens,
+            **kwargs,
+            **self.montior_dataset(config, rets)
         )
 
 
-def check_config(args, config):
+def check_config(args, ctx, config):
     config.output_dir = args.output_dir
+    config.model.packing = config.dataset.packing
+
     if config.dataset.num_workers != config.dataset.loader.num_workers:
         config.dataset.num_workers = config.dataset.loader.num_workers
         logger.warning(f"Divergence of 'config.dataset.num_workers' and 'config.dataset.loader.num_workers', rewrite 'config.dataset.num_workers' to {config.dataset.loader.num_workers}")
+
+    model_config_path = osp.join(config.model.siglip_dir, "config.json")
+    model_config = json.load(open(model_config_path, "r", encoding="utf-8"))
+    patch_size = model_config["vision_config"]["patch_size"]
+    config.dataset.packing.patch_size = patch_size
+    logger.warning(f"Set patch_size = {patch_size} from model config file {model_config_path}")
+
+    config.dataset.cache_dir = osp.join("/code/data/zdj/cache", osp.basename(osp.dirname(args.output_dir)), osp.basename(args.output_dir))
+
+    if ctx.rank == 0:
+        tmp_config = OmegaConf.to_container(config, resolve=True)
+        json.dump(tmp_config, open(osp.join(config.output_dir, "train_config.json"), "w"), indent=4)
 
 
 def train(args):
@@ -202,12 +249,12 @@ def train(args):
 
     config = OmegaConf.load(args.config_file)
     print("ZDJ", config)
-    check_config(args, config)
     
     ctx = DistributedContext(args=args, config=config).setup()
+    check_config(args, ctx, config)
     
     with deepspeed.zero.Init(config_dict_or_path=args.deepspeed_config, enabled=False):
-        model = KimiViT(config.model, ctx)
+        model = KimiViTMoonViT(config.model, ctx)
     optimizer = build_optimizer(config.optimizer, model, model_name="siglip")
     optimizer = FusedAdam(model.parameters(),
                         lr=config.optimizer.learn_rate,
@@ -222,20 +269,24 @@ def train(args):
         lr_scheduler=lr_scheduler
     )
 
+    # freeze LLN
+    model.text_decoder.requires_grad_(False)
+
     model.train()
 
-    dataloader = build_dataloader(config.dataset)
-
+    dataloader = build_dataloader(config.dataset, model=model)
+    # monitor.model = model
+    # monitor.dataloader = dataloader
     monitor = build_monitor(config, ctx, model=model, dataloader=dataloader)
     decorator = MonitorDecorator(monitor, ctx)
     decorator.register_metrics(config)
 
     start = time.time()
     for step, batch in enumerate(dataloader, 1):
-
+        
         images = batch["images"]
         texts = batch["texts"]
-        outputs, rets = model(images=images, texts=texts)
+        rets = model(package=batch, images=images, texts=texts)
         
         loss = rets.loss
 
@@ -243,9 +294,11 @@ def train(args):
 
         model.step()
         end = time.time()
-        package = decorator.collect(outputs, rets, end - start)
+        package = decorator.collect(config, rets, end - start)
         monitor.step(package)
         start = end
+
+    monitor.step(force_save=True)
 
 
 if __name__ == "__main__":

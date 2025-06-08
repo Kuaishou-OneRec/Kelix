@@ -10,6 +10,7 @@ import logging
 import traceback
 import numpy as np
 import pandas as pd
+from copy import deepcopy
 import pyarrow as pa
 import torch.nn as nn
 import os.path as osp
@@ -18,14 +19,37 @@ import multiprocessing
 from io import BytesIO
 import pyarrow.parquet as pq
 from torch.utils.data import Dataset, IterableDataset, DataLoader
+from recipes.ViT.helpers.hook import build_hook
+from recipes.ViT.data.dataset.utils import load_parquet_file
 from typing import Union, Iterable, Optional, List, Dict, Tuple, Any
 logger = logging.getLogger(__name__)
 
 
 class ParquetDataset(IterableDataset):
-    def __init__(self, data_files, num_workers):
+    def __init__(self, data_files, num_workers, **kwargs):
         self.data_files = data_files
         self.num_workers = num_workers
+        model = kwargs.pop("model")
+        self.batch_size = kwargs.get("loader")["batch_size"]
+        packing_kwargs = kwargs.get("packing")
+        self.use_packing = packing_kwargs.enabled
+        self.patch_size = packing_kwargs.patch_size
+        self.packing_drop_ratio = packing_kwargs.drop_ratio
+        self.packing_max_length = packing_kwargs.max_length
+        self.cache_dir = kwargs["cache_dir"]
+
+        self.after_hook = list()
+        self.before_hook = list()
+
+        for hook_info in kwargs.get("hooks"):
+            position = hook_info.get("position")
+            if position == "after":
+                hook_list = self.after_hook
+            else:
+                hook_list = self.before_hook
+            hook = build_hook(processor=model.processor, type=hook_info["type"], **kwargs)
+
+            hook_list.append(hook)
 
         manager = multiprocessing.Manager()
 
@@ -112,106 +136,19 @@ class ParquetDataset(IterableDataset):
         self.offset_dict_all[worker].update(tmp_offset_dict)
         logger.warning(f"[rank{rank}-worker{worker}] load checkpoint success.")
 
-    def _parser(self, raw_row_data, file_url):
+    def _parser(self, sample, url):
         try:
-            images = None
-            videos = None
-
-            if "images" in raw_row_data:
-                images = raw_row_data["images"]
-                if isinstance(images, str):
-                    images = json.loads(images)
-
-            if "videos" in raw_row_data:
-                videos = raw_row_data["videos"]
-                if isinstance(videos, str):
-                    videos = json.loads(videos)
-
-            data_source = raw_row_data["source"]
-            key = raw_row_data["uuid"]
-            task = raw_row_data["task"]
-            text = raw_row_data["text"]
-
-            samples = {
+            key = sample.pop("uuid")
+            processed_sample = {
                 "__key__": key,
-                "__url__": file_url,
+                "__url__": url,
+                "json": sample
             }
+            return processed_sample
 
-            # process message or segments -> webdataset_key = json
-            sample_data = {
-                "source": data_source,
-                "task": task,
-                "texts": [text]
-            }
-
-            if images is not None and isinstance(images, list):
-                sample_data["images"] = images
-            elif videos is not None and isinstance(videos, list):
-                sample_data["videos"] = videos
-            elif images is not None and isinstance(images, np.ndarray):
-                sample_data["images"] = images.tolist()
-            elif videos is not None and isinstance(videos, np.ndarray):
-                sample_data["videos"] = videos.tolist()
-            else:
-                raise NotImplementedError(
-                    f"Unsupported sample, images type is {type(images)}, images={images}, videos type is {type(videos)}, videos={videos}")
-            samples["json"] = sample_data
-
-            for image_idx, image_block in enumerate(images):
-                images[image_idx] = self._process_image_block(image_block)
-
-            for video_idx, video_block in enumerate(videos):
-                videos[video_idx] = self._process_video_block(video_block)
-
-            return samples
         except:
             logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}")
             return None
-
-    @staticmethod
-    def _process_image_block(image_block):
-        if isinstance(image_block, str):
-            if len(image_block) > 200:
-                base64_data = image_block
-                data = base64.b64decode(base64_data)
-                image = Image.open(BytesIO(data))
-                return image
-            else:
-                image = Image.open(image_block)
-                return image
-        elif isinstance(image_block, dict):
-            image_obj = image_block.pop("image")
-            image_obj = ParquetDataset._process_image_block(image_obj)
-            return ParquetDataset._process_image(image_obj, **image_block)
-        else:
-            raise TypeError("Unsupported image_block type '{}'".format(image_block.__class__.__name__))
-
-    @staticmethod
-    def _process_image(image, **kwargs):
-        if len(kwargs) == 0:
-            return image
-        raise NotImplementedError
-
-    @staticmethod
-    def _process_video(video_path, nframes=10, **kwargs):
-        if len(kwargs) == 0:
-            vr = decord.VideoReader(video_path)
-            total_frames, video_fps = len(vr), vr.get_avg_fps()
-            idx = torch.linspace(0, total_frames - 1, nframes).round().long().tolist()
-            video = vr.get_batch(idx).asnumpy()
-            video = torch.tensor(video)
-            return video
-        raise NotImplementedError
-
-    @staticmethod
-    def _process_video_block(video_block):
-        if isinstance(video_block, str):
-            return ParquetDataset._process_video(video_block)
-        elif isinstance(video_block, dict):
-            video_path = video_block.pop("video")
-            return ParquetDataset._process_video(video_path, **video_block)
-        else:
-            TypeError("Unsupported video_block type '{}'".format(video_block.__class__.__name__))
 
     def __iter__(self, ):
         rank, world_size, worker, num_workers = self.pytorch_worker_info()
@@ -236,7 +173,8 @@ class ParquetDataset(IterableDataset):
 
                 # open parquet file
                 try:
-                    parquet_file = pq.ParquetFile(fn)
+                    # parquet_file = pq.ParquetFile(fn)
+                    parquet_file = load_parquet_file(fn, self.cache_dir, worker, rank)
                 except Exception as e:
                     logger.error(
                         f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
@@ -265,10 +203,25 @@ class ParquetDataset(IterableDataset):
                         for row_idx, row in row_pandas.iterrows():
                             if row_idx < offset:
                                 continue
+                            
+                            row_info_str = f"{fn}-epoch{epoch_idx}-group{group_idx}-offset{row_idx}"
 
                             try:
                                 offset_dict[fn_group_key] = row_idx
-                                sample = self._parser(row, fn)
+                                sample = row.to_dict()
+                                for hook in self.before_hook:
+                                    if sample is not None:
+                                        sample = hook(sample, row_info_str)
+                                
+                                if sample is None:
+                                    continue
+
+                                sample = self._parser(sample, fn)
+
+                                for hook in self.after_hook:
+                                    if sample is not None:
+                                        sample = hook(sample, row_info_str)
+                                    
                                 if sample is not None:
                                     yield sample
                             except GeneratorExit:

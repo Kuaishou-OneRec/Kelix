@@ -64,7 +64,7 @@ class KimiViT(nn.Module):
 
         # T5 text model for Contrastive loss
         self.siglip = SiglipModel.from_pretrained(config.siglip_dir, ignore_mismatched_sizes=True).cuda()
-        self.siglip_processor = SiglipProcessor.from_pretrained(config.siglip_dir)
+        self.processor = SiglipProcessor.from_pretrained(config.siglip_dir)
 
         MoonViT_config = MoonViTConfig()
         KimiVL_Config_AR = KimiVLConfig()
@@ -72,9 +72,13 @@ class KimiViT(nn.Module):
         MoonViT_config._attn_implementation = 'flash_attention_2'
 
         self.MoonVIT_processor = KimiVLImageProcessor()
-        self.MoonVIT = MoonVitPretrainedModel(MoonViT_config).cuda()
-        
-        self.loss_lambda = 2
+        self.MoonVIT = MoonVitPretrainedModel(MoonViT_config)
+
+        state_dict = torch.load(config.VitParam_dir)
+        self.MoonVIT.load_state_dict(state_dict)
+        self.MoonVIT.cuda()
+
+        self.loss_lambda = config.text_decoder.loss_lambda
 
         # LLM for capation AR loss
         if config.text_decoder.enabled:
@@ -112,16 +116,22 @@ class KimiViT(nn.Module):
 
             gathered_image_embeds = disco_gather(image_embeds, self.ctx)
             gathered_text_embeds = disco_gather(text_embeds, self.ctx)
+            # if self.ctx.rank == 0:
+            #     print(gathered_image_embeds.shape, gathered_text_embeds.shape)
 
             logits_per_text = torch.matmul(gathered_text_embeds, gathered_image_embeds.t().to(device))
 
             logit_scale = self.siglip.logit_scale.to(device)
             logit_bias = self.siglip.logit_bias.to(device)
+
             logits_per_text = logits_per_text * logit_scale.exp() + logit_bias
 
             eye = torch.eye(logits_per_text.size(0), device=device)
             m1_diag1 = -torch.ones_like(logits_per_text) + 2 * eye
+            # if self.ctx.rank == 0:
+            #     print(logits_per_text.shape, torch.isnan(logits_per_text).any())
             loglik = torch.nn.functional.logsigmoid(m1_diag1 * logits_per_text)
+
             nll = -torch.sum(loglik, dim=-1)
             loss = nll.mean()
             return loss
@@ -142,8 +152,10 @@ class KimiViT(nn.Module):
         image_features: list[torch.Tensor] = self.MoonVIT(
             pixel_values, image_grid_hws
         )
-        # (image_token_nums_0 + image_token_nums_1 + ..., image_feature_dim)
+        # [(image_token_nums_0, qwen_hidden_dim), (image_token_nums_1, qwen_hidden_dim), ...]
         image_features_for_AR: torch.Tensor = self.mlp_AR(image_features)
+
+        # (B, T5 dim)
         image_features: torch.Tensor = self.mlp(image_features)
 
         return image_features, image_features_for_AR
@@ -151,74 +163,92 @@ class KimiViT(nn.Module):
     def _merge_with_image_features(
             self,
             inputs_embeds: torch.Tensor,
-            image_features: torch.Tensor,
+            image_features: list[torch.Tensor],
         ):
-            """
-            Args:
-                inputs_embeds (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length, input_embed_dim)`):
-                    The input embeddings.
-                image_features (:obj:`torch.Tensor` of shape :obj:`(image_token_nums, image_feature_dim)`):
-                    The image features to prepend to the input embeddings.
-            """
-            batch_size, sequence_length, input_embed_dim = inputs_embeds.shape
-            image_feature_nums, image_feature_dim = image_features.shape
-            
-            assert image_feature_dim == input_embed_dim
-            
-            # Create new embeddings tensor with expanded sequence length
-            new_sequence_length = sequence_length + image_feature_nums
-            new_inputs_embeds = torch.zeros(
-                (batch_size, new_sequence_length, input_embed_dim),
-                device=inputs_embeds.device,
-                dtype=inputs_embeds.dtype
-            )
-            
-            # Prepend image features to each sequence in the batch
-            new_inputs_embeds[:, :image_feature_nums, :] = image_features.unsqueeze(0).expand(batch_size, -1, -1)
-            
-            # Copy original text embeddings after the image features
-            new_inputs_embeds[:, image_feature_nums:, :] = inputs_embeds
-            
-            return new_inputs_embeds
+        """
+        Args:
+            inputs_embeds (torch.Tensor of shape (batch_size, sequence_length, input_embed_dim)):
+                The input embeddings.
+            image_features (list[torch.Tensor]): A list where each element is a tensor of shape 
+                (image_token_nums_i, image_feature_dim) corresponding to the i-th sample in the batch.
+                The image_feature_dim should match input_embed_dim.
+        """
+        batch_size, sequence_length, input_embed_dim = inputs_embeds.shape
+        
+        # Validate input dimensions
+        assert len(image_features) == batch_size, "Number of image features must match batch size"
+        for img_feat in image_features:
+            assert img_feat.shape[-1] == input_embed_dim, "Image feature dimension must match input embedding dimension"
+        
+        image_token_nums = [img_feat.shape[0] for img_feat in image_features]
+        max_image_tokens = max(image_token_nums) if image_token_nums else 0
+        new_sequence_length = sequence_length + max_image_tokens
+        
+        new_inputs_embeds = torch.zeros(
+            (batch_size, new_sequence_length, input_embed_dim),
+            device=inputs_embeds.device,
+            dtype=inputs_embeds.dtype
+        )
+        
+        for i in range(batch_size):
+            img_feat = image_features[i]
+            img_token_num = img_feat.shape[0]
+            new_inputs_embeds[i, :img_token_num, :] = img_feat
+            new_inputs_embeds[i, img_token_num:img_token_num+sequence_length, :] = inputs_embeds[i]
+        
+        return new_inputs_embeds
 
     def compute_loss_with_image_features(
             self,
             inputs_embeds: torch.Tensor,
-            image_features: torch.Tensor,
+            image_features: list[torch.Tensor],
             labels: torch.LongTensor,
+            pad_token_id: int,
         ):
         """
         Args:
             inputs_embeds (torch.Tensor of shape (batch_size, sequence_length, input_embed_dim)):
                 The input text embeddings.
-            image_features (torch.Tensor of shape (image_token_nums, image_feature_dim)):
-                The image features to prepend.
+            image_features (list[torch.Tensor]): A list where each element is a tensor of shape
+                (image_token_nums_i, image_feature_dim) corresponding to the i-th sample in the batch.
             labels (torch.LongTensor of shape (batch_size, sequence_length)):
                 Labels for language modeling loss. Will be extended with -100 for image positions.
         """
         batch_size = inputs_embeds.size(0)
-        image_feature_nums = image_features.size(0)
         
+        # Merge text and image embeddings
         combined_embeds = self._merge_with_image_features(inputs_embeds, image_features)
         
         if labels is not None:
-            new_labels = torch.full(
-                (batch_size, combined_embeds.size(1)),
+            new_labels = torch.full_like(
+                combined_embeds[:, :, 0],  
                 -100,
                 dtype=labels.dtype,
                 device=labels.device
             )
-            new_labels[:, image_feature_nums:] = labels
+            for i in range(batch_size):
+                img_token_num = image_features[i].size(0)
+                new_labels[i, img_token_num:img_token_num+labels.size(1)] = labels[i]
+            
             labels = new_labels
+            labels[labels == pad_token_id] = -100
+        
         outputs = self.text_decoder(inputs_embeds=combined_embeds, labels=labels)
         
         return outputs.loss
 
-    def forward(self, images, texts):
+    def forward(self, images, texts, package=None):
+        if package is not None:
+            images = package["images"]
+            texts = package["texts"]
+            if isinstance(images[0], list):
+                images = [x[0] for x in images]
+            source = package["source"]
         vit_inputs = self.MoonVIT_processor(images=images, return_tensors="pt")
-        inputs = self.siglip_processor(images=images, text=texts, padding="longest", return_tensors="pt")
+        inputs = self.processor(images=images, text=texts, padding="longest", return_tensors="pt")
         input_ids = self.text_decoder_tokenizer(texts, return_tensors="pt", padding=True, truncation=True)
 
+        pad_token_id = self.text_decoder_tokenizer.pad_token_id
         for key in vit_inputs:
             vit_inputs[key] = vit_inputs[key].cuda()
 
@@ -234,10 +264,15 @@ class KimiViT(nn.Module):
 
         image_features, image_features_for_AR = self._extract_image_features(**vit_inputs)
         inputs_embeds = self.text_decoder.get_input_embeddings()(input_ids.input_ids)
-
+        
         # Autoregression loss
-        AR_loss = self.compute_loss_with_image_features(inputs_embeds=inputs_embeds, image_features=image_features_for_AR, labels=input_ids.input_ids)
-
+        AR_loss = self.compute_loss_with_image_features(
+            inputs_embeds=inputs_embeds, 
+            image_features=image_features_for_AR, 
+            labels=input_ids.input_ids, 
+            pad_token_id=pad_token_id
+        )
+        
         # Contrastive loss
         Contrastive_loss = self.calcul_loss(outputs.text_embeds, image_features)
 
@@ -252,12 +287,14 @@ class KimiViT(nn.Module):
         batch_size = image_hidden_embeds.shape[0]
         assert text_hidden_embeds.shape[0] == image_hidden_embeds.shape[0]
 
-        return outputs, Context(
+        return Context(
             Contrastive_loss=Contrastive_loss,
             AR_loss=AR_loss,
             loss=loss,
             total_image_num_tokens=np.prod(image_hidden_embeds.shape[:2]).item(),
             total_text_num_tokens=np.prod(text_hidden_embeds.shape[:2]).item(),
             total_num_samples=batch_size,
-            total_text_num_valid_tokens=(inputs["input_ids"] != self.text_decoder_tokenizer.pad_token_id).long().sum().item()
+            total_text_num_valid_tokens=(input_ids["input_ids"] != pad_token_id).long().sum().item(),
+            source=source,
+            outputs=outputs
         )

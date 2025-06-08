@@ -298,9 +298,12 @@ class MoonVisionPatchEmbed(nn.Module):
         ), f"Expected patch_size to be a tuple of 2, got {patch_size}"
         self.patch_size = patch_size
 
+        #initialize the conv2d layer
         self.proj = nn.Conv2d(
             in_dim, out_dim, kernel_size=patch_size, stride=patch_size
         )
+        nn.init.normal_(self.proj.weight, std=0.02)
+        nn.init.zeros_(self.proj.bias)
 
         self.pos_emb = Learnable2DInterpPosEmb(
             height=pos_emb_height, width=pos_emb_width, dim=out_dim
@@ -316,6 +319,7 @@ class MoonVisionPatchEmbed(nn.Module):
             (L, Cout) tensor
         """
         x = self.proj(x).view(x.size(0), -1)
+        
         # apply positional embedding
         x = self.pos_emb(x, grid_hws)
         return x
@@ -2376,12 +2380,14 @@ class KimiVLMultiModalProjector(nn.Module):
 
     def __init__(self, config: KimiVLConfig):
         super().__init__()
+        self.config = config
 
         self.hidden_size = (
             config.vision_config.hidden_size
             * config.vision_config.merge_kernel_size[0]
             * config.vision_config.merge_kernel_size[1]
         )
+        # self.hidden_size = config.vision_config.hidden_size
 
         self.pre_norm = torch.nn.LayerNorm(config.vision_config.hidden_size, eps=1e-05)
         self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
@@ -2390,14 +2396,29 @@ class KimiVLMultiModalProjector(nn.Module):
             self.hidden_size, config.text_config.hidden_size, bias=True
         )
 
-    def forward(self, image_features: list[torch.Tensor]) -> torch.Tensor:
-        image_features = torch.cat(image_features, dim=0)
+    def forward(self, image_features: torch.Tensor) -> torch.Tensor:
+        config = self.config
+        if isinstance(image_features, (list, tuple)):
+            processed_features = list()
+            for image_feature in image_features:
+                hidden_states = self.pre_norm(image_feature).view(-1, self.hidden_size)
+                hidden_states = self.linear_1(hidden_states)
+                hidden_states = self.act(hidden_states)
+                hidden_states = self.linear_2(hidden_states)
+                processed_features.append(hidden_states)
+
+            return processed_features
+
+        dims = image_features.shape[:-1]
+        dim = image_features.shape[-1]
+        image_features = image_features.view(np.prod(dims), dim)
         hidden_states = self.pre_norm(image_features).view(-1, self.hidden_size)
         hidden_states = self.linear_1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
 
-        return hidden_states
+        return hidden_states.view(*dims, -1)
+
 
 class KimiVLMultiModalProjector_Contrastive(nn.Module):
     def __init__(self, config: KimiVLConfig):

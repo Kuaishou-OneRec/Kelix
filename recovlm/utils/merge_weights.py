@@ -4,130 +4,87 @@ import os
 
 import torch
 import transformers
+from safetensors import safe_open
+from safetensors.torch import save_file
 # Qwen2VLForConditionalGeneration
 
 
-def get_argument_parser():
-  parser = argparse.ArgumentParser()
+# def get_argument_parser():
+#   parser = argparse.ArgumentParser()
 
-  parser.add_argument("--model_dir", type=str, default=None,
-                      help="The directory of the pretrained LLM.")
+#   parser.add_argument("--model_dir", type=str, default="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base",
+#                       help="The directory of the pretrained LLM.")
 
-  parser.add_argument("--vision_encoder_dir", type=str, default=None,
-                      help="The directory of the pretrained ViT.")
+#   parser.add_argument("--vision_encoder_dir", type=str, default="/llm_reco/liuyang76/Models/siglip2-so400m-patch14-384",
+#                       help="The directory of the pretrained ViT.")
 
-  parser.add_argument("--new_model_dir", type=str, default=None,
-                      help="The directory of the pretrained ViT.")
+#   parser.add_argument("--new_model_dir", type=str, default="/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-siglip",
+#                       help="The directory of the pretrained ViT.")
 
-  return parser
+#   return parser
 
 
 def main():
-  arg_parser = get_argument_parser()
-  args = arg_parser.parse_args()
+  # Load the PyTorch model file
+  model_path = "/mmu_mllm_hdd_2/zangdunju/ckpt/global_step18200/vision_model.pth"
+  ptm = torch.load(model_path, map_location='cpu')
+  pt1 = {}
+  # Print the keys in the state dict
+  if isinstance(ptm, dict):
+      for key in ptm.keys():
+          if "visual" in key:
+              pt1[key] = ptm[key]
 
-  # llm weights
-  model_config = transformers.Qwen2VLForConditionalGeneration.config_class.from_pretrained(
-    args.new_model_dir)
-  model = transformers.Qwen2VLForConditionalGeneration(model_config)
-
-  text_model = transformers.AutoModelForCausalLM.from_pretrained(
-    args.model_dir)
-
-  sd = model.state_dict()
-  text_sd = text_model.state_dict()
-
-  for name in text_sd.keys():
-    assert name in sd
-    print(name)
-    sd[name] = text_sd[name]
-
-  if args.vision_encoder_dir:
-    vision_encoder = transformers.CLIPModel.from_pretrained(
-        args.vision_encoder_dir)
-
-    vision_sd = vision_encoder.vision_model.state_dict()
-    mapped = [
-        "post_layernorm.weight",
-        "post_layernorm.bias",
-        "embeddings.patch_embedding.weight"
-    ]
-    assert "visual.merger.ln_q.weight" in sd
-    sd["visual.merger.ln_q.weight"] = vision_sd["post_layernorm.weight"]
-    assert "visual.merger.ln_q.bias" in sd
-    sd["visual.merger.ln_q.bias"] = vision_sd["post_layernorm.bias"]
-    assert "visual.patch_embed.proj.weight" in sd
-    # conv2d -> 3d
-    sd["visual.patch_embed.proj.weight"] = vision_sd["embeddings.patch_embedding.weight"][:,
-                                                                                          :, None, :, :].repeat(1, 1, 2, 1, 1)
-    for layer in range(vision_encoder.vision_model.config.num_hidden_layers):
-      wq = vision_sd[f"encoder.layers.{layer}.self_attn.q_proj.weight"]
-      wk = vision_sd[f"encoder.layers.{layer}.self_attn.k_proj.weight"]
-      wv = vision_sd[f"encoder.layers.{layer}.self_attn.v_proj.weight"]
-
-      bq = vision_sd[f"encoder.layers.{layer}.self_attn.q_proj.bias"]
-      bk = vision_sd[f"encoder.layers.{layer}.self_attn.k_proj.bias"]
-      bv = vision_sd[f"encoder.layers.{layer}.self_attn.v_proj.bias"]
-
-      qkv_weight = torch.cat([wq, wk, wv], dim=0)
-      qkv_bias = torch.cat([bq, bk, bv], dim=0)
-
-      assert f"visual.blocks.{layer}.attn.qkv.weight" in sd
-      sd[f"visual.blocks.{layer}.attn.qkv.weight"] = qkv_weight
-      assert f"visual.blocks.{layer}.attn.qkv.bias" in sd
-      sd[f"visual.blocks.{layer}.attn.qkv.bias"] = qkv_bias
-
-      assert f"visual.blocks.{layer}.attn.proj.weight" in sd
-      sd[f"visual.blocks.{layer}.attn.proj.weight"] = vision_sd[f"encoder.layers.{layer}.self_attn.out_proj.weight"]
-      assert f"visual.blocks.{layer}.attn.proj.bias" in sd
-      sd[f"visual.blocks.{layer}.attn.proj.bias"] = vision_sd[f"encoder.layers.{layer}.self_attn.out_proj.bias"]
-
-      assert f"visual.blocks.{layer}.mlp.fc1.weight" in sd
-      sd[f"visual.blocks.{layer}.mlp.fc1.weight"] = vision_sd[f"encoder.layers.{layer}.mlp.fc1.weight"]
-      assert f"visual.blocks.{layer}.mlp.fc1.bias" in sd
-      sd[f"visual.blocks.{layer}.mlp.fc1.bias"] = vision_sd[f"encoder.layers.{layer}.mlp.fc1.bias"]
-      assert f"visual.blocks.{layer}.mlp.fc2.weight" in sd
-      sd[f"visual.blocks.{layer}.mlp.fc2.weight"] = vision_sd[f"encoder.layers.{layer}.mlp.fc2.weight"]
-      assert f"visual.blocks.{layer}.mlp.fc2.bias" in sd
-      sd[f"visual.blocks.{layer}.mlp.fc2.bias"] = vision_sd[f"encoder.layers.{layer}.mlp.fc2.bias"]
-
-      assert f"visual.blocks.{layer}.norm1.weight" in sd
-      sd[f"visual.blocks.{layer}.norm1.weight"] = vision_sd[f"encoder.layers.{layer}.layer_norm1.weight"]
-      assert f"visual.blocks.{layer}.norm1.bias" in sd
-      sd[f"visual.blocks.{layer}.norm1.bias"] = vision_sd[f"encoder.layers.{layer}.layer_norm1.bias"]
-      assert f"visual.blocks.{layer}.norm2.weight" in sd
-      sd[f"visual.blocks.{layer}.norm2.weight"] = vision_sd[f"encoder.layers.{layer}.layer_norm2.weight"]
-      assert f"visual.blocks.{layer}.norm2.bias" in sd
-      sd[f"visual.blocks.{layer}.norm2.bias"] = vision_sd[f"encoder.layers.{layer}.layer_norm2.bias"]
-
-      mapped.extend([
-          f"encoder.layers.{layer}.self_attn.q_proj.weight",
-          f"encoder.layers.{layer}.self_attn.k_proj.weight",
-          f"encoder.layers.{layer}.self_attn.v_proj.weight",
-          f"encoder.layers.{layer}.self_attn.q_proj.bias",
-          f"encoder.layers.{layer}.self_attn.k_proj.bias",
-          f"encoder.layers.{layer}.self_attn.v_proj.bias",
-          f"encoder.layers.{layer}.self_attn.out_proj.weight",
-          f"encoder.layers.{layer}.self_attn.out_proj.bias",
-          f"encoder.layers.{layer}.mlp.fc1.weight",
-          f"encoder.layers.{layer}.mlp.fc1.bias",
-          f"encoder.layers.{layer}.mlp.fc2.weight",
-          f"encoder.layers.{layer}.mlp.fc2.bias",
-          f"encoder.layers.{layer}.layer_norm1.weight",
-          f"encoder.layers.{layer}.layer_norm1.bias",
-          f"encoder.layers.{layer}.layer_norm2.weight",
-          f"encoder.layers.{layer}.layer_norm2.bias"
-      ])
-
-    for name in vision_encoder.vision_model.state_dict().keys():
-      if name not in mapped:
-        print(f"Parameter {name} in VisionEncoder is not mapped.")
-
-  model.load_state_dict(sd)
-  if not os.path.exists(args.new_model_dir):
-    os.makedirs(args.new_model_dir)
-  model.save_pretrained(args.new_model_dir)
-
-
+  # for key in pt1.keys():
+  #   print(key)
+  #   print(pt1[key].shape)
+  #   print("================================================")
+  pt2 = {}
+  for i in range(1, 6):
+      with safe_open("/llm_reco_ssd/zhouyang12/models/Qwen3-8B/model-0000" + str(i) + "-of-00005.safetensors", framework="pt", device="cpu") as f:
+          for key in f.keys():
+              pt2[key] = f.get_tensor(key)
+  print('lalallalalallal')
+  for key in pt1.keys():
+    pt2[key] = pt1[key]
+  outputdir = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope"
+  os.makedirs(outputdir, exist_ok=True)
+  #merge pt1 and pt2
+  save_file(pt2, outputdir + "/model.safetensors",metadata={"format": "pt"})
+  pt3 = {}
+  with safe_open(outputdir + "/model.safetensors", framework="pt", device="cpu") as f:
+    for key in f.keys():
+      pt3[key] = f.get_tensor(key)
+  closecnt =0 
+  for key in pt3.keys():
+    if key in pt2.keys():
+      #check tensor allclose
+      if not torch.allclose(pt3[key], pt2[key], atol=1e-7):
+        print(key)
+        print(pt3[key].shape)
+        print(pt2[key].shape)
+        print("================================================")
+        closecnt += 1 
+  print(closecnt)
+  for key in pt2.keys():
+    assert key in pt3.keys()
+    assert pt2[key].shape == pt3[key].shape
+  for key in pt3.keys():
+    if key in pt2.keys():
+      continue
+    else:
+      print('not in pt2')
+      print(key)
+      print(pt3[key].shape)
+      print("================================================")
+  print('--------------------------------')
+  print('--------------------------------')
+  for key in ptm.keys():
+    if key not in pt3.keys():
+      print("not in pt3")
+      print(key)
+      print(ptm[key].shape)
+      print("================================================")
+  print("all close")
 if __name__ == "__main__":
   main()

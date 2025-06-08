@@ -1,38 +1,67 @@
 dataset:
   type: ViTParquetDataset
-  sources: /llm_reco_ssd/zangdunju/dataset/hdfs_data/vit/test.json
-  num_epochs: 2
+  sources: /llm_reco_ssd/zangdunju/dataset/hdfs_data/vit/caption_v1.json
+  num_epochs: 1
   num_workers: 2
   loader:
     num_workers: 2
-    batch_size: 4
+    batch_size: 8
     collate_fn: SingleImageTextPairCollator
+  vision:
+    resized_height: null
+    resized_width: null
+    multiple_of: 28
+    min_pixels: 784
+    max_pixels: 3211264
+    video_min_pixels: 25088
+    video_max_pixels: 150528
+    video_total_pixels: 4816896
+    nframes: 10
+    fps: null
+    fps_min_frames: 4
+    fps_max_frames: 32
+  packing:
+    enabled: true
+    max_length: 8192
+    drop_ratio: 0.0
+    add_cls_token: false
+  hooks:
+    - type: TextLengthCheckHook
+      position: before
+    - type: VisionEncoderDataProcessorHook
+      position: before
+    - type: NaiveHook
+      position: after
+  truncate_text_length: 64
 model:
-  siglip_dir: /llm_reco_ssd/zhouyang12/models/SigLIP-So400M-Patch14-384/
+  siglip_dir: /llm_reco/liuyang76/Models/siglip2-so400m-patch14-384
+  VitParam_dir: /llm_reco/liuyang76/Models/MoonVitParam/MoonVit.pt
+  vision_return_embed_list: false
   text_decoder:
-    enabled: True
+    enabled: true
+    loss_lambda: 2.0
     model_dir: /llm_reco/liuyang76/Models/Qwen2.5-0.5B-Instruct
 optimizer:
   type: muon
   beta1: 0.9
   bata2: 0.95
-  learn_rate: 1e-3
+  learn_rate: 1e-5
   weight_decay: 0.01
 lr_scheduler:
   type: cosine
-  num_warmup_steps: 500
-  num_training_steps: 10000
+  num_warmup_steps: 7500
+  num_training_steps: 150000
   min_lr: 0.0
 monitor:
   type: ViTMonitor
 strategy:
   type: ViTStrategy
   seed: 123456
-  save_per_step: 100
+  save_per_step: 1000
 verbose:
   type: ViTVerbose
   verbose_per_step: 1
 report:
   report_per_step: 1
 gradient_checkpointing:
-  enabled: True
+  enabled: true

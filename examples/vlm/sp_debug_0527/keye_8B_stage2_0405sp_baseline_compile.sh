@@ -1,6 +1,7 @@
-email=$(git config --get user.email)
+git config --global user.email 'lingzhixin@kuaishou.com'
+git config --global user.name 'lingzhixin'
 
-mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15" 
+email=$(git config --get user.email)
 
 # 检查 email 是否为空
 if [[ -z "$email" ]]; then
@@ -8,16 +9,15 @@ if [[ -z "$email" ]]; then
         echo "  git config --global user.email 'you@kuaishou.com'"
         exit 1
 else
-        echo "Git user.emal: $email"
+        echo "Git user.email: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile  | head -999 > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/Megred_model/2B # Pretrained/Base model path
-# MODEL_DIR=/llm_reco/chuchenglong/InternVL/models/OpenGVLab/InternVL2_5-4B
-OUTPUT_DIR=/llm_reco/lingzhixin/output/internvl-2b/qwen_vs_intern/debug_intern_2B_1u_sp1_16k_xray_cut
-rm -rf $OUTPUT_DIR
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo/
+OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/Keye/spdebug_sp_baseline_compile/0.0.1/8b
+
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
@@ -25,11 +25,10 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="run internvl 2b stage1 by ccl"
-
+comment="128H_080_201"
 
 git add --all
-git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR"
+git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
 git_hash=$(git rev-parse --short HEAD)
 
 set -x
@@ -45,6 +44,7 @@ echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=$PWD:$PYTHONPATH
 
+
 source set_env.sh
 
 hostfile=/etc/mpi/hostfile_seq
@@ -52,12 +52,11 @@ Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
 np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
 
+
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
-# debug7b_short.json
-# debug7b_fsdp_3p_v1_debug2_orids             
-# --enable_gradient_checkpointing \
+
 nohup mpirun --allow-run-as-root \
         -hostfile $hostfile \
         -mca btl self,tcp -mca pml ob1 \
@@ -112,38 +111,40 @@ nohup mpirun --allow-run-as-root \
         -x KAI_FLAG_FILE \
         -x KML_ID \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
+	-x TOKENIZERS_PARALLELISM=false \
         -x http_proxy=\
         -x https_proxy=\
-        with_nccl_local_env \
-        python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
+	-x TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1 \
+	with_nccl_local_env \
+        bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
+                --dataset_config examples/vlm/sp_debug_0527/keye_8B_stage2_0405sp.json \
+                --model_class KeyeForConditionalGeneration \
+                --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --dataset_config examples/vlm/configs/2b_internvl_stage2_cut.json \
-                --max_length 16000 \
-                --learning_rate 4e-7 \
-                --model_class InternVLChatModel \
-                --min_lr 0.0 \
-                --weight_decay 0.01 \
+		--monitor_image_tokens \
+                --max_length 13500 \
+                --learning_rate 1e-5 \
+                --vision_learning_rate 1e-6 \
+                --min_lr 1e-6 \
+                --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --num_warmup_steps 500 \
-                --num_training_steps 100000 \
-                --save_checkpoint_per_step 50000 \
+                --num_warmup_steps 1100 \
+                --num_training_steps 80000 \
+                --save_checkpoint_per_step 10 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
-                --logging_per_step 10 \
+                --logging_per_step 5 \
                 --fp32_weight \
-                --enable_profile \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
-                --comment "$comment" \
+                --comment '$comment' \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-                --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
-
-
+                --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 

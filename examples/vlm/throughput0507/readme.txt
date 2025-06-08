@@ -1,0 +1,3 @@
+stage1: examples/vlm/throughput0507/2b_v0_6_0_internvl_stage2.json
+stage2: examples/vlm/throughput0507/2b_v0_6_0_internvl_stage2.json
+stage3: examples/vlm/throughput0507/2b_v0_7_0_internvl_stage3_v3.json

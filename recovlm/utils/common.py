@@ -367,7 +367,7 @@ class FakeParquetFileFromFastParquetFile:
         return self.res
 
 
-def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fast_parquet') -> pq.ParquetFile:
+def load_parquet_file(fn: str, retry=5, max_cache_files=5, parquet_backend='fast_parquet') -> pq.ParquetFile:
     """
     加载 Parquet 文件，如果 HDFS 读取失败，则回退到本地缓存。
 
@@ -398,6 +398,8 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fas
     """
     import hashlib
     assert parquet_backend in ["fast_parquet", "pyarrow"]
+    if os.path.exists(fn):
+      return  pq.ParquetFile(fn) if parquet_backend == 'pyarrow' else FakeParquetFileFromFastParquetFile(fn)
 
     def calculate_text_hash(text):
         # 创建一个 SHA-256 哈希对象
@@ -423,7 +425,11 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fas
         if len(files) > max_cache_files:
             files.sort(key=os.path.getctime)
             for fn in files[:max_cache_files//2]:
-                print(f"Removing old cached file: {fn}")
+                try: 
+                  print(f"Removing old cached file: {fn}")
+                  os.remove(fn)
+                except: 
+                  print(f"Failed to remove old cached file: {fn}")
 
     for r in range(retry):
         print(f"retrying for fn={fn}/{cache_fn}")
@@ -447,4 +453,6 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=10, parquet_backend='fas
                 time.sleep(2 + np.random.randint(0, 5))
                 
                 if r == retry - 1:
+                    import traceback
+                    traceback.print_exc()
                     raise Exception(f"Failed to load parquet file from both original path and cache.\nOriginal error: {e}\nCache error: {e2}")

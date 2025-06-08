@@ -19,8 +19,8 @@ class ViTStrategy(BaseStrategy):
 
         self.save_per_step = config.strategy.save_per_step
 
-    def step(self, ctx):
-        self.save(ctx)
+    def step(self, ctx, force_save=False):
+        self.save(ctx, force=force_save)
 
     def setup(self):
         self.set_random_seed()
@@ -29,8 +29,8 @@ class ViTStrategy(BaseStrategy):
     def resume(self):
         pass
 
-    def save(self, ctx, output_dir=None):
-        if ctx.step % self.save_per_step != 0:
+    def save(self, ctx, output_dir=None, force=False):
+        if ctx.step % self.save_per_step != 0 and (not force):
             return
         output_dir = output_dir or self.config.output_dir
         model = ctx.model

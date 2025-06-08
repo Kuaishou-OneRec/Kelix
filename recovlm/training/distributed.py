@@ -13,10 +13,15 @@ from typing import Any, Callable, cast, Dict, List, Optional, Tuple
 import torch
 import torch.distributed as dist
 from torch import nn
+from recovlm.utils.ds_utils import format_dict_or_list
 
 from torch.distributed._composable.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
 from torch.distributed._tensor import distribute_tensor, DTensor
 from torch.distributed._tensor.placement_types import DTensorSpec, TensorMeta
+
+import datetime
+process_group_timeout = datetime.timedelta(minutes=60*24)
+
 from torch.distributed.checkpoint.state_dict import (
     _init_optim_state,
     get_optimizer_state_dict,
@@ -162,7 +167,7 @@ def get_shard_conditions(
     """
 
     # 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration'
-    if model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration']:
+    if model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit', "Qwen2_5_VLForConditionalGeneration_siglip","Qwen3_VLForConditionalGeneration_siglip",'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope']:
         if names_to_match and name in names_to_match:
             return True
 
@@ -190,7 +195,8 @@ def shard_model(
     dp_mesh: Optional[DeviceMesh] = None,
     fp32_weight=True,
     prefetch_parameters=False,
-    model_class='InternVLChatModel'
+    model_class='InternVLChatModel',
+    fp32_reduce=True
     ) -> None:
     """
     Utility to shard a model with FSDP using the PyTorch Distributed fully_shard API.
@@ -216,29 +222,28 @@ def shard_model(
         ValueError: If no layer modules were sharded, indicating that no shard_condition was triggered.
     """
     fsdp_kwargs = {"reshard_after_forward": reshard_after_forward, "mesh": dp_mesh}
-    if fp32_weight: fsdp_kwargs["mp_policy"] = MixedPrecisionPolicy(param_dtype=torch.bfloat16, reduce_dtype=torch.bfloat16)
+    fp32_reduce=True
+    if fp32_weight: fsdp_kwargs["mp_policy"] = MixedPrecisionPolicy(param_dtype=torch.bfloat16, reduce_dtype=torch.float32 if fp32_reduce else torch.bfloat16)
     if cpu_offload:
         fsdp_kwargs["offload_policy"] = CPUOffloadPolicy()
 
     # Shard the model with FSDP, iterating in reverse to start with
     # lowest-level modules first
     num_layers_sharded = 0
+    print(f"model_definition: {list(model.named_modules())}")
 
     if model_class == 'InternVLChatModel':
         layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
         for m in layers:
-            # if m in layers:
-            #     if dist.get_rank() == 0: print("sharding", n)
             fully_shard(m, **fsdp_kwargs)
             num_layers_sharded += 1
     else: 
-        assert model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration']
-        layers = []
-        for n, m in reversed(list(model.named_modules())):
-            if any([shard_condition(n, m) for shard_condition in shard_conditions]):
-                fully_shard(m, **fsdp_kwargs)
-                num_layers_sharded += 1
-                layers.append(m)
+        assert model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit', "Qwen2_5_VLForConditionalGeneration_siglip","Qwen3_VLForConditionalGeneration_siglip",'Qwen3SiglipForConditionalGeneration_navit','KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope']
+        layers = list(model.visual.vision_model.encoder.layers) + list(model.model.layers)
+        for m in layers:
+            fully_shard(m, **fsdp_kwargs)
+            num_layers_sharded += 1
+            # layers.append(m)
 
 
     # print('=' * 40)
@@ -261,19 +266,51 @@ def shard_model(
         model.set_modules_to_forward_prefetch([prev])
 
 
-
-def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]):
+def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any], allow_random_init_params=None):
+    # allow_random_init_params = ['mlp_AR.pre_norm.weight', 'mlp_AR.pre_norm.bias', 'mlp_AR.linear_1.weight', 'mlp_AR.linear_1.bias', 'mlp_AR.linear_2.weight', 'mlp_AR.linear_2.bias']
+    if isinstance(allow_random_init_params, str): allow_random_init_params = allow_random_init_params.split(',')
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
     if dist.get_rank() == 0:
+        extra_meta_sharded_sd = set(meta_sharded_sd.keys()) - set((full_sd.keys()))
+        extra_full_ds = set(full_sd.keys()) - set((meta_sharded_sd.keys()))
+        extra_meta_sharded_sd = {
+            k:(v.shape, v.device, v.dtype) for k, v in meta_sharded_sd.items() if k in extra_meta_sharded_sd
+        }
+        extra_full_ds = {
+            k:(v.shape, v.device, v.dtype) for k, v in full_sd.items() if k in extra_full_ds
+        }
+        print(f"full_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in full_sd.items()})}")
+        print(f"meta_sharded_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in meta_sharded_sd.items()})}")
+
+        device0 = full_sd[list(full_sd)[0]]
+        for k in extra_meta_sharded_sd:
+            if allow_random_init_params is not None and k in allow_random_init_params:
+                # full_sd[k] = meta_sharded_sd[k].clone()
+                full_sd[k] = torch.rand(extra_meta_sharded_sd[k][0]) * 0.1 # ) .to(device0)
+                if full_sd[k].ndim >= 2:
+                    nn.init.kaiming_normal_(full_sd[k], a=0, mode='fan_in', nonlinearity='relu')
+                else:
+                    nn.init.zeros_(full_sd[k])  # 最常见
+                full_sd[k] = full_sd[k].to(device0)
+                # full_sd[k] = meta_sharded_sd[k].clone().to(device0)
+                print(f"random init k={k}, {extra_meta_sharded_sd[k]}\n, meta_sharded_sd={meta_sharded_sd[k]} \nfull={full_sd[k]}")
+
         assert len(meta_sharded_sd) == len(full_sd), \
-            "Sharded State Dict doesn't equal to Full State Dict"
+            f"Sharded State Dict doesn't equal to Full State Dict, {len(meta_sharded_sd) } v.s {len(full_sd)}" + "\n" + \
+            f"extra_meta_sharded_sd={format_dict_or_list(extra_meta_sharded_sd)}, extra_full_ds={format_dict_or_list(extra_full_ds)}"
         assert sorted(list(meta_sharded_sd.keys())) == sorted(list(full_sd.keys())), \
             "Keys of Sharded State Dict doesn't equal to Full State Dict"
 
     for param_name, sharded_meta_param in meta_sharded_sd.items():
         if dist.get_rank() == 0:
-            full_tensor = full_sd[param_name].detach().cuda().type(sharded_meta_param.dtype)
+            try:
+                full_tensor = full_sd[param_name].detach().cuda().type(sharded_meta_param.dtype)
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                print(f"bad param_name={param_name}\nsharded_meta_param={sharded_meta_param}")
+                raise e
         else:
             full_tensor = torch.empty(
                 sharded_meta_param.size(),
@@ -291,3 +328,57 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
             print(f"Load & redistribute: {param_name}")
 
     model.load_state_dict(sharded_sd, assign=True)
+
+
+
+
+
+# 这个是单机版本的load_from_full_model_state_dict
+def load_from_full_model_state_dict_local(model, full_sd: Dict[str, Any], allow_random_init_params="mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias"):
+    if isinstance(allow_random_init_params, str): allow_random_init_params = allow_random_init_params.split(',')
+    meta_sharded_sd = model.state_dict()
+    sharded_sd = {}
+
+    extra_meta_sharded_sd = set(meta_sharded_sd.keys()) - set((full_sd.keys()))
+    extra_full_ds = set(full_sd.keys()) - set((meta_sharded_sd.keys()))
+    extra_meta_sharded_sd = {
+        k:(v.shape, v.device, v.dtype) for k, v in meta_sharded_sd.items() if k in extra_meta_sharded_sd
+    }
+    extra_full_ds = {
+        k:(v.shape, v.device, v.dtype) for k, v in full_sd.items() if k in extra_full_ds
+    }
+    print(f"full_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in full_sd.items()})}")
+    print(f"meta_sharded_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in meta_sharded_sd.items()})}")
+
+    device0 = full_sd[list(full_sd)[0]]
+    for k in extra_meta_sharded_sd:
+        if allow_random_init_params is not None and k in allow_random_init_params:
+            # full_sd[k] = meta_sharded_sd[k].clone()
+            full_sd[k] = torch.rand(extra_meta_sharded_sd[k][0]) * 0.1 # ) .to(device0)
+            if full_sd[k].ndim >= 2:
+                nn.init.kaiming_normal_(full_sd[k], a=0, mode='fan_in', nonlinearity='relu')
+            else:
+                nn.init.zeros_(full_sd[k])  # 最常见
+            full_sd[k] = full_sd[k].to(device0)
+            # full_sd[k] = meta_sharded_sd[k].clone().to(device0)
+            print(f"random init k={k}, {extra_meta_sharded_sd[k]}\n, meta_sharded_sd={meta_sharded_sd[k]} \nfull={full_sd[k]}")
+
+    assert len(meta_sharded_sd) == len(full_sd), \
+        f"Sharded State Dict doesn't equal to Full State Dict, {len(meta_sharded_sd) } v.s {len(full_sd)}" + "\n" + \
+        f"extra_meta_sharded_sd={format_dict_or_list(extra_meta_sharded_sd)}, extra_full_ds={format_dict_or_list(extra_full_ds)}"
+    assert sorted(list(meta_sharded_sd.keys())) == sorted(list(full_sd.keys())), \
+        "Keys of Sharded State Dict doesn't equal to Full State Dict"
+
+
+    for param_name, sharded_meta_param in meta_sharded_sd.items():
+        full_tensor = full_sd[param_name].detach().cuda().type(sharded_meta_param.dtype)
+        sharded_sd[param_name] = nn.Parameter(full_tensor)
+    model.load_state_dict(sharded_sd, assign=True)
+
+
+
+
+
+
+
+

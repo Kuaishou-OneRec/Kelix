@@ -8,6 +8,9 @@ from flash_attn import flash_attn_varlen_func
 
 from recovlm.utils.common import print_rank_0, Timer
 
+import datetime
+process_group_timeout = datetime.timedelta(minutes=60*24)
+
 _SEQUENCE_PARALLEL_GROUP = None
 _SEQUENCE_PARALLEL_GROUP_GLOO = None
 _DATA_PARALLEL_GROUP = None
@@ -42,7 +45,7 @@ def worker_init_fn(worker_id):
             str(int(os.environ["MASTER_PORT"]) + worker_id + 1)
     os.environ["MASTER_PORT"] = os.environ["WORKER_MASTER_PORT"]
     dist.init_process_group(
-        "gloo", rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"])
+        "gloo", rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"]),timeout=process_group_timeout
     )
 
 def get_sequence_parallel_group(backend="nccl"):

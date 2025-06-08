@@ -20,6 +20,7 @@ class Metric:
     verbose_name: str = ""
     formula: str = ""
     reset_step: int = 0x3f3f3f3f
+    can_skip_update: bool = False
 
     def add_value(self, other: Dict[str, Any]):
         value = getattr(other, self.name)
@@ -42,6 +43,8 @@ class Metric:
         self.value = deepcopy(value)
 
     def update(self, other: Dict[str, Any]):
+        if self.can_skip_update and (self.name not in other.keys()):
+            return
         if isinstance(self.method, str):
             method = self.method
             update_method = getattr(self, "{}_value".format(method))
