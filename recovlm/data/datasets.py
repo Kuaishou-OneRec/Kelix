@@ -50,7 +50,7 @@ from recovlm.models.keye.processing_keye import KeyeProcessor
 from recovlm.models.keye.modeling_keye import KeyeConfig
 from recovlm.models.keye.keye_vl_utils import process_vision_info as process_vision_info_keye
 from recovlm.models.keye_vitrope.keye_vl_utils import process_vision_info as process_vision_info_keye_vitrope
-from recovlm.models.keye_vitrope_slowfast.keye_vl_utils import process_vision_info as process_vision_info_keye_slowfast
+from recovlm.models.keye_vitrope_slowfast.keye_vl_utils import process_vision_info as process_vision_info_keye_vitrope_slowfast
 
 from recovlm.utils.qwen_vl_utils import process_vision_info
 from recovlm.utils.common import shell_hdfs_ls, pytorch_worker_info
