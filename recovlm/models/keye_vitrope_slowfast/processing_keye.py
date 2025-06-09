@@ -73,8 +73,8 @@ class KeyeProcessor(ProcessorMixin):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         self.fast_patch_size = 16
-        self.fast_image_processor = SiglipImageProcessor(patch_size=16)
-        self.slowfast = False
+        self.fast_image_processor = SiglipImageProcessor(patch_size=self.fast_patch_size)
+        self.slowfast = True
 
     def __call__(
         self,
