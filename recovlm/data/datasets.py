@@ -2109,18 +2109,20 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       packed_pixel_values.append(inputs["pixel_values"])
       packed_image_gird_thw.append(inputs["image_grid_thw"])
       ##### fast #####
-      packed_fast_pixel_values.append(inputs["fast_pixel_values"])
-      packed_fast_image_grid_thw.append(inputs["fast_image_grid_thw"])
-      packed_all_image_grid_thw.append(inputs["all_image_grid_thw"])
+      if "fast_pixel_values" in inputs:
+        packed_fast_pixel_values.append(inputs["fast_pixel_values"])
+        packed_fast_image_grid_thw.append(inputs["fast_image_grid_thw"])
+        packed_all_image_grid_thw.append(inputs["all_image_grid_thw"])
     if "pixel_values_videos" in inputs:
       packed_pixel_values_videos.append(inputs["pixel_values_videos"])
       packed_video_grid_thw.append(inputs["video_grid_thw"])
       packed_second_per_grid_ts.append(inputs["second_per_grid_ts"])
       ##### fast #####
-      packed_fast_pixel_values_videos.append(inputs["fast_pixel_values_videos"])
-      packed_fast_video_grid_thw.append(inputs["fast_video_grid_thw"])
-      packed_all_video_grid_thw.append(inputs["all_video_grid_thw"])
-      packed_all_second_per_grid_ts.append(inputs["all_second_per_grid_ts"])
+      if "fast_pixel_values_videos" in inputs:
+        packed_fast_pixel_values_videos.append(inputs["fast_pixel_values_videos"])
+        packed_fast_video_grid_thw.append(inputs["fast_video_grid_thw"])
+        packed_all_video_grid_thw.append(inputs["all_video_grid_thw"])
+        packed_all_second_per_grid_ts.append(inputs["all_second_per_grid_ts"])
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     return len(inputs["input_ids"][0])
 

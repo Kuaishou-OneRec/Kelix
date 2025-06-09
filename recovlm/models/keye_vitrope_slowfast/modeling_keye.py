@@ -3132,56 +3132,59 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 #64*7168
                 
 
-                ############## fast vit start ##############
-                fast_pixel_values = fast_pixel_values.type(self.visual.dtype)
-                fast_pixel_values = fast_pixel_values.unsqueeze(0)
-                fast_siglip_position_ids = list()
-                fast_image_grid_hws = list()
-                fast_sample_indices = list()
-                fast_cu_seqlens = [0]
+                if fast_pixel_values is not None:
 
-                #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
-                for idx, thw in enumerate(fast_image_grid_thw):
-                    thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
-                    numel = np.prod(thw_tuple)
-                    fast_image_grid_hws.append(thw_tuple)
-                    fast_image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
-                    fast_siglip_position_ids.append(fast_image_position_ids)
-                    fast_sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
-                    fast_cu_seqlens.append(fast_cu_seqlens[-1] + numel)
+                    ############## fast vit start ##############
+                    fast_pixel_values = fast_pixel_values.type(self.visual.dtype)
+                    fast_pixel_values = fast_pixel_values.unsqueeze(0)
+                    fast_siglip_position_ids = list()
+                    fast_image_grid_hws = list()
+                    fast_sample_indices = list()
+                    fast_cu_seqlens = [0]
 
-                fast_siglip_position_ids = torch.concat(fast_siglip_position_ids, dim=0).to(pixel_values.device)
-                fast_cu_seqlens = torch.tensor(fast_cu_seqlens, dtype=torch.int32).to(pixel_values.device)
-                fast_sample_indices = torch.concat(fast_sample_indices, dim=0).to(pixel_values.device)
-                # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
-                #print(f"X=3, rank={torch.distributed.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
-                fast_vision_outputs = self.visual_fast(
-                    pixel_values=fast_pixel_values, 
-                    image_grid_thw=fast_image_grid_hws,
-                    position_ids=fast_siglip_position_ids,
-                    vision_return_embed_list=True,
-                    interpolate_pos_encoding=True,
-                    sample_indices=fast_sample_indices,
-                    cu_seqlens=fast_cu_seqlens,
-                    return_pooler_output=False,
-                    use_rope=False,
-                    window_size =-1,
-                )
-                fast_image_embeds = fast_vision_outputs.last_hidden_state
-                fast_image_embeds = self.fast_mlp_AR(fast_image_embeds, fast_image_grid_hws)
+                    #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
+                    for idx, thw in enumerate(fast_image_grid_thw):
+                        thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
+                        numel = np.prod(thw_tuple)
+                        fast_image_grid_hws.append(thw_tuple)
+                        fast_image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+                        fast_siglip_position_ids.append(fast_image_position_ids)
+                        fast_sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
+                        fast_cu_seqlens.append(fast_cu_seqlens[-1] + numel)
 
-                # fast_vision_outputs = fast_vision_outputs.last_hidden_state
-                ############## fast vit end ##############
+                    fast_siglip_position_ids = torch.concat(fast_siglip_position_ids, dim=0).to(pixel_values.device)
+                    fast_cu_seqlens = torch.tensor(fast_cu_seqlens, dtype=torch.int32).to(pixel_values.device)
+                    fast_sample_indices = torch.concat(fast_sample_indices, dim=0).to(pixel_values.device)
+                    # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
+                    #print(f"X=3, rank={torch.distributed.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
+                    fast_vision_outputs = self.visual_fast(
+                        pixel_values=fast_pixel_values, 
+                        image_grid_thw=fast_image_grid_hws,
+                        position_ids=fast_siglip_position_ids,
+                        vision_return_embed_list=True,
+                        interpolate_pos_encoding=True,
+                        sample_indices=fast_sample_indices,
+                        cu_seqlens=fast_cu_seqlens,
+                        return_pooler_output=False,
+                        use_rope=False,
+                        window_size =-1,
+                    )
+                    fast_image_embeds = fast_vision_outputs.last_hidden_state
+                    fast_image_embeds = self.fast_mlp_AR(fast_image_embeds, fast_image_grid_hws)
 
-                ############## Slow Fast Merge ##############
-                print("cjx image debug: slow part {}, fast part {}".format(pixel_values.size(), fast_pixel_values.size()))
-                merged_image_embeds = list()
-                for i in range(len(image_embeds)):
-                    merged_image_embeds.append(image_embeds[i])
-                    merged_image_embeds.append(fast_image_embeds[i])
-                image_embeds = merged_image_embeds
-                ############## Slow Fast Merge ##############
+                    # fast_vision_outputs = fast_vision_outputs.last_hidden_state
+                    ############## fast vit end ##############
 
+                    ############## Slow Fast Merge ##############
+                    print("cjx image debug: slow part {}, fast part {}".format(pixel_values.size(), fast_pixel_values.size()))
+                    merged_image_embeds = list()
+                    for i in range(len(image_embeds)):
+                        merged_image_embeds.append(image_embeds[i])
+                        merged_image_embeds.append(fast_image_embeds[i])
+                    image_embeds = merged_image_embeds
+                    ############## Slow Fast Merge ##############
+
+                print("cjx image debug: slow part {}".format(pixel_values.size()))
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 #image_embeds is a list of tensor, each tensor is a image feature,I want to concat them all into a tensor
                 image_embeds = torch.cat(image_embeds,dim=0)
@@ -3239,54 +3242,54 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 video_embeds = vision_outputs.last_hidden_state
                 video_embeds = self.mlp_AR(video_embeds, video_grid_thw)
 
-                ############## fast vit start ##############
-                fast_pixel_values_videos = fast_pixel_values_videos.type(self.visual.dtype)
-                fast_pixel_values_videos = fast_pixel_values_videos.unsqueeze(0)
-                fast_siglip_position_ids = list()
-                fast_video_grid_hws = list()
-                fast_sample_indices = list()
-                fast_cu_seqlens = [0]
+                if fast_pixel_values_videos is not None:
+                    ############## fast vit start ##############
+                    fast_pixel_values_videos = fast_pixel_values_videos.type(self.visual.dtype)
+                    fast_pixel_values_videos = fast_pixel_values_videos.unsqueeze(0)
+                    fast_siglip_position_ids = list()
+                    fast_video_grid_hws = list()
+                    fast_sample_indices = list()
+                    fast_cu_seqlens = [0]
 
-                for idx, thw in enumerate(fast_video_grid_thw):
-                    thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
-                    numel = np.prod(thw_tuple)
+                    for idx, thw in enumerate(fast_video_grid_thw):
+                        thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
+                        numel = np.prod(thw_tuple)
 
-                    fast_video_grid_hws.append(thw_tuple)
-                    video_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
-                    fast_siglip_position_ids.append(video_position_ids)
-                    fast_sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
-                    fast_cu_seqlens.append(fast_cu_seqlens[-1] + numel)
-                fast_siglip_position_ids = torch.concat(fast_siglip_position_ids, dim=0).to(fast_pixel_values_videos.device)
-                fast_cu_seqlens = torch.tensor(fast_cu_seqlens, dtype=torch.int32).to(fast_pixel_values_videos.device)
-                fast_sample_indices = torch.concat(fast_sample_indices, dim=0).to(fast_pixel_values_videos.device)
+                        fast_video_grid_hws.append(thw_tuple)
+                        video_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+                        fast_siglip_position_ids.append(video_position_ids)
+                        fast_sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
+                        fast_cu_seqlens.append(fast_cu_seqlens[-1] + numel)
+                    fast_siglip_position_ids = torch.concat(fast_siglip_position_ids, dim=0).to(fast_pixel_values_videos.device)
+                    fast_cu_seqlens = torch.tensor(fast_cu_seqlens, dtype=torch.int32).to(fast_pixel_values_videos.device)
+                    fast_sample_indices = torch.concat(fast_sample_indices, dim=0).to(fast_pixel_values_videos.device)
 
-                fast_vision_outputs = self.visual_fast(
-                    pixel_values=fast_pixel_values_videos, 
-                    image_grid_thw=fast_video_grid_hws,
-                    position_ids=fast_siglip_position_ids,
-                    vision_return_embed_list=True,
-                    interpolate_pos_encoding=True,
-                    sample_indices=fast_sample_indices,
-                    cu_seqlens=fast_cu_seqlens,
-                    return_pooler_output=False,
-                    use_rope=False,
-                    window_size =-1,
-                )
-                fast_video_embeds = fast_vision_outputs.last_hidden_state
-                fast_video_embeds = self.fast_mlp_AR(fast_video_embeds, fast_video_grid_thw)
-                ############## fast vit end ##############
+                    fast_vision_outputs = self.visual_fast(
+                        pixel_values=fast_pixel_values_videos, 
+                        image_grid_thw=fast_video_grid_hws,
+                        position_ids=fast_siglip_position_ids,
+                        vision_return_embed_list=True,
+                        interpolate_pos_encoding=True,
+                        sample_indices=fast_sample_indices,
+                        cu_seqlens=fast_cu_seqlens,
+                        return_pooler_output=False,
+                        use_rope=False,
+                        window_size =-1,
+                    )
+                    fast_video_embeds = fast_vision_outputs.last_hidden_state
+                    fast_video_embeds = self.fast_mlp_AR(fast_video_embeds, fast_video_grid_thw)
+                    ############## fast vit end ##############
                 
-                ############## Slow Fast Merge ##############
-                print("cjx video debug: slow part {}, fast part {}".format(pixel_values_videos.size(), fast_pixel_values_videos.size()))
-                merged_video_embeds = list()
-                for i in range(len(video_embeds)):
-                    merged_video_embeds.append(video_embeds[i])
-                    merged_video_embeds.append(fast_video_embeds[i])
-                video_embeds = merged_video_embeds
-                ############## Slow Fast Merge ##############
-
-
-
+                    ############## Slow Fast Merge ##############
+                    print("cjx video debug: slow part {}, fast part {}".format(pixel_values_videos.size(), fast_pixel_values_videos.size()))
+                    merged_video_embeds = list()
+                    for i in range(len(video_embeds)):
+                        merged_video_embeds.append(video_embeds[i])
+                        merged_video_embeds.append(fast_video_embeds[i])
+                    video_embeds = merged_video_embeds
+                    ############## Slow Fast Merge ##############
+                
+                print("cjx video debug: slow part {}".format(pixel_values_videos.size()))
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 video_embeds = torch.cat(video_embeds,dim=0)
                 n_video_features = video_embeds.shape[0]

@@ -74,7 +74,7 @@ class KeyeProcessor(ProcessorMixin):
 
         self.fast_patch_size = 16
         self.fast_image_processor = SiglipImageProcessor(patch_size=16)
-        self.slowfast = True
+        self.slowfast = False
 
     def __call__(
         self,
