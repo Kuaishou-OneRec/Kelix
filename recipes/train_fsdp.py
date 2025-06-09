@@ -481,21 +481,21 @@ def freeze_params(args, model):
     if args.freeze_llm:
       print_rank_0("Freeze LLM parameters.")
       for name, param in model.named_parameters():
-        if not (name.startswith("visual") or name.startswith("mlp_AR")):
+        if not (name.startswith("visual") or name.startswith("mlp_AR") or name.startswith("fast_mlp_AR")):
           print_rank_0(f"Disable LLM grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
     if args.freeze_projector:
       print_rank_0("Freeze visual encoder parameters.")
       for name, param in model.named_parameters():
-        if name.startswith("mlp_AR"):
+        if name.startswith("mlp_AR") or name.startswith("fast_mlp_AR"):
           print_rank_0(f"Disable visual encoder grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
     if args.freeze_visual:
       print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
       for name, param in model.named_parameters():
-        if name.startswith("visual") and not name.startswith("mlp_AR"):
+        if name.startswith("visual"):
           print_rank_0(f"Disable visual encoder grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
