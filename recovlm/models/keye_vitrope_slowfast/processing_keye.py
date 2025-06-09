@@ -312,9 +312,11 @@ class KeyeProcessor(ProcessorMixin):
             index = 0
             for i in range(len(text)):
                 while self.image_token in text[i]:
-                    image_place_holder_tempale = "<|slow_image_start|>" + "<|placeholder|>" * (image_grid_thw[index].prod()//self.image_processor.merge_size//self.image_processor.merge_size) + "<|slow_image_end|>"
+                    # image_place_holder_tempale = "<|slow_image_start|>" + "<|placeholder|>" * (image_grid_thw[index].prod()//self.image_processor.merge_size//self.image_processor.merge_size) + "<|slow_image_end|>"
+                    image_place_holder_tempale = "<|placeholder|>" * (image_grid_thw[index].prod()//self.image_processor.merge_size//self.image_processor.merge_size)
                     if self.slowfast:
-                        image_place_holder_tempale += "<|fast_image_start|>" + ("<|placeholder|>" * (image_inputs["fast_image_grid_thw"][index].prod()//self.image_processor.merge_size//self.image_processor.merge_size)) + "<|fast_image_end|>"
+                        # image_place_holder_tempale += "<|fast_image_start|>" + ("<|placeholder|>" * (image_inputs["fast_image_grid_thw"][index].prod()//self.image_processor.merge_size//self.image_processor.merge_size)) + "<|fast_image_end|>"
+                        image_place_holder_tempale += ("<|placeholder|>" * (image_inputs["fast_image_grid_thw"][index].prod()//self.image_processor.merge_size//self.image_processor.merge_size))
                     text[i] = text[i].replace(
                         self.image_token,
                         image_place_holder_tempale,
@@ -329,10 +331,11 @@ class KeyeProcessor(ProcessorMixin):
                 while self.video_token in text[i]:
                     video_place_holder_tempale = ""
                     for j in range(len(slow_videos_token_nums[index])):
-                        video_place_holder_tempale += "<|slow_video_start|>" + "<|placeholder|>" * (slow_videos_token_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size) + "<|slow_video_end|>"
+                        # video_place_holder_tempale += "<|slow_video_start|>" + "<|placeholder|>" * (slow_videos_token_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size) + "<|slow_video_end|>"
+                        video_place_holder_tempale += "<|placeholder|>" * (slow_videos_token_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size)
                         if self.slowfast:
                             # 这里是为了保证每一帧的token都被分割开
-                            video_place_holder_tempale += ("<|fast_video_start|>" + ("<|placeholder|>" * (fast_videos_token_nums[index][j]//fast_videos_frame_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size)) + "<|fast_video_end|>") * fast_videos_frame_nums[index][j]
+                            video_place_holder_tempale += "<|placeholder|>" * (fast_videos_token_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size)
                             # video_place_holder_tempale += "<|fast_video_start|>" + ("<|placeholder|>" * (fast_videos_token_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size)) + "<|fast_video_end|>"
                     text[i] = text[i].replace(
                         self.video_token,
