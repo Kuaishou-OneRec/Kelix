@@ -2923,7 +2923,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 image_nums = (vision_tokens == image_token_id).sum()
                 # video_nums = (vision_tokens == video_token_id).sum()
                 # video_start_index_list = vision_tokens == video_token_id.
-                video_start_indices = torch.argwhere(vision_tokens == video_token_id) - 1
+                # video_start_indices = torch.argwhere(vision_tokens == video_token_id)
+                video_start_indices = vision_start_indices[vision_tokens == video_token_id]
+                
                 video_nums = video_grid_thw.size(0)//2
                 input_tokens = input_ids.tolist()
                 llm_pos_ids_list: list = []
@@ -2931,6 +2933,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 remain_images, remain_videos = image_nums, video_nums
                 # remain_images, remain_videos = image_nums, video_grid_thw.size(0)//2
                 for _ in range(image_nums + video_nums):
+                    assert video_nums * 2 != second_per_grid_ts.size(0), print("video_grid_thw is {}, and second_per_grid_ts is {}".format(video_grid_thw.size(), second_per_grid_ts,size()))
+                    
                     if image_token_id in input_tokens and remain_images > 0:
                         ed_image = input_tokens.index(image_token_id, st)
                     else:
@@ -2939,8 +2943,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         ed_video = input_tokens.index(video_token_id, st)
                     else:
                         ed_video = len(input_tokens) + 1
-                    # import pdb
-                    # pdb.set_trace()
+                    
                     if ed_image < ed_video:
                         t, h, w = (
                             image_grid_thw[image_index][0],
@@ -2971,6 +2974,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         if second_per_grid_ts is not None:
                             lookback_video_index = (video_start_indices < ed_video).sum() - 1
                             second_per_grid_t = second_per_grid_ts[lookback_video_index]
+                            import pdb
+                            pdb.set_trace()
                         else:
                             second_per_grid_t = 1.0
                         video_index += 2
