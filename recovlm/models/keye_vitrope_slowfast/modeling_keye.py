@@ -2922,6 +2922,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 vision_tokens = input_ids[vision_start_indices + 1]
                 image_nums = (vision_tokens == image_token_id).sum()
                 # video_nums = (vision_tokens == video_token_id).sum()
+                # video_start_index_list = vision_tokens == video_token_id.
+                video_start_indices = torch.argwhere(vision_tokens == video_token_id) - 1
                 video_nums = video_grid_thw.size(0)//2
                 input_tokens = input_ids.tolist()
                 llm_pos_ids_list: list = []
@@ -2967,7 +2969,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                             video_grid_thw[video_index+1][2],
                         )
                         if second_per_grid_ts is not None:
-                            second_per_grid_t = second_per_grid_ts[video_index]
+                            lookback_video_index = (video_start_indices < ed_video).sum() - 1
+                            second_per_grid_t = second_per_grid_ts[lookback_video_index]
                         else:
                             second_per_grid_t = 1.0
                         video_index += 2
