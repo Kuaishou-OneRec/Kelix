@@ -130,7 +130,7 @@ class KeyeProcessor(ProcessorMixin):
             image_inputs['pixel_values'] = image_inputs['pixel_values']
             image_grid_thw = image_inputs["image_grid_thw"]
 
-            ####### fast part #########å
+            ####### fast part #########
             if self.slowfast:
                 if kwargs.get("image_video_pad", False):
                     fast_image_inputs = self.fast_image_processor.preprocess(
