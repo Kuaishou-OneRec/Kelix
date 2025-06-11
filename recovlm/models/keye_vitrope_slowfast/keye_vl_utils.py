@@ -295,14 +295,12 @@ def _read_video_decord_slowfast(
     nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
 
     indices = torch.linspace(0, total_frames - 1, nframes).round().long()
-
-    if indices.shape[0] % SLOWFAST_RATIO == 1:
-        indices = torch.concat([indices, indices[-1:]], dim=0)
+    
     slow_mask = torch.remainder(torch.arange(indices.shape[0]), SLOWFAST_RATIO) == 0
     frames = vr.get_batch(indices.tolist()).asnumpy()
     frames = torch.tensor(frames).permute(0, 3, 1, 2)
     slow_frames = frames[slow_mask]
-    fast_frames = frames[~slow_mask]
+    fast_frames = frames
     return slow_frames, fast_frames
 
 
@@ -372,7 +370,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             interpolation=InterpolationMode.BICUBIC,
             antialias=True,
         ).float()
-        fast_frames = list(fast_frames.split(SLOWFAST_RATIO - 1, dim=0))
+        fast_frames = list(fast_frames.split(SLOWFAST_RATIO, dim=0))
         assert len(slow_frames) == len(fast_frames)
 
         return slow_frames, fast_frames

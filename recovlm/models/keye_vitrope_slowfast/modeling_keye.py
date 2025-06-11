@@ -2921,11 +2921,13 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
                 vision_tokens = input_ids[vision_start_indices + 1]
                 image_nums = (vision_tokens == image_token_id).sum()
-                video_nums = (vision_tokens == video_token_id).sum()
+                # video_nums = (vision_tokens == video_token_id).sum()
+                video_nums = video_grid_thw.size(0)//2
                 input_tokens = input_ids.tolist()
                 llm_pos_ids_list: list = []
                 st = 0
                 remain_images, remain_videos = image_nums, video_nums
+                # remain_images, remain_videos = image_nums, video_grid_thw.size(0)//2
                 for _ in range(image_nums + video_nums):
                     if image_token_id in input_tokens and remain_images > 0:
                         ed_image = input_tokens.index(image_token_id, st)
@@ -2935,14 +2937,21 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         ed_video = input_tokens.index(video_token_id, st)
                     else:
                         ed_video = len(input_tokens) + 1
+                    # import pdb
+                    # pdb.set_trace()
                     if ed_image < ed_video:
                         t, h, w = (
                             image_grid_thw[image_index][0],
                             image_grid_thw[image_index][1],
                             image_grid_thw[image_index][2],
                         )
+                        tf,hf,wf = (
+                            image_grid_thw[image_index+1][0],
+                            image_grid_thw[image_index+1][1],
+                            image_grid_thw[image_index+1][2],
+                        )
                         second_per_grid_t = 0
-                        image_index += 1
+                        image_index += 2
                         remain_images -= 1
                         ed = ed_image
 
@@ -2952,11 +2961,16 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                             video_grid_thw[video_index][1],
                             video_grid_thw[video_index][2],
                         )
+                        tf,hf,wf = (
+                            video_grid_thw[video_index+1][0],
+                            video_grid_thw[video_index+1][1],
+                            video_grid_thw[video_index+1][2],
+                        )
                         if second_per_grid_ts is not None:
                             second_per_grid_t = second_per_grid_ts[video_index]
                         else:
                             second_per_grid_t = 1.0
-                        video_index += 1
+                        video_index += 2
                         remain_videos -= 1
                         ed = ed_video
                     llm_grid_t, llm_grid_h, llm_grid_w = (
@@ -2964,24 +2978,39 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         h.item() // spatial_merge_size,
                         w.item() // spatial_merge_size,
                     )
+                    llm_grid_tf, llm_grid_hf, llm_grid_wf = (
+                        tf.item(),
+                        hf.item() // spatial_merge_size,
+                        wf.item() // spatial_merge_size,
+                    )
                     text_len = ed - st
 
-                    st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
+                    st_idx = llm_pos_ids_list[-1][0].max() + 1 if len(llm_pos_ids_list) > 0 else 0
                     llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
                     if torch.is_tensor(second_per_grid_t): second_per_grid_t = second_per_grid_t.detach().item()
                     range_tensor = torch.arange(llm_grid_t).view(-1, 1)
+                    range_tensor_tf = torch.arange(llm_grid_tf).view(-1, 1)
                     expanded_range = range_tensor.expand(-1, llm_grid_h * llm_grid_w)
+                    expanded_range_tf = range_tensor_tf.expand(-1, llm_grid_hf * llm_grid_wf)
 
                     time_tensor = expanded_range * second_per_grid_t * self.config.vision_config.tokens_per_second
-
+                    time_tensor_tf = expanded_range_tf * second_per_grid_t * self.config.vision_config.tokens_per_second
                     time_tensor_long = time_tensor.long()
+                    time_tensor_long_tf = time_tensor_tf.long()
                     t_index = time_tensor_long.flatten()
+                    t_index_tf = time_tensor_long_tf.flatten()
 
                     h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
                     w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
+                    h_index_tf = torch.arange(llm_grid_hf).view(1, -1, 1).expand(llm_grid_tf, -1, llm_grid_wf).flatten()
+                    w_index_tf = torch.arange(llm_grid_wf).view(1, 1, -1).expand(llm_grid_tf, llm_grid_hf, -1).flatten()
+                    #add slow and fast part
                     llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + text_len + st_idx)
+                    llm_pos_ids_list.append(torch.stack([t_index_tf, h_index_tf, w_index_tf]) + text_len + st_idx)
+
                     st = ed + llm_grid_t * llm_grid_h * llm_grid_w
+                    st = st + llm_grid_tf * llm_grid_hf * llm_grid_wf
 
                 if st < len(input_tokens):
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0

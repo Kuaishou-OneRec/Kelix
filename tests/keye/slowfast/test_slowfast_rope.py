@@ -111,23 +111,23 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-PROCESSOR_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-2B-demo-slowfast"
-MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-2B-demo_fix_improc_slowfast/"
+PROCESSOR_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0608_debug"
+MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0608_debug"
 
 processor = KeyeProcessor.from_pretrained(PROCESSOR_DIR)
 tokenizer = processor.tokenizer
 
 
 def make_inputs(a,b):
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "image", "image": generate_circle_image((a,b),) },
-                {"type": "text", "text": "what's in the image"},
-            ],
-        }
-    ]
+    # messages = [
+    #     {
+    #         "role": "user",
+    #         "content": [
+    #             {"type": "image", "image": generate_circle_image((a,b),) },
+    #             {"type": "text", "text": "what's in the image"},
+    #         ],
+    #     }
+    # ]
 
     # messages = [
     #     {"role": "user", 
@@ -147,26 +147,24 @@ def make_inputs(a,b):
     #         "text": "\\nGenerate video descriptions that include details of visual effects, character actions, and movement of people/objects within frames. Describe this video and its style to generate a description. Pay attention to all objects in the video. Do not describe each frame individually. Instead of describing the imaginary content, only describing the content one can determine confidently. Do not describe the contents by itemizing them in list form."}]}
     #     ]
     
-    # messages = [
-    #     {"role": "user", 
-    #     "content": 
-    #     [
-    #         {"type": "video", 
-    #         "video": ["/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png", "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"]}, 
-    #         {"type": "video", 
-    #         "video": ["/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png", "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"]}, 
-    #         {"type": "video", 
-    #         "video": "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/tests/qwen3navit/2.mp4"}, 
-    #         {"type": "text", 
-    #         "text": "\\nWhat information in this video?"}]}
-    #     ]
+    messages = [
+        {"role": "user", 
+        "content": 
+        [
+            {"type": "video", 
+            "video": ["/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png", "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"]}, 
+            {"type": "video", 
+            "video": ["/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png", "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"]}, 
+            # {"type": "video", 
+            # "video": "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/tests/qwen3navit/2.mp4"}, 
+            {"type": "text", 
+            "text": "\\nWhat information in this video?"}]}
+        ]
 
     # messages = [
     #     {"role": "user", 
     #     "content": 
     #     [
-    #         {"type": "image", 
-    #         "image": "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"}, 
     #         {"type": "image", 
     #         "image": "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"}, 
     #         {"type": "text", 
