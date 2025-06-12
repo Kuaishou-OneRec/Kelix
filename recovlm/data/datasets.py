@@ -2263,7 +2263,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       "fast_video_grid_thw": packed_fast_video_grid_thw,
       "all_image_grid_thw": packed_all_image_grid_thw,
       "all_video_grid_thw": packed_all_video_grid_thw,
-      "packed_all_second_per_grid_ts": packed_all_second_per_grid_ts
+      "all_second_per_grid_ts": packed_all_second_per_grid_ts
     }
 
     return inputs

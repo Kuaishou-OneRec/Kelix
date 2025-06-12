@@ -1178,6 +1178,7 @@ def train():
             image_sample_indices = batch.get("image_sample_indices", None)
             image_cu_seqlens = batch.get("image_cu_seqlens", None)
             second_per_grid_ts = batch.get("second_per_grid_ts", None)
+            all_second_per_grid_ts = batch.get("all_second_per_grid_ts", None)
             output = model(
               input_ids = input_ids, attention_mask=attention_mask,
               pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
