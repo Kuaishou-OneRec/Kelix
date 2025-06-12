@@ -301,6 +301,7 @@ class KeyeProcessor(ProcessorMixin):
 
                 videos_inputs["all_video_grid_thw"] = torch.stack(list(chain.from_iterable(zip(videos_inputs["video_grid_thw"], videos_inputs["fast_video_grid_thw"]))), dim = 0)
                 videos_inputs["all_second_per_grid_ts"] = torch.stack(list(chain.from_iterable(zip(videos_inputs["second_per_grid_ts"], videos_inputs["fast_second_per_grid_ts"]))), dim = 0)
+                print("preprocessing all_second_per_grid_ts: {}".format(videos_inputs["all_second_per_grid_ts"].size()))
         else:
             videos_inputs = {}
             video_grid_thw = None
