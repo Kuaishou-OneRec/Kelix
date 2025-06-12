@@ -2935,6 +2935,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 # remain_images, remain_videos = image_nums, video_grid_thw.size(0)//2
                 for _ in range(image_nums + video_nums):
                     if video_nums:
+                        print("video_grid_thw is {}, and second_per_grid_ts is {}".format(video_grid_thw.size(), second_per_grid_ts))
                         assert video_nums * 2 != second_per_grid_ts.size(0), print("video_grid_thw is {}, and second_per_grid_ts is {}".format(video_grid_thw.size(), second_per_grid_ts.size()))
 
                     if image_token_id in input_tokens and remain_images > 0:
@@ -3358,7 +3359,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 or self.rope_deltas is None
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
             ):
-                print("all_second_per_grid_ts size {}, second_per_grid_ts size {}".format(all_second_per_grid_ts.size(), second_per_grid_ts.size()))
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     all_image_grid_thw if all_image_grid_thw is not None else image_grid_thw,
