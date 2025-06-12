@@ -2918,13 +2918,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             for i, input_ids in enumerate(total_input_ids):
                 input_ids = input_ids[attention_mask[i] == 1]
                 image_nums, video_nums = 0, 0
-                vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
-                vision_tokens = input_ids[vision_start_indices + 1]
                 image_nums = (vision_tokens == image_token_id).sum()
                 # video_nums = (vision_tokens == video_token_id).sum()
-                # video_start_index_list = vision_tokens == video_token_id.
-                # video_start_indices = torch.argwhere(vision_tokens == video_token_id)
-                video_start_indices = vision_start_indices[vision_tokens == video_token_id]
                 video_nums = video_grid_thw.size(0)//2
                 if not video_nums:
                     video_nums = 0
@@ -2972,12 +2967,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                             video_grid_thw[video_index+1][2],
                         )
                         if second_per_grid_ts is not None:
-                            # lookback_video_index = (video_start_indices < ed_video).sum() - 1
-                            try:
-                                second_per_grid_t = second_per_grid_ts[video_index]
-                            except:
-                                print("input_tokens size is {}, ed_image is {}, ed_video is {}, image_index is {}, image_grid_thw is {}, video_index is {}, video_grid_thw is {}, and second_per_grid_ts is {}, remain_images is {}, reamin_videos is {}, total_image is {}, total_video is {}".format(len(input_tokens), ed_image, ed_video, image_index, image_grid_thw.size(), video_index, video_grid_thw.size(), second_per_grid_ts.size(), remain_images, remain_videos, image_nums, video_nums))
-                                exit(0)
+                            second_per_grid_t = second_per_grid_ts[video_index]
                         else:
                             second_per_grid_t = 1.0
                         video_index += 2
