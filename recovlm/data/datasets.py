@@ -2226,6 +2226,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       torch.cat(packed_all_image_grid_thw, dim=0)
     packed_all_video_grid_thw = None if len(packed_all_video_grid_thw) == 0 else \
       torch.cat(packed_all_video_grid_thw, dim=0)
+    print("dataset packed_all_second_per_grid_ts len is {}, packed_all_video_grid_thw is {}".format(len(packed_all_second_per_grid_ts), len(packed_all_video_grid_thw)))
     packed_all_second_per_grid_ts = None if len(packed_all_second_per_grid_ts) == 0 else \
       torch.cat(packed_all_second_per_grid_ts, dim=0)
     ############
