@@ -2925,15 +2925,17 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 # video_start_index_list = vision_tokens == video_token_id.
                 # video_start_indices = torch.argwhere(vision_tokens == video_token_id)
                 video_start_indices = vision_start_indices[vision_tokens == video_token_id]
-                
                 video_nums = video_grid_thw.size(0)//2
+                if not video_nums:
+                    video_nums = 0
                 input_tokens = input_ids.tolist()
                 llm_pos_ids_list: list = []
                 st = 0
                 remain_images, remain_videos = image_nums, video_nums
                 # remain_images, remain_videos = image_nums, video_grid_thw.size(0)//2
                 for _ in range(image_nums + video_nums):
-                    assert video_nums * 2 != second_per_grid_ts.size(0), print("video_grid_thw is {}, and second_per_grid_ts is {}".format(video_grid_thw.size(), second_per_grid_ts.size()))
+                    if video_nums:
+                        assert video_nums * 2 != second_per_grid_ts.size(0), print("video_grid_thw is {}, and second_per_grid_ts is {}".format(video_grid_thw.size(), second_per_grid_ts.size()))
 
                     if image_token_id in input_tokens and remain_images > 0:
                         ed_image = input_tokens.index(image_token_id, st)
