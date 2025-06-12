@@ -2976,7 +2976,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                             try:
                                 second_per_grid_t = second_per_grid_ts[video_index]
                             except:
-                                print("video_grid_thw is {}, and second_per_grid_ts is {}".format(video_grid_thw.size(), second_per_grid_ts.size()))
+                                print("video_index is {}, video_grid_thw is {}, and second_per_grid_ts is {}".format(video_index, video_grid_thw.size(), second_per_grid_ts.size()))
                                 exit(0)
                         else:
                             second_per_grid_t = 1.0
