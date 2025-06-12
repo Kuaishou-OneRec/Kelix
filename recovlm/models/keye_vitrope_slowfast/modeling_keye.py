@@ -2972,8 +2972,12 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                             video_grid_thw[video_index+1][2],
                         )
                         if second_per_grid_ts is not None:
-                            lookback_video_index = (video_start_indices < ed_video).sum() - 1
-                            second_per_grid_t = second_per_grid_ts[lookback_video_index]
+                            # lookback_video_index = (video_start_indices < ed_video).sum() - 1
+                            try:
+                                second_per_grid_t = second_per_grid_ts[video_index]
+                            except:
+                                print("video_grid_thw is {}, and second_per_grid_ts is {}".format(video_grid_thw.size(), second_per_grid_ts.size()))
+                                exit(0)
                         else:
                             second_per_grid_t = 1.0
                         video_index += 2
