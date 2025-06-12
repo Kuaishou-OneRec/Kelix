@@ -2974,8 +2974,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         if second_per_grid_ts is not None:
                             lookback_video_index = (video_start_indices < ed_video).sum() - 1
                             second_per_grid_t = second_per_grid_ts[lookback_video_index]
-                            import pdb
-                            pdb.set_trace()
                         else:
                             second_per_grid_t = 1.0
                         video_index += 2
