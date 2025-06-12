@@ -2970,8 +2970,10 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         )
                         if second_per_grid_ts is not None:
                             second_per_grid_t = second_per_grid_ts[video_index]
+                            second_per_grid_t_fs = second_per_grid_ts[video_index+1]
                         else:
                             second_per_grid_t = 1.0
+                            second_per_grid_t_fs = 1.0
                         video_index += 2
                         remain_videos -= 1
                         ed = ed_video
@@ -2991,13 +2993,14 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
                     if torch.is_tensor(second_per_grid_t): second_per_grid_t = second_per_grid_t.detach().item()
+                    if torch.is_tensor(second_per_grid_t_fs): second_per_grid_t_fs = second_per_grid_t_fs.detach().item()
                     range_tensor = torch.arange(llm_grid_t).view(-1, 1)
                     range_tensor_tf = torch.arange(llm_grid_tf).view(-1, 1)
                     expanded_range = range_tensor.expand(-1, llm_grid_h * llm_grid_w)
                     expanded_range_tf = range_tensor_tf.expand(-1, llm_grid_hf * llm_grid_wf)
 
                     time_tensor = expanded_range * second_per_grid_t * self.config.vision_config.tokens_per_second
-                    time_tensor_tf = expanded_range_tf * second_per_grid_t * self.config.vision_config.tokens_per_second
+                    time_tensor_tf = expanded_range_tf * second_per_grid_t_fs * self.config.vision_config.tokens_per_second
                     time_tensor_long = time_tensor.long()
                     time_tensor_long_tf = time_tensor_tf.long()
                     t_index = time_tensor_long.flatten()
