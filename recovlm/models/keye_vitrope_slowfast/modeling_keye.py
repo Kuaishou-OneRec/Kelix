@@ -3356,6 +3356,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 or self.rope_deltas is None
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
             ):
+                print("all_second_per_grid_ts size {}, second_per_grid_ts size {}".format(all_second_per_grid_ts.size(), second_per_grid_ts.size()))
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     all_image_grid_thw if all_image_grid_thw is not None else image_grid_thw,
