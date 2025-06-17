@@ -4849,7 +4849,7 @@ class BalanceParquetDataset(IterableDataset):
     self.input_creator = input_creator
     self.model_type = model_type
     self.buffer_size = kwargs.get("buffer_size", 1000)
-    self.shuffle_group = kwags.get("shuffle_group", False)
+    self.shuffle_group = kwargs.get("shuffle_group", False)
     self.base_model_dir = base_model_dir
     with open(os.path.join(self.base_model_dir, "config.json"), "r") as fp:
       config = json.load(fp)
