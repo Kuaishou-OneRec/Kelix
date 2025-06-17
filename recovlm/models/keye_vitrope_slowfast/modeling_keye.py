@@ -2953,6 +2953,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                             image_grid_thw[image_index+1][2],
                         )
                         second_per_grid_t = 0
+                        second_per_grid_t_fs = 0
                         image_index += 2
                         remain_images -= 1
                         ed = ed_image
