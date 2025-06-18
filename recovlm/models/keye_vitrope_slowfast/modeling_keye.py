@@ -2922,8 +2922,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 vision_tokens = input_ids[vision_start_indices + 1]
                 image_nums = (vision_tokens == image_token_id).sum()
                 # video_nums = (vision_tokens == video_token_id).sum()
-                video_nums = video_grid_thw.size(0)//2
-                if not video_nums:
+                if video_grid_thw is not None:
+                    video_nums = video_grid_thw.size(0)//2
+                else:
                     video_nums = 0
                 input_tokens = input_ids.tolist()
                 llm_pos_ids_list: list = []
