@@ -217,7 +217,8 @@ def _read_video_torchvision(
         total_frames, video_fps = video.size(0), video_meta["fps"][-1]
         logger.info(f"torchvision:  {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
 
-    nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    # nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    nframes, real_fps = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
     idx = torch.linspace(0, total_frames - 1, nframes).round().long()
     video = video[idx]
     return video
