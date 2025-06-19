@@ -168,9 +168,10 @@ class KeyeProcessor(ProcessorMixin):
                     slow_videos_inputs = self.image_processor(images=None, videos=current_video[0], **output_kwargs["images_kwargs"])
                     slow_video_grid_thw = slow_videos_inputs["video_grid_thw"]
 
-                    fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
+                    fps = output_kwargs["videos_kwargs"].pop("fps", 2.0) # note this fps is not real
                     if isinstance(fps, (int, float)):
-                        second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(slow_video_grid_thw)
+                        fps_ratio = current_video[2]
+                        second_per_grid_ts = [self.image_processor.temporal_patch_size / (fps * fps_ratio)] * len(slow_video_grid_thw) # the real fps
                     elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
                         second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
                     else:
@@ -190,7 +191,8 @@ class KeyeProcessor(ProcessorMixin):
 
                         fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
                         if isinstance(fps, (int, float)):
-                            second_per_grid_ts = [self.fast_image_processor.temporal_patch_size / fps] * len(fast_video_grid_thw)
+                            fps_ratio = current_video[2]
+                            second_per_grid_ts = [self.fast_image_processor.temporal_patch_size / (fps * fps_ratio)] * len(fast_video_grid_thw)
                         elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
                             second_per_grid_ts = [self.fast_image_processor.temporal_patch_size / tmp for tmp in fps]
                         else:
@@ -211,7 +213,7 @@ class KeyeProcessor(ProcessorMixin):
 
                         fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
                         if isinstance(fps, (int, float)):
-                            second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(slow_video_grid_thw)
+                            second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(slow_video_grid_thw) # 如果已经抽好了帧，那么这个地方只能假设fps_ratio为1就是，实际fps为2
                         elif hasattr(fps, "__len__") and len(fps) == len(slow_video_grid_thw):
                             second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
                         else:
