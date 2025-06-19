@@ -3003,6 +3003,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
                     time_tensor = expanded_range * second_per_grid_t * self.config.vision_config.tokens_per_second
                     time_tensor_tf = expanded_range_tf * second_per_grid_t_fs * self.config.vision_config.tokens_per_second
+                    time_tensor = time_tensor * 10
+                    time_tensor_tf = time_tensor_tf * 10
                     time_tensor_long = time_tensor.long()
                     time_tensor_long_tf = time_tensor_tf.long()
                     t_index = time_tensor_long.flatten()

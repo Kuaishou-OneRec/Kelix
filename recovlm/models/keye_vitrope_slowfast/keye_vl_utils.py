@@ -35,9 +35,9 @@ VIDEO_TOTAL_PIXELS = 24576 * 28 * 28
 FRAME_FACTOR = 2
 FPS = 2.0
 FPS_MIN_FRAMES = 4
-FPS_MAX_FRAMES = 768
+FPS_MAX_FRAMES = 128 # slowfast 版本为128总帧数，但slow部分更少
 
-SLOWFAST_RATIO = 5
+SLOWFAST_RATIO = 3
 FAST_HEIGHT = 224
 FAST_WIDTH = 224
 
@@ -164,16 +164,21 @@ def smart_nframes(
         min_frames = ceil_by_factor(ele.get("min_frames", FPS_MIN_FRAMES), FRAME_FACTOR)
         max_frames = floor_by_factor(ele.get("max_frames", min(FPS_MAX_FRAMES, total_frames)), FRAME_FACTOR)
         nframes = total_frames / video_fps * fps
-        nframes = min(max(nframes, min_frames), max_frames)
+        # nframes = min(max(nframes, min_frames), max_frames)
+        if nframes > max_frames:
+            fps_ratio = max_frames / nframes
+            nframes = max_frames
+        else:
+            fps_ratio = 1.0
         nframes = round_by_factor(nframes, FRAME_FACTOR)
     if not (FRAME_FACTOR <= nframes and nframes <= total_frames):
         raise ValueError(f"nframes should in interval [{FRAME_FACTOR}, {total_frames}], but got {nframes}.")
-    return nframes
+    return nframes, fps_ratio
 
 
 def _read_video_torchvision(
         ele: dict,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, float]:
     """read video using torchvision.io.read_video
 
     Args:
@@ -217,11 +222,10 @@ def _read_video_torchvision(
         total_frames, video_fps = video.size(0), video_meta["fps"][-1]
         logger.info(f"torchvision:  {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
 
-    # nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
-    nframes, real_fps = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    nframes, fps_ratio = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
     idx = torch.linspace(0, total_frames - 1, nframes).round().long()
     video = video[idx]
-    return video
+    return video, fps_ratio
 
 
 def is_decord_available() -> bool:
@@ -232,7 +236,7 @@ def is_decord_available() -> bool:
 
 def _read_video_decord(
         ele: dict,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, float]:
     """read video using decord.VideoReader
 
     Args:
@@ -258,11 +262,11 @@ def _read_video_decord(
         raise NotImplementedError("not support start_pts and end_pts in decord for now.")
     total_frames, video_fps = len(vr), vr.get_avg_fps()
     logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-    nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    nframes, fps_ratio = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
     idx = torch.linspace(0, total_frames - 1, nframes).round().long().tolist()
     video = vr.get_batch(idx).asnumpy()
     video = torch.tensor(video).permute(0, 3, 1, 2)  # Convert to TCHW format
-    return video
+    return video, fps_ratio
 
 
 def _read_video_decord_slowfast(
@@ -293,7 +297,7 @@ def _read_video_decord_slowfast(
         raise NotImplementedError("not support start_pts and end_pts in decord for now.")
     total_frames, video_fps = len(vr), vr.get_avg_fps()
     logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-    nframes = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    nframes, fps_ratio = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
 
     indices = torch.linspace(0, total_frames - 1, nframes).round().long()
     
@@ -302,7 +306,7 @@ def _read_video_decord_slowfast(
     frames = torch.tensor(frames).permute(0, 3, 1, 2)
     slow_frames = frames[slow_mask]
     fast_frames = frames
-    return slow_frames, fast_frames
+    return slow_frames, fast_frames, fps_ratio
 
 
 VIDEO_READER_BACKENDS = {
@@ -331,7 +335,7 @@ def get_video_reader_backend() -> str:
 def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = True) -> torch.Tensor | list[Image.Image]:
     if isinstance(ele["video"], str) or isinstance(ele["video"], bytes):
         video_reader_backend = get_video_reader_backend()
-        slow_frames, fast_frames = VIDEO_READER_BACKENDS[video_reader_backend](ele)
+        slow_frames, fast_frames, fps_ratio = VIDEO_READER_BACKENDS[video_reader_backend](ele)
         if image_factor is None:
             return None
 
@@ -374,7 +378,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         fast_frames = list(fast_frames.split(SLOWFAST_RATIO, dim=0))
         assert len(slow_frames) == len(fast_frames)
 
-        return slow_frames, fast_frames
+        return slow_frames, fast_frames, fps_ratio
 
     else:
         assert isinstance(ele["video"], (list, tuple))

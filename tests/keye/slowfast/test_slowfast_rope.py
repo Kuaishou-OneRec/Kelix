@@ -137,18 +137,39 @@ def make_inputs(a,b):
     #         "text": "\\nGenerate video descriptions that include details of visual effects, character actions, and movement of people/objects within frames. Describe this video and its style to generate a description. Pay attention to all objects in the video. Do not describe each frame individually. Instead of describing the imaginary content, only describing the content one can determine confidently. Do not describe the contents by itemizing them in list form."}]}
     #     ]
 
+    # messages = [
+    #     {"role": "user", 
+    #     "content": 
+    #     [
+    #         {"type": "video", 
+    #         "video": "/llm_reco/maosiyang/dataset/cinepile/mp4/DcZgodKg9OQ.mp4"}, 
+    #         {"type": "video", 
+    #         "video": "/llm_reco/maosiyang/dataset/cinepile/mp4/DcZgodKg9OQ.mp4"}, 
+    #         {"type": "text", 
+    #         "text": "\\nGenerate video descriptions that include details of visual effects, character actions, and movement of people/objects within frames. Describe this video and its style to generate a description. Pay attention to all objects in the video. Do not describe each frame individually. Instead of describing the imaginary content, only describing the content one can determine confidently. Do not describe the contents by itemizing them in list form."}]}
+    #     ]
+    
+
     messages = [
         {"role": "user", 
         "content": 
         [
+            # {"type": "video", 
+            # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_30mb.mp4"}, 
+            # {"type": "video", 
+            # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_20mb.mp4"}, 
+            # {"type": "video", 
+            # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_10mb.mp4"}, 
+            # {"type": "video", 
+            # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_5mb.mp4"}, 
+            # {"type": "video", 
+            # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_2mb.mp4"}, 
             {"type": "video", 
-            "video": "/llm_reco/maosiyang/dataset/cinepile/mp4/DcZgodKg9OQ.mp4"}, 
-            {"type": "video", 
-            "video": "/llm_reco/maosiyang/dataset/cinepile/mp4/DcZgodKg9OQ.mp4"}, 
+            "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_1mb.mp4"}, 
             {"type": "text", 
-            "text": "\\nGenerate video descriptions that include details of visual effects, character actions, and movement of people/objects within frames. Describe this video and its style to generate a description. Pay attention to all objects in the video. Do not describe each frame individually. Instead of describing the imaginary content, only describing the content one can determine confidently. Do not describe the contents by itemizing them in list form."}]}
+            "text": "\\What is this?"}]}
         ]
-    
+
     # messages = [
     #     {"role": "user", 
     #     "content": 
