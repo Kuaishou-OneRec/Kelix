@@ -15,7 +15,7 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0608_split_fps_onlyslow
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0608_split_fps
 #OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
 OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage1/8b/slowfast-video-0.1.0-only-slow
 mkdir -p $OUTPUT_DIR
@@ -33,9 +33,9 @@ git_hash=$(git rev-parse --short HEAD)
 
 set -x
 
-KML_TASK_ID=112233
-
 SCRIPT_FILE=$(readlink -f $0)
+
+KML_TASK_ID=112233
 echo `date '+%Y-%m-%d %H:%M:%S'` >> $OUTPUT_DIR/task_info.log
 echo "task: kml-task-${KML_TASK_ID}-record-${KML_ID}" >> $OUTPUT_DIR/task_info.log
 echo "script: ${SCRIPT_FILE}" >> $OUTPUT_DIR/task_info.log
@@ -117,7 +117,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/0.9.0_8B_stage1_slowfast/debug/keye_stage1_video_only_slow.json \
+                --dataset_config examples/vlm/0.9.0_8B_stage1_slowfast/debug/keye_stage1_video_slowfast.json \
                 --model_class KeyeForConditionalGeneration_vitrope_slowfast \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias,visual_fast.vision_model.embeddings.packing_position_embedding.weight,fast_mlp_AR.pre_norm.weight,fast_mlp_AR.pre_norm.bias,fast_mlp_AR.linear_1.weight,fast_mlp_AR.linear_1.bias,fast_mlp_AR.linear_2.weight,fast_mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
