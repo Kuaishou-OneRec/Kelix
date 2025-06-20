@@ -1260,7 +1260,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       )
   
 
-   def _cut_sample(self, inputs, packable_length):
+  def _cut_sample(self, inputs, packable_length):
     # if 'pixel_values_videos' in inputs and dist.get_rank() == 0:
 
     inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
