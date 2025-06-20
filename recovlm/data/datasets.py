@@ -1259,6 +1259,72 @@ class ChatCompletionVisionDataset(IterableDataset):
           f"Unable to generate sample within max_length={self.max_length} after {retry} retrys"
       )
   
+
+   def _cut_sample(self, inputs, packable_length):
+    # if 'pixel_values_videos' in inputs and dist.get_rank() == 0:
+
+    inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
+    inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
+
+    inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
+
+    vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
+    vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
+
+    if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
+      # inputs["input_ids"][:, vision_starts[-1]:] = 0 # 随便什么id都可以
+      # inputs["loss_mask"][:, vision_starts[-1]:] = 0
+      # inputs["position_ids"][:, vision_starts[-1]:] = 0
+      inputs["input_ids"] = inputs["input_ids"][:, :vision_starts[-1]] # 继续截断,截断到vision_starts token,因为vision_start之后的内容都不会有loss
+      inputs["loss_mask"] = inputs["loss_mask"][:, :vision_starts[-1]]
+      inputs["position_ids"] = inputs["position_ids"][..., :vision_starts[-1]]
+      
+    if 'image_grid_thw' in inputs and len(inputs["pixel_values"]) and 'video_grid_thw' in inputs and len(inputs["pixel_values_videos"]):
+      raise Exception("Unexpected inputs: there are both pixel_values and pixel_values_videos: {}/{}".format(inputs["pixel_values"].shape, inputs["pixel_values_videos"].shape))
+
+    if 'image_grid_thw' in inputs: # 如果有图片
+      n_tokens = 0
+      for i in range(len(vision_ends), len(inputs["image_grid_thw"])):
+        n_tokens_hw = inputs["image_grid_thw"][i]
+        n_tokens += n_tokens_hw[1] * n_tokens_hw[2]
+
+      if n_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
+      inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
+
+    elif 'video_grid_thw' in inputs: # 如果有视频
+      # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs000000_{dist.get_rank()}")
+      # print(f"inputs000000_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
+      n_tokens = 0
+      for i in range(len(vision_ends) , len(inputs["video_grid_thw"])):
+        n_tokens_hw = inputs["video_grid_thw"][i]
+        n_tokens += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
+
+      if n_tokens: inputs["pixel_values_videos"] = inputs["pixel_values_videos"][:-n_tokens]
+      inputs["video_grid_thw"] = inputs["video_grid_thw"][:len(vision_ends)]
+      inputs["second_per_grid_ts"] = inputs["second_per_grid_ts"][:len(vision_ends)]
+
+      # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs111111_{dist.get_rank()}")
+      # print(f"inputs111111_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
+
+      if len(inputs["pixel_values_videos"]) == 0:
+        del inputs["pixel_values_videos"]
+        del inputs["video_grid_thw"]
+        del inputs["second_per_grid_ts"]
+    # num_thw = 0
+    # if "image_grid_thw" in inputs:
+    #   thw = inputs["image_grid_thw"]
+    #   num_thw = sum([(thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))])
+    # num_image_id = (inputs["input_ids"] == self.image_token_id).sum()
+    # if num_thw != num_image_id * 4:
+    #   print(f"{num_thw=}, {num_image_id=}, {inputs=}")
+    # pvs = [0]
+    # if "pixel_values" in inputs:
+    #   pvs = inputs["pixel_values"].shape
+    # if pvs[0] != num_thw:
+    #   print(f"{num_thw=}, pixel_values={pvs}")
+    return inputs
+
+
   def _append_sample_packing(self,
                              inputs: Dict[str, torch.Tensor],
                              packed_input_ids: List[torch.Tensor],
@@ -2049,6 +2115,149 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
 
     self.datasource_config = datasource_config
 
+
+  def _cut_sample(self, inputs, packable_length):
+    # if 'pixel_values_videos' in inputs and dist.get_rank() == 0:
+
+    inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
+    inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
+
+    inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
+
+    vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
+    vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
+
+    if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
+      # inputs["input_ids"][:, vision_starts[-1]:] = 0 # 随便什么id都可以
+      # inputs["loss_mask"][:, vision_starts[-1]:] = 0
+      # inputs["position_ids"][:, vision_starts[-1]:] = 0
+      inputs["input_ids"] = inputs["input_ids"][:, :vision_starts[-1]] # 继续截断,截断到vision_starts token,因为vision_start之后的内容都不会有loss
+      inputs["loss_mask"] = inputs["loss_mask"][:, :vision_starts[-1]]
+      inputs["position_ids"] = inputs["position_ids"][..., :vision_starts[-1]]
+      
+    if 'image_grid_thw' in inputs and len(inputs["pixel_values"]) and 'video_grid_thw' in inputs and len(inputs["pixel_values_videos"]):
+      raise Exception("Unexpected inputs: there are both pixel_values and pixel_values_videos: {}/{}".format(inputs["pixel_values"].shape, inputs["pixel_values_videos"].shape))
+
+    if 'image_grid_thw' in inputs: # 如果有图片
+      n_tokens = 0
+      for i in range(len(vision_ends) * 2, len(inputs["image_grid_thw"])): # 注意，因为slowfast的video_grid_thw是正常的两倍，所以前面需要 * 2。
+        n_tokens_hw = inputs["image_grid_thw"][i]
+        n_tokens += n_tokens_hw[1] * n_tokens_hw[2]
+
+      if n_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
+      inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends) * 2]
+
+    elif 'video_grid_thw' in inputs: # 如果有视频
+      # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs000000_{dist.get_rank()}")
+      # print(f"inputs000000_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
+      n_tokens = 0
+      for i in range(len(vision_ends) * 2, len(inputs["video_grid_thw"])): # 注意，因为slowfast的video_grid_thw是正常的两倍，所以前面需要 * 2。
+        n_tokens_hw = inputs["video_grid_thw"][i]
+        n_tokens += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
+
+      if n_tokens: inputs["pixel_values_videos"] = inputs["pixel_values_videos"][:-n_tokens]
+      inputs["video_grid_thw"] = inputs["video_grid_thw"][:len(vision_ends) * 2]
+      inputs["second_per_grid_ts"] = inputs["second_per_grid_ts"][:len(vision_ends) * 2]
+
+      # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs111111_{dist.get_rank()}")
+      # print(f"inputs111111_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
+
+      if len(inputs["pixel_values_videos"]) == 0:
+        del inputs["pixel_values_videos"]
+        del inputs["video_grid_thw"]
+        del inputs["second_per_grid_ts"]
+    # num_thw = 0
+    # if "image_grid_thw" in inputs:
+    #   thw = inputs["image_grid_thw"]
+    #   num_thw = sum([(thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))])
+    # num_image_id = (inputs["input_ids"] == self.image_token_id).sum()
+    # if num_thw != num_image_id * 4:
+    #   print(f"{num_thw=}, {num_image_id=}, {inputs=}")
+    # pvs = [0]
+    # if "pixel_values" in inputs:
+    #   pvs = inputs["pixel_values"].shape
+    # if pvs[0] != num_thw:
+    #   print(f"{num_thw=}, pixel_values={pvs}")
+    return inputs
+
+
+  def _cut_sample_cjx(self, inputs, packable_length):
+    # if 'pixel_values_videos' in inputs and dist.get_rank() == 0:
+    inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
+    inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
+
+    inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
+
+    vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
+    vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
+
+
+    if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
+      # inputs["input_ids"][:, vision_starts[-1]:] = 0 # 随便什么id都可以
+      # inputs["loss_mask"][:, vision_starts[-1]:] = 0
+      # inputs["position_ids"][:, vision_starts[-1]:] = 0
+      inputs["input_ids"] = inputs["input_ids"][:, :vision_starts[-1]] # 继续截断,截断到vision_starts token,因为vision_start之后的内容都不会有loss
+      inputs["loss_mask"] = inputs["loss_mask"][:, :vision_starts[-1]]
+      inputs["position_ids"] = inputs["position_ids"][..., :vision_starts[-1]]
+    
+    vision_start_indices = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
+    vision_tokens = inputs["input_ids"][0][vision_start_indices + 1]
+    image_nums = (vision_tokens == self.image_token_id).sum()
+    video_token_nums = (inputs["input_ids"][0] == self.video_token_id).sum()
+
+    if 'image_grid_thw' in inputs and len(inputs["pixel_values"]) and 'video_grid_thw' in inputs and len(inputs["pixel_values_videos"]):
+      raise Exception("Unexpected inputs: there are both pixel_values and pixel_values_videos: {}/{}".format(inputs["pixel_values"].shape, inputs["pixel_values_videos"].shape))
+
+    if 'image_grid_thw' in inputs: # 如果有图片
+      n_tokens = 0
+      for i in range(image_nums * 2, len(inputs["image_grid_thw"])): # 注意，因为slowfast的video_grid_thw是正常的两倍，所以前面需要 * 2。
+        n_tokens_hw = inputs["image_grid_thw"][i]
+        n_tokens += n_tokens_hw[1] * n_tokens_hw[2]
+
+      if n_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
+      inputs["image_grid_thw"] = inputs["image_grid_thw"][:image_nums * 2]
+
+    elif 'video_grid_thw' in inputs: # 如果有视频
+      # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs000000_{dist.get_rank()}")
+      # print(f"inputs000000_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
+      used_n_token = 0
+      video_used_idx = 0
+      for idx, n_tokens_hw in enumerate(inputs["video_grid_thw"]):
+        used_n_token += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
+        if used_n_token == video_token_nums:
+          video_used_idx = idx + 1
+          break
+
+      # n_tokens = 0
+      # for i in range(used_idx, len(inputs["video_grid_thw"])): # 注意，因为slowfast的video_grid_thw是正常的两倍，所以前面需要 * 2。
+      #   n_tokens_hw = inputs["video_grid_thw"][i]
+      #   n_tokens += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
+
+      if n_tokens: inputs["pixel_values_videos"] = inputs["pixel_values_videos"][:video_token_nums]
+      inputs["video_grid_thw"] = inputs["video_grid_thw"][:video_used_idx]
+      inputs["second_per_grid_ts"] = inputs["second_per_grid_ts"][:video_used_idx]
+
+      # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs111111_{dist.get_rank()}")
+      # print(f"inputs111111_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
+
+      if len(inputs["pixel_values_videos"]) == 0:
+        del inputs["pixel_values_videos"]
+        del inputs["video_grid_thw"]
+        del inputs["second_per_grid_ts"]
+    # num_thw = 0
+    # if "image_grid_thw" in inputs:
+    #   thw = inputs["image_grid_thw"]
+    #   num_thw = sum([(thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))])
+    # num_image_id = (inputs["input_ids"] == self.image_token_id).sum()
+    # if num_thw != num_image_id * 4:
+    #   print(f"{num_thw=}, {num_image_id=}, {inputs=}")
+    # pvs = [0]
+    # if "pixel_values" in inputs:
+    #   pvs = inputs["pixel_values"].shape
+    # if pvs[0] != num_thw:
+    #   print(f"{num_thw=}, pixel_values={pvs}")
+    return inputs
+
   def _append_sample_packing(self,
                              inputs: Dict[str, torch.Tensor],
                              packed_input_ids: List[torch.Tensor],
@@ -2071,31 +2280,13 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                              sample_idx: Optional[int] = None,
                              image_pad: bool = False):
 
+    
     if not image_pad:
       packable_length = self.max_length - cu_seqlens[-1]
       if packable_length == 0: return
 
     if not image_pad and self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
-      import copy
-      inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
-      inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
-
-      inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
-
-      vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
-      vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
-      if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
-        inputs["input_ids"][:, vision_starts[-1]:] = 0 # 随便什么id都可以
-        inputs["loss_mask"][:, vision_starts[-1]:] = 0
-
-      if 'image_grid_thw' in inputs: # 如果有图片
-        n_tokens = 0
-        for i in range(len(vision_ends), len(inputs["image_grid_thw"])):
-          n_tokens_hw = inputs["image_grid_thw"][i]
-          n_tokens += n_tokens_hw[1] * n_tokens_hw[2]
-
-        if n_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
-        inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
+      inputs = self._cut_sample_cjx(inputs, packable_length)
 
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
