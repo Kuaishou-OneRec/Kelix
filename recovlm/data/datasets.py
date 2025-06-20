@@ -4844,9 +4844,10 @@ class InternVLChatCompletionVisionParquetDataset(InternVLChatCompletionVisionDat
 
 
 
+
 class BalanceParquetDataset(IterableDataset):
-  def __init__(self, input_creator, model_type, base_model_dir=None, **kwargs):
-    self.input_creator = input_creator
+  def __init__(self, input, model_type, base_model_dir=None, **kwargs):
+    self.input = input
     self.model_type = model_type
     self.buffer_size = kwargs.get("buffer_size", 1000)
     self.shuffle_group = kwargs.get("shuffle_group", False)
@@ -4854,6 +4855,8 @@ class BalanceParquetDataset(IterableDataset):
     with open(os.path.join(self.base_model_dir, "config.json"), "r") as fp:
       config = json.load(fp)
       self.arch = config["architectures"][0]
+    self._initialized = False
+    self.kwargs = kwargs
 
   def _process_task(self):
     while True:
@@ -4986,62 +4989,109 @@ class BalanceParquetDataset(IterableDataset):
           # found.append((groups[gid][begin + off], True))
           found_by_group[gid].append((groups[gid][begin + off], True))
       
-      for group in found_by_group:
-        if self.shuffle_group: np.random.shuffle(group)
+      if self.rank == 0:
+        print(f'found_by_group={found_by_group}')
+      # for group in found_by_group:
+      #   if self.shuffle_group: 
+      #     np.random.shuffle(group)
+
       found = sum(found_by_group, [])
     return found, send_idx
 
   def _balance_task(self):
-    buffer = []
-    source_list = []
+    # processed_buffer -> _balance_buf -> _result_buf
+    buffer, cumsum = [], 0
+    maxlen = self.input.max_length - self.image_pad_len
+    pivot = "__ds__"
+    next_inputs = None
     while True:
-      inputs, source_name = self.processed_buffer.get()
-      buffer.append(inputs)
-      source_list.append(source_name)
-      if len(buffer) == self.buffer_size:
-        raw_input_ids = [data["input_ids"].shape[-1] for data in buffer]
-        candidates, send_out = self._balance_global(raw_input_ids, buffer, source_list)
-        used = set()
-        for selected, is_local in candidates:
-          if is_local:
-            used.update(selected)
-            inputs = [buffer[idx] for idx in selected]
-            data_source = [source_list[idx] for idx in selected]
-          else:
-            data_source = []
-            for sample in selected:
-              ds = sample.pop("__ds__")
-              data_source.append(ds)
-            inputs = selected
-          stats = balance.exchange_batch_info(inputs, data_source, self.fm)
-          if self.rank == 0:
-            print(f"rank=0, step_stats={stats}")
-          
-          # if dist.get_rank() == 0:
-          #   print_input_info(inputs, f"is_local{is_local}")
-          self._balance_buf.put((inputs, data_source, [stats[0], stats[1], stats[2]]))
-        for sends in send_out:
-          for idx in sends:
-            assert idx not in used
-            used.add(idx)
+      try:
+        if next_inputs is not None:
+          inputs, source_name = next_inputs
+          next_inputs = None
+        else:
+          inputs, source_name = self.processed_buffer.get()
 
+        inputs[pivot] = source_name
+        buffer.append(inputs)
+        cumsum += inputs["input_ids"].shape[-1]
+        if cumsum < maxlen: # 可以保证这个样本有loss
+          continue
+        elif cumsum > maxlen:
+          if 1:
+            sample_original_len = inputs["input_ids"].shape[-1]
+            reserved = inputs["input_ids"].shape[-1] - (cumsum - maxlen)
+            cut = self.input._cut_sample(inputs, reserved)
+            
+            all_loss_tokens = cut["loss_mask"].sum().item()
+            if all_loss_tokens == 0 and len(buffer) == 1: # 一条样本就占满了seq len, 而且不能计算loss，删掉
+              buffer.pop()
+              cumsum -= sample_original_len
+              if len(buffer) == 0: continue # 继续填, 没有样本
+            if all_loss_tokens == 0 and inputs["input_ids"].shape[-1] < maxlen:
+              next_inputs = (inputs, source_name) # 放回去
+            else:
+              # 截断
+              buffer[-1] = cut
+        # t0 = time.perf_counter()
+        send_info, send_data = balance.calculate_exchange_info(buffer, self.fm)
+        # t1 = time.perf_counter()
+        recvs = transfer.exchange_batch_data(send_info, send_data)
+        # t2 = time.perf_counter()
+        buffer = [recv[0] for recv in recvs]
 
-        buffer = [x for i, x in enumerate(buffer) if i not in used]
-        source_list = [x for i, x in enumerate(source_list) if i not in used]
+        source_list = [inputs.pop(pivot) for inputs in buffer]
+        # stats = balance.exchange_batch_info(buffer, source_list, self.fm)
+        self._balance_buf.put((buffer, source_list, [0, 0, 0]))
+        
+        buffer, cumsum = [], 0
+      except Exception as e:
+        import traceback
+        print(f"rank{dist.get_rank()} errors")
+        print(traceback.format_exc())
+        print(e)
 
   def _packing_task(self):
     while True:
-      inputs, data_source, step_info = self._balance_buf.get()
-      if dist.get_rank() == 0: print("packed0....")
-      packed_inputs = self.input._packing(inputs)
-      packed_inputs["data_source"] = data_source
-      packed_inputs["num_samples"] = step_info[0]
-      packed_inputs["num_tokens"] = step_info[1]
-      packed_inputs["num_image_tokens"] = step_info[2]
-      self._post_process(packed_inputs)
-      self._result_buf.put(packed_inputs)
+      try:
+        t1 = time.perf_counter()
+        inputs, data_source, step_info = self._balance_buf.get()
+        t2 = time.perf_counter()
+        if dist.get_rank() == 0: print("packed0....")
+        packed_inputs = self.input._packing(inputs)
+        loss_sum = packed_inputs["loss_mask"].sum().item()
+        assert loss_sum != 0, f"loss_sum=0\n{print_input_info(packed_inputs, 'packed_inputs')}"
+
+        t3 = time.perf_counter()
+        packed_inputs["data_source"] = data_source
+        packed_inputs["num_samples"] = step_info[0]
+        packed_inputs["num_tokens"] = step_info[1]
+        packed_inputs["num_image_tokens"] = step_info[2]
+        #if 'pixel_values_videos' in packed_inputs and torch.isnan(packed_inputs["pixel_values_videos"]).any(): print(f"packed_inputspacked_inputspacked_inputs_nanannnn", packed_inputs["pixel_values_videos"])
+        self._post_process(packed_inputs)
+        #if 'pixel_values_videos' in packed_inputs and torch.isnan(packed_inputs["pixel_values_videos"]).any(): print(f"afterrrr_packed_inputspacked_inputspacked_inputs_nanannnn", packed_inputs["pixel_values_videos"])
+        t4 = time.perf_counter()
+        print(f"rank={dist.get_rank()} packing_get={t2-t1}, packing={t3-t2}, post={t4-t3}")
+        self._result_buf.put(packed_inputs)
+      except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(e)
+        print("error in _packing_task")
 
   def _post_process(self, inputs):
+    num_thw = 0
+    if "image_grid_thw" in inputs:
+      thw = inputs["image_grid_thw"]
+      num_thw = sum([(thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))])
+    num_image_id = (inputs["input_ids"] == self.input.image_token_id).sum()
+    if num_thw != num_image_id * 4:
+      print(f"post_debug: {num_thw=}, {num_image_id=}, {inputs=}")
+    pvs = [0]
+    if "pixel_values" in inputs:
+      pvs = inputs["pixel_values"].shape
+    if pvs[0] != num_thw:
+        print(f"post_debug: {num_thw=}, pixel_values={pvs}")
     image_grid_thw = inputs.get("image_grid_thw", None)
     pixel_values = inputs.get("pixel_values", None)
     if all([v is not None for v in [pixel_values, image_grid_thw]]):
@@ -5066,39 +5116,93 @@ class BalanceParquetDataset(IterableDataset):
       inputs["image_position_ids"] = siglip_position_ids
       inputs["image_cu_seqlens"] = cu_seqlens
       inputs["image_sample_indices"] = sample_indices
+      inputs["image_max_seqlen_q"] = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+      inputs["image_max_seqlen_k"] = inputs["image_max_seqlen_q"]
+      cu_seqlens = inputs["cu_seqlens"]
+      inputs["max_seqlen_q"] = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+      inputs["max_seqlen_k"] =  inputs["max_seqlen_q"]
+
+  def _resume(self):
+    resume_flag = self.kwargs.get("resume_dataloader", False)
+    if not resume_flag:
+      return
+    resume_from = self.kwargs.get("resume_from", None)
+    resume_path = os.path.join(resume_from, "dataloader_ckpt", f"rank{dist.get_rank()}.pt")
+    if not os.path.exists(resume_path):
+      print_rank_0(f"Warning: Dataloader checkpoint {resume_path} does not exist")
+      print_rank_0("Will start training without resuming dataloader state")
+    else:
+      try:
+        state_dict = torch.load(resume_path)["dataloader_state_dict"]
+        
+        self.load_state_dict(state_dict)
+        print_rank_0(f"Successfully loaded dataloader state from {resume_path}, state_dict={state_dict}")
+      except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print_rank_0(f"Error loading dataloader checkpoint: {str(e)}")
+        print_rank_0("Will start training without resuming dataloader state")
+        state_dict = None
 
   def __iter__(self):
-    self.rank = dist.get_rank()
-    self.world_size = dist.get_world_size()
-    self._balance_buf = queue.Queue(maxsize=32)
-    self._result_buf = queue.Queue(maxsize=16)
-    
-    self.input = self.input_creator()
-    self.dataset = self.input.dataset
-    image_pad_len = getattr(self.input, "image_pad_len", 0)
-    # self.fm = balance.get_flops_model(self.model_type, max_length=(self.input.max_length - image_pad_len))
-    from recovlm.data.balance import CustomModelFlops
-    self.fm = CustomModelFlops(base_model_config=os.path.join(self.base_model_dir, "config.json"), max_length=(self.input.max_length - image_pad_len))
+    try:
+      self.rank = dist.get_rank()
+      self.world_size = dist.get_world_size()
+      self._balance_buf = queue.Queue(maxsize=32)
+      self._result_buf = queue.Queue(maxsize=16)
+      
+      self.input.init()
+      self.dataset = self.input.dataset
+      self.image_pad_len = getattr(self.input, "image_pad_len", 0)
+      dist.barrier()
+      self._initialized = True
+      self._resume()
+      from recovlm.data.balance import CustomModelFlops
+      self.fm = CustomModelFlops(base_model_config=os.path.join(self.base_model_dir, "config.json"),
+                                max_length=(self.input.max_length - self.image_pad_len))
 
-    self.sample_queue = queue.Queue(maxsize=32)
-    def reader_task():
-        dataset_iter = iter(self.dataset)
-        while True:
-            sample = next(dataset_iter)
-            self.sample_queue.put(sample)
-    self.reader_thread = threading.Thread(target=reader_task, daemon=True)
-    self.reader_thread.start()
+      self.sample_queue = queue.Queue(maxsize=32)
+      def reader_task():
+          dataset_iter = iter(self.dataset)
+          while True:
+              sample = next(dataset_iter)
+              self.sample_queue.put(sample)
+      self.reader_thread = threading.Thread(target=reader_task, daemon=True)
+      self.reader_thread.start()
 
-    self.processed_buffer = queue.Queue(self.buffer_size)
-    self.process_threads = [threading.Thread(target=self._process_task, daemon=True) for _ in range(16)]
-    for t in self.process_threads:
-      t.start()
-    self.balance_thread = threading.Thread(target=self._balance_task, daemon=True)
-    self.packing_thread = threading.Thread(target=self._packing_task, daemon=True)
-    self.balance_thread.start()
-    self.packing_thread.start()
+      self.processed_buffer = queue.Queue(self.buffer_size)
+      self.process_threads = [threading.Thread(target=self._process_task, daemon=True) for _ in range(16)]
+      for t in self.process_threads:
+        t.start()
+      self.balance_thread = threading.Thread(target=self._balance_task, daemon=True)
+      self.packing_thread = threading.Thread(target=self._packing_task, daemon=True)
+      self.balance_thread.start()
+      self.packing_thread.start()
 
-    while True:
-        result = self._result_buf.get()
-        yield result
+      while True:
+          t1 = time.perf_counter()
+          result = self._result_buf.get()
+          # print(f"11111111_rank{self.rank}_world_size{self.world_size}", result)
+          # print(f"rrrrrr_{torch.isnan(result['pixel_values_videos']).any()  }", result['pixel_values_videos'])
+          t2 = time.perf_counter()
+          if np.random.rand() < 0.01: print(f"rank={dist.get_rank()} io_next: {t2-t1}")
+          yield result
+    except Exception as e:
+      import traceback
+      traceback.print_exc()
+      print(e)
+      print(f"error in __iter__")
+
+  def state_dict(self):
+    if not self._initialized:
+        return {}
+    print(f"save_dataset_state_dict: {self.dataset.state_dict()}")
+    return self.dataset.state_dict()
+  
+  def load_state_dict(self, state_dict):
+    print(f"load_dataset_state_dict: {self.dataset.state_dict()}, self._initialized={self._initialized}")
+    if not self._initialized:
+        return
+    print(f"load_dataset_state_dict: {self.dataset.state_dict()}")
+    self.dataset.load_state_dict(state_dict)
 
