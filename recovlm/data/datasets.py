@@ -2114,8 +2114,8 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     print(f"self.process_vision_info: {self.process_vision_info}")
 
     self.datasource_config = datasource_config
-
-
+    
+    
   def _cut_sample(self, inputs, packable_length):
     # if 'pixel_values_videos' in inputs and dist.get_rank() == 0:
 
@@ -2179,7 +2179,6 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     # if pvs[0] != num_thw:
     #   print(f"{num_thw=}, pixel_values={pvs}")
     return inputs
-
 
   def _cut_sample_cjx(self, inputs, packable_length):
     # if 'pixel_values_videos' in inputs and dist.get_rank() == 0:
