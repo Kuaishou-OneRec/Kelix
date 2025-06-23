@@ -2806,8 +2806,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         self.visual = SiglipVisionModel(config.vision_config)
 
         # init by the siglip-base-patch16-224
-        self.visual_fast = SiglipVisionModel(config.fast_vision_config)
-        self.fast_mlp_AR = Projector(config, config.fast_vision_config)
+        # self.visual_fast = SiglipVisionModel(config.fast_vision_config)
+        # self.fast_mlp_AR = Projector(config, config.fast_vision_config)
 
         self.model = Qwen3Model(config)
         self.vocab_size = config.vocab_size
@@ -3374,7 +3374,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     fast_sample_indices = torch.concat(fast_sample_indices, dim=0).to(pixel_values.device)
                     # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
                     #print(f"X=3, rank={torch.distributed.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
-                    fast_vision_outputs = self.visual_fast(
+                    fast_vision_outputs = self.visual(
                         pixel_values=fast_pixel_values, 
                         image_grid_thw=fast_image_grid_hws,
                         position_ids=fast_siglip_position_ids,
@@ -3383,11 +3383,11 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         sample_indices=fast_sample_indices,
                         cu_seqlens=fast_cu_seqlens,
                         return_pooler_output=False,
-                        use_rope=False,
+                        use_rope=True,
                         window_size =-1,
                     )
                     fast_image_embeds = fast_vision_outputs.last_hidden_state
-                    fast_image_embeds = self.fast_mlp_AR(fast_image_embeds, fast_image_grid_hws)
+                    fast_image_embeds = self.mlp_AR(fast_image_embeds, fast_image_grid_hws)
 
                     # fast_vision_outputs = fast_vision_outputs.last_hidden_state
                     ############## fast vit end ##############
@@ -3481,7 +3481,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     fast_cu_seqlens = torch.tensor(fast_cu_seqlens, dtype=torch.int32).to(fast_pixel_values_videos.device)
                     fast_sample_indices = torch.concat(fast_sample_indices, dim=0).to(fast_pixel_values_videos.device)
 
-                    fast_vision_outputs = self.visual_fast(
+                    fast_vision_outputs = self.visual(
                         pixel_values=fast_pixel_values_videos, 
                         image_grid_thw=fast_video_grid_hws,
                         position_ids=fast_siglip_position_ids,
@@ -3490,11 +3490,11 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         sample_indices=fast_sample_indices,
                         cu_seqlens=fast_cu_seqlens,
                         return_pooler_output=False,
-                        use_rope=False,
-                        window_size =-1,
+                        use_rope=True,
+                        window_size = -1,
                     )
                     fast_video_embeds = fast_vision_outputs.last_hidden_state
-                    fast_video_embeds = self.fast_mlp_AR(fast_video_embeds, fast_video_grid_thw)
+                    fast_video_embeds = self.mlp_AR(fast_video_embeds, fast_video_grid_thw)
                     ############## fast vit end ##############
                 
                     ############## Slow Fast Merge ##############
