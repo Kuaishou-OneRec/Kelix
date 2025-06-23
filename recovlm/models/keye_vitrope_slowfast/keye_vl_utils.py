@@ -35,7 +35,7 @@ VIDEO_TOTAL_PIXELS = 24576 * 28 * 28
 FRAME_FACTOR = 2
 FPS = 2.0
 FPS_MIN_FRAMES = 4
-FPS_MAX_FRAMES = 128 # slowfast 版本为128总帧数，但slow部分更少
+FPS_MAX_FRAMES = 64 # 注意：修改了含义，这里是用来限制slow的nframe的！
 
 SLOWFAST_RATIO = 3
 FAST_HEIGHT = 224
@@ -190,6 +190,66 @@ def smart_nframes(
     return nframes, fps_ratio
 
 
+def smart_nframes_slowfast(
+        ele: dict,
+        total_frames: int,
+        video_fps: int | float,
+) -> int:
+    """calculate the number of frames for video used for model inputs.
+
+    Args:
+        ele (dict): a dict contains the configuration of video.
+            support either `fps` or `nframes`:
+                - nframes: the number of frames to extract for model inputs.
+                - fps: the fps to extract frames for model inputs.
+                    - min_frames: the minimum number of frames of the video, only used when fps is provided.
+                    - max_frames: the maximum number of frames of the video, only used when fps is provided.
+        total_frames (int): the original total number of frames of the video.
+        video_fps (int | float): the original fps of the video.
+
+    Raises:
+        ValueError: nframes should in interval [FRAME_FACTOR, total_frames].
+
+    Returns:
+        int: the number of frames for video used for model inputs.
+    """
+    assert not ("fps" in ele and "nframes" in ele), "Only accept either `fps` or `nframes`"
+    if "nframes" in ele:
+        nframes = round_by_factor(ele["nframes"], FRAME_FACTOR)
+    else:
+        fps = ele.get("fps", FPS)
+        min_frames = ceil_by_factor(ele.get("min_frames", FPS_MIN_FRAMES), FRAME_FACTOR)
+        if total_frames > ele.get("max_frames", FPS_MAX_FRAMES) * 5:
+            max_frames = ele.get("max_frames", FPS_MAX_FRAMES) * 5
+            slowfast_rate = 5
+        elif total_frames < ele.get("max_frames", FPS_MAX_FRAMES) * 1.5:
+            max_frames = total_frames
+            slowfast_rate = 1
+        else:
+            max_frames = ele.get("max_frames", FPS_MAX_FRAMES) * (total_frames // ele.get("max_frames", FPS_MAX_FRAMES))
+            slowfast_rate = total_frames // ele.get("max_frames", FPS_MAX_FRAMES)
+        # max_frames = floor_by_factor(ele.get("max_frames", min(FPS_MAX_FRAMES, total_frames)), FRAME_FACTOR)
+
+
+        nframes = total_frames / video_fps * fps
+        if nframes < 1:
+            nframes = FRAME_FACTOR
+            slowfast_rate = 1
+        # nframes = min(max(nframes, min_frames), max_frames)
+
+        if nframes >= max_frames:
+            fps_ratio = max_frames / nframes
+            nframes = max_frames
+        else:
+            fps_ratio = 1.0
+        nframes = round_by_factor(nframes, FRAME_FACTOR)
+
+    if not (FRAME_FACTOR <= nframes and nframes <= total_frames):
+        raise ValueError(f"nframes should in interval [{FRAME_FACTOR}, {total_frames}], but got {nframes}, max_frames {max_frames}, video_fps {video_fps}.")
+    return nframes, slowfast_rate, fps_ratio
+
+
+
 def _read_video_torchvision(
         ele: dict,
 ) -> tuple[torch.Tensor, float]:
@@ -311,11 +371,11 @@ def _read_video_decord_slowfast(
         raise NotImplementedError("not support start_pts and end_pts in decord for now.")
     total_frames, video_fps = len(vr), vr.get_avg_fps()
     logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-    nframes, fps_ratio = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    nframes, slowfast_rate, fps_ratio = smart_nframes_slowfast(ele, total_frames=total_frames, video_fps=video_fps)
 
     indices = torch.linspace(0, total_frames - 1, nframes).round().long()
     
-    slow_mask = torch.remainder(torch.arange(indices.shape[0]), SLOWFAST_RATIO) == 0
+    slow_mask = torch.remainder(torch.arange(indices.shape[0]), slowfast_rate) == 0
     frames = vr.get_batch(indices.tolist()).asnumpy()
     frames = torch.tensor(frames).permute(0, 3, 1, 2)
     slow_frames = frames[slow_mask]
