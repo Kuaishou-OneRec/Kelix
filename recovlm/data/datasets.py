@@ -2099,6 +2099,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     self.shuffle_size = shuffle_size
     self.shuffle_initial_size = shuffle_initial_size
     # self.dataset, self.total_samples = self._build_source_dataset(sources)
+    self.use_flops_balance = use_flops_balance
     if self.use_flops_balance: self.dataset, self.total_samples = None, None
     else:  self.dataset, self.total_samples = self._build_source_dataset(sources)
     self.sources = sources
