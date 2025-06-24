@@ -4807,15 +4807,15 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     if 'all_image_grid_thw' in inputs: # 如果有图片
       n_slow_tokens = 0
       n_fast_tokens = 0
-      for i in range(image_nums, len(inputs["image_grid_thw"])): # 注意，因为slowfast的video_grid_thw是正常的两倍，所以前面需要 * 2。
+      for i in range(image_nums):
         n_tokens_hw = inputs["image_grid_thw"][i]
         n_slow_tokens += n_tokens_hw[1] * n_tokens_hw[2]
 
         n_tokens_hw = inputs["fast_image_grid_thw"][i]
         n_fast_tokens += n_tokens_hw[1] * n_tokens_hw[2]
 
-      if n_slow_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_slow_tokens]
-      if n_fast_tokens: inputs["fast_pixel_values"] = inputs["fast_pixel_values"][:-n_fast_tokens]
+      if n_slow_tokens: inputs["pixel_values"] = inputs["pixel_values"][:n_slow_tokens]
+      if n_fast_tokens: inputs["fast_pixel_values"] = inputs["fast_pixel_values"][:n_fast_tokens]
 
       inputs["image_grid_thw"] = inputs["image_grid_thw"][:image_nums]
       inputs["fast_image_grid_thw"] = inputs["fast_image_grid_thw"][:image_nums]
@@ -4848,10 +4848,12 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       if fast_used_n_token: inputs["fast_pixel_values_videos"] = inputs["fast_pixel_values_videos"][:fast_used_n_token]
 
       inputs["video_grid_thw"] = inputs["video_grid_thw"][:video_used_idx//2]
+      inputs["second_per_grid_ts"] = inputs["second_per_grid_ts"][:video_used_idx//2]
       inputs["fast_video_grid_thw"] = inputs["fast_video_grid_thw"][:video_used_idx//2]
+      # inputs["fast_second_per_grid_ts"] = inputs["fast_second_per_grid_ts"][:video_used_idx//2] # 这个没有
 
       inputs["all_video_grid_thw"] = inputs["all_video_grid_thw"][:video_used_idx]
-      inputs["second_per_grid_ts"] = inputs["second_per_grid_ts"][:video_used_idx]
+      inputs["all_second_per_grid_ts"] = inputs["all_second_per_grid_ts"][:video_used_idx]
 
       # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs111111_{dist.get_rank()}")
       # print(f"inputs111111_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
