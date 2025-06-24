@@ -17,6 +17,5 @@
     "num_epochs": 1,
     "cut_to_pad": 0,
     "model_class": "KeyeForConditionalGeneration_vitrope_slowfast",
-    "patch_size": 14,
-    "use_flops_balance": true
+    "patch_size": 14
 }
