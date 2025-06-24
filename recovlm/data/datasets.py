@@ -3999,7 +3999,8 @@ class ChatCompletionVisionParquetDataset_keye_vitrope(ChatCompletionVisionDatase
 
 
 
-class ChatCompletionVisionParquetDataset_keye_vitrope_slowfast(ChatCompletionVisionDataset_keye_vitrope_slowfast):
+class ChatCompletionVisionParquetDataset_keye_vitrope
+_slowfast(ChatCompletionVisionDataset_keye_vitrope_slowfast):
   def __init__(self, sources, num_workers, shuffle_seed=1024, num_epochs=1, **kargs):
     self.rng = random.Random(shuffle_seed)
     self.num_workers = num_workers
