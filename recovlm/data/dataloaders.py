@@ -273,6 +273,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
     shuffle_window = kwargs.get("shuffle_window", 0)
 
     def input_creator():
+        print("cjx debug model_type {}".format(model_type))
         return ModelDataset[model_type](
             sources = sources,
             num_workers = num_workers,
