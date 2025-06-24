@@ -2038,7 +2038,6 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                process_vision_info_args={"image_factor":28},
                min_visual_tokens_per_frame: int = 4,
                max_visual_tokens_per_frame: int = 512,
-               use_flops_balance=False,
                **kwargs
                ):
     """
@@ -2098,10 +2097,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     self.multiple_of = multiple_of
     self.shuffle_size = shuffle_size
     self.shuffle_initial_size = shuffle_initial_size
-    # self.dataset, self.total_samples = self._build_source_dataset(sources)
-    if self.use_flops_balance: self.dataset, self.total_samples = None, None
-    else:  self.dataset, self.total_samples = self._build_source_dataset(sources)
-    self.sources = sources
+    self.dataset, self.total_samples = self._build_source_dataset(sources)
 
     # for data_source monitor
     self.source_sample_cnt = {}
@@ -4059,6 +4055,36 @@ class ChatCompletionVisionParquetDataset_keye_vitrope_slowfast(ChatCompletionVis
   
   def load_state_dict(self, state_dict):
     self.dataset.load_state_dict(state_dict)
+
+  def _build_source_dataset(self, sources):
+    data_file_list = []
+    if dist.get_rank() == 0:
+      data_files = []
+      if isinstance(sources, str) and sources.endswith(".json"):
+        with open(sources, "r") as fp:
+          data_files = json.loads(fp.read())
+          data_files = [fn for fn in data_files if fn.endswith(".parquet")]
+      elif isinstance(sources, list):
+        for source in sources:
+          hdfs_files = shell_hdfs_ls(source)
+          data_files += [fn for fn in hdfs_files if fn.endswith(".parquet")]
+      # repeat
+      for i in range(self.num_epochs):
+        data_files.sort()
+        self.rng.shuffle(data_files)
+        data_file_list += [(fn, i) for fn in data_files]
+      logger.error(f"ChatCompletionVisionParquetDataset_keye_vitrope rank{dist.get_rank()}: ori_file_num={len(data_files)} file_num={len(data_file_list)}")
+
+    t = [data_file_list]
+    dist.broadcast_object_list(t, src=0)
+    data_file_list = t[0]
+
+    logger.error(f"ChatCompletionVisionParquetDataset_keye_vitrope rank{dist.get_rank()}: file_num={len(data_file_list)}")
+    if len(data_file_list) == 0:
+      raise ValueError(f"no datafile found!")
+
+    dataset = ParquetDataset(data_file_list, self.num_workers, shuffle_window=self.shuffle_window)
+    return dataset, -1
 
   def state_dict(self, ):
     
