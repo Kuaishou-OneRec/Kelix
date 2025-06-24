@@ -72,8 +72,8 @@ class KeyeProcessor(ProcessorMixin):
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-        self.fast_patch_size = 16
-        self.fast_image_processor = SiglipImageProcessor(patch_size=self.fast_patch_size)
+        # self.fast_patch_size = 16
+        # self.fast_image_processor = SiglipImageProcessor(patch_size=self.fast_patch_size)
         self.slowfast = True
 
     def __call__(
@@ -126,21 +126,23 @@ class KeyeProcessor(ProcessorMixin):
             **kwargs,
         )
         if images is not None:
-            image_inputs = self.image_processor(images=images, return_tensors="pt")
+            slow_images = [content[0] for content in images]
+            fast_images = [content[1] for content in images]
+
+            image_inputs = self.image_processor(images=slow_images, return_tensors="pt")
             image_inputs['pixel_values'] = image_inputs['pixel_values']
             image_grid_thw = image_inputs["image_grid_thw"]
 
             ####### fast part #########
             if self.slowfast:
                 if kwargs.get("image_video_pad", False):
-                    fast_image_inputs = self.fast_image_processor.preprocess(
-                                    images=images,
-                                    size = {"height": 32, "width": 32},
+                    fast_image_inputs = self.image_processor.preprocess(
+                                    images=fast_images,
+                                    size = {"height": 28, "width": 28},
                                     return_tensors="pt")
                 else:
-                    fast_image_inputs = self.fast_image_processor.preprocess(
-                                    images=images,
-                                    size = {"height": 224, "width": 224},
+                    fast_image_inputs = self.image_processor.preprocess(
+                                    images=fast_images,
                                     return_tensors="pt")
 
                 image_inputs["fast_pixel_values"] = fast_image_inputs["pixel_values"]
@@ -162,6 +164,7 @@ class KeyeProcessor(ProcessorMixin):
             slow_videos_token_nums = [[] for i in range(len(videos))]
             fast_videos_token_nums = [[] for i in range(len(videos))]
             fast_videos_frame_nums = [[] for i in range(len(videos))]
+
             for current_index, current_video in enumerate(videos):
                 if isinstance(current_video[0], list):
                     ####### slow part #########
@@ -186,15 +189,15 @@ class KeyeProcessor(ProcessorMixin):
 
                     ####### fast part #########
                     if self.slowfast:
-                        fast_videos_inputs = self.fast_image_processor(images=None, videos=current_video[1], **output_kwargs["images_kwargs"])
+                        fast_videos_inputs = self.image_processor(images=None, videos=current_video[1], **output_kwargs["images_kwargs"])
                         fast_video_grid_thw = fast_videos_inputs["video_grid_thw"]
 
                         fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
                         if isinstance(fps, (int, float)):
                             fps_ratio = current_video[2]
-                            second_per_grid_ts = [self.fast_image_processor.temporal_patch_size / (fps * fps_ratio)] * len(fast_video_grid_thw)
+                            second_per_grid_ts = [self.image_processor.temporal_patch_size / (fps * fps_ratio)] * len(fast_video_grid_thw)
                         elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-                            second_per_grid_ts = [self.fast_image_processor.temporal_patch_size / tmp for tmp in fps]
+                            second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
                         else:
                             raise ValueError(
                                 f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(fast_video_grid_thw)}) or fps should be a single number."
@@ -206,9 +209,9 @@ class KeyeProcessor(ProcessorMixin):
                         fast_videos_frame_nums[current_index].append(fast_video_grid_thw.size(0))
                     ###########################
                 else:
-                    for each_image in current_video:
+                    for image_pattern in current_video:
                         ####### slow part #########
-                        slow_videos_inputs = self.image_processor(images=None, videos=[each_image], **output_kwargs["images_kwargs"])
+                        slow_videos_inputs = self.image_processor(images=None, videos=[image_pattern[0]], **output_kwargs["images_kwargs"])
                         slow_video_grid_thw = slow_videos_inputs["video_grid_thw"]
 
                         fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
@@ -228,9 +231,9 @@ class KeyeProcessor(ProcessorMixin):
                         ####### fast part #########
                         if self.slowfast:
                             if kwargs.get("image_video_pad", False):
-                                fast_videos_inputs = self.fast_image_processor.preprocess(images=None, videos=[each_image], size = {"height": 32, "width": 32}, **output_kwargs["images_kwargs"])
+                                fast_videos_inputs = self.image_processor.preprocess(images=None, videos=[image_pattern[1]], size = {"height": 28, "width": 28}, **output_kwargs["images_kwargs"])
                             else:
-                                fast_videos_inputs = self.fast_image_processor.preprocess(images=None, videos=[each_image], size = {"height": 224, "width": 224}, **output_kwargs["images_kwargs"])
+                                fast_videos_inputs = self.image_processor.preprocess(images=None, videos=[image_pattern[1]], **output_kwargs["images_kwargs"])
                             fast_video_grid_thw = fast_videos_inputs["video_grid_thw"]
 
                             fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
@@ -347,7 +350,8 @@ class KeyeProcessor(ProcessorMixin):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
             # text[0].count(self.video_token)
-
+        # import pdb
+        # pdb.set_trace()
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
