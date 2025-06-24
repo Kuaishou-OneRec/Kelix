@@ -4,6 +4,7 @@ import os
 import json
 import torch
 import wids
+import psutil
 
 import webdataset as wds
 
