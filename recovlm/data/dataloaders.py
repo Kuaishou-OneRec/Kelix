@@ -7,6 +7,8 @@ import wids
 import psutil
 
 import webdataset as wds
+import torch.distributed as dist
+
 
 from recovlm.utils.numa_bind import get_numa_bind_info
 from torch.utils.data import DataLoader
