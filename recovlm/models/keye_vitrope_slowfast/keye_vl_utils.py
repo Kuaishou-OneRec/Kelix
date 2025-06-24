@@ -374,7 +374,7 @@ def _read_video_decord_slowfast(
     logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
 
 
-    nframes, _ = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    nframes, fps_ratio = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
     idx = torch.linspace(0, total_frames - 1, nframes).round().long().tolist()
     slow_frames = vr.get_batch(idx).asnumpy()
     slow_frames = torch.tensor(slow_frames).permute(0, 3, 1, 2)  # Convert to TCHW format
