@@ -4622,10 +4622,9 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                pad_token_id: int = 151643,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
-               process_vision_info_args={"image_factor":28},
+               process_vision_info_args={"image_factor":32},
                min_visual_tokens_per_frame: int = 4,
                max_visual_tokens_per_frame: int = 512,
-               use_flops_balance=False,
                **kwargs
                ):
     """
@@ -4640,7 +4639,10 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                         video_max_frames
     """
     if base_model_dir:
-      processor = AutoProcessor.from_pretrained(base_model_dir, trust_remote_code=True)
+      try:
+        processor = AutoProcessor.from_pretrained(base_model_dir, trust_remote_code=True)
+      except:
+        processor = KeyeProcessor.from_pretrained(base_model_dir)
       model_config = KeyeConfig.from_pretrained(base_model_dir)
       spatial_merge_size = model_config.vision_config.spatial_merge_size
       patch_size = model_config.vision_config.patch_size
@@ -4650,13 +4652,13 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
+    self.use_flops_balance = kwargs.get("use_flops_balance", False)
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
-    self.process_vision_info = process_vision_info_keye_vitrope_slowfast
     self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
     print(f"set cut_to_pad={cut_to_pad}")
     self.processor = processor
-    self.use_flops_balance = use_flops_balance
+    self.process_vision_info = process_vision_info_keye_vitrope_slowfast
 
     self.min_visual_tokens_per_image = min_visual_tokens_per_image
     self.max_visual_tokens_per_image = max_visual_tokens_per_image
@@ -4686,15 +4688,15 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     self.multiple_of = multiple_of
     self.shuffle_size = shuffle_size
     self.shuffle_initial_size = shuffle_initial_size
-    self.use_flops_balance = use_flops_balance
     if self.use_flops_balance: self.dataset, self.total_samples = None, None
     else:  self.dataset, self.total_samples = self._build_source_dataset(sources)
     self.sources = sources
+
     # for data_source monitor
     self.source_sample_cnt = {}
     self.source_error_cnt = {}
 
-    self.tokenizer = AutoTokenizer.from_pretrained(base_model_dir)
+    self.tokenizer = AutoTokenizer.from_pretrained(base_model_dir, trust_remote_code=True)
     self.img_start_token = "<|vision_start|>"
     self.img_end_token = "<|vision_end|>"
     self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
@@ -4706,9 +4708,6 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
-    print(f"patch_size: {patch_size}")
-    print(f"processor: {self.processor}")
-    print(f"self.process_vision_info: {self.process_vision_info}")
 
     self.datasource_config = datasource_config
     self.kargs = self.kwargs = kwargs
