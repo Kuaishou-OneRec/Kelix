@@ -273,30 +273,6 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
     shuffle_window = kwargs.get("shuffle_window", 0)
 
     def input_creator():
-        if "slowfast" in model_type:
-            return ChatCompletionVisionParquetDataset_keye_vitrope_slowfast(
-                sources = sources,
-                num_workers = num_workers,
-                num_epochs = num_epochs,
-                shuffle_seed = shuffle_seed,
-                max_length = max_length,
-                min_visual_tokens_per_image = min_visual_tokens_per_image,
-                max_visual_tokens_per_image = max_visual_tokens_per_image,
-                video_nframe=video_nframe,
-                video_fps=video_fps,
-                video_min_frames=video_min_frames,
-                video_max_frames=video_max_frames,
-                base_model_dir=base_model_dir,
-                shrink_ratio=shrink_ratio,
-                max_retry=max_retry,
-                multiple_of=multiple_of,
-                datasource_config=datasource_config,
-                num_readers=num_readers,
-                shuffle_window=shuffle_window,
-                min_visual_tokens_per_frame = min_visual_tokens_per_frame,
-                max_visual_tokens_per_frame = max_visual_tokens_per_frame, 
-                **kwargs
-                )
         return ModelDataset[model_type](
             sources = sources,
             num_workers = num_workers,
