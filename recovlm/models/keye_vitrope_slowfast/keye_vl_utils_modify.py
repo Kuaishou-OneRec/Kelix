@@ -35,12 +35,14 @@ VIDEO_TOTAL_PIXELS = 24576 * 28 * 28
 FRAME_FACTOR = 2
 FPS = 2.0
 FPS_MIN_FRAMES = 4
-FPS_MAX_FRAMES = 64
+FPS_MAX_FRAMES = 64 # 注意：修改了含义，这里是用来限制slow的nframe的！
 
-SLOWFAST_RATIO = 1
+SLOWFAST_RATIO = 3
 FAST_HEIGHT = 224
 FAST_WIDTH = 224
 
+FAST_MIN_PIXELS = 4 * 28 * 28
+FAST_MAX_PIXELS = 64 * 28 * 28
 
 def round_by_factor(number: int, factor: int) -> int:
     """Returns the closest integer to 'number' that is divisible by 'factor'."""
@@ -86,7 +88,7 @@ def smart_resize(
         beta = math.sqrt(min_pixels / (height * width))
         h_bar = ceil_by_factor(height * beta, factor)
         w_bar = ceil_by_factor(width * beta, factor)
-    return h_bar, w_bar
+    return max(h_bar, factor), max(w_bar, factor)
 
 
 def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACTOR) -> Image.Image:
@@ -128,9 +130,21 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
             min_pixels=min_pixels,
             max_pixels=max_pixels,
         )
-    image = image.resize((resized_width, resized_height))
 
-    return image
+        fast_min_pixels = ele.get("fast_min_pixels", FAST_MIN_PIXELS)
+        fast_max_pixels = ele.get("fast_max_pixels", FAST_MAX_PIXELS)
+        fast_resized_height, fast_resized_width = smart_resize(
+            height,
+            width,
+            factor=size_factor,
+            min_pixels=fast_min_pixels,
+            max_pixels=fast_max_pixels,
+        )
+
+    slow_image = image.resize((resized_width, resized_height))
+    fast_image = image.resize((fast_resized_width, fast_resized_height))
+    
+    return slow_image, fast_image
 
 
 def smart_nframes(
@@ -174,6 +188,66 @@ def smart_nframes(
     if not (FRAME_FACTOR <= nframes and nframes <= total_frames):
         raise ValueError(f"nframes should in interval [{FRAME_FACTOR}, {total_frames}], but got {nframes}.")
     return nframes, fps_ratio
+
+
+def smart_nframes_slowfast(
+        ele: dict,
+        total_frames: int,
+        video_fps: int | float,
+) -> int:
+    """calculate the number of frames for video used for model inputs.
+
+    Args:
+        ele (dict): a dict contains the configuration of video.
+            support either `fps` or `nframes`:
+                - nframes: the number of frames to extract for model inputs.
+                - fps: the fps to extract frames for model inputs.
+                    - min_frames: the minimum number of frames of the video, only used when fps is provided.
+                    - max_frames: the maximum number of frames of the video, only used when fps is provided.
+        total_frames (int): the original total number of frames of the video.
+        video_fps (int | float): the original fps of the video.
+
+    Raises:
+        ValueError: nframes should in interval [FRAME_FACTOR, total_frames].
+
+    Returns:
+        int: the number of frames for video used for model inputs.
+    """
+    assert not ("fps" in ele and "nframes" in ele), "Only accept either `fps` or `nframes`"
+    if "nframes" in ele:
+        nframes = round_by_factor(ele["nframes"], FRAME_FACTOR)
+    else:
+        fps = ele.get("fps", FPS)
+        min_frames = ceil_by_factor(ele.get("min_frames", FPS_MIN_FRAMES), FRAME_FACTOR)
+        if total_frames > ele.get("max_frames", FPS_MAX_FRAMES) * 5:
+            max_frames = ele.get("max_frames", FPS_MAX_FRAMES) * 5
+            slowfast_rate = 5
+        elif total_frames < ele.get("max_frames", FPS_MAX_FRAMES) * 1.5:
+            max_frames = total_frames
+            slowfast_rate = 1
+        else:
+            max_frames = ele.get("max_frames", FPS_MAX_FRAMES) * (total_frames // ele.get("max_frames", FPS_MAX_FRAMES))
+            slowfast_rate = total_frames // ele.get("max_frames", FPS_MAX_FRAMES)
+        # max_frames = floor_by_factor(ele.get("max_frames", min(FPS_MAX_FRAMES, total_frames)), FRAME_FACTOR)
+
+
+        nframes = total_frames / video_fps * fps
+        if nframes < 1:
+            nframes = FRAME_FACTOR
+            slowfast_rate = 1
+        # nframes = min(max(nframes, min_frames), max_frames)
+
+        if nframes >= max_frames:
+            fps_ratio = max_frames / nframes
+            nframes = max_frames
+        else:
+            fps_ratio = 1.0
+        nframes = round_by_factor(nframes, FRAME_FACTOR)
+
+    if not (FRAME_FACTOR <= nframes and nframes <= total_frames):
+        raise ValueError(f"nframes should in interval [{FRAME_FACTOR}, {total_frames}], but got {nframes}, max_frames {max_frames}, video_fps {video_fps}.")
+    return nframes, slowfast_rate, fps_ratio
+
 
 
 def _read_video_torchvision(
@@ -297,16 +371,16 @@ def _read_video_decord_slowfast(
         raise NotImplementedError("not support start_pts and end_pts in decord for now.")
     total_frames, video_fps = len(vr), vr.get_avg_fps()
     logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-    nframes, fps_ratio = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    nframes, slowfast_rate, fps_ratio = smart_nframes_slowfast(ele, total_frames=total_frames, video_fps=video_fps)
 
     indices = torch.linspace(0, total_frames - 1, nframes).round().long()
     
-    slow_mask = torch.remainder(torch.arange(indices.shape[0]), SLOWFAST_RATIO) == 0
+    slow_mask = torch.remainder(torch.arange(indices.shape[0]), slowfast_rate) == 0
     frames = vr.get_batch(indices.tolist()).asnumpy()
     frames = torch.tensor(frames).permute(0, 3, 1, 2)
     slow_frames = frames[slow_mask]
     fast_frames = frames
-    return slow_frames, fast_frames, fps_ratio
+    return slow_frames, fast_frames, slowfast_rate, fps_ratio
 
 
 VIDEO_READER_BACKENDS = {
@@ -335,7 +409,7 @@ def get_video_reader_backend() -> str:
 def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = True) -> torch.Tensor | list[Image.Image]:
     if isinstance(ele["video"], str) or isinstance(ele["video"], bytes):
         video_reader_backend = get_video_reader_backend()
-        slow_frames, fast_frames, fps_ratio = VIDEO_READER_BACKENDS[video_reader_backend](ele)
+        slow_frames, fast_frames, slowfast_rate, fps_ratio = VIDEO_READER_BACKENDS[video_reader_backend](ele)
         if image_factor is None:
             return None
 
@@ -346,11 +420,21 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         total_pixels = ele.get("total_pixels", VIDEO_TOTAL_PIXELS)
         max_pixels = max(min(VIDEO_MAX_PIXELS, total_pixels / nframes * FRAME_FACTOR), int(min_pixels * 1.05))
         max_pixels = ele.get("max_pixels", max_pixels)
+        fast_min_pixels = ele.get("fast_min_pixels", FAST_MIN_PIXELS)
+        fast_max_pixels = ele.get("fast_max_pixels", FAST_MAX_PIXELS)
         if "resized_height" in ele and "resized_width" in ele:
             resized_height, resized_width = smart_resize(
                 ele["resized_height"],
                 ele["resized_width"],
                 factor=image_factor,
+            )
+
+            fast_resized_height, fast_resized_width = smart_resize(
+                height,
+                width,
+                factor=image_factor,
+                min_pixels=fast_min_pixels,
+                max_pixels=fast_max_pixels,
             )
         else:
             resized_height, resized_width = smart_resize(
@@ -360,6 +444,15 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
                 min_pixels=min_pixels,
                 max_pixels=max_pixels,
             )
+
+            fast_resized_height, fast_resized_width = smart_resize(
+                height,
+                width,
+                factor=image_factor,
+                min_pixels=fast_min_pixels,
+                max_pixels=fast_max_pixels,
+            )
+
         slow_frames = transforms.functional.resize(
             slow_frames,
             [resized_height, resized_width],
@@ -371,11 +464,11 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         #### fast part ######
         fast_frames = transforms.functional.resize(
             fast_frames,
-            [FAST_HEIGHT, FAST_WIDTH],
+            [fast_resized_height, fast_resized_width],
             interpolation=InterpolationMode.BICUBIC,
             antialias=True,
         ).float()
-        fast_frames = list(fast_frames.split(SLOWFAST_RATIO, dim=0))
+        fast_frames = list(fast_frames.split(slowfast_rate, dim=0))
         assert len(slow_frames) == len(fast_frames)
 
         return slow_frames, fast_frames, fps_ratio
@@ -448,4 +541,5 @@ def process_vision_info(
     if len(video_inputs) == 0:
         video_inputs = None
     return image_inputs, video_inputs
+
 
