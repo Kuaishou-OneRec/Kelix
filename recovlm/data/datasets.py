@@ -5334,6 +5334,10 @@ class BalanceParquetDataset(IterableDataset):
         print_rank_0("Will start training without resuming dataloader state")
         state_dict = None
 
+  def init(self):
+    if self.dataset is None:
+      self.dataset, self.total_samples = self._build_source_dataset(self.sources)
+
   def __iter__(self):
     try:
       self.rank = dist.get_rank()
