@@ -28,6 +28,7 @@ import multiprocessing as mp
 import psutil
 import threading
 import queue
+import traceback
 from functools import partial
 from tools.mfu.flops_counter import MFUStats
 
@@ -83,7 +84,7 @@ from recovlm.training.parallel import get_sequence_parallel_group, \
   get_sequence_parallel_rank, get_sequence_parallel_world_size, \
   get_local_sequence_boundary, initialize_model_parallel, gather_by_group, \
   get_local_sequence, get_data_parallel_group, get_data_parallel_world_size, \
-  get_data_parallel_rank
+  get_data_parallel_rank, gather_batches
 
 from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
 
@@ -244,7 +245,7 @@ def get_argument_parser():
 
   parser.add_argument("--freeze_visual", action="store_true",
                       help="Freeze all visual encoder parameters except visual projector layers.")
-  
+
   parser.add_argument("--freeze_projector", action="store_true",
                       help="Freeze visual projector layers.")
 
@@ -338,8 +339,10 @@ def save_model_checkpoint(
     model,
     save_dir: str,
     tag: str = None,
-    client_state: dict = None,
+    client_state=None,
+    optimizer = None,
     dataloader = None,
+    lr_scheduler=None,
     app_state: AppState = None,
     dist_checkpointer: DistributedCheckpointer = None,
     global_step: int = None,
@@ -406,8 +409,22 @@ def save_model_checkpoint(
                 )
                 print_rank_0(f"Saved dataloader state to {dataloader_path}")
             except:
-                logging.error("Failed to save dataloader state!")
-    
+                import traceback
+                logging.error(f"Failed to save dataloader state! dataloader({type(dataloader)})={dataloader} \ntraceback:{traceback.format_exc()}")
+
+        optimizer_path = os.path.join(ckpt_path, "optimizer_ckpt")
+        optimizer_state = {
+          "optimizer_state_dict": optimizer.state_dict(),
+          "scheduler_state_dict": lr_scheduler.state_dict(),
+        }
+        if dist.get_rank() == 0:
+            os.makedirs(optimizer_path, exist_ok=True)
+        dist.barrier()
+        torch.save(
+            optimizer_state,
+            os.path.join(optimizer_path, f"rank{dist.get_rank()}.pt")
+        )
+        print_rank_0(f"Saved dataloader state to {optimizer_path}")
     except Exception as e:
         logging.error(f"Failed to save checkpoint: {str(e)}")
         raise e
@@ -573,28 +590,26 @@ class TokenStats:
       self.std_image_tokens.clear()
       return res
 
-  
-def data_func(name, dataset_config, batch_queue, cpu_bind):
-  p = psutil.Process(os.getpid())
-  p.cpu_affinity(cpu_bind)
-  master_port = int(os.environ["MASTER_PORT"]) + 1
-  os.environ["MASTER_PORT"] = str(master_port)
-  rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
-  world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
-  dist.init_process_group(backend="gloo", rank=rank, world_size=world_size, timeout=process_group_timeout)
-  print(f"dataset_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind}")
 
-  # with Timer("Build dataloader"):
-  try:  dataloader = get_dataloader_v2(name=name, **dataset_config)
-  except: 
-    import traceback
-    print(f"get_dataloader_v2 error: {traceback.format_exc()}")
-    print(f"get_dataloader_v2 retry for get_dataloader")
-    traceback.print_exc()
-    dataloader = get_dataloader(name=name, **dataset_config)
-
-  for batch in dataloader:
-    batch_queue.put(batch)
+def data_prefetch_fn(data_iter, batch_queue, sp_size):
+  while True:
+    try:
+      t1 = time.perf_counter()
+      batch = next(data_iter)
+      t2 = time.perf_counter()
+      if sp_size > 1:
+        batches = gather_batches([batch], get_sequence_parallel_group())
+        t3 = time.perf_counter()
+        # print(f"rank={dist.get_rank()} get_one_batch: {t2-t1}, all_gather={t3-t2}")
+        for b in batches:
+          batch_queue.put(b)
+      else:
+        batch_queue.put(batch)
+        t3 = time.perf_counter()
+        # print(f"rank={dist.get_rank()}, get_one_batch: {t2-t1}")
+    except Exception as e:
+      traceback.print_exc()
+      batch_queue.put(None)
 
 class FakeConverter:
   def __init__(self, model_path_or_name: str = None):
@@ -613,6 +628,14 @@ class FakeConverter:
 def train():
   arg_parser = get_argument_parser()
   args = arg_parser.parse_args()
+
+  resume_from, ckpt_id, rewrite_resume_flag = get_resume_info(args)
+  
+  if rewrite_resume_flag:
+    args.resume_dataloader = True
+    args.load_weights_only = False
+    print_rank_0(f"WARN: --resume_dataloader is rewrited to True \n" \
+                 f"WARN: --load_weights_only is rewrited to False \n")
 
   # check vision_lr
   assert args.learning_rate > 0.0
@@ -634,6 +657,8 @@ def train():
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
   local_world_size = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_SIZE", 0))
   cpu_bind = get_numa_bind_info(local_rank, local_world_size)
+  os.environ["KML_ID"] = args.kml_id
+  os.environ["KML_TASK_ID"] = args.kml_task_id
 
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
@@ -645,15 +670,24 @@ def train():
   use_flops_balance = dataset_config.get("use_flops_balance", False)
 
   if use_flops_balance:
-    batch_queue = mp.Queue(1)
-    data_process = mp.Process(target=data_func, args=(dataset, dataset_config, batch_queue, cpu_bind[:8]))
-    data_process.start()
-  else:
-    batch_queue = None
-    
-  # init model params
-  os.environ["KML_ID"] = args.kml_id
-  os.environ["KML_TASK_ID"] = args.kml_task_id
+    try:
+      dataloader = get_dataloader(name=dataset, **dataset_config,
+                                  resume_dataloader=args.resume_dataloader,
+                                  resume_from=resume_from,
+                                  snapshot_step=args.save_checkpoint_per_step//2)
+    except: 
+      import traceback
+      traceback.print_exc()
+      dataloader = get_dataloader_v2(name=dataset, **dataset_config)
+
+    data_iter = dataloader._get_iterator()
+
+    batch_queue = queue.Queue(maxsize=8)
+    batch_prefetcher = threading.Thread(
+      target=data_prefetch_fn,
+      args=(data_iter, batch_queue, args.sequence_parallel_size),
+      daemon=True)
+    batch_prefetcher.start()
 
   # torch init
   torch.cuda.set_device(local_rank)
@@ -689,7 +723,6 @@ def train():
     with set_default_dtype(torch.bfloat16):
       state_dict = load_hf_checkpoint(args.model_dir)
       state_dict = converter(state_dict)
-
 
   dist.barrier()
 
@@ -731,7 +764,7 @@ def train():
     #msyTODO: add siglip
   
   # 暂时注释（caojiangxia）
-  # # check all param & buffer on meta device 
+  # check all param & buffer on meta device 
   # for tensor in itertools.chain(model.parameters(), model.buffers()):
   #   assert tensor.device == torch.device("meta")
 
@@ -804,7 +837,6 @@ def train():
       print_rank_0(f"params not freeze: {name}")
   print_rank_0("=" * 50)
 
-
   # Split weights in two groups, one with weight decay and the other not.
   optimizer_grouped_parameters = get_optimizer_grouped_parameters(
     model,
@@ -847,17 +879,8 @@ def train():
   local_acc_data_source_samples = collections.defaultdict(int)
   total_data_source_tokens = collections.defaultdict(int)
 
-  resume_from, ckpt_id, rewrite_resume_flag = get_resume_info(args)
-
   app_state = AppState(model=model)
   dist_checkpointer = DistributedCheckpointer()
-
-  if rewrite_resume_flag:
-    args.resume_dataloader = True
-    args.load_weights_only = False
-    print_rank_0(f"WARN: --resume_dataloader is rewrited to True \n" \
-                 f"WARN: --load_weights_only is rewrited to False \n")
-
 
   if ckpt_id:
     ckpt_path = os.path.join(resume_from, ckpt_id)
@@ -884,9 +907,13 @@ def train():
     
     print_rank_0(f"Successfully loaded model using distributed checkpoint")
 
-    if args.resume_dataloader:
+    if args.resume_dataloader: # and not use_flops_balance:
       print_rank_0(f"resume_from={resume_from}, len={len(resume_from)}")
       dataloader_resume_path = os.path.join(resume_from, "dataloader_ckpt", f"rank{dist.get_rank()}.pt")
+      optimizer_state_dict_path = os.path.join(resume_from, "optimizer_ckpt", f"rank{dist.get_rank()}.pt")
+      optimizer_state_dict = torch.load(optimizer_state_dict_path)
+      lr_scheduler.load_state_dict(optimizer_state_dict["scheduler_state_dict"])
+      optimizer.load_state_dict(optimizer_state_dict["optimizer_state_dict"])
       # Add validation for dataloader checkpoint
       if not os.path.exists(dataloader_resume_path):
         print_rank_0(f"Warning: Dataloader checkpoint {dataloader_resume_path} does not exist")
@@ -913,7 +940,7 @@ def train():
 
   dist.barrier()
 
-  tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True, use_fast=False)
+  tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True)
   image_token_id = tokenizer.encode('<im_patch>')[0]  if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|image_pad|>')[0]
   image_start_id = tokenizer.encode("</image>")[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|vision_start|>')[0]
   
@@ -935,8 +962,7 @@ def train():
         dataloader = get_dataloader(name=dataset, **dataset_config)
       if args.resume_dataloader and dataloader_state_dict is not None:
         dataloader.load_state_dict(dataloader_state_dict)
-  else:
-    dataloader = None
+
 
   ##############
   torch_profiler = _init_profiler(output_dir=os.path.join(args.output_dir, "torch_profile"))
@@ -980,19 +1006,11 @@ def train():
         batch = input_fn()
         to_device(batch, dev, True)
         output_q.put(batch)
-        print(f"put__donnnnnn")
       except StopIteration:
         break
 
   if use_flops_balance:
-    # input_fn = lambda: batch_queue.get()
-    # data_iter = iter(gather_batches(batch_queue.get(), get_sequence_parallel_group()))
-    class dataloader_fn:
-      def __iter__(self): 
-        while True: yield batch_queue.get()
-    new_dataloader = dataloader_fn()
-    data_iter = iter(gather_by_group(new_dataloader, get_sequence_parallel_group()))
-    input_fn =  lambda: next(data_iter)
+    input_fn = lambda: batch_queue.get()
   else:
     data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
     input_fn =  lambda: next(data_iter)
@@ -1056,6 +1074,10 @@ def train():
     tb_writer_t = threading.Thread(target=write_tb_async,args=(tb_writer, tb_metrics_q, args.gradient_accumulation_steps))
     tb_writer_t.start()
 
+  total_data_source_samples = 0
+  total_num_valid_tokens = 0
+  total_num_tokens = 0 
+  total_num_samples = 0
 
   while True:
     ticker.tick("while_True")
@@ -1064,7 +1086,7 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
-      try: batch = gpu_batch_q.get() if prefetch_t is not None else input_fn()
+      try: batch = input_fn() #batch_queue.get()
       except StopIteration: break
       ticker.tick("next_batch")
       
@@ -1111,7 +1133,6 @@ def train():
       all_video_grid_thw = batch.get("all_video_grid_thw", None)
       all_second_per_grid_ts = batch.get("all_second_per_grid_ts", None)
       ###################
-
       # 打印 token 数量
       if not use_flops_balance or True:
         token_count = input_ids.numel() / args.sequence_parallel_size  # 计算 token 数量
@@ -1185,7 +1206,10 @@ def train():
               image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
               cu_seqlens=cu_seqlens, image_position_ids=image_position_ids,
               image_grid_hws=image_grid_hws, image_sample_indices=image_sample_indices,
-              image_cu_seqlens=image_cu_seqlens, second_per_grid_ts=second_per_grid_ts,
+              image_cu_seqlens=image_cu_seqlens,
+              max_seqlen_q=batch.get("max_seqlen_q", None),
+              image_max_seqlen_q=batch.get("image_max_seqlen_q", None),
+              image_max_seqlen_k=batch.get("image_max_seqlen_k", None), second_per_grid_ts=second_per_grid_ts,
               fast_pixel_values=fast_pixel_values,
               fast_image_grid_thw=fast_image_grid_thw, fast_pixel_values_videos=fast_pixel_values_videos,
               fast_video_grid_thw=fast_video_grid_thw, fast_second_per_grid_ts=fast_second_per_grid_ts,
@@ -1389,7 +1413,7 @@ def train():
         batch_data_source_tokens = collections.defaultdict(int)
         valid_data_source_tokens = collections.defaultdict(int)
 
-      if global_step % args.save_checkpoint_per_step == 0 and \
+      if (global_step % args.save_checkpoint_per_step == 0 or global_step in [1, 5, 10, 50, 100, 200]) and \
           global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
         
         torch.cuda.empty_cache()
@@ -1407,30 +1431,14 @@ def train():
                           "total_num_samples": total_num_samples,
                           "total_data_source_samples": total_data_source_samples,
                           "total_data_source_tokens": total_data_source_tokens,
+                          "optimizer": optimizer.state_dict(),
                       },
-                      dataloader=dataloader,
+                      optimizer=optimizer,
+                      lr_scheduler=lr_scheduler,
+                      dataloader=data_iter if use_flops_balance else  dataloader,
                       app_state=app_state.set_call_back(converter.revert), # app_state.set_call_back(state_dict), # no need to convert 
                       dist_checkpointer=dist_checkpointer
                   )
-          try:
-            dataloader_state_dict = {
-              "dataloader_state_dict": dataloader.state_dict()
-            }
-          except:
-            dataloader_state_dict = None
-            logging.error(f"Dataloader cannot dump state_dict!!!!!!!!")
-          if dataloader_state_dict is not None:
-            # dataloader ckpt
-            dataloader_path = os.path.join(args.output_dir, "dataloader_ckpt")
-            if dist.get_rank() == 0:
-              os.makedirs(dataloader_path, exist_ok=True)
-            dist.barrier()
-            torch.save(
-              dataloader_state_dict,
-              os.path.join(
-                dataloader_path,
-                f"rank{dist.get_rank()}_global_step{global_step}.pth")
-              )
         ticker.tick(f"save_ckpt*{args.save_checkpoint_per_step * args.gradient_accumulation_steps}") 
 
       # print_rank_0(f"ticker_info: { format ticker.stat()}")
@@ -1450,7 +1458,9 @@ def train():
                           "total_data_source_samples": total_data_source_samples,
                           "total_data_source_tokens": total_data_source_tokens,
                       },
-                      dataloader=dataloader,
+                      optimizer=optimizer,
+                      lr_scheduler=lr_scheduler,
+                      dataloader=data_iter if use_flops_balance else dataloader,
                       app_state=app_state.set_call_back(converter.revert), # app_state.set_call_back(state_dict),
                       dist_checkpointer=dist_checkpointer,
                   )
