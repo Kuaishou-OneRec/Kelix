@@ -4010,6 +4010,10 @@ class ChatCompletionVisionParquetDataset_keye_vitrope_slowfast(ChatCompletionVis
     self.shuffle_window = kargs.get("shuffle_window", 0)
     super().__init__(sources, **kargs)
 
+  def init(self):
+    if self.dataset is None:
+      self.dataset, self.total_samples = self._build_source_dataset(self.sources)
+      
   def _build_source_dataset(self, sources):
     data_file_list = []
     if dist.get_rank() == 0:
@@ -5333,10 +5337,6 @@ class BalanceParquetDataset(IterableDataset):
         print_rank_0(f"Error loading dataloader checkpoint: {str(e)}")
         print_rank_0("Will start training without resuming dataloader state")
         state_dict = None
-
-  def init(self):
-    if self.dataset is None:
-      self.dataset, self.total_samples = self._build_source_dataset(self.sources)
 
   def __iter__(self):
     try:
