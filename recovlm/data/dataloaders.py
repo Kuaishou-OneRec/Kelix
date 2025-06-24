@@ -7,6 +7,7 @@ import wids
 
 import webdataset as wds
 
+from recovlm.utils.numa_bind import get_numa_bind_info
 from torch.utils.data import DataLoader
 from torchdata.stateful_dataloader import StatefulDataLoader
 from qwen_vl_utils import process_vision_info
