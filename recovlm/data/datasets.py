@@ -4804,21 +4804,36 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     if 'image_grid_thw' in inputs and len(inputs["pixel_values"]) and 'video_grid_thw' in inputs and len(inputs["pixel_values_videos"]):
       raise Exception("Unexpected inputs: there are both pixel_values and pixel_values_videos: {}/{}".format(inputs["pixel_values"].shape, inputs["pixel_values_videos"].shape))
 
-    if 'image_grid_thw' in inputs: # 如果有图片
-      n_tokens = 0
-      for i in range(image_nums * 2, len(inputs["image_grid_thw"])): # 注意，因为slowfast的video_grid_thw是正常的两倍，所以前面需要 * 2。
+    if 'all_image_grid_thw' in inputs: # 如果有图片
+      n_slow_tokens = 0
+      n_fast_tokens = 0
+      for i in range(image_nums, len(inputs["image_grid_thw"])): # 注意，因为slowfast的video_grid_thw是正常的两倍，所以前面需要 * 2。
         n_tokens_hw = inputs["image_grid_thw"][i]
-        n_tokens += n_tokens_hw[1] * n_tokens_hw[2]
+        n_slow_tokens += n_tokens_hw[1] * n_tokens_hw[2]
 
-      if n_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
-      inputs["image_grid_thw"] = inputs["image_grid_thw"][:image_nums * 2]
+        n_tokens_hw = inputs["fast_image_grid_thw"][i]
+        n_fast_tokens += n_tokens_hw[1] * n_tokens_hw[2]
 
-    elif 'video_grid_thw' in inputs: # 如果有视频
+      if n_slow_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_slow_tokens]
+      if n_fast_tokens: inputs["fast_pixel_values"] = inputs["fast_pixel_values"][:-n_fast_tokens]
+
+      inputs["image_grid_thw"] = inputs["image_grid_thw"][:image_nums]
+      inputs["fast_image_grid_thw"] = inputs["fast_image_grid_thw"][:image_nums]
+      inputs["all_image_grid_thw"] = inputs["all_image_grid_thw"][:image_nums * 2]
+
+    elif 'all_video_grid_thw' in inputs: # 如果有视频
       # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs000000_{dist.get_rank()}")
       # print(f"inputs000000_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
       used_n_token = 0
+      fast_used_n_token = 0
+      slow_used_n_token = 0
       video_used_idx = 0
-      for idx, n_tokens_hw in enumerate(inputs["video_grid_thw"]):
+      for idx, n_tokens_hw in enumerate(inputs["all_video_grid_thw"]):
+        if idx % 2 == 1:
+          fast_used_n_token += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
+        else:
+          slow_used_n_token += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
+
         used_n_token += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
         if used_n_token == video_token_nums:
           video_used_idx = idx + 1
@@ -4829,8 +4844,13 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       #   n_tokens_hw = inputs["video_grid_thw"][i]
       #   n_tokens += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
 
-      if n_tokens: inputs["pixel_values_videos"] = inputs["pixel_values_videos"][:video_token_nums]
-      inputs["video_grid_thw"] = inputs["video_grid_thw"][:video_used_idx]
+      if slow_used_n_token: inputs["pixel_values_videos"] = inputs["pixel_values_videos"][:slow_used_n_token]
+      if fast_used_n_token: inputs["fast_pixel_values_videos"] = inputs["fast_pixel_values_videos"][:fast_used_n_token]
+
+      inputs["video_grid_thw"] = inputs["video_grid_thw"][:video_used_idx//2]
+      inputs["fast_video_grid_thw"] = inputs["fast_video_grid_thw"][:video_used_idx//2]
+
+      inputs["all_video_grid_thw"] = inputs["all_video_grid_thw"][:video_used_idx]
       inputs["second_per_grid_ts"] = inputs["second_per_grid_ts"][:video_used_idx]
 
       # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs111111_{dist.get_rank()}")
@@ -4839,6 +4859,10 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       if len(inputs["pixel_values_videos"]) == 0:
         del inputs["pixel_values_videos"]
         del inputs["video_grid_thw"]
+        del inputs["second_per_grid_ts"]
+        del inputs["all_video_grid_thw"]
+        del inputs["fast_pixel_values_videos"]
+        del inputs["fast_video_grid_thw"]
         del inputs["second_per_grid_ts"]
     # num_thw = 0
     # if "image_grid_thw" in inputs:
