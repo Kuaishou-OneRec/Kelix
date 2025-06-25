@@ -4821,6 +4821,10 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       inputs["fast_image_grid_thw"] = inputs["fast_image_grid_thw"][:image_nums]
       inputs["all_image_grid_thw"] = inputs["all_image_grid_thw"][:image_nums * 2]
 
+      image_pad_sum = torch.nonzero(inputs["input_ids"][0] == self.image_token_id).sum().item()
+      if image_pad_sum != (inputs["pixel_values"].shape[0] + inputs["fast_pixel_values"].shape[0]):
+        raise Exception("cjx dataset debug,  image_pad_sum {} pixel_values {} fast_pixel_values {}".format(image_pad_sum, inputs["pixel_values"].shape[0], inputs["fast_pixel_values"].shape[0]))
+
     elif 'all_video_grid_thw' in inputs: # 如果有视频
       # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs000000_{dist.get_rank()}")
       # print(f"inputs000000_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
