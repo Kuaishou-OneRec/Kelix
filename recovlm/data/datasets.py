@@ -4841,7 +4841,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       used_n_token = 0
       fast_used_n_token = 0
       slow_used_n_token = 0
-      video_used_idx = 0
+      video_used_idx = len(inputs["all_video_grid_thw"])
       for idx, n_tokens_hw in enumerate(inputs["all_video_grid_thw"]):
         if used_n_token == video_token_nums:
           video_used_idx = idx
