@@ -4772,11 +4772,11 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
         assert inputs["input_ids"].shape[-1] <= process_max_length, "inputs too long"
         lenf = inputs["input_ids"].shape[-1]
 
-        print(f"rank{dist.get_rank()}_process{lenf}=============== ")
-        print_input_info(
-          inputs,
-          f"rank{dist.get_rank()}_process{lenf}: "
-        )
+        # print(f"rank{dist.get_rank()}_process{lenf}=============== ")
+        # print_input_info(
+        #   inputs,
+        #   f"rank{dist.get_rank()}_process{lenf}: "
+        # )
         return inputs
     else:
       raise ValueError(
