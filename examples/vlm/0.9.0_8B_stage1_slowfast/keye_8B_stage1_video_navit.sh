@@ -125,16 +125,15 @@ nohup mpirun --allow-run-as-root \
                 --min_lr 5e-5 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --num_warmup_steps 9200 \
-                --num_training_steps 92000 \
+                --num_warmup_steps 4000 \
+                --num_training_steps 39000 \
                 --save_checkpoint_per_step 1000 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 20 \
-                --enable_gradient_checkpointing \
-                --gradient_accumulation_steps 2 \
                 --fp32_weight \
                 --seed 19260817 \
+                --enable_gradient_checkpointing \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
@@ -145,4 +144,5 @@ nohup mpirun --allow-run-as-root \
                 --freeze_llm \
                 --freeze_visual \
                 --heartbeat_monitor > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+
 
