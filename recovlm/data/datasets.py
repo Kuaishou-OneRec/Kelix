@@ -5325,7 +5325,7 @@ class BalanceParquetDataset(IterableDataset):
           if 1:
             sample_original_len = inputs["input_ids"].shape[-1]
             reserved = inputs["input_ids"].shape[-1] - (cumsum - maxlen)
-            cut = self.input._cut_sample(inputs, reserved)
+            cut = self.input._cut_sample_cjx(inputs, reserved)
             
             all_loss_tokens = cut["loss_mask"].sum().item()
             if all_loss_tokens == 0 and len(buffer) == 1: # 一条样本就占满了seq len, 而且不能计算loss，删掉
