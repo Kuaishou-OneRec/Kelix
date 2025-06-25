@@ -4993,7 +4993,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       if "pixel_values" in inputs: n_pixels += inputs["pixel_values"].shape[0]
       if "pixel_values_videos" in inputs: n_pixels += inputs["pixel_values_videos"].shape[0]
       image_pad = True if self.use_flops_balance else False
-      print(22222, self.use_flops_balance, image_pad)
+      # print(22222, self.use_flops_balance, image_pad)
       epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
