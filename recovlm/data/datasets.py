@@ -4841,16 +4841,17 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       used_n_token = 0
       fast_used_n_token = 0
       slow_used_n_token = 0
+      video_token_nums = video_token_nums * 4 # 注意这里的乘4是因为我们有2*2的merge patch操作
       video_used_idx = len(inputs["all_video_grid_thw"])
       for idx, n_tokens_hw in enumerate(inputs["all_video_grid_thw"]):
         if used_n_token == video_token_nums:
           video_used_idx = idx
           break
         if idx % 2 == 1:
-          fast_used_n_token += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
+          fast_used_n_token += (n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2])
         else:
-          slow_used_n_token += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
-        used_n_token += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
+          slow_used_n_token += (n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2])
+        used_n_token += (n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2])
       # n_tokens = 0
       # for i in range(used_idx, len(inputs["video_grid_thw"])): # 注意，因为slowfast的video_grid_thw是正常的两倍，所以前面需要 * 2。
       #   n_tokens_hw = inputs["video_grid_thw"][i]
