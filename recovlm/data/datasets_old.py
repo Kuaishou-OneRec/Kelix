@@ -1268,13 +1268,6 @@ class ChatCompletionVisionDataset(IterableDataset):
         continue
       else:
         assert inputs["input_ids"].shape[-1] <= process_max_length, "inputs too long"
-        lenf = inputs["input_ids"].shape[-1]
-
-        print(f"rank{dist.get_rank()}_process{lenf}=============== ")
-        print_input_info(
-          inputs,
-          f"rank{dist.get_rank()}_process{lenf}: "
-        )
         return inputs
     else:
       raise ValueError(
@@ -4659,9 +4652,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
 
-    kwargs['use_flops_balance'] = kwargs.get("use_flops_balance", False)
-    self.use_flops_balance = kwargs['use_flops_balance']
-    print(111111111, self.use_flops_balance)
+    self.use_flops_balance = kwargs.get("use_flops_balance", False)
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
     self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
@@ -4721,73 +4712,72 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     self.datasource_config = datasource_config
     self.kargs = self.kwargs = kwargs
     
-  def _process(self, sample, source_name=None):
-    # self._may_filter(sample)
-
-    # get data format
-    if "messages" in sample["json"] or "message" in sample["json"]:
-      data_format = "chatml"
-    elif "segments" in sample["json"]:
-      data_format = "completion"
-    else:
-      raise NotImplementedError(f"Unsupported dataset format.")
     
-    source_conf = {
-      "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
-      "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
-      "min_visual_tokens_per_frame": self.min_visual_tokens_per_frame,
-      "max_visual_tokens_per_frame": self.max_visual_tokens_per_frame, 
-      "video_nframe": self.video_nframe,
-      "video_fps": self.video_fps,
-      "video_min_frames": self.video_min_frames,
-      "video_max_frames": self.video_max_frames
-    }
-
-    if source_name != None and source_name in self.datasource_config:
-      for key in source_conf:
-        if key in self.datasource_config[source_name]:
-          source_conf[key] = self.datasource_config[source_name][key]
-    
-    for retry in range(self.max_retry):
-      if data_format == "chatml":
-        inputs = self._process_chat(sample, source_conf)
-      elif data_format == "completion":
-        inputs = self._process_completion(sample, source_conf)
-
-      else:
-        raise NotImplementedError(
-            f"Unsupported dataset format `{data_format}`")
-      inputs['epoch_idx'] = sample['epoch_idx']
-      if not inputs:
-        raise ValueError("Empty inputs, skip")
-
-      process_max_length = min(int(self.max_length // 1.5), 8000) if self.use_flops_balance else self.max_length
-      if inputs["input_ids"].shape[-1] > process_max_length:
-        source_conf["max_visual_tokens_per_image"] = (
-            source_conf["max_visual_tokens_per_image"] * self.shrink_ratio)
-        source_conf["max_visual_tokens_per_frame"] = (
-            source_conf["max_visual_tokens_per_frame"] * self.shrink_ratio)
-        continue
-      else:
-        assert inputs["input_ids"].shape[-1] <= process_max_length, "inputs too long"
-        lenf = inputs["input_ids"].shape[-1]
-
-        print(f"rank{dist.get_rank()}_process{lenf}=============== ")
-        print_input_info(
-          inputs,
-          f"rank{dist.get_rank()}_process{lenf}: "
-        )
-        return inputs
-    else:
-      raise ValueError(
-          f"Unable to generate sample within max_length={process_max_length} after {retry} retrys"
-      )
   def _cut_sample(self, inputs, packable_length):
-    return self._cut_sample_cjx(inputs, packable_length)
+    # if 'pixel_values_videos' in inputs and dist.get_rank() == 0:
+
+    inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
+    inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
+
+    inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
+
+    vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
+    vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
+
+    if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
+      # inputs["input_ids"][:, vision_starts[-1]:] = 0 # 随便什么id都可以
+      # inputs["loss_mask"][:, vision_starts[-1]:] = 0
+      # inputs["position_ids"][:, vision_starts[-1]:] = 0
+      inputs["input_ids"] = inputs["input_ids"][:, :vision_starts[-1]] # 继续截断,截断到vision_starts token,因为vision_start之后的内容都不会有loss
+      inputs["loss_mask"] = inputs["loss_mask"][:, :vision_starts[-1]]
+      inputs["position_ids"] = inputs["position_ids"][..., :vision_starts[-1]]
+      
+    if 'image_grid_thw' in inputs and len(inputs["pixel_values"]) and 'video_grid_thw' in inputs and len(inputs["pixel_values_videos"]):
+      raise Exception("Unexpected inputs: there are both pixel_values and pixel_values_videos: {}/{}".format(inputs["pixel_values"].shape, inputs["pixel_values_videos"].shape))
+
+    if 'image_grid_thw' in inputs: # 如果有图片
+      n_tokens = 0
+      for i in range(len(vision_ends) * 2, len(inputs["image_grid_thw"])): # 注意，因为slowfast的video_grid_thw是正常的两倍，所以前面需要 * 2。
+        n_tokens_hw = inputs["image_grid_thw"][i]
+        n_tokens += n_tokens_hw[1] * n_tokens_hw[2]
+
+      if n_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
+      inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends) * 2]
+
+    elif 'video_grid_thw' in inputs: # 如果有视频
+      # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs000000_{dist.get_rank()}")
+      # print(f"inputs000000_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
+      n_tokens = 0
+      for i in range(len(vision_ends) * 2, len(inputs["video_grid_thw"])): # 注意，因为slowfast的video_grid_thw是正常的两倍，所以前面需要 * 2。
+        n_tokens_hw = inputs["video_grid_thw"][i]
+        n_tokens += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
+
+      if n_tokens: inputs["pixel_values_videos"] = inputs["pixel_values_videos"][:-n_tokens]
+      inputs["video_grid_thw"] = inputs["video_grid_thw"][:len(vision_ends) * 2]
+      inputs["second_per_grid_ts"] = inputs["second_per_grid_ts"][:len(vision_ends) * 2]
+
+      # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs111111_{dist.get_rank()}")
+      # print(f"inputs111111_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
+
+      if len(inputs["pixel_values_videos"]) == 0:
+        del inputs["pixel_values_videos"]
+        del inputs["video_grid_thw"]
+        del inputs["second_per_grid_ts"]
+    # num_thw = 0
+    # if "image_grid_thw" in inputs:
+    #   thw = inputs["image_grid_thw"]
+    #   num_thw = sum([(thw[i][1] * thw[i][2]).item() for i in range(thw.size(0))])
+    # num_image_id = (inputs["input_ids"] == self.image_token_id).sum()
+    # if num_thw != num_image_id * 4:
+    #   print(f"{num_thw=}, {num_image_id=}, {inputs=}")
+    # pvs = [0]
+    # if "pixel_values" in inputs:
+    #   pvs = inputs["pixel_values"].shape
+    # if pvs[0] != num_thw:
+    #   print(f"{num_thw=}, pixel_values={pvs}")
+    return inputs
 
   def _cut_sample_cjx(self, inputs, packable_length):
-    inputs1 = copy.deepcopy(inputs)
-
     # if 'pixel_values_videos' in inputs and dist.get_rank() == 0:
     inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
     inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
@@ -4807,13 +4797,9 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       inputs["position_ids"] = inputs["position_ids"][..., :vision_starts[-1]]
     
     vision_start_indices = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
-    if vision_start_indices.numel() == 0:  # 检查是否为空
-      image_nums = 0
-      video_token_nums = (inputs["input_ids"][0] == self.video_token_id).sum()
-    else:
-      vision_tokens = inputs["input_ids"][0][vision_start_indices + 1]
-      image_nums = (vision_tokens == self.image_token_id).sum()
-      video_token_nums = (inputs["input_ids"][0] == self.video_token_id).sum()
+    vision_tokens = inputs["input_ids"][0][vision_start_indices + 1]
+    image_nums = (vision_tokens == self.image_token_id).sum()
+    video_token_nums = (inputs["input_ids"][0] == self.video_token_id).sum()
 
     if 'image_grid_thw' in inputs and len(inputs["pixel_values"]) and 'video_grid_thw' in inputs and len(inputs["pixel_values_videos"]):
       raise Exception("Unexpected inputs: there are both pixel_values and pixel_values_videos: {}/{}".format(inputs["pixel_values"].shape, inputs["pixel_values_videos"].shape))
@@ -4828,12 +4814,16 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
         n_tokens_hw = inputs["fast_image_grid_thw"][i]
         n_fast_tokens += n_tokens_hw[1] * n_tokens_hw[2]
 
-      inputs["pixel_values"] = inputs["pixel_values"][:n_slow_tokens]
-      inputs["fast_pixel_values"] = inputs["fast_pixel_values"][:n_fast_tokens]
+      if n_slow_tokens: inputs["pixel_values"] = inputs["pixel_values"][:n_slow_tokens]
+      if n_fast_tokens: inputs["fast_pixel_values"] = inputs["fast_pixel_values"][:n_fast_tokens]
 
       inputs["image_grid_thw"] = inputs["image_grid_thw"][:image_nums]
       inputs["fast_image_grid_thw"] = inputs["fast_image_grid_thw"][:image_nums]
       inputs["all_image_grid_thw"] = inputs["all_image_grid_thw"][:image_nums * 2]
+
+      image_pad_sum = torch.nonzero(inputs["input_ids"][0] == self.image_token_id).sum().item()
+      if image_pad_sum != (inputs["pixel_values"].shape[0] + inputs["fast_pixel_values"].shape[0]):
+        raise Exception("cjx dataset debug,  image_pad_sum {} pixel_values {} fast_pixel_values {}".format(image_pad_sum, inputs["pixel_values"].shape[0], inputs["fast_pixel_values"].shape[0]))
 
     elif 'all_video_grid_thw' in inputs: # 如果有视频
       # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs000000_{dist.get_rank()}")
@@ -4858,8 +4848,8 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       #   n_tokens_hw = inputs["video_grid_thw"][i]
       #   n_tokens += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
 
-      inputs["pixel_values_videos"] = inputs["pixel_values_videos"][:slow_used_n_token]
-      inputs["fast_pixel_values_videos"] = inputs["fast_pixel_values_videos"][:fast_used_n_token]
+      if slow_used_n_token: inputs["pixel_values_videos"] = inputs["pixel_values_videos"][:slow_used_n_token]
+      if fast_used_n_token: inputs["fast_pixel_values_videos"] = inputs["fast_pixel_values_videos"][:fast_used_n_token]
 
       inputs["video_grid_thw"] = inputs["video_grid_thw"][:video_used_idx//2]
       inputs["second_per_grid_ts"] = inputs["second_per_grid_ts"][:video_used_idx//2]
@@ -4892,171 +4882,6 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     #   pvs = inputs["pixel_values"].shape
     # if pvs[0] != num_thw:
     #   print(f"{num_thw=}, pixel_values={pvs}")
-    rank = f"rank{dist.get_rank()}"
-    s = print_input_info(
-      inputs1,
-      f"{rank}_before____cut_sample_pl_{packable_length}_cjx",
-      return_str=True
-    )
-    s += '\n' + print_input_info(
-      inputs,
-      f"{rank}_after____cut_sample_pl{packable_length}_cjx",
-      return_str=True
-    )
-    s += f"{rank}_before____cut_sample_pl_{packable_length}_cjx_input_list_"
-    print(s)
-    """
-rank2_before____cut_sample_cjxDict: keys=10
-rank2_before____cut_sample_cjx'input_ids':
-rank2_before____cut_sample_cjx  Tensor: shape=(1, 1380), dtype=torch.int64, device=cpu, data=tensor([151644,   8948,    198,   2610])...tensor([    13, 151645,    198, 151643])
-rank2_before____cut_sample_cjx'pixel_values':
-rank2_before____cut_sample_cjx  Tensor: shape=(5032, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([0.3569, 0.3490, 0.3412, 0.3490])...tensor([0.3333, 0.3098, 0.2941, 0.2784])
-rank2_before____cut_sample_cjx'image_grid_thw':
-rank2_before____cut_sample_cjx  Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 74, 68])...tensor([ 1, 74, 68])
-rank2_before____cut_sample_cjx'fast_pixel_values':
-rank2_before____cut_sample_cjx  Tensor: shape=(224, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([0.4039, 0.4118, 0.4353, 0.4431])...tensor([0.2549, 0.2471, 0.2157, 0.2549])
-rank2_before____cut_sample_cjx'fast_image_grid_thw':
-rank2_before____cut_sample_cjx  Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 16, 14])...tensor([ 1, 16, 14])
-rank2_before____cut_sample_cjx'all_image_grid_thw':
-rank2_before____cut_sample_cjx  Tensor: shape=(2, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 74, 68,  1])...tensor([68,  1, 16, 14])
-rank2_before____cut_sample_cjx'loss_mask':
-rank2_before____cut_sample_cjx  Tensor: shape=(1, 1380), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([1, 1, 1, 0])
-rank2_before____cut_sample_cjx'position_ids':
-rank2_before____cut_sample_cjx  Tensor: shape=(3, 1, 1380), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([155, 156, 157, 158])
-rank2_before____cut_sample_cjx'epoch_idx':
-rank2_before____cut_sample_cjx  Tensor: shape=(), dtype=torch.int64, device=cpu, data=tensor([0])...tensor([0])
-rank2_before____cut_sample_cjx'__ds__':
-rank2_before____cut_sample_cjx  String: length=24, value='ketu_caption_for_gaohuan'
-
-rank2_after____cut_sample_cjxDict: keys=10
-rank2_after____cut_sample_cjx'input_ids':
-rank2_after____cut_sample_cjx  Tensor: shape=(1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_after____cut_sample_cjx'pixel_values':
-rank2_after____cut_sample_cjx  Tensor: shape=(5032, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([0.3569, 0.3490, 0.3412, 0.3490])...tensor([0.3333, 0.3098, 0.2941, 0.2784])
-rank2_after____cut_sample_cjx'image_grid_thw':
-rank2_after____cut_sample_cjx  Dict: keys=0
-rank2_after____cut_sample_cjx'fast_pixel_values':
-rank2_after____cut_sample_cjx  Tensor: shape=(224, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([0.4039, 0.4118, 0.4353, 0.4431])...tensor([0.2549, 0.2471, 0.2157, 0.2549])
-rank2_after____cut_sample_cjx'fast_image_grid_thw':
-rank2_after____cut_sample_cjx  Dict: keys=0
-rank2_after____cut_sample_cjx'all_image_grid_thw':
-rank2_after____cut_sample_cjx  Dict: keys=0
-rank2_after____cut_sample_cjx'loss_mask':
-rank2_after____cut_sample_cjx  Tensor: shape=(1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_after____cut_sample_cjx'position_ids':
-rank2_after____cut_sample_cjx  Tensor: shape=(3, 1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_after____cut_sample_cjx'epoch_idx':
-rank2_after____cut_sample_cjx  Tensor: shape=(), dtype=torch.int64, device=cpu, data=tensor([0])...tensor([0])
-rank2_after____cut_sample_cjx'__ds__':
-rank2_after____cut_sample_cjx  String: length=24, value='ketu_caption_for_gaohuan'
-
-
-
-rank2_before____cut_sample_cjxDict: keys=10
-rank2_before____cut_sample_cjx'input_ids':
-rank2_before____cut_sample_cjx  Tensor: shape=(1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_before____cut_sample_cjx'pixel_values':
-rank2_before____cut_sample_cjx  Tensor: shape=(4440, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([1., 1., 1., 1.])...tensor([1., 1., 1., 1.])
-rank2_before____cut_sample_cjx'image_grid_thw':
-rank2_before____cut_sample_cjx  Dict: keys=0
-rank2_before____cut_sample_cjx'fast_pixel_values':
-rank2_before____cut_sample_cjx  Tensor: shape=(196, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([1., 1., 1., 1.])...tensor([1., 1., 1., 1.])
-rank2_before____cut_sample_cjx'fast_image_grid_thw':
-rank2_before____cut_sample_cjx  Dict: keys=0
-rank2_before____cut_sample_cjx'all_image_grid_thw':
-rank2_before____cut_sample_cjx  Dict: keys=0
-rank2_before____cut_sample_cjx'loss_mask':
-rank2_before____cut_sample_cjx  Tensor: shape=(1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_before____cut_sample_cjx'position_ids':
-rank2_before____cut_sample_cjx  Tensor: shape=(3, 1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_before____cut_sample_cjx'epoch_idx':
-rank2_before____cut_sample_cjx  Tensor: shape=(), dtype=torch.int64, device=cpu, data=tensor([0])...tensor([0])
-rank2_before____cut_sample_cjx'__ds__':
-rank2_before____cut_sample_cjx  String: length=18, value='SyntheticOCR_EN_HW'
-
-rank2_after____cut_sample_cjxDict: keys=10
-rank2_after____cut_sample_cjx'input_ids':
-rank2_after____cut_sample_cjx  Tensor: shape=(1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_after____cut_sample_cjx'pixel_values':
-rank2_after____cut_sample_cjx  Tensor: shape=(4440, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([1., 1., 1., 1.])...tensor([1., 1., 1., 1.])
-rank2_after____cut_sample_cjx'image_grid_thw':
-rank2_after____cut_sample_cjx  Dict: keys=0
-rank2_after____cut_sample_cjx'fast_pixel_values':
-rank2_after____cut_sample_cjx  Tensor: shape=(196, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([1., 1., 1., 1.])...tensor([1., 1., 1., 1.])
-rank2_after____cut_sample_cjx'fast_image_grid_thw':
-rank2_after____cut_sample_cjx  Dict: keys=0
-rank2_after____cut_sample_cjx'all_image_grid_thw':
-rank2_after____cut_sample_cjx  Dict: keys=0
-rank2_after____cut_sample_cjx'loss_mask':
-rank2_after____cut_sample_cjx  Tensor: shape=(1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_after____cut_sample_cjx'position_ids':
-rank2_after____cut_sample_cjx  Tensor: shape=(3, 1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_after____cut_sample_cjx'epoch_idx':
-rank2_after____cut_sample_cjx  Tensor: shape=(), dtype=torch.int64, device=cpu, data=tensor([0])...tensor([0])
-rank2_after____cut_sample_cjx'__ds__':
-rank2_after____cut_sample_cjx  String: length=18, value='SyntheticOCR_EN_HW'
-
-
-
-
-rank0_before____cut_sample_pl1263_cjxDict: keys=13
-rank0_before____cut_sample_pl1263_cjx'input_ids':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(1, 7267), dtype=torch.int64, device=cpu, data=tensor([151644,   8948,    198,   2610])...tensor([    60, 151645,    198, 151643])
-rank0_before____cut_sample_pl1263_cjx'pixel_values_videos':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(11520, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([-0.2941, -0.6627, -0.5137, -0.2549])...tensor([-0.8745, -0.8745, -0.8667, -0.8510])
-rank0_before____cut_sample_pl1263_cjx'video_grid_thw':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(24, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 30, 16,  1])...tensor([16,  1, 30, 16])
-rank0_before____cut_sample_pl1263_cjx'second_per_grid_ts':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(24,), dtype=torch.float32, device=cpu, data=tensor([0.1667, 0.1667, 0.1667, 0.1667])...tensor([0.1667, 0.1667, 0.1667, 0.1667])
-rank0_before____cut_sample_pl1263_cjx'fast_pixel_values_videos':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(17280, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([-0.3961, -0.6314, -0.2627, -0.3961])...tensor([-0.8745, -0.8667, -0.8667, -0.8510])
-rank0_before____cut_sample_pl1263_cjx'fast_video_grid_thw':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(24, 3), dtype=torch.int64, device=cpu, data=tensor([ 3, 20, 12,  3])...tensor([12,  3, 20, 12])
-rank0_before____cut_sample_pl1263_cjx'fast_second_per_grid_ts':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(24,), dtype=torch.float32, device=cpu, data=tensor([0.1667, 0.1667, 0.1667, 0.1667])...tensor([0.1667, 0.1667, 0.1667, 0.1667])
-rank0_before____cut_sample_pl1263_cjx'all_video_grid_thw':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(48, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 30, 16,  3])...tensor([16,  3, 20, 12])
-rank0_before____cut_sample_pl1263_cjx'all_second_per_grid_ts':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(48,), dtype=torch.float32, device=cpu, data=tensor([0.1667, 0.1667, 0.1667, 0.1667])...tensor([0.1667, 0.1667, 0.1667, 0.1667])
-rank0_before____cut_sample_pl1263_cjx'loss_mask':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(1, 7267), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([1, 1, 1, 0])
-rank0_before____cut_sample_pl1263_cjx'position_ids':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(3, 1, 7267), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([7158, 7159, 7160, 7161])
-rank0_before____cut_sample_pl1263_cjx'epoch_idx':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(), dtype=torch.int64, device=cpu, data=tensor([0])...tensor([0])
-rank0_before____cut_sample_pl1263_cjx'__ds__':
-rank0_before____cut_sample_pl1263_cjx  String: length=12, value='KwaiComments'
-rank0_after____cut_sample_pl1263_cjxDict: keys=13
-rank0_after____cut_sample_pl1263_cjx'input_ids':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(1, 21), dtype=torch.int64, device=cpu, data=tensor([151644,   8948,    198,   2610])...tensor([ 43815, 101128, 101057,   8997])
-rank0_after____cut_sample_pl1263_cjx'pixel_values_videos':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(11520, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([-0.2941, -0.6627, -0.5137, -0.2549])...tensor([-0.8745, -0.8745, -0.8667, -0.8510])
-rank0_after____cut_sample_pl1263_cjx'video_grid_thw':
-rank0_after____cut_sample_pl1263_cjx  Dict: keys=0
-rank0_after____cut_sample_pl1263_cjx'second_per_grid_ts':
-rank0_after____cut_sample_pl1263_cjx  Dict: keys=0
-rank0_after____cut_sample_pl1263_cjx'fast_pixel_values_videos':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(17280, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([-0.3961, -0.6314, -0.2627, -0.3961])...tensor([-0.8745, -0.8667, -0.8667, -0.8510])
-rank0_after____cut_sample_pl1263_cjx'fast_video_grid_thw':
-rank0_after____cut_sample_pl1263_cjx  Dict: keys=0
-rank0_after____cut_sample_pl1263_cjx'fast_second_per_grid_ts':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(24,), dtype=torch.float32, device=cpu, data=tensor([0.1667, 0.1667, 0.1667, 0.1667])...tensor([0.1667, 0.1667, 0.1667, 0.1667])
-rank0_after____cut_sample_pl1263_cjx'all_video_grid_thw':
-rank0_after____cut_sample_pl1263_cjx  Dict: keys=0
-rank0_after____cut_sample_pl1263_cjx'all_second_per_grid_ts':
-rank0_after____cut_sample_pl1263_cjx  Dict: keys=0
-rank0_after____cut_sample_pl1263_cjx'loss_mask':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(1, 21), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([0, 0, 0, 0])
-rank0_after____cut_sample_pl1263_cjx'position_ids':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(3, 1, 21), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([17, 18, 19, 20])
-rank0_after____cut_sample_pl1263_cjx'epoch_idx':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(), dtype=torch.int64, device=cpu, data=tensor([0])...tensor([0])
-rank0_after____cut_sample_pl1263_cjx'__ds__':
-rank0_after____cut_sample_pl1263_cjx  String: length=12, value='KwaiComments' 这里也有个case，1263的packable length, pixel value没有截断
-
-
-
-    """
     return inputs
 
   def _append_sample_packing(self,
@@ -5087,7 +4912,7 @@ rank0_after____cut_sample_pl1263_cjx  String: length=12, value='KwaiComments' �
       if packable_length == 0: return
 
     if not image_pad and self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
-      inputs = self._cut_sample_cjx(inputs, packable_length)
+      inputs = self._cut_sample_cjx(copy.deepcopy(inputs), packable_length)
 
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
@@ -5142,9 +4967,9 @@ rank0_after____cut_sample_pl1263_cjx  String: length=12, value='KwaiComments' �
     for _, inputs in enumerate(buffer):
       if "pixel_values" in inputs: n_pixels += inputs["pixel_values"].shape[0]
       if "pixel_values_videos" in inputs: n_pixels += inputs["pixel_values_videos"].shape[0]
-      image_pad = True if self.use_flops_balance else False
-      print(22222, self.use_flops_balance, image_pad)
+      
       epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
+      image_pad = True if self.use_flops_balance else False
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
                                       packed_position_ids,
@@ -5163,8 +4988,7 @@ rank0_after____cut_sample_pl1263_cjx  String: length=12, value='KwaiComments' �
                                       packed_all_image_grid_thw,
                                       packed_all_video_grid_thw,
                                       packed_all_second_per_grid_ts,
-                                      image_pad=image_pad
-                                      )
+                                      image_pad=image_pad)
 
 
     # 
@@ -5503,26 +5327,16 @@ class BalanceParquetDataset(IterableDataset):
           if 1:
             sample_original_len = inputs["input_ids"].shape[-1]
             reserved = inputs["input_ids"].shape[-1] - (cumsum - maxlen)
-            # rank2__balance_task_balance_task_inputstorch.Size([1, 1380]),cumsum=17114,maxlen=13972,reserved=-1762,id=140644323789360
-
-            print(f"rank{dist.get_rank()}__balance_task_balance_task_inputs{inputs['input_ids'].shape},cumsum={cumsum},maxlen={maxlen},reserved={reserved},sample_original_len={sample_original_len},id={id(inputs)}")
-            
             cut = self.input._cut_sample_cjx(copy.deepcopy(inputs), reserved)
             
             all_loss_tokens = cut["loss_mask"].sum().item()
             if all_loss_tokens == 0 and len(buffer) == 1: # 一条样本就占满了seq len, 而且不能计算loss，删掉
               buffer.pop()
               cumsum -= sample_original_len
-              if len(buffer) == 0: 
-                print(f"rank{dist.get_rank()}__balance_task_balance_remove_{sample_original_len}_from_{cumsum}")
-                continue # 继续填, 没有样本
-
-
+              if len(buffer) == 0: continue # 继续填, 没有样本
+              
             if all_loss_tokens == 0 and inputs["input_ids"].shape[-1] < maxlen:
-              print(f"rank{dist.get_rank()}__balance_task_balance_task_put_bakkk_id={id(inputs)}")
               next_inputs = (inputs, source_name) # 放回去
-
-
             else:
               # 截断
               buffer[-1] = cut
