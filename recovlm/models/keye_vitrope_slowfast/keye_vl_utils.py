@@ -35,14 +35,14 @@ VIDEO_TOTAL_PIXELS = 24576 * 28 * 28
 FRAME_FACTOR = 2
 FPS = 2.0
 FPS_MIN_FRAMES = 4
-FPS_MAX_FRAMES = 64 # 注意：修改了含义，这里是用来限制slow的nframe的！
+FPS_MAX_FRAMES = 64 # 注意：这里的含义是Max Slow Frame，不是总的frames数量
 
-SLOWFAST_RATIO = 3
-FAST_HEIGHT = 224
-FAST_WIDTH = 224
+SLOWFAST_MAX_RATIO = 5
 
-FAST_MIN_PIXELS = 4 * 28 * 28
-FAST_MAX_PIXELS = 64 * 28 * 28
+FAST_IMAGE_FACTOR = 32
+FAST_MIN_PIXELS = 4 * 32 * 32
+FAST_MAX_PIXELS = 64 * 32 * 32
+FAST_VIDEO_TOTAL_PIXELS = 24576 * 32 * 32
 
 def round_by_factor(number: int, factor: int) -> int:
     """Returns the closest integer to 'number' that is divisible by 'factor'."""
@@ -136,7 +136,7 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
         fast_resized_height, fast_resized_width = smart_resize(
             height,
             width,
-            factor=size_factor,
+            factor=FAST_IMAGE_FACTOR,
             min_pixels=fast_min_pixels,
             max_pixels=fast_max_pixels,
         )
@@ -382,7 +382,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             fast_resized_height, fast_resized_width = smart_resize(
                 height,
                 width,
-                factor=image_factor,
+                factor=FAST_IMAGE_FACTOR,
                 min_pixels=fast_min_pixels,
                 max_pixels=fast_max_pixels,
             )
@@ -398,7 +398,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             fast_resized_height, fast_resized_width = smart_resize(
                 height,
                 width,
-                factor=image_factor,
+                factor=FAST_IMAGE_FACTOR,
                 min_pixels=fast_min_pixels,
                 max_pixels=fast_max_pixels,
             )

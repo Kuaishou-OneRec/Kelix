@@ -4891,171 +4891,22 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     #   pvs = inputs["pixel_values"].shape
     # if pvs[0] != num_thw:
     #   print(f"{num_thw=}, pixel_values={pvs}")
-    rank = f"rank{dist.get_rank()}"
-    s = print_input_info(
-      inputs1,
-      f"{rank}_before____cut_sample_pl_{packable_length}_cjx",
-      return_str=True
-    )
-    s += '\n' + print_input_info(
-      inputs,
-      f"{rank}_after____cut_sample_pl{packable_length}_cjx",
-      return_str=True
-    )
-    s += f"{rank}_before____cut_sample_pl_{packable_length}_cjx_input_list_"
-    print(s)
-    """
-rank2_before____cut_sample_cjxDict: keys=10
-rank2_before____cut_sample_cjx'input_ids':
-rank2_before____cut_sample_cjx  Tensor: shape=(1, 1380), dtype=torch.int64, device=cpu, data=tensor([151644,   8948,    198,   2610])...tensor([    13, 151645,    198, 151643])
-rank2_before____cut_sample_cjx'pixel_values':
-rank2_before____cut_sample_cjx  Tensor: shape=(5032, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([0.3569, 0.3490, 0.3412, 0.3490])...tensor([0.3333, 0.3098, 0.2941, 0.2784])
-rank2_before____cut_sample_cjx'image_grid_thw':
-rank2_before____cut_sample_cjx  Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 74, 68])...tensor([ 1, 74, 68])
-rank2_before____cut_sample_cjx'fast_pixel_values':
-rank2_before____cut_sample_cjx  Tensor: shape=(224, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([0.4039, 0.4118, 0.4353, 0.4431])...tensor([0.2549, 0.2471, 0.2157, 0.2549])
-rank2_before____cut_sample_cjx'fast_image_grid_thw':
-rank2_before____cut_sample_cjx  Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 16, 14])...tensor([ 1, 16, 14])
-rank2_before____cut_sample_cjx'all_image_grid_thw':
-rank2_before____cut_sample_cjx  Tensor: shape=(2, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 74, 68,  1])...tensor([68,  1, 16, 14])
-rank2_before____cut_sample_cjx'loss_mask':
-rank2_before____cut_sample_cjx  Tensor: shape=(1, 1380), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([1, 1, 1, 0])
-rank2_before____cut_sample_cjx'position_ids':
-rank2_before____cut_sample_cjx  Tensor: shape=(3, 1, 1380), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([155, 156, 157, 158])
-rank2_before____cut_sample_cjx'epoch_idx':
-rank2_before____cut_sample_cjx  Tensor: shape=(), dtype=torch.int64, device=cpu, data=tensor([0])...tensor([0])
-rank2_before____cut_sample_cjx'__ds__':
-rank2_before____cut_sample_cjx  String: length=24, value='ketu_caption_for_gaohuan'
 
-rank2_after____cut_sample_cjxDict: keys=10
-rank2_after____cut_sample_cjx'input_ids':
-rank2_after____cut_sample_cjx  Tensor: shape=(1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_after____cut_sample_cjx'pixel_values':
-rank2_after____cut_sample_cjx  Tensor: shape=(5032, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([0.3569, 0.3490, 0.3412, 0.3490])...tensor([0.3333, 0.3098, 0.2941, 0.2784])
-rank2_after____cut_sample_cjx'image_grid_thw':
-rank2_after____cut_sample_cjx  Dict: keys=0
-rank2_after____cut_sample_cjx'fast_pixel_values':
-rank2_after____cut_sample_cjx  Tensor: shape=(224, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([0.4039, 0.4118, 0.4353, 0.4431])...tensor([0.2549, 0.2471, 0.2157, 0.2549])
-rank2_after____cut_sample_cjx'fast_image_grid_thw':
-rank2_after____cut_sample_cjx  Dict: keys=0
-rank2_after____cut_sample_cjx'all_image_grid_thw':
-rank2_after____cut_sample_cjx  Dict: keys=0
-rank2_after____cut_sample_cjx'loss_mask':
-rank2_after____cut_sample_cjx  Tensor: shape=(1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_after____cut_sample_cjx'position_ids':
-rank2_after____cut_sample_cjx  Tensor: shape=(3, 1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_after____cut_sample_cjx'epoch_idx':
-rank2_after____cut_sample_cjx  Tensor: shape=(), dtype=torch.int64, device=cpu, data=tensor([0])...tensor([0])
-rank2_after____cut_sample_cjx'__ds__':
-rank2_after____cut_sample_cjx  String: length=24, value='ketu_caption_for_gaohuan'
-
-
-
-rank2_before____cut_sample_cjxDict: keys=10
-rank2_before____cut_sample_cjx'input_ids':
-rank2_before____cut_sample_cjx  Tensor: shape=(1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_before____cut_sample_cjx'pixel_values':
-rank2_before____cut_sample_cjx  Tensor: shape=(4440, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([1., 1., 1., 1.])...tensor([1., 1., 1., 1.])
-rank2_before____cut_sample_cjx'image_grid_thw':
-rank2_before____cut_sample_cjx  Dict: keys=0
-rank2_before____cut_sample_cjx'fast_pixel_values':
-rank2_before____cut_sample_cjx  Tensor: shape=(196, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([1., 1., 1., 1.])...tensor([1., 1., 1., 1.])
-rank2_before____cut_sample_cjx'fast_image_grid_thw':
-rank2_before____cut_sample_cjx  Dict: keys=0
-rank2_before____cut_sample_cjx'all_image_grid_thw':
-rank2_before____cut_sample_cjx  Dict: keys=0
-rank2_before____cut_sample_cjx'loss_mask':
-rank2_before____cut_sample_cjx  Tensor: shape=(1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_before____cut_sample_cjx'position_ids':
-rank2_before____cut_sample_cjx  Tensor: shape=(3, 1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_before____cut_sample_cjx'epoch_idx':
-rank2_before____cut_sample_cjx  Tensor: shape=(), dtype=torch.int64, device=cpu, data=tensor([0])...tensor([0])
-rank2_before____cut_sample_cjx'__ds__':
-rank2_before____cut_sample_cjx  String: length=18, value='SyntheticOCR_EN_HW'
-
-rank2_after____cut_sample_cjxDict: keys=10
-rank2_after____cut_sample_cjx'input_ids':
-rank2_after____cut_sample_cjx  Tensor: shape=(1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_after____cut_sample_cjx'pixel_values':
-rank2_after____cut_sample_cjx  Tensor: shape=(4440, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([1., 1., 1., 1.])...tensor([1., 1., 1., 1.])
-rank2_after____cut_sample_cjx'image_grid_thw':
-rank2_after____cut_sample_cjx  Dict: keys=0
-rank2_after____cut_sample_cjx'fast_pixel_values':
-rank2_after____cut_sample_cjx  Tensor: shape=(196, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([1., 1., 1., 1.])...tensor([1., 1., 1., 1.])
-rank2_after____cut_sample_cjx'fast_image_grid_thw':
-rank2_after____cut_sample_cjx  Dict: keys=0
-rank2_after____cut_sample_cjx'all_image_grid_thw':
-rank2_after____cut_sample_cjx  Dict: keys=0
-rank2_after____cut_sample_cjx'loss_mask':
-rank2_after____cut_sample_cjx  Tensor: shape=(1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_after____cut_sample_cjx'position_ids':
-rank2_after____cut_sample_cjx  Tensor: shape=(3, 1, 0), dtype=torch.int64, device=cpu, data=tensor([], dtype=torch.int64)...tensor([], dtype=torch.int64)
-rank2_after____cut_sample_cjx'epoch_idx':
-rank2_after____cut_sample_cjx  Tensor: shape=(), dtype=torch.int64, device=cpu, data=tensor([0])...tensor([0])
-rank2_after____cut_sample_cjx'__ds__':
-rank2_after____cut_sample_cjx  String: length=18, value='SyntheticOCR_EN_HW'
-
-
-
-
-rank0_before____cut_sample_pl1263_cjxDict: keys=13
-rank0_before____cut_sample_pl1263_cjx'input_ids':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(1, 7267), dtype=torch.int64, device=cpu, data=tensor([151644,   8948,    198,   2610])...tensor([    60, 151645,    198, 151643])
-rank0_before____cut_sample_pl1263_cjx'pixel_values_videos':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(11520, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([-0.2941, -0.6627, -0.5137, -0.2549])...tensor([-0.8745, -0.8745, -0.8667, -0.8510])
-rank0_before____cut_sample_pl1263_cjx'video_grid_thw':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(24, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 30, 16,  1])...tensor([16,  1, 30, 16])
-rank0_before____cut_sample_pl1263_cjx'second_per_grid_ts':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(24,), dtype=torch.float32, device=cpu, data=tensor([0.1667, 0.1667, 0.1667, 0.1667])...tensor([0.1667, 0.1667, 0.1667, 0.1667])
-rank0_before____cut_sample_pl1263_cjx'fast_pixel_values_videos':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(17280, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([-0.3961, -0.6314, -0.2627, -0.3961])...tensor([-0.8745, -0.8667, -0.8667, -0.8510])
-rank0_before____cut_sample_pl1263_cjx'fast_video_grid_thw':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(24, 3), dtype=torch.int64, device=cpu, data=tensor([ 3, 20, 12,  3])...tensor([12,  3, 20, 12])
-rank0_before____cut_sample_pl1263_cjx'fast_second_per_grid_ts':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(24,), dtype=torch.float32, device=cpu, data=tensor([0.1667, 0.1667, 0.1667, 0.1667])...tensor([0.1667, 0.1667, 0.1667, 0.1667])
-rank0_before____cut_sample_pl1263_cjx'all_video_grid_thw':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(48, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 30, 16,  3])...tensor([16,  3, 20, 12])
-rank0_before____cut_sample_pl1263_cjx'all_second_per_grid_ts':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(48,), dtype=torch.float32, device=cpu, data=tensor([0.1667, 0.1667, 0.1667, 0.1667])...tensor([0.1667, 0.1667, 0.1667, 0.1667])
-rank0_before____cut_sample_pl1263_cjx'loss_mask':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(1, 7267), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([1, 1, 1, 0])
-rank0_before____cut_sample_pl1263_cjx'position_ids':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(3, 1, 7267), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([7158, 7159, 7160, 7161])
-rank0_before____cut_sample_pl1263_cjx'epoch_idx':
-rank0_before____cut_sample_pl1263_cjx  Tensor: shape=(), dtype=torch.int64, device=cpu, data=tensor([0])...tensor([0])
-rank0_before____cut_sample_pl1263_cjx'__ds__':
-rank0_before____cut_sample_pl1263_cjx  String: length=12, value='KwaiComments'
-rank0_after____cut_sample_pl1263_cjxDict: keys=13
-rank0_after____cut_sample_pl1263_cjx'input_ids':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(1, 21), dtype=torch.int64, device=cpu, data=tensor([151644,   8948,    198,   2610])...tensor([ 43815, 101128, 101057,   8997])
-rank0_after____cut_sample_pl1263_cjx'pixel_values_videos':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(11520, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([-0.2941, -0.6627, -0.5137, -0.2549])...tensor([-0.8745, -0.8745, -0.8667, -0.8510])
-rank0_after____cut_sample_pl1263_cjx'video_grid_thw':
-rank0_after____cut_sample_pl1263_cjx  Dict: keys=0
-rank0_after____cut_sample_pl1263_cjx'second_per_grid_ts':
-rank0_after____cut_sample_pl1263_cjx  Dict: keys=0
-rank0_after____cut_sample_pl1263_cjx'fast_pixel_values_videos':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(17280, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([-0.3961, -0.6314, -0.2627, -0.3961])...tensor([-0.8745, -0.8667, -0.8667, -0.8510])
-rank0_after____cut_sample_pl1263_cjx'fast_video_grid_thw':
-rank0_after____cut_sample_pl1263_cjx  Dict: keys=0
-rank0_after____cut_sample_pl1263_cjx'fast_second_per_grid_ts':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(24,), dtype=torch.float32, device=cpu, data=tensor([0.1667, 0.1667, 0.1667, 0.1667])...tensor([0.1667, 0.1667, 0.1667, 0.1667])
-rank0_after____cut_sample_pl1263_cjx'all_video_grid_thw':
-rank0_after____cut_sample_pl1263_cjx  Dict: keys=0
-rank0_after____cut_sample_pl1263_cjx'all_second_per_grid_ts':
-rank0_after____cut_sample_pl1263_cjx  Dict: keys=0
-rank0_after____cut_sample_pl1263_cjx'loss_mask':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(1, 21), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([0, 0, 0, 0])
-rank0_after____cut_sample_pl1263_cjx'position_ids':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(3, 1, 21), dtype=torch.int64, device=cpu, data=tensor([0, 1, 2, 3])...tensor([17, 18, 19, 20])
-rank0_after____cut_sample_pl1263_cjx'epoch_idx':
-rank0_after____cut_sample_pl1263_cjx  Tensor: shape=(), dtype=torch.int64, device=cpu, data=tensor([0])...tensor([0])
-rank0_after____cut_sample_pl1263_cjx'__ds__':
-rank0_after____cut_sample_pl1263_cjx  String: length=12, value='KwaiComments' 这里也有个case，1263的packable length, pixel value没有截断
-
-
-
-    """
+    ############# debug cjx #############
+    # rank = f"rank{dist.get_rank()}"
+    # s = print_input_info(
+    #   inputs1,
+    #   f"{rank}_before____cut_sample_pl_{packable_length}_cjx",
+    #   return_str=True
+    # )
+    # s += '\n' + print_input_info(
+    #   inputs,
+    #   f"{rank}_after____cut_sample_pl{packable_length}_cjx",
+    #   return_str=True
+    # )
+    # s += f"{rank}_before____cut_sample_pl_{packable_length}_cjx_input_list_"
+    # print(s)
+    ############# debug cjx #############
     return inputs
 
   def _append_sample_packing(self,
