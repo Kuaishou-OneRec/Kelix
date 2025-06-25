@@ -4969,6 +4969,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       if "pixel_values_videos" in inputs: n_pixels += inputs["pixel_values_videos"].shape[0]
       
       epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
+      image_pad = True if self.use_flops_balance else False
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
                                       packed_position_ids,
@@ -4986,7 +4987,8 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                                       packed_fast_video_grid_thw,
                                       packed_all_image_grid_thw,
                                       packed_all_video_grid_thw,
-                                      packed_all_second_per_grid_ts,)
+                                      packed_all_second_per_grid_ts,
+                                      image_pad=image_pad)
 
 
     # 
