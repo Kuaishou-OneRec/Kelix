@@ -4809,7 +4809,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     vision_start_indices = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
     if vision_start_indices.numel() == 0:  # 检查是否为空
       image_nums = 0
-      video_token_nums = (inputs["input_ids"][0] == self.video_token_id).sum()
+      video_token_nums = 0
     else:
       vision_tokens = inputs["input_ids"][0][vision_start_indices + 1]
       image_nums = (vision_tokens == self.image_token_id).sum()
@@ -4843,16 +4843,14 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       slow_used_n_token = 0
       video_used_idx = 0
       for idx, n_tokens_hw in enumerate(inputs["all_video_grid_thw"]):
+        if used_n_token == video_token_nums:
+          video_used_idx = idx
+          break
         if idx % 2 == 1:
           fast_used_n_token += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
         else:
           slow_used_n_token += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
-
         used_n_token += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
-        if used_n_token == video_token_nums:
-          video_used_idx = idx + 1
-          break
-
       # n_tokens = 0
       # for i in range(used_idx, len(inputs["video_grid_thw"])): # 注意，因为slowfast的video_grid_thw是正常的两倍，所以前面需要 * 2。
       #   n_tokens_hw = inputs["video_grid_thw"][i]
