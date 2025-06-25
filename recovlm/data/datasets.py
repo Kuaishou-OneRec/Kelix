@@ -4912,9 +4912,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       if packable_length == 0: return
 
     if not image_pad and self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
-      if inputs["input_ids"].shape[1] < 1:
-        return
-      inputs = self._cut_sample_cjx(inputs, packable_length)
+      inputs = self._cut_sample_cjx(copy.deepcopy(inputs), packable_length)
 
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
@@ -5329,7 +5327,7 @@ class BalanceParquetDataset(IterableDataset):
           if 1:
             sample_original_len = inputs["input_ids"].shape[-1]
             reserved = inputs["input_ids"].shape[-1] - (cumsum - maxlen)
-            cut = self.input._cut_sample_cjx(inputs, reserved)
+            cut = self.input._cut_sample_cjx(copy.deepcopy(inputs), reserved)
             
             all_loss_tokens = cut["loss_mask"].sum().item()
             if all_loss_tokens == 0 and len(buffer) == 1: # 一条样本就占满了seq len, 而且不能计算loss，删掉
