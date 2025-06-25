@@ -3407,8 +3407,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 image_embeds = torch.cat(image_embeds,dim=0)
                 n_image_features = image_embeds.shape[0]
                 if n_image_tokens != n_image_features:
+                    fast_image_embeds = torch.cat(fast_image_embeds,dim=0)
                     raise ValueError(
-                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}, fast features {fast_image_embeds.shape[0]}"
                     )
 
                 mask = (input_ids == self.config.image_token_id)
