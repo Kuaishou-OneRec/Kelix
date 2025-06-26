@@ -691,10 +691,7 @@ def train():
 
   # torch init
   torch.cuda.set_device(local_rank)
-  x = torch.rand(10000,10000).cuda()
-  print("rank {} before now!".format(rank))
   torch.distributed.init_process_group(rank=rank, world_size=world_size, timeout=process_group_timeout)
-  print("rank {} after now!".format(rank))
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
 
   if use_flops_balance:
