@@ -269,7 +269,8 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                     'KeyeForConditionalGeneration_vitrope': ChatCompletionVisionParquetDataset_keye_vitrope,
                     'KeyeForConditionalGeneration_vitrope_slowfast': ChatCompletionVisionParquetDataset_keye_vitrope_slowfast,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
-    num_readers = kwargs.get("num_readers", 1)
+    # num_readers = kwargs.get("num_readers", 1)
+    num_readers = 1
     shuffle_window = kwargs.get("shuffle_window", 0)
 
     def input_creator():
@@ -306,6 +307,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
             assert worker_id == 0, f"worker_id expect 0, but got {worker_id}"
             local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
             local_world_size = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_SIZE", 0))
+            print("rank {} bind now!".format(rank))
             cpu_bind = get_numa_bind_info(local_rank, local_world_size)
             if cpu_bind is not None:
                 p = psutil.Process(os.getpid())
@@ -314,6 +316,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
             os.environ["MASTER_PORT"] = str(master_port)
             rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
             world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+            print("rank {} now!".format(rank))
             if not dist.is_initialized():
                 dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
             print(f"dataset_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind[:8]}")
