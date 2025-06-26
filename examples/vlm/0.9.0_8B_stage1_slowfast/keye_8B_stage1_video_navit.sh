@@ -17,7 +17,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0625_fast_navit
 #OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage1/8b/slowfast-video-0.1.0-fast-navit
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage1/8b/slowfast-video-0.1.0-fast-navit-0626
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.9.1;model_size:8B;GPU_type:128H800;data:inner & outer comments stage1,slowfast,video_stage1,navit-fast-vit-32"
+comment="version:0.9.1;model_size:8B;GPU_type:504-H800;data:inner & outer comments stage1,slowfast,video_stage1,navit-fast-vit-32"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -125,8 +125,8 @@ nohup mpirun --allow-run-as-root \
                 --min_lr 5e-5 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --num_warmup_steps 4000 \
-                --num_training_steps 39000 \
+                --num_warmup_steps 3500 \
+                --num_training_steps 35000 \
                 --save_checkpoint_per_step 1000 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
