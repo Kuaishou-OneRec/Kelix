@@ -317,6 +317,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
             os.environ["MASTER_PORT"] = str(master_port)
             rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
             world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+            x = torch.rand(10000,10000).cuda()
             print("rank {} now!".format(rank))
             if not dist.is_initialized():
                 dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
