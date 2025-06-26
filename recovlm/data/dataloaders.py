@@ -307,6 +307,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
             assert worker_id == 0, f"worker_id expect 0, but got {worker_id}"
             local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
             local_world_size = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_SIZE", 0))
+            rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
             print("rank {} bind now!".format(rank))
             cpu_bind = get_numa_bind_info(local_rank, local_world_size)
             if cpu_bind is not None:
