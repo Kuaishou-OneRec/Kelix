@@ -825,7 +825,6 @@ class SiglipAttention(nn.Module):
             attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         else:
             assert batch_size == 1, hidden_states.shape
-            print("cjx_debug!!!!!!!")
             queries = queries.transpose(1, 2).squeeze(0)
             keys = keys.transpose(1, 2).squeeze(0)
             values = values.transpose(1, 2).squeeze(0)
@@ -835,7 +834,7 @@ class SiglipAttention(nn.Module):
             max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
-
+            print("cjx_debug2: {}".format(cu_seqlens))
             attn_output = flash_attn_varlen_func(
                 queries,
                 keys,
@@ -847,6 +846,7 @@ class SiglipAttention(nn.Module):
                 causal=False,
                 softmax_scale=self.scale,
             )
+            print("cjx_debug3: {}".format(cu_seqlens))
             attn_output = attn_output.flatten(-2).unsqueeze(0)
             attn_weights = None
 
