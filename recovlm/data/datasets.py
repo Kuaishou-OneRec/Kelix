@@ -4864,13 +4864,17 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs111111_{dist.get_rank()}")
       # print(f"inputs111111_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
 
-      if len(inputs["pixel_values_videos"]) == 0:
-          del inputs["pixel_values_videos"]
-          del inputs["video_grid_thw"]
-          
-      if len(inputs["fast_pixel_values_videos"]) == 0:
-          del inputs["fast_pixel_values_videos"]
-          del inputs["fast_video_grid_thw"]
+    if len(inputs["pixel_values"]) == 0:
+        del inputs["pixel_values"]
+        del inputs["image_grid_thw"]
+
+    if len(inputs["pixel_values_videos"]) == 0:
+        del inputs["pixel_values_videos"]
+        del inputs["video_grid_thw"]
+        
+    if len(inputs["fast_pixel_values_videos"]) == 0:
+        del inputs["fast_pixel_values_videos"]
+        del inputs["fast_video_grid_thw"]
           
     # num_thw = 0
     # if "image_grid_thw" in inputs:
