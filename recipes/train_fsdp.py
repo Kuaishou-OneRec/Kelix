@@ -1119,19 +1119,12 @@ def train():
       video_grid_thw = batch.get("video_grid_thw", None)
       cu_seqlens = batch.get("cu_seqlens", None)
       sample_idx = batch["sample_idx"]
-      second_per_grid_ts = batch.get("second_per_grid_ts", None)
       position_ids = batch.get("position_ids", None)
       image_flags = batch.get("image_flags", None)
       epoch_idx = batch.get("epoch_idx", torch.tensor([0])).cpu().item()
       #####slowfast######
-      fast_pixel_values = batch.get("fast_pixel_values", None)
-      fast_image_grid_thw = batch.get("fast_image_grid_thw", None)
       fast_pixel_values_videos = batch.get("fast_pixel_values_videos", None)
       fast_video_grid_thw = batch.get("fast_video_grid_thw", None)
-      fast_second_per_grid_ts = batch.get("fast_second_per_grid_ts", None)
-      all_image_grid_thw = batch.get("all_image_grid_thw", None)
-      all_video_grid_thw = batch.get("all_video_grid_thw", None)
-      all_second_per_grid_ts = batch.get("all_second_per_grid_ts", None)
       ###################
       # 打印 token 数量
       if not use_flops_balance or True:
@@ -1198,8 +1191,6 @@ def train():
             image_grid_hws = batch.get("image_grid_hws", None)
             image_sample_indices = batch.get("image_sample_indices", None)
             image_cu_seqlens = batch.get("image_cu_seqlens", None)
-            second_per_grid_ts = batch.get("second_per_grid_ts", None)
-            all_second_per_grid_ts = batch.get("all_second_per_grid_ts", None)
             output = model(
               input_ids = input_ids, attention_mask=attention_mask,
               pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
@@ -1209,11 +1200,9 @@ def train():
               image_cu_seqlens=image_cu_seqlens,
               max_seqlen_q=batch.get("max_seqlen_q", None),
               image_max_seqlen_q=batch.get("image_max_seqlen_q", None),
-              image_max_seqlen_k=batch.get("image_max_seqlen_k", None), second_per_grid_ts=second_per_grid_ts,
-              fast_pixel_values=fast_pixel_values,
-              fast_image_grid_thw=fast_image_grid_thw, fast_pixel_values_videos=fast_pixel_values_videos,
-              fast_video_grid_thw=fast_video_grid_thw, fast_second_per_grid_ts=fast_second_per_grid_ts,
-              all_image_grid_thw=all_image_grid_thw, all_video_grid_thw=all_video_grid_thw, all_second_per_grid_ts=all_second_per_grid_ts
+              image_max_seqlen_k=batch.get("image_max_seqlen_k", None)
+              fast_pixel_values_videos=fast_pixel_values_videos,
+              fast_video_grid_thw=fast_video_grid_thw, 
             )
         ticker.tick("model.forward")
 

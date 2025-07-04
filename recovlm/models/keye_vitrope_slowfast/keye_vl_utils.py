@@ -372,12 +372,8 @@ def _read_video_decord_slowfast_v2(
     slow_frames = vr.get_batch(slow_idx).asnumpy()
     slow_frames = torch.tensor(slow_frames).permute(0, 3, 1, 2)  # Convert to TCHW format
     slow_time_position = [total_frames_time_position[idx] for idx in slow_idx]
-
-    import pdb
-    pdb.set_trace()
     
     max_fast_frame_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) * ele.get("slow_fast_ratio", SLOW_FAST_RATIO) - slow_nframes_number
-    max_fast_frame_number = 0
     fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
 
     if fast_nframes_number > 0:

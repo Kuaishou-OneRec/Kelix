@@ -241,6 +241,8 @@ class KeyeProcessor(ProcessorMixin):
         else:
             videos_inputs = {}
             video_grid_thw = None
+            fast_video_grid_thw = None
+
 
         if not isinstance(text, list):
             text = [text]
@@ -268,7 +270,7 @@ class KeyeProcessor(ProcessorMixin):
                     for j in range(len(all_position[index][1])):
                         if all_position[index][0] is not None: # 如果有时间戳
                             video_place_holder_tempale += format(all_position[index][0][j], ".1f") + self.time_token
-                            
+
                         if all_position[index][1][j] == 0: # 当前帧是slow？
                             video_place_holder_tempale += "<|placeholder|>" * (slow_videos_token_nums[index][slow_index]//self.image_processor.merge_size//self.image_processor.merge_size)
                             slow_index += 1
@@ -281,8 +283,6 @@ class KeyeProcessor(ProcessorMixin):
                         1,
                     )
                     index += 1
-                import pdb
-                pdb.set_trace()
                 #  self.tokenizer.decode(191678)
                 # self.tokenizer.encode("<|fast_video_pad|>")
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)

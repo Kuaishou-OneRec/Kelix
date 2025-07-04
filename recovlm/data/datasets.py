@@ -4655,6 +4655,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       patch_size = model_config.vision_config.patch_size
       image_token_id = model_config.image_token_id
       video_token_id = model_config.video_token_id
+      fast_video_token_id = model_config.fast_video_token_id
       vision_start_token_id = model_config.vision_start_token_id
       vision_end_token_id = model_config.vision_end_token_id
       pad_token_id = model_config.pad_token_id
@@ -4689,6 +4690,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     self.spatial_merge_size = spatial_merge_size
     self.image_token_id = image_token_id
     self.video_token_id = video_token_id
+    self.fast_video_token_id = fast_video_token_id
     self.vision_start_token_id = vision_start_token_id
     self.vision_end_token_id = vision_end_token_id
     self.pad_token_id = pad_token_id
@@ -4810,63 +4812,54 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     if vision_start_indices.numel() == 0:  # 检查是否为空
       image_nums = 0
       video_token_nums = 0
+      fast_video_token_nums = 0
     else:
       vision_tokens = inputs["input_ids"][0][vision_start_indices + 1]
       image_nums = (vision_tokens == self.image_token_id).sum()
       video_token_nums = (inputs["input_ids"][0] == self.video_token_id).sum()
+      fast_video_token_nums = (inputs["input_ids"][0] == self.fast_video_token_id).sum()
 
     if 'image_grid_thw' in inputs and len(inputs["pixel_values"]) and 'video_grid_thw' in inputs and len(inputs["pixel_values_videos"]):
       raise Exception("Unexpected inputs: there are both pixel_values and pixel_values_videos: {}/{}".format(inputs["pixel_values"].shape, inputs["pixel_values_videos"].shape))
 
-    if 'all_image_grid_thw' in inputs: # 如果有图片
-      n_slow_tokens = 0
-      n_fast_tokens = 0
-      for i in range(image_nums):
+    if 'image_grid_thw' in inputs: # 如果有图片
+      n_tokens = 0
+      for i in range(len(vision_ends), len(inputs["image_grid_thw"])):
         n_tokens_hw = inputs["image_grid_thw"][i]
-        n_slow_tokens += n_tokens_hw[1] * n_tokens_hw[2]
+        n_tokens += n_tokens_hw[1] * n_tokens_hw[2]
 
-        n_tokens_hw = inputs["fast_image_grid_thw"][i]
-        n_fast_tokens += n_tokens_hw[1] * n_tokens_hw[2]
+      if n_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
+      inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
 
-      inputs["pixel_values"] = inputs["pixel_values"][:n_slow_tokens]
-      inputs["fast_pixel_values"] = inputs["fast_pixel_values"][:n_fast_tokens]
-
-      inputs["image_grid_thw"] = inputs["image_grid_thw"][:image_nums]
-      inputs["fast_image_grid_thw"] = inputs["fast_image_grid_thw"][:image_nums]
-      inputs["all_image_grid_thw"] = inputs["all_image_grid_thw"][:image_nums * 2]
-
-    elif 'all_video_grid_thw' in inputs: # 如果有视频
+    if 'video_grid_thw' in inputs: # 如果有视频
       # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs000000_{dist.get_rank()}")
       # print(f"inputs000000_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
       used_n_token = 0
-      fast_used_n_token = 0
-      slow_used_n_token = 0
       video_token_nums = video_token_nums * 4 # 注意这里的乘4是因为我们有2*2的merge patch操作
-      video_used_idx = len(inputs["all_video_grid_thw"])
-      for idx, n_tokens_hw in enumerate(inputs["all_video_grid_thw"]):
+      video_used_idx = len(inputs["video_grid_thw"])
+      for idx, n_tokens_hw in enumerate(inputs["video_grid_thw"]):
         if used_n_token == video_token_nums:
           video_used_idx = idx
           break
-        if idx % 2 == 1:
-          fast_used_n_token += (n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2])
-        else:
-          slow_used_n_token += (n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2])
         used_n_token += (n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2])
-      # n_tokens = 0
-      # for i in range(used_idx, len(inputs["video_grid_thw"])): # 注意，因为slowfast的video_grid_thw是正常的两倍，所以前面需要 * 2。
-      #   n_tokens_hw = inputs["video_grid_thw"][i]
-      #   n_tokens += n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2]
 
-      inputs["pixel_values_videos"] = inputs["pixel_values_videos"][:slow_used_n_token]
-      inputs["fast_pixel_values_videos"] = inputs["fast_pixel_values_videos"][:fast_used_n_token]
+      inputs["pixel_values_videos"] = inputs["pixel_values_videos"][:video_token_nums]
+      inputs["video_grid_thw"] = inputs["video_grid_thw"][:video_used_idx]
+    
+    if 'fast_video_grid_thw' in inputs: # 如果有视频
+      # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs000000_{dist.get_rank()}")
+      # print(f"inputs000000_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
+      fast_used_n_token = 0
+      fast_video_token_nums = fast_video_token_nums * 4 # 注意这里的乘4是因为我们有2*2的merge patch操作
+      fast_video_used_idx = len(inputs["fast_video_grid_thw"])
+      for idx, n_tokens_hw in enumerate(inputs["fast_video_grid_thw"]):
+        if fast_used_n_token == fast_video_token_nums:
+          fast_video_used_idx = idx
+          break
+        fast_used_n_token += (n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2])
 
-      inputs["video_grid_thw"] = inputs["video_grid_thw"][:video_used_idx//2]
-      inputs["second_per_grid_ts"] = inputs["second_per_grid_ts"][:video_used_idx//2]
-      inputs["fast_video_grid_thw"] = inputs["fast_video_grid_thw"][:video_used_idx//2]
-      # inputs["fast_second_per_grid_ts"] = inputs["fast_second_per_grid_ts"][:video_used_idx//2] # 这个没有
-
-      inputs["all_video_grid_thw"] = inputs["all_video_grid_thw"][:video_used_idx]
-      inputs["all_second_per_grid_ts"] = inputs["all_second_per_grid_ts"][:video_used_idx]
+      inputs["fast_pixel_values_videos"] = inputs["fast_pixel_values_videos"][:fast_video_token_nums]
+      inputs["fast_video_grid_thw"] = inputs["fast_video_grid_thw"][:fast_video_used_idx]
 
       # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs111111_{dist.get_rank()}")
       # print(f"inputs111111_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
@@ -4874,11 +4867,11 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       if len(inputs["pixel_values_videos"]) == 0:
           del inputs["pixel_values_videos"]
           del inputs["video_grid_thw"]
-          del inputs["second_per_grid_ts"]
-          del inputs["all_video_grid_thw"]
+          
+      if len(inputs["fast_pixel_values_videos"]) == 0:
           del inputs["fast_pixel_values_videos"]
           del inputs["fast_video_grid_thw"]
-          del inputs["all_second_per_grid_ts"]
+          
     # num_thw = 0
     # if "image_grid_thw" in inputs:
     #   thw = inputs["image_grid_thw"]
@@ -4920,17 +4913,12 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                              packed_video_grid_thw: List[torch.Tensor],
                              packed_sample_idx: List[torch.Tensor],
                              cu_seqlens: List[int],
-                             packed_second_per_grid_ts: List[torch.Tensor],
                              packed_fast_pixel_values: List[torch.Tensor],
                              packed_fast_image_grid_thw: List[torch.Tensor],
                              packed_fast_pixel_values_videos: List[torch.Tensor],
                              packed_fast_video_grid_thw: List[torch.Tensor],
-                             packed_all_image_grid_thw: List[torch.Tensor],
-                             packed_all_video_grid_thw: List[torch.Tensor],
-                             packed_all_second_per_grid_ts: List[torch.Tensor],
                              sample_idx: Optional[int] = None,
                              image_pad: bool = False):
-
     
     if not image_pad:
       packable_length = self.max_length - cu_seqlens[-1]
@@ -4950,21 +4938,13 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     if "pixel_values" in inputs and len(inputs["pixel_values"]):
       packed_pixel_values.append(inputs["pixel_values"])
       packed_image_gird_thw.append(inputs["image_grid_thw"])
-      ##### fast #####
-      if "fast_pixel_values" in inputs:
-        packed_fast_pixel_values.append(inputs["fast_pixel_values"])
-        packed_fast_image_grid_thw.append(inputs["fast_image_grid_thw"])
-        packed_all_image_grid_thw.append(inputs["all_image_grid_thw"])
     if "pixel_values_videos" in inputs:
       packed_pixel_values_videos.append(inputs["pixel_values_videos"])
       packed_video_grid_thw.append(inputs["video_grid_thw"])
-      packed_second_per_grid_ts.append(inputs["second_per_grid_ts"])
-      ##### fast #####
-      if "fast_pixel_values_videos" in inputs:
-        packed_fast_pixel_values_videos.append(inputs["fast_pixel_values_videos"])
-        packed_fast_video_grid_thw.append(inputs["fast_video_grid_thw"])
-        packed_all_video_grid_thw.append(inputs["all_video_grid_thw"])
-        packed_all_second_per_grid_ts.append(inputs["all_second_per_grid_ts"])
+    ##### fast #####
+    if "fast_pixel_values_videos" in inputs:
+      packed_fast_pixel_values_videos.append(inputs["fast_pixel_values_videos"])
+      packed_fast_video_grid_thw.append(inputs["fast_video_grid_thw"])
     cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
     return len(inputs["input_ids"][0])
 
@@ -4977,14 +4957,8 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     packed_image_gird_thw: List[torch.Tensor] = []
     packed_video_grid_thw: List[torch.Tensor] = []
     packed_sample_idx: List[torch.Tensor] = []
-    packed_second_per_grid_ts: List[torch.Tensor] = []
-    packed_fast_pixel_values: List[torch.Tensor] = []
-    packed_fast_image_grid_thw: List[torch.Tensor] = []
     packed_fast_pixel_values_videos: List[torch.Tensor] = []
     packed_fast_video_grid_thw: List[torch.Tensor] = []
-    packed_all_image_grid_thw: List[torch.Tensor] = []
-    packed_all_video_grid_thw: List[torch.Tensor] = []
-    packed_all_second_per_grid_ts: List[torch.Tensor] = []
     cu_seqlens: List[int] = [0]
     epochs = []
     valid_seq_len = 0
@@ -5005,14 +4979,8 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                                       packed_video_grid_thw,
                                       packed_sample_idx,
                                       cu_seqlens,
-                                      packed_second_per_grid_ts,
-                                      packed_fast_pixel_values,
-                                      packed_fast_image_grid_thw,
                                       packed_fast_pixel_values_videos,
                                       packed_fast_video_grid_thw,
-                                      packed_all_image_grid_thw,
-                                      packed_all_video_grid_thw,
-                                      packed_all_second_per_grid_ts,
                                       image_pad=image_pad
                                       )
 
@@ -5030,14 +4998,8 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                                 packed_video_grid_thw,
                                 packed_sample_idx,
                                 cu_seqlens,
-                                packed_second_per_grid_ts,
-                                packed_fast_pixel_values,
-                                packed_fast_image_grid_thw,
                                 packed_fast_pixel_values_videos,
                                 packed_fast_video_grid_thw,
-                                packed_all_image_grid_thw,
-                                packed_all_video_grid_thw,
-                                packed_all_second_per_grid_ts,
                                 sample_idx=-1,
                                 image_pad=True
                                 )
@@ -5047,8 +5009,6 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
     packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
-    packed_second_per_grid_ts = None if len(packed_second_per_grid_ts) == 0 else \
-      torch.cat(packed_second_per_grid_ts, dim=0)
     packed_pixel_values = None if len(packed_pixel_values) == 0 else \
       torch.cat(packed_pixel_values, dim=0)
     packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else \
@@ -5059,20 +5019,10 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     packed_video_grid_thw = None if len(packed_video_grid_thw) == 0 else \
       torch.cat(packed_video_grid_thw, dim=0)
     ####fast####
-    packed_fast_pixel_values = None if len(packed_fast_pixel_values) == 0 else \
-      torch.cat(packed_fast_pixel_values, dim=0)
-    packed_fast_image_grid_thw = None if len(packed_fast_image_grid_thw) == 0 else \
-      torch.cat(packed_fast_image_grid_thw, dim=0)
     packed_fast_pixel_values_videos = None if len(packed_fast_pixel_values_videos) == 0 else \
       torch.cat(packed_fast_pixel_values_videos, dim=0)
     packed_fast_video_grid_thw = None if len(packed_fast_video_grid_thw) == 0 else \
       torch.cat(packed_fast_video_grid_thw, dim=0)
-    packed_all_image_grid_thw = None if len(packed_all_image_grid_thw) == 0 else \
-      torch.cat(packed_all_image_grid_thw, dim=0)
-    packed_all_video_grid_thw = None if len(packed_all_video_grid_thw) == 0 else \
-      torch.cat(packed_all_video_grid_thw, dim=0)
-    packed_all_second_per_grid_ts = None if len(packed_all_second_per_grid_ts) == 0 else \
-      torch.cat(packed_all_second_per_grid_ts, dim=0)
     ############
 
     # pad seq len to multiple_of
@@ -5101,14 +5051,8 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
       "sample_idx": packed_sample_idx.to(torch.int32),
       "epoch_idx": torch.tensor([sum(epochs) / len(epochs)], dtype=torch.float32),
-      "second_per_grid_ts": packed_second_per_grid_ts,
-      "fast_pixel_values": packed_fast_pixel_values,
-      "fast_image_grid_thw": packed_fast_image_grid_thw,
       "fast_pixel_values_videos": packed_fast_pixel_values_videos,
       "fast_video_grid_thw": packed_fast_video_grid_thw,
-      "all_image_grid_thw": packed_all_image_grid_thw,
-      "all_video_grid_thw": packed_all_video_grid_thw,
-      "all_second_per_grid_ts": packed_all_second_per_grid_ts
     }
 
     return inputs
