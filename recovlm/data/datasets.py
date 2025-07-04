@@ -4913,8 +4913,6 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                              packed_video_grid_thw: List[torch.Tensor],
                              packed_sample_idx: List[torch.Tensor],
                              cu_seqlens: List[int],
-                             packed_fast_pixel_values: List[torch.Tensor],
-                             packed_fast_image_grid_thw: List[torch.Tensor],
                              packed_fast_pixel_values_videos: List[torch.Tensor],
                              packed_fast_video_grid_thw: List[torch.Tensor],
                              sample_idx: Optional[int] = None,
