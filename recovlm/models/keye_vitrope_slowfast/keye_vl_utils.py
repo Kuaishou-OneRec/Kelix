@@ -376,7 +376,7 @@ def _read_video_decord_slowfast_v2(
     
     max_fast_frame_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) * ele.get("slow_fast_ratio", SLOW_FAST_RATIO) - slow_nframes_number
     fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
-    if ONLY_SLOW:
+    if  ele.get("only_slow", ONLY_SLOW):
         fast_nframes_number = 0
     if fast_nframes_number > 0:
         left_frame_list = [x for x in range(total_frames) if x not in slow_idx]
@@ -475,7 +475,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         slow_frames = transforms.functional.resize(
             slow_frames,
             [resized_height, resized_width],
-            interpolation=InterpolationMode.BICUBIC,
+            interpolation=InterpolationMode.BILINEAR,
             antialias=True,
         ).float()
         slow_frames = list(slow_frames.split(1, dim=0))
@@ -485,7 +485,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             fast_frames = transforms.functional.resize(
                 fast_frames,
                 [fast_resized_height, fast_resized_width],
-                interpolation=InterpolationMode.BICUBIC,
+                interpolation=InterpolationMode.BILINEAR,
                 antialias=True,
             ).float()
             fast_frames = list(fast_frames.split(1, dim=0))
@@ -517,7 +517,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
 
         max_fast_frame_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) * ele.get("slow_fast_ratio", SLOW_FAST_RATIO) - slow_nframes_number
         fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
-        if ONLY_SLOW:
+        if  ele.get("only_slow", ONLY_SLOW):
             fast_nframes_number = 0
         if fast_nframes_number > 0:
             left_frame_list = [x for x in range(total_frames) if x not in slow_idx]
