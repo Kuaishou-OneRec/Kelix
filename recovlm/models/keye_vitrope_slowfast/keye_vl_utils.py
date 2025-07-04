@@ -36,7 +36,7 @@ FRAME_FACTOR = 2
 FPS = 2.0
 FPS_MIN_FRAMES = 4
 
-SLOW_FAST_RATIO = 1 # 超参数
+SLOW_FAST_RATIO = 3 # 超参数
 FPS_MAX_SLOW_FRAMES = 64 # 注意：这里的含义是Max Slow Frame，不是总的frames数量
 
 
@@ -45,7 +45,7 @@ FAST_MIN_PIXELS = 4 * 28 * 28
 FAST_MAX_PIXELS = 64 * 28 * 28
 FAST_VIDEO_TOTAL_PIXELS = 24576 * 28 * 28
 
-ONLY_SLOW = 1
+ONLY_SLOW = 0
 def round_by_factor(number: int, factor: int) -> int:
     """Returns the closest integer to 'number' that is divisible by 'factor'."""
     return round(number / factor) * factor

@@ -902,7 +902,6 @@ class SiglipEncoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-        print("cjx debug1, hidden_states {}".format(hidden_states.size()))
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -911,7 +910,6 @@ class SiglipEncoderLayer(nn.Module):
             rope_emb=rope_emb,
             # cu_seqlens=cu_seqlens
         )
-        print("cjx debug2, hidden_states {}, rank{}".format(hidden_states.size(), dist.get_rank()))
         hidden_states = residual + hidden_states
 
         residual = hidden_states
