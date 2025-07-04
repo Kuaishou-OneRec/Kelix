@@ -830,11 +830,9 @@ class SiglipAttention(nn.Module):
             values = values.transpose(1, 2).squeeze(0)
 
             from flash_attn import flash_attn_func, flash_attn_varlen_func
-            print("cjx_debug: {}".format(cu_seqlens))
             max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
-            print("cjx_debug2: {}".format(cu_seqlens))
             attn_output = flash_attn_varlen_func(
                 queries,
                 keys,
@@ -846,7 +844,6 @@ class SiglipAttention(nn.Module):
                 causal=False,
                 softmax_scale=self.scale,
             )
-            print("cjx_debug3: {}".format(cu_seqlens))
             attn_output = attn_output.flatten(-2).unsqueeze(0)
             attn_weights = None
 
@@ -905,6 +902,7 @@ class SiglipEncoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
+        print("cjx debug1, hidden_states {}".format(hidden_states.size()))
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -913,6 +911,7 @@ class SiglipEncoderLayer(nn.Module):
             rope_emb=rope_emb,
             # cu_seqlens=cu_seqlens
         )
+        print("cjx debug2, hidden_states {}".format(hidden_states.size()))
         hidden_states = residual + hidden_states
 
         residual = hidden_states
