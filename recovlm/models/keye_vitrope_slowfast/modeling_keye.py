@@ -3019,7 +3019,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         input_ids: Optional[torch.LongTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
-        second_per_grid_ts: Optional[torch.Tensor] = None,
+        fast_video_grid_thw: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -3078,6 +3078,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         spatial_merge_size = self.config.vision_config.spatial_merge_size
         image_token_id = self.config.image_token_id
         video_token_id = self.config.video_token_id
+        fast_video_token_id = self.config.fast_video_token_id
         vision_start_token_id = self.config.vision_start_token_id
         mrope_position_deltas = []
         if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
@@ -3091,113 +3092,97 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 dtype=input_ids.dtype,
                 device=input_ids.device,
             )
-            image_index, video_index = 0, 0
+            image_index, video_index, fast_video_index = 0, 0, 0
             attention_mask = attention_mask.to(total_input_ids.device)
             for i, input_ids in enumerate(total_input_ids):
                 input_ids = input_ids[attention_mask[i] == 1]
-                image_nums, video_nums = 0, 0
-                vision_start_indices = torch.argwhere(input_ids == vision_start_token_id).squeeze(1)
-                vision_tokens = input_ids[vision_start_indices + 1]
-                image_nums = (vision_tokens == image_token_id).sum()
-                # video_nums = (vision_tokens == video_token_id).sum()
+
+                if image_grid_thw is not None:
+                    image_nums = image_grid_thw.size(0) # 这里实际上是图片的数量
+                else:
+                    image_nums = 0
+
                 if video_grid_thw is not None:
-                    video_nums = video_grid_thw.size(0)//2
+                    video_nums = video_grid_thw.size(0) # 这里实际上是slow_frame的数量
                 else:
                     video_nums = 0
+
+                if fast_video_grid_thw is not None:
+                    fast_video_nums = fast_video_grid_thw.size(0) # 这里实际上是fast_frame的数量
+                else:
+                    fast_video_nums = 0
+
                 input_tokens = input_ids.tolist()
                 llm_pos_ids_list: list = []
                 st = 0
-                remain_images, remain_videos = image_nums, video_nums
+                remain_images, remain_videos_frames, remain_fast_videos_frames = image_nums, video_nums, fast_video_nums
                 # remain_images, remain_videos = image_nums, video_grid_thw.size(0)//2
-                for _ in range(image_nums + video_nums):
+                for _ in range(image_nums + video_nums + fast_video_nums):
 
                     if image_token_id in input_tokens and remain_images > 0:
                         ed_image = input_tokens.index(image_token_id, st)
                     else:
                         ed_image = len(input_tokens) + 1
-                    if video_token_id in input_tokens and remain_videos > 0:
+
+                    if video_token_id in input_tokens and remain_videos_frames > 0:
                         ed_video = input_tokens.index(video_token_id, st)
                     else:
                         ed_video = len(input_tokens) + 1
                     
-                    if ed_image < ed_video:
+                    if fast_video_token_id in input_tokens and remain_fast_videos_frames > 0:
+                        ed_fast_video = input_tokens.index(fast_video_token_id, st)
+                    else:
+                        ed_fast_video = len(input_tokens) + 1
+                    
+                    if ed_image < min(ed_video, ed_fast_video):
                         t, h, w = (
                             image_grid_thw[image_index][0],
                             image_grid_thw[image_index][1],
                             image_grid_thw[image_index][2],
                         )
-                        tf,hf,wf = (
-                            image_grid_thw[image_index+1][0],
-                            image_grid_thw[image_index+1][1],
-                            image_grid_thw[image_index+1][2],
-                        )
-                        second_per_grid_t = 0
-                        second_per_grid_t_fs = 0
-                        image_index += 2
+                        image_index += 1
                         remain_images -= 1
                         ed = ed_image
 
-                    else:
+                    elif ed_video < min(ed_image, ed_fast_video):
                         t, h, w = (
                             video_grid_thw[video_index][0],
                             video_grid_thw[video_index][1],
                             video_grid_thw[video_index][2],
                         )
-                        tf,hf,wf = (
-                            video_grid_thw[video_index+1][0],
-                            video_grid_thw[video_index+1][1],
-                            video_grid_thw[video_index+1][2],
-                        )
-                        if second_per_grid_ts is not None:
-                            second_per_grid_t = second_per_grid_ts[video_index]
-                            second_per_grid_t_fs = second_per_grid_ts[video_index+1]
-                        else:
-                            second_per_grid_t = 1.0
-                            second_per_grid_t_fs = 1.0
-                        video_index += 2
-                        remain_videos -= 1
+                        video_index += 1
+                        remain_videos_frames -= 1
                         ed = ed_video
+                    
+                    elif ed_fast_video < min(ed_image, ed_video):
+                        t, h, w = (
+                            fast_video_grid_thw[fast_video_index][0],
+                            fast_video_grid_thw[fast_video_index][1],
+                            fast_video_grid_thw[fast_video_index][2],
+                        )
+                        fast_video_index += 1
+                        remain_fast_videos_frames -= 1
+                        ed = ed_fast_video
+
+
                     llm_grid_t, llm_grid_h, llm_grid_w = (
                         t.item(),
                         h.item() // spatial_merge_size,
                         w.item() // spatial_merge_size,
                     )
-                    llm_grid_tf, llm_grid_hf, llm_grid_wf = (
-                        tf.item(),
-                        hf.item() // spatial_merge_size,
-                        wf.item() // spatial_merge_size,
-                    )
                     text_len = ed - st
 
-                    st_idx = llm_pos_ids_list[-1][0].max() + 1 if len(llm_pos_ids_list) > 0 else 0
+                    st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
                     llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
-                    if torch.is_tensor(second_per_grid_t): second_per_grid_t = second_per_grid_t.detach().item()
-                    if torch.is_tensor(second_per_grid_t_fs): second_per_grid_t_fs = second_per_grid_t_fs.detach().item()
                     range_tensor = torch.arange(llm_grid_t).view(-1, 1)
-                    range_tensor_tf = torch.arange(llm_grid_tf).view(-1, 1)
                     expanded_range = range_tensor.expand(-1, llm_grid_h * llm_grid_w)
-                    expanded_range_tf = range_tensor_tf.expand(-1, llm_grid_hf * llm_grid_wf)
 
-                    time_tensor = expanded_range * second_per_grid_t * self.config.vision_config.tokens_per_second
-                    time_tensor_tf = expanded_range_tf * second_per_grid_t_fs * self.config.vision_config.tokens_per_second
-                    time_tensor = time_tensor * 10
-                    time_tensor_tf = time_tensor_tf * 10
-                    time_tensor_long = time_tensor.long()
-                    time_tensor_long_tf = time_tensor_tf.long()
-                    t_index = time_tensor_long.flatten()
-                    t_index_tf = time_tensor_long_tf.flatten()
-
+                    t_index = expanded_range.flatten()
                     h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
                     w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
-                    h_index_tf = torch.arange(llm_grid_hf).view(1, -1, 1).expand(llm_grid_tf, -1, llm_grid_wf).flatten()
-                    w_index_tf = torch.arange(llm_grid_wf).view(1, 1, -1).expand(llm_grid_tf, llm_grid_hf, -1).flatten()
-                    #add slow and fast part
                     llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + text_len + st_idx)
-                    llm_pos_ids_list.append(torch.stack([t_index_tf, h_index_tf, w_index_tf]) + text_len + st_idx)
-
                     st = ed + llm_grid_t * llm_grid_h * llm_grid_w
-                    st = st + llm_grid_tf * llm_grid_hf * llm_grid_wf
 
                 if st < len(input_tokens):
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
@@ -3249,15 +3234,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         video_grid_thw: Optional[torch.LongTensor] = None,
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        second_per_grid_ts: Optional[torch.Tensor] = None,
-        fast_pixel_values: Optional[torch.Tensor] = None,
-        fast_image_grid_thw: Optional[torch.LongTensor] = None,
         fast_pixel_values_videos: Optional[torch.FloatTensor] = None,
         fast_video_grid_thw: Optional[torch.LongTensor] = None,
-        fast_second_per_grid_ts: Optional[torch.Tensor] = None,
-        all_image_grid_thw: Optional[torch.LongTensor] = None,
-        all_video_grid_thw: Optional[torch.LongTensor] = None,
-        all_second_per_grid_ts: Optional[torch.Tensor] = None,
         **kwargs
     ) -> Union[Tuple, KeyeCausalLMOutputWithPast]:
         r"""
@@ -3347,60 +3325,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
                 #64*7168
                 
-
-                if fast_pixel_values is not None:
-
-                    ############## fast vit start ##############
-                    fast_pixel_values = fast_pixel_values.type(self.visual.dtype)
-                    fast_pixel_values = fast_pixel_values.unsqueeze(0)
-                    fast_siglip_position_ids = list()
-                    fast_image_grid_hws = list()
-                    fast_sample_indices = list()
-                    fast_cu_seqlens = [0]
-
-                    #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
-                    for idx, thw in enumerate(fast_image_grid_thw):
-                        thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
-                        numel = np.prod(thw_tuple)
-                        fast_image_grid_hws.append(thw_tuple)
-                        fast_image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
-                        fast_siglip_position_ids.append(fast_image_position_ids)
-                        fast_sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
-                        fast_cu_seqlens.append(fast_cu_seqlens[-1] + numel)
-
-                    fast_siglip_position_ids = torch.concat(fast_siglip_position_ids, dim=0).to(pixel_values.device)
-                    fast_cu_seqlens = torch.tensor(fast_cu_seqlens, dtype=torch.int32).to(pixel_values.device)
-                    fast_sample_indices = torch.concat(fast_sample_indices, dim=0).to(pixel_values.device)
-                    # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
-                    #print(f"X=3, rank={torch.distributed.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
-                    fast_vision_outputs = self.visual_fast(
-                        pixel_values=fast_pixel_values, 
-                        image_grid_thw=fast_image_grid_hws,
-                        position_ids=fast_siglip_position_ids,
-                        vision_return_embed_list=True,
-                        interpolate_pos_encoding=True,
-                        sample_indices=fast_sample_indices,
-                        cu_seqlens=fast_cu_seqlens,
-                        return_pooler_output=False,
-                        use_rope=True,
-                        window_size =-1,
-                    )
-                    fast_image_embeds = fast_vision_outputs.last_hidden_state
-                    fast_image_embeds = self.fast_mlp_AR(fast_image_embeds, fast_image_grid_hws)
-
-                    # fast_vision_outputs = fast_vision_outputs.last_hidden_state
-                    ############## fast vit end ##############
-
-                    ############## Slow Fast Merge ##############
-                    print("cjx image debug: slow part {}, fast part {}".format(pixel_values.size(), fast_pixel_values.size()))
-                    merged_image_embeds = list()
-                    for i in range(len(image_embeds)):
-                        merged_image_embeds.append(image_embeds[i])
-                        merged_image_embeds.append(fast_image_embeds[i])
-                    image_embeds = merged_image_embeds
-                    ############## Slow Fast Merge ##############
-
-                # print("cjx image debug: slow part {}".format(pixel_values.size()))
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 #image_embeds is a list of tensor, each tensor is a image feature,I want to concat them all into a tensor
                 image_embeds = torch.cat(image_embeds,dim=0)
@@ -3481,7 +3405,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     fast_cu_seqlens = torch.tensor(fast_cu_seqlens, dtype=torch.int32).to(fast_pixel_values_videos.device)
                     fast_sample_indices = torch.concat(fast_sample_indices, dim=0).to(fast_pixel_values_videos.device)
 
-                    fast_vision_outputs = self.visual_fast(
+                    fast_vision_outputs = self.visual(
                         pixel_values=fast_pixel_values_videos, 
                         image_grid_thw=fast_video_grid_hws,
                         position_ids=fast_siglip_position_ids,
@@ -3494,19 +3418,29 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         window_size = -1,
                     )
                     fast_video_embeds = fast_vision_outputs.last_hidden_state
-                    fast_video_embeds = self.fast_mlp_AR(fast_video_embeds, fast_video_grid_thw)
+                    fast_video_embeds = self.mlp_AR(fast_video_embeds, fast_video_grid_thw)
                     ############## fast vit end ##############
-                
-                    ############## Slow Fast Merge ##############
+
+                    ############## fast scatter start##############
+                    n_fast_video_tokens = (input_ids == self.config.fast_video_token_id).sum().item()
+                    fast_video_embeds = torch.cat(fast_video_embeds,dim=0)
+                    n_fast_video_features = fast_video_embeds.shape[0]
+                    if n_fast_video_tokens != n_fast_video_features:
+                        raise ValueError(
+                            f"Fast!!! video features and video tokens do not match: tokens: {n_fast_video_tokens}, features {n_fast_video_features}"
+                        )
+
+                    mask = input_ids == self.config.fast_video_token_id
+                    mask_unsqueezed = mask.unsqueeze(-1)
+                    mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
+                    video_mask = mask_expanded.to(inputs_embeds.device)
+
+                    fast_video_embeds = fast_video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                    inputs_embeds = inputs_embeds.masked_scatter(video_mask, fast_video_embeds)
+                    ############## fast scatter end##############
+
                     print("cjx video debug: slow part {}, fast part {}".format(pixel_values_videos.size(), fast_pixel_values_videos.size()))
-                    merged_video_embeds = list()
-                    for i in range(len(video_embeds)):
-                        merged_video_embeds.append(video_embeds[i])
-                        merged_video_embeds.append(fast_video_embeds[i])
-                    video_embeds = merged_video_embeds
-                    ############## Slow Fast Merge ##############
-                
-                # print("cjx video debug: slow part {}".format(pixel_values_videos.size()))
+                    
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 video_embeds = torch.cat(video_embeds,dim=0)
                 n_video_features = video_embeds.shape[0]
@@ -3534,25 +3468,16 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 or self.rope_deltas is None
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
             ):
-
-                if (fast_pixel_values is not None) or (fast_pixel_values_videos is not None):
-                    position_ids, rope_deltas = self.get_rope_index_slowfast(
-                        input_ids,
-                        all_image_grid_thw if all_image_grid_thw is not None else image_grid_thw,
-                        all_video_grid_thw if all_video_grid_thw is not None else video_grid_thw,
-                        all_second_per_grid_ts if all_second_per_grid_ts is not None else second_per_grid_ts,
-                        attention_mask,
-                    )
-                    self.rope_deltas = rope_deltas
-                else:
-                    position_ids, rope_deltas = self.get_rope_index(
-                        input_ids,
-                        all_image_grid_thw if all_image_grid_thw is not None else image_grid_thw,
-                        all_video_grid_thw if all_video_grid_thw is not None else video_grid_thw,
-                        all_second_per_grid_ts if all_second_per_grid_ts is not None else second_per_grid_ts,
-                        attention_mask,
-                    )
-                    self.rope_deltas = rope_deltas
+                position_ids, rope_deltas = self.get_rope_index_slowfast(
+                    input_ids,
+                    image_grid_thw,
+                    video_grid_thw,
+                    fast_video_grid_thw,
+                    attention_mask,
+                )
+                import pdb
+                pdb.set_trace()
+                self.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape
@@ -3821,7 +3746,7 @@ class Projector(nn.Module):
         dims = image_features.shape[:-1]
         dim = image_features.shape[-1]
         image_features = image_features.view(np.prod(dims), dim)
-        hidden_states = self.pre_norm(image_features).view(-1, self.hidden_size)
+        hidden_states = self.pre_norm(image_features.view(-1, self.hidden_size))
         hidden_states = self.linear_1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)

@@ -111,12 +111,11 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-PROCESSOR_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0608"
-MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0608"
+PROCESSOR_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0703_patch14"
+MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0703_patch14"
 
-processor = KeyeProcessor.from_pretrained(PROCESSOR_DIR)
+processor = KeyeProcessor.from_pretrained(PROCESSOR_DIR, use_fast=True, local_files_only=False)
 tokenizer = processor.tokenizer
-
 
 def make_inputs(a,b):
     # messages = [
@@ -164,6 +163,8 @@ def make_inputs(a,b):
             # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_2mb.mp4"}, 
             {"type": "video", 
             "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_1mb.mp4"}, 
+            # {"type": "video", 
+            # "video": ["/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png", "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"]}, 
             {"type": "text", 
             "text": "\\What is this?"}]}
         ]

@@ -70,9 +70,8 @@ class KeyeProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
-        # self.fast_image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
-        self.time_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
-        self.fast_video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
+        self.time_token = "<|second|>" if not hasattr(tokenizer, "second_token") else tokenizer.second_token
+        self.fast_video_token = "<|fast_video_pad|>" if not hasattr(tokenizer, "fast_video_token") else tokenizer.fast_video_token
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         # self.fast_patch_size = 16
@@ -145,127 +144,100 @@ class KeyeProcessor(ProcessorMixin):
             # 这个是因为视频会划分为多张图片，需要在这个地方提前统计好token量，后面就不清楚界限在哪了
             slow_videos_token_nums = [[] for i in range(len(videos))]
             fast_videos_token_nums = [[] for i in range(len(videos))]
-            fast_videos_frame_nums = [[] for i in range(len(videos))]
+            all_position = []
 
             for current_index, current_video in enumerate(videos):
-                if isinstance(current_video[0], list): # slow_frames, fast_frames, fps_ratio, 这里需要注意的是fast_frames，有可能和slow的长度不等？
+                if len(current_video) == 4: # slow_frames, slow_time_position, fast_frames, fast_time_position, slow_fast_order, 这里需要注意的是fast_frames，有可能和slow的长度不等，需要靠slow_fast_order来进行识别
+                    slow_frames, fast_frames, time_position, slow_fast_order = current_video[0], current_video[1], current_video[2], current_video[3]
+                    all_position.append((time_position, slow_fast_order))
                     ####### slow part #########
-                    slow_videos_inputs = self.image_processor(images=None, videos=current_video[0], **output_kwargs["images_kwargs"])
-                    slow_video_grid_thw = slow_videos_inputs["video_grid_thw"]
-
-                    fps = output_kwargs["videos_kwargs"].pop("fps", 2.0) # note this fps is not real
-                    if isinstance(fps, (int, float)):
-                        fps_ratio = current_video[2]
-                        second_per_grid_ts = [self.image_processor.temporal_patch_size / (fps * fps_ratio)] * len(slow_video_grid_thw) # the real fps
-                    elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-                        second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
+                    if slow_frames is not None:
+                        slow_videos_inputs = self.image_processor(images=None, videos=slow_frames, **output_kwargs["images_kwargs"])
+                        slow_video_grid_thw = slow_videos_inputs["video_grid_thw"]
+                        all_slow_videos.append(slow_videos_inputs)
+                        slow_videos_token_nums[current_index] = slow_video_grid_thw.prod(dim=1).tolist() # 当前这个视频的所有token数
                     else:
-                        raise ValueError(
-                            f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(slow_video_grid_thw)}) or fps should be a single number."
-                        )
-                    slow_videos_inputs.update({"second_per_grid_ts": torch.tensor(second_per_grid_ts)})
-                    all_slow_videos.append(slow_videos_inputs)
-
-                    slow_videos_token_nums[current_index].append(int(slow_video_grid_thw.prod(dim=1).sum()))
+                        all_slow_videos.append(None) # 这样的话，slow_fast_order都是1了，这里应该不会用到的
+                        slow_videos_token_nums[current_index] = None # 如果全为fast？但目前不存在这种情况
                     ###########################
 
                     ####### fast part #########
                     if self.slowfast:
-                        fast_videos_inputs = self.fast_image_processor(images=None, videos=current_video[1], **output_kwargs["images_kwargs"])
-                        fast_video_grid_thw = fast_videos_inputs["video_grid_thw"]
-
-                        fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
-                        if isinstance(fps, (int, float)):
-                            fps_ratio = current_video[2]
-                            second_per_grid_ts = [self.fast_image_processor.temporal_patch_size / (fps * fps_ratio)] * len(fast_video_grid_thw)
-                        elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
-                            second_per_grid_ts = [self.fast_image_processor.temporal_patch_size / tmp for tmp in fps]
+                        if fast_frames is not None:
+                            fast_videos_inputs = self.image_processor(images=None, videos=fast_frames, **output_kwargs["images_kwargs"])
+                            fast_video_grid_thw = fast_videos_inputs["video_grid_thw"]
+                            all_fast_videos.append(fast_videos_inputs)
+                            fast_videos_token_nums[current_index] = fast_video_grid_thw.prod(dim=1).tolist() # 当前这个视频的fast的所有token数
                         else:
-                            raise ValueError(
-                                f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(fast_video_grid_thw)}) or fps should be a single number."
-                            )
-                        fast_videos_inputs.update({"second_per_grid_ts": torch.tensor(second_per_grid_ts)})
-                        all_fast_videos.append(fast_videos_inputs)
-
-                        fast_videos_token_nums[current_index].append(int(fast_video_grid_thw.prod(dim=1).sum()))
-                        fast_videos_frame_nums[current_index].append(fast_video_grid_thw.size(0))
+                            all_fast_videos.append(None) # 如果全为slow
+                            fast_videos_token_nums[current_index] = None
                     ###########################
                 else:
-                    for image_pattern in current_video:
-                        slow_images = image_pattern
-                        ####### slow part #########
-                        slow_videos_inputs = self.image_processor(images=None, videos=[slow_images], **output_kwargs["images_kwargs"])
-                        slow_video_grid_thw = slow_videos_inputs["video_grid_thw"]
+                    slow_frames, fast_frames, slow_fast_order = current_video[0], current_video[1], current_video[2]
+                    all_position.append((None, slow_fast_order))
+                    ####### slow part #########
+                    if slow_frames is not None:
+                        for each_image in slow_frames:
+                            slow_videos_inputs = self.image_processor(images=None, videos=[each_image], **output_kwargs["images_kwargs"])
+                            slow_video_grid_thw = slow_videos_inputs["video_grid_thw"]
 
-                        fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
-                        if isinstance(fps, (int, float)):
-                            second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(slow_video_grid_thw) # 如果已经抽好了帧，那么这个地方只能假设fps_ratio为1就是，实际fps为2
-                        elif hasattr(fps, "__len__") and len(fps) == len(slow_video_grid_thw):
-                            second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
-                        else:
-                            raise ValueError(
-                                f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(slow_video_grid_thw)}) or fps should be a single number."
-                            )
-                        slow_videos_inputs.update({"second_per_grid_ts": torch.tensor(second_per_grid_ts)})
-                        all_slow_videos.append(slow_videos_inputs)
-                        slow_videos_token_nums[current_index].append(int(slow_video_grid_thw.prod(dim=1).sum()))
+                            all_slow_videos.append(slow_videos_inputs)
+                            slow_videos_token_nums[current_index].append(slow_video_grid_thw.prod(dim=1).item()) # 这里因为没在前面split开，所以要这么写
                         ###########################
+                    else:
+                        all_slow_videos.append(None) # 这样的话，slow_fast_order都是1了，这里应该不会用到的
+                        slow_videos_token_nums[current_index] = None # 如果全为fast？但目前不存在这种情况
 
-                        ####### fast part #########
-                        if self.slowfast:
-                            if kwargs.get("image_video_pad", False):
-                                fast_videos_inputs = self.fast_image_processor.preprocess(images=None, videos=[image_pattern[1]], size = {"height": 28, "width": 28}, **output_kwargs["images_kwargs"])
-
+                    ####### fast part #########
+                    if self.slowfast:
+                        if fast_frames is not None:
+                            for each_image in fast_frames:
+                                if kwargs.get("image_video_pad", False):
+                                    fast_videos_inputs = self.image_processor.preprocess(images=None, videos=[each_image], size = {"height": 28, "width": 28}, **output_kwargs["images_kwargs"])
+                                else:
+                                    fast_videos_inputs = self.image_processor.preprocess(images=None, videos=[each_image], **output_kwargs["images_kwargs"])
                                 fast_video_grid_thw = fast_videos_inputs["video_grid_thw"]
 
-                                fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
-                                if isinstance(fps, (int, float)):
-                                    second_per_grid_ts = [self.fast_image_processor.temporal_patch_size / fps] * len(fast_video_grid_thw)
-                                elif hasattr(fps, "__len__") and len(fps) == len(fast_video_grid_thw):
-                                    second_per_grid_ts = [self.fast_image_processor.temporal_patch_size / tmp for tmp in fps]
-                                else:
-                                    raise ValueError(
-                                        f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(fast_video_grid_thw)}) or fps should be a single number."
-                                    )
-                                fast_videos_inputs.update({"second_per_grid_ts": torch.tensor(second_per_grid_ts)})
                                 all_fast_videos.append(fast_videos_inputs)
-                                fast_videos_token_nums[current_index].append(int(fast_video_grid_thw.prod(dim=1).sum()))
-                                fast_videos_frame_nums[current_index].append(fast_video_grid_thw.size(0))
-                        ###########################
-
+                                fast_videos_token_nums[current_index].append(fast_video_grid_thw.prod(dim=1).item())
+                        else:
+                            all_fast_videos.append(None)
+                            fast_videos_token_nums[current_index] = None
+                    ###########################
 
 
             # todo: zdj debug 多次concat速度会慢很多
-            slow_pixel_values_videos_list = [single_slow_video["pixel_values_videos"] for single_slow_video in all_slow_videos]
-            slow_video_grid_thw_list = [single_slow_video["video_grid_thw"] for single_slow_video in all_slow_videos]
-            slow_second_per_grid_ts_list = [single_slow_video["second_per_grid_ts"] for single_slow_video in all_slow_videos]
+            slow_pixel_values_videos_list = [single_slow_video["pixel_values_videos"] for single_slow_video in all_slow_videos if single_slow_video is not None]
+            slow_video_grid_thw_list = [single_slow_video["video_grid_thw"] for single_slow_video in all_slow_videos if single_slow_video is not None]
 
             total_slow_pixel_values_videos = torch.concat(slow_pixel_values_videos_list, dim=0)
             total_slow_video_grid_thw = torch.concat(slow_video_grid_thw_list, dim=0)
-            total_slow_second_per_grid_ts = torch.concat(slow_second_per_grid_ts_list, dim=0)
             # todo: zdj debug end
 
-            videos_inputs = {
-                "pixel_values_videos": total_slow_pixel_values_videos,
-                "video_grid_thw": total_slow_video_grid_thw,
-                "second_per_grid_ts": total_slow_second_per_grid_ts,   
-            }
-            video_grid_thw = videos_inputs["video_grid_thw"]
+            if len(total_slow_pixel_values_videos):
+                videos_inputs = {
+                    "pixel_values_videos": total_slow_pixel_values_videos,
+                    "video_grid_thw": total_slow_video_grid_thw,
+                }
+                video_grid_thw = videos_inputs["video_grid_thw"]
+            else:
+                videos_inputs = {}
+                video_grid_thw = None
 
             if self.slowfast:
                 # todo: zdj debug 多次concat速度会慢很多
-                fast_pixel_values_videos_list = [single_fast_video["pixel_values_videos"] for single_fast_video in all_fast_videos]
-                fast_video_grid_thw_list = [single_fast_video["video_grid_thw"] for single_fast_video in all_fast_videos]
-                fast_second_per_grid_ts_list = [single_fast_video["second_per_grid_ts"] for single_fast_video in all_fast_videos]
+                fast_pixel_values_videos_list = [single_fast_video["pixel_values_videos"] for single_fast_video in all_fast_videos if single_fast_video is not None]
+                fast_video_grid_thw_list = [single_fast_video["video_grid_thw"] for single_fast_video in all_fast_videos if single_fast_video is not None]
                 # fast_second_per_grid_ts = torch.tensor(list(chain(*fast_second_per_grid_ts_list)))
 
-                videos_inputs["fast_pixel_values_videos"] = torch.concat(fast_pixel_values_videos_list, dim=0)
-                videos_inputs["fast_video_grid_thw"] = torch.concat(fast_video_grid_thw_list, dim=0)
-                videos_inputs["fast_second_per_grid_ts"] = torch.concat(fast_second_per_grid_ts_list, dim=0)
-                # todo: zdj debug end
+                if len(fast_pixel_values_videos_list):
+                    videos_inputs["fast_pixel_values_videos"] = torch.concat(fast_pixel_values_videos_list, dim=0)
+                    videos_inputs["fast_video_grid_thw"] = torch.concat(fast_video_grid_thw_list, dim=0)
+                    fast_video_grid_thw = videos_inputs["fast_video_grid_thw"]
+                else:
+                    fast_video_grid_thw = None
 
-                videos_inputs["all_video_grid_thw"] = torch.stack(list(chain.from_iterable(zip(videos_inputs["video_grid_thw"], videos_inputs["fast_video_grid_thw"]))), dim = 0)
-                videos_inputs["all_second_per_grid_ts"] = torch.stack(list(chain.from_iterable(zip(videos_inputs["second_per_grid_ts"], videos_inputs["fast_second_per_grid_ts"]))), dim = 0)
+                # todo: zdj debug end
         else:
             videos_inputs = {}
             video_grid_thw = None
@@ -286,28 +258,36 @@ class KeyeProcessor(ProcessorMixin):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
             # text[0].count("<|placeholder|>")
-        if video_grid_thw is not None:
+        if video_grid_thw is not None or fast_video_grid_thw is not None:
             index = 0
             for i in range(len(text)):
                 while self.video_token in text[i]:
                     video_place_holder_tempale = ""
-                    for j in range(len(slow_videos_token_nums[index])):
-                        # video_place_holder_tempale += "<|slow_video_start|>" + "<|placeholder|>" * (slow_videos_token_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size) + "<|slow_video_end|>"
-                        video_place_holder_tempale += "<|placeholder|>" * (slow_videos_token_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size)
-                        if self.slowfast:
-                            # 这里是为了保证每一帧的token都被分割开
-                            video_place_holder_tempale += "<|placeholder|>" * (fast_videos_token_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size)
-                            # video_place_holder_tempale += "<|fast_video_start|>" + ("<|placeholder|>" * (fast_videos_token_nums[index][j]//self.image_processor.merge_size//self.image_processor.merge_size)) + "<|fast_video_end|>"
+                    slow_index = 0
+                    fast_index = 0
+                    for j in range(len(all_position[index][1])):
+                        if all_position[index][0] is not None: # 如果有时间戳
+                            video_place_holder_tempale += format(all_position[index][0][j], ".1f") + self.time_token
+                            
+                        if all_position[index][1][j] == 0: # 当前帧是slow？
+                            video_place_holder_tempale += "<|placeholder|>" * (slow_videos_token_nums[index][slow_index]//self.image_processor.merge_size//self.image_processor.merge_size)
+                            slow_index += 1
+                        elif all_position[index][1][j] == 1: # 当前帧是fast？
+                            video_place_holder_tempale += "<|fast_placeholder|>" * (fast_videos_token_nums[index][fast_index]//self.image_processor.merge_size//self.image_processor.merge_size)
+                            fast_index += 1
                     text[i] = text[i].replace(
                         self.video_token,
                         video_place_holder_tempale,
                         1,
                     )
                     index += 1
+                import pdb
+                pdb.set_trace()
+                #  self.tokenizer.decode(191678)
+                # self.tokenizer.encode("<|fast_video_pad|>")
                 text[i] = text[i].replace("<|placeholder|>", self.video_token)
+                text[i] = text[i].replace("<|fast_placeholder|>", self.fast_video_token)
             # text[0].count(self.video_token)
-        # import pdb
-        # pdb.set_trace()
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
