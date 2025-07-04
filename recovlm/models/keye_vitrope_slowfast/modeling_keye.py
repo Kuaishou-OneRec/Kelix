@@ -2805,8 +2805,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         self.mlp_AR = Projector(config, config.vision_config)
         self.visual = SiglipVisionModel(config.vision_config)
 
-        self.visual_fast = SiglipVisionModel(config.fast_vision_config)
-        self.fast_mlp_AR = Projector(config, config.fast_vision_config)
+        # self.visual_fast = SiglipVisionModel(config.fast_vision_config)
+        # self.fast_mlp_AR = Projector(config, config.fast_vision_config)
 
         self.model = Qwen3Model(config)
         self.vocab_size = config.vocab_size
