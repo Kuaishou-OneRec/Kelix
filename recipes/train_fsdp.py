@@ -1200,7 +1200,7 @@ def train():
               image_cu_seqlens=image_cu_seqlens,
               max_seqlen_q=batch.get("max_seqlen_q", None),
               image_max_seqlen_q=batch.get("image_max_seqlen_q", None),
-              image_max_seqlen_k=batch.get("image_max_seqlen_k", None)
+              image_max_seqlen_k=batch.get("image_max_seqlen_k", None),
               fast_pixel_values_videos=fast_pixel_values_videos,
               fast_video_grid_thw=fast_video_grid_thw, 
             )
