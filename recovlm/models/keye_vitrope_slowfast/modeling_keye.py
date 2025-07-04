@@ -911,7 +911,7 @@ class SiglipEncoderLayer(nn.Module):
             rope_emb=rope_emb,
             # cu_seqlens=cu_seqlens
         )
-        print("cjx debug2, hidden_states {}".format(hidden_states.size()))
+        print("cjx debug2, hidden_states {}, rank{}".format(hidden_states.size(), dist.get_rank()))
         hidden_states = residual + hidden_states
 
         residual = hidden_states

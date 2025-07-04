@@ -45,6 +45,7 @@ FAST_MIN_PIXELS = 4 * 28 * 28
 FAST_MAX_PIXELS = 64 * 28 * 28
 FAST_VIDEO_TOTAL_PIXELS = 24576 * 28 * 28
 
+ONLY_SLOW = 1
 def round_by_factor(number: int, factor: int) -> int:
     """Returns the closest integer to 'number' that is divisible by 'factor'."""
     return round(number / factor) * factor
@@ -375,7 +376,8 @@ def _read_video_decord_slowfast_v2(
     
     max_fast_frame_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) * ele.get("slow_fast_ratio", SLOW_FAST_RATIO) - slow_nframes_number
     fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
-
+    if ONLY_SLOW:
+        fast_nframes_number = 0
     if fast_nframes_number > 0:
         left_frame_list = [x for x in range(total_frames) if x not in slow_idx]
 
@@ -515,7 +517,8 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
 
         max_fast_frame_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) * ele.get("slow_fast_ratio", SLOW_FAST_RATIO) - slow_nframes_number
         fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
-        
+        if ONLY_SLOW:
+            fast_nframes_number = 0
         if fast_nframes_number > 0:
             left_frame_list = [x for x in range(total_frames) if x not in slow_idx]
 
