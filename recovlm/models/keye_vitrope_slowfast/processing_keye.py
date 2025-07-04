@@ -174,6 +174,10 @@ class KeyeProcessor(ProcessorMixin):
                     ###########################
                 else:
                     slow_frames, fast_frames, slow_fast_order = current_video[0], current_video[1], current_video[2]
+                    if kwargs.get("image_video_pad", False):
+                        fast_frames = slow_frames
+                        slow_fast_order += [1]
+
                     all_position.append((None, slow_fast_order))
                     ####### slow part #########
                     if slow_frames is not None:

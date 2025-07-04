@@ -1162,7 +1162,8 @@ class ChatCompletionVisionDataset(IterableDataset):
         text=text,
         images=image_inputs,
         videos=video_inputs if with_vid else None,
-        return_tensors="pt"
+        return_tensors="pt",
+        image_video_pad=True,
     )
     # tensor([[151652, 151655, 151655, 151655, 151655, 151653, 151652, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151653]])
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
