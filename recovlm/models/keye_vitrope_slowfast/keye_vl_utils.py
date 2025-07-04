@@ -36,7 +36,7 @@ FRAME_FACTOR = 2
 FPS = 2.0
 FPS_MIN_FRAMES = 4
 
-SLOW_FAST_RATIO = 3 # 超参数
+SLOW_FAST_RATIO = 2 # 超参数
 FPS_MAX_SLOW_FRAMES = 64 # 注意：这里的含义是Max Slow Frame，不是总的frames数量
 
 
