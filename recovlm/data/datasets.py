@@ -1158,6 +1158,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     self._fill_image_block(pad_image, sample_dict={}, conf=source_conf)
     self._fill_video_block(pad_video, sample_dict={}, conf=source_conf)
     image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video] if with_vid else [pad_image])
+    print("self.processorself.processor", type(self.processor))
     inputs = self.processor(
         text=text,
         images=image_inputs,
@@ -1165,6 +1166,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         return_tensors="pt",
         image_video_pad=True,
     )
+    print("self.processorself.processor__donnnn")
     # tensor([[151652, 151655, 151655, 151655, 151655, 151653, 151652, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151653]])
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
     inputs["position_ids"] = get_rope_index(
