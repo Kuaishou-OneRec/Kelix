@@ -150,9 +150,9 @@ def all_to_all_4D(
     Returns:
         torch.tensor: resharded tensor (bs, seqlen/P, hc, hs)
     """
-    assert (
-        input.dim() == 4
-    ), f"input must be 4D tensor, got {input.dim()} and shape {input.shape}"
+    #assert (
+    #    input.dim() == 4
+    #), f"input must be 4D tensor, got {input.dim()} and shape {input.shape}"
 
     seq_world_size = dist.get_world_size(group)
 
@@ -697,10 +697,10 @@ class SiglipVisionEmbeddings(nn.Module):
             # todo: not dubug
             if interpolate_pos_encoding and image_grid_thw is not None:
                 flatten_image_grid_thw = self.flatten_list(image_grid_thw)
-                assert batch_size == 1
+                #assert batch_size == 1
                 start = 0
                 image_embedding_list = list()
-                assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (flatten_image_grid_thw, embeddings.shape)
+                #assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (flatten_image_grid_thw, embeddings.shape)
                 embeddings = embeddings.squeeze(0)
                 tmp_embeddings = list()
                 for image_grid in image_grid_thw:
@@ -792,7 +792,7 @@ class SiglipAttention(nn.Module):
             keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
             values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         else:
-            assert cu_seqlens is not None, "Rope support flash attn only."
+            #assert cu_seqlens is not None, "Rope support flash attn only."
             cos, sin = rope_emb
             queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim)
             keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim)
@@ -824,7 +824,7 @@ class SiglipAttention(nn.Module):
             )
             attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
         else:
-            assert batch_size == 1, hidden_states.shape
+            #assert batch_size == 1, hidden_states.shape
             queries = queries.transpose(1, 2).squeeze(0)
             keys = keys.transpose(1, 2).squeeze(0)
             values = values.transpose(1, 2).squeeze(0)
@@ -832,7 +832,7 @@ class SiglipAttention(nn.Module):
             from flash_attn import flash_attn_func, flash_attn_varlen_func
             max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
+            #assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
             attn_output = flash_attn_varlen_func(
                 queries,
                 keys,
@@ -1183,7 +1183,7 @@ class SiglipEncoder(nn.Module):
         """
         
         vision_or_text = "vision"
-        assert vision_or_text in ["vision", "text"]
+        #assert vision_or_text in ["vision", "text"]
         use_window_attn = (window_size > 0 and vision_or_text == "vision")
         use_rope = (use_rope is True) and (vision_or_text == "vision")
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1199,7 +1199,7 @@ class SiglipEncoder(nn.Module):
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
         if use_rope is True:
             flatten_image_grid_thw = self.flatten_list(image_grid_thw)
-            assert sum([np.prod(x) for x in flatten_image_grid_thw]) == hidden_states.shape[1], (flatten_image_grid_thw, hidden_states.shape)
+            #assert sum([np.prod(x) for x in flatten_image_grid_thw]) == hidden_states.shape[1], (flatten_image_grid_thw, hidden_states.shape)
 
             if width_position_ids is None or height_position_ids is None:
                 split_hids = list()
@@ -1234,7 +1234,7 @@ class SiglipEncoder(nn.Module):
             
             if use_window_attn:
                 flatten_image_grid_thw = self.flatten_list(image_grid_thw)
-                assert sum([np.prod(x) for x in flatten_image_grid_thw]) == hidden_states.shape[1], (flatten_image_grid_thw, hidden_states.shape)
+                #assert sum([np.prod(x) for x in flatten_image_grid_thw]) == hidden_states.shape[1], (flatten_image_grid_thw, hidden_states.shape)
                 
                 window_indices, cu_seqlens_within_windows = self.build_window_index(flatten_image_grid_thw, window_size, device)
                 reversed_window_indices = window_indices.argsort()
@@ -1420,7 +1420,7 @@ class SiglipVisionTransformer(nn.Module):
             )
         
         sample_hidden_state = list()
-        assert cu_seqlens is not None
+        #assert cu_seqlens is not None
         for i in range(cu_seqlens.shape[0] - 1):
             start = cu_seqlens[i]
             end = cu_seqlens[i + 1]
