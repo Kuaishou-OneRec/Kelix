@@ -4930,7 +4930,8 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       if packable_length == 0: return
 
     if not image_pad and self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
-      inputs = self._cut_sample_cjx(inputs, packable_length)
+        print(packable_length, "packable_lengthpackable_lengthpackable_length")
+        inputs = self._cut_sample_cjx(inputs, packable_length)
 
     packed_input_ids.append(inputs["input_ids"].flatten())
     packed_loss_mask.append(inputs["loss_mask"].flatten())
