@@ -1155,10 +1155,10 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_min_frames": self.video_min_frames,
       "video_max_frames": self.video_max_frames
     }
-    if 'only_slow' in self.kwargs:
-      source_conf["only_slow"] = kwargs["only_slow"]
-    if 'max_slow_frames' in self.kwargs:
-      source_conf["max_slow_frames"] = kwargs["max_slow_frames"]
+    if 'only_slow' in self.kargs:
+      source_conf["only_slow"] = self.kargs["only_slow"]
+    if 'max_slow_frames' in self.kargs:
+      source_conf["max_slow_frames"] = self.kargs["max_slow_frames"]
     self._fill_image_block(pad_image, sample_dict={}, conf=source_conf)
     self._fill_video_block(pad_video, sample_dict={}, conf=source_conf)
     image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video] if with_vid else [pad_image])
@@ -1248,6 +1248,12 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_max_frames": self.video_max_frames
     }
 
+    if 'only_slow' in self.kargs:
+      source_conf["only_slow"] = self.kargs["only_slow"]
+    if 'max_slow_frames' in self.kargs:
+      source_conf["max_slow_frames"] = self.kargs["max_slow_frames"]
+
+      
     if source_name != None and source_name in self.datasource_config:
       for key in source_conf:
         if key in self.datasource_config[source_name]:
