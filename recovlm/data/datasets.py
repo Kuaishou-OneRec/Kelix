@@ -1155,6 +1155,10 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_min_frames": self.video_min_frames,
       "video_max_frames": self.video_max_frames
     }
+    if 'only_slow' in self.kwargs:
+      source_conf["only_slow"] = kwargs["only_slow"]
+    if 'max_slow_frames' in self.kwargs:
+      source_conf["max_slow_frames"] = kwargs["max_slow_frames"]
     self._fill_image_block(pad_image, sample_dict={}, conf=source_conf)
     self._fill_video_block(pad_video, sample_dict={}, conf=source_conf)
     image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video] if with_vid else [pad_image])
@@ -1648,6 +1652,7 @@ class ChatCompletionVisionDataset_moonvit(ChatCompletionVisionDataset):
     self.video_fps = video_fps
     self.video_min_frames = video_min_frames
     self.video_max_frames = video_max_frames
+    
     if video_nframe > 0 and (video_fps > 0 or video_min_frames > 0 or video_max_frames > 0):
       logger.warning(
         f"ChatCompletionVisionDataset(video_fps=...): video_fps, video_min_frames, "\

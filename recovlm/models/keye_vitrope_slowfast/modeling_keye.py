@@ -3716,7 +3716,7 @@ class Projector(nn.Module):
             * self.merge_kernel_size[1]
         )
 
-        self.pre_norm = torch.nn.LayerNorm(self.hidden_size, eps=1e-05)
+        self.pre_norm = torch.nn.LayerNorm(self.vision_config.hidden_size, eps=1e-05)
         self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
         self.act = GELUActivation()
         self.linear_2 = nn.Linear(
@@ -3728,11 +3728,11 @@ class Projector(nn.Module):
         if isinstance(image_features, (list, tuple)):
             processed_features = list()
             for image_feature, image_grid in zip(image_features, image_grid_thw):
-                image_feature = self.pre_norm(image_feature)
                 t, h, w = image_grid
                 from einops import rearrange
-
+                image_feature = self.pre_norm(image_feature)
                 image_feature = rearrange(image_feature, "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2)
+                
                 hidden_states = self.linear_1(image_feature)
                 hidden_states = self.act(hidden_states)
                 hidden_states = self.linear_2(hidden_states)
@@ -3743,7 +3743,7 @@ class Projector(nn.Module):
         dims = image_features.shape[:-1]
         dim = image_features.shape[-1]
         image_features = image_features.view(np.prod(dims), dim)
-        hidden_states = self.pre_norm(image_features.view(-1, self.hidden_size))
+        hidden_states = self.pre_norm(image_features).view(-1, self.hidden_size)
         hidden_states = self.linear_1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
