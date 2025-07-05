@@ -1402,7 +1402,7 @@ def train():
         batch_data_source_tokens = collections.defaultdict(int)
         valid_data_source_tokens = collections.defaultdict(int)
 
-      if (global_step % args.save_checkpoint_per_step == 0 or global_step in [1, 5, 10, 50, 100, 200]) and \
+      if (global_step % args.save_checkpoint_per_step == 0 or global_step in [200]) and \
           global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
         
         torch.cuda.empty_cache()

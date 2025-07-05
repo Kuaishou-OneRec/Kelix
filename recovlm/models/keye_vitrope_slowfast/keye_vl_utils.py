@@ -13,6 +13,7 @@ from io import BytesIO
 
 import requests
 import torch
+import torch.nn as nn
 import torchvision
 from packaging import version
 from PIL import Image
@@ -365,39 +366,71 @@ def _read_video_decord_slowfast_v2(
     if 'video_start' in ele or 'video_end' in ele:
         raise NotImplementedError("not support start_pts and end_pts in decord for now.")
     total_frames, video_fps = len(vr), vr.get_avg_fps()
-    total_frames_time_position = [(1 / video_fps) * (i+1) for i in range(total_frames)]
+    total_frames_time_position = torch.FloatTensor([(1 / video_fps) * (i+1) for i in range(total_frames)])
     logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
 
     slow_nframes_number = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
-    slow_idx = torch.linspace(0, total_frames - 1, slow_nframes_number).round().long().tolist()
-    slow_frames = vr.get_batch(slow_idx).asnumpy()
-    slow_frames = torch.tensor(slow_frames).permute(0, 3, 1, 2)  # Convert to TCHW format
-    slow_time_position = [total_frames_time_position[idx] for idx in slow_idx]
-    
-    max_fast_frame_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) * ele.get("slow_fast_ratio", SLOW_FAST_RATIO) - slow_nframes_number
-    fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
-    if  ele.get("only_slow", ONLY_SLOW):
+
+    if ONLY_SLOW:
         fast_nframes_number = 0
-    if fast_nframes_number > 0:
-        left_frame_list = [x for x in range(total_frames) if x not in slow_idx]
-
-        left_fast_idx = torch.linspace(0, len(left_frame_list) - 1, fast_nframes_number).round().long().tolist()
-        fast_idx = [left_frame_list[left_fast_idx[idx]] for idx in range(fast_nframes_number)]
-
-        fast_frames = vr.get_batch(fast_idx).asnumpy()
-        fast_frames = torch.tensor(fast_frames).permute(0, 3, 1, 2)
-
-        selected_index = slow_idx + fast_idx
-        sort_selected_index = sorted(selected_index)
-        slow_fast_order = [0 if index in slow_idx else 1 for index in sort_selected_index]
-
-        time_position = [total_frames_time_position[idx] for idx in sort_selected_index]
     else:
-        fast_frames = None
-        slow_fast_order = [0] * len(slow_time_position)
-        time_position = [total_frames_time_position[idx] for idx in slow_idx]
+        max_fast_frame_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) * ele.get("slow_fast_ratio", SLOW_FAST_RATIO) - slow_nframes_number
+        fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
 
-    return slow_frames, fast_frames, time_position, slow_fast_order
+    total_nframes_number = slow_nframes_number + fast_nframes_number
+    selected_indices = torch.linspace(0, total_frames - 1, total_nframes_number).round().long()
+    selected_time_position = total_frames_time_position[selected_indices]
+
+    slow_indices = torch.linspace(0, total_nframes_number - 1, slow_nframes_number).round().long()
+    slow_mask = torch.zeros(size=(total_nframes_number, ), dtype=torch.bool)
+    slow_mask[slow_indices] = True
+
+    selected_frames = vr.get_batch(selected_indices.tolist()).asnumpy()
+    selected_frames = torch.tensor(selected_frames).permute(0, 3, 1, 2)
+    slow_frames = selected_frames[slow_mask]
+    fast_frames = selected_frames[~slow_mask] if fast_nframes_number > 0 else None
+
+    slow_fast_order = torch.ones(size=(total_nframes_number, ), dtype=torch.long)
+    slow_fast_order[slow_indices] = 0
+
+    return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order.tolist()
+
+    # slow_nframes_number = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    # slow_idx = torch.linspace(0, total_frames - 1, slow_nframes_number).round().long().tolist()
+    # slow_frames = vr.get_batch(slow_idx).asnumpy()
+    # slow_frames = torch.tensor(slow_frames).permute(0, 3, 1, 2)  # Convert to TCHW format
+    # slow_time_position = [total_frames_time_position[idx] for idx in slow_idx]
+    
+    # max_fast_frame_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) * ele.get("slow_fast_ratio", SLOW_FAST_RATIO) - slow_nframes_number
+    # fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
+    # if  ele.get("only_slow", ONLY_SLOW):
+    #     fast_nframes_number = 0
+    # if fast_nframes_number > 0:
+    #     left_frame_list = [x for x in range(total_frames) if x not in slow_idx]
+
+    #     left_fast_idx = torch.linspace(0, len(left_frame_list) - 1, fast_nframes_number).round().long().tolist()
+    #     fast_idx = [left_frame_list[left_fast_idx[idx]] for idx in range(fast_nframes_number)]
+
+    #     fast_frames = vr.get_batch(fast_idx).asnumpy()
+    #     fast_frames = torch.tensor(fast_frames).permute(0, 3, 1, 2)
+
+    #     selected_index = slow_idx + fast_idx
+    #     sort_selected_index = sorted(selected_index)
+    #     slow_fast_order = [0 if index in slow_idx else 1 for index in sort_selected_index]
+
+    #     time_position = [total_frames_time_position[idx] for idx in sort_selected_index]
+    # else:
+    #     fast_frames = None
+    #     slow_fast_order = [0] * len(slow_time_position)
+    #     time_position = [total_frames_time_position[idx] for idx in slow_idx]
+
+    # return slow_frames, fast_frames, time_position, slow_fast_order
+    
+
+
+
+
+
     
 
 
@@ -472,25 +505,25 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
                 max_pixels=fast_max_pixels,
             )
 
-        slow_frames = transforms.functional.resize(
+        slow_frames = nn.functional.interpolate(
             slow_frames,
             [resized_height, resized_width],
-            interpolation=InterpolationMode.BILINEAR,
+            mode="bicubic",
             antialias=True,
         ).float()
         slow_frames = list(slow_frames.split(1, dim=0))
-
         #### fast part ######
         if fast_frames is not None:
-            fast_frames = transforms.functional.resize(
+            fast_frames = nn.functional.interpolate(
                 fast_frames,
                 [fast_resized_height, fast_resized_width],
-                interpolation=InterpolationMode.BILINEAR,
+                mode="bicubic",
                 antialias=True,
             ).float()
             fast_frames = list(fast_frames.split(1, dim=0))
 
         assert (len(slow_frames) if slow_frames is not None else 0) + (len(fast_frames) if fast_frames is not None else 0) == len(slow_fast_order)
+        # assert (slow_frames.size(0) if slow_frames is not None else 0) + (fast_frames.size(0) if fast_frames is not None else 0) == len(slow_fast_order)
 
         return slow_frames, fast_frames, time_position, slow_fast_order
 
