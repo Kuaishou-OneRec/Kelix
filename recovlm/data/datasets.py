@@ -2353,7 +2353,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
         if conf["video_min_frames"] > 0:
           block["min_frames"] = conf["video_min_frames"]
         if conf["video_max_frames"] > 0:
-          block["max_frames"] = conf["video_max_frames"]
+          block["x"] = conf["video_max_frames"]
     else:
       raise ValueError(f"Unsupport video type. {type(block['video'])=}")
   

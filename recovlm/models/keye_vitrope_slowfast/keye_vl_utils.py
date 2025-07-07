@@ -37,7 +37,8 @@ FRAME_FACTOR = 2
 FPS = 2.0
 FPS_MIN_FRAMES = 4
 
-SLOW_FAST_RATIO = 2 # 超参数
+
+MAX_FRAMES = 80 # 总的frame数量
 FPS_MAX_SLOW_FRAMES = 64 # 注意：这里的含义是Max Slow Frame，不是总的frames数量
 
 
@@ -374,7 +375,7 @@ def _read_video_decord_slowfast_v2(
     if ONLY_SLOW:
         fast_nframes_number = 0
     else:
-        max_fast_frame_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) * ele.get("slow_fast_ratio", SLOW_FAST_RATIO) - slow_nframes_number
+        max_fast_frame_number = ele.get("max_frames", MAX_FRAMES) - slow_nframes_number
         fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
 
     total_nframes_number = slow_nframes_number + fast_nframes_number
@@ -394,37 +395,6 @@ def _read_video_decord_slowfast_v2(
     slow_fast_order[slow_indices] = 0
 
     return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order.tolist()
-
-    # slow_nframes_number = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
-    # slow_idx = torch.linspace(0, total_frames - 1, slow_nframes_number).round().long().tolist()
-    # slow_frames = vr.get_batch(slow_idx).asnumpy()
-    # slow_frames = torch.tensor(slow_frames).permute(0, 3, 1, 2)  # Convert to TCHW format
-    # slow_time_position = [total_frames_time_position[idx] for idx in slow_idx]
-    
-    # max_fast_frame_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) * ele.get("slow_fast_ratio", SLOW_FAST_RATIO) - slow_nframes_number
-    # fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
-    # if  ele.get("only_slow", ONLY_SLOW):
-    #     fast_nframes_number = 0
-    # if fast_nframes_number > 0:
-    #     left_frame_list = [x for x in range(total_frames) if x not in slow_idx]
-
-    #     left_fast_idx = torch.linspace(0, len(left_frame_list) - 1, fast_nframes_number).round().long().tolist()
-    #     fast_idx = [left_frame_list[left_fast_idx[idx]] for idx in range(fast_nframes_number)]
-
-    #     fast_frames = vr.get_batch(fast_idx).asnumpy()
-    #     fast_frames = torch.tensor(fast_frames).permute(0, 3, 1, 2)
-
-    #     selected_index = slow_idx + fast_idx
-    #     sort_selected_index = sorted(selected_index)
-    #     slow_fast_order = [0 if index in slow_idx else 1 for index in sort_selected_index]
-
-    #     time_position = [total_frames_time_position[idx] for idx in sort_selected_index]
-    # else:
-    #     fast_frames = None
-    #     slow_fast_order = [0] * len(slow_time_position)
-    #     time_position = [total_frames_time_position[idx] for idx in slow_idx]
-
-    # return slow_frames, fast_frames, time_position, slow_fast_order
     
 
 
@@ -550,7 +520,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         
         slow_frames = [images[idx][0] for idx in slow_idx]
 
-        max_fast_frame_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) * ele.get("slow_fast_ratio", SLOW_FAST_RATIO) - slow_nframes_number
+        max_fast_frame_number = ele.get("max_frames", MAX_FRAMES) - slow_nframes_number
         fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
         if  ele.get("only_slow", ONLY_SLOW):
             fast_nframes_number = 0
