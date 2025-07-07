@@ -17,7 +17,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0703_patch14
 #OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage2_5e-5/8b/slowfast_0704_sharevit_only_video_256_balance_false_ml15_stage2
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage2_5e-5/8b/slowfast_0704_sharevit_only_video_256_balance_false_512
 
 mkdir -p $OUTPUT_DIR
 
@@ -26,7 +26,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.9.1;model_size:8B:H800:512;Stage2:0.4.8"
+comment="version:0.9.3;model_size:8B:H800:512;Stage2:0.5.0,sharevit,15000seqlen"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
