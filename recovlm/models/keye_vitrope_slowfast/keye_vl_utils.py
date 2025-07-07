@@ -39,7 +39,7 @@ FPS_MIN_FRAMES = 4
 
 
 MAX_FRAMES = 80 # 总的frame数量
-FPS_MAX_SLOW_FRAMES = 64 # 注意：这里的含义是Max Slow Frame，不是总的frames数量
+FPS_MAX_SLOW_FRAMES = 48 # 注意：这里的含义是Max Slow Frame，不是总的frames数量
 
 
 FAST_IMAGE_FACTOR = 28
