@@ -3374,7 +3374,7 @@ class ParquetDataset(IterableDataset):
       samples["json"] = sample_data
 
       self._load_images_to_samples(images, samples, raw_row_data)
-       self._load_videos_to_samples(videos, samples, raw_row_data)
+      self._load_videos_to_samples(videos, samples, raw_row_data)
 
       return samples
     except:
@@ -3408,7 +3408,7 @@ class ParquetDataset(IterableDataset):
               samples[image_name] = image
           except Exception as e:
               raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}, image_b64={image_b64[:100]}")
-              
+
   def _load_videos_to_samples(self, videos, samples, raw_row_data):
       # process images
       if isinstance(videos, str):
