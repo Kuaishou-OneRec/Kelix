@@ -30,7 +30,7 @@ MIN_PIXELS = 4 * 28 * 28
 MAX_PIXELS = 16384 * 28 * 28
 MAX_RATIO = 200
 
-VIDEO_MIN_PIXELS = 128 * 28 * 28
+VIDEO_MIN_PIXELS = 32 * 28 * 28
 VIDEO_MAX_PIXELS = 768 * 28 * 28
 VIDEO_TOTAL_PIXELS = 24576 * 28 * 28
 FRAME_FACTOR = 2
@@ -43,7 +43,7 @@ FPS_MAX_SLOW_FRAMES = 64 # 注意：这里的含义是Max Slow Frame，不是总
 
 FAST_IMAGE_FACTOR = 28
 FAST_MIN_PIXELS = 1 * 28 * 28
-FAST_MAX_PIXELS = 64 * 28 * 28
+FAST_MAX_PIXELS = 32 * 28 * 28
 FAST_VIDEO_TOTAL_PIXELS = 8192 * 28 * 28
 
 ONLY_SLOW = 0
@@ -470,8 +470,9 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         #### slow part ######
         min_pixels = ele.get("min_pixels", VIDEO_MIN_PIXELS)
         total_pixels = ele.get("total_pixels", VIDEO_TOTAL_PIXELS)
-        max_pixels = max(min(VIDEO_MAX_PIXELS, total_pixels / nframes * FRAME_FACTOR), int(min_pixels * 1.05))
-        max_pixels = ele.get("max_pixels", max_pixels)
+        max_pixels_1 = max(min(VIDEO_MAX_PIXELS, total_pixels / nframes * FRAME_FACTOR), int(min_pixels * 1.05))
+        max_pixels_2 = ele.get("max_pixels", max_pixels_1)
+        max_pixels = min(max_pixels_1, max_pixels_2)
         fast_min_pixels = ele.get("fast_min_pixels", FAST_MIN_PIXELS)
         fast_max_pixels = ele.get("fast_max_pixels", FAST_MAX_PIXELS)
         if "resized_height" in ele and "resized_width" in ele:
@@ -489,6 +490,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
                 max_pixels=fast_max_pixels,
             )
         else:
+            min_pixels = min(min_pixels, max_pixels)
             resized_height, resized_width = smart_resize(
                 height,
                 width,
