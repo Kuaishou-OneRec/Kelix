@@ -1253,7 +1253,6 @@ class ChatCompletionVisionDataset(IterableDataset):
     if 'max_slow_frames' in self.kargs:
       source_conf["max_slow_frames"] = self.kargs["max_slow_frames"]
 
-      
     if source_name != None and source_name in self.datasource_config:
       for key in source_conf:
         if key in self.datasource_config[source_name]:
@@ -4777,7 +4776,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       if not inputs:
         raise ValueError("Empty inputs, skip")
 
-      process_max_length = min(int(self.max_length // 1.5), 8000) # if self.use_flops_balance else self.max_length
+      process_max_length = min(int(self.max_length // 1.5), 8000) if self.use_flops_balance else self.max_length
       if inputs["input_ids"].shape[-1] > process_max_length:
         source_conf["max_visual_tokens_per_image"] = (
             source_conf["max_visual_tokens_per_image"] * self.shrink_ratio)

@@ -42,9 +42,9 @@ FPS_MAX_SLOW_FRAMES = 64 # 注意：这里的含义是Max Slow Frame，不是总
 
 
 FAST_IMAGE_FACTOR = 28
-FAST_MIN_PIXELS = 4 * 28 * 28
+FAST_MIN_PIXELS = 1 * 28 * 28
 FAST_MAX_PIXELS = 64 * 28 * 28
-FAST_VIDEO_TOTAL_PIXELS = 24576 * 28 * 28
+FAST_VIDEO_TOTAL_PIXELS = 8192 * 28 * 28
 
 ONLY_SLOW = 0
 def round_by_factor(number: int, factor: int) -> int:
