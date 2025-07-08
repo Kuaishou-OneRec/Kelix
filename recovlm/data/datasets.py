@@ -2353,7 +2353,7 @@ class ChatCompletionVisionDpoDataset(IterableDataset):
         if conf["video_min_frames"] > 0:
           block["min_frames"] = conf["video_min_frames"]
         if conf["video_max_frames"] > 0:
-          block["x"] = conf["video_max_frames"]
+          block["max_frames"] = conf["video_max_frames"]
     else:
       raise ValueError(f"Unsupport video type. {type(block['video'])=}")
   
@@ -2924,6 +2924,8 @@ class NaiveParquetDataset(IterableDataset):
     # process images
     if isinstance(videos, str):
       videos = json.loads(videos)
+      if videos is None:
+        return
     elif isinstance(videos, dict):
       pass
     else:
@@ -3410,18 +3412,20 @@ class ParquetDataset(IterableDataset):
               raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}, image_b64={image_b64[:100]}")
 
   def _load_videos_to_samples(self, videos, samples, raw_row_data):
-      # process images
-      if isinstance(videos, str):
-        videos = json.loads(videos)
-      elif isinstance(videos, dict):
-        pass
-      else:
-        raise NotImplementedError(f"Unsupported video field type, {type(raw_row_data['videos'])=}")
+    # process images
+    if isinstance(videos, str):
+      videos = json.loads(videos)
+      if videos is None:
+        return
+    elif isinstance(videos, dict):
+      pass
+    else:
+      raise NotImplementedError(f"Unsupported video field type, {type(raw_row_data['videos'])=}")
 
-      for video_name in videos:
-        video_path = videos[video_name]
-        # 先检查是否是有效文件路径
-        if isinstance(video_path, str) and os.path.exists(video_path):
+    for video_name in videos:
+      video_path = videos[video_name]
+      # 先检查是否是有效文件路径
+      if isinstance(video_path, str) and os.path.exists(video_path):
           try:
               messages = samples['json']['messages']
               for message in messages:
@@ -3432,8 +3436,8 @@ class ParquetDataset(IterableDataset):
           except Exception as e:
               raise ValueError(f"Failed to substitute video path for {video_path}: {str(e)}")
       # 否则按base64处理
-        else:
-            raise NotImplementedError(f"base64 video is not supported")
+      else:
+          raise NotImplementedError(f"base64 video is not supported")
 
   def read_parquet_runner(self, fn_list, tid):
     rank, world_size, worker, num_workers = pytorch_worker_info()

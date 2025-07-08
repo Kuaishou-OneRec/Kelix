@@ -147,7 +147,7 @@ class KeyeProcessor(ProcessorMixin):
             all_position = []
 
             for current_index, current_video in enumerate(videos):
-                if len(current_video) == 4: # slow_frames, slow_time_position, fast_frames, fast_time_position, slow_fast_order, 这里需要注意的是fast_frames，有可能和slow的长度不等，需要靠slow_fast_order来进行识别
+                if len(current_video) == 4: # slow_frames, fast_frames, time_position, slow_fast_order, 这里需要注意的是fast_frames，有可能和slow的长度不等，需要靠slow_fast_order来进行识别
                     slow_frames, fast_frames, time_position, slow_fast_order = current_video[0], current_video[1], current_video[2], current_video[3]
                     all_position.append((time_position, slow_fast_order))
                     ####### slow part #########
