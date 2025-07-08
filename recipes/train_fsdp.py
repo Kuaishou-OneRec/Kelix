@@ -1216,9 +1216,32 @@ def train():
         local_labels = get_local_sequence(labels, seq_idx=1)
         loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
 
-        print("input_ids_size is {}, labels_size is {}, loss_mask_size is {}".format(input_ids.size(), labels.size(), loss_mask.size()))
+        ################# label check #################
+        # print("input_ids_size is {}, labels_size is {}, loss_mask_size is {}".format(input_ids.size(), labels.size(), loss_mask.size()))
 
-        print("input_ids is {}, labels is {}, loss_mask is {}".format(input_ids, labels, loss_mask))
+        # print("input_ids is {}, labels is {}, loss_mask is {}".format(input_ids, labels, loss_mask))
+
+        # 获取序列长度
+        seq_len = input_ids.size(1)
+
+        # 计算需要检查的位置：所有 loss_mask 为1的位置的前一个位置
+        # 因为我们需要检查 input_ids[i+1] == labels[i]
+        check_mask = torch.zeros_like(loss_mask)
+        check_mask[:, :-1] = loss_mask[:, 1:]  # 将 loss_mask 右移一位
+
+        # 提取需要检查的标签位置
+        masked_labels = labels[check_mask.bool()]
+
+        # 提取对应的 input_ids（右移后应匹配）
+        shifted_input_ids = input_ids[:, 1:][loss_mask[:, 1:].bool()]
+
+        # 断言：在 loss_mask 为1的位置之前，input_ids[i+1] == labels[i]
+        assert torch.equal(masked_labels, shifted_input_ids), \
+            f"标签与输入不匹配：\n" \
+            f"标签位置: {masked_labels}\n" \
+            f"输入位置: {shifted_input_ids}\n" \
+            f"差异位置: {torch.nonzero(masked_labels != shifted_input_ids, as_tuple=True)}"
+        ################# label check #################
         ticker.tick("loss_fn")
 
       # print(f"X=111, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
