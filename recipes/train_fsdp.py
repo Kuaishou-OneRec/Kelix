@@ -1108,7 +1108,7 @@ def train():
       to_cuda(batch)
       ticker.tick("to_cuda(batch)")
       #rint(f"X=1, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
-      print(data_source)
+      print("micro_step{}, data_source{}.".format(micro_step, data_source))
       continue
 
       input_ids = batch["input_ids"]
