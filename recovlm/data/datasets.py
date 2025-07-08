@@ -2924,13 +2924,13 @@ class NaiveParquetDataset(IterableDataset):
     # process images
     if isinstance(videos, str):
       videos = json.loads(videos)
-      if videos is None:
-        return
-    elif isinstance(videos, dict):
+      if not videos: return
+    
+    if isinstance(videos, dict):
       pass
     else:
-      raise NotImplementedError(f"Unsupported video field type, {type(raw_row_data['videos'])=}")
-
+      raise NotImplementedError(f"Unsupported video field type, {type(raw_row_data['videos'])=}, {raw_row_data['videos']}\n{type(videos)}, videos={videos}, samples={samples}")
+    
     for video_name in videos:
       video_path = videos[video_name]
       # 先检查是否是有效文件路径
@@ -3415,13 +3415,13 @@ class ParquetDataset(IterableDataset):
     # process images
     if isinstance(videos, str):
       videos = json.loads(videos)
-      if videos is None:
-        return
-    elif isinstance(videos, dict):
+      if not videos: return
+    
+    if isinstance(videos, dict):
       pass
     else:
-      raise NotImplementedError(f"Unsupported video field type, {type(raw_row_data['videos'])=}")
-
+      raise NotImplementedError(f"Unsupported video field type, {type(raw_row_data['videos'])=}, {raw_row_data['videos']}\n{type(videos)}, videos={videos}, samples={samples}")
+    
     for video_name in videos:
       video_path = videos[video_name]
       # 先检查是否是有效文件路径
