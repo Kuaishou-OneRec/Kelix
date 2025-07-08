@@ -5391,6 +5391,7 @@ class BalanceParquetDataset(IterableDataset):
 
 
             if all_loss_tokens == 0 and inputs["input_ids"].shape[-1] < maxlen:
+              buffer.pop()
               print(f"rank{dist.get_rank()}__balance_task_balance_task_put_bakkk_id={id(inputs)}")
               next_inputs = (inputs, source_name) # 放回去
 

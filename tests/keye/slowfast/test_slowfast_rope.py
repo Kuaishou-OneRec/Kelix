@@ -2,10 +2,14 @@ from PIL import Image, ImageDraw
 from PIL import Image
 import torch
 import sys
+  
 sys.path.append("./recovlm/models")
 from keye_vitrope_slowfast.modeling_keye import KeyeForConditionalGeneration
 from keye_vitrope_slowfast.processing_keye import KeyeProcessor
 from keye_vitrope_slowfast.keye_vl_utils import process_vision_info
+from torch.nn import CrossEntropyLoss
+
+
 
 import contextlib
 
@@ -161,16 +165,21 @@ def make_inputs(a,b):
             # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_5mb.mp4"}, 
             # {"type": "video", 
             # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_2mb.mp4"}, 
-            {"type": "video", 
-            "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_1mb.mp4"}, 
+            # {"type": "video", 
+            # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_1mb.mp4"}, 
             # {"type": "video", 
             # "video": ["/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png", "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"]}, 
             # {"type": "image", 
             # "image": "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"},
-            # {"type": "image", 
-            # "image": "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"}, 
+            {"type": "image", 
+            "image": "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"}, 
             {"type": "text", 
-            "text": "\\What is this?"}]}
+            "text": "\\What is this?"}]},
+        {"role": "assistant", 
+        "content": 
+        [
+            {"type": "text", 
+            "text": "\\This is a movie, "}]},
         ]
 
     # messages = [
@@ -230,6 +239,31 @@ if 1:
 
             messages, inputs = make_inputs(200,200)
             for k in inputs: inputs[k] = inputs[k].cuda()
+            
+
+            tokenized = tokenizer.apply_chat_template(
+                [messages],
+                # chat_template=chat_template,
+                return_assistant_tokens_mask=True,
+                return_dict=True
+            )
+
+            input_ids = inputs["input_ids"]
+            loss_mask = tokenized.pop("assistant_masks")
+            
+
+            input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
+
+            labels = input_ids * loss_mask + -100 * (1 - loss_mask)
+
+            # 提前shift logits & labels
+            # pad = torch.full((labels.shape[0], 1), -100,
+            #     dtype=labels.dtype).to(device=labels.device, non_blocking=True)
+            # labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
+            # local_labels = get_local_sequence(labels, seq_idx=1)
+            # loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
+
+            
 
             generated = model.generate(**inputs, max_new_tokens=32768)
             logits = model(**inputs).logits
