@@ -1155,9 +1155,6 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_min_frames": self.video_min_frames,
       "video_max_frames": self.video_max_frames
     }
-    
-    import pdb
-    pdb.set_trace()
 
     if 'only_slow' in self.kargs:
       source_conf["only_slow"] = self.kargs["only_slow"]

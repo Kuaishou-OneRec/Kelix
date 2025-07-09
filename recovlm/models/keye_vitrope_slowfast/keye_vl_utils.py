@@ -46,7 +46,7 @@ FAST_MIN_PIXELS = 1 * 28 * 28
 FAST_MAX_PIXELS = 32 * 28 * 28
 FAST_VIDEO_TOTAL_PIXELS = 8192 * 28 * 28
 
-ONLY_SLOW = 0
+ONLY_SLOW = 1
 def round_by_factor(number: int, factor: int) -> int:
     """Returns the closest integer to 'number' that is divisible by 'factor'."""
     return round(number / factor) * factor
