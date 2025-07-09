@@ -705,6 +705,12 @@ def train():
 
   set_random_seed(args.seed)
 
+  ####### for pdb debug #######
+  if dist.get_rank()!=0:
+    dist.barrier()
+####### for pdb debug #######
+
+
   state_dict = None
 
   converter = FakeConverter()
