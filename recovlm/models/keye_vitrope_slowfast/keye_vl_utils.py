@@ -46,6 +46,7 @@ FAST_MIN_PIXELS = 1 * 28 * 28
 FAST_MAX_PIXELS = 32 * 28 * 28
 FAST_VIDEO_TOTAL_PIXELS = 8192 * 28 * 28
 
+
 ONLY_SLOW = 0
 def round_by_factor(number: int, factor: int) -> int:
     """Returns the closest integer to 'number' that is divisible by 'factor'."""
@@ -186,7 +187,8 @@ def smart_nframes(
     else:
         fps = ele.get("fps", FPS)
         min_frames = ele.get("min_frames", FPS_MIN_FRAMES)
-        max_frames = ele.get("max_slow_frames", min(FPS_MAX_SLOW_FRAMES, total_frames))
+        max_frames = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)
+        max_frames = min(max_frames, total_frames)
         fps = min(fps, video_fps)
         nframes = total_frames / video_fps * fps
         nframes = int(min(max(nframes, min_frames), max_frames))
@@ -519,7 +521,8 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
                 )
         total_frames = len(images)
         
-        slow_nframes_number = ele.get("max_slow_frames", min(FPS_MAX_SLOW_FRAMES, total_frames))
+        slow_nframes_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)
+        slow_nframes_number = min(total_frames, slow_nframes_number)
         slow_idx = torch.linspace(0, total_frames - 1, slow_nframes_number).round().long().tolist()
         
         slow_frames = [images[idx][0] for idx in slow_idx]
