@@ -95,6 +95,8 @@ def smart_resize(
 
 
 def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACTOR, open_fast_image = False) -> Image.Image:
+    if ele.get("only_slow", ONLY_SLOW):
+        print("cjxdebugonlyslow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
     if "image" in ele:
         image = ele["image"]
     else:
@@ -567,9 +569,6 @@ def process_vision_info(
 ) -> tuple[list[Image.Image] | None, list[torch.Tensor | list[Image.Image]] | None]:
     assert conversations is not None or vision_infos is not None
 
-    if ele.get("only_slow", ONLY_SLOW):
-        print("cjxdebugonlyslow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
-        
     if vision_infos is None:
         vision_infos = extract_vision_info(conversations)
     ## Read images or videos
