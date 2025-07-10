@@ -39,14 +39,14 @@ FPS_MIN_FRAMES = 4
 
 
 MAX_FRAMES = 40 # 总的frame数量
-FPS_MAX_SLOW_FRAMES = 25 # 注意：这里的含义是Max Slow Frame，不是总的frames数量
+FPS_MAX_SLOW_FRAMES = 20 # 注意：这里的含义是Max Slow Frame，不是总的frames数量
 
 FAST_IMAGE_FACTOR = 28
 FAST_MIN_PIXELS = 1 * 28 * 28
 FAST_MAX_PIXELS = 32 * 28 * 28
 FAST_VIDEO_TOTAL_PIXELS = 8192 * 28 * 28
 
-ONLY_SLOW = 1
+ONLY_SLOW = 0
 def round_by_factor(number: int, factor: int) -> int:
     """Returns the closest integer to 'number' that is divisible by 'factor'."""
     return round(number / factor) * factor
@@ -371,7 +371,7 @@ def _read_video_decord_slowfast_v2(
 
     slow_nframes_number = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
 
-    if ONLY_SLOW:
+    if ele.get("only_slow", ONLY_SLOW):
         print("cjx debug only slow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
         fast_nframes_number = 0
     else:
@@ -523,6 +523,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         max_fast_frame_number = ele.get("max_frames", MAX_FRAMES) - slow_nframes_number
         fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
         if  ele.get("only_slow", ONLY_SLOW):
+            print("cjx debug only slow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
             fast_nframes_number = 0
         if fast_nframes_number > 0:
             left_frame_list = [x for x in range(total_frames) if x not in slow_idx]
