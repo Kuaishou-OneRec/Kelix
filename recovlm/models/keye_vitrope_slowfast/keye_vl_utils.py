@@ -437,7 +437,7 @@ def _read_video_decord_slowfast_v3(
         min_pixels=min_pixels,
         max_pixels=max_pixels,
     )
-    avaliable_fast_frame_number = int((resized_height * resized_width) * (ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) / ele.get("slow_token_rate", SLOW_TOKEN_RATE) * (1 - ele.get("slow_token_rate", SLOW_TOKEN_RATE))) / min(FAST_MAX_PIXELS, resized_height * resized_width))
+    avaliable_fast_frame_number = int(((resized_height * resized_width) * (ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) / ele.get("slow_token_rate", SLOW_TOKEN_RATE) * (1 - ele.get("slow_token_rate", SLOW_TOKEN_RATE))) + 0.1) / min(FAST_MAX_PIXELS, resized_height * resized_width))
     ##### frames dynamic token/frames #####
 
     slow_nframes_number = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
