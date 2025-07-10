@@ -464,6 +464,8 @@ def _read_video_decord_slowfast_v3(
     slow_fast_order = torch.ones(size=(total_nframes_number, ), dtype=torch.long)
     slow_fast_order[slow_indices] = 0
 
+    print("cjx vl debug for mp4, avaliable_fast_frame_number {} fast_nframes_number {}, fast_dynamic_rate {}".format(avaliable_fast_frame_number, fast_nframes_number, (avaliable_fast_frame_number)/(fast_nframes_number + 0.001) + 0.1))
+
     return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order.tolist(), (avaliable_fast_frame_number)/(fast_nframes_number + 0.001) + 0.1
 
 
@@ -494,7 +496,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
     if isinstance(ele["video"], str) or isinstance(ele["video"], bytes):
         video_reader_backend = get_video_reader_backend()
         slow_frames, fast_frames, time_position, slow_fast_order, fast_dynamic_rate = VIDEO_READER_BACKENDS[video_reader_backend](ele)
-        
+
         if image_factor is None:
             return None
 
@@ -599,7 +601,9 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             fast_max_pixels = ele.get("fast_max_pixels", FAST_MAX_PIXELS)
             fast_dynamic_rate = avaliable_fast_frame_number/fast_nframes_number
             fast_max_pixels = max(fast_max_pixels, int(fast_max_pixels/28/28 * fast_dynamic_rate) * 28 * 28)
-            print("cjx vl debug, avaliable_fast_frame_number {} fast_nframes_number {}, fast_dynamic_rate {}".format(avaliable_fast_frame_number, fast_nframes_number, fast_dynamic_rate))
+            
+            print("cjx vl debug for image list, avaliable_fast_frame_number {} fast_nframes_number {}, fast_dynamic_rate {}".format(avaliable_fast_frame_number, fast_nframes_number, (avaliable_fast_frame_number)/(fast_nframes_number + 0.001) + 0.1))
+
             fast_resized_height, fast_resized_width = smart_resize(
                 resized_height,
                 resized_width,
