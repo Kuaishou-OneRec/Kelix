@@ -895,6 +895,11 @@ class ChatCompletionVisionDataset(IterableDataset):
     min_visual_tokens_per_frame = conf["min_visual_tokens_per_frame"]
     max_visual_tokens_per_frame = conf["max_visual_tokens_per_frame"]
 
+    if "only_slow" in conf:
+      block["only_slow"] = conf["only_slow"]
+    if "max_slow_frames" in conf:
+      block["max_slow_frames"] = conf["max_slow_frames"]
+
     if isinstance(block["video"], list):
 
         if all([isinstance(image_block, str) for image_block in block["video"]]):
