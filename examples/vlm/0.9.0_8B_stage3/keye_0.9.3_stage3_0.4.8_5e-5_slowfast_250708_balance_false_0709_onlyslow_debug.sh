@@ -58,7 +58,7 @@ MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
 
-mpirun --allow-run-as-root \
+nohup mpirun --allow-run-as-root \
         -hostfile $hostfile \
         -mca btl self,tcp -mca pml ob1 \
         -mca plm_rsh_num_concurrent 600 \
@@ -146,5 +146,5 @@ mpirun --allow-run-as-root \
                 --kml_task_id $KML_TASK_ID \
 		--resume_from /mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage1/8b/0.0.1/step39000 \
                 --resume_from_tag global_step39000 \
-                --heartbeat_monitor"
+                --heartbeat_monitor"  > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 

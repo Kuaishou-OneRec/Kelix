@@ -1251,10 +1251,6 @@ class ChatCompletionVisionDataset(IterableDataset):
     ### debug #####
     print("cjxargs")
     print(self.kargs)
-    if dist.get_rank() != 0:
-      dist.barrier()
-    import pdb
-    pdb.set_trace()
     ### debug #####
     if 'only_slow' in self.kargs:
       source_conf["only_slow"] = self.kargs["only_slow"]
@@ -4822,67 +4818,6 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     self.datasource_config = datasource_config
     self.kargs = self.kwargs = kwargs
     
-  def _process(self, sample, source_name=None):
-    # self._may_filter(sample)
-
-    # get data format
-    if "messages" in sample["json"] or "message" in sample["json"]:
-      data_format = "chatml"
-    elif "segments" in sample["json"]:
-      data_format = "completion"
-    else:
-      raise NotImplementedError(f"Unsupported dataset format.")
-    
-    source_conf = {
-      "min_visual_tokens_per_image": self.min_visual_tokens_per_image,
-      "max_visual_tokens_per_image": self.max_visual_tokens_per_image,
-      "min_visual_tokens_per_frame": self.min_visual_tokens_per_frame,
-      "max_visual_tokens_per_frame": self.max_visual_tokens_per_frame, 
-      "video_nframe": self.video_nframe,
-      "video_fps": self.video_fps,
-      "video_min_frames": self.video_min_frames,
-      "video_max_frames": self.video_max_frames
-    }
-
-    if source_name != None and source_name in self.datasource_config:
-      for key in source_conf:
-        if key in self.datasource_config[source_name]:
-          source_conf[key] = self.datasource_config[source_name][key]
-    
-    for retry in range(self.max_retry):
-      if data_format == "chatml":
-        inputs = self._process_chat(sample, source_conf)
-      elif data_format == "completion":
-        inputs = self._process_completion(sample, source_conf)
-
-      else:
-        raise NotImplementedError(
-            f"Unsupported dataset format `{data_format}`")
-      inputs['epoch_idx'] = sample['epoch_idx']
-      if not inputs:
-        raise ValueError("Empty inputs, skip")
-
-      process_max_length = min(int(self.max_length // 1.5), 8000) if self.use_flops_balance else self.max_length
-      if inputs["input_ids"].shape[-1] > process_max_length:
-        source_conf["max_visual_tokens_per_image"] = (
-            source_conf["max_visual_tokens_per_image"] * self.shrink_ratio)
-        source_conf["max_visual_tokens_per_frame"] = (
-            source_conf["max_visual_tokens_per_frame"] * self.shrink_ratio)
-        continue
-      else:
-        assert inputs["input_ids"].shape[-1] <= process_max_length, "inputs too long"
-        lenf = inputs["input_ids"].shape[-1]
-
-        # print(f"rank{dist.get_rank()}_process{lenf}=============== ")
-        # print_input_info(
-        #   inputs,
-        #   f"rank{dist.get_rank()}_process{lenf}: "
-        # )
-        return inputs
-    else:
-      raise ValueError(
-          f"Unable to generate sample within max_length={process_max_length} after {retry} retrys"
-      )
   def _cut_sample(self, inputs, packable_length):
     return self._cut_sample_cjx(inputs, packable_length)
 
