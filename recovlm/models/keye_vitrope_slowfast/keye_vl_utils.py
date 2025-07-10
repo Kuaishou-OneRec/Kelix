@@ -433,7 +433,7 @@ def _read_video_decord_slowfast_v3(
     resized_height, resized_width = smart_resize(
         height,
         width,
-        factor=image_factor,
+        factor=IMAGE_FACTOR,
         min_pixels=min_pixels,
         max_pixels=max_pixels,
     )
