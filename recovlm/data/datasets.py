@@ -1155,7 +1155,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_min_frames": self.video_min_frames,
       "video_max_frames": self.video_max_frames
     }
-
+    
     if 'only_slow' in self.kargs:
       source_conf["only_slow"] = self.kargs["only_slow"]
     if 'max_slow_frames' in self.kargs:
@@ -1248,7 +1248,13 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_min_frames": self.video_min_frames,
       "video_max_frames": self.video_max_frames
     }
-
+    ### debug #####
+    print(self.kargs)
+    if dist.get_rank() != 0:
+      dist.barrier()
+    import pdb
+    pdb.set_trace()
+    ### debug #####
     if 'only_slow' in self.kargs:
       source_conf["only_slow"] = self.kargs["only_slow"]
     if 'max_slow_frames' in self.kargs:
@@ -2923,6 +2929,7 @@ class NaiveParquetDataset(IterableDataset):
 
   def _load_videos_to_samples(self, videos, samples, raw_row_data):
     # process images
+    _videos = videos
     if isinstance(videos, str):
       videos = json.loads(videos)
       if not videos: return
@@ -2940,11 +2947,18 @@ class NaiveParquetDataset(IterableDataset):
               messages = samples['json']['messages']
               for message in messages:
                 contents = message['content']
+
+                # 我们允许纯文本字段的时候，不使用content list
+                # 不带这个if continue条件，会导致带system prompt的样本报错
+                if isinstance(contents, str): continue 
+
                 for content in contents:
                   if content['type'] == 'video' and content['video'] == video_name:
                     content['video'] = video_path
           except Exception as e:
-              raise ValueError(f"Failed to substitute video path for {video_path}: {str(e)}")
+              import traceback
+              traceback.print_exc()
+              raise ValueError(f"Failed to substitute video path for {video_path}: {str(e)}, \nvideos={videos}, _videos={_videos}, \nmessages={messages}")
       # 否则按base64处理
       else:
           raise NotImplementedError(f"base64 video is not supported")
@@ -3414,6 +3428,7 @@ class ParquetDataset(IterableDataset):
 
   def _load_videos_to_samples(self, videos, samples, raw_row_data):
     # process images
+    _videos = videos
     if isinstance(videos, str):
       videos = json.loads(videos)
       if not videos: return
@@ -3431,11 +3446,18 @@ class ParquetDataset(IterableDataset):
               messages = samples['json']['messages']
               for message in messages:
                 contents = message['content']
+
+                # 我们允许纯文本字段的时候，不使用content list
+                # 不带这个if continue条件，会导致带system prompt的样本报错
+                if isinstance(contents, str): continue 
+
                 for content in contents:
                   if content['type'] == 'video' and content['video'] == video_name:
                     content['video'] = video_path
           except Exception as e:
-              raise ValueError(f"Failed to substitute video path for {video_path}: {str(e)}")
+              import traceback
+              traceback.print_exc()
+              raise ValueError(f"Failed to substitute video path for {video_path}: {str(e)}, \nvideos={videos}, _videos={_videos}, \nmessages={messages}")
       # 否则按base64处理
       else:
           raise NotImplementedError(f"base64 video is not supported")
