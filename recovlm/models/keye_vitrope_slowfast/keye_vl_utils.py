@@ -95,9 +95,6 @@ def smart_resize(
 
 
 def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACTOR, open_fast_image = False) -> Image.Image:
-    print("debugele {}".format(ele))
-    if ele.get("only_slow", ONLY_SLOW):
-        print("cjxdebugonlyslow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
     if "image" in ele:
         image = ele["image"]
     else:
@@ -127,8 +124,12 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
         )
     else:
         width, height = image.size
-        min_pixels = ele.get("min_pixels", MIN_PIXELS)
-        max_pixels = ele.get("max_pixels", MAX_PIXELS)
+        if open_fast_image:
+            min_pixels = ele.get("video_min_pixels", VIDEO_MIN_PIXELS)
+            max_pixels = ele.get("video_max_pixels", VIDEO_MAX_PIXELS)
+        else:
+            min_pixels = ele.get("min_pixels", MIN_PIXELS)
+            max_pixels = ele.get("max_pixels", MAX_PIXELS)
         resized_height, resized_width = smart_resize(
             height,
             width,

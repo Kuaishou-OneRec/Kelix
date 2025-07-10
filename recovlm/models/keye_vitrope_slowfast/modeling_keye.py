@@ -3475,6 +3475,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     attention_mask,
                 )
                 self.rope_deltas = rope_deltas
+                # import pdb
+                # pdb.set_trace()
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
                 batch_size, seq_length, _ = inputs_embeds.shape

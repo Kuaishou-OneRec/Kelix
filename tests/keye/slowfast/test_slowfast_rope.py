@@ -155,8 +155,8 @@ def make_inputs(a,b):
         {"role": "user", 
         "content": 
         [
-            # {"type": "video", 
-            # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_30mb.mp4"}, 
+            {"type": "video", 
+            "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_30mb.mp4"}, 
             # {"type": "video", 
             # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_20mb.mp4"}, 
             # {"type": "video", 
@@ -171,8 +171,8 @@ def make_inputs(a,b):
             # "video": ["/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png", "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"]}, 
             # {"type": "image", 
             # "image": "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"},
-            {"type": "image", 
-            "image": "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"}, 
+            # {"type": "image", 
+            # "image": "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"}, 
             {"type": "text", 
             "text": "\\What is this?"}]},
         {"role": "assistant", 
@@ -247,23 +247,6 @@ if 1:
                 return_assistant_tokens_mask=True,
                 return_dict=True
             )
-
-            input_ids = inputs["input_ids"]
-            loss_mask = tokenized.pop("assistant_masks")
-            
-
-            input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
-
-            labels = input_ids * loss_mask + -100 * (1 - loss_mask)
-
-            # 提前shift logits & labels
-            # pad = torch.full((labels.shape[0], 1), -100,
-            #     dtype=labels.dtype).to(device=labels.device, non_blocking=True)
-            # labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
-            # local_labels = get_local_sequence(labels, seq_idx=1)
-            # loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
-
-            
 
             generated = model.generate(**inputs, max_new_tokens=32768)
             logits = model(**inputs).logits
