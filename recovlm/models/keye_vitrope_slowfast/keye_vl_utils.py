@@ -382,8 +382,8 @@ def _read_video_decord_slowfast_v2(
         fast_nframes_number = 0
     else:
         max_fast_frame_number = ele.get("max_frames", MAX_FRAMES) - slow_nframes_number
-        fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
-
+        fast_nframes_number = min(min(total_frames - slow_nframes_number, max_fast_frame_number), MAX_FRAMES - slow_nframes_number)
+        
     total_nframes_number = slow_nframes_number + fast_nframes_number
     selected_indices = torch.linspace(0, total_frames - 1, total_nframes_number).round().long()
     selected_time_position = total_frames_time_position[selected_indices]
@@ -403,11 +403,6 @@ def _read_video_decord_slowfast_v2(
     return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order.tolist()
     
 
-
-
-
-
-    
 
 
 VIDEO_READER_BACKENDS = {
@@ -528,7 +523,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         slow_frames = [images[idx][0] for idx in slow_idx]
 
         max_fast_frame_number = ele.get("max_frames", MAX_FRAMES) - slow_nframes_number
-        fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
+        fast_nframes_number = min(min(total_frames - slow_nframes_number, max_fast_frame_number), MAX_FRAMES - slow_nframes_number)
         if  ele.get("only_slow", ONLY_SLOW):
             print("cjxdebugonlyslow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
             fast_nframes_number = 0
