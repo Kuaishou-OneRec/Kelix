@@ -464,7 +464,7 @@ def _read_video_decord_slowfast_v3(
     slow_fast_order = torch.ones(size=(total_nframes_number, ), dtype=torch.long)
     slow_fast_order[slow_indices] = 0
 
-    print("cjx vl debug for mp4, avaliable_fast_frame_number {} fast_nframes_number {}, fast_dynamic_rate {}".format(avaliable_fast_frame_number, fast_nframes_number, (avaliable_fast_frame_number)/(fast_nframes_number + 0.001) + 0.1))
+    print("cjx vl debug for mp4, total_frames {}, slow_size {}, fast size {}, avaliable_fast_frame_number {} fast_nframes_number {}, fast_dynamic_rate {}".format(total_frames, resized_height * resized_width, FAST_MAX_PIXELS, avaliable_fast_frame_number, fast_nframes_number, (avaliable_fast_frame_number)/(fast_nframes_number + 0.001) + 0.1))
 
     return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order.tolist(), (avaliable_fast_frame_number)/(fast_nframes_number + 0.001) + 0.1
 
