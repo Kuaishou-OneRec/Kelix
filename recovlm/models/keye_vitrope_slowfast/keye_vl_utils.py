@@ -466,7 +466,7 @@ def _read_video_decord_slowfast_v3(
     slow_fast_order = torch.ones(size=(total_nframes_number, ), dtype=torch.long)
     slow_fast_order[slow_indices] = 0
 
-    return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order.tolist(), (avaliable_fast_frame_number/(fast_nframes_number + 0.1))
+    return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order.tolist(), (avaliable_fast_frame_number)/(fast_nframes_number + 0.001) + 0.1
 
 
 VIDEO_READER_BACKENDS = {
@@ -599,7 +599,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         if fast_nframes_number > 0:
             fast_min_pixels = ele.get("fast_min_pixels", FAST_MIN_PIXELS)
             fast_max_pixels = ele.get("fast_max_pixels", FAST_MAX_PIXELS)
-            fast_dynamic_rate = avaliable_fast_frame_number/(fast_nframes_number + 0.1)
+            fast_dynamic_rate = avaliable_fast_frame_number/fast_nframes_number
             fast_max_pixels = max(fast_max_pixels, int(fast_max_pixels/28/28 * fast_dynamic_rate) * 28 * 28)
             print("cjx vl debug, avaliable_fast_frame_number {} fast_nframes_number {}, fast_dynamic_rate {}".format(avaliable_fast_frame_number, fast_nframes_number, fast_dynamic_rate))
             fast_resized_height, fast_resized_width = smart_resize(
