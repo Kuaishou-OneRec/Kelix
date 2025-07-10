@@ -425,7 +425,7 @@ def _read_video_decord_slowfast_v3(
     ##### frames dynamic token/frames #####
     min_pixels = ele.get("min_pixels", VIDEO_MIN_PIXELS)
     max_pixels = ele.get("max_pixels", VIDEO_MAX_PIXELS)
-    max_pixels = min(max_pixels, int(min_pixels * 1.05))
+    max_pixels = max(max_pixels, int(min_pixels * 1.05))
 
     selected_frames = vr.get_batch([0]).asnumpy()
     selected_frames = torch.tensor(selected_frames).permute(0, 3, 1, 2)
