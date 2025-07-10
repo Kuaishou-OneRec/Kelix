@@ -372,7 +372,7 @@ def _read_video_decord_slowfast_v2(
     slow_nframes_number = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
 
     if ele.get("only_slow", ONLY_SLOW):
-        print("cjx debug only slow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
+        print("cjxdebugonlyslow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
         fast_nframes_number = 0
     else:
         max_fast_frame_number = ele.get("max_frames", MAX_FRAMES) - slow_nframes_number
@@ -523,7 +523,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         max_fast_frame_number = ele.get("max_frames", MAX_FRAMES) - slow_nframes_number
         fast_nframes_number = min(total_frames - slow_nframes_number, max_fast_frame_number)
         if  ele.get("only_slow", ONLY_SLOW):
-            print("cjx debug only slow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
+            print("cjxdebugonlyslow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
             fast_nframes_number = 0
         if fast_nframes_number > 0:
             left_frame_list = [x for x in range(total_frames) if x not in slow_idx]
@@ -567,6 +567,9 @@ def process_vision_info(
 ) -> tuple[list[Image.Image] | None, list[torch.Tensor | list[Image.Image]] | None]:
     assert conversations is not None or vision_infos is not None
 
+    if ele.get("only_slow", ONLY_SLOW):
+        print("cjxdebugonlyslow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
+        
     if vision_infos is None:
         vision_infos = extract_vision_info(conversations)
     ## Read images or videos

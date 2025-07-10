@@ -1248,10 +1248,6 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_min_frames": self.video_min_frames,
       "video_max_frames": self.video_max_frames
     }
-    ### debug #####
-    print("cjxargs")
-    print(self.kargs)
-    ### debug #####
     if 'only_slow' in self.kargs:
       source_conf["only_slow"] = self.kargs["only_slow"]
     if 'max_slow_frames' in self.kargs:
