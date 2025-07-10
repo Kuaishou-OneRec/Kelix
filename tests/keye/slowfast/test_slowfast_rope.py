@@ -155,8 +155,8 @@ def make_inputs(a,b):
         {"role": "user", 
         "content": 
         [
-            {"type": "video", 
-            "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_30mb.mp4"}, 
+            # {"type": "video", 
+            # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_30mb.mp4"}, 
             # {"type": "video", 
             # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_20mb.mp4"}, 
             # {"type": "video", 
@@ -167,8 +167,8 @@ def make_inputs(a,b):
             # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_2mb.mp4"}, 
             # {"type": "video", 
             # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_1mb.mp4"}, 
-            # {"type": "video", 
-            # "video": ["/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png", "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"]}, 
+            {"type": "video", 
+            "video": ["/llm_reco_ssd/caojiangxia/vllm/test_image.png", "/llm_reco_ssd/caojiangxia/vllm/test_image.png"] * 30}, 
             # {"type": "image", 
             # "image": "/llm_reco_ssd/caojiangxia/vllm/test_wangxiangu.png"},
             # {"type": "image", 
