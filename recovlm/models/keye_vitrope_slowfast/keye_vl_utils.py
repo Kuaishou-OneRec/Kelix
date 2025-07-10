@@ -95,6 +95,7 @@ def smart_resize(
 
 
 def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACTOR, open_fast_image = False) -> Image.Image:
+    print("debugele {}".format(ele))
     if ele.get("only_slow", ONLY_SLOW):
         print("cjxdebugonlyslow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
     if "image" in ele:
