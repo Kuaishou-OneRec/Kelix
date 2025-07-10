@@ -1249,6 +1249,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_max_frames": self.video_max_frames
     }
     ### debug #####
+    print("cjxargs")
     print(self.kargs)
     if dist.get_rank() != 0:
       dist.barrier()
