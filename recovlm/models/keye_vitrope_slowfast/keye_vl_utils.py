@@ -343,7 +343,7 @@ def extract_slow_fast_frames(selected_frames):
     slow_fast_order = torch.ones(size=(selected_frames.size(0), ), dtype=torch.long)
     slow_fast_order[slow_indices] = 0
 
-    return slow_frames, fast_frames, slow_fast_order
+    return slow_frames, fast_frames, slow_fast_order.tolist()
 
 def _read_video_decord_slowfast(
         ele: dict,
