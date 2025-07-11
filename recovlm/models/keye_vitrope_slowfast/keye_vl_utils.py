@@ -14,6 +14,7 @@ from io import BytesIO
 import requests
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torchvision
 from packaging import version
 from PIL import Image
@@ -22,32 +23,23 @@ from torchvision.transforms import InterpolationMode
 import traceback
 import io as py_io
 import os.path as osp
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
 IMAGE_FACTOR = 28
 MIN_PIXELS = 4 * 28 * 28
-MAX_PIXELS = 16384 * 28 * 28
+MAX_PIXELS = 20480 * 28 * 28
 MAX_RATIO = 200
 
-VIDEO_MIN_PIXELS = 1 * 28 * 28
+VIDEO_MIN_PIXELS = 32 * 28 * 28
 VIDEO_MAX_PIXELS = 768 * 28 * 28
-VIDEO_TOTAL_PIXELS = 24576 * 28 * 28
-FRAME_FACTOR = 2
+VIDEO_TOTAL_PIXELS = 65536 * 28 * 28
 FPS = 2.0
 FPS_MIN_FRAMES = 4
 
+FAST_TOKEN_RATIO = 0.2
 
-FPS_MAX_SLOW_FRAMES = 20 # 注意：这里的含义是Max Slow Frame，不是总的frames数量
-SLOW_TOKEN_RATE = 0.8
-
-FAST_IMAGE_FACTOR = 28
-FAST_MIN_PIXELS = 1 * 28 * 28
-FAST_MAX_PIXELS = 32 * 28 * 28
-FAST_VIDEO_TOTAL_PIXELS = 8192 * 28 * 28
-
-
-ONLY_SLOW = 0
 def round_by_factor(number: int, factor: int) -> int:
     """Returns the closest integer to 'number' that is divisible by 'factor'."""
     return round(number / factor) * factor
@@ -172,13 +164,11 @@ def smart_nframes(
     if "nframes" in ele:
         nframes = ele["nframes"]
     else:
-        fps = ele.get("fps", FPS)
-        min_frames = ele.get("min_frames", FPS_MIN_FRAMES)
-        max_frames = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)
-        max_frames = min(max_frames, total_frames)
-        fps = min(fps, video_fps)
-        nframes = total_frames / video_fps * fps
-        nframes = int(min(max(nframes, min_frames), max_frames))
+        fps = ele.get("fps", FPS) # 应该是走的默认FPS，按照每秒抽两帧来算
+        fps = min(fps, video_fps) # 注意，这里的video_fps是真实的后验FPS
+        max_frames = int(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS) / VIDEO_MIN_PIXELS) # 计算我们在fast设置下最多能吃多少帧，这个是用来兜底的
+        fps_nframes = int(total_frames / video_fps * fps) # 换算为秒数，之后计算希望抽多少帧
+        nframes = min(fps_nframes, max_frames)
     return nframes
 
 
@@ -275,7 +265,84 @@ def _read_video_decord(
     return video, fps_ratio
 
 
+def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.99):
+    # 确保输入是3D张量 [C, H, W]
+    assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
+    
+    # 获取图像尺寸
+    C, H, W = frame1.shape
+    
+    # 计算patch网格
+    patch_rows = H // patch_size
+    patch_cols = W // patch_size
+    total_patches = patch_rows * patch_cols
+    
+    # 将帧分割为patch
+    def frame_to_patches(frame):
+        # [C, H, W] -> [patch_rows, patch_cols, C, patch_size, patch_size]
+        patches = frame.unfold(1, patch_size, patch_size).unfold(2, patch_size, patch_size)
+        patches = patches.contiguous().view(patch_rows, patch_cols, C, patch_size, patch_size)
+        return patches
+    
+    patches1 = frame_to_patches(frame1)
+    patches2 = frame_to_patches(frame2)
+    
+    # 计算每个patch的相似度
+    unchanged_patches = 0
+    
+    for r in range(patch_rows):
+        for c in range(patch_cols):
+            patch1 = patches1[r, c]
+            patch2 = patches2[r, c]
+            
+            # 计算像素差异
+            diff = torch.abs(patch1 - patch2)
+            
+            # 计算差异小于阈值的像素比例
+            similar_pixels = torch.sum(diff < pixel_threshold).item()
+            total_pixels = patch_size * patch_size * C
+            patch_similarity = similar_pixels / total_pixels
+            
+            # 判断patch是否未变化
+            if patch_similarity > patch_sim:
+                unchanged_patches += 1
+    
+    # 计算全局相似度（未变化patch比例）
+    global_similarity = unchanged_patches / total_patches
+    return global_similarity
 
+
+def extract_key_frame(frames, patch_size=28, threshold=0.9):
+    assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
+    
+    key_frame_indices = [0]
+    last_key_frame = frames[0]
+    
+    for i in range(1, frames.size(0)):
+        current_frame = frames[i]
+        
+        global_sim = cal_sim(last_key_frame, current_frame)
+        
+        if global_sim < threshold:
+            key_frame_indices.append(i)
+            last_key_frame = current_frame  # 更新关键帧
+            
+    return key_frame_indices
+
+
+def extract_slow_fast_frames(selected_frames):
+    slow_indices = extract_key_frame(selected_frames)
+
+    slow_mask = torch.zeros(size=(selected_frames.size(0), ), dtype=torch.bool)
+    slow_mask[slow_indices] = True
+
+    slow_frames = selected_frames[slow_mask]
+    fast_frames = selected_frames[~slow_mask]
+
+    slow_fast_order = torch.ones(size=(selected_frames.size(0), ), dtype=torch.long)
+    slow_fast_order[slow_indices] = 0
+
+    return slow_frames, fast_frames, slow_fast_order
 
 def _read_video_decord_slowfast(
         ele: dict,
@@ -304,175 +371,45 @@ def _read_video_decord_slowfast(
     if 'video_start' in ele or 'video_end' in ele:
         raise NotImplementedError("not support start_pts and end_pts in decord for now.")
     total_frames, video_fps = len(vr), vr.get_avg_fps()
-    logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-
-    nframes, slow_fps_ratio = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps) # 这个地方已经是按照了
-    slow_idx = torch.linspace(0, total_frames - 1, nframes).round().long().tolist()
-    slow_frames = vr.get_batch(slow_idx).asnumpy()
-    slow_frames = torch.tensor(slow_frames).permute(0, 3, 1, 2)  # Convert to TCHW format
-    
-    # TODO(caojiangxia): 这里可以稍微加一些随机性，见过更多样的slowfast比例
-    if total_frames >= nframes * SLOWFAST_MAX_RATIO:
-        fast_nframes = nframes * SLOWFAST_MAX_RATIO
-        slowfast_rate = SLOWFAST_MAX_RATIO
-    else:
-        fast_nframes = total_frames
-        slowfast_rate = total_frames / nframes
-
-    fast_idx = torch.linspace(0, total_frames - 1, fast_nframes).round().long().tolist()
-    filter_fast_idx = [x for x in fast_idx if x not in slow_idx]
-    fast_frames = vr.get_batch(filter_fast_idx).asnumpy()
-    fast_frames = torch.tensor(fast_frames).permute(0, 3, 1, 2)
-    fast_fps_ratio = slow_fps_ratio * slowfast_rate
-
-    mix_index = slow_idx + filter_fast_idx
-    sort_mix_index = sorted(mix_index)
-    slow_fast_order = [0 if index in slow_idx else 1 for index in sort_mix_index]
-    return slow_frames, fast_frames, slow_fast_order, slow_fps_ratio, fast_fps_ratio
-
-
-
-def _read_video_decord_slowfast_v2(
-        ele: dict,
-) -> torch.Tensor:
-    """read video using decord.VideoReader
-
-    Args:
-        ele (dict): a dict contains the configuration of video.
-        support keys:
-            - video: the path of video. support "file://", "http://", "https://" and local path.
-            - video_start: the start time of video.
-            - video_end: the end time of video.
-    Returns:
-        torch.Tensor: the video tensor with shape (T, C, H, W).
-    """
-    import decord
-    st = time.time()
-    if isinstance(ele["video"], bytes):
-        video_path = ""
-        fp = py_io.BytesIO(ele["video"])
-        vr = decord.VideoReader(fp)
-    else:
-        video_path = ele["video"]
-        vr = decord.VideoReader(video_path)
-    # TODO: support start_pts and end_pts
-    if 'video_start' in ele or 'video_end' in ele:
-        raise NotImplementedError("not support start_pts and end_pts in decord for now.")
-    total_frames, video_fps = len(vr), vr.get_avg_fps()
     total_frames_time_position = torch.FloatTensor([(1 / video_fps) * (i+1) for i in range(total_frames)])
     logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-
-    slow_nframes_number = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
-
-    if ele.get("only_slow", ONLY_SLOW):
-        print("cjxdebugonlyslow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
-        fast_nframes_number = 0
-    else:
-        max_fast_frame_number = ele.get("max_frames", MAX_FRAMES) - slow_nframes_number
-        fast_nframes_number = min(min(total_frames - slow_nframes_number, max_fast_frame_number), MAX_FRAMES - slow_nframes_number)
-        
-    total_nframes_number = slow_nframes_number + fast_nframes_number
+    
+    total_nframes_number = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    
     selected_indices = torch.linspace(0, total_frames - 1, total_nframes_number).round().long()
-    selected_time_position = total_frames_time_position[selected_indices]
-
-    slow_indices = torch.linspace(0, total_nframes_number - 1, slow_nframes_number).round().long()
-    slow_mask = torch.zeros(size=(total_nframes_number, ), dtype=torch.bool)
-    slow_mask[slow_indices] = True
-
     selected_frames = vr.get_batch(selected_indices.tolist()).asnumpy()
     selected_frames = torch.tensor(selected_frames).permute(0, 3, 1, 2)
-    slow_frames = selected_frames[slow_mask]
-    fast_frames = selected_frames[~slow_mask] if fast_nframes_number > 0 else None
+    selected_time_position = total_frames_time_position[selected_indices]
 
-    slow_fast_order = torch.ones(size=(total_nframes_number, ), dtype=torch.long)
-    slow_fast_order[slow_indices] = 0
-
-    return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order.tolist()
-    
-
-
-def _read_video_decord_slowfast_v3(
-        ele: dict,
-) -> torch.Tensor:
-    """read video using decord.VideoReader
-
-    Args:
-        ele (dict): a dict contains the configuration of video.
-        support keys:
-            - video: the path of video. support "file://", "http://", "https://" and local path.
-            - video_start: the start time of video.
-            - video_end: the end time of video.
-    Returns:
-        torch.Tensor: the video tensor with shape (T, C, H, W).
-    """
-    import decord
-    st = time.time()
-    if isinstance(ele["video"], bytes):
-        video_path = ""
-        fp = py_io.BytesIO(ele["video"])
-        vr = decord.VideoReader(fp)
-    else:
-        video_path = ele["video"]
-        vr = decord.VideoReader(video_path)
-    # TODO: support start_pts and end_pts
-    if 'video_start' in ele or 'video_end' in ele:
-        raise NotImplementedError("not support start_pts and end_pts in decord for now.")
-    total_frames, video_fps = len(vr), vr.get_avg_fps()
-    total_frames_time_position = torch.FloatTensor([(1 / video_fps) * (i+1) for i in range(total_frames)])
-    logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-    
-
-    ##### frames dynamic token/frames #####
-    min_pixels = ele.get("min_pixels", VIDEO_MIN_PIXELS)
-    max_pixels = ele.get("max_pixels", VIDEO_MAX_PIXELS)
-    max_pixels = max(max_pixels, int(min_pixels * 1.05))
-
-    selected_frames = vr.get_batch([0]).asnumpy()
-    selected_frames = torch.tensor(selected_frames).permute(0, 3, 1, 2)
+    ##### extract key frames start ######
+    # Step#1，对选中的图，假设都为slow，先resize到28*28的倍数
     _, _, height, width = selected_frames.shape
     resized_height, resized_width = smart_resize(
         height,
         width,
         factor=IMAGE_FACTOR,
-        min_pixels=min_pixels,
-        max_pixels=max_pixels,
+        min_pixels=VIDEO_MIN_PIXELS,
+        max_pixels=VIDEO_MAX_PIXELS,
     )
-    avaliable_fast_frame_number = int(((resized_height * resized_width) * (ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) / ele.get("slow_token_rate", SLOW_TOKEN_RATE) * (1 - ele.get("slow_token_rate", SLOW_TOKEN_RATE))) + 0.1) / min(FAST_MAX_PIXELS, resized_height * resized_width))
-    ##### frames dynamic token/frames #####
 
-    slow_nframes_number = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    selected_frames = nn.functional.interpolate(
+        selected_frames,
+        [resized_height, resized_width],
+        mode="bicubic",
+        antialias=True,
+    ).float()
+    # Step#2 对选中的图，筛选出其中关键帧部分，其余为slow
+    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames)
+    print("cjx vl debug for mp4, total_frames {}, total_nframes_number {}, slow frames {}, fast frames {}".format(total_frames, total_nframes_number, slow_frames.size(0), fast_frames.size(0)))
+    ##### extract key frames start ######
 
-    if ele.get("only_slow", ONLY_SLOW):
-        print("cjxdebugonlyslow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
-        fast_nframes_number = 0
-    else:
-        fast_nframes_number = min(total_frames - slow_nframes_number, avaliable_fast_frame_number)
-        
-    total_nframes_number = slow_nframes_number + fast_nframes_number
-    selected_indices = torch.linspace(0, total_frames - 1, total_nframes_number).round().long()
-    selected_time_position = total_frames_time_position[selected_indices]
-
-    slow_indices = torch.linspace(0, total_nframes_number - 1, slow_nframes_number).round().long()
-    slow_mask = torch.zeros(size=(total_nframes_number, ), dtype=torch.bool)
-    slow_mask[slow_indices] = True
-
-    selected_frames = vr.get_batch(selected_indices.tolist()).asnumpy()
-    selected_frames = torch.tensor(selected_frames).permute(0, 3, 1, 2)
-    slow_frames = selected_frames[slow_mask]
-    fast_frames = selected_frames[~slow_mask] if fast_nframes_number > 0 else None
-
-    slow_fast_order = torch.ones(size=(total_nframes_number, ), dtype=torch.long)
-    slow_fast_order[slow_indices] = 0
-
-    print("cjx vl debug for mp4, total_frames {}, slow_size {}, fast size {}, avaliable_fast_frame_number {} fast_nframes_number {}, fast_dynamic_rate {}".format(total_frames, resized_height * resized_width, FAST_MAX_PIXELS, avaliable_fast_frame_number, fast_nframes_number, (avaliable_fast_frame_number)/(fast_nframes_number + 0.001) + 0.1))
-
-    return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order.tolist(), (avaliable_fast_frame_number)/(fast_nframes_number + 0.001) + 0.1
+    return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order.tolist()
 
 
 VIDEO_READER_BACKENDS = {
     "decord": _read_video_decord,
     "torchvision": _read_video_torchvision,
-    "slowfast_decord": _read_video_decord_slowfast_v3,
+    "slowfast_decord": _read_video_decord_slowfast,
 }
 
 FORCE_QWENVL_VIDEO_READER = os.getenv("FORCE_QWENVL_VIDEO_READER", None)
@@ -493,119 +430,10 @@ def get_video_reader_backend() -> str:
 
 
 
-
-
-def extrace_key_frame():
-    titles = []
-
-    calculator = PatchSimilarityCalculator(
-        patch_size=28,
-        similarity_threshold=0.99,
-        resize_method='nearest'
-    )
-    ref_frame = frames[0]["frame_data"]
-    ref_index = frames[0]["frame_index"]
-    is_slow = True
-    slow_index = []
-
-    for i, frame in enumerate(frames):
-        f2 = frame["frame_data"]
-        # sim = FrameSimilarity.pixel_difference_similarity(f1, f2, 'mae')
-        # sim = FrameSimilarity.structural_similarity(f1, f2)
-        sim = calculator.calculate_patch_based_similarity(ref_frame, f2)
-        if sim < 0.9:
-            ref_frame = f2
-            ref_index = frame["frame_index"]
-            is_slow = True
-        else:
-            is_slow = False
-        if frame["frame_index"] == frames[0]["frame_index"]:
-            is_slow = True
-        # sim = FrameSimilarity.feature_matching_similarity(f1, f2, 'orb')
-        title = f"Sim: {sim:.2f}, frame: {frame['frame_index']}"
-        if is_slow: 
-            slow_index.append(i)
-        titles.append(title)
-
-    # show_images_grid([frame["frame_data"] for frame in frames[1:50]], titles=titles, max_cols=10, dpi=150, slow_frames=slow_index)
-
-
-
-
-
 def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = True) -> torch.Tensor | list[Image.Image]:
     if isinstance(ele["video"], str) or isinstance(ele["video"], bytes):
         video_reader_backend = get_video_reader_backend()
-        slow_frames, fast_frames, time_position, slow_fast_order, fast_dynamic_rate = VIDEO_READER_BACKENDS[video_reader_backend](ele)
-
-        if image_factor is None:
-            return None
-
-        nframes, _, height, width = slow_frames.shape
-
-        #### slow part ######
-        min_pixels = ele.get("min_pixels", VIDEO_MIN_PIXELS)
-        total_pixels = ele.get("total_pixels", VIDEO_TOTAL_PIXELS)
-        max_pixels_1 = max(min(VIDEO_MAX_PIXELS, total_pixels / nframes * FRAME_FACTOR), int(min_pixels * 1.05))
-        max_pixels_2 = ele.get("max_pixels", max_pixels_1)
-        max_pixels = min(max_pixels_1, max_pixels_2)
-        fast_min_pixels = ele.get("fast_min_pixels", FAST_MIN_PIXELS)
-        fast_max_pixels = ele.get("fast_max_pixels", FAST_MAX_PIXELS)
-        fast_max_pixels = max(fast_max_pixels, int(fast_max_pixels/28/28 * fast_dynamic_rate) * 28 * 28)
-        fast_max_pixels = min(fast_max_pixels, ele.get("max_pixels", VIDEO_MAX_PIXELS))
-        if "resized_height" in ele and "resized_width" in ele:
-            resized_height, resized_width = smart_resize(
-                ele["resized_height"],
-                ele["resized_width"],
-                factor=image_factor,
-            )
-
-            fast_resized_height, fast_resized_width = smart_resize(
-                height,
-                width,
-                factor=FAST_IMAGE_FACTOR,
-                min_pixels=fast_min_pixels,
-                max_pixels=fast_max_pixels,
-            )
-        else:
-            min_pixels = min(min_pixels, max_pixels)
-            resized_height, resized_width = smart_resize(
-                height,
-                width,
-                factor=image_factor,
-                min_pixels=min_pixels,
-                max_pixels=max_pixels,
-            )
-
-            fast_resized_height, fast_resized_width = smart_resize(
-                height,
-                width,
-                factor=FAST_IMAGE_FACTOR,
-                min_pixels=fast_min_pixels,
-                max_pixels=fast_max_pixels,
-            )
-
-        slow_frames = nn.functional.interpolate(
-            slow_frames,
-            [resized_height, resized_width],
-            mode="bicubic",
-            antialias=True,
-        ).float()
-        slow_frames = list(slow_frames.split(1, dim=0))
-        #### fast part ######
-        if fast_frames is not None:
-            fast_frames = nn.functional.interpolate(
-                fast_frames,
-                [fast_resized_height, fast_resized_width],
-                mode="bicubic",
-                antialias=True,
-            ).float()
-            fast_frames = list(fast_frames.split(1, dim=0))
-
-        assert (len(slow_frames) if slow_frames is not None else 0) + (len(fast_frames) if fast_frames is not None else 0) == len(slow_fast_order)
-        # assert (slow_frames.size(0) if slow_frames is not None else 0) + (fast_frames.size(0) if fast_frames is not None else 0) == len(slow_fast_order)
-
-        return slow_frames, fast_frames, time_position, slow_fast_order
+        slow_frames, fast_frames, time_position, slow_fast_order = VIDEO_READER_BACKENDS[video_reader_backend](ele)
 
     else:
         assert isinstance(ele["video"], (list, tuple))
@@ -622,54 +450,93 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
                     fetch_image({"image": video_element, **process_info}, size_factor=image_factor, open_fast_image = True)
                 )
         total_frames = len(images)
-        ##### frames dynamic token/frames #####
-        resized_height, resized_width = images[0].size
-        avaliable_fast_frame_number = int((resized_height * resized_width) * (ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES) / ele.get("slow_token_rate", SLOW_TOKEN_RATE) * (1 - ele.get("slow_token_rate", SLOW_TOKEN_RATE))) / min(FAST_MAX_PIXELS, resized_height * resized_width))
-        ##### frames dynamic token/frames #####
-
-        slow_nframes_number = ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)
-        slow_nframes_number = min(total_frames, slow_nframes_number)
-        slow_idx = torch.linspace(0, total_frames - 1, slow_nframes_number).round().long().tolist()
         
-        slow_frames = [images[idx] for idx in slow_idx]
+        tensor_images = [torch.from_numpy(np.array(pil_image)).permute(2, 0, 1).unsqueeze(0) for pil_image in images]
+        tensor_images = torch.concat(tensor_images, dim = 0)
 
-        fast_nframes_number = min(total_frames - slow_nframes_number, avaliable_fast_frame_number)
-        
-        if  ele.get("only_slow", ONLY_SLOW):
-            print("cjxdebugonlyslow True, max_slow_frames is {}".format(ele.get("max_slow_frames", FPS_MAX_SLOW_FRAMES)))
-            fast_nframes_number = 0
-        if fast_nframes_number > 0:
-            fast_min_pixels = ele.get("fast_min_pixels", FAST_MIN_PIXELS)
-            fast_max_pixels = ele.get("fast_max_pixels", FAST_MAX_PIXELS)
-            fast_dynamic_rate = avaliable_fast_frame_number/fast_nframes_number
-            fast_max_pixels = max(fast_max_pixels, int(fast_max_pixels/28/28 * fast_dynamic_rate) * 28 * 28)
-            fast_max_pixels = min(fast_max_pixels, ele.get("max_pixels", VIDEO_MAX_PIXELS))
-            print("cjx vl debug for image list, avaliable_fast_frame_number {} fast_nframes_number {}, fast_dynamic_rate {}".format(avaliable_fast_frame_number, fast_nframes_number, (avaliable_fast_frame_number)/(fast_nframes_number + 0.001) + 0.1))
-
-            fast_resized_height, fast_resized_width = smart_resize(
-                resized_height,
-                resized_width,
-                factor=FAST_IMAGE_FACTOR,
-                min_pixels=fast_min_pixels,
-                max_pixels=fast_max_pixels,
-            )
-
-            left_frame_list = [x for x in range(total_frames) if x not in slow_idx]
-
-            left_fast_idx = torch.linspace(0, len(left_frame_list) - 1, fast_nframes_number).round().long().tolist()
-            fast_idx = [left_frame_list[left_fast_idx[idx]] for idx in range(fast_nframes_number)]
-
-            fast_frames = [images[idx].resize((fast_resized_width, fast_resized_height)) for idx in fast_idx]
-            selected_index = slow_idx + fast_idx
-            sort_selected_index = sorted(selected_index)
-            slow_fast_order = [0 if index in slow_idx else 1 for index in sort_selected_index]
-        else:
+        slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(tensor_images)
+        time_position = None
+    
+    ### 计算slow fast的token量 begin ###
+    slow_number = slow_frames.size(0)
+    if fast_frames.size(0) == 0:
             fast_frames = None
-            fast_time_position = []
-            slow_fast_order = [0] * len(slow_frames)
+    fast_number = fast_frames.size(0) if fast_frames is not None else 0
 
+    left = VIDEO_MIN_PIXELS / 28 / 28
+    right = VIDEO_MAX_PIXELS / 28 / 28
+    while left < right:
+        mid = int(left+right)//2
+        if slow_number * mid * 28 * 28 + fast_number * int(0.2 * mid) * 28 * 28 > ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS):
+            right = mid
+        else:
+            left = mid + 1
+    slow_max_pixels = left * 28 * 28
+    fast_max_pixels = int(0.2*left) * 28 * 28
+    min_pixels = min(MIN_PIXELS, fast_max_pixels)
+    ### 计算slow fast的token量 end ###
+
+    nframes, _, height, width = slow_frames.shape
+
+    #### slow part ######
+    resized_height, resized_width = smart_resize(
+        height,
+        width,
+        factor=IMAGE_FACTOR,
+        min_pixels=min_pixels,
+        max_pixels=slow_max_pixels,
+    )
+
+    fast_resized_height, fast_resized_width = smart_resize(
+        height,
+        width,
+        factor=IMAGE_FACTOR,
+        min_pixels=min_pixels,
+        max_pixels=fast_max_pixels,
+    )
+
+    if time_position is None: # image list
+        slow_frames = []
+        fast_frames = []
+        for idx, value in enumerate(slow_fast_order):
+            if value == 0:
+                slow_frames.append(images[idx].resize((resized_height, resized_width)))
+            else:
+                fast_frames.append(images[idx].resize((fast_resized_width, fast_resized_height)))
+        
+        if len(fast_frames) == 0:
+            fast_frames = None
+        
+        print("cjx vl debug for image list, slow frames {}, fast frames {}, slow token is {}, fast token is {}".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28))
+        assert (len(slow_frames) if slow_frames is not None else 0) + (len(fast_frames) if fast_frames is not None else 0) == len(slow_fast_order)
+        import pdb
+        pdb.set_trace()
         return slow_frames, fast_frames, slow_fast_order
 
+    else: # mp4
+        slow_frames = nn.functional.interpolate(
+            slow_frames,
+            [resized_height, resized_width],
+            mode="bicubic",
+            antialias=True,
+        ).float()
+        slow_frames = list(slow_frames.split(1, dim=0))
+        #### fast part ######
+        if fast_frames is not None:
+            fast_frames = nn.functional.interpolate(
+                fast_frames,
+                [fast_resized_height, fast_resized_width],
+                mode="bicubic",
+                antialias=True,
+            ).float()
+            fast_frames = list(fast_frames.split(1, dim=0))
+        
+        print("cjx vl debug for mp4, slow frames {}, fast frames {}, slow token is {}, fast token is {}".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28))
+        assert (len(slow_frames) if slow_frames is not None else 0) + (len(fast_frames) if fast_frames is not None else 0) == len(slow_fast_order)
+        import pdb
+        pdb.set_trace()
+        return slow_frames, fast_frames, time_position, slow_fast_order
+    
 
 def extract_vision_info(conversations: list[dict] | list[list[dict]]) -> list[dict]:
     vision_infos = []

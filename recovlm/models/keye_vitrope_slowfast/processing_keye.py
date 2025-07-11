@@ -182,7 +182,10 @@ class KeyeProcessor(ProcessorMixin):
                     ####### slow part #########
                     if slow_frames is not None:
                         for each_image in slow_frames:
-                            slow_videos_inputs = self.image_processor(images=None, videos=[each_image], **output_kwargs["images_kwargs"])
+                            if kwargs.get("image_video_pad", False):
+                                slow_videos_inputs = self.image_processor.preprocess(images=None, videos=[each_image], size = {"height": 28, "width": 28}, **output_kwargs["images_kwargs"])
+                            else:
+                                slow_videos_inputs = self.image_processor(images=None, videos=[each_image], **output_kwargs["images_kwargs"])
                             slow_video_grid_thw = slow_videos_inputs["video_grid_thw"]
 
                             all_slow_videos.append(slow_videos_inputs)
