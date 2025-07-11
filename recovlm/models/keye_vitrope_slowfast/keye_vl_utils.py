@@ -402,7 +402,7 @@ def _read_video_decord_slowfast(
         antialias=True,
     ).float()
     # Step#2 对选中的图，筛选出其中关键帧部分，其余为slow
-    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames)
+    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(copy.deepcopy(selected_frames))
     print("cjx vl debug for mp4, total_frames {}, total_nframes_number {}, slow frames {}, fast frames {}".format(total_frames, total_nframes_number, slow_frames.size(0), fast_frames.size(0)))
     ##### extract key frames start ######
 
