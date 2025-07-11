@@ -492,77 +492,44 @@ def get_video_reader_backend() -> str:
     return "slowfast_decord"
 
 
-def extract_key_frames(image_list, threshold=0.9, method='phash'):
-    """
-    从图像序列中提取关键帧
-    
-    参数:
-    image_list: PIL图像列表
-    threshold: 相似度阈值 (低于此值则视为关键帧)
-    method: 相似度计算方法 ('ssim' 或 'phash')
-    visualize: 是否生成可视化结果
-    
-    返回:
-    key_frame_indices: 关键帧索引列表
-    key_frames: 关键帧图像列表
-    """
-    if not image_list:
-        print("错误: 图像列表为空")
-        return [], []
-    
-    # 初始化关键帧列表
-    key_frame_indices = [0]  # 第一帧总是关键帧
-    key_frames = [image_list[0]]
-    
-    # 用于记录所有帧与上一个关键帧的相似度
-    similarities = [1.0]  # 第一帧与自身相似度为1
-    
-    # 处理后续帧
-    for i in range(1, len(image_list)):
-        current_frame = image_list[i]
-        last_key_frame = key_frames[-1]
-        
-        # 确保图像尺寸相同（使用关键帧尺寸）
-        if current_frame.size != last_key_frame.size:
-            current_frame = current_frame.resize(last_key_frame.size)
-        
-        # 转换为 numpy 数组
-        current_arr = np.array(current_frame)
-        key_arr = np.array(last_key_frame)
-        
-        # 计算相似度
-        if method == 'ssim':
-            # 转换为灰度
-            gray_current = np.dot(current_arr[..., :3], [0.2989, 0.5870, 0.1140])
-            gray_key = np.dot(key_arr[..., :3], [0.2989, 0.5870, 0.1140])
-            
-            # 计算 SSIM
-            similarity = ssim(gray_current, gray_key)
-        elif method == 'phash':
-            # 计算感知哈希
-            from imagehash import phash
-            hash_current = phash(Image.fromarray(current_arr))
-            hash_key = phash(Image.fromarray(key_arr))
-            
-            # 计算汉明距离并转换为相似度
-            hamming_dist = hash_current - hash_key
-            similarity = 1 - (hamming_dist / 64)
+
+
+
+def extrace_key_frame():
+    titles = []
+
+    calculator = PatchSimilarityCalculator(
+        patch_size=28,
+        similarity_threshold=0.99,
+        resize_method='nearest'
+    )
+    ref_frame = frames[0]["frame_data"]
+    ref_index = frames[0]["frame_index"]
+    is_slow = True
+    slow_index = []
+
+    for i, frame in enumerate(frames):
+        f2 = frame["frame_data"]
+        # sim = FrameSimilarity.pixel_difference_similarity(f1, f2, 'mae')
+        # sim = FrameSimilarity.structural_similarity(f1, f2)
+        sim = calculator.calculate_patch_based_similarity(ref_frame, f2)
+        if sim < 0.9:
+            ref_frame = f2
+            ref_index = frame["frame_index"]
+            is_slow = True
         else:
-            raise ValueError("无效的方法参数。选择 'ssim' 或 'phash'")
-        
-        similarity = round(similarity, 3)
-        similarities.append(similarity)
-        
-        # 如果相似度低于阈值，标记为新的关键帧
-        if similarity < threshold:
-            key_frame_indices.append(i)
-            key_frames.append(current_frame)
-    
-    # 可视化结果
-    if visualize:
-        visualize_results(image_list, key_frame_indices, similarities, threshold)
-    
-    return key_frame_indices, key_frames
+            is_slow = False
+        if frame["frame_index"] == frames[0]["frame_index"]:
+            is_slow = True
+        # sim = FrameSimilarity.feature_matching_similarity(f1, f2, 'orb')
+        title = f"Sim: {sim:.2f}, frame: {frame['frame_index']}"
+        if is_slow: 
+            slow_index.append(i)
+        titles.append(title)
+
+    # show_images_grid([frame["frame_data"] for frame in frames[1:50]], titles=titles, max_cols=10, dpi=150, slow_frames=slow_index)
+
+
 
 
 
