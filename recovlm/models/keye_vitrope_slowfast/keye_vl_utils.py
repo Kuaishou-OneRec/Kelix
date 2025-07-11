@@ -166,7 +166,7 @@ def smart_nframes(
     else:
         fps = ele.get("fps", FPS) # 应该是走的默认FPS，按照每秒抽两帧来算
         fps = min(fps, video_fps) # 注意，这里的video_fps是真实的后验FPS
-        max_frames = int(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS) / VIDEO_MIN_PIXELS) # 计算我们在fast设置下最多能吃多少帧，这个是用来兜底的
+        max_frames = int(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS) / ele.get("video_min_pixels", VIDEO_MIN_PIXELS)) # 计算我们在fast设置下最多能吃多少帧，这个是用来兜底的
         fps_nframes = int(total_frames / video_fps * fps) # 换算为秒数，之后计算希望抽多少帧
         nframes = min(fps_nframes, max_frames)
     return nframes
@@ -388,8 +388,8 @@ def _read_video_decord_slowfast(
         height,
         width,
         factor=IMAGE_FACTOR,
-        min_pixels=VIDEO_MIN_PIXELS,
-        max_pixels=VIDEO_MAX_PIXELS,
+        min_pixels=ele.get("video_min_pixels", VIDEO_MIN_PIXELS),
+        max_pixels=ele.get("video_max_pixels", VIDEO_MAX_PIXELS),
     )
 
     selected_frames = nn.functional.interpolate(
@@ -463,8 +463,8 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             fast_frames = None
     fast_number = fast_frames.size(0) if fast_frames is not None else 0
 
-    left = VIDEO_MIN_PIXELS / 28 / 28
-    right = VIDEO_MAX_PIXELS / 28 / 28
+    left = ele.get("video_min_pixels", VIDEO_MIN_PIXELS) / 28 / 28
+    right = ele.get("video_max_pixels", VIDEO_MAX_PIXELS) / 28 / 28
     while left < right:
         mid = int(left+right)//2
         if slow_number * mid * 28 * 28 + fast_number * int(0.2 * mid) * 28 * 28 > ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS):

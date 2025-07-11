@@ -895,8 +895,8 @@ class ChatCompletionVisionDataset(IterableDataset):
     min_visual_tokens_per_frame = conf["min_visual_tokens_per_frame"]
     max_visual_tokens_per_frame = conf["max_visual_tokens_per_frame"]
 
-    if "only_slow" in conf:
-      block["only_slow"] = conf["only_slow"]
+    if "video_total_pixels" in conf:
+      block["video_total_pixels"] = conf["video_total_pixels"]
     if "max_slow_frames" in conf:
       block["max_slow_frames"] = conf["max_slow_frames"]
 
@@ -1161,8 +1161,8 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_max_frames": self.video_max_frames
     }
     
-    if 'only_slow' in self.kargs:
-      source_conf["only_slow"] = self.kargs["only_slow"]
+    if 'video_total_pixels' in self.kargs:
+      source_conf["video_total_pixels"] = self.kargs["video_total_pixels"]
     if 'max_slow_frames' in self.kargs:
       source_conf["max_slow_frames"] = self.kargs["max_slow_frames"]
     self._fill_image_block(pad_image, sample_dict={}, conf=source_conf)
@@ -1253,8 +1253,8 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_min_frames": self.video_min_frames,
       "video_max_frames": self.video_max_frames
     }
-    if 'only_slow' in self.kargs:
-      source_conf["only_slow"] = self.kargs["only_slow"]
+    if 'video_total_pixels' in self.kargs:
+      source_conf["video_total_pixels"] = self.kargs["video_total_pixels"]
     if 'max_slow_frames' in self.kargs:
       source_conf["max_slow_frames"] = self.kargs["max_slow_frames"]
 
