@@ -166,7 +166,7 @@ def smart_nframes(
     else:
         fps = ele.get("fps", FPS) # 应该是走的默认FPS，按照每秒抽两帧来算
         fps = min(fps, video_fps) # 注意，这里的video_fps是真实的后验FPS
-        print("cjx smart nfram debug VIDEO_TOTAL_PIXELS token num in llm side is {}".format(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS)//28//28))
+        # print("cjx smart nfram debug VIDEO_TOTAL_PIXELS token num in llm side is {}".format(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS)//28//28))
         max_frames = int(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS) / ele.get("video_min_pixels", VIDEO_MIN_PIXELS)) # 计算我们在fast设置下最多能吃多少帧，这个是用来兜底的
         fps_nframes = int(total_frames / video_fps * fps) # 换算为秒数，之后计算希望抽多少帧
         nframes = min(fps_nframes, max_frames)
@@ -404,7 +404,7 @@ def _read_video_decord_slowfast(
     print("cjx vl debug for mp4, total_frames {}, total_nframes_number {}, slow frames {}, fast frames {}".format(total_frames, total_nframes_number, slow_frames.size(0), fast_frames.size(0)))
     ##### extract key frames start ######
 
-    return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order.tolist()
+    return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order
 
 
 VIDEO_READER_BACKENDS = {
