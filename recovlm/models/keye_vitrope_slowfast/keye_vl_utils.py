@@ -24,6 +24,8 @@ import traceback
 import io as py_io
 import os.path as osp
 import numpy as np
+import copy
+
 
 logger = logging.getLogger(__name__)
 
@@ -452,7 +454,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
                 )
         total_frames = len(images)
         
-        tensor_images = [torch.from_numpy(np.array(pil_image)).permute(2, 0, 1).unsqueeze(0) for pil_image in images]
+        tensor_images = [torch.from_numpy(np.array(copy.deepcopy(pil_image))).permute(2, 0, 1).unsqueeze(0) for pil_image in images]
         tensor_images = torch.concat(tensor_images, dim = 0)
 
         slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(tensor_images)
