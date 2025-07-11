@@ -166,7 +166,7 @@ def smart_nframes(
     else:
         fps = ele.get("fps", FPS) # 应该是走的默认FPS，按照每秒抽两帧来算
         fps = min(fps, video_fps) # 注意，这里的video_fps是真实的后验FPS
-        print("cjx smart nfram debug VIDEO_TOTAL_PIXELS is {}".format(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS)//28//28))
+        print("cjx smart nfram debug VIDEO_TOTAL_PIXELS token num in llm side is {}".format(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS)//28//28))
         max_frames = int(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS) / ele.get("video_min_pixels", VIDEO_MIN_PIXELS)) # 计算我们在fast设置下最多能吃多少帧，这个是用来兜底的
         fps_nframes = int(total_frames / video_fps * fps) # 换算为秒数，之后计算希望抽多少帧
         nframes = min(fps_nframes, max_frames)
