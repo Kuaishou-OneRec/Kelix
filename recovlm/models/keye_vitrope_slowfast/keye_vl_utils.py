@@ -492,6 +492,80 @@ def get_video_reader_backend() -> str:
     return "slowfast_decord"
 
 
+def extract_key_frames(image_list, threshold=0.9, method='phash'):
+    """
+    从图像序列中提取关键帧
+    
+    参数:
+    image_list: PIL图像列表
+    threshold: 相似度阈值 (低于此值则视为关键帧)
+    method: 相似度计算方法 ('ssim' 或 'phash')
+    visualize: 是否生成可视化结果
+    
+    返回:
+    key_frame_indices: 关键帧索引列表
+    key_frames: 关键帧图像列表
+    """
+    if not image_list:
+        print("错误: 图像列表为空")
+        return [], []
+    
+    # 初始化关键帧列表
+    key_frame_indices = [0]  # 第一帧总是关键帧
+    key_frames = [image_list[0]]
+    
+    # 用于记录所有帧与上一个关键帧的相似度
+    similarities = [1.0]  # 第一帧与自身相似度为1
+    
+    # 处理后续帧
+    for i in range(1, len(image_list)):
+        current_frame = image_list[i]
+        last_key_frame = key_frames[-1]
+        
+        # 确保图像尺寸相同（使用关键帧尺寸）
+        if current_frame.size != last_key_frame.size:
+            current_frame = current_frame.resize(last_key_frame.size)
+        
+        # 转换为 numpy 数组
+        current_arr = np.array(current_frame)
+        key_arr = np.array(last_key_frame)
+        
+        # 计算相似度
+        if method == 'ssim':
+            # 转换为灰度
+            gray_current = np.dot(current_arr[..., :3], [0.2989, 0.5870, 0.1140])
+            gray_key = np.dot(key_arr[..., :3], [0.2989, 0.5870, 0.1140])
+            
+            # 计算 SSIM
+            similarity = ssim(gray_current, gray_key)
+        elif method == 'phash':
+            # 计算感知哈希
+            from imagehash import phash
+            hash_current = phash(Image.fromarray(current_arr))
+            hash_key = phash(Image.fromarray(key_arr))
+            
+            # 计算汉明距离并转换为相似度
+            hamming_dist = hash_current - hash_key
+            similarity = 1 - (hamming_dist / 64)
+        else:
+            raise ValueError("无效的方法参数。选择 'ssim' 或 'phash'")
+        
+        similarity = round(similarity, 3)
+        similarities.append(similarity)
+        
+        # 如果相似度低于阈值，标记为新的关键帧
+        if similarity < threshold:
+            key_frame_indices.append(i)
+            key_frames.append(current_frame)
+    
+    # 可视化结果
+    if visualize:
+        visualize_results(image_list, key_frame_indices, similarities, threshold)
+    
+    return key_frame_indices, key_frames
+
+
+
 def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = True) -> torch.Tensor | list[Image.Image]:
     if isinstance(ele["video"], str) or isinstance(ele["video"], bytes):
         video_reader_backend = get_video_reader_backend()
@@ -511,6 +585,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         fast_min_pixels = ele.get("fast_min_pixels", FAST_MIN_PIXELS)
         fast_max_pixels = ele.get("fast_max_pixels", FAST_MAX_PIXELS)
         fast_max_pixels = max(fast_max_pixels, int(fast_max_pixels/28/28 * fast_dynamic_rate) * 28 * 28)
+        fast_max_pixels = min(fast_max_pixels, ele.get("max_pixels", VIDEO_MAX_PIXELS))
         if "resized_height" in ele and "resized_width" in ele:
             resized_height, resized_width = smart_resize(
                 ele["resized_height"],
@@ -601,7 +676,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             fast_max_pixels = ele.get("fast_max_pixels", FAST_MAX_PIXELS)
             fast_dynamic_rate = avaliable_fast_frame_number/fast_nframes_number
             fast_max_pixels = max(fast_max_pixels, int(fast_max_pixels/28/28 * fast_dynamic_rate) * 28 * 28)
-            
+            fast_max_pixels = min(fast_max_pixels, ele.get("max_pixels", VIDEO_MAX_PIXELS))
             print("cjx vl debug for image list, avaliable_fast_frame_number {} fast_nframes_number {}, fast_dynamic_rate {}".format(avaliable_fast_frame_number, fast_nframes_number, (avaliable_fast_frame_number)/(fast_nframes_number + 0.001) + 0.1))
 
             fast_resized_height, fast_resized_width = smart_resize(
