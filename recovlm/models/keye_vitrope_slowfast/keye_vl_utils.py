@@ -334,7 +334,7 @@ def extract_key_frame(frames, patch_size=28, threshold=0.9):
 
 
 def extract_slow_fast_frames(selected_frames):
-    slow_indices = extract_key_frame(selected_frames)
+    slow_indices = extract_key_frame(copy.deepcopy(selected_frames))
 
     slow_mask = torch.zeros(size=(selected_frames.size(0), ), dtype=torch.bool)
     slow_mask[slow_indices] = True
@@ -402,7 +402,7 @@ def _read_video_decord_slowfast(
         antialias=True,
     ).float()
     # Step#2 对选中的图，筛选出其中关键帧部分，其余为slow
-    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(copy.deepcopy(selected_frames))
+    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames)
     print("cjx vl debug for mp4, total_frames {}, total_nframes_number {}, slow frames {}, fast frames {}".format(total_frames, total_nframes_number, slow_frames.size(0), fast_frames.size(0)))
     ##### extract key frames start ######
 
