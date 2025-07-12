@@ -118,7 +118,7 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
             factor=size_factor,
         )
     else:
-        width, height = image.size
+        height, width = image.size
         
         if open_fast_image:
             min_pixels = ele.get("video_min_pixels", VIDEO_MIN_PIXELS)
@@ -133,7 +133,7 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
             min_pixels=min_pixels,
             max_pixels=max_pixels,
         )
-    slow_image = image.resize((resized_width, resized_height))
+    slow_image = image.resize((resized_height, resized_width))
 
     return slow_image
 
@@ -347,7 +347,6 @@ def extract_slow_fast_frames(selected_frames, selected_frames_extract):
 
     return slow_frames, fast_frames, slow_fast_order.tolist()
 
-
 def _read_video_decord_slowfast(
         ele: dict,
 ) -> torch.Tensor:
@@ -454,16 +453,16 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
                 )
         total_frames = len(images)
         
-        tensor_images = [torch.from_numpy(np.array(pil_image.clone())).permute(2, 0, 1) for pil_image in images]
-        tensor_images = torch.stack(tensor_images, dim=0)
+        tensor_images = [torch.from_numpy(np.array(copy.deepcopy(pil_image))).permute(2, 0, 1).unsqueeze(0) for pil_image in images]
+        tensor_images = torch.concat(tensor_images, dim = 0)
 
-        slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(tensor_images, tensor_images.clone())
+        slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(tensor_images, copy.deepcopy(tensor_images))
         time_position = None
     
     ### 计算slow fast的token量 begin ###
     slow_number = slow_frames.size(0)
     if fast_frames.size(0) == 0:
-        fast_frames = None
+            fast_frames = None
     fast_number = fast_frames.size(0) if fast_frames is not None else 0
 
     left = ele.get("video_min_pixels", VIDEO_MIN_PIXELS) / 28 / 28
@@ -503,9 +502,9 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         fast_frames = []
         for idx, value in enumerate(slow_fast_order):
             if value == 0:
-                slow_frames.append(images[idx].resize((resized_width, resized_height)))
+                slow_frames.append(images[idx].resize((resized_height, resized_width)))
             else:
-                fast_frames.append(images[idx].resize((fast_resized_width, fast_resized_height)))
+                fast_frames.append(images[idx].resize((fast_resized_height, resized_width)))
         
         if len(fast_frames) == 0:
             fast_frames = None
