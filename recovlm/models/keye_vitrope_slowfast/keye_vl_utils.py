@@ -269,49 +269,20 @@ def _read_video_decord(
 
 
 def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.99):
-    # 确保输入是3D张量 [C, H, W]
     assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
-    # 获取图像尺寸
-    C, H, W = frame1.shape
+    channel, height, width = frame1.shape
+    unchanged_threshold = patch_sim * channel * patch_size * patch_size
     
-    # 计算patch网格
-    patch_rows = H // patch_size
-    patch_cols = W // patch_size
-    total_patches = patch_rows * patch_cols
+    from einops import rearrange
     
-    # 将帧分割为patch
-    def frame_to_patches(frame, patch_size):
-        from einops import rearrange
-        frame = rearrange(frame, "c (h p1) (w p2) -> c h w p1 p2", p1 = patch_size , p2 = patch_size)
-        return frame
+    diff = (frame1 - frame2).abs()
+    unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size).long()
 
-    patches1 = frame_to_patches(frame1, patch_size)
-    patches2 = frame_to_patches(frame2, patch_size)
+    patch_unchanged_count = unchanged_pixel.sum(-1).sum(-1).sum(-1)
+    unchanged = (patch_unchanged_count.float() > unchanged_threshold)
     
-    # 计算每个patch的相似度
-    unchanged_patches = 0
-    total_pixels = patch_size * patch_size * C
-
-    for r in range(patch_rows):
-        for c in range(patch_cols):
-            patch1 = patches1[:, r, c]
-            patch2 = patches2[:, r, c]
-            
-            # 计算像素差异
-            diff = torch.abs(patch1 - patch2)
-            
-            # 计算差异小于阈值的像素比例
-            similar_pixels = torch.sum(diff < pixel_threshold).item()
-            patch_similarity = similar_pixels / total_pixels
-            
-            # 判断patch是否未变化
-            if patch_similarity > patch_sim:
-                unchanged_patches += 1
-    
-    # 计算全局相似度（未变化patch比例）
-    global_similarity = unchanged_patches / total_patches
-    return global_similarity
+    return unchanged.long().sum().item() / unchanged.numel()
 
 
 def extract_key_frame(frames, patch_size=28, threshold=0.9):
