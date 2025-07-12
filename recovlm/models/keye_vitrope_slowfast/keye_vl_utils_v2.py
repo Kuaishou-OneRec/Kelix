@@ -269,49 +269,23 @@ def _read_video_decord(
 
 
 def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.99):
-    # 确保输入是3D张量 [C, H, W]
     assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
-    # 获取图像尺寸
-    C, H, W = frame1.shape
+    channel, height, width = frame1.shape
+    threshold = 
     
-    # 计算patch网格
-    patch_rows = H // patch_size
-    patch_cols = W // patch_size
-    total_patches = patch_rows * patch_cols
+    from einops import rearrange
+    def frame_to_patches(frame):
+        patches = rearrange(frame, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size)
+        return patches
     
-    # 将帧分割为patch
-    def frame_to_patches(frame, patch_size):
-        from einops import rearrange
-        frame = rearrange(frame, "c (h p1) (w p2) -> c h w p1 p2", p1 = patch_size , p2 = patch_size)
-        return frame
+    diff = (frame1 - frame2).abs()
+    unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size).long()
 
-    patches1 = frame_to_patches(frame1, patch_size)
-    patches2 = frame_to_patches(frame2, patch_size)
+    patch_unchanged_count = unchanged_pixel.sum(-1).sum(-1).sum(-1)
+    is_changed = (patch_unchanged_count.float() > patch_sim * channel * patch_size * patch_size)
     
-    # 计算每个patch的相似度
-    unchanged_patches = 0
-    total_pixels = patch_size * patch_size * C
-
-    for r in range(patch_rows):
-        for c in range(patch_cols):
-            patch1 = patches1[:, r, c]
-            patch2 = patches2[:, r, c]
-            
-            # 计算像素差异
-            diff = torch.abs(patch1 - patch2)
-            
-            # 计算差异小于阈值的像素比例
-            similar_pixels = torch.sum(diff < pixel_threshold).item()
-            patch_similarity = similar_pixels / total_pixels
-            
-            # 判断patch是否未变化
-            if patch_similarity > patch_sim:
-                unchanged_patches += 1
-    
-    # 计算全局相似度（未变化patch比例）
-    global_similarity = unchanged_patches / total_patches
-    return global_similarity
+    return is_changed.long().sum().item() / is_changed.numel()
 
 
 def extract_key_frame(frames, patch_size=28, threshold=0.9):
@@ -332,8 +306,8 @@ def extract_key_frame(frames, patch_size=28, threshold=0.9):
     return key_frame_indices
 
 
-def extract_slow_fast_frames(selected_frames, selected_frames_extract):
-    slow_indices = extract_key_frame(selected_frames_extract)
+def extract_slow_fast_frames(selected_frames):
+    slow_indices = extract_key_frame(copy.deepcopy(selected_frames))
 
     slow_mask = torch.zeros(size=(selected_frames.size(0), ), dtype=torch.bool)
     slow_mask[slow_indices] = True
@@ -393,14 +367,14 @@ def _read_video_decord_slowfast(
         max_pixels=ele.get("video_max_pixels", VIDEO_MAX_PIXELS),
     )
 
-    selected_frames_extract = nn.functional.interpolate(
+    selected_frames = nn.functional.interpolate(
         selected_frames,
         [resized_height, resized_width],
         mode="bicubic",
         antialias=True,
     ).float()
     # Step#2 对选中的图，筛选出其中关键帧部分，其余为slow
-    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames, selected_frames_extract)
+    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames)
     print("cjx vl debug for mp4, total_frames {}, total_nframes_number {}, slow frames {}, fast frames {}".format(total_frames, total_nframes_number, slow_frames.size(0), fast_frames.size(0)))
     ##### extract key frames start ######
 
@@ -455,7 +429,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         tensor_images = [torch.from_numpy(np.array(copy.deepcopy(pil_image))).permute(2, 0, 1).unsqueeze(0) for pil_image in images]
         tensor_images = torch.concat(tensor_images, dim = 0)
 
-        slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(tensor_images, copy.deepcopy(tensor_images))
+        slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(tensor_images)
         time_position = None
     
     ### 计算slow fast的token量 begin ###
