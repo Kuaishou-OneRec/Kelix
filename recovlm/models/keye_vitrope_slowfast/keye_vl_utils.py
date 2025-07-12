@@ -369,6 +369,8 @@ def _read_video_decord_slowfast(
         min_pixels=ele.get("video_min_pixels", VIDEO_MIN_PIXELS),
         max_pixels=ele.get("video_max_pixels", VIDEO_MAX_PIXELS),
     )
+    assert resized_height % 28 == 0, resized_height
+    assert resized_width % 28 == 0, resized_width
     
     selected_frames_extract = nn.functional.interpolate(
         selected_frames,
@@ -376,7 +378,6 @@ def _read_video_decord_slowfast(
         mode="bicubic",
         antialias=True,
     ).float()
-    print("ZDJ", resized_height, resized_width, selected_frames_extract.shape, selected_frames.shape)
     # Step#2 对选中的图，筛选出其中关键帧部分，其余为slow
     slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames, selected_frames_extract)
     print("cjx vl debug for mp4, total_frames {}, total_nframes_number {}, slow frames {}, fast frames {}".format(total_frames, total_nframes_number, slow_frames.size(0), fast_frames.size(0)))
