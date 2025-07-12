@@ -133,7 +133,7 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
             max_pixels=max_pixels,
         )
 
-    slow_image = image.resize((resized_width, resized_height))
+    slow_image = image.resize((resized_height, resized_width))
 
     return slow_image
 
@@ -503,7 +503,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             if value == 0:
                 slow_frames.append(images[idx].resize((resized_height, resized_width)))
             else:
-                fast_frames.append(images[idx].resize((fast_resized_width, fast_resized_height)))
+                fast_frames.append(images[idx].resize((fast_resized_height, resized_width)))
         
         if len(fast_frames) == 0:
             fast_frames = None

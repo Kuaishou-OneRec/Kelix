@@ -272,20 +272,35 @@ def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.99):
     assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
     channel, height, width = frame1.shape
-    threshold = 
+    unchanged_threshold = patch_sim * channel * patch_size * patch_size
     
     from einops import rearrange
-    def frame_to_patches(frame):
-        patches = rearrange(frame, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size)
-        return patches
     
     diff = (frame1 - frame2).abs()
     unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size).long()
 
     patch_unchanged_count = unchanged_pixel.sum(-1).sum(-1).sum(-1)
-    is_changed = (patch_unchanged_count.float() > patch_sim * channel * patch_size * patch_size)
+    unchanged = (patch_unchanged_count.float() > unchanged_threshold)
     
-    return is_changed.long().sum().item() / is_changed.numel()
+    return unchanged.long().sum().item() / unchanged.numel()
+
+
+def extract_key_frame2(frames, patch_size=28, threshold=0.9):
+    assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
+    
+    key_frame_indices = [0]
+    last_key_frame = frames[0]
+    
+    for i in range(1, frames.size(0)):
+        current_frame = frames[i]
+        
+        global_sim = cal_sim(last_key_frame, current_frame)
+        
+        if global_sim < threshold:
+            key_frame_indices.append(i)
+            last_key_frame = current_frame  # 更新关键帧
+            
+    return key_frame_indices
 
 
 def extract_key_frame(frames, patch_size=28, threshold=0.9):
@@ -293,6 +308,19 @@ def extract_key_frame(frames, patch_size=28, threshold=0.9):
     
     key_frame_indices = [0]
     last_key_frame = frames[0]
+
+    num_frames, channel, height, width = frames.shape
+    unchanged_threshold = 0.99 * channel * patch_size * patch_size
+    from einops import rearrange
+    
+    diff = (frames[:, None] - frames[]).abs()
+    unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size).long()
+
+    patch_unchanged_count = unchanged_pixel.sum(-1).sum(-1).sum(-1)
+    unchanged = (patch_unchanged_count.float() > unchanged_threshold)
+    
+    return unchanged.long().sum().item() / unchanged.numel()
+
     
     for i in range(1, frames.size(0)):
         current_frame = frames[i]
