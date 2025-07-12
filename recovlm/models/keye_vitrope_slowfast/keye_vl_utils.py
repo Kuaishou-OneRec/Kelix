@@ -277,7 +277,10 @@ def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.99):
     from einops import rearrange
     
     diff = (frame1 - frame2).abs()
-    unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size).long()
+    try:
+        unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size).long()
+    except:
+        raise ValueError(str(frame1.shape) + " " + str(frame2.shape))
 
     patch_unchanged_count = unchanged_pixel.sum(-1).sum(-1).sum(-1)
     unchanged = (patch_unchanged_count.float() > unchanged_threshold)
