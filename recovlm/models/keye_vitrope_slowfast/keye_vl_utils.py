@@ -537,6 +537,7 @@ def process_vision_info(
         conversations: list[dict] | list[list[dict]] = None, vision_infos: list[dict] = None,
         image_factor: int = IMAGE_FACTOR
 ) -> tuple[list[Image.Image] | None, list[torch.Tensor | list[Image.Image]] | None]:
+    print(image_factor, "ZDJ")
     assert conversations is not None or vision_infos is not None
 
     if vision_infos is None:
