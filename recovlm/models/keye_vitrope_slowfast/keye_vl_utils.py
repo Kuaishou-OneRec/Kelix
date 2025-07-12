@@ -282,8 +282,8 @@ def cal_sim(frame1, frame2, frames, patch_size=28, pixel_threshold=5, patch_sim=
     except:
         raise ValueError(str(frame1.shape) + " " + str(frame2.shape) + " " + str(frames.shape))
 
-    patch_unchanged_count = unchanged_pixel.sum(-1).sum(-1).sum(-1)
-    unchanged = (patch_unchanged_count.float() > unchanged_threshold)
+    pixel_unchanged_count = unchanged_pixel.sum(-1).sum(-1).sum(-1)
+    unchanged = (pixel_unchanged_count.float() > unchanged_threshold)
     
     return unchanged.long().sum().item() / unchanged.numel()
 
@@ -433,6 +433,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         
         tensor_images = [torch.from_numpy(np.array(pil_image.copy())).permute(2, 0, 1) for pil_image in images]
         tensor_images = torch.stack(tensor_images, dim=0)
+        assert tensor_images.shape[-2] % 28 == 0 and tensor_images.shape[-1] % 28 == 0, (tensor_images.shape, "ZZX")
 
         slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(tensor_images, tensor_images.clone())
         time_position = None
