@@ -281,29 +281,28 @@ def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.99):
     total_patches = patch_rows * patch_cols
     
     # 将帧分割为patch
-    def frame_to_patches(frame):
-        # [C, H, W] -> [patch_rows, patch_cols, C, patch_size, patch_size]
-        patches = frame.unfold(1, patch_size, patch_size).unfold(2, patch_size, patch_size)
-        patches = patches.contiguous().view(patch_rows, patch_cols, C, patch_size, patch_size)
-        return patches
-    
-    patches1 = frame_to_patches(frame1)
-    patches2 = frame_to_patches(frame2)
+    def frame_to_patches(frame, patch_size):
+        from einops import rearrange
+        frame = rearrange(frame, "c (h p1) (w p2) -> c h w p1 p2", p1 = patch_size , p2 = patch_size)
+        return frame
+
+    patches1 = frame_to_patches(frame1, patch_size)
+    patches2 = frame_to_patches(frame2, patch_size)
     
     # 计算每个patch的相似度
     unchanged_patches = 0
-    
+    total_pixels = patch_size * patch_size * C
+
     for r in range(patch_rows):
         for c in range(patch_cols):
-            patch1 = patches1[r, c]
-            patch2 = patches2[r, c]
+            patch1 = patches1[:, r, c]
+            patch2 = patches2[:, r, c]
             
             # 计算像素差异
             diff = torch.abs(patch1 - patch2)
             
             # 计算差异小于阈值的像素比例
             similar_pixels = torch.sum(diff < pixel_threshold).item()
-            total_pixels = patch_size * patch_size * C
             patch_similarity = similar_pixels / total_pixels
             
             # 判断patch是否未变化
@@ -376,7 +375,6 @@ def _read_video_decord_slowfast(
     total_frames, video_fps = len(vr), vr.get_avg_fps()
     total_frames_time_position = torch.FloatTensor([(1 / video_fps) * (i+1) for i in range(total_frames)])
     logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-    
     total_nframes_number = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
     
     selected_indices = torch.linspace(0, total_frames - 1, total_nframes_number).round().long()
