@@ -268,7 +268,7 @@ def _read_video_decord(
     return video, fps_ratio
 
 
-def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.99):
+def cal_sim(frame1, frame2, frames, patch_size=28, pixel_threshold=5, patch_sim=0.99):
     assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
     channel, height, width = frame1.shape
@@ -280,7 +280,7 @@ def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.99):
     try:
         unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size).long()
     except:
-        raise ValueError(str(frame1.shape) + " " + str(frame2.shape))
+        raise ValueError(str(frame1.shape) + " " + str(frame2.shape) + " " + str(frames.shape))
 
     patch_unchanged_count = unchanged_pixel.sum(-1).sum(-1).sum(-1)
     unchanged = (patch_unchanged_count.float() > unchanged_threshold)
@@ -298,7 +298,7 @@ def extract_key_frame(frames, patch_size=28, threshold=0.9):
     for i in range(1, frames.size(0)):
         current_frame = frames[i]
         
-        global_sim = cal_sim(last_key_frame, current_frame)
+        global_sim = cal_sim(last_key_frame, current_frame, frames)
         
         if global_sim < threshold:
             key_frame_indices.append(i)
