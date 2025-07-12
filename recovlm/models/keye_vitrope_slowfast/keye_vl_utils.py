@@ -132,7 +132,6 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
             min_pixels=min_pixels,
             max_pixels=max_pixels,
         )
-
     slow_image = image.resize((resized_height, resized_width))
 
     return slow_image
@@ -333,6 +332,7 @@ def extract_key_frame(frames, patch_size=28, threshold=0.9):
 
 
 def extract_slow_fast_frames(selected_frames, selected_frames_extract):
+    print("selected_frames size {}, selected_frames_extract size {}".format(selected_frames.size(), selected_frames_extract.size()))
     slow_indices = extract_key_frame(selected_frames_extract)
 
     slow_mask = torch.zeros(size=(selected_frames.size(0), ), dtype=torch.bool)

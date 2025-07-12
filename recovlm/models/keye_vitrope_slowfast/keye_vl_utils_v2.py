@@ -308,16 +308,27 @@ def extract_key_frame(frames, patch_size=28, threshold=0.9):
     
     key_frame_indices = [0]
     last_key_frame = frames[0]
+    last = 0
 
     num_frames, channel, height, width = frames.shape
     unchanged_threshold = 0.99 * channel * patch_size * patch_size
+    pixel_threshold = 5
     from einops import rearrange
     
-    diff = (frames[:, None] - frames[]).abs()
-    unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size).long()
+    diff = (frames.unsqueeze(1) - frames.unsqueeze(0)).abs()    # n * n * c * h * w
+    unchanged_pixel = rearrange(diff < pixel_threshold, "m n c (h p1) (w p2) -> m n h w c p1 p2", p1=patch_size, p2=patch_size).long()
 
     patch_unchanged_count = unchanged_pixel.sum(-1).sum(-1).sum(-1)
-    unchanged = (patch_unchanged_count.float() > unchanged_threshold)
+    unchanged = (patch_unchanged_count.float() > unchanged_threshold).float()
+
+    simiality = unchanged.sum(-1).sum(-1) / np.prod(unchanged.shape[-2:])
+
+    for now in range(1, num_frames):
+        global_sim = simiality[last][now]
+        if global_sim < threshold:
+            key_frame_indices.append(now)
+            last = now
+    return key_frame_indices
     
     return unchanged.long().sum().item() / unchanged.numel()
 
