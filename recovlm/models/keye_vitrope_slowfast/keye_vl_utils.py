@@ -369,8 +369,8 @@ def _read_video_decord_slowfast(
         min_pixels=ele.get("video_min_pixels", VIDEO_MIN_PIXELS),
         max_pixels=ele.get("video_max_pixels", VIDEO_MAX_PIXELS),
     )
-    assert resized_height % 28 == 0, resized_height
-    assert resized_width % 28 == 0, resized_width
+    assert resized_height % 28 == 0, (resized_height, "LXC")
+    assert resized_width % 28 == 0, (resized_width, "LXC")
     
     selected_frames_extract = nn.functional.interpolate(
         selected_frames,
