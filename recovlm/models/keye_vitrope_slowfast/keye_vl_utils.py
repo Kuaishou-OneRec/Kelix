@@ -133,7 +133,6 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
             min_pixels=min_pixels,
             max_pixels=max_pixels,
         )
-        print(width, height, resized_width, resized_height, "ZZX", size_factor)
     slow_image = image.resize((resized_width, resized_height))
 
     return slow_image
@@ -291,7 +290,6 @@ def cal_sim(frame1, frame2, frames, patch_size=28, pixel_threshold=5, patch_sim=
 
 def extract_key_frame(frames, patch_size=28, threshold=0.9):
     assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
-    print("LZX", frames.shape)
     
     key_frame_indices = [0]
     last_key_frame = frames[0]
