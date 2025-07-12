@@ -4725,7 +4725,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                pad_token_id: int = 151643,
                datasource_config:Dict[str, Dict[str, Any]] = {},
                cut_to_pad=True,
-               process_vision_info_args={"image_factor":32},
+               process_vision_info_args={"image_factor":28},
                min_visual_tokens_per_frame: int = 4,
                max_visual_tokens_per_frame: int = 512,
                **kwargs

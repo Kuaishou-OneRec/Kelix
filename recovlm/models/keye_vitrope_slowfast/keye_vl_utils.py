@@ -277,15 +277,12 @@ def cal_sim(frame1, frame2, frames, patch_size=28, pixel_threshold=5, patch_sim=
     from einops import rearrange
     
     diff = (frame1 - frame2).abs()
-    try:
-        unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size).long()
-    except:
-        raise ValueError(str(frame1.shape) + " " + str(frame2.shape) + " " + str(frames.shape))
+    unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size).float()
 
-    pixel_unchanged_count = unchanged_pixel.sum(-1).sum(-1).sum(-1)
-    unchanged = (pixel_unchanged_count.float() > unchanged_threshold)
+    pixel_unchanged_count = unchanged_pixel.sum(dim=[-1, -2, -3])
+    unchanged = (pixel_unchanged_count > unchanged_threshold)
     
-    return unchanged.long().sum().item() / unchanged.numel()
+    return unchanged.float().sum().item() / unchanged.numel()
 
 
 def extract_key_frame(frames, patch_size=28, threshold=0.9):
@@ -376,7 +373,6 @@ def _read_video_decord_slowfast(
         antialias=True,
     ).float()
     
-    assert selected_frames_extract.shape[-2] % 28 == 0 and selected_frames_extract.shape[-1] % 28 == 0, (selected_frames_extract.shape, "LXC")
     # Step#2 对选中的图，筛选出其中关键帧部分，其余为slow
     slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames, selected_frames_extract)
     print("cjx vl debug for mp4, total_frames {}, total_nframes_number {}, slow frames {}, fast frames {}".format(total_frames, total_nframes_number, slow_frames.size(0), fast_frames.size(0)))
@@ -535,7 +531,6 @@ def process_vision_info(
         conversations: list[dict] | list[list[dict]] = None, vision_infos: list[dict] = None,
         image_factor: int = IMAGE_FACTOR
 ) -> tuple[list[Image.Image] | None, list[torch.Tensor | list[Image.Image]] | None]:
-    image_factor = 28
     assert conversations is not None or vision_infos is not None
 
     if vision_infos is None:
