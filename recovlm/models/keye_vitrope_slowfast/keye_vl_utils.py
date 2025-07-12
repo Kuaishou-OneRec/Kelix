@@ -133,7 +133,7 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
             min_pixels=min_pixels,
             max_pixels=max_pixels,
         )
-        print(width, height, resized_width, resized_height, "ZZX")
+        print(width, height, resized_width, resized_height, "ZZX", size_factor)
     slow_image = image.resize((resized_width, resized_height))
 
     return slow_image
