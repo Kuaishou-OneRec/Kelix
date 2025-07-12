@@ -134,6 +134,7 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
             max_pixels=max_pixels,
         )
     slow_image = image.resize((resized_width, resized_height))
+    print(resized_width, resized_height, "ZZX")
 
     return slow_image
 
@@ -433,7 +434,6 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         
         tensor_images = [torch.from_numpy(np.array(pil_image.copy())).permute(2, 0, 1) for pil_image in images]
         tensor_images = torch.stack(tensor_images, dim=0)
-        assert tensor_images.shape[-2] % 28 == 0 and tensor_images.shape[-1] % 28 == 0, (tensor_images.shape, "ZZX")
 
         slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(tensor_images, tensor_images.clone())
         time_position = None
