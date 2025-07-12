@@ -118,7 +118,8 @@ def fetch_image(ele: dict[str, str | Image.Image], size_factor: int = IMAGE_FACT
             factor=size_factor,
         )
     else:
-        width, height = image.size
+        height, width = image.size
+        
         if open_fast_image:
             min_pixels = ele.get("video_min_pixels", VIDEO_MIN_PIXELS)
             max_pixels = ele.get("video_max_pixels", VIDEO_MAX_PIXELS)

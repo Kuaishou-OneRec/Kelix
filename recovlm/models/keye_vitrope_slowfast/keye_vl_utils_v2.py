@@ -285,53 +285,11 @@ def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.99):
     return unchanged.long().sum().item() / unchanged.numel()
 
 
-def extract_key_frame2(frames, patch_size=28, threshold=0.9):
-    assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
-    
-    key_frame_indices = [0]
-    last_key_frame = frames[0]
-    
-    for i in range(1, frames.size(0)):
-        current_frame = frames[i]
-        
-        global_sim = cal_sim(last_key_frame, current_frame)
-        
-        if global_sim < threshold:
-            key_frame_indices.append(i)
-            last_key_frame = current_frame  # 更新关键帧
-            
-    return key_frame_indices
-
-
 def extract_key_frame(frames, patch_size=28, threshold=0.9):
     assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
     
     key_frame_indices = [0]
     last_key_frame = frames[0]
-    last = 0
-
-    num_frames, channel, height, width = frames.shape
-    unchanged_threshold = 0.99 * channel * patch_size * patch_size
-    pixel_threshold = 5
-    from einops import rearrange
-    
-    diff = (frames.unsqueeze(1) - frames.unsqueeze(0)).abs()    # n * n * c * h * w
-    unchanged_pixel = rearrange(diff < pixel_threshold, "m n c (h p1) (w p2) -> m n h w c p1 p2", p1=patch_size, p2=patch_size).long()
-
-    patch_unchanged_count = unchanged_pixel.sum(-1).sum(-1).sum(-1)
-    unchanged = (patch_unchanged_count.float() > unchanged_threshold).float()
-
-    simiality = unchanged.sum(-1).sum(-1) / np.prod(unchanged.shape[-2:])
-
-    for now in range(1, num_frames):
-        global_sim = simiality[last][now]
-        if global_sim < threshold:
-            key_frame_indices.append(now)
-            last = now
-    return key_frame_indices
-    
-    return unchanged.long().sum().item() / unchanged.numel()
-
     
     for i in range(1, frames.size(0)):
         current_frame = frames[i]
@@ -343,6 +301,48 @@ def extract_key_frame(frames, patch_size=28, threshold=0.9):
             last_key_frame = current_frame  # 更新关键帧
             
     return key_frame_indices
+
+
+# def extract_key_frame(frames, patch_size=28, threshold=0.9):
+#     assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
+    
+#     key_frame_indices = [0]
+#     last_key_frame = frames[0]
+#     last = 0
+
+#     num_frames, channel, height, width = frames.shape
+#     unchanged_threshold = 0.99 * channel * patch_size * patch_size
+#     pixel_threshold = 5
+#     from einops import rearrange
+    
+#     diff = (frames.unsqueeze(1) - frames.unsqueeze(0)).abs()    # n * n * c * h * w
+#     unchanged_pixel = rearrange(diff < pixel_threshold, "m n c (h p1) (w p2) -> m n h w c p1 p2", p1=patch_size, p2=patch_size).long()
+
+#     patch_unchanged_count = unchanged_pixel.sum(-1).sum(-1).sum(-1)
+#     unchanged = (patch_unchanged_count.float() > unchanged_threshold).float()
+
+#     simiality = unchanged.sum(-1).sum(-1) / np.prod(unchanged.shape[-2:])
+
+#     for now in range(1, num_frames):
+#         global_sim = simiality[last][now]
+#         if global_sim < threshold:
+#             key_frame_indices.append(now)
+#             last = now
+#     return key_frame_indices
+    
+#     return unchanged.long().sum().item() / unchanged.numel()
+
+    
+#     for i in range(1, frames.size(0)):
+#         current_frame = frames[i]
+        
+#         global_sim = cal_sim(last_key_frame, current_frame)
+        
+#         if global_sim < threshold:
+#             key_frame_indices.append(i)
+#             last_key_frame = current_frame  # 更新关键帧
+            
+#     return key_frame_indices
 
 
 def extract_slow_fast_frames(selected_frames):
