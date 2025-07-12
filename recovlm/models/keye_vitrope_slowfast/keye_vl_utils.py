@@ -454,7 +454,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
                 )
         total_frames = len(images)
         
-        tensor_images = [torch.from_numpy(np.array(pil_image.clone())).permute(2, 0, 1) for pil_image in images]
+        tensor_images = [torch.from_numpy(np.array(pil_image.copy())).permute(2, 0, 1) for pil_image in images]
         tensor_images = torch.stack(tensor_images, dim=0)
 
         slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(tensor_images, tensor_images.clone())
