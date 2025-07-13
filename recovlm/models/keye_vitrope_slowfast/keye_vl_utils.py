@@ -294,13 +294,13 @@ def extract_key_frame(frames, patch_size=28, threshold=0.8):
         current_frame = frames[i]
         
         global_sim = cal_sim(last_key_frame, current_frame, frames)
-        similarity_list.append(similarity_list)
+        similarity_list.append(global_sim)
         if global_sim < threshold:
             key_frame_indices.append(i)
             last_key_frame = current_frame  # 更新关键帧
 
     print("cjx similarity debug {}".format(similarity_list))
-    
+
     return key_frame_indices
 
 
