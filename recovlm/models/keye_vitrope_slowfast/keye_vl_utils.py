@@ -268,7 +268,7 @@ def _read_video_decord(
     return video, fps_ratio
 
 
-def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.97):
+def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.98):
     assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
     channel, height, width = frame1.shape
