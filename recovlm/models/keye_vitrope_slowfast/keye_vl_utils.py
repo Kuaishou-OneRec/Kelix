@@ -25,7 +25,7 @@ import io as py_io
 import os.path as osp
 import numpy as np
 import copy
-
+from einops import rearrange
 
 logger = logging.getLogger(__name__)
 
@@ -268,20 +268,19 @@ def _read_video_decord(
     return video, fps_ratio
 
 
-def cal_sim(frame1, frame2, frames, patch_size=28, pixel_threshold=5, patch_sim=0.99):
+def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.95):
     assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
     channel, height, width = frame1.shape
     unchanged_threshold = patch_sim * channel * patch_size * patch_size
     
-    from einops import rearrange
-    
     diff = (frame1 - frame2).abs()
     unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
 
-    unchanged = (unchanged_pixel.sum(-1) > unchanged_threshold)
+    unchanged = (unchanged_pixel.sum(-1) < unchanged_threshold)
     
     return unchanged.float().sum().item() / unchanged.numel()
+    
 
 
 def extract_key_frame(frames, patch_size=28, threshold=0.8):
@@ -293,7 +292,7 @@ def extract_key_frame(frames, patch_size=28, threshold=0.8):
     for i in range(1, frames.size(0)):
         current_frame = frames[i]
         
-        global_sim = cal_sim(last_key_frame, current_frame, frames)
+        global_sim = cal_sim(last_key_frame, current_frame)
         similarity_list.append(global_sim)
         if global_sim < threshold:
             key_frame_indices.append(i)
