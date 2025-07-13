@@ -289,16 +289,18 @@ def extract_key_frame(frames, patch_size=28, threshold=0.8):
     
     key_frame_indices = [0]
     last_key_frame = frames[0]
-    
+    similarity_list = []
     for i in range(1, frames.size(0)):
         current_frame = frames[i]
         
         global_sim = cal_sim(last_key_frame, current_frame, frames)
-        
+        similarity_list.append(similarity_list)
         if global_sim < threshold:
             key_frame_indices.append(i)
             last_key_frame = current_frame  # 更新关键帧
-            
+
+    print("cjx similarity debug {}".format(similarity_list))
+    
     return key_frame_indices
 
 
@@ -374,7 +376,6 @@ def _read_video_decord_slowfast(
     
     # Step#2 对选中的图，筛选出其中关键帧部分，其余为slow
     slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames, selected_frames_extract)
-    print("cjx vl debug for mp4, total_frames {}, total_nframes_number {}, slow frames {}, fast frames {}".format(total_frames, total_nframes_number, slow_frames.size(0), fast_frames.size(0)))
     ##### extract key frames start ######
 
     return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order
