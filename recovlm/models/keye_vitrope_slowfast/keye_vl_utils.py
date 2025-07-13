@@ -280,7 +280,7 @@ def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.95):
     unchanged = (unchanged_pixel.sum(-1) < unchanged_threshold)
     
     return unchanged.float().sum().item() / unchanged.numel()
-    
+
 
 
 def extract_key_frame(frames, patch_size=28, threshold=0.8):
@@ -481,7 +481,9 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         if len(fast_frames) == 0:
             fast_frames = None
         
-        print("cjx vl debug for image list, slow frames {}, fast frames {}, slow token is {}, fast token is {}".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28))
+        if len(slow_frames) > 1:
+            # 避免太多的 pad log
+            print("cjx vl debug for image list, slow frames {}, fast frames {}, slow token is {}, fast token is {}".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28))
         assert (len(slow_frames) if slow_frames is not None else 0) + (len(fast_frames) if fast_frames is not None else 0) == len(slow_fast_order)
         return slow_frames, fast_frames, slow_fast_order
 
