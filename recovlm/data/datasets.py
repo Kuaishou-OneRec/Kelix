@@ -1282,6 +1282,9 @@ class ChatCompletionVisionDataset(IterableDataset):
             source_conf["max_visual_tokens_per_image"] * self.shrink_ratio)
         source_conf["max_visual_tokens_per_frame"] = (
             source_conf["max_visual_tokens_per_frame"] * self.shrink_ratio)
+        if "video_total_pixels" in source_conf:
+          source_conf["video_total_pixels"] = (
+              source_conf["video_total_pixels"] * self.shrink_ratio)
         continue
       else:
         assert inputs["input_ids"].shape[-1] <= process_max_length, "inputs too long"

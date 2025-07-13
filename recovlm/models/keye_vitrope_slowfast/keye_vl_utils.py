@@ -168,7 +168,7 @@ def smart_nframes(
     else:
         fps = ele.get("fps", FPS) # 应该是走的默认FPS，按照每秒抽两帧来算
         fps = min(fps, video_fps) # 注意，这里的video_fps是真实的后验FPS
-        # print("cjx smart nfram debug VIDEO_TOTAL_PIXELS token num in llm side is {}".format(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS)//28//28))
+        print("cjx smart nfram debug VIDEO_TOTAL_PIXELS token num in llm side is {}".format(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS)//28//28))
         max_frames = int(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS) / ele.get("video_min_pixels", VIDEO_MIN_PIXELS)) # 计算我们在fast设置下最多能吃多少帧，这个是用来兜底的
         fps_nframes = int(total_frames / video_fps * fps) # 换算为秒数，之后计算希望抽多少帧
         nframes = min(fps_nframes, max_frames)
@@ -277,15 +277,14 @@ def cal_sim(frame1, frame2, frames, patch_size=28, pixel_threshold=5, patch_sim=
     from einops import rearrange
     
     diff = (frame1 - frame2).abs()
-    unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w c p1 p2", p1=patch_size, p2=patch_size).float()
+    unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
 
-    pixel_unchanged_count = unchanged_pixel.sum(dim=[-1, -2, -3])
-    unchanged = (pixel_unchanged_count > unchanged_threshold)
+    unchanged = (unchanged_pixel.sum(-1) > unchanged_threshold)
     
     return unchanged.float().sum().item() / unchanged.numel()
 
 
-def extract_key_frame(frames, patch_size=28, threshold=0.9):
+def extract_key_frame(frames, patch_size=28, threshold=0.8):
     assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
     
     key_frame_indices = [0]
@@ -304,7 +303,7 @@ def extract_key_frame(frames, patch_size=28, threshold=0.9):
 
 
 def extract_slow_fast_frames(selected_frames, selected_frames_extract):
-    print("selected_frames size {}, selected_frames_extract size {}".format(selected_frames.size(), selected_frames_extract.size()))
+    # print("selected_frames size {}, selected_frames_extract size {}".format(selected_frames.size(), selected_frames_extract.size()))
     slow_indices = extract_key_frame(selected_frames_extract)
 
     slow_mask = torch.zeros(size=(selected_frames.size(0), ), dtype=torch.bool)
