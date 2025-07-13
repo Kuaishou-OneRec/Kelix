@@ -268,7 +268,7 @@ def _read_video_decord(
     return video, fps_ratio
 
 
-def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.95):
+def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.97):
     assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
     channel, height, width = frame1.shape
@@ -283,7 +283,7 @@ def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.95):
 
 
 
-def extract_key_frame(frames, patch_size=28, threshold=0.8):
+def extract_key_frame(frames, patch_size=28, threshold=0.9):
     assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
     
     key_frame_indices = [0]
@@ -298,7 +298,7 @@ def extract_key_frame(frames, patch_size=28, threshold=0.8):
             key_frame_indices.append(i)
             last_key_frame = current_frame  # 更新关键帧
 
-    print("cjx similarity debug {}".format(similarity_list))
+    # print("cjx similarity debug {}".format(similarity_list))
 
     return key_frame_indices
 
