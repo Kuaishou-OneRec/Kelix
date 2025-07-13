@@ -283,7 +283,7 @@ def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.98):
 
 
 
-def extract_key_frame(frames, patch_size=28, threshold=0.9):
+def extract_key_frame(frames, patch_size=28, threshold=0.92):
     assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
     
     key_frame_indices = [0]
