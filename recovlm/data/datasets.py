@@ -1283,6 +1283,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         source_conf["max_visual_tokens_per_frame"] = (
             source_conf["max_visual_tokens_per_frame"] * self.shrink_ratio)
         if "video_total_pixels" in source_conf:
+          print("test video_total_pixels shrink")
           source_conf["video_total_pixels"] = (
               source_conf["video_total_pixels"] * self.shrink_ratio)
         continue

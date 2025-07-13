@@ -34,13 +34,13 @@ MIN_PIXELS = 4 * 28 * 28
 MAX_PIXELS = 20480 * 28 * 28
 MAX_RATIO = 200
 
-VIDEO_MIN_PIXELS = 32 * 28 * 28
+VIDEO_MIN_PIXELS = 64 * 28 * 28
 VIDEO_MAX_PIXELS = 768 * 28 * 28
 VIDEO_TOTAL_PIXELS = 65536 * 28 * 28
 FPS = 2.0
 FPS_MIN_FRAMES = 4
 
-FAST_TOKEN_RATIO = 0.2
+FAST_TOKEN_RATIO = 0.5
 
 def round_by_factor(number: int, factor: int) -> int:
     """Returns the closest integer to 'number' that is divisible by 'factor'."""
