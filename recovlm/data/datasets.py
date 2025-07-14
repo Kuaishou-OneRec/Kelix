@@ -1165,7 +1165,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_max_frames": self.video_max_frames
     }
     
-    if 'video_total_pixels' in self.kargs:
+    if 'video_total_pixels' in self.kargs and 'video_total_pixels' not in source_conf:
       source_conf["video_total_pixels"] = self.kargs["video_total_pixels"]
     if 'max_slow_frames' in self.kargs:
       source_conf["max_slow_frames"] = self.kargs["max_slow_frames"]
@@ -1260,7 +1260,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       "video_min_frames": self.video_min_frames,
       "video_max_frames": self.video_max_frames
     }
-    if 'video_total_pixels' in self.kargs:
+    if 'video_total_pixels' in self.kargs and 'video_total_pixels' not in source_conf:
       source_conf["video_total_pixels"] = self.kargs["video_total_pixels"]
     if 'max_slow_frames' in self.kargs:
       source_conf["max_slow_frames"] = self.kargs["max_slow_frames"]
