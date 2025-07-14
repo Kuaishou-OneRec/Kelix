@@ -896,7 +896,9 @@ class ChatCompletionVisionDataset(IterableDataset):
     max_visual_tokens_per_frame = conf["max_visual_tokens_per_frame"]
 
     if "video_total_pixels" in conf:
-      block["video_total_pixels"] = conf["video_total_pixels"]
+      block["video_total_pixels"] = int(conf["video_total_pixels"])
+      if block["video_total_pixels"] //28//28 < 10000:
+        print("cjx debug retry {}".format(block["video_total_pixels"] //28//28))
     if "max_slow_frames" in conf:
       block["max_slow_frames"] = conf["max_slow_frames"]
     if "only_slow" in conf:
