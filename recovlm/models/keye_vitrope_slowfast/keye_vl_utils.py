@@ -441,12 +441,12 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
     right = ele.get("video_max_pixels", VIDEO_MAX_PIXELS) / 28 / 28
     while left < right:
         mid = int(left+right)//2
-        if slow_number * mid * 28 * 28 + fast_number * max(int(0.2 * mid) * 28 * 28, ele.get("video_min_pixels", VIDEO_MIN_PIXELS)) > ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS):
+        if slow_number * mid * 28 * 28 + fast_number * max(int(FAST_TOKEN_RATIO * mid) * 28 * 28, ele.get("video_min_pixels", VIDEO_MIN_PIXELS)) > ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS):
             right = mid
         else:
             left = mid + 1
     slow_max_pixels = left * 28 * 28
-    fast_max_pixels = max(int(0.2 * mid) * 28 * 28, ele.get("video_min_pixels", VIDEO_MIN_PIXELS))
+    fast_max_pixels = max(int(FAST_TOKEN_RATIO * mid) * 28 * 28, ele.get("video_min_pixels", VIDEO_MIN_PIXELS))
     video_min_pixels = ele.get("video_min_pixels", VIDEO_MIN_PIXELS)
     ### 计算slow fast的token量 end ###
 
