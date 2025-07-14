@@ -784,23 +784,26 @@ class SiglipAttention(nn.Module):
         keys = self.k_proj(hidden_states)
         values = self.v_proj(hidden_states)
 
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim)
+
+
         if self.q_norm is not None and self.k_norm is not None:
             queries = self.q_norm(queries)
             keys = self.k_norm(keys)
 
         if rope_emb is None:
-            queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-            keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-            values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+            queries = queries.transpose(1, 2)
+            keys = keys.transpose(1, 2)
+            values = values.transpose(1, 2)
         else:
             #assert cu_seqlens is not None, "Rope support flash attn only."
             cos, sin = rope_emb
-            queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim)
-            keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim)
             queries, keys = apply_rotary_pos_emb_flashatt(queries, keys, cos, sin)
             queries = queries.transpose(1, 2)
             keys = keys.transpose(1, 2)
-            values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+            values = values.transpose(1, 2)
 
         if not use_flash_attn:
             attention_interface: Callable = eager_attention_forward
