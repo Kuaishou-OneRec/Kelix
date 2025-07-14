@@ -25,7 +25,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.9.1;model_size:8B;GPU_type:128H800;data:inner & outer comments stage1,slowfast,video_stage1"
+comment="version:0.9.1;model_size:8B;GPU_type:392H800;data:inner & outer comments stage1,slowfast,video_stage1_0714"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -125,8 +125,8 @@ nohup mpirun --allow-run-as-root \
                 --min_lr 5e-5 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --num_warmup_steps 9200 \
-                --num_training_steps 92000 \
+                --num_warmup_steps 2000 \
+                --num_training_steps 20000 \
                 --save_checkpoint_per_step 1000 \
                 --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
