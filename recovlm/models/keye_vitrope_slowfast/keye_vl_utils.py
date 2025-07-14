@@ -452,8 +452,8 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         fast_frames = None
     fast_number = fast_frames.size(0) if fast_frames is not None else 0
 
-    left = ele.get("video_min_pixels", VIDEO_MIN_PIXELS) / 28 / 28
-    right = ele.get("video_max_pixels", VIDEO_MAX_PIXELS) / 28 / 28
+    left = ele.get("min_pixels", VIDEO_MIN_PIXELS) / 28 / 28
+    right = ele.get("max_pixels", VIDEO_MAX_PIXELS) / 28 / 28
     while left < right:
         mid = int(left+right)//2
         if slow_number * mid * 28 * 28 + fast_number * max(int(FAST_TOKEN_RATIO * mid) * 28 * 28, ele.get("video_min_pixels", VIDEO_MIN_PIXELS)) > ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS):
@@ -461,7 +461,6 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         else:
             left = mid + 1
     slow_max_pixels = left * 28 * 28
-    fast_max_pixels = max(int(FAST_TOKEN_RATIO * mid) * 28 * 28, ele.get("video_min_pixels", VIDEO_MIN_PIXELS))
     video_min_pixels = ele.get("video_min_pixels", VIDEO_MIN_PIXELS)
     ### 计算slow fast的token量 end ###
 
@@ -475,7 +474,8 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         min_pixels=video_min_pixels,
         max_pixels=slow_max_pixels,
     )
-
+    real_slow_token = resized_height * resized_width / 28 / 28
+    fast_max_pixels = max(int(real_slow_token * FAST_TOKEN_RATIO) * 28 * 28, video_min_pixels)
     fast_resized_height, fast_resized_width = smart_resize(
         height,
         width,
