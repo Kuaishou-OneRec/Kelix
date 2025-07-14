@@ -122,7 +122,7 @@ nohup mpirun --allow-run-as-root \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias,visual_fast.vision_model.embeddings.packing_position_embedding.weight,fast_mlp_AR.pre_norm.weight,fast_mlp_AR.pre_norm.bias,fast_mlp_AR.linear_1.weight,fast_mlp_AR.linear_1.bias,fast_mlp_AR.linear_2.weight,fast_mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 80000 \
+                --max_length 40000 \
                 --learning_rate 5e-5 \
                 --vision_learning_rate 5e-6 \
                 --min_lr 5e-5 \
@@ -135,6 +135,9 @@ nohup mpirun --allow-run-as-root \
                 --use_flash_attention_2 \
                 --logging_per_step 20 \
                 --fp32_weight \
+
+
+                
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
                 --merge_checkpoint \
