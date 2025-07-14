@@ -313,7 +313,7 @@ def cal_sim_cosine(frame1, frame2, patch_size=28, cos_threshold = 0.7, epsilon=1
     similar = torch.ones_like(cos_sim)  # 默认全部相似
     
     non_zero_mask = ~zero_vector_mask
-    similar[non_zero_mask] = cos_sim[non_zero_mask] > cos_threshold
+    similar[non_zero_mask] = (cos_sim[non_zero_mask] > cos_threshold).float()
     
     return similar.float().mean().item()
 
