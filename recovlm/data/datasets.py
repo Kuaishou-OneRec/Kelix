@@ -899,6 +899,8 @@ class ChatCompletionVisionDataset(IterableDataset):
       block["video_total_pixels"] = conf["video_total_pixels"]
     if "max_slow_frames" in conf:
       block["max_slow_frames"] = conf["max_slow_frames"]
+    if "only_slow" in conf:
+      block["only_slow"] = conf["only_slow"]
 
     if isinstance(block["video"], list):
 
@@ -1165,6 +1167,9 @@ class ChatCompletionVisionDataset(IterableDataset):
       source_conf["video_total_pixels"] = self.kargs["video_total_pixels"]
     if 'max_slow_frames' in self.kargs:
       source_conf["max_slow_frames"] = self.kargs["max_slow_frames"]
+    if 'only_slow' in self.kargs:
+      source_conf["only_slow"] = self.kargs["only_slow"]
+    
     self._fill_image_block(pad_image, sample_dict={}, conf=source_conf)
     self._fill_video_block(pad_video, sample_dict={}, conf=source_conf)
     image_inputs, video_inputs = self.process_vision_info(vision_infos=[pad_image, pad_video] if with_vid else [pad_image])
@@ -1257,6 +1262,8 @@ class ChatCompletionVisionDataset(IterableDataset):
       source_conf["video_total_pixels"] = self.kargs["video_total_pixels"]
     if 'max_slow_frames' in self.kargs:
       source_conf["max_slow_frames"] = self.kargs["max_slow_frames"]
+    if 'only_slow' in self.kargs:
+      source_conf["only_slow"] = self.kargs["only_slow"]
 
     if source_name != None and source_name in self.datasource_config:
       for key in source_conf:
@@ -1283,9 +1290,9 @@ class ChatCompletionVisionDataset(IterableDataset):
         source_conf["max_visual_tokens_per_frame"] = (
             source_conf["max_visual_tokens_per_frame"] * self.shrink_ratio)
         if "video_total_pixels" in source_conf:
-          print("test video_total_pixels shrink")
           source_conf["video_total_pixels"] = (
               source_conf["video_total_pixels"] * self.shrink_ratio)
+          print("test video_total_pixels shrink {}".format(source_conf["video_total_pixels"]//28//28))
         continue
       else:
         assert inputs["input_ids"].shape[-1] <= process_max_length, "inputs too long"
