@@ -24,8 +24,6 @@ import traceback
 import io as py_io
 import os.path as osp
 import numpy as np
-import copy
-from einops import rearrange
 
 logger = logging.getLogger(__name__)
 
@@ -50,8 +48,6 @@ VIDEO_MAX_PIXELS = VIDEO_MAX_TOKENS * IMAGE_FACTOR * IMAGE_FACTOR # 768 * 28 * 2
 VIDEO_TOTAL_PIXELS = 65536 * IMAGE_FACTOR * IMAGE_FACTOR # 65,536 * 28 * 28 = 51,380,224
 # default fps
 FPS = 2.0
-
-FAST_TOKEN_RATIO = 0.5
 
 def round_by_factor(number: int, factor: int) -> int:
     """Returns the closest integer to 'number' that is divisible by 'factor'."""
@@ -280,42 +276,51 @@ def _read_video_decord(
     return video, fps_ratio
 
 
-def cal_sim_pixel(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.98):
+def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.99):
+    # 确保输入是3D张量 [C, H, W]
     assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
-    channel, height, width = frame1.shape
-    unchanged_threshold = patch_sim * channel * patch_size * patch_size
+    # 获取图像尺寸
+    C, H, W = frame1.shape
     
-    diff = (frame1 - frame2).abs()
-    unchanged_pixel = rearrange(diff < pixel_threshold, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
-
-    unchanged = (unchanged_pixel.sum(-1) < unchanged_threshold)
+    # 计算patch网格
+    patch_rows = H // patch_size
+    patch_cols = W // patch_size
+    total_patches = patch_rows * patch_cols
     
-    return unchanged.float().mean().item()
-
-
-def cal_sim_cosine(frame1, frame2, patch_size=28, cos_threshold = 0.7, epsilon=1e-8):
-    assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
+    # 将帧分割为patch
+    def frame_to_patches(frame):
+        # [C, H, W] -> [patch_rows, patch_cols, C, patch_size, patch_size]
+        patches = frame.unfold(1, patch_size, patch_size).unfold(2, patch_size, patch_size)
+        patches = patches.contiguous().view(patch_rows, patch_cols, C, patch_size, patch_size)
+        return patches
     
-    patch1 = rearrange(frame1, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
-    patch2 = rearrange(frame2, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
-
-    norm1 = torch.norm(patch1, p=2, dim=-1, keepdim=True) + epsilon
-    norm2 = torch.norm(patch2, p=2, dim=-1, keepdim=True) + epsilon
+    patches1 = frame_to_patches(frame1)
+    patches2 = frame_to_patches(frame2)
     
-    normalized1 = patch1 / norm1
-    normalized2 = patch2 / norm2
-    cos_sim = (normalized1 * normalized2).sum(dim=-1)
-
+    # 计算每个patch的相似度
+    unchanged_patches = 0
     
-    zero_vector_mask = (norm1.squeeze() < 0.01) & (norm2.squeeze() < 0.01) # 全黑图
+    for r in range(patch_rows):
+        for c in range(patch_cols):
+            patch1 = patches1[r, c]
+            patch2 = patches2[r, c]
+            
+            # 计算像素差异
+            diff = torch.abs(patch1 - patch2)
+            
+            # 计算差异小于阈值的像素比例
+            similar_pixels = torch.sum(diff < pixel_threshold).item()
+            total_pixels = patch_size * patch_size * C
+            patch_similarity = similar_pixels / total_pixels
+            
+            # 判断patch是否未变化
+            if patch_similarity > patch_sim:
+                unchanged_patches += 1
     
-    similar = torch.ones_like(cos_sim)  # 默认全部相似
-    
-    non_zero_mask = ~zero_vector_mask
-    similar[non_zero_mask] = cos_sim[non_zero_mask] > cos_threshold
-    
-    return similar.float().mean().item()
+    # 计算全局相似度（未变化patch比例）
+    global_similarity = unchanged_patches / total_patches
+    return global_similarity
 
 
 def extract_key_frame(frames, patch_size=28, threshold=0.9):
@@ -323,24 +328,21 @@ def extract_key_frame(frames, patch_size=28, threshold=0.9):
     
     key_frame_indices = [0]
     last_key_frame = frames[0]
-    similarity_list = []
+    
     for i in range(1, frames.size(0)):
         current_frame = frames[i]
         
-        global_sim = cal_sim_cosine(last_key_frame, current_frame)
-        similarity_list.append(global_sim)
+        global_sim = cal_sim(last_key_frame, current_frame, patch_size=patch_size)
+        
         if global_sim < threshold:
             key_frame_indices.append(i)
             last_key_frame = current_frame  # 更新关键帧
-
-    print("cjx similarity debug {}".format(similarity_list))
-
+            
     return key_frame_indices
 
 
-def extract_slow_fast_frames(selected_frames, selected_frames_extract):
-    # print("selected_frames size {}, selected_frames_extract size {}".format(selected_frames.size(), selected_frames_extract.size()))
-    slow_indices = extract_key_frame(selected_frames_extract)
+def extract_slow_fast_frames(selected_frames):
+    slow_indices = extract_key_frame(selected_frames)
 
     slow_mask = torch.zeros(size=(selected_frames.size(0), ), dtype=torch.bool)
     slow_mask[slow_indices] = True
@@ -351,8 +353,7 @@ def extract_slow_fast_frames(selected_frames, selected_frames_extract):
     slow_fast_order = torch.ones(size=(selected_frames.size(0), ), dtype=torch.long)
     slow_fast_order[slow_indices] = 0
 
-    return slow_frames, fast_frames, slow_fast_order.tolist()
-
+    return slow_frames, fast_frames, slow_fast_order
 
 def _read_video_decord_slowfast(
         ele: dict,
@@ -402,19 +403,19 @@ def _read_video_decord_slowfast(
         min_pixels=ele.get("min_pixels", VIDEO_MIN_PIXELS),
         max_pixels=ele.get("max_pixels", VIDEO_MAX_PIXELS),
     )
-    
-    selected_frames_extract = nn.functional.interpolate(
+
+    selected_frames = nn.functional.interpolate(
         selected_frames,
         [resized_height, resized_width],
         mode="bicubic",
         antialias=True,
     ).float()
-    
-    # Step#2 对选中的图，筛选出其中关键帧部分，其余为fast
-    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames, selected_frames_extract)
+    # Step#2 对选中的图，筛选出其中关键帧部分，其余为slow
+    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames)
+    print("cjx vl debug for mp4, total_frames {}, total_nframes_number {}, slow frames {}, fast frames {}".format(total_frames, total_nframes_number, slow_frames.size(0), fast_frames.size(0)))
     ##### extract key frames start ######
 
-    return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order
+    return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order.tolist()
 
 
 VIDEO_READER_BACKENDS = {
@@ -459,16 +460,16 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             )
         total_frames = len(images)
         
-        tensor_images = [torch.from_numpy(np.array(pil_image.copy())).permute(2, 0, 1) for pil_image in images]
-        tensor_images = torch.stack(tensor_images, dim=0)
+        tensor_images = [torch.from_numpy(np.array(pil_image)).permute(2, 0, 1).unsqueeze(0) for pil_image in images]
+        tensor_images = torch.concat(tensor_images, dim = 0)
 
-        slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(tensor_images, tensor_images.clone())
+        slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(tensor_images)
         time_position = None
     
     ### 计算slow fast的token量 begin ###
     slow_number = slow_frames.size(0)
     if fast_frames.size(0) == 0:
-        fast_frames = None
+            fast_frames = None
     fast_number = fast_frames.size(0) if fast_frames is not None else 0
 
     min_pixels = ele.get("min_pixels", VIDEO_MIN_PIXELS)
@@ -500,8 +501,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         min_pixels=min_pixels,
         max_pixels=slow_max_pixels,
     )
-    real_slow_token = resized_height * resized_width / IMAGE_FACTOR / IMAGE_FACTOR
-    fast_max_pixels = max(int(real_slow_token * FAST_TOKEN_RATIO) * IMAGE_FACTOR * IMAGE_FACTOR, video_min_pixels)
+
     fast_resized_height, fast_resized_width = smart_resize(
         height,
         width,
@@ -515,16 +515,14 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         fast_frames = []
         for idx, value in enumerate(slow_fast_order):
             if value == 0:
-                slow_frames.append(images[idx].resize((resized_width, resized_height)))
+                slow_frames.append(images[idx].resize((resized_height, resized_width)))
             else:
                 fast_frames.append(images[idx].resize((fast_resized_width, fast_resized_height)))
         
         if len(fast_frames) == 0:
             fast_frames = None
         
-        if len(slow_frames) > 1:
-            # 避免太多的 pad log
-            print("cjx vl debug for image list, slow frames {}, fast frames {}, slow token is {}, fast token is {}".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28))
+        print("cjx vl debug for image list, slow frames {}, fast frames {}, slow token is {}, fast token is {}".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28))
         assert (len(slow_frames) if slow_frames is not None else 0) + (len(fast_frames) if fast_frames is not None else 0) == len(slow_fast_order)
         return slow_frames, fast_frames, slow_fast_order
 
@@ -546,8 +544,10 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             ).float()
             fast_frames = list(fast_frames.split(1, dim=0))
         
-        print("cjx vl debug for mp4, slow frames {}, fast frames {}, slow token is {}, fast token is {}, video dir".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28), ele["video"])
+        print("cjx vl debug for mp4, slow frames {}, fast frames {}, slow token is {}, fast token is {}".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28))
         assert (len(slow_frames) if slow_frames is not None else 0) + (len(fast_frames) if fast_frames is not None else 0) == len(slow_fast_order)
+        import pdb
+        pdb.set_trace()
         return slow_frames, fast_frames, time_position, slow_fast_order
     
 
