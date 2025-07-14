@@ -279,21 +279,28 @@ def cal_sim_pixel(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.
 
     unchanged = (unchanged_pixel.sum(-1) < unchanged_threshold)
     
-    return unchanged.float().sum().item() / unchanged.numel()
+    return unchanged.float().mean().item()
 
 
-def cal_sim_cosine(frame1, frame2, patch_size=28, cosine_sim = 0.7):
+def cal_sim_cosine(frame1, frame2, patch_size=28, cosine_sim = 0.7, epsilon=1e-8):
     assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
     frame1_patch = rearrange(frame1, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
     frame2_patch = rearrange(frame2, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
 
-    patch1 = F.normalize(frame1_patch, p=2, dim=-1)
-    patch2 = F.normalize(frame2_patch, p=2, dim=-1)
+    norm1 = torch.norm(patch1, p=2, dim=-1, keepdim=True) + epsilon
+    norm2 = torch.norm(patch2, p=2, dim=-1, keepdim=True) + epsilon
     
-    cos_sim = torch.einsum('hwi, hwi -> hw', patch1, patch2)
+    normalized1 = patch1 / norm1
+    normalized2 = patch2 / norm2
+    cos_sim = (normalized1 * normalized2).sum(dim=-1)
     
-    similar = cos_sim > cosine_sim
+    zero_vector_mask = (norm1.squeeze() < 0.01) & (norm2.squeeze() < 0.01) # 全黑图
+    
+    similar = torch.ones_like(cos_sim)  # 默认全部相似
+    
+    non_zero_mask = ~zero_vector_mask
+    similar[non_zero_mask] = cos_sim[non_zero_mask] > cos_threshold
     
     return similar.float().mean().item()
 
