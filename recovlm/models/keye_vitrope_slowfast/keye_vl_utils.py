@@ -475,9 +475,9 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         fast_frames = None
     fast_number = fast_frames.size(0) if fast_frames is not None else 0
 
-    min_pixels = ele.get("min_pixels", VIDEO_MIN_PIXELS)
+    min_pixels = max(int(ele.get("min_pixels", VIDEO_MIN_PIXELS)), VIDEO_MIN_PIXELS)
     min_tokens = int(min_pixels / IMAGE_FACTOR / IMAGE_FACTOR)
-    left = ele.get("min_pixels", VIDEO_MIN_PIXELS) / IMAGE_FACTOR / IMAGE_FACTOR
+    left = min_pixels / IMAGE_FACTOR / IMAGE_FACTOR
     right = ele.get("max_pixels", VIDEO_MAX_PIXELS) / IMAGE_FACTOR / IMAGE_FACTOR
     def _estimate_total_pixels(tokens_per_frame):
         return slow_number * tokens_per_frame * IMAGE_FACTOR * IMAGE_FACTOR + \
@@ -491,7 +491,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             left = mid + 1
     slow_max_pixels = left * IMAGE_FACTOR * IMAGE_FACTOR
     # fast tokens下限为min_tokens，极端情况下slow和fast数量一样
-    fast_max_pixels = max(int(FAST_TOKEN_RATIO * left), min_tokens) * IMAGE_FACTOR * IMAGE_FACTOR
+    # fast_max_pixels = max(int(FAST_TOKEN_RATIO * left), min_tokens) * IMAGE_FACTOR * IMAGE_FACTOR
     ### 计算slow fast的token量 end ###
 
     nframes, _, height, width = slow_frames.shape
