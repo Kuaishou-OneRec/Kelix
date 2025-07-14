@@ -39,7 +39,7 @@ MAX_PIXELS = MAX_TOKENS * IMAGE_FACTOR * IMAGE_FACTOR # 20480 * 28 * 28 = 16,056
 MAX_RATIO = 200
 
 # min tokens per video frame
-VIDEO_MIN_TOKENS = 32
+VIDEO_MIN_TOKENS = 64
 # max tokens per video frame
 VIDEO_MAX_TOKENS = 768
 # min pixels per video frame
@@ -393,14 +393,14 @@ def _read_video_decord_slowfast(
     selected_time_position = total_frames_time_position[selected_indices]
 
     ##### extract key frames start ######
-    # Step#1，对选中的图，假设都为slow，先resize到28*28的倍数
+    # Step#1，对选中的图，假设都为slow，先resize到28*28的倍数，但是会先在256视图下去进行比较
     _, _, height, width = selected_frames.shape
     resized_height, resized_width = smart_resize(
         height,
         width,
         factor=IMAGE_FACTOR,
         min_pixels=ele.get("min_pixels", VIDEO_MIN_PIXELS),
-        max_pixels=ele.get("max_pixels", VIDEO_MAX_PIXELS),
+        max_pixels=256 * IMAGE_FACTOR * IMAGE_FACTOR,
     )
     
     selected_frames_extract = nn.functional.interpolate(
@@ -480,7 +480,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
     right = ele.get("max_pixels", VIDEO_MAX_PIXELS) / IMAGE_FACTOR / IMAGE_FACTOR
     def _estimate_total_pixels(tokens_per_frame):
         return slow_number * tokens_per_frame * IMAGE_FACTOR * IMAGE_FACTOR + \
-            fast_number * max(int(0.2 * tokens_per_frame), min_tokens) * IMAGE_FACTOR * IMAGE_FACTOR
+            fast_number * max(int(FAST_TOKEN_RATIO * tokens_per_frame), min_tokens) * IMAGE_FACTOR * IMAGE_FACTOR
 
     while left < right:
         mid = int(left+right) // 2
@@ -490,7 +490,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             left = mid + 1
     slow_max_pixels = left * IMAGE_FACTOR * IMAGE_FACTOR
     # fast tokens下限为min_tokens，极端情况下slow和fast数量一样
-    fast_max_pixels = max(int(0.2 * left), min_tokens) * IMAGE_FACTOR * IMAGE_FACTOR
+    fast_max_pixels = max(int(FAST_TOKEN_RATIO * left), min_tokens) * IMAGE_FACTOR * IMAGE_FACTOR
     ### 计算slow fast的token量 end ###
 
     nframes, _, height, width = slow_frames.shape
@@ -504,7 +504,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         max_pixels=slow_max_pixels,
     )
     real_slow_token = resized_height * resized_width / IMAGE_FACTOR / IMAGE_FACTOR
-    fast_max_pixels = max(int(real_slow_token * FAST_TOKEN_RATIO) * IMAGE_FACTOR * IMAGE_FACTOR, video_min_pixels)
+    fast_max_pixels = max(int(real_slow_token * FAST_TOKEN_RATIO) * IMAGE_FACTOR * IMAGE_FACTOR, VIDEO_MIN_PIXELS)
     fast_resized_height, fast_resized_width = smart_resize(
         height,
         width,
