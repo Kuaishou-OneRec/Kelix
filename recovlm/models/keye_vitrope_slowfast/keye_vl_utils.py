@@ -316,8 +316,7 @@ def cal_sim_cosine(frame1, frame2, patch_size=28, cos_threshold = 0.7, epsilon=1
     non_zero_mask = ~zero_vector_mask
     similar[non_zero_mask] = (cos_sim[non_zero_mask] > cos_threshold).float()
     
-    return similar.float().mean().item()
-
+    return similar[non_zero_mask].float().mean().item()
 
 def extract_key_frame(frames, patch_size=28, threshold=0.9):
     assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
