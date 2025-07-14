@@ -454,9 +454,12 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         images = []
         for video_element in ele["video"]:
             # preprocess images
-            images.append(
-                fetch_image({"image": video_element, **process_info}, size_factor=image_factor, is_video=True)
-            )
+            if isinstance(video_element, dict):
+                images.append(fetch_image(video_element, size_factor=image_factor, is_video = True))
+            else:
+                images.append(
+                    fetch_image({"image": video_element, **process_info}, size_factor=image_factor, is_video = True)
+                )
         total_frames = len(images)
         
         tensor_images = [torch.from_numpy(np.array(pil_image.copy())).permute(2, 0, 1) for pil_image in images]
