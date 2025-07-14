@@ -181,7 +181,7 @@ def smart_nframes(
         fps = min(fps, video_fps) # 注意，这里的video_fps是真实的后验FPS
         # 计算每帧使用最少token的情况下，能吃多少帧，这个是用来兜底的
         # 是否允许用户低于这个限制？
-        print("cjx smart nfram debug VIDEO_TOTAL_PIXELS token num in llm side is {}".format(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS)//28//28))
+        # print("cjx smart nfram debug VIDEO_TOTAL_PIXELS token num in llm side is {}".format(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS)//28//28))
         max_frames = int(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS) / ele.get("min_pixels", VIDEO_MIN_PIXELS))
         fps_nframes = int(total_frames / video_fps * fps) # 换算为秒数，之后计算希望抽多少帧
         nframes = min(fps_nframes, max_frames)
@@ -334,7 +334,7 @@ def extract_key_frame(frames, patch_size=28, threshold=0.9):
             key_frame_indices.append(i)
             last_key_frame = current_frame  # 更新关键帧
 
-    print("cjx similarity debug {}".format(similarity_list))
+    # print("cjx similarity debug {}".format(similarity_list))
 
     return key_frame_indices
 

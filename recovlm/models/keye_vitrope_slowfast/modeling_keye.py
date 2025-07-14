@@ -582,7 +582,7 @@ class SiglipVisionEmbeddings(nn.Module):
         self.embed_dim = config.hidden_size
         self.image_size = config.image_size
         self.patch_size = config.patch_size
-
+        self.has_learnable_position_embedding = config.has_learnable_position_embedding if hasattr(config, "has_learnable_position_embedding") else False
         self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
             out_channels=self.embed_dim,
@@ -590,7 +590,7 @@ class SiglipVisionEmbeddings(nn.Module):
             stride=self.patch_size,
             padding="valid",
         )
-
+        
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
         self.cache_position_embedding = dict()
