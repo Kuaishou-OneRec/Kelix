@@ -711,7 +711,6 @@ def train():
 #     dist.barrier()
 # ####### for pdb debug #######
 
-
   state_dict = None
 
   converter = FakeConverter()

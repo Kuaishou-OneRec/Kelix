@@ -268,7 +268,7 @@ def _read_video_decord(
     return video, fps_ratio
 
 
-def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.98):
+def cal_sim_pixel(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.98):
     assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
     channel, height, width = frame1.shape
@@ -282,8 +282,23 @@ def cal_sim(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.98):
     return unchanged.float().sum().item() / unchanged.numel()
 
 
+def cal_sim_cosine(frame1, frame2, patch_size=28, cosine_sim = 0.7):
+    assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
+    
+    frame1_patch = rearrange(frame1, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
+    frame2_patch = rearrange(frame2, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
 
-def extract_key_frame(frames, patch_size=28, threshold=0.95):
+    patch1 = F.normalize(frame1_patch, p=2, dim=-1)
+    patch2 = F.normalize(frame2_patch, p=2, dim=-1)
+    
+    cos_sim = torch.einsum('hwi, hwi -> hw', patch1, patch2)
+    
+    similar = cos_sim > cosine_sim
+    
+    return similar.float().mean().item()
+
+
+def extract_key_frame(frames, patch_size=28, threshold=0.9):
     assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
     
     key_frame_indices = [0]
@@ -292,13 +307,13 @@ def extract_key_frame(frames, patch_size=28, threshold=0.95):
     for i in range(1, frames.size(0)):
         current_frame = frames[i]
         
-        global_sim = cal_sim(last_key_frame, current_frame)
+        global_sim = cal_sim_cosine(last_key_frame, current_frame)
         similarity_list.append(global_sim)
         if global_sim < threshold:
             key_frame_indices.append(i)
             last_key_frame = current_frame  # 更新关键帧
 
-    # print("cjx similarity debug {}".format(similarity_list))
+    print("cjx similarity debug {}".format(similarity_list))
 
     return key_frame_indices
 
@@ -363,7 +378,7 @@ def _read_video_decord_slowfast(
         width,
         factor=IMAGE_FACTOR,
         min_pixels=ele.get("video_min_pixels", VIDEO_MIN_PIXELS),
-        max_pixels=ele.get("video_max_pixels", VIDEO_MAX_PIXELS),
+        max_pixels=ele.get("video_max_pixels", 256*28*28),
     )
     
     selected_frames_extract = nn.functional.interpolate(
@@ -373,7 +388,7 @@ def _read_video_decord_slowfast(
         antialias=True,
     ).float()
     
-    # Step#2 对选中的图，筛选出其中关键帧部分，其余为slow
+    # Step#2 对选中的图，筛选出其中关键帧部分，其余为fast
     slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames, selected_frames_extract)
     ##### extract key frames start ######
 
@@ -505,7 +520,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             ).float()
             fast_frames = list(fast_frames.split(1, dim=0))
         
-        print("cjx vl debug for mp4, slow frames {}, fast frames {}, slow token is {}, fast token is {}".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28))
+        print("cjx vl debug for mp4, slow frames {}, fast frames {}, slow token is {}, fast token is {}, video dir".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28), ele["video"])
         assert (len(slow_frames) if slow_frames is not None else 0) + (len(fast_frames) if fast_frames is not None else 0) == len(slow_fast_order)
         return slow_frames, fast_frames, time_position, slow_fast_order
     
