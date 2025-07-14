@@ -32,7 +32,7 @@ git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnod
 git_hash=$(git rev-parse --short HEAD)
 
 set -x
-
+KML_TASK_ID=112233
 SCRIPT_FILE=$(readlink -f $0)
 echo `date '+%Y-%m-%d %H:%M:%S'` >> $OUTPUT_DIR/task_info.log
 echo "task: kml-task-${KML_TASK_ID}-record-${KML_ID}" >> $OUTPUT_DIR/task_info.log
