@@ -181,7 +181,8 @@ def smart_nframes(
         fps = min(fps, video_fps) # 注意，这里的video_fps是真实的后验FPS
         # 计算每帧使用最少token的情况下，能吃多少帧，这个是用来兜底的
         # 是否允许用户低于这个限制？
-        max_frames = int(ele.get("total_pixels", VIDEO_TOTAL_PIXELS) / ele.get("min_pixels", VIDEO_MIN_PIXELS))
+        print("cjx smart nfram debug VIDEO_TOTAL_PIXELS token num in llm side is {}".format(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS)//28//28))
+        max_frames = int(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS) / ele.get("min_pixels", VIDEO_MIN_PIXELS))
         fps_nframes = int(total_frames / video_fps * fps) # 换算为秒数，之后计算希望抽多少帧
         nframes = min(fps_nframes, max_frames)
     return nframes
@@ -484,7 +485,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
 
     while left < right:
         mid = int(left+right) // 2
-        if _estimate_total_pixels(mid) > ele.get("total_pixels", VIDEO_TOTAL_PIXELS):
+        if _estimate_total_pixels(mid) > ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS):
             right = mid
         else:
             left = mid + 1
