@@ -295,6 +295,7 @@ def cal_sim_cosine(frame1, frame2, patch_size=28, cosine_sim = 0.7, epsilon=1e-8
     normalized2 = patch2 / norm2
     cos_sim = (normalized1 * normalized2).sum(dim=-1)
     
+    
     zero_vector_mask = (norm1.squeeze() < 0.01) & (norm2.squeeze() < 0.01) # 全黑图
     
     similar = torch.ones_like(cos_sim)  # 默认全部相似
