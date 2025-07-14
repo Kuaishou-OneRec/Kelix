@@ -897,8 +897,11 @@ class ChatCompletionVisionDataset(IterableDataset):
 
     if "video_total_pixels" in conf:
       block["video_total_pixels"] = int(conf["video_total_pixels"])
-      if block["video_total_pixels"] //28//28 < 10000:
+      if block["video_total_pixels"]//28//28 < 10000:
         print("cjx debug retry {}".format(block["video_total_pixels"] //28//28))
+      else:
+        print("cjx pass {}".format(block["video_total_pixels"] //28//28))
+        
     if "max_slow_frames" in conf:
       block["max_slow_frames"] = conf["max_slow_frames"]
     if "only_slow" in conf:
