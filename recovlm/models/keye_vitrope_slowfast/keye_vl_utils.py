@@ -517,21 +517,28 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         fast_frames = None
     fast_number = fast_frames.size(0) if fast_frames is not None else 0
 
-    min_pixels = max(int(ele.get("min_pixels", VIDEO_MIN_PIXELS)), VIDEO_MIN_PIXELS)
-    min_tokens = int(min_pixels / IMAGE_FACTOR / IMAGE_FACTOR)
-    left = min_pixels / IMAGE_FACTOR / IMAGE_FACTOR
-    right = ele.get("max_pixels", VIDEO_MAX_PIXELS) / IMAGE_FACTOR / IMAGE_FACTOR
-    def _estimate_total_pixels(tokens_per_frame):
-        return slow_number * tokens_per_frame * IMAGE_FACTOR * IMAGE_FACTOR + \
-            fast_number * max(int(FAST_TOKEN_RATIO * tokens_per_frame), min_tokens) * IMAGE_FACTOR * IMAGE_FACTOR
+    ####### 二分，精准，但暂时弃用 #####
+    # min_pixels = max(int(ele.get("min_pixels", VIDEO_MIN_PIXELS)), VIDEO_MIN_PIXELS)
+    # min_tokens = int(min_pixels / IMAGE_FACTOR / IMAGE_FACTOR)
+    # left = min_pixels / IMAGE_FACTOR / IMAGE_FACTOR
+    # right = ele.get("max_pixels", VIDEO_MAX_PIXELS) / IMAGE_FACTOR / IMAGE_FACTOR
+    # def _estimate_total_pixels(tokens_per_frame):
+    #     return slow_number * tokens_per_frame * IMAGE_FACTOR * IMAGE_FACTOR + \
+    #         fast_number * max(int(FAST_TOKEN_RATIO * tokens_per_frame), min_tokens) * IMAGE_FACTOR * IMAGE_FACTOR
 
-    while left < right:
-        mid = int(left+right) // 2
-        if _estimate_total_pixels(mid) > ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS):
-            right = mid
-        else:
-            left = mid + 1
-    slow_max_pixels = left * IMAGE_FACTOR * IMAGE_FACTOR
+    # while left < right:
+    #     mid = int(left+right) // 2
+    #     if _estimate_total_pixels(mid) > ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS):
+    #         right = mid
+    #     else:
+    #         left = mid + 1
+    # slow_max_pixels = left * IMAGE_FACTOR * IMAGE_FACTOR
+    ######
+
+    accum_slow_number = slow_number + FAST_TOKEN_RATIO * fast_number
+    rough_slow_token = int(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS) / accum_slow_number / IMAGE_FACTOR / IMAGE_FACTOR)
+    slow_max_pixels = rough_slow_token * IMAGE_FACTOR * IMAGE_FACTOR
+
     # fast tokens下限为min_tokens，极端情况下slow和fast数量一样
     # fast_max_pixels = max(int(FAST_TOKEN_RATIO * left), min_tokens) * IMAGE_FACTOR * IMAGE_FACTOR
     ### 计算slow fast的token量 end ###
