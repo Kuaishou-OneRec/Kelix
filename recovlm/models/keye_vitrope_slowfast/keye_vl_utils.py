@@ -326,9 +326,8 @@ def cal_sim_cosine_hsv(frame1, frame2, patch_size=28, cos_threshold=0.7, epsilon
     def to_numpy_cvt(tensor):
         # 确保张量在CPU上并转换为HWC格式
         tensor = tensor.cpu().permute(1, 2, 0).numpy()
-        # 将范围从[0,1]转换为[0,255]（如果输入是浮点型）
         if tensor.dtype == np.float32 or tensor.dtype == np.float64:
-            tensor = (tensor * 255).astype(np.uint8)
+            tensor = (tensor).astype(np.uint8)
         # 转换为HSV颜色空间
         return cv2.cvtColor(tensor, cv2.COLOR_RGB2HSV)
     
