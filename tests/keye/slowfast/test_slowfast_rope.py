@@ -115,8 +115,8 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-PROCESSOR_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0703_patch14"
-MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0703_patch14"
+PROCESSOR_DIR = "/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714"
+MODEL_DIR = "/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714"
 
 processor = KeyeProcessor.from_pretrained(PROCESSOR_DIR, use_fast=True, local_files_only=False)
 tokenizer = processor.tokenizer

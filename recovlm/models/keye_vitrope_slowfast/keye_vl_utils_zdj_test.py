@@ -296,35 +296,40 @@ def cal_sim_pixel(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.
 
 
 def cal_sim_cosine(frame1, frame2, patch_size=28, cos_threshold = 0.7, epsilon=1e-8):
-    assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
+    # assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
+    p1, p2 = patch_size, patch_size
+    h, w, c = frame1.shape
+    patch1 = frame1.reshape(h // p1, p1, w // p2, p2, c).transpose(0, 2, 4, 1, 3).reshape(h // p1, w // p2, c * p1 * p2)
+    patch2 = frame2.reshape(h // p1, p1, w // p2, p2, c).transpose(0, 2, 4, 1, 3).reshape(h // p1, w // p2, c * p1 * p2)
     
-    patch1 = rearrange(frame1, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
-    patch2 = rearrange(frame2, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
+    # patch1 = rearrange(frame1, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
+    # patch2 = rearrange(frame2, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
 
-    norm1 = torch.norm(patch1, p=2, dim=-1, keepdim=True) + epsilon
-    norm2 = torch.norm(patch2, p=2, dim=-1, keepdim=True) + epsilon
+    norm1 = np.linalg.norm(patch1, ord=2, axis=-1, keepdims=True) + epsilon
+    norm2 = np.linalg.norm(patch2, ord=2, axis=-1, keepdims=True) + epsilon
     
     normalized1 = patch1 / norm1
     normalized2 = patch2 / norm2
-    cos_sim = (normalized1 * normalized2).sum(dim=-1)
+    cos_sim = (normalized1 * normalized2).sum(-1)
 
+    zero_vector_mask = (norm1.squeeze(-1) < 0.01) & (norm2.squeeze(-1) < 0.01) # 全黑图
     
-    zero_vector_mask = (norm1.squeeze() < 0.01) & (norm2.squeeze() < 0.01) # 全黑图
-    
-    similar = torch.ones_like(cos_sim)  # 默认全部相似
+    similar = np.ones_like(cos_sim)  # 默认全部相似
     
     non_zero_mask = ~zero_vector_mask
-    similar[non_zero_mask] = (cos_sim[non_zero_mask] > cos_threshold).float()
-    
-    return similar[non_zero_mask].float().mean().item()
+    similar[non_zero_mask] = (cos_sim[non_zero_mask] > cos_threshold).astype(np.float32)
+
+    return similar[non_zero_mask].mean()
 
 def extract_key_frame(frames, patch_size=28, threshold=0.9):
-    assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
+    # assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
     
+    nframes = len(frames)
+
     key_frame_indices = [0]
     last_key_frame = frames[0]
     similarity_list = []
-    for i in range(1, frames.size(0)):
+    for i in range(1, nframes):
         current_frame = frames[i]
         
         global_sim = cal_sim_cosine(last_key_frame, current_frame)
@@ -338,17 +343,18 @@ def extract_key_frame(frames, patch_size=28, threshold=0.9):
     return key_frame_indices
 
 
-def extract_slow_fast_frames(selected_frames, selected_frames_extract):
+def extract_slow_fast_frames(selected_frames):
     # print("selected_frames size {}, selected_frames_extract size {}".format(selected_frames.size(), selected_frames_extract.size()))
-    slow_indices = extract_key_frame(selected_frames_extract)
+    nframes = len(selected_frames)
+    slow_indices = extract_key_frame(selected_frames)
 
-    slow_mask = torch.zeros(size=(selected_frames.size(0), ), dtype=torch.bool)
+    slow_mask = np.zeros(shape=(nframes, ), dtype=bool)
     slow_mask[slow_indices] = True
 
     slow_frames = selected_frames[slow_mask]
     fast_frames = selected_frames[~slow_mask]
 
-    slow_fast_order = torch.ones(size=(selected_frames.size(0), ), dtype=torch.long)
+    slow_fast_order = np.ones(shape=(nframes, ), dtype=np.int64)
     slow_fast_order[slow_indices] = 0
 
     return slow_frames, fast_frames, slow_fast_order.tolist()
@@ -387,14 +393,15 @@ def _read_video_decord_slowfast(
     
     total_nframes_number = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
     
-    selected_indices = torch.linspace(0, total_frames - 1, total_nframes_number).round().long()
+    selected_indices = np.linspace(0, total_frames - 1, total_nframes_number).round().astype(np.int64)
     selected_frames = vr.get_batch(selected_indices.tolist()).asnumpy()
-    selected_frames = torch.tensor(selected_frames).permute(0, 3, 1, 2)
+
+    # selected_frames = torch.tensor(selected_frames).permute(0, 3, 1, 2)
     selected_time_position = total_frames_time_position[selected_indices]
 
     ##### extract key frames start ######
     # Step#1，对选中的图，假设都为slow，先resize到28*28的倍数，但是会先在256视图下去进行比较
-    _, _, height, width = selected_frames.shape
+    _, height, width, _ = selected_frames.shape
     resized_height, resized_width = smart_resize(
         height,
         width,
@@ -402,16 +409,26 @@ def _read_video_decord_slowfast(
         min_pixels=ele.get("min_pixels", VIDEO_MIN_PIXELS),
         max_pixels=256 * IMAGE_FACTOR * IMAGE_FACTOR,
     )
-    
-    selected_frames_extract = nn.functional.interpolate(
-        selected_frames,
-        [resized_height, resized_width],
-        mode="bicubic",
-        antialias=True,
-    ).float()
+
+    selected_images = list()
+    for array in list(selected_frames):
+        image = Image.fromarray(array)
+        image = image.resize((resized_width, resized_height))
+        image = np.array(image).astype(np.float32)
+        selected_images.append(image)
+    selected_frames = np.stack(selected_images, axis=0)
+
+    # selected_images = [Image.fromarray(image) for image in list(selected_frames)]
+
+    # selected_frames_extract = nn.functional.interpolate(
+    #     selected_frames,
+    #     [resized_height, resized_width],
+    #     mode="bicubic",
+    #     antialias=True,
+    # ).float()
     
     # Step#2 对选中的图，筛选出其中关键帧部分，其余为fast
-    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames, selected_frames_extract)
+    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames)
     ##### extract key frames start ######
 
     return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order
@@ -445,6 +462,8 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
     if isinstance(ele["video"], str) or isinstance(ele["video"], bytes):
         video_reader_backend = get_video_reader_backend()
         slow_frames, fast_frames, time_position, slow_fast_order = VIDEO_READER_BACKENDS[video_reader_backend](ele)
+        slow_frames = torch.as_tensor(slow_frames)
+        fast_frames = torch.as_tensor(fast_frames)
 
     else:
         assert isinstance(ele["video"], (list, tuple))

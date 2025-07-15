@@ -295,21 +295,23 @@ def cal_sim_pixel(frame1, frame2, patch_size=28, pixel_threshold=5, patch_sim=0.
     return unchanged.float().mean().item()
 
 
-def cal_sim_cosine(frame1, frame2, patch_size=28, cos_threshold = 0.7, epsilon=1e-8):
-    assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
+def cal_sim_cosine(frame1, mask1, frame2, mask2, patch_size=28, cos_threshold = 0.7, epsilon=1e-8):
+    # assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
-    patch1 = rearrange(frame1, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
-    patch2 = rearrange(frame2, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
+    # patch1 = rearrange(frame1, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
+    # patch2 = rearrange(frame2, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
 
-    norm1 = torch.norm(patch1, p=2, dim=-1, keepdim=True) + epsilon
-    norm2 = torch.norm(patch2, p=2, dim=-1, keepdim=True) + epsilon
+    # norm1 = torch.norm(patch1, p=2, dim=-1, keepdim=True) + epsilon
+    # norm2 = torch.norm(patch2, p=2, dim=-1, keepdim=True) + epsilon
     
-    normalized1 = patch1 / norm1
-    normalized2 = patch2 / norm2
+    # normalized1 = patch1 / norm1
+    # normalized2 = patch2 / norm2
+    normalized1 = frame1
+    normalized2 = frame2
     cos_sim = (normalized1 * normalized2).sum(dim=-1)
 
     
-    zero_vector_mask = (norm1.squeeze() < 0.01) & (norm2.squeeze() < 0.01) # 全黑图
+    zero_vector_mask = mask1 & mask2 # 全黑图
     
     similar = torch.ones_like(cos_sim)  # 默认全部相似
     
@@ -320,18 +322,25 @@ def cal_sim_cosine(frame1, frame2, patch_size=28, cos_threshold = 0.7, epsilon=1
 
 def extract_key_frame(frames, patch_size=28, threshold=0.9):
     assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
-    
+    frames = rearrange(frames, "t c (h p1) (w p2) -> t h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
+    norm = torch.norm(frames, p=2, dim=-1, keepdim=True) + (1e-8)
+    frames = frames / norm
+    is_black = (norm.squeeze(-1) < 0.01)
+
     key_frame_indices = [0]
     last_key_frame = frames[0]
+    last_key_mask = is_black[0]
     similarity_list = []
     for i in range(1, frames.size(0)):
         current_frame = frames[i]
+        current_mask = is_black[i]
         
-        global_sim = cal_sim_cosine(last_key_frame, current_frame)
+        global_sim = cal_sim_cosine(last_key_frame, last_key_mask, current_frame, current_mask)
         similarity_list.append(global_sim)
         if global_sim < threshold:
             key_frame_indices.append(i)
             last_key_frame = current_frame  # 更新关键帧
+            last_key_mask = current_mask
 
     # print("cjx similarity debug {}".format(similarity_list))
 

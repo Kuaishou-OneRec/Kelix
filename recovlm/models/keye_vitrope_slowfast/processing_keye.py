@@ -70,8 +70,10 @@ class KeyeProcessor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
-        self.time_token = "<|second|>" if not hasattr(tokenizer, "second_token") else tokenizer.second_token
+        self.frame_token = "<|frame|>" if not hasattr(tokenizer, "frame_token") else tokenizer.frame_token
         self.fast_video_token = "<|fast_video_pad|>" if not hasattr(tokenizer, "fast_video_token") else tokenizer.fast_video_token
+        self.fast_start = "<|fast_start|>" if not hasattr(tokenizer, "fast_start") else tokenizer.fast_start
+        self.fast_end = "<|fast_end|>" if not hasattr(tokenizer, "fast_end") else tokenizer.fast_end
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
         # self.fast_patch_size = 16
@@ -276,13 +278,13 @@ class KeyeProcessor(ProcessorMixin):
                     fast_index = 0
                     for j in range(len(all_position[index][1])):
                         if all_position[index][0] is not None: # 如果有时间戳
-                            video_place_holder_tempale += format(all_position[index][0][j], ".1f") + self.time_token
+                            video_place_holder_tempale += self.frame_token + format(all_position[index][0][j], ".1f")
 
                         if all_position[index][1][j] == 0: # 当前帧是slow？
                             video_place_holder_tempale += "<|placeholder|>" * (slow_videos_token_nums[index][slow_index]//self.image_processor.merge_size//self.image_processor.merge_size)
                             slow_index += 1
                         elif all_position[index][1][j] == 1: # 当前帧是fast？
-                            video_place_holder_tempale += "<|fast_placeholder|>" * (fast_videos_token_nums[index][fast_index]//self.image_processor.merge_size//self.image_processor.merge_size)
+                            video_place_holder_tempale += self.fast_start + "<|fast_placeholder|>" * (fast_videos_token_nums[index][fast_index]//self.image_processor.merge_size//self.image_processor.merge_size) + self.fast_end
                             fast_index += 1
                     text[i] = text[i].replace(
                         self.video_token,
