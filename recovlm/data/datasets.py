@@ -69,6 +69,9 @@ from .prompts import PromptLoader
 from recovlm.data import balance, transfer
 from recovlm.services.clients import PidInfoClient
 
+import signal
+def timeout_handler(signum, frame):
+  raise TimeoutError("Process excel 60 secs")
 
 _DATASET_SKIP_MM = os.environ.get("_DATASET_SKIP_MM", "")
 assert _DATASET_SKIP_MM in ["", "SKIP_MM", "SKIP_VI"]
@@ -1553,12 +1556,19 @@ class ChatCompletionVisionDataset(IterableDataset):
 
         self.source_sample_cnt.setdefault(source_name, 0)
         self.source_sample_cnt[source_name] += 1
-      
+
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(60)
+
         inputs = self._process(sample, source_name)
+        signal.alarm(0)
       except StopIteration as e:
+        signal.alarm(0)
         logger.info(f"StopIteration: {e}")
         break
-      except:
+      except Exception as e:
+        signal.alarm(0)
+        print(e)
         self.source_error_cnt.setdefault(source_name, 0)
         self.source_error_cnt[source_name] += 1
         error_ratio = self.source_error_cnt[source_name] * 1.0 / \
@@ -3285,325 +3295,6 @@ class NaiveParquetDataset(IterableDataset):
     logger.warning(f"[rank{rank}-woker{worker}] load checkpoint success. self.finish_dict_all={self.finish_dict_all}")
 
 
-class ParquetDataset(IterableDataset):
-  def __init__(self, data_files, num_workers, num_readers=1, shuffle_window=0, **kargs):
-    self.data_files = data_files
-    self.num_workers = num_workers
-    self.num_readers = num_readers
-    self.shuffle_window = shuffle_window
-    self.kargs = kargs
-    self.finish_dict_all = {}
-    self.offset_dict_all = {}
-    for i in range(self.num_workers * num_readers):
-      self.finish_dict_all[i] = {}
-      self.offset_dict_all[i] = {}
-
-  def state_dict(self):
-    rank, world_size, worker, num_workers = pytorch_worker_info()
-
-    state_dict = {
-      "finish_dict": self.finish_dict_all,
-      "offset_dict": self.offset_dict_all,
-    }
-    return state_dict
-  
-  def load_state_dict(self, state_dict):
-    rank, world_size, worker, num_workers = pytorch_worker_info()
-    finish_dict = state_dict["finish_dict"]
-    offset_dict = state_dict["offset_dict"]
-
-    tmp_finish = {}
-    for i, finish in finish_dict.items():
-      # support old ckpt format
-      tmp_finish_dict = dict()
-
-      for k, v in finish.items():
-        if isinstance(k, str):
-          tmp_finish_dict[(k, 0)] = v
-        elif isinstance(k, tuple) and len(k) == 2:
-          tmp_finish_dict[k] = v
-        else:
-          raise NotImplementedError(f"Unsupported dataloader checkpoint format. {tmp_finish_dict}") 
-      tmp_finish[i] = tmp_finish_dict
-
-    tmp_offset = {}
-    for i, offset in offset_dict.items():
-      tmp_offset_dict = dict()
-      for k, v in offset_dict.items():
-        if isinstance(k, str):
-          fn, group_idx = k.split("|")
-          group_idx = int(group_idx)
-          tmp_offset_dict[(fn, 0, group_idx)] = v
-        elif isinstance(k, tuple) and len(k) == 3:
-          tmp_offset_dict[k] = v
-        else:
-          raise NotImplementedError(f"Unsupported dataloader checkpoint format. {tmp_offset_dict}") 
-      tmp_offset[i] = tmp_offset_dict
-
-    # clear cur state
-    self.finish_dict_all.clear()
-    self.offset_dict_all.clear()
-
-    # update
-    self.finish_dict_all.update(tmp_finish)
-    self.offset_dict_all.update(tmp_offset)
-    logger.warning(f"[rank{rank}-woker{worker}] load checkpoint success.")
-
-  def _parser(self, raw_row_data, file_url):
-    try:
-      messages = None
-      segments = None
-      chosen = None
-      rejected = None
-
-      if "messages" in raw_row_data:
-        messages = raw_row_data["messages"]
-        if isinstance(messages, str):
-          messages = json.loads(messages)
-          
-      if "segments" in raw_row_data:
-        segments = raw_row_data["segments"]
-        if isinstance(segments, str):
-          segments = json.loads(segments)
-          
-      images = raw_row_data["images"]
-      data_source = raw_row_data["source"]
-      key = raw_row_data["uuid"]
-      videos = raw_row_data["videos"]
-
-      samples = {
-        "__key__": key,
-        "__url__": file_url,
-      }
-
-      # process message or segments -> webdataset_key = json
-      sample_data = {
-        "source": data_source,
-      }
-
-      if "chosen" in raw_row_data:
-        chosen = raw_row_data["chosen"]
-        if isinstance(chosen, str):
-          chosen = json.loads(chosen)
-        sample_data["chosen"] = chosen
-          
-      if "rejected" in raw_row_data:
-        rejected = raw_row_data["rejected"]
-        if isinstance(rejected, str):
-          rejected = json.loads(rejected)
-        sample_data["rejected"] = rejected
-
-      if messages is not None and isinstance(messages, list) and len(messages) > 0:
-        sample_data["messages"] = messages
-      elif segments is not None and isinstance(segments, list) and len(segments) > 0:
-        sample_data["segments"] = segments
-      elif messages is not None and isinstance(messages, np.ndarray):
-        sample_data["messages"] = messages.tolist()
-      else:
-        raise NotImplementedError(f"Unsupported sample, message type is {type(messages)}, message={messages}, segments type is {type(segments)}, segments={segments}")
-
-      samples["json"] = sample_data
-
-      self._load_images_to_samples(images, samples, raw_row_data)
-      self._load_videos_to_samples(videos, samples, raw_row_data)
-
-      return samples
-    except:
-      logger.error(f"ParquetDataset parse sample error!!! err_msg={traceback.format_exc()}, images={str(images)[:50]}\nsamples={str(samples)[:50]}")
-      return None
-
-  def _load_images_to_samples(self, images, samples, raw_row_data):
-    # process images
-    if isinstance(images, str):
-      images = json.loads(images)
-    elif isinstance(images, dict):
-      pass
-    else:
-      raise NotImplementedError(f"Unsupported image field type, {type(raw_row_data['images'])=}")
-
-    for image_name in images:
-      image_b64 = images[image_name]
-      # 先检查是否是有效文件路径
-      if isinstance(image_b64, str) and os.path.exists(image_b64):
-          try:
-              image = Image.open(image_b64)
-              samples[image_name] = image
-          except Exception as e:
-              raise ValueError(f"Failed to load image from path {image_b64}: {str(e)}, image_b64={image_b64[:100]}")
-      # 否则按base64处理
-      else:
-          try:
-              image_bytes = base64.b64decode(image_b64)
-              image_bytes_stream = BytesIO(image_bytes)
-              image = Image.open(image_bytes_stream)
-              samples[image_name] = image
-          except Exception as e:
-              raise ValueError(f"Failed to decode base64 image {image_name}: {str(e)}, image_b64={image_b64[:100]}")
-
-  def _load_videos_to_samples(self, videos, samples, raw_row_data):
-    # process images
-    _videos = videos
-    if isinstance(videos, str):
-      videos = json.loads(videos)
-      if not videos: return
-    
-    if isinstance(videos, dict):
-      pass
-    else:
-      raise NotImplementedError(f"Unsupported video field type, {type(raw_row_data['videos'])=}, {raw_row_data['videos']}\n{type(videos)}, videos={videos}, samples={samples}")
-    
-    for video_name in videos:
-      video_path = videos[video_name]
-      # 先检查是否是有效文件路径
-      if isinstance(video_path, str) and os.path.exists(video_path):
-          try:
-              messages = samples['json']['messages']
-              for message in messages:
-                contents = message['content']
-
-                # 我们允许纯文本字段的时候，不使用content list
-                # 不带这个if continue条件，会导致带system prompt的样本报错
-                if isinstance(contents, str): continue 
-
-                for content in contents:
-                  if content['type'] == 'video' and content['video'] == video_name:
-                    content['video'] = video_path
-          except Exception as e:
-              import traceback
-              traceback.print_exc()
-              raise ValueError(f"Failed to substitute video path for {video_path}: {str(e)}, \nvideos={videos}, _videos={_videos}, \nmessages={messages}")
-      # 否则按base64处理
-      else:
-          raise NotImplementedError(f"base64 video is not supported")
-
-  def read_parquet_runner(self, fn_list, tid):
-    rank, world_size, worker, num_workers = pytorch_worker_info()
-    worker = worker + tid
-    finish_dict = self.finish_dict_all[worker]
-    offset_dict = self.offset_dict_all[worker]
-    try:
-      for i, epoch_fn in enumerate(fn_list):
-        if i % self.num_readers != tid:
-          continue
-        fn, epoch_idx = epoch_fn
-        if (fn, epoch_idx) in finish_dict:
-          logger.warning(f"[Rank{rank}-{worker}] skip {fn}")
-          continue
-        
-        # open parquet file
-        try:
-          #parquet_file = pq.ParquetFile(fn)
-          parquet_file = load_parquet_file(fn)
-
-        except Exception as e:
-          logger.error(f"ParquetDataset error, open parquet fail!!! {fn=}, error_msg={traceback.format_exc()}")
-          parquet_file = None
-        
-        # # process file content
-        if parquet_file is not None:
-          logger.warning(f"[Rank{rank}-{worker}] {fn} total row_groups: {parquet_file.num_row_groups}")
-          for group_idx in range(parquet_file.num_row_groups):
-            try:
-              offset = 0
-              fn_group_key = (fn, epoch_idx, group_idx)
-              if fn_group_key in offset_dict:
-                if offset_dict[fn_group_key] == -1:
-                  logger.warning(f"[Rank{rank}-{worker}] skip {fn}-epoch{epoch_idx}-group{group_idx}")
-                  continue
-                else:
-                  offset = offset_dict[fn_group_key] + 1
-              
-              row_group = parquet_file.read_row_group(group_idx)
-              if offset >= row_group.num_rows:
-                continue
-              logger.warning(f"[Rank{rank}-{worker}] start {fn}-epoch{epoch_idx}-group{group_idx}-offset{offset}")
-              row_pandas = row_group.to_pandas().reset_index().iloc[offset:]
-
-              for row_idx, row in row_pandas.iterrows():
-                if row_idx < offset:
-                  continue
-
-                try:
-                  sample = self._parser(row, fn)
-                  sample['epoch_idx'] = torch.tensor(epoch_idx)
-                  if sample is not None:
-                    # yield sample
-                    self.sample_queue.put(sample)
-                  offset_dict[fn_group_key] = row_idx
-                except GeneratorExit:
-                  # 正确处理生成器退出
-                  logger.warning(f"Generator exited at {fn}-epoch{epoch_idx}-group{group_idx}-row{row_idx}")
-                  return
-                except Exception as e:
-                  logger.error(f"Error processing row {row_idx}: {str(e)}")
-                  continue
-
-                if row_idx % 1000 == 0:
-                  logger.warning(f"Processing row {row_idx} in {fn}-epoch{epoch_idx}-group{group_idx}")
-
-              # group finish
-              logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx}-group{group_idx} finish.")
-              offset_dict[fn_group_key] = -1
-              
-            except GeneratorExit:
-              # 正确处理生成器退出
-              logger.warning(f"Generator exited during group processing")
-              return
-            except Exception as e:
-              logger.error(f"Error processing group {group_idx}: {str(e)}")
-              continue
-          
-          # file finish
-          logger.warning(f"[Rank{rank}-{worker}] {fn} finish.")
-          finish_dict[(fn, epoch_idx)] = True
-    except GeneratorExit:
-      # 正确处理生成器退出
-      logger.warning("Generator exited during file processing")
-      return
-    except Exception as e:
-      logger.error(f"Error in dataset iterator: {str(e)}\n{traceback.format_exc()}")
-      raise
-    
-  def shuffle_runner(self, window):
-    buffer = []
-    while True:
-      buffer.append(self.sample_queue.get())
-      if len(buffer) == window: # 每3k shuffle。
-        random.shuffle(buffer)
-        for sample in buffer:
-          self.shuffled_queue.put(sample)
-        buffer = []
-
-  def __iter__(self):
-    rank, world_size, worker, num_workers = pytorch_worker_info()
-    assert num_workers == self.num_workers, f"{num_workers} : {self.num_workers}"
-
-    total_num_workers = num_workers * world_size
-    local_worker_idx = rank * num_workers + worker
-    fn_list = [fn for idx, fn in enumerate(self.data_files) if idx % total_num_workers == local_worker_idx]
-    logger.warning(
-      f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
-    )
-    
-    self.sample_queue = queue.Queue(maxsize=16)
-    self.readers = []
-    for i in range(self.num_readers):
-      reader = threading.Thread(target=self.read_parquet_runner, args=(fn_list, i), daemon=True)
-      reader.start()
-      self.readers.append(reader)
-    input_q = self.sample_queue
-      
-    if self.shuffle_window > 0:
-      self.shuffled_queue = queue.Queue(self.shuffle_window * 2)
-      self.shuffle_task = threading.Thread(target=self.shuffle_runner, args=(self.shuffle_window, ), daemon=True)
-      self.shuffle_task.start()
-      input_q = self.shuffled_queue
-    
-    while True:
-      sample = input_q.get()
-      yield sample
-
-
 ParquetDataset = NaiveParquetDataset
 
 
@@ -5208,9 +4899,14 @@ class BalanceParquetDataset(IterableDataset):
       self.input.source_sample_cnt[source_name] += 1
       
       try:
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(60)
         inputs = self.input._process(sample, source_name)
+        signal.alarm(0)
         self.processed_buffer.put((inputs, source_name))
-      except:
+      except Exception as e:
+        signal.alarm(0)
+        print(e)
         self.input.source_error_cnt.setdefault(source_name, 0)
         self.input.source_error_cnt[source_name] += 1
         error_ratio = self.input.source_error_cnt[source_name] * 1.0 / \
@@ -5351,30 +5047,24 @@ class BalanceParquetDataset(IterableDataset):
           if 1:
             sample_original_len = inputs["input_ids"].shape[-1]
             reserved = inputs["input_ids"].shape[-1] - (cumsum - maxlen)
-            # rank2__balance_task_balance_task_inputstorch.Size([1, 1380]),cumsum=17114,maxlen=13972,reserved=-1762,id=140644323789360
-
-            print(f"rank{dist.get_rank()}__balance_task_balance_task_inputs{inputs['input_ids'].shape},cumsum={cumsum},maxlen={maxlen},reserved={reserved},sample_original_len={sample_original_len},id={id(inputs)}")
-            
-            cut = self.input._cut_sample_cjx(copy.deepcopy(inputs), reserved)
+            cut = self.input._cut_sample(copy.deepcopy(inputs), reserved) # 深拷贝
             
             all_loss_tokens = cut["loss_mask"].sum().item()
             if all_loss_tokens == 0 and len(buffer) == 1: # 一条样本就占满了seq len, 而且不能计算loss，删掉
               buffer.pop()
               cumsum -= sample_original_len
-              if len(buffer) == 0: 
-                print(f"rank{dist.get_rank()}__balance_task_balance_remove_{sample_original_len}_from_{cumsum}")
-                continue # 继续填, 没有样本
-
+              if len(buffer) == 0: continue # 继续填, 没有样本
 
             if all_loss_tokens == 0 and inputs["input_ids"].shape[-1] < maxlen:
+              # 截断之后没有loss，就把整条样本放入下一个batch，当前batch扔了这个样本
               buffer.pop()
-              print(f"rank{dist.get_rank()}__balance_task_balance_task_put_bakkk_id={id(inputs)}")
               next_inputs = (inputs, source_name) # 放回去
 
 
             else:
               # 截断
               buffer[-1] = cut
+
         # t0 = time.perf_counter()
         send_info, send_data = balance.calculate_exchange_info(buffer, self.fm)
         # t1 = time.perf_counter()

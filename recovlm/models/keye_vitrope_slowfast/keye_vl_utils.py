@@ -26,7 +26,7 @@ import os.path as osp
 import numpy as np
 import copy
 from einops import rearrange
-
+import cv2
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ MAX_PIXELS = MAX_TOKENS * IMAGE_FACTOR * IMAGE_FACTOR # 20480 * 28 * 28 = 16,056
 MAX_RATIO = 200
 
 # min tokens per video frame
-VIDEO_MIN_TOKENS = 64
+VIDEO_MIN_TOKENS = 48
 # max tokens per video frame
 VIDEO_MAX_TOKENS = 768
 # min pixels per video frame
@@ -52,7 +52,7 @@ VIDEO_TOTAL_PIXELS = 65536 * IMAGE_FACTOR * IMAGE_FACTOR # 65,536 * 28 * 28 = 51
 # default fps
 FPS = 2.0
 
-FAST_TOKEN_RATIO = 0.5
+FAST_TOKEN_RATIO = 0.3
 
 def round_by_factor(number: int, factor: int) -> int:
     """Returns the closest integer to 'number' that is divisible by 'factor'."""
@@ -319,7 +319,6 @@ def cal_sim_cosine(frame1, frame2, patch_size=28, cos_threshold = 0.7, epsilon=1
     
     return similar[non_zero_mask].float().mean().item()
 
-import cv2
 def cal_sim_cosine_hsv(frame1, frame2, patch_size=28, cos_threshold=0.7, epsilon=1e-8):
     assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
