@@ -1279,11 +1279,11 @@ class ChatCompletionVisionDataset(IterableDataset):
           source_conf[key] = self.datasource_config[source_name][key]
     
     for retry in range(self.max_retry):
+      if source_conf["video_total_pixels"]//28//28 < 10000:
+          print("mlgb video_total_pixels {}".format(source_conf["video_total_pixels"]//28//28))
       if data_format == "chatml":
         inputs = self._process_chat(sample, source_conf)
       elif data_format == "completion":
-        if source_conf["video_total_pixels"]//28//28 < 10000:
-          print("mlgb video_total_pixels {}".format(source_conf["video_total_pixels"]//28//28))
         inputs = self._process_completion(sample, source_conf)
 
       else:
