@@ -319,49 +319,48 @@ def cal_sim_cosine(frame1, frame2, patch_size=28, cos_threshold = 0.7, epsilon=1
     
     return similar[non_zero_mask].float().mean().item()
 
-# import cv2
-# def cal_sim_cosine_hsv(frame1, frame2, patch_size=28, cos_threshold=0.7, epsilon=1e-8):
-#     assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
+import cv2
+def cal_sim_cosine_hsv(frame1, frame2, patch_size=28, cos_threshold=0.7, epsilon=1e-8):
+    assert frame1.dim() == 3 and frame2.dim() == 3, "输入必须是3D张量 [C, H, W]"
     
-#     # 将PyTorch张量转换为OpenCV格式的numpy数组
-#     def to_numpy_cvt(tensor):
-#         # 确保张量在CPU上并转换为HWC格式
-#         tensor = tensor.cpu().permute(1, 2, 0).numpy()
-#         # 将范围从[0,1]转换为[0,255]（如果输入是浮点型）
-#         if tensor.dtype == np.float32 or tensor.dtype == np.float64:
-#             tensor = (tensor * 255).astype(np.uint8)
-#         # 转换为HSV颜色空间
-#         return cv2.cvtColor(tensor, cv2.COLOR_RGB2HSV)
+    # 将PyTorch张量转换为OpenCV格式的numpy数组
+    def to_numpy_cvt(tensor):
+        # 确保张量在CPU上并转换为HWC格式
+        tensor = tensor.cpu().permute(1, 2, 0).numpy()
+        # 将范围从[0,1]转换为[0,255]（如果输入是浮点型）
+        if tensor.dtype == np.float32 or tensor.dtype == np.float64:
+            tensor = (tensor * 255).astype(np.uint8)
+        # 转换为HSV颜色空间
+        return cv2.cvtColor(tensor, cv2.COLOR_RGB2HSV)
     
-#     # 转换颜色空间
-#     frame1_hsv = to_numpy_cvt(frame1)
-#     frame2_hsv = to_numpy_cvt(frame2)
+    # 转换颜色空间
+    frame1_hsv = to_numpy_cvt(frame1)
+    frame2_hsv = to_numpy_cvt(frame2)
     
-#     # 将HSV图像转回PyTorch张量
-#     frame1_tensor = torch.from_numpy(frame1_hsv).permute(2, 0, 1).to(frame1.device).float()
-#     frame2_tensor = torch.from_numpy(frame2_hsv).permute(2, 0, 1).to(frame2.device).float()
+    # 将HSV图像转回PyTorch张量
+    frame1_tensor = torch.from_numpy(frame1_hsv).permute(2, 0, 1).to(frame1.device).float()
+    frame2_tensor = torch.from_numpy(frame2_hsv).permute(2, 0, 1).to(frame2.device).float()
     
-#     # 分块处理
-#     patch1 = rearrange(frame1_tensor, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
-#     patch2 = rearrange(frame2_tensor, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
+    # 分块处理
+    patch1 = rearrange(frame1_tensor, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
+    patch2 = rearrange(frame2_tensor, "c (h p1) (w p2) -> h w (c p1 p2)", p1=patch_size, p2=patch_size).float()
 
-#     norm1 = torch.norm(patch1, p=2, dim=-1, keepdim=True) + epsilon
-#     norm2 = torch.norm(patch2, p=2, dim=-1, keepdim=True) + epsilon
+    norm1 = torch.norm(patch1, p=2, dim=-1, keepdim=True) + epsilon
+    norm2 = torch.norm(patch2, p=2, dim=-1, keepdim=True) + epsilon
     
-#     normalized1 = patch1 / norm1
-#     normalized2 = patch2 / norm2
-#     cos_sim = (normalized1 * normalized2).sum(dim=-1)
+    normalized1 = patch1 / norm1
+    normalized2 = patch2 / norm2
+    cos_sim = (normalized1 * normalized2).sum(dim=-1)
     
-#     zero_vector_mask = (norm1.squeeze() < 0.01) & (norm2.squeeze() < 0.01)  # 全黑图
+    zero_vector_mask = (norm1.squeeze() < 0.01) & (norm2.squeeze() < 0.01)  # 全黑图
     
-#     similar = torch.ones_like(cos_sim)  # 默认全部相似
+    similar = torch.ones_like(cos_sim)  # 默认全部相似
     
-#     non_zero_mask = ~zero_vector_mask
-#     similar[non_zero_mask] = (cos_sim[non_zero_mask] > cos_threshold).float()
+    non_zero_mask = ~zero_vector_mask
+    similar[non_zero_mask] = (cos_sim[non_zero_mask] > cos_threshold).float()
     
-#     return similar[non_zero_mask].float().mean().item()
+    return similar[non_zero_mask].float().mean().item()
 
-# cosine_score = self._calculate_cosine_similarity(cv2.cvtColor(patch1, cv2.COLOR_BGR2HSV), cv2.cvtColor(patch2, cv2.COLOR_BGR2HSV))
 
 def extract_key_frame(frames, patch_size=28, threshold=0.9):
     assert frames.dim() == 4, "输入必须是4D张量 [N, C, H, W]"
@@ -372,7 +371,7 @@ def extract_key_frame(frames, patch_size=28, threshold=0.9):
     for i in range(1, frames.size(0)):
         current_frame = frames[i]
         
-        global_sim = cal_sim_cosine(last_key_frame, current_frame)
+        global_sim = cal_sim_cosine_hsv(last_key_frame, current_frame)
         similarity_list.append(global_sim)
         if global_sim < threshold:
             key_frame_indices.append(i)
