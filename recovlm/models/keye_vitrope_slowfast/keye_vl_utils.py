@@ -518,7 +518,7 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
     fast_number = fast_frames.size(0) if fast_frames is not None else 0
 
     ####### 二分，精准，但暂时弃用 #####
-    # min_pixels = max(int(ele.get("min_pixels", VIDEO_MIN_PIXELS)), VIDEO_MIN_PIXELS)
+    min_pixels = max(int(ele.get("min_pixels", VIDEO_MIN_PIXELS)), VIDEO_MIN_PIXELS)
     # min_tokens = int(min_pixels / IMAGE_FACTOR / IMAGE_FACTOR)
     # left = min_pixels / IMAGE_FACTOR / IMAGE_FACTOR
     # right = ele.get("max_pixels", VIDEO_MAX_PIXELS) / IMAGE_FACTOR / IMAGE_FACTOR
