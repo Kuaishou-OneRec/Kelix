@@ -3,7 +3,7 @@
     "sources": "/llm_reco/vlm/datahub/datasets/stage1_blended/0.0.7/index/parquet.json",
     "max_length": 15000,
     "min_visual_tokens_per_image": 4,
-    "max_visual_tokens_per_image": 1028,
+    "max_visual_tokens_per_image": 1280,
     "min_visual_tokens_per_frame": 4,
     "max_visual_tokens_per_frame": 512,
     "video_fps": 2.0,
