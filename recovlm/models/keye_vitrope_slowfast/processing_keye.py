@@ -279,7 +279,9 @@ class KeyeProcessor(ProcessorMixin):
                     for j in range(len(all_position[index][1])):
                         if all_position[index][0] is not None: # 如果有时间戳
                             video_place_holder_tempale += self.frame_token + format(all_position[index][0][j], ".1f")
-
+                        else:
+                            video_place_holder_tempale += self.frame_token
+                        
                         if all_position[index][1][j] == 0: # 当前帧是slow？
                             video_place_holder_tempale += "<|placeholder|>" * (slow_videos_token_nums[index][slow_index]//self.image_processor.merge_size//self.image_processor.merge_size)
                             slow_index += 1
