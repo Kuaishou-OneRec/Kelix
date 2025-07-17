@@ -1294,13 +1294,13 @@ def train():
           local_mask = get_local_sequence(loss_mask)[0]
           mask = (local_sample_idx == s_idx) * local_mask
 
-          sum_loss = per_token_loss[mask>0].sum()
-
-
+          per_token_loss2 = per_token_loss[:-1]
+          mask = mask[1:]
+          sum_loss = per_token_loss2[mask>0].sum()
           key = data_source[int(s_idx.item())]
           batch_data_source_loss[key] += sum_loss.item()
           batch_data_source_tokens[key] += mask.sum().item()
-          valid_data_source_tokens[key] += mask[local_labels.squeeze() != loss_fn.ignore_index].sum().item()
+
         ticker.tick("monitor_datasource_loss")
 
       if args.monitor_datasource_cnt:
