@@ -1291,7 +1291,11 @@ class ChatCompletionVisionDataset(IterableDataset):
       if not inputs:
         raise ValueError("Empty inputs, skip")
 
-      process_max_length = min(int(self.max_length // 1.5), 8000) if self.use_flops_balance else self.max_length
+      process_max_length = self.kwargs.get("max_sample_length", 8000)
+      process_max_length = min(process_max_length, self.max_length)
+      # min(int(self.max_length // 1.5), ) # if self.use_flops_balance else self.max_length
+      # process_max_length = self.max_length
+
       if inputs["input_ids"].shape[-1] > process_max_length:
         source_conf["max_visual_tokens_per_image"] = (
             source_conf["max_visual_tokens_per_image"] * self.shrink_ratio)
@@ -2957,7 +2961,9 @@ class NaiveParquetDataset(IterableDataset):
     if isinstance(videos, str):
       videos = json.loads(videos)
       if not videos: return
-    
+    if isinstance(videos, list):
+      print(f"Find unexpected list of videos: {videos}, skip")
+      return
     if isinstance(videos, dict):
       pass
     else:
@@ -3351,7 +3357,7 @@ class ChatCompletionVisionParquetDataset_keye(ChatCompletionVisionDataset_keye):
     self.num_epochs = num_epochs
     self.cut_to_pad = kargs.get("cut_to_pad", True)
     self.kargs = kargs
-    self.num_readers = kargs.get("num_readers", 1)
+    self.num_readers = kargs.get("num_readers", 4)
     self.shuffle_window = kargs.get("shuffle_window", 0)
     super().__init__(sources, **kargs)
 
@@ -4465,7 +4471,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
 
     kwargs['use_flops_balance'] = kwargs.get("use_flops_balance", False)
     self.use_flops_balance = kwargs['use_flops_balance']
-    print(111111111, self.use_flops_balance)
+    self.slowfast_padder = SlowFastVisionPadder(base_model_dir)
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
     self.process_vision_info_args = process_vision_info_args
     self.cut_to_pad = cut_to_pad
@@ -4707,12 +4713,9 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     cu_seqlens: List[int] = [0]
     epochs = []
     valid_seq_len = 0
-    n_pixels = 0
+
     for _, inputs in enumerate(buffer):
-      if "pixel_values" in inputs: n_pixels += inputs["pixel_values"].shape[0]
-      if "pixel_values_videos" in inputs: n_pixels += inputs["pixel_values_videos"].shape[0]
       image_pad = True if self.use_flops_balance else False
-      # print(22222, self.use_flops_balance, image_pad)
       epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
@@ -4728,28 +4731,30 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                                       packed_fast_video_grid_thw,
                                       image_pad=image_pad
                                       )
-
-
-    # 
-    # append a pad image sequence to trigger ViT
-    image_pad = self._gen_img_pad() if n_pixels % 8 == 0 else self._gen_img_pad(sz=(4, round(self.patch_size * 1.4))) # 1.4 处于 (1.25 ~ 1.5)之间
-    self._append_sample_packing(image_pad,
-                                packed_input_ids,
-                                packed_position_ids,
-                                packed_loss_mask,
-                                packed_pixel_values,
-                                packed_pixel_values_videos,
-                                packed_image_gird_thw,
-                                packed_video_grid_thw,
-                                packed_sample_idx,
-                                cu_seqlens,
-                                packed_fast_pixel_values_videos,
-                                packed_fast_video_grid_thw,
-                                sample_idx=-1,
-                                image_pad=True
-                                )
+    # 1. 保证image, slow_video, fast_video的 vit token数量都是8的倍数。
+    # 2. 保证每张卡都会经过VIT
+    paddings = self.slowfast_padder( 
+      packed_pixel_values,
+      packed_pixel_values_videos,
+      packed_fast_pixel_values_videos
+    )
+    for pad in paddings:
+      self._append_sample_packing(pad,
+                                  packed_input_ids,
+                                  packed_position_ids,
+                                  packed_loss_mask,
+                                  packed_pixel_values,
+                                  packed_pixel_values_videos,
+                                  packed_image_gird_thw,
+                                  packed_video_grid_thw,
+                                  packed_sample_idx,
+                                  cu_seqlens,
+                                  packed_fast_pixel_values_videos,
+                                  packed_fast_video_grid_thw,
+                                  sample_idx=-1,
+                                  image_pad=True
+                                  )
     
-
     packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
     packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
     packed_position_ids = torch.cat(packed_position_ids, dim=-1)
@@ -4899,14 +4904,9 @@ class BalanceParquetDataset(IterableDataset):
       self.input.source_sample_cnt[source_name] += 1
       
       try:
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(60)
         inputs = self.input._process(sample, source_name)
-        signal.alarm(0)
         self.processed_buffer.put((inputs, source_name))
       except Exception as e:
-        signal.alarm(0)
-        print(e)
         self.input.source_error_cnt.setdefault(source_name, 0)
         self.input.source_error_cnt[source_name] += 1
         error_ratio = self.input.source_error_cnt[source_name] * 1.0 / \
@@ -5237,3 +5237,134 @@ class BalanceParquetDataset(IterableDataset):
         return
     print(f"load_dataset_state_dict: {self.dataset.state_dict()}")
     self.dataset.load_state_dict(state_dict)
+
+
+
+class SlowFastVisionPadder:
+    """
+    给slow fast的padding，最多使用4+6个token
+    """
+    def __init__(self, model_dir):
+        processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
+        self.processor = processor
+        self.patch_size = processor.image_processor.patch_size
+        self.merge_size = processor.image_processor.merge_size
+        assert self.merge_size == 2, f"SlowFastVisionPadder does not support self.merge_size({self.merge_size}) != 2"
+        self.image_pad = processor.tokenizer.encode("<|image_pad|>")[0]
+        self.video_pad = processor.tokenizer.encode("<|video_pad|>")[0]
+        fast_video_pad = processor.tokenizer.encode("<|fast_video_pad|>")
+        assert len(fast_video_pad) == 1, "Decode fast_video_pad failed: {}".format(fast_video_pad)
+        self.fast_video_pad = fast_video_pad[0]
+        self.vision_start = processor.tokenizer.encode("<|vision_start|>")[0]
+        self.vision_end = processor.tokenizer.encode("<|vision_end|>")[0]
+        self.frame = processor.tokenizer.encode("<|frame|>")[0]
+
+    def __call__(self, packed_pixel_values, packed_pixel_values_videos, packed_fast_pixel_values_videos):
+          paddings = []
+          n_pixel_values = sum([x.shape[0] for x in packed_pixel_values], 0)
+          n_pixel_values_videos = sum([x.shape[0] for x in packed_pixel_values_videos], 0)
+          n_fast_pixel_values_videos = sum([x.shape[0] for x in packed_fast_pixel_values_videos], 0)
+
+          if n_pixel_values % 8 == 4: paddings.append(self.gen_img_pad(n_merged_slow_tokens=1))
+          elif n_pixel_values == 0: paddings.append(self.gen_img_pad(n_merged_slow_tokens=2))
+
+          paddings.append(
+            self.gen_video_pad(
+              n_merged_slow_tokens=1 if n_pixel_values_videos % 8 == 4 else 2, 
+              n_merged_fast_tokens=1 if n_fast_pixel_values_videos % 8 == 4 else 2, 
+              )
+          )
+
+          return paddings
+
+    def gen_img_pad(self, n_merged_slow_tokens=1):
+        input_ids = [self.vision_start] + [self.image_pad] * n_merged_slow_tokens + [self.vision_end]
+        inputs = {
+            "input_ids": torch.tensor([input_ids], dtype=torch.int64),
+            "attention_mask": torch.tensor([[1] * (n_merged_slow_tokens + 2)], dtype=torch.int64),
+            "pixel_values": torch.rand(n_merged_slow_tokens * 4, 3, self.patch_size, self.patch_size).float(),
+            "image_grid_thw": torch.tensor([[1, 2, n_merged_slow_tokens * 2]], dtype=torch.int64),
+            "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
+        }
+        inputs["position_ids"] = get_rope_index(
+          inputs["input_ids"],
+          image_grid_thw=inputs.get("image_grid_thw"),
+          video_grid_thw=inputs.get("video_grid_thw"),
+          spatial_merge_size=self.merge_size,
+          image_token_id=self.image_pad,
+          video_token_id=self.video_pad,
+          vision_start_token_id=self.vision_start
+        )
+        return inputs
+
+    def gen_video_pad(self, n_merged_slow_tokens=1, n_merged_fast_tokens=2):
+        """
+        demo: 
+        'input_ids':
+        Tensor: shape=(1, 42), dtype=torch.int64, device=cpu, data=tensor([151652,     27,     91,   6763])...tensor([  6213,     91,     29, 151653])
+        'attention_mask':
+        Tensor: shape=(1, 42), dtype=torch.int64, device=cpu, data=tensor([1, 1, 1, 1])...tensor([1, 1, 1, 1])
+        'pixel_values_videos':
+        Tensor: shape=(16, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([-1., -1., -1., -1.])...tensor([-1., -1., -1., -1.])
+        'video_grid_thw':
+        Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([1, 4, 4])...tensor([1, 4, 4])
+        'fast_pixel_values_videos':
+        Tensor: shape=(32, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([-1., -1., -1., -1.])...tensor([-1., -1., -1., -1.])
+        'fast_video_grid_thw':
+        Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([1, 8, 4])...tensor([1, 8, 4])
+        """
+        # 标准是这个
+        # # <|frame|>ts<|placeholder|><|placeholder|> ... n_slow ... <|placeholder|><|fast_start|><|fast_placeholder|><|fast_placeholder|> ... n_fast ... <|fast_placeholder|><|fast_end|>
+        # 但是我们不需要那么多token
+        #   只需要<|placeholder|><|placeholder|> ... n_slow ... <|placeholder|><|fast_placeholder|><|fast_placeholder|> ... n_fast ... <|fast_placeholder|>
+        # total_slow_tokens = pass # 
+        # video_inputs = (
+        input_ids = [self.vision_start] + [self.video_pad] * n_merged_slow_tokens + [self.fast_video_pad] * n_merged_fast_tokens + [self.vision_end]
+        inputs = {
+            "input_ids": torch.tensor([input_ids], dtype=torch.int64),
+            "attention_mask": torch.tensor([[1] * len(input_ids)], dtype=torch.int64),
+            "video_grid_thw": torch.tensor([[1, 2, n_merged_slow_tokens * 2]], dtype=torch.int64),
+            "fast_video_grid_thw": torch.tensor([[1, 2, n_merged_fast_tokens * 2]], dtype=torch.int64),
+            "fast_pixel_values_videos": torch.rand(n_merged_fast_tokens * 4, 3, self.patch_size, self.patch_size).float(),
+            "pixel_values_videos": torch.rand(n_merged_slow_tokens * 4, 3, self.patch_size, self.patch_size).float(),
+            "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
+        }
+        inputs["position_ids"] = get_rope_index(
+          inputs["input_ids"],
+          image_grid_thw=inputs.get("image_grid_thw"),
+          video_grid_thw=inputs.get("video_grid_thw"),
+          spatial_merge_size=self.merge_size,
+          image_token_id=self.image_pad,
+          video_token_id=self.video_pad,
+          vision_start_token_id=self.vision_start
+        )
+        return inputs
+
+    @staticmethod
+    def _test():
+        from transformers import AutoTokenizer, AutoModel, AutoProcessor
+        from recovlm.models.keye_vitrope_slowfast import KeyeForConditionalGeneration
+        model = KeyeForConditionalGeneration.from_pretrained(MODEL_DIR, _attn_implementation="flash_attention_2").bfloat16().to(0)
+        print("gen_img_padgen_img_pad")
+        p = SlowFastVisionPadder(MODEL_DIR)
+        for n_merged_slow_tokens in range(1,3):
+            inputs = p.gen_img_pad(n_merged_slow_tokens)
+            inputs = {k:v.to(0) for k,v in inputs.items()}
+            for k in inputs:
+                if 'pixel' in k: 
+                    inputs[k] = inputs[k].bfloat16()
+            print_input_info(inputs)
+            res = model(**inputs)
+            print(res)
+
+        print("gen_video_padgen_video_pad")
+        for n_merged_slow_tokens in range(1,3):
+            for n_merged_fast_tokens in range(1,3):
+                inputs = p.gen_video_pad(n_merged_slow_tokens, n_merged_fast_tokens)
+                inputs = {k:v.to(0) for k,v in inputs.items()}
+                for k in inputs:
+                    if 'pixel' in k: 
+                        inputs[k] = inputs[k].bfloat16()
+                print_input_info(inputs)
+                res = model(**inputs)
+                print(res)
