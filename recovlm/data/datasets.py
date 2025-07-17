@@ -1354,7 +1354,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         fast_video_grid_thw=inputs.get("fast_video_grid_thw", None),
         image_token_id=self.image_token_id,
         video_token_id=self.video_token_id,
-        fast_video_token_id=self.fast_video_token_id
+        fast_video_token_id=self.fast_video_token_id,
         spatial_merge_size=self.spatial_merge_size,
         vision_start_token_id=self.vision_start_token_id,
     )
@@ -1451,7 +1451,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         fast_video_grid_thw=inputs.get("fast_video_grid_thw"),
         image_token_id=self.image_token_id,
         video_token_id=self.video_token_id,
-        fast_video_token_id=self.fast_video_token_id
+        fast_video_token_id=self.fast_video_token_id,
         spatial_merge_size=self.spatial_merge_size,
         vision_start_token_id=self.vision_start_token_id,
     )
@@ -5557,7 +5557,7 @@ class SlowFastVisionPadder:
             fast_video_grid_thw=inputs.get("fast_video_grid_thw", None),
             image_token_id=self.image_pad,
             video_token_id=self.video_pad,
-            fast_video_token_id=self.fast_video_pad
+            fast_video_token_id=self.fast_video_pad,
             spatial_merge_size=self.merge_size,
             vision_start_token_id=self.vision_start,
         )
@@ -5611,7 +5611,7 @@ class SlowFastVisionPadder:
             fast_video_grid_thw=inputs.get("fast_video_grid_thw", None),
             image_token_id=self.image_pad,
             video_token_id=self.video_pad,
-            fast_video_token_id=self.fast_video_pad
+            fast_video_token_id=self.fast_video_pad,
             spatial_merge_size=self.merge_size,
             vision_start_token_id=self.vision_start,
         )
