@@ -4780,7 +4780,8 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
 
     # append image_pad for each packing
     # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
-    image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
+    # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
+    image_pad_len = 8
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
 
