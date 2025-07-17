@@ -27,6 +27,7 @@ import numpy as np
 import copy
 from einops import rearrange
 import cv2
+import random 
 
 logger = logging.getLogger(__name__)
 
@@ -576,7 +577,8 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         
         if len(slow_frames) > 1:
             # 避免太多的 pad log
-            print("cjx vl debug for image list, slow frames {}, fast frames {}, slow token is {}, fast token is {}".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28))
+            if random.randint(0, 10000) < 5:
+                print("cjx vl debug for image list, slow frames {}, fast frames {}, slow token is {}, fast token is {}".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28))
         assert (len(slow_frames) if slow_frames is not None else 0) + (len(fast_frames) if fast_frames is not None else 0) == len(slow_fast_order)
         return slow_frames, fast_frames, slow_fast_order
 
@@ -597,8 +599,8 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
                 antialias=True,
             ).float()
             fast_frames = list(fast_frames.split(1, dim=0))
-        
-        print("cjx vl debug for mp4, slow frames {}, fast frames {}, slow token is {}, fast token is {}, video dir".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28), ele["video"])
+        if random.randint(0, 10000) < 5:
+            print("cjx vl debug for mp4, slow frames {}, fast frames {}, slow token is {}, fast token is {}, video dir".format(len(slow_frames), len(fast_frames) if fast_frames is not None else 0, resized_height*resized_width//28//28, fast_resized_height*fast_resized_width//28//28), ele["video"])
         assert (len(slow_frames) if slow_frames is not None else 0) + (len(fast_frames) if fast_frames is not None else 0) == len(slow_fast_order)
         return slow_frames, fast_frames, time_position, slow_fast_order
     

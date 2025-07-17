@@ -536,7 +536,7 @@ def get_rope_index_slowfast(
                 assert remain_fast_videos_frames == 0
                 assert remain_videos_frames == 0
                 assert remain_images == 0
-                print("cjx slowfast rope test!!")
+                
                 if st < len(input_tokens):
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
                     text_len = len(input_tokens) - st
