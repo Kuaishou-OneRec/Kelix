@@ -533,6 +533,10 @@ def get_rope_index_slowfast(
                     llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + text_len + st_idx)
                     st = ed + llm_grid_t * llm_grid_h * llm_grid_w
 
+                assert remain_fast_videos_frames == 0
+                assert remain_videos_frames == 0
+                assert remain_images == 0
+                print("cjx slowfast rope test!!")
                 if st < len(input_tokens):
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
                     text_len = len(input_tokens) - st
@@ -1227,7 +1231,6 @@ class ChatCompletionVisionDataset(IterableDataset):
       )
 
     if isinstance(self, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast):
-      print("cjx debug: yes, slowfast1")
       inputs["position_ids"] = get_rope_index_slowfast(
           input_ids = inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw", None),
@@ -1340,7 +1343,6 @@ class ChatCompletionVisionDataset(IterableDataset):
         )
 
     if isinstance(self, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast):
-      print("cjx debug: yes, slowfast2")
       inputs["position_ids"] = get_rope_index_slowfast(
           input_ids = inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw", None),
