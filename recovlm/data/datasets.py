@@ -1227,6 +1227,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       )
 
     if isinstance(self, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast):
+      print("cjx debug: yes, slowfast1")
       inputs["position_ids"] = get_rope_index_slowfast(
           input_ids = inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw", None),
@@ -1339,6 +1340,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         )
 
     if isinstance(self, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast):
+      print("cjx debug: yes, slowfast2")
       inputs["position_ids"] = get_rope_index_slowfast(
           input_ids = inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw", None),
