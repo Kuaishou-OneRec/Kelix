@@ -365,7 +365,6 @@ def get_rope_index(
 
 
 def get_rope_index_slowfast(
-        self,
         input_ids: Optional[torch.LongTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
@@ -1237,7 +1236,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     #   vision_start_token_id=self.vision_start_token_id
     # )
     inputs["position_ids"] = get_rope_index_slowfast(
-        inputs["input_ids"],
+        input_ids = inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw", None),
         video_grid_thw=inputs.get("video_grid_thw", None),
         fast_video_grid_thw=inputs.get("fast_video_grid_thw", None),
@@ -1348,7 +1347,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     # )
 
     inputs["position_ids"] = get_rope_index_slowfast(
-        inputs["input_ids"],
+        input_ids = inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw", None),
         video_grid_thw=inputs.get("video_grid_thw", None),
         fast_video_grid_thw=inputs.get("fast_video_grid_thw", None),
@@ -1445,7 +1444,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     #     vision_start_token_id=self.vision_start_token_id
     # )
     inputs["position_ids"] = get_rope_index_slowfast(
-        inputs["input_ids"],
+        input_ids = inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw"),
         video_grid_thw=inputs.get("video_grid_thw"),
         fast_video_grid_thw=inputs.get("fast_video_grid_thw"),
