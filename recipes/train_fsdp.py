@@ -1225,6 +1225,7 @@ def train():
               image_max_seqlen_k=batch.get("image_max_seqlen_k", None),
               fast_pixel_values_videos=fast_pixel_values_videos,
               fast_video_grid_thw=fast_video_grid_thw, 
+              position_ids = position_ids,
             )
         ticker.tick("model.forward")
 

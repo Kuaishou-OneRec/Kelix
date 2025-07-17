@@ -706,6 +706,7 @@ class ImageTextPairDatasetWithPacking(IterableDataset):
         video_token_id=self.video_token_id,
         vision_start_token_id=self.vision_start_token_id
     )
+
     inputs.pop("attention_mask")
     
     return inputs
@@ -941,6 +942,7 @@ class ChatCompletionVisionDataset(IterableDataset):
                patch_size: int = 14,
                image_token_id: int = 151655,
                video_token_id: int = 151656,
+               fast_video_token_id: int = 151678,
                vision_start_token_id: int = 151652,
                vision_end_token_id: int = 151653,
                pad_token_id: int = 151643,
@@ -998,6 +1000,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.spatial_merge_size = spatial_merge_size
     self.image_token_id = image_token_id
     self.video_token_id = video_token_id
+    self.fast_video_token_id = fast_video_token_id
     self.vision_start_token_id = vision_start_token_id
     self.vision_end_token_id = vision_end_token_id
     self.pad_token_id = pad_token_id
@@ -1224,15 +1227,27 @@ class ChatCompletionVisionDataset(IterableDataset):
         f"Unable to generate sample with 0 loss_mask."
       )
 
-    inputs["position_ids"] = get_rope_index(
-      inputs["input_ids"],
-      image_grid_thw=inputs.get("image_grid_thw"),
-      video_grid_thw=inputs.get("video_grid_thw"),
-      spatial_merge_size=self.spatial_merge_size,
-      image_token_id=self.image_token_id,
-      video_token_id=self.video_token_id,
-      vision_start_token_id=self.vision_start_token_id
+    # inputs["position_ids"] = get_rope_index(
+    #   inputs["input_ids"],
+    #   image_grid_thw=inputs.get("image_grid_thw"),
+    #   video_grid_thw=inputs.get("video_grid_thw"),
+    #   spatial_merge_size=self.spatial_merge_size,
+    #   image_token_id=self.image_token_id,
+    #   video_token_id=self.video_token_id,
+    #   vision_start_token_id=self.vision_start_token_id
+    # )
+    inputs["position_ids"] = get_rope_index_slowfast(
+        inputs["input_ids"],
+        image_grid_thw=inputs.get("image_grid_thw", None),
+        video_grid_thw=inputs.get("video_grid_thw", None),
+        fast_video_grid_thw=inputs.get("fast_video_grid_thw", None),
+        image_token_id=self.image_token_id,
+        video_token_id=self.video_token_id,
+        fast_video_token_id=self.fast_video_token_id
+        spatial_merge_size=self.spatial_merge_size,
+        vision_start_token_id=self.vision_start_token_id,
     )
+
     inputs.pop("attention_mask")
     return inputs
 
@@ -1322,15 +1337,28 @@ class ChatCompletionVisionDataset(IterableDataset):
           f"Unable to generate sample with 0 loss_mask."
         )
 
-    inputs["position_ids"] = get_rope_index(
-      inputs["input_ids"],
-      image_grid_thw=inputs.get("image_grid_thw"),
-      video_grid_thw=inputs.get("video_grid_thw"),
-      spatial_merge_size=self.spatial_merge_size,
-      image_token_id=self.image_token_id,
-      video_token_id=self.video_token_id,
-      vision_start_token_id=self.vision_start_token_id
+    # inputs["position_ids"] = get_rope_index(
+    #   inputs["input_ids"],
+    #   image_grid_thw=inputs.get("image_grid_thw"),
+    #   video_grid_thw=inputs.get("video_grid_thw"),
+    #   spatial_merge_size=self.spatial_merge_size,
+    #   image_token_id=self.image_token_id,
+    #   video_token_id=self.video_token_id,
+    #   vision_start_token_id=self.vision_start_token_id
+    # )
+
+    inputs["position_ids"] = get_rope_index_slowfast(
+        inputs["input_ids"],
+        image_grid_thw=inputs.get("image_grid_thw", None),
+        video_grid_thw=inputs.get("video_grid_thw", None),
+        fast_video_grid_thw=inputs.get("fast_video_grid_thw", None),
+        image_token_id=self.image_token_id,
+        video_token_id=self.video_token_id,
+        fast_video_token_id=self.fast_video_token_id
+        spatial_merge_size=self.spatial_merge_size,
+        vision_start_token_id=self.vision_start_token_id,
     )
+
     inputs.pop("attention_mask")
     return inputs
   
@@ -1339,12 +1367,23 @@ class ChatCompletionVisionDataset(IterableDataset):
     inputs = self.processor.tokenizer(text)
     inputs["input_ids"] = torch.tensor([inputs["input_ids"]], dtype=torch.int64) # shape=[1, N], for get_rope_index
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
-    inputs["position_ids"] = get_rope_index(
-      inputs["input_ids"],
-      spatial_merge_size=self.spatial_merge_size,
-      image_token_id=self.image_token_id,
-      video_token_id=self.video_token_id,
-      vision_start_token_id=self.vision_start_token_id
+    # inputs["position_ids"] = get_rope_index(
+    #   inputs["input_ids"],
+    #   spatial_merge_size=self.spatial_merge_size,
+    #   image_token_id=self.image_token_id,
+    #   video_token_id=self.video_token_id,
+    #   vision_start_token_id=self.vision_start_token_id
+    # )
+    inputs["position_ids"] = get_rope_index_slowfast(
+        inputs["input_ids"],
+        image_grid_thw=inputs.get("image_grid_thw", None),
+        video_grid_thw=inputs.get("video_grid_thw", None),
+        fast_video_grid_thw=inputs.get("fast_video_grid_thw", None),
+        image_token_id=self.image_token_id,
+        video_token_id=self.video_token_id,
+        fast_video_token_id=self.fast_video_token_id
+        spatial_merge_size=self.spatial_merge_size,
+        vision_start_token_id=self.vision_start_token_id,
     )
     inputs.pop("attention_mask")
     return inputs
@@ -1396,14 +1435,25 @@ class ChatCompletionVisionDataset(IterableDataset):
     print("self.processorself.processor__donnnn")
     # tensor([[151652, 151655, 151655, 151655, 151655, 151653, 151652, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151653]])
     inputs["loss_mask"] = torch.zeros_like(inputs["input_ids"])
-    inputs["position_ids"] = get_rope_index(
+    # inputs["position_ids"] = get_rope_index(
+    #     inputs["input_ids"],
+    #     image_grid_thw=inputs.get("image_grid_thw"),
+    #     video_grid_thw=inputs.get("video_grid_thw"),
+    #     spatial_merge_size=self.spatial_merge_size,
+    #     image_token_id=self.image_token_id,
+    #     video_token_id=self.video_token_id,
+    #     vision_start_token_id=self.vision_start_token_id
+    # )
+    inputs["position_ids"] = get_rope_index_slowfast(
         inputs["input_ids"],
         image_grid_thw=inputs.get("image_grid_thw"),
         video_grid_thw=inputs.get("video_grid_thw"),
-        spatial_merge_size=self.spatial_merge_size,
+        fast_video_grid_thw=inputs.get("fast_video_grid_thw"),
         image_token_id=self.image_token_id,
         video_token_id=self.video_token_id,
-        vision_start_token_id=self.vision_start_token_id
+        fast_video_token_id=self.fast_video_token_id
+        spatial_merge_size=self.spatial_merge_size,
+        vision_start_token_id=self.vision_start_token_id,
     )
     inputs.pop("attention_mask")
     return inputs
@@ -4637,6 +4687,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
                patch_size: int = 16,
                image_token_id: int = 151655,
                video_token_id: int = 151656,
+               fast_video_token_id: int = 151678,
                vision_start_token_id: int = 151652,
                vision_end_token_id: int = 151653,
                pad_token_id: int = 151643,
@@ -5490,14 +5541,25 @@ class SlowFastVisionPadder:
             "image_grid_thw": torch.tensor([[1, 2, n_merged_slow_tokens * 2]], dtype=torch.int64),
             "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
         }
-        inputs["position_ids"] = get_rope_index(
-          inputs["input_ids"],
-          image_grid_thw=inputs.get("image_grid_thw"),
-          video_grid_thw=inputs.get("video_grid_thw"),
-          spatial_merge_size=self.merge_size,
-          image_token_id=self.image_pad,
-          video_token_id=self.video_pad,
-          vision_start_token_id=self.vision_start
+        # inputs["position_ids"] = get_rope_index(
+        #   inputs["input_ids"],
+        #   image_grid_thw=inputs.get("image_grid_thw"),
+        #   video_grid_thw=inputs.get("video_grid_thw"),
+        #   spatial_merge_size=self.merge_size,
+        #   image_token_id=self.image_pad,
+        #   video_token_id=self.video_pad,
+        #   vision_start_token_id=self.vision_start
+        # )
+        inputs["position_ids"] = get_rope_index_slowfast(
+            inputs["input_ids"],
+            image_grid_thw=inputs.get("image_grid_thw", None),
+            video_grid_thw=inputs.get("video_grid_thw", None),
+            fast_video_grid_thw=inputs.get("fast_video_grid_thw", None),
+            image_token_id=self.image_pad,
+            video_token_id=self.video_pad,
+            fast_video_token_id=self.fast_video_pad
+            spatial_merge_size=self.merge_size,
+            vision_start_token_id=self.vision_start,
         )
         return inputs
 
@@ -5533,14 +5595,25 @@ class SlowFastVisionPadder:
             "pixel_values_videos": torch.rand(n_merged_slow_tokens * 4, 3, self.patch_size, self.patch_size).float(),
             "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
         }
-        inputs["position_ids"] = get_rope_index(
-          inputs["input_ids"],
-          image_grid_thw=inputs.get("image_grid_thw"),
-          video_grid_thw=inputs.get("video_grid_thw"),
-          spatial_merge_size=self.merge_size,
-          image_token_id=self.image_pad,
-          video_token_id=self.video_pad,
-          vision_start_token_id=self.vision_start
+        # inputs["position_ids"] = get_rope_index(
+        #   inputs["input_ids"],
+        #   image_grid_thw=inputs.get("image_grid_thw"),
+        #   video_grid_thw=inputs.get("video_grid_thw"),
+        #   spatial_merge_size=self.merge_size,
+        #   image_token_id=self.image_pad,
+        #   video_token_id=self.video_pad,
+        #   vision_start_token_id=self.vision_start
+        # )
+        inputs["position_ids"] = get_rope_index_slowfast(
+            inputs["input_ids"],
+            image_grid_thw=inputs.get("image_grid_thw", None),
+            video_grid_thw=inputs.get("video_grid_thw", None),
+            fast_video_grid_thw=inputs.get("fast_video_grid_thw", None),
+            image_token_id=self.image_pad,
+            video_token_id=self.video_pad,
+            fast_video_token_id=self.fast_video_pad
+            spatial_merge_size=self.merge_size,
+            vision_start_token_id=self.vision_start,
         )
         return inputs
 
