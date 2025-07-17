@@ -3219,8 +3219,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-        # else:
-        #     print("input_ids {} check and position_ids {} check.".format(input_ids.cpu().tolist(), position_ids.cpu().tolist()))
+        else:
+            print("input_ids {} check and position_ids {} check.".format(input_ids.cpu().tolist(), position_ids.cpu().tolist()))
 
         outputs = self.model(
             input_ids=None,
