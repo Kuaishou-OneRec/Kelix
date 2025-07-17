@@ -949,6 +949,7 @@ def train():
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True)
   image_token_id = tokenizer.encode('<im_patch>')[0]  if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|image_pad|>')[0]
   video_token_id = tokenizer.encode('<vi_patch>')[0]  if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|video_pad|>')[0]
+  fast_video_token_id = -9999 if len(tokenizer.encode('<|fast_video_pad|>'))  > 1 else tokenizer.encode('<|fast_video_pad|>')[0] 
   image_start_id = tokenizer.encode("</image>")[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|vision_start|>')[0]
   
   if dist.get_rank() == 0:
@@ -1153,7 +1154,7 @@ def train():
         num_image_tokens = image_tokens_ids.sum().item() / args.sequence_parallel_size
         num_image_tokens2 = num_image_tokens
 
-        video_tokens_ids = input_ids == video_token_id
+        video_tokens_ids = (input_ids == video_token_id) | (input_ids == fast_video_token_id)
         num_video_tokens = video_tokens_ids.sum().item() / args.sequence_parallel_size
         num_video_tokens2 = num_video_tokens
 
