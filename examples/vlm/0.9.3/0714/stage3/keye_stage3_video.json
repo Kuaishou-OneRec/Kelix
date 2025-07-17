@@ -19,5 +19,6 @@
     "model_class": "KeyeForConditionalGeneration_vitrope_slowfast",
     "patch_size": 14,
     "use_flops_balance": false,
-    "video_total_pixels": 47040000
+    "video_total_pixels": 47040000,
+    "max_sample_length": 84000
 }
