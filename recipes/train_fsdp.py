@@ -1024,7 +1024,10 @@ def train():
     input_fn = lambda: batch_queue.get()
   else:
     data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
-    input_fn =  lambda: next(data_iter)
+    prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(lambda : next(data_iter), gpu_batch_q, torch.cuda.current_device()))
+    prefetch_t.start()
+    input_fn =  lambda: gpu_batch_q.get()
+    # input_fn = lambda : next(data_iter)
 
   # prefetch_t = threading.Thread(target=prefetch_to_gpu, args=(input_fn, gpu_batch_q, torch.cuda.current_device()))
   # prefetch_t.start()
