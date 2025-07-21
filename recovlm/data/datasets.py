@@ -3129,7 +3129,8 @@ class NaiveParquetDataset(IterableDataset):
     self.use_flops_balance = use_flops_balance
     print(f"NaiveParquetDataset: use_flops_balance={use_flops_balance}")
 
-    print(f"ParquetDataset set n_local_shuffle_files_window={n_local_shuffle_files_window}, vit_token_balance={vit_token_balance}")
+    # print(f"ParquetDataset set n_local_shuffle_files_window={n_local_shuffle_files_window}, vit_token_balance={vit_token_balance}")
+    print(f"debug ParquetDataset set n_local_shuffle_files_window={n_local_shuffle_files_window}")
 
     if use_flops_balance:
       def make_dict(): return {}
