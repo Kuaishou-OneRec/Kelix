@@ -16,7 +16,6 @@
     "num_workers": 8,
     "num_epochs": 2,
     "cut_to_pad": 1,
-    "n_local_shuffle_files_window": 1,
     "model_class": "KeyeForConditionalGeneration_vitrope_slowfast",
     "patch_size": 14,
     "use_flops_balance": false,
