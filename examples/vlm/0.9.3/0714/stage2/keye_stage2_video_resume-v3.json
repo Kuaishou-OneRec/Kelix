@@ -18,7 +18,7 @@
     "cut_to_pad": 1,
     "model_class": "KeyeForConditionalGeneration_vitrope_slowfast",
     "patch_size": 14,
-    "n_local_shuffle_files_window": 2,
+    "n_local_shuffle_files_window": 10,
     "use_flops_balance": false,
     "video_total_pixels": 10192000
 }
