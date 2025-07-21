@@ -1006,7 +1006,7 @@ def train():
 
   micro_step = 0
   ticker = TimeTracker(n=args.logging_per_step)
-  iter_ticker = TimeTracker(n=args.logging_per_step, sync=args.tick_sync)
+  iter_ticker = TimeTracker(n=args.logging_per_step)
   token_stasts = TokenStats(args, _type='image')
   vid_token_stasts = TokenStats(args, _type='video')
 
