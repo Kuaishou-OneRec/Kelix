@@ -890,7 +890,7 @@ def train():
 
   if ckpt_id:
     ckpt_path = os.path.join(resume_from, ckpt_id)
-    global_step = int(ckpt_id.split("step")[-1])
+    global_step = global_step0 = int(ckpt_id.split("step")[-1])
     print_rank_0(
       f"Resume from checkpoint: {ckpt_path}, global_step={global_step}"
       f"load_weights_only={args.load_weights_only}")
@@ -951,7 +951,8 @@ def train():
   video_token_id = tokenizer.encode('<vi_patch>')[0]  if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|video_pad|>')[0]
   fast_video_token_id = -9999 if len(tokenizer.encode('<|fast_video_pad|>'))  > 1 else tokenizer.encode('<|fast_video_pad|>')[0] 
   image_start_id = tokenizer.encode("</image>")[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|vision_start|>')[0]
-  
+  frame_id = -9999 if len(tokenizer.encode('<|frame|>'))  > 1 else tokenizer.encode('<|frame|>')[0] 
+
   if dist.get_rank() == 0:
     with open(os.path.join(args.output_dir,
         f"dataset-{args.commit_id}-{timestamp}.json"), 'w',
@@ -983,6 +984,7 @@ def train():
   show_cnt = 1
   if not args.resume_dataloader:
     global_step = 0
+    global_step0 = 0
 
 
   # Metrics, acc_ account for gradient accumulation
@@ -1003,8 +1005,8 @@ def train():
   # get_sequence_parallel_group("gloo")
 
   micro_step = 0
-  ticker = TimeTracker(n=args.logging_per_step)
-  iter_ticker = TimeTracker(n=args.logging_per_step)
+  ticker = TimeTracker(n=args.logging_per_step, sync=args.tick_sync)
+  iter_ticker = TimeTracker(n=args.logging_per_step, sync=args.tick_sync)
   token_stasts = TokenStats(args, _type='image')
   vid_token_stasts = TokenStats(args, _type='video')
 
@@ -1070,17 +1072,19 @@ def train():
                 new_style=True)
 
       if args.monitor_datasource_cnt and tb_writer:
+        total_samples = sum([x for _, x in ds_samples.items()])
         for key, samples in ds_samples.items():
           tb_writer.add_scalar(
               f"data_source_sample_ratio/{key}",
-              1.0 * samples / total_num_samples,
+              1.0 * samples / total_samples,
               global_step=global_step,
               new_style=True)
 
         for key, num_tokens in ds_tokens.items():
+          total_tokens = sum([x for _, x in ds_tokens.items()])
           tb_writer.add_scalar(
               f"data_source_token_ratio/{key}",
-              1.0 * num_tokens / total_num_valid_tokens,
+              1.0 * num_tokens / total_tokens,
               global_step=global_step,
               new_style=True)
 
@@ -1161,9 +1165,18 @@ def train():
         num_video_tokens = video_tokens_ids.sum().item() / args.sequence_parallel_size
         num_video_tokens2 = num_video_tokens
 
-        num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else (input_ids == image_start_id).sum().item() / args.sequence_parallel_size
+        num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else -1 # (((input_ids == image_start_id) | (input_ids == frame_id)).sum().item() / args.sequence_parallel_size)
 
-        mfu_stats.set(max(num_image_tokens, 1) + max(num_video_tokens, 1), max(num_tokens, 1), max(1, num_samples.detach().item()), max(num_images, 1))
+        if num_images == -1: 
+          num_images = sum([v.shape[0] for k, v in batch.items() if 'grid_thw' in k], 0)
+
+        # num_image_tokens, num_tokens, num_samples, num_images
+        mfu_stats.set(
+          max(num_image_tokens, 1) + max(num_video_tokens, 1), 
+          max(num_tokens, 1), 
+          max(1, num_samples.detach().item()), 
+          max(num_images, 1)
+        )
 
         # num_tokens - (sample_idx == -1).sum()
         num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() / args.sequence_parallel_size + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
@@ -1403,7 +1416,7 @@ def train():
             "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
             "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples,
             "perf/video_token_per_sample_per_gpu":total_num_video_tokens / total_num_samples,
-            **mfu_stats.mfu(end_time - start_time, global_step),
+            **mfu_stats.mfu(end_time - start_time, global_step - global_step0),
             "perf/samples_per_step_per_gpu_v2": samples_per_step_per_gpu_v2,
             "perf/samples_per_sec_per_gpu_v2": samples_per_sec_per_gpu_v2,
             "perf/image_tokens_per_step_per_gpu_v2": image_tokens_per_step_per_gpu_v2,
