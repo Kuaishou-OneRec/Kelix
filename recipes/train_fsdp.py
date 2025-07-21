@@ -1005,7 +1005,7 @@ def train():
   # get_sequence_parallel_group("gloo")
 
   micro_step = 0
-  ticker = TimeTracker(n=args.logging_per_step, sync=args.tick_sync)
+  ticker = TimeTracker(n=args.logging_per_step)
   iter_ticker = TimeTracker(n=args.logging_per_step, sync=args.tick_sync)
   token_stasts = TokenStats(args, _type='image')
   vid_token_stasts = TokenStats(args, _type='video')
