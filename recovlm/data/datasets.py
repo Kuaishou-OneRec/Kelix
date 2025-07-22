@@ -3415,10 +3415,10 @@ class NaiveParquetDataset(IterableDataset):
                   if sample is not None:
                     yield sample
 
-                except GeneratorExit:
-                  # 正确处理生成器退出
-                  logger.warning(f"Generator exited")
-                  return
+                # except GeneratorExit:
+                #   # 正确处理生成器退出
+                #   logger.warning(f"Generator exited")
+                #   return
 
                 except Exception as e:
                   logger.error(f"Error processing row : {str(e)}")
@@ -3458,9 +3458,9 @@ class NaiveParquetDataset(IterableDataset):
               print("error in ParquetDataset!!!")
               print(traceback.format_exc())
             
-            # 如果已经处理完所有文件且当前数据都已处理完，则退出循环
-            if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
-                break
+            # # 如果已经处理完所有文件且当前数据都已处理完，则退出循环
+            # if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
+            #     break
     
     for sample in shuffle_parquet_rows(fn_list, self.n_local_shuffle_files_window):
       yield sample
