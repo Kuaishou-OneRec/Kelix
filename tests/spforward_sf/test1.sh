@@ -76,4 +76,4 @@ mpirun --allow-run-as-root -np 1 \
         -x HADOOP_USER_NAME=$HADOOP_USER_NAME \
         -x http_proxy=\
         -x https_proxy=\
-        python3 recovlm/tests/spforward_sf/test_sp.py
+        python3 ./tests/spforward_sf/test_sp.py
