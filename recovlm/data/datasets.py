@@ -909,7 +909,7 @@ def get_assistant_mask(batch_input_ids: torch.Tensor,
           assistant_start.append(_id.item())
         else:
           assistant_start = []
-        if assistant_start[-3:] == start_pattern:
+        if assistant_start[-len(start_pattern):] == start_pattern:
           to_mask = True
           assistant_start = []
       else:
@@ -917,7 +917,7 @@ def get_assistant_mask(batch_input_ids: torch.Tensor,
           assistant_end.append(_id.item())
         else:
           assistant_end = []
-        if assistant_end[-2:] == end_pattern:
+        if assistant_end[-len(end_pattern):] == end_pattern:
           to_mask = False
           assistant_end = []
     masks.append(mask)
@@ -1216,13 +1216,21 @@ class ChatCompletionVisionDataset(IterableDataset):
     # mask all vision token
     # <|vision_start|>: 151652 , <|vision_end|>: 151653, <|image_pad|>: 151655, <|video_pad|>: 151656
     input_ids = inputs["input_ids"]
-    inputs["loss_mask"] = torch.ones_like(input_ids)
-    inputs["loss_mask"][
-        (input_ids == self.vision_start_token_id) | 
-        (input_ids == self.vision_end_token_id) |
-        (input_ids == self.image_token_id) |
-        (input_ids == self.video_token_id)
-      ] = 0
+    cjx_test = True
+    if cjx_test:
+        inputs["loss_mask"] = get_assistant_mask(
+          inputs["input_ids"],
+          start_pattern=self.kargs.get("start_pattern", [151652]), 
+          end_pattern=self.kargs.get("end_pattern", [151653]), #
+        )
+    else:
+      inputs["loss_mask"] = torch.ones_like(input_ids)
+      inputs["loss_mask"][
+          (input_ids == self.vision_start_token_id) | 
+          (input_ids == self.vision_end_token_id) |
+          (input_ids == self.image_token_id) |
+          (input_ids == self.video_token_id)
+        ] = 0
     # mask EOS token
     inputs["loss_mask"][-1][-1] = 0
     if inputs["loss_mask"].sum() == 0:
