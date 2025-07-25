@@ -3444,10 +3444,12 @@ class NaiveParquetDataset(IterableDataset):
                 if (fn, epoch_idx) in finish_dict:
                   logger.warning(f"[Rank{rank}-{worker}] skip {fn}-epoch{epoch_idx}")
                   file_index += 1
+                  file_index = file_index%len(parquet_files_list) # cjx, 新增逻辑，防止程序在数据层面挂掉
                   continue
 
                 finish_dict[(fn, epoch_idx)] = True
                 file_index += 1
+                file_index = file_index%len(parquet_files_list) # cjx, 新增逻辑，防止程序在数据层面挂掉
                 try:
                   new_df = load_parquet_file(fn).read_row_group(0).to_pandas()
                   break
