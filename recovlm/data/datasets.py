@@ -1218,19 +1218,18 @@ class ChatCompletionVisionDataset(IterableDataset):
     input_ids = inputs["input_ids"]
     cjx_test = True
     if cjx_test:
-        inputs["loss_mask"] = get_assistant_mask(
+        inputs["loss_mask"] = 1 - get_assistant_mask(
           inputs["input_ids"],
           start_pattern=self.kargs.get("start_pattern", [151652]), 
           end_pattern=self.kargs.get("end_pattern", [151653]), #
         )
-    else:
-      inputs["loss_mask"] = torch.ones_like(input_ids)
-      inputs["loss_mask"][
-          (input_ids == self.vision_start_token_id) | 
-          (input_ids == self.vision_end_token_id) |
-          (input_ids == self.image_token_id) |
-          (input_ids == self.video_token_id)
-        ] = 0
+    # inputs["loss_mask"] = torch.ones_like(input_ids)
+    inputs["loss_mask"][
+        (input_ids == self.vision_start_token_id) | 
+        (input_ids == self.vision_end_token_id) |
+        (input_ids == self.image_token_id) |
+        (input_ids == self.video_token_id)
+      ] = 0
     # mask EOS token
     inputs["loss_mask"][-1][-1] = 0
     if inputs["loss_mask"].sum() == 0:

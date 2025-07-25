@@ -20,7 +20,7 @@ MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_07
 OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.3/Stage3/8b/slowfast-0725-sp1-from53k
 
 mkdir -p $OUTPUT_DIR
-8sp
+
 mkdir -p /tmp/_wids_cache
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
