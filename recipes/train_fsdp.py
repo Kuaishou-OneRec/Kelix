@@ -1254,7 +1254,8 @@ def train():
         labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
         local_labels = get_local_sequence(labels, seq_idx=1)
         loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
-
+        print("logits debug {}".format(logits))
+        exit(0)
         ################# label check #################
         # print("input_ids_size is {}, labels_size is {}, loss_mask_size is {}".format(input_ids.size(), labels.size(), loss_mask.size()))
 

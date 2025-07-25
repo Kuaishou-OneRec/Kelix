@@ -288,11 +288,11 @@ def debug_model_inference(model):
             # "output_text": output_text
         })
     
+    print("cjx logits shape{}, debug {}".format(logits.size(), logits))
     print('=' * 30)
     if dist.get_rank() in [0, 7]:
         print(f"rank{dist.get_rank()}", logits.shape, "\n", logits[:6])
     # print_rank_0(output_text)
-
 
 if __name__=='__main__':
   # 禁用 CuDNN 的非确定性算法（确保结果可复现）

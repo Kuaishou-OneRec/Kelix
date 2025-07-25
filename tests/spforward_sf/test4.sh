@@ -20,7 +20,8 @@ np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=5499
-#                 
+# CUDA_VISIBLE_DEVICES=0,1,2,3,4
+#
 
 mpirun --allow-run-as-root -np 4 \
         -mca plm_rsh_args "-p ${Port}"  \

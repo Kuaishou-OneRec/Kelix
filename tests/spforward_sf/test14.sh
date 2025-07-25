@@ -20,7 +20,7 @@ np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
 
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8400
-CUDA_VISIBLE_DIVICES=7
+CUDA_VISIBLE_DEVICES=7
 #                 
 
 mpirun --allow-run-as-root -np 1 \
@@ -50,7 +50,7 @@ mpirun --allow-run-as-root -np 1 \
         -x NCCL_IB_HCA=mlx5 \
         -x NCCL_NET_OVERHEAD=1000 \
         -x NCCL_PROTO=^LL128 \
-        -x CUDA_VISIBLE_DIVICES=$CUDA_VISIBLE_DIVICES \
+        -x CUDA_VISIBLE_DEVICES=$CUDA_VISIBLE_DEVICES \
         -x NCCL_MIN_NCHANNELS=4 \
         -x NCCL_ALGO=^NVLS,NVLSTree \
         -x LD_LIBRARY_PATH=$LIBRARY_PATH \
