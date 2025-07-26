@@ -3228,7 +3228,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
         # else:
         #     print("input_ids {} check and position_ids {} check.".format(input_ids.cpu().tolist(), position_ids.cpu().tolist()))
-        print("llm embedding: {}".format(inputs_embeds))
+        # print("llm embedding: {}".format(inputs_embeds))
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
