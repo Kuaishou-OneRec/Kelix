@@ -140,8 +140,8 @@ nohup mpirun --allow-run-as-root \
                 --merge_checkpoint \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
-                --resume_from /llm_reco/lingzhixin/output/Keye/exp_saveload0530/0.8.2/2b/step20 \
-                --resume_from_tag global_step20 \
+                --resume_from /llm_reco/lingzhixin/output/Keye/exp_saveload0530/0.8.2/2b/step100 \
+                --resume_from_tag global_step100 \
                 --resume_dataloader \
                 --comment '$comment' \
                 --commit_id $git_hash \

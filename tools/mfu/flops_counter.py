@@ -524,6 +524,7 @@ def calc_mfu(config_path, total_seq_len, image_token_merged_len, llm_batch_size,
         'seq_len': [x*4 for x in image_token_merged_len] if isinstance(image_token_merged_len, list) else image_token_merged_len * 4, 
         'batch_size': image_batch_size
     })
+    
 
     flops = calculate_vlm_flops(vit_params, llm_params, _gpu_flops=_gpu_flops)
 
@@ -737,8 +738,24 @@ def demo_intern_vl():
 
     print(calculate_vit_flops_from_config('/Users/lingzhixin/Desktop/work/LLMreco/grpo_rlmain/recovlm0515/recovlm/tools/mfu/internvl3_2b.json'))
 
+
+def demo_slowfast():
+    # config_path, total_seq_len, image_token_merged_len, llm_batch_size, image_batch_size=None, secs_per_step=None, _gpu_flops=None
+    # config_path, total_seq_len, image_token_merged_len, llm_batch_size, image_batch_size=None, secs_per_step=None, _gpu_flops=None
+    mfu = calc_mfu(
+        '/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714_sp1/config.json',
+        total_seq_len=84000,
+        image_token_merged_len=[768,] * (300000//768),
+        # image_token_merged_len=[13000//26,]*26,
+        llm_batch_size=1,
+        secs_per_step=16,
+        _gpu_flops=989e12
+    )
+    print(format_dict_or_list(mfu))
+
+
 if __name__=='__main__':
-    demo_intern_vl()
+    demo_slowfast()
 
 '''
 2B 模型

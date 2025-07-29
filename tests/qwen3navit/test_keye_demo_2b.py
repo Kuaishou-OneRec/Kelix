@@ -147,14 +147,13 @@ def make_inputs(a,b):
     return messages, inputs
 
 
-make_inputs(100, 100)
-exit()
 logits_all = []
 if 1:
     try:
         with set_default_dtype(torch.bfloat16):
-            model = KeyeForConditionalGeneration.from_pretrained(
-                MODEL_DIR,
+            model = AutoModel.from_pretrained(
+                "/llm_reco/liuyang76/train_out/0.0.0/qwen3_2B_stage1_resume_7k/step4000/global_step4000/converted_hf/",
+                # MODEL_DIR,
                 torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
                 device_map="cuda:0",

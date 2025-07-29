@@ -610,28 +610,36 @@ class SiglipVisionEmbeddings(nn.Module):
         - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
 
-        num_patches = embeddings.shape[1]
+        # 获取位置嵌入的数量
+        #num_patches = embeddings.shape[1]
         num_positions = self.position_embedding.weight.shape[0]
 
         # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embedding(self.position_ids)
+        # 在torch.jit追踪时总是进行插值，以确保导出的模型支持动态输入形状
+        #if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+        #    return self.position_embedding(self.position_ids)
 
+        # 将位置嵌入权重增加一个维度
         patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
 
+        # 获取嵌入的维度
         dim = embeddings.shape[-1]
 
+        # 判断是否已经对图像进行了块处理
         if is_after_patchify:
             new_height = height
             new_width = width
         else:
+            # 如果未进行块处理，则根据块大小计算新的高度和宽度
             new_height = height // self.patch_size
             new_width = width // self.patch_size
 
+        # 计算位置嵌入的平方根数量
         sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
+        # 对位置嵌入进行双线性插值
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
             size=(new_height, new_width),
@@ -639,6 +647,7 @@ class SiglipVisionEmbeddings(nn.Module):
             align_corners=False,
         )
 
+        # 调整插值后的位置嵌入形状
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
@@ -778,7 +787,8 @@ class SiglipAttention(nn.Module):
         output_attentions: Optional[bool] = False,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         rope_freqs_cis: Optional[torch.Tensor] = None,
-        # cu_seqlens = None
+        max_seqlen_q: Optional[int] = None,
+        max_seqlen_k: Optional[int] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -844,8 +854,10 @@ class SiglipAttention(nn.Module):
                 # attn_output = attn_output.flatten(-2).unsqueeze(0)
                 attn_weights = None
             else:
-                max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-                max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                if max_seqlen_q is None:
+                    max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                if max_seqlen_k is None:
+                    max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
                 # assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
                 attn_output = flash_attn_varlen_func(
                     queries,
@@ -900,7 +912,8 @@ class SiglipEncoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         rope_freqs_cis: Optional[torch.Tensor] = None,
-        # cu_seqlens = None,
+        max_seqlen_q: Optional[int] = None,
+        max_seqlen_k: Optional[int] = None,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -921,7 +934,8 @@ class SiglipEncoderLayer(nn.Module):
             output_attentions=output_attentions,
             cu_seqlens=cu_seqlens,
             rope_freqs_cis=rope_freqs_cis,
-            # cu_seqlens=cu_seqlens
+            max_seqlen_q=max_seqlen_q,
+            max_seqlen_k=max_seqlen_k,
         )
         hidden_states = residual + hidden_states
 
@@ -950,7 +964,6 @@ class SiglipPreTrainedModel(PreTrainedModel):
 
     _no_split_modules = [
         "SiglipTextEmbeddings",
-        "SiglipEncoderLayer",
         "SiglipVisionEmbeddings",
         "SiglipEncoderLayer",
         "SiglipMultiheadAttentionPoolingHead",
@@ -1126,7 +1139,8 @@ class SiglipEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         use_mrope: Optional[bool] = None,
-        # cu_seqlens: Optional[List[torch.Tensor]] = None,
+        max_seqlen_q: Optional[int] = None,
+        max_seqlen_k: Optional[int] = None,
     ) -> BaseModelOutput:
         r"""
         Args:
@@ -1177,14 +1191,18 @@ class SiglipEncoder(nn.Module):
                     attention_mask,
                     output_attentions,
                     None, # rope_freqs_cis
-                    cu_seqlens
+                    cu_seqlens,
+                    max_seqlen_q,
+                    max_seqlen_k,
                 )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
                     output_attentions=output_attentions,
-                    cu_seqlens=cu_seqlens
+                    cu_seqlens=cu_seqlens,
+                    max_seqlen_q=max_seqlen_q,
+                    max_seqlen_k=max_seqlen_k,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1241,6 +1259,8 @@ class SiglipVisionTransformer(nn.Module):
         vision_return_embed_list: Optional[bool] = False,
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
         return_pooler_output: Optional[bool] = True,
+        max_seqlen_q: Optional[int] = None,
+        max_seqlen_k: Optional[int] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -1274,6 +1294,8 @@ class SiglipVisionTransformer(nn.Module):
             output_hidden_states=output_hidden_states,
             attention_mask=attention_mask,
             cu_seqlens=cu_seqlens,
+            max_seqlen_q=max_seqlen_q,
+            max_seqlen_k=max_seqlen_k,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -1410,6 +1432,8 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         return_pooler_output: Optional[bool] = True,
+        max_seqlen_q: Optional[int] = None,
+        max_seqlen_k: Optional[int] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -1444,7 +1468,9 @@ class SiglipVisionModel(SiglipPreTrainedModel):
             image_grid_thw=image_grid_thw,
             sample_indices=sample_indices,
             cu_seqlens=cu_seqlens,
-            return_pooler_output=return_pooler_output
+            return_pooler_output=return_pooler_output,
+            max_seqlen_q=max_seqlen_q,
+            max_seqlen_k=max_seqlen_k,
         )
 
 
@@ -1769,6 +1795,7 @@ class KeyeRotaryEmbedding(nn.Module):
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
+        print(f"self.original_max_seq_len={self.original_max_seq_len}")
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
@@ -1921,24 +1948,35 @@ class KeyeAttention(nn.Module):
 
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.is_causal = True
         self.attention_dropout = config.attention_dropout
         self.rope_scaling = config.rope_scaling
 
-        if (self.head_dim * self.num_heads) != self.hidden_size:
-            raise ValueError(
-                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
-                f" and `num_heads`: {self.num_heads})."
-            )
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
+        # if (self.head_dim * self.num_heads) != self.hidden_size:
+        #     raise ValueError(
+        #         f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
+        #         f" and `num_heads`: {self.num_heads})."
+        #     )
+
+
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
         self.q_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
         self.k_norm = Qwen3RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # thus post q_norm does not need reshape
+
         self.rotary_emb = KeyeRotaryEmbedding(config=config)
 
     def forward(
@@ -2116,7 +2154,9 @@ class KeyeFlashAttention2(KeyeAttention):
         else:
             if cu_seqlens is not None:
                 # Sample packing with FA2
-                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                max_seqlen = kargs.pop("max_seqlen_q", None)
+                if max_seqlen is None:
+                    max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
                 cu_seqlens = cu_seqlens.to(torch.int32)
                 # remove batch_dim first: q.squeeze(0)
                 attn_output = flash_attn_varlen_func(
@@ -2144,7 +2184,7 @@ class KeyeFlashAttention2(KeyeAttention):
                     use_top_left_mask=self._flash_attn_uses_top_left_mask,
                 )
 
-        attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
+        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
         if not output_attentions:
@@ -2924,6 +2964,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         second_per_grid_ts: Optional[torch.Tensor] = None,
+        image_max_seqlen_q: Optional[int] = None,
+        image_max_seqlen_k: Optional[int] = None,
         **kwargs
     ) -> Union[Tuple, KeyeCausalLMOutputWithPast]:
         r"""
@@ -3011,7 +3053,10 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     sample_indices=sample_indices,
                     cu_seqlens=cu_seqlens,
                     return_pooler_output=False,
+                    max_seqlen_q=image_max_seqlen_q,
+                    max_seqlen_k=image_max_seqlen_k,
                 )
+
                 image_embeds = vision_outputs.last_hidden_state
 
                 image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
@@ -3039,6 +3084,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 # image pixel_values=torch.Size([1, 196, 3, 14, 14]), image_grid_thw=torch.Size([1, 3]), n_image_tokens=49, image_mask=torch.Size([1,376, 3584]), image_embeds=torch.Size([49, 3584]), inputs_embeds=torch.Size([1,376, 3584])
 
             if pixel_values_videos is not None:
+                # print(f"pixel_values_videospixel_values_videos0000000_{torch.isnan(pixel_values_videos).any()}", pixel_values_videos)
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
                 pixel_values_videos = pixel_values_videos.unsqueeze(0)
                 siglip_position_ids = list()
@@ -3058,7 +3104,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values_videos.device)
                 cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values_videos.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values_videos.device)
-
+                # print(f"pixel_values_videospixel_values_videos{torch.isnan(pixel_values_videos).any()}", pixel_values_videos)
+                # print(pixel_values_videos)
                 vision_outputs = self.visual(
                     pixel_values=pixel_values_videos, 
                     image_grid_thw=video_grid_hws,
@@ -3068,8 +3115,11 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     sample_indices=sample_indices,
                     cu_seqlens=cu_seqlens,
                     return_pooler_output=False,
+                    #max_seqlen_q=image_max_seqlen_q,
+                    #max_seqlen_k=image_max_seqlen_k,
                 )
                 video_embeds = vision_outputs.last_hidden_state
+                # print(f"video_embedsvideo_embedsvideo_embeds_{any([torch.isnan(x).any() for x in video_embeds])}", [torch.isnan(x).any() for x in video_embeds], video_embeds)
                 video_embeds = self.mlp_AR(video_embeds, video_grid_thw)
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 video_embeds = torch.cat(video_embeds,dim=0)
@@ -3089,7 +3139,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
-
+        
         # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
         if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
             # calculate RoPE index once per generation in the pre-fill stage only

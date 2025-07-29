@@ -2,7 +2,7 @@ import time
 import os
 
 class TimeTracker:
-    def __init__(self, n=1, time_types=["absolute"]):
+    def __init__(self, n=1, time_types=["absolute"], sync=False):
         """
         初始化 TimeTracker 类。
 
@@ -15,6 +15,7 @@ class TimeTracker:
             "absolute": time.perf_counter(),
             "cpu": os.times().user
         }
+        self.sync = sync
         self.interval_records = {}
 
     def tick(self, name):
@@ -23,6 +24,7 @@ class TimeTracker:
 
         :param name: 时间间隔记录的名称
         """
+        if self.sync: torch.cuda.synchronize()
         for time_type in self.time_types:
             if time_type == "absolute":
                 current_time = time.perf_counter()

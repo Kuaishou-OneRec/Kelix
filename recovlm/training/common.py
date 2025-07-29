@@ -115,3 +115,68 @@ def get_global_grad_norm(model):
         param.grad.data for param in model.parameters() \
             if param.grad is not None]
     return get_total_norm(grads, norm_type=2.0)
+
+
+import torch
+import math
+import os
+import shutil  # 用于删除文件夹及内容
+from pathlib import Path
+
+class GradNormLogger:
+    def __init__(self, log_dir="grad_norm_logs"):
+        """
+        初始化梯度范数记录器（会清空原有文件夹内容）
+        :param log_dir: 日志文件夹路径
+        """
+        self.step = 0  # 记录当前是第几个step
+        self.log_dir = log_dir
+        self.rank = self._get_rank()  # 获取当前进程的rank
+        
+        # 若文件夹已存在则删除并重建（清空效果），否则直接创建
+        if self._get_rank() == 0 and os.path.exists(self.log_dir):
+            shutil.rmtree(self.log_dir)  # 递归删除文件夹及内部所有内容
+        Path(self.log_dir).mkdir(parents=True, exist_ok=True)  # 重新创建文件夹
+        
+    def _get_rank(self):
+        """
+        自动获取当前进程的rank，处理非分布式环境情况
+        在非分布式环境或未初始化分布式时返回0
+        """
+        try:
+            if not hasattr(torch, 'distributed'):
+                return 0
+                
+            if torch.distributed.is_initialized():
+                return torch.distributed.get_rank()
+            else:
+                return 0
+        except (RuntimeError, ImportError):
+            return 0
+        
+    def __call__(self, model, step=None):
+        """
+        调用方法，计算并记录当前step的所有参数梯度范数
+        :param model: PyTorch模型
+        :param step: 可选参数，指定当前step，不指定则自动递增
+        """
+        if step is None:
+            self.step += 1
+            step = self.step
+        
+        # 为当前rank创建独立的日志文件
+        log_file = os.path.join(self.log_dir, f"grad_norm_rank_{self.rank}.txt")
+        
+        # 第一次写入时添加表头
+        write_header = not os.path.exists(log_file)
+        
+        with open(log_file, 'a') as f:
+            if write_header:
+                f.write("Step,Parameter Name,Gradient Norm\n")
+                
+            for name, param in model.named_parameters():
+                if param.grad is not None:
+                    grad_norm = math.sqrt(torch.sum(param.grad**2).item())
+                    f.write(f"{step},{name},{grad_norm:.6f}\n")
+                else:
+                    f.write(f"{step},{name},NaN\n")

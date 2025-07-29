@@ -35,6 +35,7 @@ torch.cuda.set_device(0)
 local_rank = 0
 
 
+from PIL import Image, ImageDraw
 def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(255, 255, 255), outline_width=5):
     """
     生成一个包含一个圆的 PIL Image 对象。

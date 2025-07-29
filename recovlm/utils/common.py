@@ -437,7 +437,7 @@ def load_parquet_file(fn: str, retry=5, max_cache_files=5, parquet_backend='fast
             if os.path.exists(cache_fn):
                 res = pq.ParquetFile(cache_fn) if parquet_backend == 'pyarrow' else FakeParquetFileFromFastParquetFile(cache_fn)
             else:
-                raise Exception("File not found") # 直接用shell的方式
+                raise Exception(f"File not found on rank{dist.get_rank()}") # 直接用shell的方式
                 # res = pq.ParquetFile(fn)
             return res
         

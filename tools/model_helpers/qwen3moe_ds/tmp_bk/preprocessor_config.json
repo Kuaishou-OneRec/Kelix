@@ -1,0 +1,18 @@
+{
+  "min_pixels": 4096,
+  "max_pixels": 16777216,
+  "patch_size": 16,
+  "temporal_patch_size": 1,
+  "merge_size": 2,
+  "image_mean": [
+    0.48145466,0.4578275,0.40821073
+  ],
+  "image_std": [
+    0.26862954,0.26130258,0.27577711
+  ],
+  "processor_class": "KeyeProcessor",
+  "auto_map": {
+    "AutoProcessor": "processing_keye.KeyeProcessor",
+    "AutoImageProcessor": "image_processing_keye.SiglipImageProcessor"
+  }
+}

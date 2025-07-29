@@ -10,17 +10,29 @@ export https_proxy=http://oversea-squid4.sgp.txyun:11080
 export no_proxy=localhost,127.0.0.1,localaddress,localdomain.com,internal,corp.kuaishou.com,test.gifshow.com,staging.kuaishou.com
 cloud_storage="https://halo.corp.kuaishou.com/api/cloud-storage/v1/public-objects"
 
-
-# Step0: 多机安装
+function apt_install_func() {
+    if [ ! -f /etc/apt/sources.list ]; then
+        apt update &> /dev/null && apt-get install -y "$@" &> /dev/null
+    else
+        cp /etc/apt/sources.list /etc/apt/sources.list.bak
+        sed -i 's|http://|https://|g' /etc/apt/sources.list
+        apt update &> /dev/null && apt-get install -y "$@" &> /dev/null
+        rm -f /etc/apt/sources.list && mv /etc/apt/sources.list.bak /etc/apt/sources.list
+    fi
+}
+# Step0: 多机安装，尝试选择可读写的最大可用量ceph网盘路径
 install_dir=$1
 if [ "$install_dir" == "all" ]; then
-    ceph_df_info=$(xargs -I{} df -B 1G {} < <(awk '{print $3}' < <(grep "type ceph" < <(mount))))
+    ceph_df_info=$(xargs -I{} df -B 1G {} < <(awk '{print $3}' < <(grep -E "type ceph [^a-z]rw[^a-z]" < <(mount))))
     read -r ceph_dir ceph_size _ < <(tail -1 < <(sort -k2 -n < <(awk '!/^File/ {print $6,$4}' <<< "$ceph_df_info")))
+
     if [ ! -d "$ceph_dir" ] || [[ ! "$ceph_size" =~ ^[1-9][0-9]*$ ]]; then
         print_red "cannot find any vacant share directory on ceph to help install xray on all workers"; exit 2
     fi
+    TCP_NIC=$(grep -o "^\w*" < <(grep -B1 " ""$(hostname -i)"" " < <(ifconfig)))
     set -x
     env -i PATH="$(sed -e 's/^\/opt\/xray\/deps://' <<< "$PATH")" HOME="$HOME" mpirun --allow-run-as-root -pernode -hostfile /etc/mpi/mpi-hostfile \
+        -mca btl tcp,self -mca pml ob1 -mca btl_tcp_if_include "$TCP_NIC" -mca oob_tcp_if_include "$TCP_NIC" \
         -x PATH bash -c "bash install_xray.sh ${ceph_dir} || echo -e '\e[31m\e[100m xray install failed on $(hostname) \e[0m'"
     exit 0
 fi
@@ -28,13 +40,11 @@ fi
 
 # Step1: 检查OS版本，安装依赖包
 _os_=$(grep -Ei '^ID=' /etc/os-release | cut -d'=' -f2 | tr -d '"')
-if [ "${_os_}" == "ubuntu" ]; then
-    _pkg_="deb"
+if [ "${_os_}" == "ubuntu" ]; then _pkg_="deb"
     dpkg --configure -a &> /dev/null || true
     print_green "updating dependencies by apt"
-    apt update &> /dev/null && apt-get install -y net-tools iproute2 lldpd bind9-utils ethtool iputils-ping &> /dev/null
-elif [ "${_os_}" == "centos" ]; then
-    _pkg_="rpm"
+    apt_install_func net-tools iproute2 lldpd bind9-utils ethtool iputils-ping
+elif [ "${_os_}" == "centos" ]; then _pkg_="rpm"
     print_green "updating dependencies by yum"
     yum install -y --nogpgcheck net-tools iproute lldpd bind-utils ethtool iputils --skip-broken &> /dev/null
 else print_red "Error: unsupported os for xray, only centos and ubuntu are available"; exit 1
@@ -52,15 +62,16 @@ elif command -v amd-sli &> /dev/null || command -v rocm-sli &> /dev/null ; then
     _gpu_="rocm6"  # TODO: 动态识别
 else print_red "Error: unrecognized cuda/rocm version"; exit 2
 fi
+pip3 install requests 2>/dev/null
 
 
 # Step3: 更新xray
 installed="0"
 if out=$(xray update) && grep -q "update complete" <<< "$out" ; then
-    print_green "Info: xray auto update success"
+    print_green "Info: xray auto update success, no need to re-install"
     installed="1"
-elif xray --help &> /dev/null ; then
-    print_green "Info: removing old version of xray"
+else
+    print_green "Info: removing old version of xray if there is any"
     if [ "${_os_}" == "ubuntu" ]; then
         apt-get remove -y xray &> /dev/null || true
     else

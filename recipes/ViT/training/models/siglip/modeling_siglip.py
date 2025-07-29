@@ -494,7 +494,8 @@ class SiglipAttention(nn.Module):
         output_attentions: Optional[bool] = False,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         rope_freqs_cis: Optional[torch.Tensor] = None,
-        # cu_seqlens = None
+        max_seqlen_q: Optional[int] = None,
+        max_seqlen_k: Optional[int] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
@@ -546,9 +547,10 @@ class SiglipAttention(nn.Module):
             values = values.transpose(1, 2).squeeze(0)
 
             from flash_attn import flash_attn_func, flash_attn_varlen_func
-            max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
+            if max_seqlen_q is None:
+                max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            if max_seqlen_k is None:
+                max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
 
             attn_output = flash_attn_varlen_func(
                 queries,
@@ -603,7 +605,8 @@ class SiglipEncoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         rope_freqs_cis: Optional[torch.Tensor] = None,
-        # cu_seqlens = None,
+        max_seqlen_q: Optional[int] = None,
+        max_seqlen_k: Optional[int] = None,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -624,7 +627,8 @@ class SiglipEncoderLayer(nn.Module):
             output_attentions=output_attentions,
             cu_seqlens=cu_seqlens,
             rope_freqs_cis=rope_freqs_cis,
-            # cu_seqlens=cu_seqlens
+            max_seqlen_q=max_seqlen_q,
+            max_seqlen_k=max_seqlen_k,
         )
         hidden_states = residual + hidden_states
 
@@ -838,7 +842,8 @@ class SiglipEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         use_mrope: Optional[bool] = None,
-        # cu_seqlens: Optional[List[torch.Tensor]] = None,
+        max_seqlen_q: Optional[int] = None,
+        max_seqlen_k: Optional[int] = None,
     ) -> BaseModelOutput:
         r"""
         Args:
@@ -883,14 +888,18 @@ class SiglipEncoder(nn.Module):
                     attention_mask,
                     output_attentions,
                     None, # rope_freqs_cis
-                    cu_seqlens
+                    cu_seqlens,
+                    max_seqlen_q,
+                    max_seqlen_k,
                 )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
                     output_attentions=output_attentions,
-                    cu_seqlens=cu_seqlens
+                    cu_seqlens=cu_seqlens,
+                    max_seqlen_q=max_seqlen_q,
+                    max_seqlen_k=max_seqlen_k,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1075,6 +1084,8 @@ class SiglipVisionTransformer(nn.Module):
         vision_return_embed_list: Optional[bool] = False,
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
         return_pooler_output: Optional[bool] = True,
+        max_seqlen_q: Optional[int] = None,
+        max_seqlen_k: Optional[int] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -1107,6 +1118,8 @@ class SiglipVisionTransformer(nn.Module):
             output_hidden_states=output_hidden_states,
             attention_mask=attention_mask,
             cu_seqlens=cu_seqlens,
+            max_seqlen_q=max_seqlen_q,
+            max_seqlen_k=max_seqlen_k,
         )
 
         last_hidden_state = encoder_outputs.last_hidden_state
@@ -1243,6 +1256,8 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         return_pooler_output: Optional[bool] = True,
+        max_seqlen_q: Optional[int] = None,
+        max_seqlen_k: Optional[int] = None,
     ) -> BaseModelOutputWithPooling:
         r"""
         Returns:
@@ -1277,7 +1292,9 @@ class SiglipVisionModel(SiglipPreTrainedModel):
             image_grid_thw=image_grid_thw,
             sample_indices=sample_indices,
             cu_seqlens=cu_seqlens,
-            return_pooler_output=return_pooler_output
+            return_pooler_output=return_pooler_output,
+            max_seqlen_q=max_seqlen_q,
+            max_seqlen_k=max_seqlen_k,
         )
 
 

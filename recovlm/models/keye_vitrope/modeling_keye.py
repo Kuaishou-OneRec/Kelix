@@ -64,7 +64,7 @@ from torch import nn
 from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
-from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from transformers.modeling_utils import  PreTrainedModel
 
 
 
@@ -80,59 +80,65 @@ else:
 
 
 
+try:
+    from recovlm.training import parallel as mpu
+    from recovlm.training.parallel import get_sequence_parallel_group, \
+    get_sequence_parallel_world_size, \
+    get_local_sequence_boundary, \
+    get_local_sequence
 
-_SEQUENCE_PARALLEL_GROUP = None
-_SEQUENCE_PARALLEL_GROUP_GLOO = None
-_DATA_PARALLEL_GROUP = None
+except:
+    _SEQUENCE_PARALLEL_GROUP = None
+    _SEQUENCE_PARALLEL_GROUP_GLOO = None
+    _DATA_PARALLEL_GROUP = None
 
+    def get_sequence_parallel_group(backend="nccl"):
+        """Get the sequence parallel group the caller rank belongs to."""
+        if backend == "nccl":
+            return _SEQUENCE_PARALLEL_GROUP
+        elif backend == "gloo":
+            return _SEQUENCE_PARALLEL_GROUP_GLOO
+        else:
+            raise NotImplementedError(f"Unsupport sequence parallel backend: {backend}")
 
-def get_sequence_parallel_group(backend="nccl"):
-    """Get the sequence parallel group the caller rank belongs to."""
-    if backend == "nccl":
-        return _SEQUENCE_PARALLEL_GROUP
-    elif backend == "gloo":
-        return _SEQUENCE_PARALLEL_GROUP_GLOO
-    else:
-        raise NotImplementedError(f"Unsupport sequence parallel backend: {backend}")
+    def get_sequence_parallel_world_size():
+        return 1
+        """Get the sequence parallel world size."""
+        try: return dist.get_world_size(group=get_sequence_parallel_group())
+        except: return 1
 
-def get_sequence_parallel_world_size():
-    return 1
-    """Get the sequence parallel world size."""
-    try: return dist.get_world_size(group=get_sequence_parallel_group())
-    except: return 1
+    def get_sequence_parallel_rank():
+        """Get the sequence parallel rank."""
+        return dist.get_rank(group=get_sequence_parallel_group())
 
-def get_sequence_parallel_rank():
-    """Get the sequence parallel rank."""
-    return dist.get_rank(group=get_sequence_parallel_group())
+    def get_local_sequence_boundary(seq_len):
+        sp_size = get_sequence_parallel_world_size()
+        sp_rank = get_sequence_parallel_rank()
+        local_seqlen = seq_len // sp_size
+        start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
+        return start, end
 
-def get_local_sequence_boundary(seq_len):
-    sp_size = get_sequence_parallel_world_size()
-    sp_rank = get_sequence_parallel_rank()
-    local_seqlen = seq_len // sp_size
-    start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
-    return start, end
+    def get_local_sequence(sequence: torch.Tensor, seq_idx: int = 1):
+        if get_sequence_parallel_world_size() > 1:
+            seq_len = sequence.shape[seq_idx]
+            start, end = get_local_sequence_boundary(seq_len)
+            # Create a slice object for the specified dimension
+            slices = [slice(None)] * sequence.dim()
+            slices[seq_idx] = slice(start, end)
+            # Use the slice object to index the tensor
+            local_sequence = sequence[tuple(slices)]
 
-def get_local_sequence(sequence: torch.Tensor, seq_idx: int = 1):
-    if get_sequence_parallel_world_size() > 1:
-        seq_len = sequence.shape[seq_idx]
-        start, end = get_local_sequence_boundary(seq_len)
-        # Create a slice object for the specified dimension
-        slices = [slice(None)] * sequence.dim()
-        slices[seq_idx] = slice(start, end)
-        # Use the slice object to index the tensor
-        local_sequence = sequence[tuple(slices)]
+            return local_sequence
+        return sequence
 
-        return local_sequence
-    return sequence
+    def get_data_parallel_group():
+        return _DATA_PARALLEL_GROUP
 
-def get_data_parallel_group():
-    return _DATA_PARALLEL_GROUP
+    def get_data_parallel_rank():
+        return dist.get_rank(group=get_data_parallel_group())
 
-def get_data_parallel_rank():
-    return dist.get_rank(group=get_data_parallel_group())
-
-def get_data_parallel_world_size():
-    return dist.get_world_size(group=get_data_parallel_group())
+    def get_data_parallel_world_size():
+        return dist.get_world_size(group=get_data_parallel_group())
 
 def all_to_all_4D(
     input: torch.tensor, scatter_idx: int = 2, gather_idx: int = 1, group=None, use_sync: bool = False
@@ -384,8 +390,6 @@ class UlyssesAttention(torch.nn.Module):
         return output
 
 
-
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "KeyeConfig"
@@ -579,7 +583,7 @@ class SiglipVisionEmbeddings(nn.Module):
         self.embed_dim = config.hidden_size
         self.image_size = config.image_size
         self.patch_size = config.patch_size
-
+        self.has_learnable_position_embedding = config.has_learnable_position_embedding if hasattr(config, "has_learnable_position_embedding") else True
         self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
             out_channels=self.embed_dim,
@@ -587,6 +591,7 @@ class SiglipVisionEmbeddings(nn.Module):
             stride=self.patch_size,
             padding="valid",
         )
+        print(f"self.has_learnable_position_embedding={self.has_learnable_position_embedding}")
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
@@ -606,13 +611,7 @@ class SiglipVisionEmbeddings(nn.Module):
         - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
         - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
-
-        num_patches = embeddings.shape[1]
         num_positions = self.position_embedding.weight.shape[0]
-
-        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embedding(self.position_ids)
 
         patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
 
@@ -670,21 +669,12 @@ class SiglipVisionEmbeddings(nn.Module):
         pixel_values: torch.FloatTensor, 
         position_ids: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
-        interpolate_pos_encoding=False
+        interpolate_pos_encoding=False,
+        has_learnable_position_embedding=False
     ) -> torch.Tensor:
-        if pixel_values.dim() == 4:
-            # raise NotImplementedError
-            _, _, height, width = pixel_values.shape
-            target_dtype = self.patch_embedding.weight.dtype
-            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-            embeddings = patch_embeds.flatten(2).transpose(1, 2)
-
-            if interpolate_pos_encoding:
-                embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-            else:
-                embeddings = embeddings + self.position_embedding(self.position_ids)
-            return embeddings
-        elif pixel_values.dim() == 5:
+        has_learnable_position_embedding = self.has_learnable_position_embedding
+        # assert has_learnable_position_embedding == False
+        if pixel_values.dim() == 5:
             assert position_ids is not None
             from einops import rearrange
             batch_size, squence_len, channel, height, width = pixel_values.shape
@@ -695,25 +685,28 @@ class SiglipVisionEmbeddings(nn.Module):
             embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=squence_len)
 
             # todo: not dubug
-            if interpolate_pos_encoding and image_grid_thw is not None:
-                flatten_image_grid_thw = self.flatten_list(image_grid_thw)
-                assert batch_size == 1
-                start = 0
-                image_embedding_list = list()
-                assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (flatten_image_grid_thw, embeddings.shape)
-                embeddings = embeddings.squeeze(0)
-                tmp_embeddings = list()
-                for image_grid in image_grid_thw:
-                    t, h, w = image_grid
-                    for _ in range(t):
-                        end = start + h * w
+            if has_learnable_position_embedding:
+                if interpolate_pos_encoding and image_grid_thw is not None:
+                    flatten_image_grid_thw = self.flatten_list(image_grid_thw)
+                    assert batch_size == 1
+                    start = 0
+                    image_embedding_list = list()
+                    assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (flatten_image_grid_thw, embeddings.shape)
+                    embeddings = embeddings.squeeze(0)
+                    tmp_embeddings = list()
+                    for image_grid in image_grid_thw:
+                        t, h, w = image_grid
+                        end = start + t * h * w
                         image_embeddings = embeddings[start: end, :]
-                        image_embeddings = image_embeddings + self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0)
+                        position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0).repeat(
+                            t, 1)
+                        image_embeddings = image_embeddings + position_embedding
                         tmp_embeddings.append(image_embeddings)
                         start = end
-                embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
-            else:
-                embeddings = embeddings + self.packing_position_embedding(position_ids)
+                    embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
+                else:
+                    embeddings = embeddings + self.packing_position_embedding(position_ids)
+
             return embeddings
         else:
             raise NotImplementedError(str(pixel_values.shape))
@@ -764,6 +757,16 @@ class SiglipAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self._dist_attn = UlyssesAttention(scatter_idx=2, gather_idx=1)
+        use_qk_norm = getattr(config, "use_qk_norm", False)
+        qk_norm_eps = getattr(config, "qk_norm_eps", 1e-6)
+        print("use_qk_normuse_qk_norm", use_qk_norm)
+        if use_qk_norm:
+            self.q_norm = Qwen3RMSNorm(self.head_dim, qk_norm_eps)
+            self.k_norm = Qwen3RMSNorm(self.head_dim, qk_norm_eps)
+        else:
+            self.q_norm = None
+            self.k_norm = None
 
         if self.config._attn_implementation != 'flash_attention_2':
             print(f"SiglipAttention flash_attention_2 is not set!!!!!! Get {self.config._attn_implementation}")
@@ -786,19 +789,28 @@ class SiglipAttention(nn.Module):
         keys = self.k_proj(hidden_states)
         values = self.v_proj(hidden_states)
 
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim)
+
+
+        if self.q_norm is not None and self.k_norm is not None:
+            queries = self.q_norm(queries)
+            keys = self.k_norm(keys)
+
         if rope_emb is None:
-            queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-            keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
-            values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+            queries = queries.transpose(1, 2)
+            keys = keys.transpose(1, 2)
+            values = values.transpose(1, 2)
         else:
             assert cu_seqlens is not None, "Rope support flash attn only."
             cos, sin = rope_emb
-            queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim)
-            keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim)
+            queries = queries
+            keys = keys
             queries, keys = apply_rotary_pos_emb_flashatt(queries, keys, cos, sin)
             queries = queries.transpose(1, 2)
             keys = keys.transpose(1, 2)
-            values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+            values = values.transpose(1, 2)
 
         if not use_flash_attn:
             attention_interface: Callable = eager_attention_forward
@@ -831,22 +843,38 @@ class SiglipAttention(nn.Module):
             from flash_attn import flash_attn_func, flash_attn_varlen_func
             max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
             max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-            assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
 
-            attn_output = flash_attn_varlen_func(
-                queries,
-                keys,
-                values,
-                cu_seqlens,
-                cu_seqlens,
-                max_seqlen_q,
-                max_seqlen_k,
-                causal=False,
-                softmax_scale=self.scale,
-            )
-            attn_output = attn_output.flatten(-2).unsqueeze(0)
-            attn_weights = None
-
+            if get_sequence_parallel_world_size() > 1:
+                attn_output = self._dist_attn(
+                    query=queries.unsqueeze(0),
+                    key=keys.unsqueeze(0),
+                    value=values.unsqueeze(0),
+                    cu_seqlens=cu_seqlens,
+                    causal=self.is_causal,
+                    dropout=0.0 if not self.training else self.dropout,
+                ).reshape(seq_length, -1)
+                attn_output = attn_output[None]
+                # attn_output = attn_output.flatten(-2).unsqueeze(0)
+                attn_weights = None
+            else:
+                if max_seqlen_q is None:
+                    max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                if max_seqlen_k is None:
+                    max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                # assert cu_seqlens[-1].item() == queries.shape[0] == keys.shape[0] == values.shape[0], (cu_seqlens, queries.shape, keys.shape, values.shape)
+                attn_output = flash_attn_varlen_func(
+                    queries,
+                    keys,
+                    values,
+                    cu_seqlens,
+                    cu_seqlens,
+                    max_seqlen_q,
+                    max_seqlen_k,
+                    causal=False,
+                )
+                attn_output = attn_output.flatten(-2).unsqueeze(0)
+                attn_weights = None
+        
         attn_output = self.out_proj(attn_output)
 
         if not output_attentions:
@@ -1094,17 +1122,20 @@ class SiglipEncoder(nn.Module):
     [`SiglipEncoderLayer`].
 
     Args:
-        config: KeyeConfig
+        config: KeyeVisionConfig
     """
 
-    def __init__(self, config: KeyeConfig):
+    def __init__(self, config: KeyeVisionConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
         num_heads = config.num_attention_heads
         head_dim = embed_dim // num_heads
         self.layers = nn.ModuleList([SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.rotary_pos_emb = SigLIPRotaryEmbedding(head_dim // 2)
+        # config.has_learnable_position_embedding if hasattr(config, "has_learnable_position_embedding") else False
+        self.rotary_pos_emb = SigLIPRotaryEmbedding(head_dim // 2, 
+            config.rope_theta if hasattr(config, "rope_theta") else 10000
+        )
         self.gradient_checkpointing = False
 
     @staticmethod
@@ -1245,6 +1276,18 @@ class SiglipEncoder(nn.Module):
             hidden_states = hidden_states[:, window_indices, :]
         else:
             attn_cu_seqlens = cu_seqlens
+            
+        assert hidden_states.shape[1] % get_sequence_parallel_world_size() == 0, \
+            f"Sequence length should be dividable by sp_world_size={get_sequence_parallel_world_size()}, hidden_states={hidden_states.shape}"
+
+
+        attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
+
+        if get_sequence_parallel_world_size() > 1:
+            start, end = get_local_sequence_boundary(hidden_states.shape[1])
+            sin, cos = rope_emb
+            rope_emb = (sin[start:end, :], cos[start:end, :])
+            hidden_states = hidden_states[:, start:end, :]
 
         for encoder_layer in self.layers:
             if output_hidden_states:
@@ -1278,6 +1321,12 @@ class SiglipEncoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
+        if get_sequence_parallel_world_size() > 1:
+            hidden_states = mpu.AllGather.apply(
+                hidden_states,
+                get_sequence_parallel_group(),
+                1
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=encoder_states,
@@ -1290,7 +1339,6 @@ class SiglipVisionTransformer(nn.Module):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
-
         self.embeddings = SiglipVisionEmbeddings(config)
         self.encoder = SiglipEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
@@ -1821,7 +1869,6 @@ class Qwen3PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-
 class SigLIPRotaryEmbedding(nn.Module):
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
@@ -2143,7 +2190,8 @@ class KeyeFlashAttention2(KeyeAttention):
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         cu_seqlens: Optional[torch.Tensor] = None,
-        sliding_window = -1
+        sliding_window = -1,
+        **kwargs,
     ):
         bsz, q_len, _ = hidden_states.size()
         q= self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
@@ -2962,6 +3010,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
                     llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
+                    if torch.is_tensor(second_per_grid_t): second_per_grid_t = second_per_grid_t.detach().item()
                     range_tensor = torch.arange(llm_grid_t).view(-1, 1)
                     expanded_range = range_tensor.expand(-1, llm_grid_h * llm_grid_w)
 
@@ -3108,7 +3157,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     cu_seqlens=cu_seqlens,
                     return_pooler_output=False,
                     use_rope=True,
-                    window_size =8,
+                    window_size =-1,
                 )
                 image_embeds = vision_outputs.last_hidden_state
 
@@ -3167,7 +3216,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     cu_seqlens=cu_seqlens,
                     return_pooler_output=False,
                     use_rope=True,
-                    window_size = 4,
+                    window_size = -1,
                 )
                 video_embeds = vision_outputs.last_hidden_state
                 video_embeds = self.mlp_AR(video_embeds, video_grid_thw)
@@ -3435,7 +3484,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
 class Projector(nn.Module):
 
-    def __init__(self, text_config: KeyeConfig,vision_config: KeyeVisionConfig):
+    def __init__(self, text_config: KeyeConfig, vision_config: KeyeVisionConfig):
         super().__init__()
         self.text_config = text_config
         self.vision_config = vision_config
@@ -3447,7 +3496,9 @@ class Projector(nn.Module):
             * self.merge_kernel_size[1]
         )
 
-        self.pre_norm = torch.nn.LayerNorm(self.vision_config.hidden_size, eps=1e-05)
+        self.norm_after_ps = False if not hasattr(text_config, "norm_after_ps") else text_config.norm_after_ps
+        print(f"self.norm_after_ps={self.norm_after_ps}")
+        self.pre_norm = torch.nn.LayerNorm(self.hidden_size, eps=1e-05) if self.norm_after_ps else torch.nn.LayerNorm(self.vision_config.hidden_size, eps=1e-05)
         self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
         self.act = GELUActivation()
         self.linear_2 = nn.Linear(
@@ -3459,11 +3510,13 @@ class Projector(nn.Module):
         if isinstance(image_features, (list, tuple)):
             processed_features = list()
             for image_feature, image_grid in zip(image_features, image_grid_thw):
-                image_feature = self.pre_norm(image_feature)
                 t, h, w = image_grid
                 from einops import rearrange
-
-                image_feature = rearrange(image_feature, "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2)
+                if self.norm_after_ps: 
+                    image_feature = self.pre_norm(rearrange(image_feature, "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2))
+                else: 
+                    image_feature = rearrange(self.pre_norm(image_feature), "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2)
+                
                 hidden_states = self.linear_1(image_feature)
                 hidden_states = self.act(hidden_states)
                 hidden_states = self.linear_2(hidden_states)
@@ -3474,13 +3527,15 @@ class Projector(nn.Module):
         dims = image_features.shape[:-1]
         dim = image_features.shape[-1]
         image_features = image_features.view(np.prod(dims), dim)
-        hidden_states = self.pre_norm(image_features).view(-1, self.hidden_size)
+
+        if self.norm_after_ps: hidden_states = self.pre_norm(image_features.view(-1, self.hidden_size))
+        else: hidden_states = self.pre_norm(image_features).view(-1, self.hidden_size)
+        
         hidden_states = self.linear_1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.linear_2(hidden_states)
 
         return hidden_states.view(*dims, -1)
-
 
 
 

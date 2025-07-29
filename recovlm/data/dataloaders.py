@@ -4,21 +4,26 @@ import os
 import json
 import torch
 import wids
+import psutil
 
 import webdataset as wds
+import torch.distributed as dist
 
+
+from recovlm.utils.numa_bind import get_numa_bind_info
 from torch.utils.data import DataLoader
 from torchdata.stateful_dataloader import StatefulDataLoader
 from qwen_vl_utils import process_vision_info
 from transformers import AutoProcessor
 from tqdm import tqdm
 
+from recovlm.utils.numa_bind import get_numa_bind_info
 from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
     ChatCompletionVisionDataset, ChatCompletionVisionParquetDataset, \
     ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset,InternVLChatCompletionVisionParquetDataset, \
     BalanceParquetDataset, \
     ChatCompletionVisionDataset_moonvit,ChatCompletionVisionParquetDataset_moonvit, \
-    ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip, ChatCompletionVisionParquetDataset_navit, ChatCompletionVisionParquetDataset_keye
+    ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip, ChatCompletionVisionParquetDataset_navit, ChatCompletionVisionParquetDataset_keye, ChatCompletionVisionParquetDataset_keye_vitrope, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
 
@@ -255,19 +260,27 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
     model_type = kwargs.get('model_class','Qwen2VLForConditionalGeneration')
     print('test_cut_to_pad:',kwargs.get('cut_to_pad',False))
     use_balance = kwargs.get("use_flops_balance", False)
+    kwargs["use_flops_balance"] = use_balance
+
+    num_readers = kwargs.get("num_readers", 8)
+    kwargs["num_readers"] = num_readers
+
+
     ModelDataset = {'Qwen2VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration_moonvit':ChatCompletionVisionParquetDataset_moonvit,
                     'Qwen2_5_VLForConditionalGeneration_siglip':ChatCompletionVisionParquetDataset_siglip,
-                    
                     'Qwen3SiglipForConditionalGeneration_navit':ChatCompletionVisionParquetDataset_navit,
                     'KeyeForConditionalGeneration': ChatCompletionVisionParquetDataset_keye,
+                    'KeyeForConditionalGeneration_vitrope': ChatCompletionVisionParquetDataset_keye_vitrope,
+                    'KeyeForConditionalGeneration_vitrope_slowfast': ChatCompletionVisionParquetDataset_keye_vitrope_slowfast,
+                    'KeyeForConditionalGeneration_vitrope_slowfast_v2': ChatCompletionVisionParquetDataset_keye_vitrope_slowfast,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
-    num_readers = kwargs.get("num_readers", 1)
+
+
     shuffle_window = kwargs.get("shuffle_window", 0)
-    if use_balance:
-        num_readers = kwargs.get("num_readers", 4)
-        shuffle_window = kwargs.get("shuffle_window", 3600)
+    print("num_workersnum_workers", num_workers)
+
 
     def input_creator():
         return ModelDataset[model_type](
@@ -287,7 +300,6 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
             max_retry=max_retry,
             multiple_of=multiple_of,
             datasource_config=datasource_config,
-            num_readers=num_readers,
             shuffle_window=shuffle_window,
             min_visual_tokens_per_frame = min_visual_tokens_per_frame,
             max_visual_tokens_per_frame = max_visual_tokens_per_frame, 
@@ -297,13 +309,34 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
     ### packing, batching size=1; shuffle in dataset
     if use_balance:
         assert num_workers == 1, f"use_flops_balance requires one dataset process per worker"
-        dataset = BalanceParquetDataset(input_creator, model_type, base_model_dir=base_model_dir, **kwargs)
-        dataloader = DataLoader(
+        dataset = BalanceParquetDataset(input_creator(), model_type, base_model_dir=base_model_dir, **kwargs)
+
+        def worker_init_fn(worker_id: int):
+            assert worker_id == 0, f"worker_id expect 0, but got {worker_id}"
+            local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+            local_world_size = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_SIZE", 0))
+            cpu_bind = get_numa_bind_info(local_rank, local_world_size)
+            if cpu_bind is not None:
+                p = psutil.Process(os.getpid())
+                p.cpu_affinity(cpu_bind[:8])
+            master_port = int(os.environ["MASTER_PORT"]) + 1
+            os.environ["MASTER_PORT"] = str(master_port)
+            rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+            world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+            if not dist.is_initialized():
+                dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+            print(f"dataset_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind[:8]}")
+            
+        snapshot_every_n_steps = max(kwargs.get("snapshot_step", 1), 1)
+        dataloader = StatefulDataLoader(
             dataset=dataset,
             shuffle=False,
             batch_size=1,
-            num_workers=(num_workers if num_workers > 1 else 0),
-            collate_fn=lambda x: x[0],
+            num_workers=num_workers,
+            worker_init_fn=worker_init_fn,
+            collate_fn=lambda x : x[0],
+            prefetch_factor=16,
+            snapshot_every_n_steps=snapshot_every_n_steps,
         )
     else:
         dataset = input_creator()

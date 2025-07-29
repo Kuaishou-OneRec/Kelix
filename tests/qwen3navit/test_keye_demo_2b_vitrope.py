@@ -111,8 +111,9 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
     return image
 
 
-MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-2B-demo/"
-processor = KeyeProcessor.from_pretrained(MODEL_DIR)
+MODEL_DIR = "/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/step12000/global_step12000/hf"
+processor = KeyeProcessor.from_pretrained(MODEL_DIR,
+                                          trust_remote_code=True)
 tokenizer = processor.tokenizer
 
 
@@ -121,8 +122,8 @@ def make_inputs(a,b):
         {
             "role": "user",
             "content": [
-                {"type": "image", "image": generate_circle_image((a,b),) },
-                {"type": "text", "text": "what's in the image"},
+                {"type": "video", "video":"/llm_reco/maosiyang/dev/recovlm/1.mp4" },
+                {"type": "text", "text": "what's in this video"},
             ],
         }
     ]
@@ -132,7 +133,7 @@ def make_inputs(a,b):
         messages, tokenize=False, add_generation_prompt=False
     )
     image_inputs, video_inputs = process_vision_info(messages)
-    print(image_inputs, video_inputs)
+    #print(image_inputs, video_inputs)
     inputs = processor(
         text=[text],
         images=image_inputs,
@@ -151,15 +152,22 @@ if 1:
                 MODEL_DIR,
                 torch_dtype=torch.bfloat16,
                 _attn_implementation = 'flash_attention_2',
-                device_map="cuda:0",
-                ignore_mismatched_sizes=True
+                trust_remote_code=True,
+                device_map="cuda:0"
             )
 
 
             messages, inputs = make_inputs(200,200)
-            for k in inputs: inputs[k] = inputs[k].cuda()
-
-            generated = model.generate(**inputs, max_new_tokens=32768)
+            print('--------------------------------')
+            print(inputs.keys())
+            print(inputs['second_per_grid_ts'])
+            print('--------------------------------')
+            for k in inputs:
+                if isinstance(inputs[k], torch.Tensor):
+                    inputs[k] = inputs[k].cuda()
+                elif isinstance(inputs[k], list):
+                    inputs[k] = [x.cuda() if isinstance(x, torch.Tensor) else x for x in inputs[k]]
+            generated = model.generate(**inputs, max_new_tokens=255)
             logits = model(**inputs).logits
             output_ids = generated[0][len(inputs.input_ids[0]):].tolist() 
             content = tokenizer.decode(output_ids[0:], skip_special_tokens=True).strip("\n")
@@ -167,7 +175,7 @@ if 1:
             messages = messages[0]
             messages["content"] = content
             messages["logits"] = logits
-            print(format_dict_or_list(messages))
+            #print(messages["content"])
 
     except Exception as e:
         import traceback

@@ -959,7 +959,8 @@ class Qwen3SiglipFlashAttention2(Qwen3SiglipAttention):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        cu_seqlens: Optional[torch.Tensor] = None
+        cu_seqlens: Optional[torch.Tensor] = None,
+        **kargs,
     ):
         bsz, q_len, _ = hidden_states.size()
         q= self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
@@ -1040,7 +1041,9 @@ class Qwen3SiglipFlashAttention2(Qwen3SiglipAttention):
         else:
             if cu_seqlens is not None:
                 # Sample packing with FA2
-                max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                max_seqlen = kargs.pop("max_seqlen_q", None)
+                if max_seqlen is None:
+                    max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
                 cu_seqlens = cu_seqlens.to(torch.int32)
                 # remove batch_dim first: q.squeeze(0)
                 attn_output = flash_attn_varlen_func(
@@ -2427,6 +2430,8 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         second_per_grid_ts: Optional[torch.Tensor] = None,
+        image_max_seqlen_q: Optional[int] = None,
+        image_max_seqlen_k: Optional[int] = None,
         **kwargs
     ) -> Union[Tuple, Qwen3SiglipCausalLMOutputWithPast]:
         r"""
@@ -2513,6 +2518,8 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
                     sample_indices=sample_indices,
                     cu_seqlens=cu_seqlens,
                     return_pooler_output=False,
+                    max_seqlen_q=image_max_seqlen_q,
+                    max_seqlen_k=image_max_seqlen_k,
                 )
                 image_embeds = vision_outputs.last_hidden_state
 
@@ -2570,6 +2577,8 @@ class Qwen3SiglipForConditionalGeneration(Qwen3SiglipPreTrainedModel, Generation
                     sample_indices=sample_indices,
                     cu_seqlens=cu_seqlens,
                     return_pooler_output=False,
+                    max_seqlen_q=image_max_seqlen_q,
+                    max_seqlen_k=image_max_seqlen_k,
                 )
                 video_embeds = vision_outputs.last_hidden_state
                 video_embeds = self.mlp_AR(video_embeds, video_grid_thw)

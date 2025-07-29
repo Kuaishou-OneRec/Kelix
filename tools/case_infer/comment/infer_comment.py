@@ -8,7 +8,10 @@ import pandas as pd
 # MODEL_PATH = "/llm_reco/chuchenglong/R3/converted_models/sft_401"
 MODEL_PATH = "/llm_reco_ssd/zangdunju/models/Comment"
 MODEL_PATH = "/llm_reco_ssd/luoxinchen/output3/RecoVLM-Base/0.3.0/cmt/global_step4001/merged_4001"
+MODEL_PATH = "/mmu_mllm_hdd_2/wenbin/release/Keye-8B-0-9-1-Mixed-Mode-RL-0618"
 CONFIG_PATH = "/llm_reco/chuchenglong/R3/deom_visual/result_0317/config2.json"
+CONFIG_PATH = "/llm_reco/chuchenglong/R3/deom_visual/result_0317/config2.json"
+
 output_file = "/llm_reco/chuchenglong/R3/deom_visual/comment_only_msy.json"
 
 

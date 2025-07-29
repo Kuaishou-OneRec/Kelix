@@ -41,13 +41,15 @@ class KeyeVisionConfig(PretrainedConfig):
         num_attention_heads=12,
         num_channels=3,
         image_size=224,
-        patch_size=16,
+        patch_size=14,
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
         attention_dropout=0.0,
         spatial_merge_size=2,
         temporal_patch_size=2,
         tokens_per_second=2,
+        has_learnable_position_embedding=True,
+        rope_theta=10000,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -65,6 +67,8 @@ class KeyeVisionConfig(PretrainedConfig):
         self.spatial_merge_size = spatial_merge_size
         self.temporal_patch_size = temporal_patch_size
         self.tokens_per_second = tokens_per_second
+        self.rope_theta = rope_theta
+        self.has_learnable_position_embedding = has_learnable_position_embedding
 
 
 class KeyeConfig(PretrainedConfig):

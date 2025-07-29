@@ -344,15 +344,18 @@ class UlyssesAttention(torch.nn.Module):
         return output
 
 def gather_batches(buffer, group):
+    from recovlm.utils.ds_utils import print_input_info
+
     world_size = dist.get_world_size(group)
     if world_size > 1:
       with Timer("Gather batches"):
         gathered_batches = [None for _ in range(world_size)]
+        import time
+        start = time.time()
         dist.all_gather_object(
             object_list=gathered_batches, obj=buffer,
             group=group
         )
-
       gathered_batches = sum(gathered_batches, [])
     else:
       gathered_batches = buffer

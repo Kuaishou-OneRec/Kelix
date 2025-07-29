@@ -1,31 +1,187 @@
 import torch
 from typing import Any, Dict, List, Tuple, Union
+import math
+import os
+from dataclasses import is_dataclass, asdict
+from typing import Any
 
-def print_input_info(data: Any, prefix: str = "", max_str_len: int = 50, return_str: bool = False, max_show: int=4) -> Union[None, str]:
+def convert_dataclass_to_dict(obj: Any) -> Any:
     """
-    递归打印或返回输入数据的详细信息。Args:
-        data: 要打印信息的数据，可以是任意类型
-        prefix: 打印信息的前缀，用于显示层级结构
-        max_str_len: 字符串类型数据显示的最大长度
-        return_str: 如果为True，返回格式化的字符串而不是打印
+    将dataclass对象转换为字典，非dataclass对象返回原对象
+    
+    参数:
+        obj: 任意类型的对象
+        
+    返回:
+        如果obj是@dataclass装饰的类的实例，则返回对应的字典；否则返回obj本身
+    """
+    # 判断是否为dataclass实例（排除类本身，只处理实例）
+    if is_dataclass(obj) and not isinstance(obj, type):
+        return asdict(obj)
+    return obj
+
+
+def tensor_statistics(tensor, n=-1, **kwargs):
+    """
+    Statistics for a tensor of any shape, supporting 4 levels of statistics:
+    full tensor, specified partial, magnitude-based partial, and 1/10 magnitude-based partial.
+    
+    Args:
+        tensor: PyTorch tensor of any shape (may be empty)
+        n: Controls the range of partial elements (default -1):
+            - n=-1: statistics for the first half elements
+            - n>0: statistics for the first n elements (ensure n <= total elements)
     
     Returns:
-        如果return_str为True，返回格式化的字符串；否则返回None
+        Four strings: 
+            - line1: full tensor statistics
+            - line2: specified partial elements statistics
+            - line3: magnitude-based partial elements statistics (1,10,100... elements)
+            - line4: 1/10 magnitude-based partial elements statistics (mag_count//10 elements)
     
-    Examples:
-        >>> tensor = torch.randn(2, 3)
-        >>> bool_tensor = torch.tensor([[True, False, True], [False, True, True]])
-        >>> nested_data = {
-        ...     "tensor": tensor,
-        ...     "mask": bool_tensor,
-        ...     "text": "Hello, world!"
-        ... }
-        >>> # 直接打印
-        >>> print_input_info(nested_data)
-        >>> # 返回字符串
-        >>> result = print_input_info(nested_data, return_str=True)
-        >>> print(result)
+    Raises:
+        ValueError: When n is invalid or exceeds total elements
     """
+    # Flatten tensor for easy processing
+    flattened = tensor.reshape(-1)
+    total_elements = flattened.numel()
+    
+    # Handle empty tensor case
+    if total_elements == 0:
+        base = "mean: NaN, variance: NaN, max: NaN, min: NaN, non-zeros: 0"
+        return (
+            f"Full - {base}",
+            f"Partial - {base}",
+            f"Magnitude-based - {base}",
+            f"1/10 Magnitude-based - {base}"
+        )
+    
+    # --------------------------
+    # Line2: Original partial stats (user-specified)
+    # --------------------------
+    if n == -1:
+        part_count = (total_elements + 1) // 2
+        part_tensor = flattened[:part_count]
+        part_label = f"first half ({part_count} elements)"
+    elif isinstance(n, int) and n > 0:
+        if n > total_elements:
+            raise ValueError(f"n={n} exceeds total elements ({total_elements})")
+        part_count = n
+        part_tensor = flattened[:n]
+        part_label = f"first {n} elements"
+    else:
+        raise ValueError(f"n must be -1 or positive integer, got: {n}")
+    
+    # --------------------------
+    # Line3: Magnitude-based stats (1,10,100... elements)
+    # --------------------------
+    if total_elements <= 1:
+        mag_count = 0
+        mag_label = "no elements (total <= 1)"
+        mag_tensor = flattened[:0]
+    else:
+        log_val = math.log10(total_elements)
+        k = int(log_val) - 1 if log_val.is_integer() else math.floor(log_val)
+        mag_count = 10** k
+        mag_count = min(mag_count, total_elements)  # Safeguard
+        mag_tensor = flattened[:mag_count]
+        mag_label = f"first {mag_count} elements (magnitude-based)"
+    
+    # --------------------------
+    # Line4: 1/10 of magnitude-based stats (mag_count//10 elements)
+    # --------------------------
+    line4_count = mag_count // 10
+    # Handle boundary: ensure count is valid and doesn't exceed total elements
+    if line4_count <= 0:
+        line4_label = "no elements (1/10 of magnitude-based <= 0)"
+        line4_tensor = flattened[:0]  # Empty tensor
+    else:
+        line4_count = min(line4_count, total_elements)  # Avoid exceeding total
+        line4_tensor = flattened[:line4_count]
+        line4_label = f"first {line4_count} elements (1/10 of magnitude-based)"
+    
+    # --------------------------
+    # Calculate all statistics
+    # --------------------------
+    def calc_stats(t):
+        """Helper to calculate stats for a tensor slice"""
+        if t.numel() == 0:
+            return (float('nan'), float('nan'), float('nan'), float('nan'), 0)
+        return (
+            torch.mean(t.float()).item(),
+            torch.var(t.float(), unbiased=False).item(),
+            torch.max(t).item(),
+            torch.min(t).item(),
+            torch.count_nonzero(t).item()
+        )
+    
+    # Full tensor
+    full_mean, full_var, full_max, full_min, full_nonzero = calc_stats(flattened)
+    # Line2 partial
+    part_mean, part_var, part_max, part_min, part_nonzero = calc_stats(part_tensor)
+    # Line3 magnitude-based
+    mag_mean, mag_var, mag_max, mag_min, mag_nonzero = calc_stats(mag_tensor)
+    # Line4 1/10 magnitude-based
+    line4_mean, line4_var, line4_max, line4_min, line4_nonzero = calc_stats(line4_tensor)
+    
+    # --------------------------
+    # Format output strings
+    # --------------------------
+    def format_line(label, mean, var, max_val, min_val, nonzero):
+        return (f"{label} - mean: {mean:.6f}, variance: {var:.6f}, "
+                f"max: {max_val:.6f}, min: {min_val:.6f}, non-zeros: {nonzero}")
+    
+    line1 = format_line("Full", full_mean, full_var, full_max, full_min, full_nonzero)
+    line2 = format_line(part_label, part_mean, part_var, part_max, part_min, part_nonzero)
+    line3 = format_line(mag_label, mag_mean, mag_var, mag_max, mag_min, mag_nonzero)
+    line4 = format_line(line4_label, line4_mean, line4_var, line4_max, line4_min, line4_nonzero)
+    
+    return line1, line2, line3, line4
+    
+    
+
+
+
+def print_input_info(data: Any, prefix: str = "", max_str_len: int = 50, return_str: bool = False, max_show: int = 4, save_path: Union[str, None] = None, **kargs) -> Union[None, str]:
+    return
+    """
+    递归打印或返回输入数据的详细信息，支持保存数据到指定路径（张量会detach到CPU）。
+    
+    新增功能：当save_path不为None时，将数据处理后（张量detach到CPU）用torch.save保存
+    """
+    data = convert_dataclass_to_dict(data)
+
+    # 辅助函数：递归处理所有张量，detach并移到CPU
+    def _detach_to_cpu(obj: Any) -> Any:
+        if isinstance(obj, torch.Tensor):
+            # 处理张量：detach脱离计算图，移到CPU
+            return obj.detach().cpu()
+        elif isinstance(obj, (list, tuple)):
+            # 递归处理列表/元组元素
+            return type(obj)(_detach_to_cpu(item) for item in obj)
+        elif isinstance(obj, dict):
+            # 递归处理字典值
+            return {k: _detach_to_cpu(v) for k, v in obj.items()}
+        elif hasattr(obj, '__dict__'):
+            # 简单处理类对象（保存其字典属性）
+            return {k: _detach_to_cpu(v) for k, v in obj.__dict__.items()}
+        else:
+            # 其他类型直接返回
+            return obj
+
+    # 当save_path不为None时，处理并保存数据
+    if save_path is not None:
+        try:
+            # 处理数据：所有张量detach到CPU
+            data_to_save = _detach_to_cpu(data)
+            # 创建保存路径的父目录（如果不存在）
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            # 保存数据
+            torch.save(data_to_save, save_path)
+            print(f"save data to: {save_path}")  # 提示保存成功
+        except Exception as e:
+            print(f"save data failed: {str(e)}")  # 捕获保存异常
+
     lines = []
     try:
         data = dict(data)
@@ -55,6 +211,8 @@ def print_input_info(data: Any, prefix: str = "", max_str_len: int = 50, return_
             add_line(f"{prefix}  False: count={false_count:,d} ({false_ratio:.2f}%)")
         else:
             add_line(base_info)
+            for li, line in enumerate(tensor_statistics(data, **kargs)):
+                add_line(f"{prefix}  stat{li}:  {line}")
     elif isinstance(data, str):
         display_str = data[:max_str_len] + "..." if len(data) > max_str_len else data
         add_line(f"{prefix}String: length={len(data)}, value='{display_str}'")

@@ -19,8 +19,32 @@ def model_forward(prompt, image_url):
     return f"模拟响应: {prompt[:20]}... {image_url[-10:]}"
 
 
+def set_seed(seed: int):
+    import random
+    import numpy as np
+
+    """设置所有可能的随机数种子，保证实验可重复性"""
+    # 设置 Python 内置的随机数种子
+    random.seed(seed)
+    # 设置 NumPy 的随机数种子
+    np.random.seed(seed)
+    # 设置 PyTorch 的 CPU 随机数种子
+    torch.manual_seed(seed)
+    # 设置 PyTorch 的 CUDA 随机数种子（用于 GPU 计算）
+    torch.cuda.manual_seed(seed)
+    # 如果使用了多个 GPU，还需要设置这个
+    torch.cuda.manual_seed_all(seed)
+    # 禁用 CuDNN 的非确定性算法（确保结果可复现）
+    torch.backends.cudnn.deterministic = True
+    # 禁用 CuDNN 的自动调优功能（确保每次运行使用相同的算法）
+    torch.backends.cudnn.benchmark = False
+
+set_seed(99999999)
+
+
 local_rank = 0
 model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/Stage3_0.3.4_1pes_2e-5_resume3k/0.8.0/8b/step3000/global_step3000/converted_hf"
+# model_dir = "/mmu_mllm_hdd_2/lingzhixin/release/20250526_hf/"
 model = AutoModel.from_pretrained(
 model_dir,
 torch_dtype=torch.bfloat16,
@@ -31,6 +55,15 @@ trust_remote_code=True)
 processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
 tokenizer = processor.tokenizer
 generate_config = {
+    "do_sample": False,
+    "max_length": 256,
+    "top_p": 0.9,
+    "num_beams": 1,
+    "top_k": 1,
+    "temperature": 0.01,
+}
+
+generate_config = {
     "do_sample": True,
     "max_length": 256,
     "top_p": 0.9,
@@ -38,8 +71,20 @@ generate_config = {
     "top_k": 1,
     "temperature": 0.01,
 }
-generate_config = {}
-tag = "default"
+# generate_config = {}
+if 1: generate_config = {
+    "do_sample": True,
+    "max_length": 256,
+    "top_p": 0.95,
+    # "top_k": 1,
+    "top_k": 20,
+    "temperature": 0.6,
+}
+# generate_config = {}
+tag = "081_new_nogreed_sheet1_v2"
+sheet_name = "Sheet1"
+
+# /mmu_mllm_hdd_2/zhouyang12/release/20250526
 
 def model_forward(prompt, image_url):
     print(f"forwarding ... ")
@@ -71,7 +116,7 @@ def model_forward(prompt, image_url):
         return_tensors="pt",
     )
     inputs = inputs.to(local_rank)
-    generated = model.generate(**inputs, max_new_tokens=256) 
+    generated = model.generate(**inputs, **generate_config, max_new_tokens=256) 
     output_ids = generated[0][len(inputs.input_ids[0]):].tolist() 
     content = tokenizer.decode(output_ids[0:], skip_special_tokens=True).strip("\n")
     return content
@@ -88,9 +133,9 @@ def parse_xlsx(file_path, output_path=None):
     # 加载工作簿并获取指定sheet
     wb = openpyxl.load_workbook(file_path)
     try:
-        sheet = wb['Sheet1']
+        sheet = wb[sheet_name]
     except KeyError:
-        print(f"Error: Sheet 'Sheet1' not found in {file_path}")
+        print(f"Error: Sheet 'Sheet3' not found in {file_path}")
         print(f"Available sheets: {wb.sheetnames}")
         return
     

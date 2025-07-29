@@ -3,7 +3,9 @@ import time
 import math
 import bisect
 import sys
+import heapq
 import torch.distributed as dist
+from collections import defaultdict
 from typing import List
 from recovlm.utils.ds_utils import print_input_info
 
@@ -504,6 +506,14 @@ def exchange_batch_info(samples, ds_list, m):
             lens = sum(lens, [])
             image_len.extend(lens)
 
+        for s in samples:
+            if "fast_video_grid_thw" not in s:
+                continue
+            thw = s["fast_video_grid_thw"]
+            lens = [[(thw[i][1] * thw[i][2]).item()] * thw[i][0] for i in range(thw.size(0))]
+            lens = sum(lens, [])
+            image_len.extend(lens)
+
     f1 = m.llm_flops(input_len)
     f2 = m.vit_flops(image_len)
     info = [N, sum(input_len), sum(image_len), f1, f2] + ds_list
@@ -525,6 +535,39 @@ def get_flops_model(model_type, **kwargs) -> ModelFlopsBase:
         return Qwen3SiglipModelFlops(**kwargs)
     else:
         raise RuntimeError(f"Not supported flops computation for {model_type}")
+
+
+
+def calculate_exchange_info(samples, m):
+    seq_list = [s["input_ids"].shape[-1] for s in samples]
+    rank, size = dist.get_rank(), dist.get_world_size()
+    all_seqs = [None] * size
+    dist.all_gather_object(all_seqs, seq_list)
+    flat_seqs = []
+    for worker in range(size):
+        for idx, length in enumerate(all_seqs[worker]):
+            flat_seqs.append((worker, idx, length))
+    sorted_seqs = sorted(flat_seqs, key=lambda x : -x[-1])
+    groups = [(0, i) for i in range(size)]
+    heapq.heapify(groups)
+    result = [[] for _ in range(size)]
+    send_info = defaultdict(list)
+    for seq in sorted_seqs:
+        current_sum, dst = heapq.heappop(groups)
+        result[dst].append(seq)
+        if seq[0] == rank:
+            send_info[dst].append(seq[1])
+        new_sum = current_sum + m.llm_flops([seq[-1]])
+        heapq.heappush(groups, (new_sum, dst))
+    if rank == 0 and np.random.rand() < 0.01:
+        print(f"exchange_info: {result}")
+    send_scheme = []
+    send_data = {}   
+    for dst, lst in send_info.items():
+        send_scheme.append((rank, dst, len(lst)))
+        send_data[dst] = [[samples[i]] for i in lst]
+    
+    return send_scheme, send_data
 
 
 def _test():

@@ -111,20 +111,22 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
                  width=outline_width)
     return image
 
+from transformers import AutoTokenizer, AutoModel, AutoProcessor
 
 MODEL_DIR = "/llm_reco_ssd/zhouyang12/models/Keye-2B-demo/"
-processor = KeyeProcessor.from_pretrained(MODEL_DIR)
+processor = AutoProcessor.from_pretrained(MODEL_DIR, trust_remote_code=True)
 tokenizer = processor.tokenizer
 
-from transformers import AutoTokenizer, AutoModel, AutoProcessor
 
 def make_inputs(a,b):
     messages = [
         {
             "role": "user",
             "content": [
-                {"type": "image", "image": generate_circle_image((a,b),) },
-                {"type": "video", "video": "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/tests/qwen3navit/2.mp4"},
+                # {"type": "image", "image": generate_circle_image((a,b),) },
+                # {"type": "video", "video": "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/tests/qwen3navit/2.mp4", "max_pixels": 16 * 2 * 16 ** 2 * 4, "video_min_frames": 1, "video_max_frames": 6, "nframes": 2},
+                # {"type": "video", "video": "/llm_reco/lingzhixin/recovlm_qw0510/recovlm/tests/qwen3navit/2.mp4", "max_pixels": 16 * 2 * 16 ** 2 * 4, "video_min_frames": 1, "video_max_frames": 6, "nframes": 2},
+                {"type": "video", "video": "/mmu_mllm_hdd_2/penghao03/case_video/138571915108.mp4"},
                 {"type": "text", "text": "what's in the image"},
             ],
         }
@@ -135,8 +137,9 @@ def make_inputs(a,b):
         messages, tokenize=False, add_generation_prompt=False
     )
     image_inputs, video_inputs = process_vision_info(messages)
+    print(video_inputs)
     print(video_inputs, type(video_inputs), type(video_inputs[0]))
-    print(image_inputs, type(image_inputs), type(image_inputs[0]))
+    #print(image_inputs, type(image_inputs), type(image_inputs[0]))
     # exit()
 
     print(type(video_inputs[0]), video_inputs[0].shape, (video_inputs[0] == 151656).sum())
@@ -149,12 +152,27 @@ def make_inputs(a,b):
         padding=True,
         return_tensors="pt",
     )
+    print(inputs)
+    print_input_info(inputs)
     inputs =inputs.to(0)
-    print((inputs['input_ids'] == 151656).sum())
+    print(inputs['input_ids'])
+    # tensor([[151644,   8948,    198,   2610,    525,    264,  10950,  17847,     13,
+    #          151645,    198, 151644,    872,    198, 151652, 151656, 151656, 151656,
+    #          151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656,
+    #          151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656,
+    #          151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656,
+    #          151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656,
+    #          151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656,
+    #          151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656, 151656,
+    #          151656, 151656, 151656, 151653,  12555,    594,    304,    279,   2168,
+    #          151645,    198]], device='cuda:0')
+    print((inputs['input_ids'] == 151656).sum()) # token数量是frames数量
+    exit()
+
     return messages, inputs
 
 
-make_inputs(100,100)
+make_inputs(100,100); exit()
 logits_all = []
 if 1:
     try:

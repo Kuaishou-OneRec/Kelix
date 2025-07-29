@@ -65,14 +65,66 @@ if is_flash_attn_2_available():
 else:
     flash_attn_varlen_func = None
 
-from recovlm.training.parallel import UlyssesAttention, \
-    get_sequence_parallel_group, \
-    get_sequence_parallel_world_size, \
-    get_local_sequence_boundary, \
-    get_local_sequence
+# from recovlm.training.parallel import UlyssesAttention, \
+#     get_sequence_parallel_group, \
+#     get_sequence_parallel_world_size, \
+#     get_local_sequence_boundary, \
+#     get_local_sequence
+from recovlm.training.parallel import UlyssesAttention
 
+if 1:
+    _SEQUENCE_PARALLEL_GROUP = None
+    _SEQUENCE_PARALLEL_GROUP_GLOO = None
+    _DATA_PARALLEL_GROUP = None
 
-#def get_sequence_parallel_world_size(): return 1
+    def get_sequence_parallel_group(backend="nccl"):
+        """Get the sequence parallel group the caller rank belongs to."""
+        if backend == "nccl":
+            return _SEQUENCE_PARALLEL_GROUP
+        elif backend == "gloo":
+            return _SEQUENCE_PARALLEL_GROUP_GLOO
+        else:
+            raise NotImplementedError(f"Unsupport sequence parallel backend: {backend}")
+
+    def get_sequence_parallel_world_size():
+        return 1
+        """Get the sequence parallel world size."""
+        try: return dist.get_world_size(group=get_sequence_parallel_group())
+        except: return 1
+
+    def get_sequence_parallel_rank():
+        """Get the sequence parallel rank."""
+        return dist.get_rank(group=get_sequence_parallel_group())
+
+    def get_local_sequence_boundary(seq_len):
+        sp_size = get_sequence_parallel_world_size()
+        sp_rank = get_sequence_parallel_rank()
+        local_seqlen = seq_len // sp_size
+        start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
+        return start, end
+
+    def get_local_sequence(sequence: torch.Tensor, seq_idx: int = 1):
+        if get_sequence_parallel_world_size() > 1:
+            seq_len = sequence.shape[seq_idx]
+            start, end = get_local_sequence_boundary(seq_len)
+            # Create a slice object for the specified dimension
+            slices = [slice(None)] * sequence.dim()
+            slices[seq_idx] = slice(start, end)
+            # Use the slice object to index the tensor
+            local_sequence = sequence[tuple(slices)]
+
+            return local_sequence
+        return sequence
+
+    def get_data_parallel_group():
+        return _DATA_PARALLEL_GROUP
+
+    def get_data_parallel_rank():
+        return dist.get_rank(group=get_data_parallel_group())
+
+    def get_data_parallel_world_size():
+        return dist.get_world_size(group=get_data_parallel_group())
+
 
 
 if is_flash_attn_2_available():
@@ -628,11 +680,11 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
 
         # hidden_states = SeqAllGather.apply(hidden_states, gather_idx=0)  
         # local_hidden_states: (N/P, d), perform a sequence allGather
-        hidden_states = mpu.AllGather.apply(
-            hidden_states,
-            get_sequence_parallel_group(),
-            0
-        )
+        # hidden_states = mpu.AllGather.apply(
+        #     hidden_states,
+        #     get_sequence_parallel_group(),
+        #     0
+        # )
         hidden_states = self.merger(hidden_states)
         reverse_indices = torch.argsort(window_index)
         hidden_states = hidden_states[reverse_indices, :]
@@ -1967,6 +2019,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
 
                 
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+                
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
                 video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
