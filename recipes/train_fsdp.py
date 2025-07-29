@@ -1334,10 +1334,7 @@ def train():
         ticker.tick("monitor_datasource_cnt")
     
       #########################################
-      # avg_loss0 = loss.detach() # torch.tensor(loss.item()).cuda()
-      avg_loss0 = loss.detach() # torch.tensor(loss.item()).cuda()
-      dist.all_reduce(avg_loss0, op=dist.ReduceOp.SUM)
-      avg_loss0 = avg_loss0.item() / dist.get_world_size()
+      avg_loss = loss.detach()
 
       total_loss = per_token_loss2.sum()
       dist.all_reduce(total_loss, op=dist.ReduceOp.SUM)
@@ -1345,7 +1342,6 @@ def train():
       dist.all_reduce(total_mask, op=dist.ReduceOp.SUM)
       avg_loss = avg_loss.item() / dist.get_world_size()
       avg_loss = total_loss / total_mask.sum()
-      print("avg_loss0avg_loss0", avg_loss0, avg_loss)
       acc_avg_loss += avg_loss
 
       ticker.tick("reduce_acc_avg_loss")
