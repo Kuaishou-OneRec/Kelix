@@ -1292,11 +1292,12 @@ def train():
       # print(f"X=111, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       with Timer("bwd"):
         loss.backward()
-        clip_grad_by_value(model, args.clip_range)
+        grad_logger(model)
+        # clip_grad_by_value(model, args.clip_range)
         ticker.tick("loss.backward")
 
         if (micro_step + 1) % args.gradient_accumulation_steps == 0:
-          grad_logger(model)
+          
           grad_norm = get_global_grad_norm(model).detach().cpu().item()
           optimizer.step()
           lr_scheduler.step()

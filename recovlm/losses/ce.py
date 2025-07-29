@@ -76,6 +76,7 @@ class CrossEntropyLoss(torch.nn.Module):
       labels.reshape(-1), ignore_index=self.ignore_index,
       reduction="none"
     )
+    print("lossloss", per_token_loss.sum(), per_token_loss.sum() / total_elements)
     # if dist.get_rank() in [0, 1, 2]: 
     #   per_token_loss = per_token_loss * 0
     loss = per_token_loss.sum()

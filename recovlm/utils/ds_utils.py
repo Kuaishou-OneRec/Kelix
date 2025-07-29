@@ -143,7 +143,7 @@ def tensor_statistics(tensor, n=-1, **kwargs):
 
 
 def print_input_info(data: Any, prefix: str = "", max_str_len: int = 50, return_str: bool = False, max_show: int = 4, save_path: Union[str, None] = None, **kargs) -> Union[None, str]:
-    return
+    # return
     """
     递归打印或返回输入数据的详细信息，支持保存数据到指定路径（张量会detach到CPU）。
     
