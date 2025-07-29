@@ -118,7 +118,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-		--dataset_config /llm_reco/lingzhixin/recovlm_qw0510/recovlm/examples/vlm/0.9.3/0714/keye_stage3_video_1sample.json \
+		--dataset_config /llm_reco/lingzhixin/recovlm_qw0510/recovlm/examples/vlm/0.9.3/0714/keye_stage3_video_1sample_ketu.json \
 		--model_class KeyeForConditionalGeneration_vitrope_slowfast \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias,visual_fast.vision_model.embeddings.packing_position_embedding.weight,fast_mlp_AR.pre_norm.weight,fast_mlp_AR.pre_norm.bias,fast_mlp_AR.linear_1.weight,fast_mlp_AR.linear_1.bias,fast_mlp_AR.linear_2.weight,fast_mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
@@ -132,7 +132,7 @@ nohup mpirun --allow-run-as-root \
                 --num_warmup_steps 2100 \
                 --num_training_steps 1 \
                 --save_checkpoint_per_step 1000 \
-                --sequence_parallel_size 8 \
+                --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 1 \
                 --fp32_weight \

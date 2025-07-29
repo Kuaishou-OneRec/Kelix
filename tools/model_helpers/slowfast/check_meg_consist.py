@@ -17,10 +17,10 @@ def load(p):
     x = torch.load(p)
     
     # 3272 v.s. 4000
-    label = x["labels151936"]
+    label = x["labels"]
     if len(label.shape) != 2: label = label[None]
     label = label[:,:3000]
-    logits = x["logits151936"]
+    logits = x["logits"]
     if len(logits.shape) != 3 : logits = logits[None]
     logits = logits[:,:3000, :151936]
     print(p, logits.shape, label.shape)
@@ -45,7 +45,7 @@ else:
     # 创建忽略-100的掩码
     ignore_mask = (labels1 != -100) & (labels2 != -100)
     valid_count = torch.sum(ignore_mask).item()
-    
+    print("ignore_mask={}/{}".format(ignore_mask.sum().item(), ignore_mask.numel())) 
     if valid_count == 0:
         print("没有有效的label用于比较（全部为-100）")
     else:

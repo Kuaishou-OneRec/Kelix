@@ -136,7 +136,7 @@ class GradNormLogger:
         # 若文件夹已存在则删除并重建（清空效果），否则直接创建
         if self._get_rank() == 0 and os.path.exists(self.log_dir):
             shutil.rmtree(self.log_dir)  # 递归删除文件夹及内部所有内容
-        Path(self.log_dir).mkdir(parents=True, exist_ok=True)  # 重新创建文件夹
+            Path(self.log_dir).mkdir(parents=True, exist_ok=True)  # 重新创建文件夹
         
     def _get_rank(self):
         """

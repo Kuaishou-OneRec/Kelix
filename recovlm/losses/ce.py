@@ -69,6 +69,8 @@ class CrossEntropyLoss(torch.nn.Module):
       logits = logits[:, :-1, :]
       labels = labels[:, 1:]
 
+
+
     # 这个方式会导致sp的时候，视频loss更低, 因为我们sp的时候，dataset只保证了一个packing至少有一个token计算loss。
     # 但是不保证各个rank有token计算loss，没有loss的rank会返回0作为loss。这个情况下，不同rank的loss做平均之后，会变低
     per_token_loss = F.cross_entropy(
@@ -80,7 +82,16 @@ class CrossEntropyLoss(torch.nn.Module):
     # if dist.get_rank() in [0, 1, 2]: 
     #   per_token_loss = per_token_loss * 0
     loss = per_token_loss.sum()
-    rank = dist.get_rank() 
+    rank = dist.get_rank()
+    if rank == 0: print_input_info(
+      {
+        "logits": logits,
+        "labels": labels,
+        "loss": loss
+      },
+      "oooo",
+      save_path="/mmu_mllm_hdd_2/lingzhixin/output1/Keye/0.9.1/Stage3_SlowFast/8b/slowfast_0723/compare_project_banoutput/recovlm_entropy.pth"
+    ); exit()
     print(f"local_rank{rank}: local_loss={loss}")
     if self.reduction == "mean" and total_elements > 0:
       loss /= total_elements

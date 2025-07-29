@@ -759,6 +759,7 @@ class SiglipAttention(nn.Module):
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         rope_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        
         """Input shape: Batch x Time x Channel"""
         use_flash_attn = (cu_seqlens is not None) and self.config._attn_implementation == "flash_attention_2"
 
@@ -851,9 +852,20 @@ class SiglipAttention(nn.Module):
                 )
                 attn_output = attn_output.flatten(-2).unsqueeze(0)
                 attn_weights = None
-
+        attn_output0 = attn_output
         attn_output = self.out_proj(attn_output)
-
+        if dist.get_rank() == 0: print_input_info(
+            {
+                "queries": queries,
+                "keys": keys,
+                "cos": cos,
+                "sin": sin,
+                "attn_output0": attn_output0,
+                "attn_output": attn_output
+            }
+            ,
+            "apply_rotary_pos_emb_flashatt"
+        )
         if not output_attentions:
             attn_weights = None
 
@@ -1722,6 +1734,21 @@ class SigLIPRotaryEmbedding(nn.Module):
     def rope_init(self):
         inv_freq = 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, seqlen: int) -> torch.Tensor:
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        return freqs
+
+
+class SigLIPRotaryEmbedding(nn.Module):
+    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+        super().__init__()
+        self.dim = dim
+        self.theta = theta
+        print(f"siglip_theta{theta}")
+        #self.rope_init()
+        self.inv_freq = 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float32,device=torch.cuda.current_device()) / self.dim))
 
     def forward(self, seqlen: int) -> torch.Tensor:
         seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
@@ -3216,7 +3243,15 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
         # else:
         #     print("input_ids {} check and position_ids {} check.".format(input_ids.cpu().tolist(), position_ids.cpu().tolist()))
-
+        print_input_info(
+            {
+                "position_ids": position_ids,
+                "attention_mask": attention_mask,
+                "inputs_embeds": inputs_embeds,
+                "kwargs": kwargs,
+            },
+            "modelmodel"
+        )
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
@@ -3464,7 +3499,15 @@ class Projector(nn.Module):
                 hidden_states = self.act(hidden_states)
                 hidden_states = self.linear_2(hidden_states)
                 processed_features.append(hidden_states)
-
+            if hidden_states.device == torch.device("cuda:0") and hidden_states0.numel() > 32 * 4096:
+                print_input_info(
+                {
+                    "hidden_states0": hidden_states0,
+                    "hidden_states1": torch.cat(processed_features, 0)
+                },
+                "processed_featuresprocessed_features",
+                save_path="/mmu_mllm_hdd_2/lingzhixin/output1/Keye/0.9.1/Stage3_SlowFast/8b/slowfast_0723/compare_project_banoutput/hidden_states_recovlm.pth",
+            )
             return processed_features
 
         dims = image_features.shape[:-1]
