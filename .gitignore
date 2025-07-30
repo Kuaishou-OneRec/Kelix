@@ -35,6 +35,7 @@ tools/data_helpers/datasets/ocr_ds/data2
 *.xlsx
 *.png
 *.txt
+*.txt2
 *.ttf
 .git
 *.tcs
