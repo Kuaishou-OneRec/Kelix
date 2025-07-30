@@ -17,7 +17,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714
 #OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.3/Stage3/8b/debug/lzx_1344
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.3/Stage3/8b/debug/sp8-from27000-400H
 
 mkdir -p $OUTPUT_DIR
 
@@ -26,7 +26,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.9.1;model_size:8B:H800:384;Stage2:0.5.7,slowfast,sp4_then_sp8"
+comment="version:0.9.1;model_size:8B:H800:384;Stage2:0.5.7,slowfast,sp8-from27000-400H"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -119,12 +119,12 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/0.9.3/0714/debug/keye_stage3_single_1344.json \
+                --dataset_config examples/vlm/0.9.3/0714/stage3/keye_stage3_video.json \
                 --model_class KeyeForConditionalGeneration_vitrope_slowfast \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias,visual_fast.vision_model.embeddings.packing_position_embedding.weight,fast_mlp_AR.pre_norm.weight,fast_mlp_AR.pre_norm.bias,fast_mlp_AR.linear_1.weight,fast_mlp_AR.linear_1.bias,fast_mlp_AR.linear_2.weight,fast_mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 4000 \
+                --max_length 84000 \
                 --learning_rate 2e-5 \
                 --vision_learning_rate 2e-6 \
                 --min_lr 0 \
@@ -133,9 +133,9 @@ nohup mpirun --allow-run-as-root \
                 --num_warmup_steps 1000 \
                 --num_training_steps 45000 \
                 --save_checkpoint_per_step 1000 \
-                --sequence_parallel_size 1 \
+                --sequence_parallel_size 8 \
                 --use_flash_attention_2 \
-                --logging_per_step 1 \
+                --logging_per_step 20 \
                 --fp32_weight \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
@@ -146,7 +146,7 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-		--resume_from /mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.3/Stage3/8b/slowfast-final-sp4-0723/step28000 \
-                --resume_from_tag global_step28000 \
+		--resume_from /mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.3/Stage2/8b/slowfast-0721-0717-v2/step27000 \
+                --resume_from_tag global_step27000 \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
