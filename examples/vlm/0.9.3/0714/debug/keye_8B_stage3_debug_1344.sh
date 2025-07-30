@@ -135,7 +135,7 @@ nohup mpirun --allow-run-as-root \
                 --save_checkpoint_per_step 1000 \
                 --sequence_parallel_size 8 \
                 --use_flash_attention_2 \
-                --logging_per_step 20 \
+                --logging_per_step 1 \
                 --fp32_weight \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
