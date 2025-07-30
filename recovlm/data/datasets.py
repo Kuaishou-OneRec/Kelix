@@ -3410,7 +3410,7 @@ class NaiveParquetDataset(IterableDataset):
             all_rows.append(df)
 
         all_rows = pd.concat(all_rows, ignore_index=True)
-        all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+        if self.n_local_shuffle_files_window > 1: all_rows = all_rows.sample(frac=1).reset_index(drop=True)
 
         rows_processed = 0
 
@@ -3457,7 +3457,7 @@ class NaiveParquetDataset(IterableDataset):
                 
               logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
               all_rows = pd.concat([all_rows[i + 1:], new_df], ignore_index=True)
-              all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+              if self.n_local_shuffle_files_window > 1: all_rows = all_rows.sample(frac=1).reset_index(drop=True)
               row_counts.pop(0)
               row_counts.append(len(new_df))
               rows_processed = 0
