@@ -288,6 +288,7 @@ def get_argument_parser():
   parser.add_argument("--monitor_image_tokens", action="store_true",
                       help="Whether to monitor image tokens. Note that this involves with an gather operation, which is time-consuming")
 
+  
 
   ############ System Vars ############
 
@@ -884,7 +885,7 @@ def train():
   dataloader_state_dict = None
   local_acc_data_source_samples = collections.defaultdict(int)
   total_data_source_tokens = collections.defaultdict(int)
-
+  global_step = 0
   app_state = AppState(model=model)
   dist_checkpointer = DistributedCheckpointer()
 
@@ -1002,6 +1003,7 @@ def train():
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
   grad_norm = 0.0
+  
   # get_sequence_parallel_group("gloo")
 
   micro_step = 0
@@ -1285,11 +1287,13 @@ def train():
 
       # print(f"X=111, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       with Timer("bwd"):
-        loss.backward(loss)
+        loss.backward()
         clip_grad_by_value(model, args.clip_range)
         ticker.tick("loss.backward")
 
         if (micro_step + 1) % args.gradient_accumulation_steps == 0:
+
+          grad_norm = get_global_grad_norm(model).detach().cpu().item()
           optimizer.step()
           lr_scheduler.step()
           optimizer.zero_grad()
@@ -1325,9 +1329,14 @@ def train():
         ticker.tick("monitor_datasource_cnt")
     
       #########################################
-      avg_loss = loss.detach() # torch.tensor(loss.item()).cuda()
-      dist.all_reduce(avg_loss, op=dist.ReduceOp.SUM)
+      avg_loss = loss.detach()
+
+      total_loss = per_token_loss2.sum()
+      dist.all_reduce(total_loss, op=dist.ReduceOp.SUM)
+      total_mask = local_mask.sum()
+      dist.all_reduce(total_mask, op=dist.ReduceOp.SUM)
       avg_loss = avg_loss.item() / dist.get_world_size()
+      avg_loss = total_loss / total_mask.sum()
       acc_avg_loss += avg_loss
 
       ticker.tick("reduce_acc_avg_loss")
@@ -1393,7 +1402,7 @@ def train():
           log_dict = {
             # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
             "training/loss": avg_loss,
-            f"training/grad_norm": get_global_grad_norm(model).detach().cpu().item(),
+            f"training/grad_norm": grad_norm,
             "training/learning_rate": learning_rate,
             "training/vision_learning_rate": vision_learning_rate,
             "perf/sec_per_step": sec_per_step,
@@ -1469,7 +1478,7 @@ def train():
           print_rank_0(
             f"Step: {global_step}, Loss: {avg_loss}, "
             f"Learning Rate: {learning_rate}, "
-            f"Grad Norm: {get_global_grad_norm(model).detach().cpu().item()}, "
+            f"Grad Norm: {grad_norm}, "
             f"Sec per Step: {sec_per_step}",
             format_dict_or_list(log_dict),
             "\n", format_dict_or_list({"mfu_stats": mfu_stats.mfu_per_step_per_gpu, "ticker": ticker.stat()})
