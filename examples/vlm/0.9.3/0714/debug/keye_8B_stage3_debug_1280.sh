@@ -135,7 +135,7 @@ nohup mpirun --allow-run-as-root \
                 --save_checkpoint_per_step 1000 \
                 --sequence_parallel_size 8 \
                 --use_flash_attention_2 \
-                --logging_per_step 20 \
+                --logging_per_step 1 \
                 --fp32_weight \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
@@ -146,7 +146,7 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-		--resume_from /mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.3/Stage3/8b/slowfast-final-sp4-0723/step28000 \
-                --resume_from_tag global_step28000 \
-                --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+                                               --resume_from /mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.3/Stage2/8b/slowfast-0721-0717-v2/step27000 \
+                --resume_from_tag global_step27000 \
+		--heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
