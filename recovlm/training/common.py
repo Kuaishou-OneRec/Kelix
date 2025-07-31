@@ -122,6 +122,44 @@ import math
 import os
 import shutil  # 用于删除文件夹及内容
 from pathlib import Path
+import torch.distributed as dist
+
+
+def compute_fsdp_zero2_grad_norm(model, ignore_unused_parameters=True):
+    """
+    计算FSDP Zero-2模式下的梯度L2范数（grad norm）
+    
+    参数:
+        model: FSDP包装后的模型
+        ignore_unused_parameters: 是否忽略未计算梯度的参数
+    返回:
+        全局梯度L2范数
+    """
+    # 初始化全局平方和
+    total_sq = torch.tensor(0.0, device=next(model.parameters()).device)
+    
+    # 遍历所有参数，累加本地梯度分片的平方和
+    for param in model.parameters():
+        if param.grad is None:
+            if not ignore_unused_parameters:
+                raise ValueError(f"参数 {param} 没有梯度，请检查是否被正确使用")
+            continue
+        
+        # 从DTensor中获取本地分片（FSDP的梯度是DTensor类型）
+        # 注意：DTensor的.local_tensor()方法返回当前进程持有的分片
+        local_grad = param.grad.to_local()
+        
+        # 计算本地分片的平方和，并累加到total_sq
+        total_sq += torch.sum(local_grad **2)
+    
+    # 跨进程聚合所有分片的平方和（使用all_reduce求和）
+    # 注意：需要使用FSDP的通信组，或默认的全局通信组
+    dist.all_reduce(total_sq, op=dist.ReduceOp.SUM, group=dist.group.WORLD)
+    
+    # 计算全局L2范数（平方和的平方根）
+    grad_norm = torch.sqrt(total_sq).item()
+    
+    return grad_norm
 
 class GradNormLogger:
     def __init__(self, log_dir="grad_norm_logs"):
@@ -134,8 +172,9 @@ class GradNormLogger:
         self.rank = self._get_rank()  # 获取当前进程的rank
         
         # 若文件夹已存在则删除并重建（清空效果），否则直接创建
-        if self._get_rank() == 0 and os.path.exists(self.log_dir):
-            shutil.rmtree(self.log_dir)  # 递归删除文件夹及内部所有内容
+        if self._get_rank() == 0:
+            if os.path.exists(self.log_dir):
+                shutil.rmtree(self.log_dir)  # 递归删除文件夹及内部所有内容
             Path(self.log_dir).mkdir(parents=True, exist_ok=True)  # 重新创建文件夹
         
     def _get_rank(self):
@@ -172,11 +211,18 @@ class GradNormLogger:
         
         with open(log_file, 'a') as f:
             if write_header:
-                f.write("Step,Parameter Name,Gradient Norm\n")
+                f.write("Step,Parameter Name,Gradient Norm,shape,local_shape\n")
                 
             for name, param in model.named_parameters():
                 if param.grad is not None:
                     grad_norm = math.sqrt(torch.sum(param.grad**2).item())
-                    f.write(f"{step},{name},{grad_norm:.6f}\n")
+                    shape = param.data.shape
+                    try:
+                        local_shape = param.grad.to_local().shape
+                    except:
+                        local_shape = None
+                    f.write(f"{step},{name},{grad_norm:.6f}. {shape}/{local_shape}\n")
+                    if 'head' in name:
+                        f.write('\n' + str(param) + '\n')
                 else:
-                    f.write(f"{step},{name},NaN\n")
+                    f.write(f"{step},{name},NaN,None,None\n")

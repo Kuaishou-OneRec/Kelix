@@ -17,7 +17,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714
 #OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output1/Keye/0.9.1/Stage3_SlowFast/8b/slowfast_0723_debug4
+OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output1/Keye/0.9.1/Stage3_SlowFast/8b/slowfast_0723_debug_053
 
 mkdir -p $OUTPUT_DIR
 
@@ -118,7 +118,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-		--dataset_config /llm_reco/lingzhixin/recovlm_qw0510/recovlm/examples/vlm/0.9.3/0714/keye_stage3_video_1sample.json \
+		--dataset_config /mmu_mllm_hdd_2/lingzhixin/recovlm_data/data/keye_stage3_video_0730_sp1_15k.json \
 		--model_class KeyeForConditionalGeneration_vitrope_slowfast \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias,visual_fast.vision_model.embeddings.packing_position_embedding.weight,fast_mlp_AR.pre_norm.weight,fast_mlp_AR.pre_norm.bias,fast_mlp_AR.linear_1.weight,fast_mlp_AR.linear_1.bias,fast_mlp_AR.linear_2.weight,fast_mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
@@ -132,7 +132,7 @@ nohup mpirun --allow-run-as-root \
                 --num_warmup_steps 2100 \
                 --num_training_steps 1 \
                 --save_checkpoint_per_step 1000 \
-                --sequence_parallel_size 2 \
+                --sequence_parallel_size 1 \
                 --use_flash_attention_2 \
                 --logging_per_step 1 \
                 --fp32_weight \

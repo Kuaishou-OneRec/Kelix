@@ -129,7 +129,6 @@ class KeyeProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        print(f"output_kwargs=", output_kwargs)
         if images is not None:
             slow_images = images
             image_inputs = self.image_processor(images=slow_images, return_tensors="pt")

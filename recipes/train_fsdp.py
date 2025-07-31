@@ -95,7 +95,7 @@ from recovlm.training.checkpoint import load_hf_checkpoint
 
 from recovlm.training.activations import set_activation_checkpointing
 
-from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value, GradNormLogger
+from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value, GradNormLogger, compute_fsdp_zero2_grad_norm
 
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
@@ -288,8 +288,6 @@ def get_argument_parser():
 
   parser.add_argument("--monitor_image_tokens", action="store_true",
                       help="Whether to monitor image tokens. Note that this involves with an gather operation, which is time-consuming")
-
-  parser.add_argument("--tick_sync", action="store_true", help="sync for ticker")
 
   ############ System Vars ############
 
@@ -1007,8 +1005,8 @@ def train():
   # get_sequence_parallel_group("gloo")
 
   micro_step = 0
-  ticker = TimeTracker(n=args.logging_per_step, sync=args.tick_sync)
-  iter_ticker = TimeTracker(n=args.logging_per_step, sync=args.tick_sync)
+  ticker = TimeTracker(n=args.logging_per_step)
+  iter_ticker = TimeTracker(n=args.logging_per_step)
   token_stasts = TokenStats(args, _type='image')
   vid_token_stasts = TokenStats(args, _type='video')
 
@@ -1292,13 +1290,12 @@ def train():
       # print(f"X=111, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       with Timer("bwd"):
         loss.backward()
-        grad_logger(model)
-        # clip_grad_by_value(model, args.clip_range)
+        # grad_logger(model)
+        clip_grad_by_value(model, args.clip_range)
         ticker.tick("loss.backward")
 
         if (micro_step + 1) % args.gradient_accumulation_steps == 0:
-          
-          grad_norm = get_global_grad_norm(model).detach().cpu().item()
+          grad_norm = compute_fsdp_zero2_grad_norm(model)
           optimizer.step()
           lr_scheduler.step()
           optimizer.zero_grad()

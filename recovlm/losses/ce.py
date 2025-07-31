@@ -78,23 +78,17 @@ class CrossEntropyLoss(torch.nn.Module):
       labels.reshape(-1), ignore_index=self.ignore_index,
       reduction="none"
     )
-    print("lossloss", per_token_loss.sum(), per_token_loss.sum() / total_elements)
     # if dist.get_rank() in [0, 1, 2]: 
     #   per_token_loss = per_token_loss * 0
     loss = per_token_loss.sum()
     rank = dist.get_rank()
-    if rank == 0: print_input_info(
-      {
-        "logits": logits,
-        "labels": labels,
-        "loss": loss
-      },
-      "oooo",
-      save_path="/mmu_mllm_hdd_2/lingzhixin/output1/Keye/0.9.1/Stage3_SlowFast/8b/slowfast_0723/compare_project_banoutput/recovlm_entropy.pth"
-    ); exit()
-    print(f"local_rank{rank}: local_loss={loss}")
+    # if rank == 0:
+    #     print(f"ceeee_loss{rank}", logits.shape, logits.flatten()[:1000_1000].sum(), logits[:, :1500,:100000].shape, logits[:, :1500,:100000].sum())
+    #     print(logits[:, :1500,:100000])    
+    #     print(logits)    
     if self.reduction == "mean" and total_elements > 0:
       loss /= total_elements
+    
     if self.return_token_loss:
       return loss, per_token_loss
     return loss

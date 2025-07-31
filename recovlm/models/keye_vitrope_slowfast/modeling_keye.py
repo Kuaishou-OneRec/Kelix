@@ -853,19 +853,12 @@ class SiglipAttention(nn.Module):
                 attn_output = attn_output.flatten(-2).unsqueeze(0)
                 attn_weights = None
         attn_output0 = attn_output
+        
+        
         attn_output = self.out_proj(attn_output)
-        if dist.get_rank() == 0: print_input_info(
-            {
-                "queries": queries,
-                "keys": keys,
-                "cos": cos,
-                "sin": sin,
-                "attn_output0": attn_output0,
-                "attn_output": attn_output
-            }
-            ,
-            "apply_rotary_pos_emb_flashatt"
-        )
+        # if dist.get_rank() == 0: 
+
+        # print(1111111, queries.max().detach().item(), keys.max().detach().item(), values.max().detach().item(), attn_output0.max().detach().item(), attn_output0.mean().detach().item(), attn_output.max().detach().item(), attn_output.mean().detach().item())
         if not output_attentions:
             attn_weights = None
 
@@ -2036,6 +2029,7 @@ class KeyeAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
+g_step = 0
 class KeyeFlashAttention2(KeyeAttention):
     """
     Keye flash attention module, following Keye attention module. This module inherits from `KeyeAttention`
@@ -2053,7 +2047,7 @@ class KeyeFlashAttention2(KeyeAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
         self._dist_attn = UlyssesAttention(scatter_idx=2, gather_idx=1)
-
+        
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -2172,10 +2166,32 @@ class KeyeFlashAttention2(KeyeAttention):
                     use_top_left_mask=self._flash_attn_uses_top_left_mask,
                 )
 
+
+
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-
+        attn_output0 = attn_output
         attn_output = self.o_proj(attn_output)
+        # if dist.get_rank() == 0: 
+        #     print(22222222, query_states.max().detach().item(), key_states.max().detach().item(), value_states.max().detach().item(), attn_output0.max().detach().item(), attn_output0.mean().detach().item(), attn_output.max().detach().item(), attn_output.mean().detach().item())
+        # global g_step
+        # from datetime import datetime
+        # current_time = datetime.now()
+        # yymmddhhmmss = current_time.strftime("%y%m%d%H%M%S")
 
+        # # 获取当前时间
+        # current_time = datetime.now()
+        # print_input_info(
+        #     {
+        #         "query_states":query_states,
+        #         "key_states":key_states,
+        #         "value_states":value_states,
+        #         "attn_output": attn_output,
+        #         "attn_output0":attn_output0,
+        #     },
+        #     "attn",
+        #     save_path=f"/mmu_mllm_hdd_2/lingzhixin/output1/Keye/0.9.1/Stage3_SlowFast/8b/slowfast_0723_debug_053/log_hid2/{yymmddhhmmss}_rank{dist.get_rank()}_layer{g_step}.pth"
+        # )    
+        # g_step += 1
         if not output_attentions:
             attn_weights = None
 
@@ -3243,15 +3259,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
         # else:
         #     print("input_ids {} check and position_ids {} check.".format(input_ids.cpu().tolist(), position_ids.cpu().tolist()))
-        print_input_info(
-            {
-                "position_ids": position_ids,
-                "attention_mask": attention_mask,
-                "inputs_embeds": inputs_embeds,
-                "kwargs": kwargs,
-            },
-            "modelmodel"
-        )
+
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
@@ -3499,15 +3507,7 @@ class Projector(nn.Module):
                 hidden_states = self.act(hidden_states)
                 hidden_states = self.linear_2(hidden_states)
                 processed_features.append(hidden_states)
-            if hidden_states.device == torch.device("cuda:0") and hidden_states0.numel() > 32 * 4096:
-                print_input_info(
-                {
-                    "hidden_states0": hidden_states0,
-                    "hidden_states1": torch.cat(processed_features, 0)
-                },
-                "processed_featuresprocessed_features",
-                save_path="/mmu_mllm_hdd_2/lingzhixin/output1/Keye/0.9.1/Stage3_SlowFast/8b/slowfast_0723/compare_project_banoutput/hidden_states_recovlm.pth",
-            )
+
             return processed_features
 
         dims = image_features.shape[:-1]

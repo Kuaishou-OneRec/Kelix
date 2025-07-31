@@ -1167,7 +1167,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       raise ValueError(f"Unsupport video type. {type(block['video'])=}")
   
   def _convert_pixels_types(self, inputs):
-    if self.kargs.get("pixel_bf16", False):
+    if self.kargs.get("pixel_bf16", False) or True:
       for k, v in inputs.items():
         if 'pixel_value' not in k: continue
         inputs[k] = v.bfloat16()
@@ -1819,6 +1819,7 @@ class ChatCompletionVisionDataset(IterableDataset):
       #for sample in self.dataset:
       try:
         sample = next(ds_iter)
+
         sample_key = sample["__key__"] if "__key__" in sample else ""
         sample_url = sample["__url__"] if "__url__" in sample else ""
 
@@ -1839,6 +1840,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         signal.alarm(60)
 
         inputs = self._process(sample, source_name)
+
         signal.alarm(0)
       except StopIteration as e:
         signal.alarm(0)
@@ -3406,7 +3408,6 @@ class NaiveParquetDataset(IterableDataset):
       f"ParquetDataset Info: {rank=}, {world_size=}, {worker=}, {num_workers=}, {len(fn_list)=}"
     )   
     import tqdm
-
     # np.random.shuffle(fn_list)
     def shuffle_parquet_rows(parquet_files_list, n_buffer_files):
         # file_index = 0
@@ -3415,6 +3416,7 @@ class NaiveParquetDataset(IterableDataset):
         # 一开始读取 n_buffer_files 个文件
         # while file_index < n_buffer_files and file_index < len(parquet_files_list):
         assert min(n_buffer_files,len(parquet_files_list)) != 0, f"n_buffer_files={n_buffer_files}, len(parquet_files_list)={len(parquet_files_list)}"
+        
         # for file_index in  tqdm.tqdm(range(min(n_buffer_files, len(parquet_files_list)))):
         file_index = 0
         while len(all_rows) < min(n_buffer_files, len(parquet_files_list)):
@@ -3438,7 +3440,7 @@ class NaiveParquetDataset(IterableDataset):
             all_rows.append(df)
 
         all_rows = pd.concat(all_rows, ignore_index=True)
-        all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+        if self.n_local_shuffle_files_window > 1: all_rows = all_rows.sample(frac=1).reset_index(drop=True)
 
         rows_processed = 0
 
@@ -3447,6 +3449,7 @@ class NaiveParquetDataset(IterableDataset):
                 try:
                   sample = self._parser(row, "tmp")
                   sample['epoch_idx'] = torch.tensor(row['epoch_idx'])
+                  # print(f"rank={torch.distributed.get_rank()},fn_list={len(parquet_files_list)},curr_fn={-1},uuid={row['uuid']},source={row['source']}")
                   if sample is not None:
                     yield sample
 
@@ -3483,7 +3486,7 @@ class NaiveParquetDataset(IterableDataset):
                 
               logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
               all_rows = pd.concat([all_rows[i + 1:], new_df], ignore_index=True)
-              all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+              if self.n_local_shuffle_files_window > 1: all_rows = all_rows.sample(frac=1).reset_index(drop=True)
               row_counts.pop(0)
               row_counts.append(len(new_df))
               rows_processed = 0
