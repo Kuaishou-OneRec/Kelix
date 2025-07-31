@@ -37,5 +37,6 @@ mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile -x http_proxy=http://ove
 mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install easydict"
 mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install transformers==4.49"
 mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install --upgrade torchao"
+# mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15"
 # mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install fastparquet==2024.2.0"
 # mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "wget https://halo.corp.kuaishou.com/api/cloud-storage/v1/public-objects/user-cloud-storage/xray%2Finstall_xray.sh -O install_xray.sh && bash install_xray.sh"

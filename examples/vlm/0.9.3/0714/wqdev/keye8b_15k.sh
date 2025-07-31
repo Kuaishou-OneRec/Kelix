@@ -15,10 +15,9 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
-
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0703_patch14
+MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714_2w_vtoken
 #OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage2/8b/slowfast-video-0.3.0-sharevit-0704
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.3/Stage3/8b/debug/sp8-from27000-400H-15k
 
 mkdir -p $OUTPUT_DIR
 
@@ -27,11 +26,11 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="version:0.9.1;model_size:8B:H800:384;Stage2:0.4.8,slowfast"
+comment="version:0.9.1;model_size:8B:H800:384;Stage2:0.5.7,slowfast,sp8-from27000-400H"
 
-git add --all
-git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
-git_hash=$(git rev-parse --short HEAD)
+#git add --all
+#git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
+git_hash=12345 #$(git rev-parse --short HEAD)
 
 set -x
 
@@ -120,23 +119,23 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/0.9.0_8B_stage2_slowfast/debug/keye_0.9.1_stage2_0.4.8_sharevit.json \
+                --dataset_config /mmu_mllm_hdd_2/lingzhixin/recovlm_data/data/keye_stage3_video_0730_sp8_80k.json \
                 --model_class KeyeForConditionalGeneration_vitrope_slowfast \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias,visual_fast.vision_model.embeddings.packing_position_embedding.weight,fast_mlp_AR.pre_norm.weight,fast_mlp_AR.pre_norm.bias,fast_mlp_AR.linear_1.weight,fast_mlp_AR.linear_1.bias,fast_mlp_AR.linear_2.weight,fast_mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 14000 \
-                --learning_rate 5e-5 \
-                --vision_learning_rate 5e-6 \
-                --min_lr 5e-5 \
+                --max_length 80000 \
+                --learning_rate 2e-5 \
+                --vision_learning_rate 2e-6 \
+                --min_lr 0 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
-                --num_warmup_steps 3600 \
-                --num_training_steps 36000 \
+                --num_warmup_steps 1000 \
+                --num_training_steps 45000 \
                 --save_checkpoint_per_step 1000 \
-                --sequence_parallel_size 1 \
+                --sequence_parallel_size 8 \
                 --use_flash_attention_2 \
-                --logging_per_step 20 \
+                --logging_per_step 1 \
                 --fp32_weight \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
@@ -147,7 +146,7 @@ nohup mpirun --allow-run-as-root \
                 --commit_id $git_hash \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
-		--resume_from /mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.1/Stage1/8b/0.0.1/step39000 \
-                --resume_from_tag global_step39000 \
+		--resume_from /mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.3/Stage2/8b/slowfast-0721-0717-v2/step27000 \
+                --resume_from_tag global_step27000 \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 

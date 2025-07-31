@@ -242,6 +242,7 @@ def _read_video_torchvision(
     return video
 
 
+
 def _read_video_torchvision_slowfast(
         ele: dict,
 ) -> torch.Tensor:
@@ -318,8 +319,6 @@ def _read_video_torchvision_slowfast(
     ##### extract key frames start ######
 
     return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order
-
-
 
 def is_decord_available() -> bool:
     import importlib.util
@@ -563,7 +562,6 @@ def get_video_reader_backend() -> str:
     return f"slowfast_{video_reader_backend}"
 
 
-
 def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = True) -> torch.Tensor | list[Image.Image]:
     if isinstance(ele["video"], str) or isinstance(ele["video"], bytes):
         video_reader_backend = get_video_reader_backend()
@@ -708,6 +706,7 @@ def process_vision_info(
         image_factor: int = IMAGE_FACTOR
 ) -> tuple[list[Image.Image] | None, list[torch.Tensor | list[Image.Image]] | None]:
     assert conversations is not None or vision_infos is not None
+
     if vision_infos is None:
         vision_infos = extract_vision_info(conversations)
     ## Read images or videos

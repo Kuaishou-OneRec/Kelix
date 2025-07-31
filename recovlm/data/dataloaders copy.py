@@ -9,8 +9,6 @@ import psutil
 import webdataset as wds
 import torch.distributed as dist
 
-
-from recovlm.utils.numa_bind import get_numa_bind_info
 from torch.utils.data import DataLoader
 from torchdata.stateful_dataloader import StatefulDataLoader
 from qwen_vl_utils import process_vision_info
@@ -23,7 +21,7 @@ from recovlm.data.datasets import ImageTextPairDatasetWithPacking, \
     ChatCompletionVisionDpoDataset, ChatCompletionVisionDpoParquetDataset,InternVLChatCompletionVisionParquetDataset, \
     BalanceParquetDataset, \
     ChatCompletionVisionDataset_moonvit,ChatCompletionVisionParquetDataset_moonvit, \
-    ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip, ChatCompletionVisionParquetDataset_navit, ChatCompletionVisionParquetDataset_keye, ChatCompletionVisionParquetDataset_keye_vitrope, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast
+    ChatCompletionVisionDataset_siglip,ChatCompletionVisionParquetDataset_siglip, ChatCompletionVisionParquetDataset_navit, ChatCompletionVisionParquetDataset_keye, ChatCompletionVisionParquetDataset_keye_vitrope
 
 RESPONSE_TEMPLATE = "{% for message in messages %}{{message['content'] + '<|im_end|>'}}{% endfor %}"
 
@@ -261,11 +259,6 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
     print('test_cut_to_pad:',kwargs.get('cut_to_pad',False))
     use_balance = kwargs.get("use_flops_balance", False)
     kwargs["use_flops_balance"] = use_balance
-
-    num_readers = kwargs.get("num_readers", 8)
-    kwargs["num_readers"] = num_readers
-
-
     ModelDataset = {'Qwen2VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration':ChatCompletionVisionParquetDataset,
                     'Qwen2_5_VLForConditionalGeneration_moonvit':ChatCompletionVisionParquetDataset_moonvit,
@@ -273,11 +266,9 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                     'Qwen3SiglipForConditionalGeneration_navit':ChatCompletionVisionParquetDataset_navit,
                     'KeyeForConditionalGeneration': ChatCompletionVisionParquetDataset_keye,
                     'KeyeForConditionalGeneration_vitrope': ChatCompletionVisionParquetDataset_keye_vitrope,
-                    'KeyeForConditionalGeneration_vitrope_slowfast': ChatCompletionVisionParquetDataset_keye_vitrope_slowfast,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
-
+    num_readers = kwargs.get("num_readers", 1)
     shuffle_window = kwargs.get("shuffle_window", 0)
-    print("num_workersnum_workers", num_workers)
 
     def input_creator():
         return ModelDataset[model_type](
@@ -297,6 +288,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
             max_retry=max_retry,
             multiple_of=multiple_of,
             datasource_config=datasource_config,
+            num_readers=num_readers,
             shuffle_window=shuffle_window,
             min_visual_tokens_per_frame = min_visual_tokens_per_frame,
             max_visual_tokens_per_frame = max_visual_tokens_per_frame, 

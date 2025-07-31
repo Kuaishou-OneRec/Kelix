@@ -95,7 +95,7 @@ from recovlm.training.checkpoint import load_hf_checkpoint
 
 from recovlm.training.activations import set_activation_checkpointing
 
-from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value, GradNormLogger, compute_fsdp_zero2_grad_norm
+from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value, compute_fsdp_zero2_grad_norm
 
 from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
 from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
@@ -173,7 +173,7 @@ def get_argument_parser():
                       help="The directory to write the trained model")
 
   parser.add_argument("--model_class", type=str, default="Qwen2_5_VLForConditionalGeneration_moonvit",
-                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_v2, 'InternVLChatModel'",)
+                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'InternVLChatModel'",)
   
   parser.add_argument("--model_processor", type=str, default="Qwen2_5_VLProcessor_moonvit",
                       help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit' or 'Qwen3SiglipProcessor' or 'KeyeProcessor' or 'KeyeProcessor_vitrope'")
@@ -494,7 +494,8 @@ def freeze_params(args, model):
           param.requires_grad = False
       print_rank_0("=" * 50)
     
-  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_v2']:
+
+  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast']:
     if args.freeze_llm:
       print_rank_0("Freeze LLM parameters.")
       for name, param in model.named_parameters():
@@ -771,6 +772,7 @@ def train():
       model.load_state_dict(state_dict)
     #msyTODO: add siglip
   
+  # 暂时注释（caojiangxia）
   # check all param & buffer on meta device 
   # for tensor in itertools.chain(model.parameters(), model.buffers()):
   #   assert tensor.device == torch.device("meta")
@@ -946,6 +948,7 @@ def train():
         total_data_source_tokens.update(client_state.get("total_data_source_tokens", {}))
 
   dist.barrier()
+
   tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True)
   image_token_id = tokenizer.encode('<im_patch>')[0]  if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|image_pad|>')[0]
   video_token_id = tokenizer.encode('<vi_patch>')[0]  if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|video_pad|>')[0]
@@ -983,6 +986,8 @@ def train():
   start_time0 = start_time
   show_cnt = 1
   if not args.resume_dataloader:
+
+    global_step = 0
     global_step0 = 0
 
 
@@ -1001,7 +1006,7 @@ def train():
   batch_data_source_tokens = collections.defaultdict(int)
   valid_data_source_tokens = collections.defaultdict(int)
   grad_norm = 0.0
-  grad_logger = GradNormLogger(os.path.join(args.output_dir, "grad_logger"))
+
   # get_sequence_parallel_group("gloo")
 
   micro_step = 0
@@ -1096,7 +1101,6 @@ def train():
   total_num_valid_tokens = 0
   total_num_tokens = 0 
   total_num_samples = 0
-  _batch = None
 
   while True:
     ticker.tick("while_True")
@@ -1105,6 +1109,7 @@ def train():
       if torch_profiler: ctx.enter_context(torch_profiler)
 
       ticker.tick("enter_context(torch_profiler)")
+
       try: 
         batch = input_fn()
       except StopIteration: break
@@ -1166,9 +1171,7 @@ def train():
         video_tokens_ids = (input_ids == video_token_id) | (input_ids == fast_video_token_id)
         num_video_tokens = video_tokens_ids.sum().item() / args.sequence_parallel_size
         num_video_tokens2 = num_video_tokens
-
         num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else -1 # (((input_ids == image_start_id) | (input_ids == frame_id)).sum().item() / args.sequence_parallel_size)
-
         if num_images == -1: 
           num_images = sum([v.shape[0] for k, v in batch.items() if 'grid_thw' in k], 0)
 
@@ -1258,15 +1261,7 @@ def train():
         local_labels = get_local_sequence(labels, seq_idx=1)
 
         loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
-
-        ################# label check #################
-        # print("input_ids_size is {}, labels_size is {}, loss_mask_size is {}".format(input_ids.size(), labels.size(), loss_mask.size()))
-
-        # print("input_ids is {}, labels is {}, loss_mask is {}".format(input_ids, labels, loss_mask))
-
-        # 获取序列长度
-        seq_len = input_ids.size(1)
-
+        
         # 计算需要检查的位置：所有 loss_mask 为1的位置的前一个位置
         # 因为我们需要检查 input_ids[i+1] == labels[i]
         check_mask = torch.zeros_like(loss_mask)
@@ -1291,11 +1286,13 @@ def train():
       with Timer("bwd"):
         loss.backward()
         # grad_logger(model)
+
         clip_grad_by_value(model, args.clip_range)
         ticker.tick("loss.backward")
 
         if (micro_step + 1) % args.gradient_accumulation_steps == 0:
           grad_norm = compute_fsdp_zero2_grad_norm(model)
+
           optimizer.step()
           lr_scheduler.step()
           optimizer.zero_grad()

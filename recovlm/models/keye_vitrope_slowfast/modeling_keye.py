@@ -29,7 +29,9 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 import torch.distributed as dist
+
 from recovlm.utils.ds_utils import print_input_info
+
 
 import torch
 import torch.nn as nn
@@ -574,7 +576,7 @@ class SiglipVisionEmbeddings(nn.Module):
             stride=self.patch_size,
             padding="valid",
         )
-        print(f"self.has_learnable_position_embeddingself.has_learnable_position_embedding={self.has_learnable_position_embedding}")
+
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
         self.cache_position_embedding = dict()
@@ -852,13 +854,9 @@ class SiglipAttention(nn.Module):
                 )
                 attn_output = attn_output.flatten(-2).unsqueeze(0)
                 attn_weights = None
-        attn_output0 = attn_output
-        
-        
-        attn_output = self.out_proj(attn_output)
-        # if dist.get_rank() == 0: 
 
-        # print(1111111, queries.max().detach().item(), keys.max().detach().item(), values.max().detach().item(), attn_output0.max().detach().item(), attn_output0.mean().detach().item(), attn_output.max().detach().item(), attn_output.mean().detach().item())
+        attn_output = self.out_proj(attn_output)
+
         if not output_attentions:
             attn_weights = None
 
@@ -1719,7 +1717,7 @@ class Qwen3PreTrainedModel(PreTrainedModel):
 class SigLIPRotaryEmbedding(nn.Module):
     def __init__(self, dim: int, theta: float = 10000.0) -> None:
         super().__init__()
-        print(f"siglip_theta={theta}")
+
         self.dim = dim
         self.theta = theta
         self.rope_init()
@@ -1727,21 +1725,6 @@ class SigLIPRotaryEmbedding(nn.Module):
     def rope_init(self):
         inv_freq = 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
-
-
-class SigLIPRotaryEmbedding(nn.Module):
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        self.dim = dim
-        self.theta = theta
-        print(f"siglip_theta{theta}")
-        #self.rope_init()
-        self.inv_freq = 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float32,device=torch.cuda.current_device()) / self.dim))
 
     def forward(self, seqlen: int) -> torch.Tensor:
         seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
@@ -1776,7 +1759,7 @@ class KeyeRotaryEmbedding(nn.Module):
                 self.rope_type = "default"
             self.max_seq_len_cached = config.max_position_embeddings
             self.original_max_seq_len = config.max_position_embeddings
-        
+
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
@@ -2029,7 +2012,7 @@ class KeyeAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-g_step = 0
+
 class KeyeFlashAttention2(KeyeAttention):
     """
     Keye flash attention module, following Keye attention module. This module inherits from `KeyeAttention`
@@ -2047,7 +2030,7 @@ class KeyeFlashAttention2(KeyeAttention):
         # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
         self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
         self._dist_attn = UlyssesAttention(scatter_idx=2, gather_idx=1)
-        
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -2166,32 +2149,10 @@ class KeyeFlashAttention2(KeyeAttention):
                     use_top_left_mask=self._flash_attn_uses_top_left_mask,
                 )
 
-
-
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-        attn_output0 = attn_output
-        attn_output = self.o_proj(attn_output)
-        # if dist.get_rank() == 0: 
-        #     print(22222222, query_states.max().detach().item(), key_states.max().detach().item(), value_states.max().detach().item(), attn_output0.max().detach().item(), attn_output0.mean().detach().item(), attn_output.max().detach().item(), attn_output.mean().detach().item())
-        # global g_step
-        # from datetime import datetime
-        # current_time = datetime.now()
-        # yymmddhhmmss = current_time.strftime("%y%m%d%H%M%S")
 
-        # # 获取当前时间
-        # current_time = datetime.now()
-        # print_input_info(
-        #     {
-        #         "query_states":query_states,
-        #         "key_states":key_states,
-        #         "value_states":value_states,
-        #         "attn_output": attn_output,
-        #         "attn_output0":attn_output0,
-        #     },
-        #     "attn",
-        #     save_path=f"/mmu_mllm_hdd_2/lingzhixin/output1/Keye/0.9.1/Stage3_SlowFast/8b/slowfast_0723_debug_053/log_hid2/{yymmddhhmmss}_rank{dist.get_rank()}_layer{g_step}.pth"
-        # )    
-        # g_step += 1
+        attn_output = self.o_proj(attn_output)
+
         if not output_attentions:
             attn_weights = None
 
@@ -3046,7 +3007,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         if inputs_embeds is None:
             inputs_embeds = self.model.embed_tokens(input_ids)
-            
+
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
                 pixel_values = pixel_values.unsqueeze(0)
@@ -3116,8 +3077,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 video_grid_hws = list()
                 sample_indices = list()
                 cu_seqlens = [0]
-
-                inputs_embeds0 = inputs_embeds
 
                 for idx, thw in enumerate(video_grid_thw):
                     thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
@@ -3204,8 +3163,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     ############## fast scatter end##############
 
                     print("cjx video debug: slow part {}, fast part {}".format(pixel_values_videos.size(), fast_pixel_values_videos.size()))
-                
-                inputs_embeds1 = inputs_embeds
+
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 video_embeds = torch.cat(video_embeds,dim=0)
                 n_video_features = video_embeds.shape[0]
@@ -3259,7 +3217,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
         # else:
         #     print("input_ids {} check and position_ids {} check.".format(input_ids.cpu().tolist(), position_ids.cpu().tolist()))
-
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
@@ -3497,7 +3454,6 @@ class Projector(nn.Module):
         m1, m2 = self.merge_kernel_size
         if isinstance(image_features, (list, tuple)):
             processed_features = list()
-            hidden_states0 = torch.cat(image_features, 0)
             for image_feature, image_grid in zip(image_features, image_grid_thw):
                 t, h, w = image_grid
                 from einops import rearrange
