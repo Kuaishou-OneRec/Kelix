@@ -1227,7 +1227,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         return_tensors="pt"
     )
 
-    if time.time() - time0 > 4:
+    if time.time() - time0 > 10:
       print(f"long process time source={sample['json']['source']}, it consumes {time.time() - time0} secs", )
 
     # For the Warning: (add by zzx)
@@ -1347,7 +1347,7 @@ class ChatCompletionVisionDataset(IterableDataset):
     inputs = self._convert_pixels_types(inputs)
 
 
-    if time.time() - time0 > 4: 
+    if time.time() - time0 > 10: 
       print(f"long process time source={sample['json']['source']}, it consumes {time.time() - time0} secs", )
 
     # For the Warning: (add by zzx)
