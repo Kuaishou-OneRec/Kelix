@@ -124,16 +124,16 @@ nohup mpirun --allow-run-as-root \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias,visual_fast.vision_model.embeddings.packing_position_embedding.weight,fast_mlp_AR.pre_norm.weight,fast_mlp_AR.pre_norm.bias,fast_mlp_AR.linear_1.weight,fast_mlp_AR.linear_1.bias,fast_mlp_AR.linear_2.weight,fast_mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 15000 \
-                --learning_rate 5e-5 \
-                --vision_learning_rate 5e-6 \
-                --min_lr 8e-6 \
+                --max_length 90000 \
+                --learning_rate 2e-5 \
+                --vision_learning_rate 2e-6 \
+                --min_lr 1e-8 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
                 --num_warmup_steps 1000 \
-                --num_training_steps 10000 \
-                --save_checkpoint_per_step 1000 \
-                --sequence_parallel_size 1 \
+                --num_training_steps 20000 \
+                --save_checkpoint_per_step 500 \
+                --sequence_parallel_size 8 \
                 --use_flash_attention_2 \
                 --logging_per_step 20 \
                 --fp32_weight \
