@@ -89,9 +89,6 @@ try:
     get_local_sequence
 
 except:
-    import traceback
-    print("eeerrrrrrr")
-    traceback.print_exc()
     _SEQUENCE_PARALLEL_GROUP = None
     _SEQUENCE_PARALLEL_GROUP_GLOO = None
     _DATA_PARALLEL_GROUP = None
@@ -163,10 +160,6 @@ def all_to_all_4D(
     Returns:
         torch.tensor: resharded tensor (bs, seqlen/P, hc, hs)
     """
-    assert (
-        input.dim() == 4
-    ), f"input must be 4D tensor, got {input.dim()} and shape {input.shape}"
-
 
     seq_world_size = dist.get_world_size(group)
 
@@ -425,23 +418,6 @@ class Qwen3VisionPatchEmbed(nn.Module):
         return hidden_states
 
 
-class Qwen3VisionRotaryEmbedding(nn.Module):
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        self.dim = dim
-        self.theta = theta
-        self.rope_init()
-
-    def rope_init(self):
-        inv_freq = 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
-
-
 def _trunc_normal_(tensor, mean, std, a, b):
     # Cut & paste from PyTorch official master until it's in a few official releases - RW
     # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
@@ -574,7 +550,7 @@ class SiglipVisionEmbeddings(nn.Module):
         self.embed_dim = config.hidden_size
         self.image_size = config.image_size
         self.patch_size = config.patch_size
-
+        self.has_learnable_position_embedding = config.has_learnable_position_embedding if hasattr(config, "has_learnable_position_embedding") else False
         self.patch_embedding = nn.Conv2d(
             in_channels=config.num_channels,
             out_channels=self.embed_dim,
