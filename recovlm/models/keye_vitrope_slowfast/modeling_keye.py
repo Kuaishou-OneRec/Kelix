@@ -3162,7 +3162,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     inputs_embeds = inputs_embeds.masked_scatter(video_mask, fast_video_embeds)
                     ############## fast scatter end##############
 
-                    print("cjx video debug: slow part {}, fast part {}".format(pixel_values_videos.size(), fast_pixel_values_videos.size()))
+                    # print("cjx video debug: slow part {}, fast part {}".format(pixel_values_videos.size(), fast_pixel_values_videos.size()))
 
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 video_embeds = torch.cat(video_embeds,dim=0)
