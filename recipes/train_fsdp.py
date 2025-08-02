@@ -1103,7 +1103,7 @@ def train():
   total_num_samples = 0
 
   while True:
-    print(f"rank={torch.distributed.get_rank()}, pid={os.getpid()}, begin_training")
+    # print(f"rank={torch.distributed.get_rank()}, pid={os.getpid()}, begin_training")
     ticker.tick("while_True")
     with contextlib.ExitStack() as ctx:
 
