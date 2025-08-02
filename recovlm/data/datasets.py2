@@ -909,7 +909,7 @@ def get_assistant_mask(batch_input_ids: torch.Tensor,
           assistant_start.append(_id.item())
         else:
           assistant_start = []
-        if assistant_start[-3:] == start_pattern:
+        if assistant_start[-len(start_pattern):] == start_pattern:
           to_mask = True
           assistant_start = []
       else:
@@ -917,7 +917,7 @@ def get_assistant_mask(batch_input_ids: torch.Tensor,
           assistant_end.append(_id.item())
         else:
           assistant_end = []
-        if assistant_end[-2:] == end_pattern:
+        if assistant_end[-len(end_pattern):] == end_pattern:
           to_mask = False
           assistant_end = []
     masks.append(mask)
@@ -1216,7 +1216,14 @@ class ChatCompletionVisionDataset(IterableDataset):
     # mask all vision token
     # <|vision_start|>: 151652 , <|vision_end|>: 151653, <|image_pad|>: 151655, <|video_pad|>: 151656
     input_ids = inputs["input_ids"]
-    inputs["loss_mask"] = torch.ones_like(input_ids)
+    cjx_test = True
+    if cjx_test:
+        inputs["loss_mask"] = 1 - get_assistant_mask(
+          inputs["input_ids"],
+          start_pattern=self.kargs.get("start_pattern", [151652]), 
+          end_pattern=self.kargs.get("end_pattern", [151653]), #
+        )
+    # inputs["loss_mask"] = torch.ones_like(input_ids)
     inputs["loss_mask"][
         (input_ids == self.vision_start_token_id) | 
         (input_ids == self.vision_end_token_id) |
@@ -3130,6 +3137,7 @@ class NaiveParquetDataset(IterableDataset):
     print(f"NaiveParquetDataset: use_flops_balance={use_flops_balance}")
 
     # print(f"ParquetDataset set n_local_shuffle_files_window={n_local_shuffle_files_window}, vit_token_balance={vit_token_balance}")
+    print(f"debug ParquetDataset set n_local_shuffle_files_window={n_local_shuffle_files_window}")
 
     if use_flops_balance:
       def make_dict(): return {}
@@ -3402,7 +3410,7 @@ class NaiveParquetDataset(IterableDataset):
             all_rows.append(df)
 
         all_rows = pd.concat(all_rows, ignore_index=True)
-        all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+        if self.n_local_shuffle_files_window > 1: all_rows = all_rows.sample(frac=1).reset_index(drop=True)
 
         rows_processed = 0
 
@@ -3414,10 +3422,10 @@ class NaiveParquetDataset(IterableDataset):
                   if sample is not None:
                     yield sample
 
-                except GeneratorExit:
-                  # 正确处理生成器退出
-                  logger.warning(f"Generator exited")
-                  return
+                # except GeneratorExit:
+                #   # 正确处理生成器退出
+                #   logger.warning(f"Generator exited")
+                #   return
 
                 except Exception as e:
                   logger.error(f"Error processing row : {str(e)}")
@@ -3435,10 +3443,12 @@ class NaiveParquetDataset(IterableDataset):
                 if (fn, epoch_idx) in finish_dict:
                   logger.warning(f"[Rank{rank}-{worker}] skip {fn}-epoch{epoch_idx}")
                   file_index += 1
+                  file_index = file_index%len(parquet_files_list) # cjx, 新增逻辑，防止程序在数据层面挂掉
                   continue
 
                 finish_dict[(fn, epoch_idx)] = True
                 file_index += 1
+                file_index = file_index%len(parquet_files_list) # cjx, 新增逻辑，防止程序在数据层面挂掉
                 try:
                   new_df = load_parquet_file(fn).read_row_group(0).to_pandas()
                   break
@@ -3447,7 +3457,7 @@ class NaiveParquetDataset(IterableDataset):
                 
               logger.warning(f"[Rank{rank}-{worker}] {fn}-epoch{epoch_idx} start.")
               all_rows = pd.concat([all_rows[i + 1:], new_df], ignore_index=True)
-              all_rows = all_rows.sample(frac=1).reset_index(drop=True)
+              if self.n_local_shuffle_files_window > 1: all_rows = all_rows.sample(frac=1).reset_index(drop=True)
               row_counts.pop(0)
               row_counts.append(len(new_df))
               rows_processed = 0
@@ -3457,9 +3467,9 @@ class NaiveParquetDataset(IterableDataset):
               print("error in ParquetDataset!!!")
               print(traceback.format_exc())
             
-            # 如果已经处理完所有文件且当前数据都已处理完，则退出循环
-            if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
-                break
+            # # 如果已经处理完所有文件且当前数据都已处理完，则退出循环
+            # if file_index >= len(parquet_files_list) and rows_processed == row_counts[0]:
+            #     break
     
     for sample in shuffle_parquet_rows(fn_list, self.n_local_shuffle_files_window):
       yield sample

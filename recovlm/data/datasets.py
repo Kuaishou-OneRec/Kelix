@@ -1355,8 +1355,9 @@ class ChatCompletionVisionDataset(IterableDataset):
     #   sequence length for this model (**** > 32768). Running this sequence 
     #.  through the model will result in indexing errors
     if inputs["input_ids"].shape[-1] > self.max_length:
-      raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
-    
+      # raise ValueError(f"Sample is too long. text_len={len(text)=}, token_len={inputs['input_ids'].shape[-1]}")
+      return inputs
+      
     inputs["loss_mask"] = get_assistant_mask(
       inputs["input_ids"],
       start_pattern=self.kargs.get("start_pattern", [151644, 77091, 198]), # [151644, 77091, 198],
@@ -1598,7 +1599,6 @@ class ChatCompletionVisionDataset(IterableDataset):
       process_max_length = min(process_max_length, self.max_length)
       # min(int(self.max_length // 1.5), ) # if self.use_flops_balance else self.max_length
       # process_max_length = self.max_length
-
       if inputs["input_ids"].shape[-1] > process_max_length:
         source_conf["max_visual_tokens_per_image"] = (
             source_conf["max_visual_tokens_per_image"] * self.shrink_ratio)
@@ -1606,7 +1606,7 @@ class ChatCompletionVisionDataset(IterableDataset):
             source_conf["max_visual_tokens_per_frame"] * self.shrink_ratio)
         if "video_total_pixels" in source_conf:
           source_conf["video_total_pixels"] = source_conf["video_total_pixels"] * self.shrink_ratio
-          print("test video_total_pixels shrink {}, id_source_conf={}".format(source_conf["video_total_pixels"]//28//28, id(source_conf)))
+          print("rank test video_total_pixels shrink {}, id_source_conf={}".format(source_conf["video_total_pixels"]//28//28, id(source_conf)))
         continue
       else:
         assert inputs["input_ids"].shape[-1] <= process_max_length, "inputs too long"
@@ -1837,6 +1837,8 @@ class ChatCompletionVisionDataset(IterableDataset):
     source_list = []
     cur_length = 0
     ds_iter = iter(self.dataset)
+    sample_ids = []
+    batch_id = 0
     while True:
       #for sample in self.dataset:
       try:
@@ -1876,7 +1878,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         error_ratio = self.source_error_cnt[source_name] * 1.0 / \
           self.source_sample_cnt[source_name]
         logger.error(
-          f"ChatCompletionVisionDataset process sample error. "
+          f"rank{torch.distributed.get_rank()} ChatCompletionVisionDataset process sample error. "
           f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, sample=\n{str(sample)[:50]}"
           f"errmsg={traceback.format_exc()}")
         continue
@@ -1891,6 +1893,7 @@ class ChatCompletionVisionDataset(IterableDataset):
 
         if self.cut_to_pad:
           buffer.append(inputs)
+          sample_ids.append(sample_key)
           source_list.append(source_name)
           packed_inputs = self._packing(buffer)
 
@@ -1920,10 +1923,14 @@ class ChatCompletionVisionDataset(IterableDataset):
           logger.warning("Skip 0 lable sample.")
           continue
         
+        # print(f"rank={torch.distributed.get_rank()}, {sample_ids=}, {batch_id=}")
+        sample_ids = []
+        batch_id += 1
         yield packed_inputs
 
       else:
         buffer.append(inputs)
+        sample_ids.append(sample_key)
         source_list.append(source_name)
         cur_length += sample_length
 
@@ -3490,7 +3497,7 @@ class NaiveParquetDataset(IterableDataset):
                   sample = self._parser(row, "tmp")
                   sample['epoch_idx'] = torch.tensor(row['epoch_idx'])
                   # print(f"rank={torch.distributed.get_rank()},fn_list={len(parquet_files_list)},curr_fn={-1},uuid={row['uuid']},source={row['source']}")
-                  if sample is not None:
+                  if sample is not None:  
                     yield sample
 
                 except GeneratorExit:
@@ -5095,6 +5102,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     for _, inputs in enumerate(buffer):
       image_pad = True if self.use_flops_balance else False
       epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
+      print("inputsinputsinputs", inputs["input_ids"].shape)
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
                                       packed_position_ids,

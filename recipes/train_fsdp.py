@@ -1103,6 +1103,7 @@ def train():
   total_num_samples = 0
 
   while True:
+    print(f"rank={torch.distributed.get_rank()}, pid={os.getpid()}, begin_training")
     ticker.tick("while_True")
     with contextlib.ExitStack() as ctx:
 
@@ -1194,6 +1195,7 @@ def train():
           token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
         ticker.tick("token_metrics_reduce")
 
+        print(f"rank={torch.distributed.get_rank()}, pid={os.getpid()}, token_metrics.detach")
         num_tokens, num_samples, num_valid_tokens, num_image_tokens, num_video_tokens = token_metrics.detach().cpu().numpy() * args.sequence_parallel_size
         ticker.tick("token_metrics.detach().cpu().numpy()")
       else:
@@ -1402,6 +1404,7 @@ def train():
           log_dict = {
             # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
             "training/loss": avg_loss,
+            "lm_loss": avg_loss,
             f"training/grad_norm": grad_norm,
             "training/learning_rate": learning_rate,
             "training/vision_learning_rate": vision_learning_rate,
