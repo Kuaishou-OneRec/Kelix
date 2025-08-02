@@ -1195,7 +1195,7 @@ def train():
           token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
         ticker.tick("token_metrics_reduce")
 
-        print(f"rank={torch.distributed.get_rank()}, pid={os.getpid()}, token_metrics.detach")
+        # print(f"rank={torch.distributed.get_rank()}, pid={os.getpid()}, token_metrics.detach")
         num_tokens, num_samples, num_valid_tokens, num_image_tokens, num_video_tokens = token_metrics.detach().cpu().numpy() * args.sequence_parallel_size
         ticker.tick("token_metrics.detach().cpu().numpy()")
       else:

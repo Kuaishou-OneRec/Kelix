@@ -18,7 +18,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714_2w_vtoken
 #OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
 OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.3/Stage3/8b/0802_megatron/sp8
-OUTPUT_DIR=/llm_reco/nasen/wq-outputs/recovlm/keye-128gpu-0802
+OUTPUT_DIR=/llm_reco/nasen/wq-outputs/recovlm/keye-128gpu-0802_v2
 
 mkdir -p $OUTPUT_DIR
 mkdir -p /tmp/_wids_cache
@@ -119,12 +119,12 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-		--dataset_config examples/vlm/0.9.3/0802_with_megatron/sp8.json \
+		--dataset_config examples/vlm/0.9.3/0802_with_megatron/sp8_v2.json \
 		--model_class KeyeForConditionalGeneration_vitrope_slowfast \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias,visual_fast.vision_model.embeddings.packing_position_embedding.weight,fast_mlp_AR.pre_norm.weight,fast_mlp_AR.pre_norm.bias,fast_mlp_AR.linear_1.weight,fast_mlp_AR.linear_1.bias,fast_mlp_AR.linear_2.weight,fast_mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 84000 \
+                --max_length 60000 \
                 --learning_rate 2e-5 \
                 --vision_learning_rate 2e-5 \
                 --min_lr 1e-7 \
@@ -135,7 +135,7 @@ nohup mpirun --allow-run-as-root \
                 --save_checkpoint_per_step 500 \
                 --sequence_parallel_size 8 \
                 --use_flash_attention_2 \
-                --logging_per_step 1 \
+                --logging_per_step 20 \
                 --fp32_weight \
                 --seed 19260817 \
                 --enable_gradient_checkpointing \
