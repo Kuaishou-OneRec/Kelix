@@ -5102,7 +5102,6 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     for _, inputs in enumerate(buffer):
       image_pad = True if self.use_flops_balance else False
       epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
-      print("inputsinputsinputs", inputs["input_ids"].shape)
       valid_seq_len += self._append_sample_packing(inputs,
                                       packed_input_ids,
                                       packed_position_ids,
