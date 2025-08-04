@@ -752,9 +752,10 @@ def test1():
 def test2():
     from recovlm.utils.ds_utils import print_input_info
     # video_reader_backend=slowfast_decord
+    # the sample below cannot be decoded via decord
     ele={'type': 'video', 'video': '/mmu_mllm_hdd_2/compress_video_path/zhouyang12/downlaod/youtube/data19/ytb/task2_batch4_part106/video/oP6PR4KfH0A.mkv', 'video_total_pixels': 3880000, 'min_pixels': 37632, 'max_pixels': 602112, 'fps': 2.0, 'min_frames': 2, 'max_frames': 40}
     # slowfast_decord
-    ele = {'type': 'video', 'video': '/mmu_mllm_hdd_2/compress_video_path/luoxinchen/dataset/LLaVA-Video-178K/1_2_m_youtube_v0_1/liwei_youtube_videos/videos/hdvila/RmkLa7AIfSU.mkv', 'video_total_pixels': 3880000, 'min_pixels': 37632, 'max_pixels': 602112, 'fps': 2.0, 'min_frames': 2, 'max_frames': 40}
+    # ele = {'type': 'video', 'video': '/mmu_mllm_hdd_2/compress_video_path/luoxinchen/dataset/LLaVA-Video-178K/1_2_m_youtube_v0_1/liwei_youtube_videos/videos/hdvila/RmkLa7AIfSU.mkv', 'video_total_pixels': 3880000, 'min_pixels': 37632, 'max_pixels': 602112, 'fps': 2.0, 'min_frames': 2, 'max_frames': 40}
     res1 = _read_video_torchvision_slowfast(ele)
     res2 = _read_video_decord_slowfast(ele)
     print_input_info(
