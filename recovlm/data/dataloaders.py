@@ -274,6 +274,7 @@ def get_chat_completion_vision_parquet_dataloader(sources: str,
                     'KeyeForConditionalGeneration': ChatCompletionVisionParquetDataset_keye,
                     'KeyeForConditionalGeneration_vitrope': ChatCompletionVisionParquetDataset_keye_vitrope,
                     'KeyeForConditionalGeneration_vitrope_slowfast': ChatCompletionVisionParquetDataset_keye_vitrope_slowfast,
+                    'KeyeForConditionalGeneration_vitrope_slowfast_v2': ChatCompletionVisionParquetDataset_keye_vitrope_slowfast,
                     'InternVLChatModel':InternVLChatCompletionVisionParquetDataset}
 
     shuffle_window = kwargs.get("shuffle_window", 0)

@@ -552,7 +552,7 @@ def calculate_exchange_info(samples, m):
     heapq.heapify(groups)
     result = [[] for _ in range(size)]
     send_info = defaultdict(list)
-    for seq in sorted_seqs:
+    for seq in sorted_seqs: # sort by length
         current_sum, dst = heapq.heappop(groups)
         result[dst].append(seq)
         if seq[0] == rank:

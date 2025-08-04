@@ -165,7 +165,7 @@ def get_shard_conditions(
 
     # 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration'
 
-    if model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit', "Qwen2_5_VLForConditionalGeneration_siglip","Qwen3_VLForConditionalGeneration_siglip",'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast']:
+    if model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit', "Qwen2_5_VLForConditionalGeneration_siglip","Qwen3_VLForConditionalGeneration_siglip",'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_v2']:
         if names_to_match and name in names_to_match:
             return True
 
@@ -243,7 +243,7 @@ def shard_model(
             num_layers_sharded += 1
     else: 
 
-        assert model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit', "Qwen2_5_VLForConditionalGeneration_siglip","Qwen3_VLForConditionalGeneration_siglip",'Qwen3SiglipForConditionalGeneration_navit','KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast']
+        assert model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit', "Qwen2_5_VLForConditionalGeneration_siglip","Qwen3_VLForConditionalGeneration_siglip",'Qwen3SiglipForConditionalGeneration_navit','KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_v2']
         layers = list(model.visual.vision_model.encoder.layers) + list(model.model.layers)
         for m in layers:
             fully_shard(m, **fsdp_kwargs)
