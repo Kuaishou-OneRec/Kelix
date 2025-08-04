@@ -2486,6 +2486,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
         if get_sequence_parallel_world_size() > 1:
             start, end = get_local_sequence_boundary(hidden_states.shape[1])
             sin, cos = position_embeddings
+            print("ssssine_cosssssssss", sin.shape, cos.shape)
             # print("position_embeddingsposition_embeddingsposition_embeddings", sin.shape)
             position_embeddings = (sin[:, :, start:end, :], cos[:, :, start:end, :])
             hidden_states = hidden_states[:, start:end, :]
