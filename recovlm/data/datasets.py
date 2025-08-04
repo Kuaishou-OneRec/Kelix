@@ -1880,7 +1880,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         logger.error(
           f"rank{torch.distributed.get_rank()} ChatCompletionVisionDataset process sample error. \n"
           f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, {sample.get('video', None)=}, sample=\n{str(sample)[:50]}\n" + 
-          print_input_info(sample, "sample: ", return_str=True) + '\n'
+          print_input_info(sample, "sample: ", return_str=True) + '\n' + str(sample) + '\n' +
           f"errmsg={traceback.format_exc()}")
         continue
 

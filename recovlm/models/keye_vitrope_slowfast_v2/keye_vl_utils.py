@@ -565,7 +565,12 @@ def get_video_reader_backend() -> str:
 def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = True) -> torch.Tensor | list[Image.Image]:
     if isinstance(ele["video"], str) or isinstance(ele["video"], bytes):
         video_reader_backend = get_video_reader_backend()
-        slow_frames, fast_frames, time_position, slow_fast_order = VIDEO_READER_BACKENDS[video_reader_backend](ele)
+        try:
+            slow_frames, fast_frames, time_position, slow_fast_order = VIDEO_READER_BACKENDS[video_reader_backend](ele)
+        except Exception as e:
+            print(e)
+            print(f"bad processing with video_reader_backend={video_reader_backend}, ele={ele}")
+            raise e
 
     else:
         assert isinstance(ele["video"], (list, tuple))
