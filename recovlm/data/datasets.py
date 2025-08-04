@@ -1878,9 +1878,9 @@ class ChatCompletionVisionDataset(IterableDataset):
         error_ratio = self.source_error_cnt[source_name] * 1.0 / \
           self.source_sample_cnt[source_name]
         logger.error(
-          f"rank{torch.distributed.get_rank()} ChatCompletionVisionDataset process sample error. "
-          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, {sample.get('video', None)=}, sample=\n{str(sample)[:50]}\n"
-          f"{}".format(print_input_info(sample, "sample: ", return_str=True))
+          f"rank{torch.distributed.get_rank()} ChatCompletionVisionDataset process sample error. \n"
+          f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, {sample.get('video', None)=}, sample=\n{str(sample)[:50]}\n" + 
+          print_input_info(sample, "sample: ", return_str=True) + '\n'
           f"errmsg={traceback.format_exc()}")
         continue
 
