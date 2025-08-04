@@ -243,7 +243,8 @@ def _read_video_torchvision(
 
 
 
-def _read_video_torchvision_slowfast(
+
+def _read_video_decord_slowfast(
         ele: dict,
 ) -> torch.Tensor:
     """read video using decord.VideoReader
@@ -257,44 +258,29 @@ def _read_video_torchvision_slowfast(
     Returns:
         torch.Tensor: the video tensor with shape (T, C, H, W).
     """
-    print("torchvision")
-    # process video url
+    import decord
     st = time.time()
-    if isinstance(ele["video"], str):
+    if isinstance(ele["video"], bytes):
+        video_path = ""
+        fp = py_io.BytesIO(ele["video"])
+        vr = decord.VideoReader(fp)
+    else:
         video_path = ele["video"]
-        if version.parse(torchvision.__version__) < version.parse("0.19.0"):
-            if "http://" in video_path or "https://" in video_path:
-                warnings.warn("torchvision < 0.19.0 does not support http/https video path, please upgrade to 0.19.0.")
-            if "file://" in video_path:
-                video_path = video_path[7:]
-        video, audio, info = io.read_video(
-            video_path,
-            start_pts=ele.get("video_start", 0.0),
-            end_pts=ele.get("video_end", None),
-            pts_unit="sec",
-            output_format="TCHW",
-        )
-        total_frames, video_fps = video.size(0), info["video_fps"]
-        logger.info(f"torchvision:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-
-    elif isinstance(ele["video"], bytes):
-        video_reader = torchvision.io.VideoReader(ele["video"], "video")
-        video_meta = video_reader.get_metadata()["video"]
-
-        start_ptr = ele.get("video_start", 0.0)
-        end_pts = ele.get("video_end", video_meta["duration"][-1])
-        video = []
-        for frame in itertools.takewhile(lambda x: x['pts'] <= end_pts, video_reader.seek(start_ptr)):
-            video.append(frame['data'])
-        video = torch.stack(video)
-        total_frames, video_fps = video.size(0), video_meta["fps"][-1]
-        logger.info(f"torchvision:  {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
-
+        vr = decord.VideoReader(video_path)
+    # TODO: support start_pts and end_pts
+    if 'video_start' in ele or 'video_end' in ele:
+        raise NotImplementedError("not support start_pts and end_pts in decord for now.")
+    total_frames, video_fps = len(vr), vr.get_avg_fps()
+    # timestamp start from 0.0
     total_frames_time_position = torch.FloatTensor([(1 / video_fps) * i for i in range(total_frames)])
+    logger.info(f"decord:  {video_path=}, {total_frames=}, {video_fps=}, time={time.time() - st:.3f}s")
+    
     total_nframes_number = smart_nframes(ele, total_frames=total_frames, video_fps=video_fps)
+    
     selected_indices = torch.linspace(0, total_frames - 1, total_nframes_number).round().long()
+    selected_frames = vr.get_batch(selected_indices.tolist()).asnumpy()
+    selected_frames = torch.tensor(selected_frames).permute(0, 3, 1, 2)
     selected_time_position = total_frames_time_position[selected_indices]
-    selected_frames = video[selected_indices]
 
     ##### extract key frames start ######
     # Step#1，对选中的图，假设都为slow，先resize到28*28的倍数，但是会先在256视图下去进行比较
@@ -475,6 +461,7 @@ def extract_slow_fast_frames(selected_frames, selected_frames_extract):
     return slow_frames, fast_frames, slow_fast_order.tolist()
 
 
+
 def _read_video_decord_slowfast(
         ele: dict,
 ) -> torch.Tensor:
@@ -567,11 +554,12 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
         video_reader_backend = get_video_reader_backend()
         try:
             slow_frames, fast_frames, time_position, slow_fast_order = VIDEO_READER_BACKENDS[video_reader_backend](ele)
+            # video_reader_backend=slowfast_decord
+            # ele={'type': 'video', 'video': '/mmu_mllm_hdd_2/compress_video_path/zhouyang12/downlaod/youtube/data19/ytb/task2_batch4_part106/video/oP6PR4KfH0A.mkv', 'video_total_pixels': 38800000, 'min_pixels': 37632, 'max_pixels': 602112, 'fps': 2.0, 'min_frames': 2, 'max_frames': 40}
         except Exception as e:
             print(e)
-            print(f"bad processing with video_reader_backend={video_reader_backend}, ele={ele}, fall back to _read_video_torchvision_slowfast")
-            slow_frames, fast_frames, time_position, slow_fast_order = _read_video_torchvision_slowfast(ele)
-            print(f"ele={ele}, fall back to _read_video_torchvision_slowfast and successfully decode")
+            print(f"bad processing with video_reader_backend={video_reader_backend}, ele={ele}")
+            raise e
     else:
         assert isinstance(ele["video"], (list, tuple))
         process_info = ele.copy()
@@ -750,19 +738,11 @@ def test1():
 
 
 def test2():
-    from recovlm.utils.ds_utils import print_input_info
     # video_reader_backend=slowfast_decord
-    ele={'type': 'video', 'video': '/mmu_mllm_hdd_2/compress_video_path/zhouyang12/downlaod/youtube/data19/ytb/task2_batch4_part106/video/oP6PR4KfH0A.mkv', 'video_total_pixels': 3880000, 'min_pixels': 37632, 'max_pixels': 602112, 'fps': 2.0, 'min_frames': 2, 'max_frames': 40}
+    ele={'type': 'video', 'video': '/mmu_mllm_hdd_2/compress_video_path/zhouyang12/downlaod/youtube/data19/ytb/task2_batch4_part106/video/oP6PR4KfH0A.mkv', 'video_total_pixels': 38800000, 'min_pixels': 37632, 'max_pixels': 602112, 'fps': 2.0, 'min_frames': 2, 'max_frames': 40}
     # slowfast_decord
-    ele = {'type': 'video', 'video': '/mmu_mllm_hdd_2/compress_video_path/luoxinchen/dataset/LLaVA-Video-178K/1_2_m_youtube_v0_1/liwei_youtube_videos/videos/hdvila/RmkLa7AIfSU.mkv', 'video_total_pixels': 3880000, 'min_pixels': 37632, 'max_pixels': 602112, 'fps': 2.0, 'min_frames': 2, 'max_frames': 40}
-    res1 = _read_video_torchvision_slowfast(ele)
-    res2 = _read_video_decord_slowfast(ele)
-    print_input_info(
-        {
-            # "res1": res1,
-            "res2": res2
-        }
-    )
+    res = _read_video_torchvision_slowfast(ele)
+    print(res)
 
 
 if __name__ == "__main__":
