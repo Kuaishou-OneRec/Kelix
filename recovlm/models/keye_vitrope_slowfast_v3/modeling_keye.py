@@ -2760,6 +2760,13 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.rope_deltas = None  # cache rope_deltas here
 
+        t_size, g_size, w_size = getattr(config, "t_size", 10000), getattr(config, "h_size", 20480), getattr(config, "w_size", 20480)
+        self.thw_embeddings = nn.ModuleDict({
+            "t": nn.Embedding(t_size, config.hidden_size),
+            "h": nn.Embedding(g_size, config.hidden_size),
+            "w": nn.Embedding(w_size, config.hidden_size),
+        })
+
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -2781,8 +2788,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.model
-
-
 
     def get_rope_index_slowfast(
         self,
@@ -3312,16 +3317,19 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         # print(cu_seqlens)
         # print("origgggg", position_ids.shape, cu_seqlens.shape) # origgggg torch.Size([3, 1, 75872]) torch.Size([2])
         # print(position_ids)
-        # print("position_ids0000", position_ids[0].flatten().tolist())
-        # print("position_ids1111", position_ids[1].flatten().tolist())
-        # print("position_ids2222", position_ids[2].flatten().tolist())
+        print("position_ids0000", position_ids[0].flatten().tolist())
+        print("position_ids1111", position_ids[1].flatten().tolist())
+        print("position_ids2222", position_ids[2].flatten().tolist())
+        print("position_ids1122", (position_ids[1] + position_ids[2]).flatten().tolist())
         # if 'cu_seqlens' in kwargs:
         #     cu_seqlens = kwargs["cu_seqlens"]
         # else:
         #     cu_seqlens = torch.tensor().to()
-        position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l
+        print("position_ids=", position_ids)
+
+        position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
         # print("newposition_ids", position_ids.shape)
-        print(position_ids.flatten().tolist())
+        # print(position_ids.flatten().tolist())
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
