@@ -3322,8 +3322,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l
         # print("newposition_ids", position_ids.shape)
         if dist.get_rank() == 0: 
-            print("eq000", torch.where(position_ids==0)[0])
-            print("newposition_idsposition_ids", position_ids.flatten().tolist()); exit()
+            print(position_ids.shape, "eq000", torch.where(position_ids==0)[0])
+            print("newposition_idsposition_ids", position_ids.flatten().tolist()); 
+            torch.save({"position_ids": position_ids}, f"rank_{dist.get_rank()}.pth")
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
