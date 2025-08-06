@@ -3439,18 +3439,22 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         # print(position_ids.shape, inputs_embeds.shape, "inputs_embedsinputs_embeds") # torch.Size([3, 1, 82960]) torch.Size([1, 82960, 4096]) inputs_embedsinputs_embeds
         # inputs_embeds += self.thw_embeddings["t"](position_ids[0]) + self.thw_embeddings["h"](position_ids[1]) + self.thw_embeddings["w"](position_ids[2])
         positional_embeddings = self.thw_embeddings["t"](learnable_position_ids[0]) + self.thw_embeddings["h"](learnable_position_ids[1]) + self.thw_embeddings["w"](learnable_position_ids[2])
+        print(positional_embeddings.shape)
+        if dist.get_rank() in [0]:
+            print("position_ids_position_ids_", position_ids_.shape, position_ids_)
+            print("position_idsposition_ids", position_ids.shape, position_ids)
+            print("learnable_position_ids", learnable_position_ids.shape, learnable_position_ids)
+        # if dist.get_rank() in [0,1]: print_input_info(
+        #     {
+        #         "position_ids_": position_ids_,
+        #         "position_ids": position_ids,
+        #         "learnable_position_ids": learnable_position_ids,
 
-        if dist.get_rank() in [0,1]: print_input_info(
-            {
-                "position_ids_": position_ids_,
-                "position_ids": position_ids,
-                "learnable_position_ids": learnable_position_ids,
-
-            }
-            ,
-            f"positional_embeddings{dist.get_rank()}: ",
-            # save_path=f"positional_embeddings{dist.get_rank()}.pth"
-        )
+        #     }
+        #     ,
+        #     f"positional_embeddings{dist.get_rank()}: ",
+        #     # save_path=f"positional_embeddings{dist.get_rank()}.pth"
+        # )
         # position_ids = position_ids[0] # t
         
         # print("newposition_ids", position_ids.shape)
