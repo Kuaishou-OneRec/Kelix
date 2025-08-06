@@ -117,6 +117,7 @@ def generate_circle_image(size=(200, 200), fill_color=(0, 0, 0), outline_color=(
 
 PROCESSOR_DIR = "/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714"
 MODEL_DIR = "/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714"
+MODEL_DIR = PROCESSOR_DIR = "/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.7/Stage3/8b/1d_vs_3d_rope/rope1d_0.3.1014/step500/global_step500/converted/"
 
 processor = KeyeProcessor.from_pretrained(PROCESSOR_DIR, use_fast=True, local_files_only=False)
 tokenizer = processor.tokenizer
@@ -167,8 +168,8 @@ def make_inputs(a,b):
             # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_2mb.mp4"}, 
             {"type": "video", 
             "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_1mb.mp4"}, 
-            {"type": "video", 
-            "video": ["/llm_reco_ssd/caojiangxia/vllm/test_image.png", "/llm_reco_ssd/caojiangxia/vllm/test_image.png"]},
+            #{"type": "video", 
+            #"video": ["/llm_reco_ssd/caojiangxia/vllm/test_image.png", "/llm_reco_ssd/caojiangxia/vllm/test_image.png"]},
             # {"type": "video", 
             # "video": ["/llm_reco_ssd/caojiangxia/vllm/test_image.png", "/llm_reco_ssd/caojiangxia/vllm/test_image.png"] * 30}, 
             # {"type": "video", 

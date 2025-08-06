@@ -36,6 +36,12 @@ def process_pos_ids(pos_ids):
     # 2.1 识别图像token（h值重复出现≥2次）
     unique_h, counts = torch.unique(h, return_counts=True)
     image_h_values = unique_h[counts >= 2]
+    print("tttt", t)
+    print("unique_h", unique_h)
+    print("counts", counts)
+    print("image_h_values", image_h_values)
+    exit()
+
     is_image_token = torch.isin(h, image_h_values)  # 形状: [N]
     
     # 2.2 识别文本token（非图像token且t=h=w）
@@ -120,10 +126,29 @@ if __name__ == "__main__":
              19]               # t6：w=t
         ]
     ])
-    
+    # pos_ids = torch.load("/llm_reco/lingzhixin/recovlm_qw0510/recovlm/position_ids.pth")
     # 处理positional id
     processed = process_pos_ids(pos_ids)
-    
+    print(pos_ids)
+    print(pos_ids[0].max(), pos_ids[0].min())
+    print(pos_ids[1].max(), pos_ids[1].min())
+    print(pos_ids[2].max(), pos_ids[2].min())
+
+
+
+    print(processed)
+    print(processed[0].max(), processed[0].min())
+    print(processed[1].max(), processed[1].min())
+    print(processed[2].max(), processed[2].min())
+    exit()
+    print("\n\n")
+    print('=' * 30)
+    # print(pos_ids[0].flatten().tolist()[:10000])
+    print(pos_ids[1].flatten().tolist()[:40000])
+    # print(pos_ids[2].flatten().tolist()[:10000])
+    exit()
+    print(processed[0].flatten().tolist()[:1000])
+    exit()
     # 打印结果与预期对比
     print("=== 处理结果验证 ===")
     print("处理后t维度:", processed[0, 0].tolist())
