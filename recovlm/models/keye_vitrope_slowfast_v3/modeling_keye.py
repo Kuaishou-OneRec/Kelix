@@ -3400,14 +3400,16 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         if dist.get_rank() == 0: torch.save(position_ids, "position_ids.pth"); exit()
 
-        # position_ids_ = position_ids + 0
+        position_ids_ = position_ids + 0
         # print("position_ids_position_ids_", position_ids_)
 
         learnable_position_ids = process_pos_ids(position_ids) 
         position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
-        print_input_info(
+        if dist.get_rank() in [0,1]: print_input_info(
             {
                 "position_ids": position_ids,
+                "position_ids_": position_ids_,
+                "learnable_position_ids": learnable_position_ids,
                 "image_grid_thw": image_grid_thw,
                 "video_grid_thw": video_grid_thw,
                 "fast_video_grid_thw": fast_video_grid_thw,
