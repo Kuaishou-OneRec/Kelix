@@ -2434,6 +2434,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        positional_embeddings = None,
         **kwargs
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -2498,7 +2499,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
         next_decoder_cache = None
 
         for i, decoder_layer in enumerate(self.layers):
-
+            hidden_states += positional_embeddings
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -3419,7 +3420,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         # position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
         position_ids = process_pos_ids(position_ids) 
         # print(position_ids.shape, inputs_embeds.shape, "inputs_embedsinputs_embeds") # torch.Size([3, 1, 82960]) torch.Size([1, 82960, 4096]) inputs_embedsinputs_embeds
-        inputs_embeds += self.thw_embeddings["t"](position_ids[0]) + self.thw_embeddings["h"](position_ids[1]) + self.thw_embeddings["w"](position_ids[2])
+        # inputs_embeds += self.thw_embeddings["t"](position_ids[0]) + self.thw_embeddings["h"](position_ids[1]) + self.thw_embeddings["w"](position_ids[2])
+        positional_embeddings = self.thw_embeddings["t"](position_ids[0]) + self.thw_embeddings["h"](position_ids[1]) + self.thw_embeddings["w"](position_ids[2])
+
 
         position_ids = position_ids[0] # t
         
@@ -3436,6 +3439,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            positional_embeddings=positional_embeddings
             **kwargs
         )
 
