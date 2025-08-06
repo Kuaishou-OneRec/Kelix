@@ -3433,6 +3433,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         #         "position_ids.pth"
         #     )
 
+        if dist.get_rank() == 0: torch.save(pos_ids, "pos_ids.pth"); exit()
+
         position_ids_ = position_ids + 0
         print("position_ids_position_ids_", position_ids_)
 
