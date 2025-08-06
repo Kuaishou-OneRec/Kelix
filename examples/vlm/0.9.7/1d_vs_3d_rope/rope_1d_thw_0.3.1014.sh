@@ -12,7 +12,7 @@ else
         echo "Git user.email: $email"
 fi
 
-sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile | head -1 > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714_2w_vtoken
@@ -124,7 +124,7 @@ nohup mpirun --allow-run-as-root \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias,visual_fast.vision_model.embeddings.packing_position_embedding.weight,fast_mlp_AR.pre_norm.weight,fast_mlp_AR.pre_norm.bias,fast_mlp_AR.linear_1.weight,fast_mlp_AR.linear_1.bias,fast_mlp_AR.linear_2.weight,fast_mlp_AR.linear_2.bias,thw_embeddings.t.weight,thw_embeddings.h.weight,thw_embeddings.w.weight' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
-                --max_length 88000 \
+                --max_length 80000 \
                 --learning_rate 2e-5 \
                 --vision_learning_rate 2e-6 \
                 --min_lr 1e-7 \
