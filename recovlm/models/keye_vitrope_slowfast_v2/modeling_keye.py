@@ -2498,7 +2498,6 @@ class Qwen3Model(Qwen3PreTrainedModel):
         next_decoder_cache = None
 
         for i, decoder_layer in enumerate(self.layers):
-
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -3321,9 +3320,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         #     cu_seqlens = torch.tensor().to()
         position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l
         # print("newposition_ids", position_ids.shape)
-        print(position_ids.shape, "eq000", torch.where(position_ids==0)[0])
-        print("newposition_idsposition_ids", position_ids.flatten().tolist()); 
-        torch.save({"position_ids": position_ids}, f"rank_{dist.get_rank()}.pth")
+        # print(position_ids.shape, "eq000", torch.where(position_ids==0)[0])
+        # print("newposition_idsposition_ids", position_ids.flatten().tolist()); 
+        # torch.save({"position_ids": position_ids}, f"rank_{dist.get_rank()}.pth")
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
