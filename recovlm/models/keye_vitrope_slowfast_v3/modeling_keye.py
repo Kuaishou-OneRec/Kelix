@@ -2859,7 +2859,7 @@ def process_pos_ids(pos_ids):
     ], dim=0)  # 按第0维堆叠，最终形状[3,1,N]
     
     return processed
-    
+
 class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     config_class = KeyeConfig
@@ -3417,8 +3417,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         #     )
 
         # position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
-        position_ids = process_pos_ids(position_ids)
-        print(position_ids.shape, inputs_embeds.shape, "inputs_embedsinputs_embeds")
+        position_ids = process_pos_ids(position_ids) 
+        # print(position_ids.shape, inputs_embeds.shape, "inputs_embedsinputs_embeds") # torch.Size([3, 1, 82960]) torch.Size([1, 82960, 4096]) inputs_embedsinputs_embeds
+        inputs_embeds += self.thw_embeddings["t"](position_ids[0]) + self.thw_embeddings["h"](position_ids[1]) + self.thw_embeddings["w"](position_ids[2])
 
         position_ids = position_ids[0] # t
         
