@@ -2749,115 +2749,94 @@ class KeyeCausalLMOutputWithPast(ModelOutput):
 
 def process_pos_ids(pos_ids):
     """
-    优化版positional id处理函数（基于PyTorch原生算子）
+    扩展版positional id处理函数（支持t/h/w全维度处理）
     
     功能：
         针对Qwen2 VL模型的positional id进行转换，规则如下：
-        1. 图像token：将h/w维度从"基准值+空间坐标"转换为从1开始的递增ID（每个图像独立计算）
-        2. 文本token：将h/w维度设置为0
-        3. 保持t维度（时序ID）不变
+        1. 非图片token（文本）：
+            - t维度 → 0
+            - h/w维度 → 0
+        2. 图片token：
+            - t维度 → 每张图片内部从1开始递增（独立计数）
+            - h维度 → 每张图片内部从1开始递增（行坐标）
+            - w维度 → 每张图片内部从1开始递增（列坐标）
     
     参数：
         pos_ids: torch.Tensor，形状为[3, 1, N]，其中：
-            - 第0维：t维度（时序ID，连续递增）
-            - 第1维：h维度（高度坐标，文本token与t相等，图像token为空间坐标）
-            - 第2维：w维度（宽度坐标，文本token与t相等，图像token为空间坐标）
+            - 第0维：t维度（时序ID）
+            - 第1维：h维度（高度坐标）
+            - 第2维：w维度（宽度坐标）
             - N为总token数量
     
     返回：
-        torch.Tensor，形状与输入一致[3, 1, N]，其中h/w维度已按规则转换
-    
-    优化点：
-        使用PyTorch张量操作替代原生Python循环，大幅提升处理效率，尤其适合大尺寸输入
+        torch.Tensor，形状与输入一致[3, 1, N]，所有维度按规则转换
     """
     # -------------------------- 1. 维度处理与初始化 --------------------------
-    # 挤压中间的维度（[3,1,N] → 提取为3个[N]的一维张量），简化后续操作
-    # t: 时序ID，h: 高度坐标，w: 宽度坐标
+    # 提取t/h/w维度（挤压中间维度，从[3,1,N]→3个[N]张量）
     t = pos_ids[0, 0]  # 形状: [N]
     h = pos_ids[1, 0]  # 形状: [N]
     w = pos_ids[2, 0]  # 形状: [N]
     
-    # 获取设备信息（确保张量操作在同一设备上执行，兼容CPU/GPU）
-    device = h.device
-    # 获取总token数量
-    n = t.numel()
+    device = h.device  # 设备兼容性处理
+    n = t.numel()      # 总token数量
     
-    # -------------------------- 2. 识别图像token --------------------------
-    # 图像token特征：同一行的patch共享相同h值，因此h值会重复出现（至少2次）
-    # 2.1 统计每个h值的出现次数（替代Python循环计数）
-    # unique_h: 所有唯一的h值；counts: 对应h值的出现次数
+    # -------------------------- 2. 识别图像/文本token --------------------------
+    # 2.1 识别图像token（h值重复出现≥2次）
     unique_h, counts = torch.unique(h, return_counts=True)
-    
-    # 2.2 筛选出图像token的h值（出现次数≥2的h值）
     image_h_values = unique_h[counts >= 2]
+    is_image_token = torch.isin(h, image_h_values)  # 形状: [N]
     
-    # 2.3 生成图像token掩码（标记哪些位置是图像token）
-    # torch.isin: 检查h中每个元素是否在image_h_values中，返回布尔张量
-    is_image_token = torch.isin(h, image_h_values)  # 形状: [N]，True表示图像token
+    # 2.2 识别文本token（非图像token且t=h=w）
+    is_text_token = ~is_image_token & (t == h) & (h == w)  # 形状: [N]
     
-    # -------------------------- 3. 识别文本token --------------------------
-    # 文本token特征：非图像token，且t=h=w（三者值相等）
-    # 使用向量化逻辑运算替代循环判断，效率更高
-    is_text_token = ~is_image_token & (t == h) & (h == w)  # 形状: [N]，True表示文本token
+    # -------------------------- 3. 初始化转换后的张量 --------------------------
+    new_t = torch.zeros_like(t)  # 非图片token默认0
+    new_h = torch.zeros_like(h)  # 非图片token默认0
+    new_w = torch.zeros_like(w)  # 非图片token默认0
     
-    # -------------------------- 4. 初始化转换后的h/w --------------------------
-    # 新建h/w张量，初始值为0（文本token的h/w最终保持0）
-    new_h = torch.zeros_like(h)  # 形状: [N]
-    new_w = torch.zeros_like(w)  # 形状: [N]
-    
-    # -------------------------- 5. 处理图像token的h/w转换 --------------------------
-    # 仅当存在图像token时执行转换（避免空操作）
+    # -------------------------- 4. 处理图像token（t/h/w同步转换） --------------------------
     if is_image_token.any():
-        # 5.1 获取所有图像token的索引（位置）
-        # torch.where返回满足条件的索引，结果为元组，取第0个元素
-        img_indices = torch.where(is_image_token)[0]  # 形状: [M]，M为图像token总数
+        # 4.1 获取图像token索引并分组（每张图片为一个连续片段）
+        img_indices = torch.where(is_image_token)[0]  # 所有图像token的位置
         
-        # 5.2 对图像token进行分组（同一图像的patch索引连续，不同图像索引不连续）
-        # 计算相邻索引的差值：连续索引差为1，不同图像的索引差>1
-        # 示例：[3,4,5,6,7,8,9,10,13,14,...] → 差值为[1,1,1,1,1,1,1,3,1,...]
+        # 计算分组标记（连续索引为同一图像）
         if img_indices.numel() > 1:
-            # 计算索引差（从第2个元素开始与前一个元素的差）
             index_diff = img_indices[1:] - img_indices[:-1]
-            # 标记非连续位置（差>1的位置为新图像的起点）
-            new_group_flags = (index_diff > 1)  # 形状: [M-1]，True表示新图像起点
+            new_group_flags = (index_diff > 1)  # 非连续处为新图像
         else:
-            # 若只有1个图像token，无需分组
             new_group_flags = torch.tensor([], device=device)
         
-        # 生成分组ID：通过累加标记实现连续片段分组
-        # 开头加1确保第一个片段分组ID从0开始，后续新片段ID递增
+        # 生成每个token的分组ID
         groups = torch.cumsum(
             torch.cat([torch.tensor([1], device=device), new_group_flags]), 
             dim=0
-        ) - 1  # 形状: [M]，同一图像的token具有相同group_id
+        ) - 1  # 形状: [M]，M为图像token总数
         
-        # 5.3 逐个图像片段处理h/w转换（每个图像独立从1开始计数）
-        # 遍历所有唯一的图像分组
+        # 4.2 逐个图像处理（t/h/w独立从1开始递增）
         for group_id in torch.unique(groups):
-            # 筛选当前分组的索引（当前图像的所有token位置）
-            group_mask = (groups == group_id)  # 形状: [M]，True表示属于当前分组
-            seg_indices = img_indices[group_mask]  # 形状: [K]，K为当前图像的token数
+            # 当前图像的所有token索引
+            group_mask = (groups == group_id)
+            seg_indices = img_indices[group_mask]  # 形状: [K]，K为当前图像token数
             
-            # 提取当前图像的原始h/w值
-            seg_h = h[seg_indices]  # 形状: [K]
-            seg_w = w[seg_indices]  # 形状: [K]
+            # -------------------- 处理t维度：从1开始递增 --------------------
+            new_t[seg_indices] = torch.arange(1, len(seg_indices)+1, device=device)
             
-            # 计算当前图像h/w的最小值（作为转换基准）
-            min_h = seg_h.min()  # 当前图像h的最小坐标
-            min_w = seg_w.min()  # 当前图像w的最小坐标
-            
-            # 转换为从1开始的递增ID：原始值 - 最小值 + 1
+            # -------------------- 处理h维度：行坐标从1开始 --------------------
+            seg_h = h[seg_indices]
+            min_h = seg_h.min()
             new_h[seg_indices] = seg_h - min_h + 1
+            
+            # -------------------- 处理w维度：列坐标从1开始 --------------------
+            seg_w = w[seg_indices]
+            min_w = seg_w.min()
             new_w[seg_indices] = seg_w - min_w + 1
     
-    # -------------------------- 6. 重组为原始形状 --------------------------
-    # 将处理后的t/h/w重组为[3,1,N]的输出形状
-    # unsqueeze(0)用于恢复中间的维度（从[N]→[1,N]）
+    # -------------------------- 5. 重组为原始形状 --------------------------
     processed = torch.stack([
-        t.unsqueeze(0),    # t维度保持不变
-        new_h.unsqueeze(0),# 转换后的h维度
-        new_w.unsqueeze(0) # 转换后的w维度
-    ], dim=0)  # 按第0维堆叠，最终形状[3,1,N]
+        new_t.unsqueeze(0),  # 处理后的t维度
+        new_h.unsqueeze(0),  # 处理后的h维度
+        new_w.unsqueeze(0)   # 处理后的w维度
+    ], dim=0)  # 最终形状[3,1,N]
     
     return processed
 
