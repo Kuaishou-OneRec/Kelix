@@ -3432,7 +3432,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         #         "position_ids.pth"
         #     )
 
-        position_ids_ = position_ids
+        position_ids_ = position_ids + 0
+        print("position_ids_position_ids_", position_ids_)
+
         learnable_position_ids = process_pos_ids(position_ids) 
         position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
 
