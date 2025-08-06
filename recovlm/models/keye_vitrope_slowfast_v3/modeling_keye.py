@@ -3451,7 +3451,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             f"positional_embeddings{dist.get_rank()}: ",
             save_path=f"positional_embeddings{dist.get_rank()}.pth"
         )
-        position_ids = position_ids[0] # t
+        # position_ids = position_ids[0] # t
         
         # print("newposition_ids", position_ids.shape)
         # print(position_ids.flatten().tolist())
