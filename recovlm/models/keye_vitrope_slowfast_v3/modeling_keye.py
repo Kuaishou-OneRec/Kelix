@@ -3435,8 +3435,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         position_ids_ = position_ids + 0
         print("position_ids_position_ids_", position_ids_)
 
-        learnable_position_ids = process_pos_ids(position_ids) 
-        position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+        learnable_position_ids = process_pos_ids(position_ids + 0) 
+        position_ids = generate_positional_id(position_ids + 0).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
 
         # print(position_ids.shape, inputs_embeds.shape, "inputs_embedsinputs_embeds") # torch.Size([3, 1, 82960]) torch.Size([1, 82960, 4096]) inputs_embedsinputs_embeds
         # inputs_embeds += self.thw_embeddings["t"](position_ids[0]) + self.thw_embeddings["h"](position_ids[1]) + self.thw_embeddings["w"](position_ids[2])
