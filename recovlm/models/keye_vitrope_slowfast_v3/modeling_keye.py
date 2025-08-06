@@ -3351,14 +3351,15 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         if dist.get_rank() == 0: torch.save(position_ids, "position_ids.pth"); exit()
 
-        position_ids_ = position_ids + 0
-        print("position_ids_position_ids_", position_ids_)
+        # position_ids_ = position_ids + 0
+        # print("position_ids_position_ids_", position_ids_)
 
         # learnable_position_ids = process_pos_ids(position_ids) 
         # position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
         # fast_vid_pad = 151678
         # vid_pad = 151656
         # image_pad = 151655
+        print(input_ids)
         print({
                 "position_ids": position_ids,
                 "image_grid_thw": image_grid_thw,
@@ -3369,6 +3370,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 "vid_pad": (input_ids == vid_pad).sum(),
                 "image_pad": (input_ids == image_pad).sum(),
             })
+        exit()
         print_input_info(
             {
                 "position_ids": position_ids,
