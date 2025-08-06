@@ -3416,7 +3416,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 "vid_pad": (input_ids == vid_pad).sum(),
                 "image_pad": (input_ids == image_pad).sum(),
             },
-            "position_idsposition_ids: "，
+            "position_idsposition_ids: ",
             save_path=f"pos_id_rank{dist.get_rank()}.pth"
         )
         # exit()
