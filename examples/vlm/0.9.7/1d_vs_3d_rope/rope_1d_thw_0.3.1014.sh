@@ -120,7 +120,7 @@ nohup mpirun --allow-run-as-root \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
 		--dataset_config examples/vlm/0.9.7/1d_vs_3d_rope/exp_0.3.1014.json \
-		--model_class KeyeForConditionalGeneration_vitrope_slowfast_v3 \
+		--model_class KeyeForConditionalGeneration_vitrope_slowfast_v2 \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias,visual_fast.vision_model.embeddings.packing_position_embedding.weight,fast_mlp_AR.pre_norm.weight,fast_mlp_AR.pre_norm.bias,fast_mlp_AR.linear_1.weight,fast_mlp_AR.linear_1.bias,fast_mlp_AR.linear_2.weight,fast_mlp_AR.linear_2.bias,thw_embeddings.t.weight,thw_embeddings.h.weight,thw_embeddings.w.weight' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
