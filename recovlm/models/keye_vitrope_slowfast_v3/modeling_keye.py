@@ -3412,9 +3412,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 "video_grid_thw": video_grid_thw,
                 "fast_video_grid_thw": fast_video_grid_thw,
                 "input_ids": input_ids,
-                "fast_vid_pad": (input_ids == fast_vid_pad).sum(),
-                "vid_pad": (input_ids == vid_pad).sum(),
-                "image_pad": (input_ids == image_pad).sum(),
+                # "fast_vid_pad": (input_ids == fast_vid_pad).sum(),
+                # "vid_pad": (input_ids == vid_pad).sum(),
+                # "image_pad": (input_ids == image_pad).sum(),
             },
             "position_idsposition_ids: ",
             save_path=f"pos_id_rank{dist.get_rank()}.pth"
