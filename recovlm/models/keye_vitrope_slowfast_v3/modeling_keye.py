@@ -1856,6 +1856,7 @@ class Qwen3RotaryEmbedding(nn.Module):
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+            print("inv_freq_expandedinv_freq_expanded", inv_freq_expanded.shape, position_ids_expanded.shape)
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -3429,10 +3430,12 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         
         # print(position_ids.shape, inputs_embeds.shape, "inputs_embedsinputs_embeds") # torch.Size([3, 1, 82960]) torch.Size([1, 82960, 4096]) inputs_embedsinputs_embeds
         # inputs_embeds += self.thw_embeddings["t"](position_ids[0]) + self.thw_embeddings["h"](position_ids[1]) + self.thw_embeddings["w"](position_ids[2])
+
+        print("learnable_position_idslearnable_position_idslearnable_position_ids", learnable_position_ids.shape)
         positional_embeddings = self.thw_embeddings["t"](learnable_position_ids[0]) + self.thw_embeddings["h"](learnable_position_ids[1]) + self.thw_embeddings["w"](learnable_position_ids[2])
         
         print("positional_embeddingspositional_embeddings", self.thw_embeddings)
-        print("positional_embeddingspositional_embeddings", learnable_position_ids.shape, positional_embeddings.shape)
+        print("positional_embeddingspositional_embeddings", learnable_position_ids.shape, positional_embeddings.shape, input_ids.shape)
         # if dist.get_rank() in [0]:
         #     print("position_ids_position_ids_", position_ids_.shape, position_ids_)
         #     print("position_idsposition_ids", position_ids.shape, position_ids)
