@@ -2499,7 +2499,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
         next_decoder_cache = None
 
         for i, decoder_layer in enumerate(self.layers):
-            hidden_states += positional_embeddings
+            if positional_embeddings is not None: hidden_states += positional_embeddings
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -3472,7 +3472,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            positional_embeddings=positional_embeddings,
+            # positional_embeddings=positional_embeddings,
             **kwargs
         )
 
