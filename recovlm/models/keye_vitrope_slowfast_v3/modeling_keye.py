@@ -3317,15 +3317,24 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         # print(cu_seqlens)
         # print("origgggg", position_ids.shape, cu_seqlens.shape) # origgggg torch.Size([3, 1, 75872]) torch.Size([2])
         # print(position_ids)
-        print("position_ids0000", position_ids[0].flatten().tolist())
-        print("position_ids1111", position_ids[1].flatten().tolist())
-        print("position_ids2222", position_ids[2].flatten().tolist())
-        print("position_ids1122", (position_ids[1] + position_ids[2]).flatten().tolist())
-        # if 'cu_seqlens' in kwargs:
-        #     cu_seqlens = kwargs["cu_seqlens"]
-        # else:
-        #     cu_seqlens = torch.tensor().to()
-        print("position_ids=", position_ids)
+        # print("position_ids0000", position_ids[0].flatten().tolist())
+        # print("position_ids1111", position_ids[1].flatten().tolist())
+        # print("position_ids2222", position_ids[2].flatten().tolist())
+        # print("position_ids1122", (position_ids[1] + position_ids[2]).flatten().tolist())
+        # # if 'cu_seqlens' in kwargs:
+        # #     cu_seqlens = kwargs["cu_seqlens"]
+        # # else:
+        # #     cu_seqlens = torch.tensor().to()
+        # print("position_ids=", position_ids)
+        position_ids_ = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+        if dist.get_rank() == 0:
+            torch.save(
+                {
+                    "position_ids": position_ids.detach().cpu(),
+                    "position_ids_ori": position_ids_,
+                },
+                "position_ids.pth"
+            )
 
         position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
         # print("newposition_ids", position_ids.shape)
