@@ -3432,7 +3432,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         # inputs_embeds += self.thw_embeddings["t"](position_ids[0]) + self.thw_embeddings["h"](position_ids[1]) + self.thw_embeddings["w"](position_ids[2])
 
         if 1:
-            print("learnable_position_idslearnable_position_idslearnable_position_ids", learnable_position_ids.shape)
+            print("learnable_position_idslearnable_position_idslearnable_position_ids", learnable_position_ids.shape, learnable_position_ids.max())
             positional_embeddings = self.thw_embeddings["t"](learnable_position_ids[0]) + self.thw_embeddings["h"](learnable_position_ids[1]) + self.thw_embeddings["w"](learnable_position_ids[2])
             
             print("positional_embeddingspositional_embeddings", self.thw_embeddings)
