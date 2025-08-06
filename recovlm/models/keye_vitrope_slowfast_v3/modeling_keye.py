@@ -3289,6 +3289,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             vid_pad = 151656
             image_pad = 151655
             is_image_token = (input_ids == fast_vid_pad) | (input_ids == vid_pad) | (input_ids == image_pad)
+            subsequence_starts = torch.where(seq == 0)[0].tolist()
 
             return processed
 
@@ -3354,7 +3355,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         print("position_ids_position_ids_", position_ids_)
 
         # learnable_position_ids = process_pos_ids(position_ids) 
-        position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+        # position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
         # fast_vid_pad = 151678
         # vid_pad = 151656
         # image_pad = 151655
