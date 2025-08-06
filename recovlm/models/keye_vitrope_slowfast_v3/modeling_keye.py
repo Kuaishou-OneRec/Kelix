@@ -3279,40 +3279,65 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
 
 
-        def generate_positional_id(thw):
-            """
-            将3x1xL的张量转换为1D positional_id矩阵
+        import torch
+
+        def process_pos_ids(pos_ids):
+            """处理positional id的函数（复用之前修正的版本）"""
+            # 提取一维列表（简化处理）
+            t = pos_ids[0, 0].tolist()
+            h = pos_ids[1, 0].tolist()
+            w = pos_ids[2, 0].tolist()
             
-            参数:
-                thw: 形状为(3, 1, L)的PyTorch张量
+            # 识别图像token：h值重复出现（同一行的多个patch）
+            h_counts = {}
+            for i, val in enumerate(h):
+                h_counts[val] = h_counts.get(val, []) + [i]
+            image_h_values = [k for k, v in h_counts.items() if len(v) >= 2]  # 图像h值至少出现2次
             
-            返回:
-                positional_id: 形状为(L,)的1D张量，包含连续的序列编号
-            """
-            # 检查输入形状是否正确
-            assert thw.shape[0] == 3 and thw.shape[1] == 1, "输入必须是3x1xL的张量"
+            is_image_token = [False] * len(t)
+            for i in range(len(t)):
+                if h[i] in image_h_values:
+                    is_image_token[i] = True  # 标记图像token
             
-            # 取出第一位置并flatten
-            seq = thw[0, 0, :].flatten()  # 形状变为(L,)
+            # 识别文本token：非图像token且t=h=w
+            is_text_token = [not is_image_token[i] and (t[i]==h[i]==w[i]) for i in range(len(t))]
             
-            # 识别子序列边界（假设以0为新子序列的开始）
-            subsequence_starts = torch.where(seq == 0)[0].tolist()
-            L = seq.numel()
-            positional_id = torch.zeros_like(seq, dtype=torch.long)
+            # 处理h/w维度
+            new_h = [0] * len(t)
+            new_w = [0] * len(t)
             
-            # 处理每个子序列
-            for i, start in enumerate(subsequence_starts):
-                # 确定当前子序列的结束位置
-                if i < len(subsequence_starts) - 1:
-                    end = subsequence_starts[i + 1]
+            # 提取图像token的h/w值并计算基准（按图像分组处理）
+            # 1. 找到所有图像片段的起始和结束索引
+            image_segments = []
+            current_segment = []
+            for i in range(len(is_image_token)):
+                if is_image_token[i]:
+                    current_segment.append(i)
                 else:
-                    end = L
-                
-                # 为当前子序列生成连续编号
-                subsequence_length = end - start
-                positional_id[start:end] = torch.arange(subsequence_length, dtype=torch.long)
+                    if current_segment:
+                        image_segments.append(current_segment)
+                        current_segment = []
+            if current_segment:  # 处理最后一个图像片段
+                image_segments.append(current_segment)
             
-            return positional_id
+            # 2. 每个图像单独转换h/w（确保各自从1开始）
+            for seg in image_segments:
+                seg_h = [h[i] for i in seg]
+                seg_w = [w[i] for i in seg]
+                min_h_seg = min(seg_h)
+                min_w_seg = min(seg_w)
+                for i in seg:
+                    new_h[i] = h[i] - min_h_seg + 1
+                    new_w[i] = w[i] - min_w_seg + 1
+            
+            # 重组为原始张量形状
+            processed = torch.tensor([
+                [t],   # t维度不变
+                [new_h],
+                [new_w]
+            ])
+            
+            return processed
 
         # print(cu_seqlens)
         # print("origgggg", position_ids.shape, cu_seqlens.shape) # origgggg torch.Size([3, 1, 75872]) torch.Size([2])
@@ -3326,17 +3351,22 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         # # else:
         # #     cu_seqlens = torch.tensor().to()
         # print("position_ids=", position_ids)
-        position_ids_ = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
-        if dist.get_rank() == 0:
-            torch.save(
-                {
-                    "position_ids": position_ids.detach().cpu(),
-                    "position_ids_ori": position_ids_,
-                },
-                "position_ids.pth"
-            )
+        # position_ids_ = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+        # if dist.get_rank() == 0:
+        #     torch.save(
+        #         {
+        #             "position_ids": position_ids.detach().cpu(),
+        #             "position_ids_ori": position_ids_,
+        #         },
+        #         "position_ids.pth"
+        #     )
 
-        position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+        # position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+        position_ids = process_pos_ids(position_ids)
+        print(position_ids.shape, inputs_embeds.shape, "inputs_embedsinputs_embeds")
+
+        position_ids = position_ids[0] # t
+        
         # print("newposition_ids", position_ids.shape)
         # print(position_ids.flatten().tolist())
         outputs = self.model(
