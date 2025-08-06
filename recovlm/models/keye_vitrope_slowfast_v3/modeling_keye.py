@@ -2840,6 +2840,42 @@ def process_pos_ids(pos_ids):
     
     return processed
 
+
+def generate_positional_id(thw):
+    """
+    将3x1xL的张量转换为1D positional_id矩阵
+    
+    参数:
+        thw: 形状为(3, 1, L)的PyTorch张量
+    
+    返回:
+        positional_id: 形状为(L,)的1D张量，包含连续的序列编号
+    """
+    # 检查输入形状是否正确
+    assert thw.shape[0] == 3 and thw.shape[1] == 1, "输入必须是3x1xL的张量"
+    
+    # 取出第一位置并flatten
+    seq = thw[0, 0, :].flatten()  # 形状变为(L,)
+    
+    # 识别子序列边界（假设以0为新子序列的开始）
+    subsequence_starts = torch.where(seq == 0)[0].tolist()
+    L = seq.numel()
+    positional_id = torch.zeros_like(seq, dtype=torch.long)
+    
+    # 处理每个子序列
+    for i, start in enumerate(subsequence_starts):
+        # 确定当前子序列的结束位置
+        if i < len(subsequence_starts) - 1:
+            end = subsequence_starts[i + 1]
+        else:
+            end = L
+        
+        # 为当前子序列生成连续编号
+        subsequence_length = end - start
+        positional_id[start:end] = torch.arange(subsequence_length, dtype=torch.long)
+    
+    return positional_id
+
 class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     config_class = KeyeConfig
@@ -3396,13 +3432,25 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         #         "position_ids.pth"
         #     )
 
-        # position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+        position_ids_ = position_ids
         learnable_position_ids = process_pos_ids(position_ids) 
+        position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+
         # print(position_ids.shape, inputs_embeds.shape, "inputs_embedsinputs_embeds") # torch.Size([3, 1, 82960]) torch.Size([1, 82960, 4096]) inputs_embedsinputs_embeds
         # inputs_embeds += self.thw_embeddings["t"](position_ids[0]) + self.thw_embeddings["h"](position_ids[1]) + self.thw_embeddings["w"](position_ids[2])
         positional_embeddings = self.thw_embeddings["t"](learnable_position_ids[0]) + self.thw_embeddings["h"](learnable_position_ids[1]) + self.thw_embeddings["w"](learnable_position_ids[2])
 
+        if dist.get_rank() in [0,1]: print_input_info(
+            {
+                "position_ids_": position_ids_,
+                "position_ids": position_ids,
+                "learnable_position_ids": learnable_position_ids,
 
+            }
+            ,
+            f"positional_embeddings{dist.get_rank()}: "
+            save_path=f"positional_embeddings{dist.get_rank()}.pth"
+        )
         position_ids = position_ids[0] # t
         
         # print("newposition_ids", position_ids.shape)
