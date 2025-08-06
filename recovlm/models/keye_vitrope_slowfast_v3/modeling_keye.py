@@ -3440,13 +3440,19 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         learnable_position_ids = process_pos_ids(position_ids) 
         position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
-
+        # fast_vid_pad = 151678
+        # vid_pad = 151656
+        # image_pad = 151655
         if dist.get_rank() == 0: print_input_info(
             {
                 "position_ids": position_ids,
                 "image_grid_thw": image_grid_thw,
                 "video_grid_thw": video_grid_thw,
-                "fast_video_grid_thw": fast_video_grid_thw
+                "fast_video_grid_thw": fast_video_grid_thw,
+                "input_ids": input_ids,
+                "fast_vid_pad": (input_ids == fast_vid_pad).sum(),
+                "vid_pad": (input_ids == vid_pad).sum(),
+                "image_pad": (input_ids == image_pad).sum(),
             },
             "position_idsposition_ids"
         )
