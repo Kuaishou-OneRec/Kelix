@@ -3424,7 +3424,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         # learnable_position_ids[0].max(), learnable_position_ids[0].min(),
         # learnable_position_ids[1].max(), learnable_position_ids[1].min(),
         # learnable_position_ids[2].max(), learnable_position_ids[2].min(),
-        )
+        
         # print(position_ids.shape, inputs_embeds.shape, "inputs_embedsinputs_embeds") # torch.Size([3, 1, 82960]) torch.Size([1, 82960, 4096]) inputs_embedsinputs_embeds
         # inputs_embeds += self.thw_embeddings["t"](position_ids[0]) + self.thw_embeddings["h"](position_ids[1]) + self.thw_embeddings["w"](position_ids[2])
         positional_embeddings = self.thw_embeddings["t"](learnable_position_ids[0]) + self.thw_embeddings["h"](learnable_position_ids[1]) + self.thw_embeddings["w"](learnable_position_ids[2])
