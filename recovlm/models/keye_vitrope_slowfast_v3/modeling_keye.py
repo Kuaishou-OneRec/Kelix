@@ -3408,7 +3408,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
         if dist.get_rank() in [0,1]: 
             save_path = f"pos_id_rank{dist.get_rank()}.pth"
-            print("beforecalllll", save_path)
             print_input_info(
             {
                 "position_ids": position_ids,
