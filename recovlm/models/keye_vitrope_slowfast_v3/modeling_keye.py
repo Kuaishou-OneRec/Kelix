@@ -2490,7 +2490,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
             # print("position_embeddingsposition_embeddingsposition_embeddings", sin.shape)
             position_embeddings = (sin[..., start:end, :], cos[..., start:end, :])
             hidden_states = hidden_states[:, start:end, :]
-
+            positional_embeddings = positional_embeddings[:, start:end, :]
 
 
         # decoder layers
