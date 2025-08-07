@@ -31,15 +31,12 @@ messages = [
         {"role": "user", 
         "content": 
         [
-            # {"type": "video", 
-            # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_1mb.mp4", "video_total_pixels": 28*28*256}, 
-            # {"type": "video", 
-            # "video": ["/llm_reco_ssd/caojiangxia/vllm/test_image.png", "/llm_reco_ssd/caojiangxia/vllm/test_image.png"]},
             {"type": "video", 
-            "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_1mb.mp4", "video_total_pixels": 28*28*256}, 
+            "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_1mb.mp4", "video_total_pixels": 28*28*128}, 
+            #{"type": "video", 
+            #"video": ["/llm_reco_ssd/caojiangxia/vllm/test_image.png", "/llm_reco_ssd/caojiangxia/vllm/test_image.png"]},
             {"type": "text", 
-            "text": "\\What is this?"}]},
-    ]
+            "text": "What?"}]},]
 text = processor.apply_chat_template(
     messages, tokenize=False, add_generation_prompt=False
 )
@@ -52,7 +49,8 @@ inputs = processor(
         return_tensors="pt",
     )
 print_input_info(
-    inputs, "inputsinputs"
+    inputs, 
+    # "inputsinputs"
 )
 inputs["position_ids"] = get_rope_index_slowfast(
           input_ids = inputs["input_ids"],
@@ -62,47 +60,54 @@ inputs["position_ids"] = get_rope_index_slowfast(
           image_token_id=151655,
           video_token_id=151656,
           fast_video_token_id=151678,
-          spatial_merge_size=28,
+          spatial_merge_size=2,
           vision_start_token_id=151652,
       )
-print(inputs)
-exit()
+
 '''
+inputsinputsDict: keys=7
 inputsinputs'input_ids':
-inputsinputs  Tensor: shape=(7488, 3, 14, 14), dtype=torch.bfloat16, device=cpu, data=tensor([0.9922, 0.9922, 0.9922, 0.9922], dtype=torch.bfloat16)...tensor([0.9922, 0.9922, 0.9922, 0.9922], dtype=torch.bfloat16)
-inputsinputs    stat0:  Full - mean: 0.934975, variance: 0.046155, max: 1.000000, min: -1.000000, non-zeros: 4402944
-inputsinputs    stat1:  first half (2201472 elements) - mean: 0.899500, variance: 0.067203, max: 1.000000, min: -1.000000, non-zeros: 2201472
-inputsinputs    stat2:  first 1000000 elements (magnitude-based) - mean: 0.938488, variance: 0.061735, max: 1.000000, min: -1.000000, non-zeros: 1000000
-inputsinputs    stat3:  first 100000 elements (1/10 of magnitude-based) - mean: 0.992188, variance: 0.000000, max: 0.992188, min: 0.992188, non-zeros: 100000
-inputsinputs'image_grid_thw':
-inputsinputs  Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 96, 78])...tensor([ 1, 96, 78])
-inputsinputs    stat0:  Full - mean: 58.333332, variance: 1697.555542, max: 96.000000, min: 1.000000, non-zeros: 3
-inputsinputs    stat1:  first half (2 elements) - mean: 48.500000, variance: 2256.250000, max: 96.000000, min: 1.000000, non-zeros: 2
-inputsinputs    stat2:  first 1 elements (magnitude-based) - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 1
-inputsinputs    stat3:  no elements (1/10 of magnitude-based <= 0) - mean: nan, variance: nan, max: nan, min: nan, non-zeros: 0
-inputsinputs'loss_mask':
-inputsinputs  Tensor: shape=(1, 4304), dtype=torch.int64, device=cpu, data=tensor([151644,   8948,    198,   2610])...tensor([  1773, 151645,    198, 151643])
-inputsinputs    stat0:  Full - mean: 149221.796875, variance: 263340624.000000, max: 151655.000000, min: 13.000000, non-zeros: 4304
-inputsinputs    stat1:  first half (2152 elements) - mean: 150899.593750, variance: 111227776.000000, max: 151655.000000, min: 13.000000, non-zeros: 2152
-inputsinputs    stat2:  first 1000 elements (magnitude-based) - mean: 150029.375000, variance: 237947536.000000, max: 151655.000000, min: 13.000000, non-zeros: 1000
-inputsinputs    stat3:  first 100 elements (1/10 of magnitude-based) - mean: 135398.828125, variance: 2141638656.000000, max: 151655.000000, min: 13.000000, non-zeros: 100
+inputsinputs  Tensor: shape=(1, 4121), dtype=torch.int64, device=cpu, data=tensor([151644,   8948,    198,   2610])...tensor([    13, 151645,    198, 151643])
+inputsinputs    stat0:  Full - mean: 143933.843750, variance: 1085754496.000000, max: 151680.000000, min: 13.000000, non-zeros: 4121
+inputsinputs    stat1:  first half (2061 elements) - mean: 147785.687500, variance: 570349824.000000, max: 151680.000000, min: 13.000000, non-zeros: 2061
+inputsinputs    stat2:  first 1000 elements (magnitude-based) - mean: 146853.984375, variance: 700425984.000000, max: 151680.000000, min: 13.000000, non-zeros: 1000
+inputsinputs    stat3:  first 100 elements (1/10 of magnitude-based) - mean: 130850.640625, variance: 2662927104.000000, max: 151677.000000, min: 13.000000, non-zeros: 100
 inputsinputs'attention_mask':
-inputsinputs  Tensor: shape=(112860, 3, 14, 14), dtype=torch.bfloat16, device=cpu, data=tensor([0.6953, 0.6953, 0.6953, 0.7031], dtype=torch.bfloat16)...tensor([-0.1138, -0.1138, -0.1216, -0.2793], dtype=torch.bfloat16)
-inputsinputs    stat0:  Full - mean: -0.062706, variance: 0.302617, max: 1.000000, min: -1.000000, non-zeros: 66361680
-inputsinputs    stat1:  first half (33180840 elements) - mean: -0.078084, variance: 0.316160, max: 1.000000, min: -1.000000, non-zeros: 33180840
-inputsinputs    stat2:  first 10000000 elements (magnitude-based) - mean: 0.011265, variance: 0.341314, max: 1.000000, min: -1.000000, non-zeros: 10000000
-inputsinputs    stat3:  first 1000000 elements (1/10 of magnitude-based) - mean: 0.325201, variance: 0.337852, max: 1.000000, min: -1.000000, non-zeros: 1000000
+inputsinputs  Tensor: shape=(1, 4121), dtype=torch.int64, device=cpu, data=tensor([1, 1, 1, 1])...tensor([1, 1, 1, 1])
+inputsinputs    stat0:  Full - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 4121
+inputsinputs    stat1:  first half (2061 elements) - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 2061
+inputsinputs    stat2:  first 1000 elements (magnitude-based) - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 1000
+inputsinputs    stat3:  first 100 elements (1/10 of magnitude-based) - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 100
+inputsinputs'pixel_values_videos':
+inputsinputs  Tensor: shape=(9568, 3, 14, 14), dtype=torch.bfloat16, device=cpu, data=tensor([0.6016, 0.6016, 0.6016, 0.6016], dtype=torch.bfloat16)...tensor([-0.2793, -0.2793, -0.2793, -0.2793], dtype=torch.bfloat16)
+inputsinputs    stat0:  Full - mean: 0.007288, variance: 0.176313, max: 1.000000, min: -1.000000, non-zeros: 5625984
+inputsinputs    stat1:  first half (2812992 elements) - mean: 0.031437, variance: 0.173733, max: 1.000000, min: -1.000000, non-zeros: 2812992
+inputsinputs    stat2:  first 1000000 elements (magnitude-based) - mean: 0.027855, variance: 0.156929, max: 1.000000, min: -1.000000, non-zeros: 1000000
+inputsinputs    stat3:  first 100000 elements (1/10 of magnitude-based) - mean: 0.247987, variance: 0.060637, max: 1.000000, min: -0.648438, non-zeros: 100000
+inputsinputs'video_grid_thw':
+inputsinputs  Tensor: shape=(8, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 46, 26,  1])...tensor([26,  1, 46, 26])
+inputsinputs    stat0:  Full - mean: 24.333334, variance: 338.888885, max: 46.000000, min: 1.000000, non-zeros: 24
+inputsinputs    stat1:  first half (12 elements) - mean: 24.333334, variance: 338.888885, max: 46.000000, min: 1.000000, non-zeros: 12
+inputsinputs    stat2:  first 10 elements (magnitude-based) - mean: 22.000000, variance: 354.000000, max: 46.000000, min: 1.000000, non-zeros: 10
+inputsinputs    stat3:  first 1 elements (1/10 of magnitude-based) - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 1
+inputsinputs'fast_pixel_values_videos':
+inputsinputs  Tensor: shape=(5712, 3, 14, 14), dtype=torch.bfloat16, device=cpu, data=tensor([-0.1138, -0.1138, -0.1138, -0.1138], dtype=torch.bfloat16)...tensor([-0.3340, -0.3340, -0.3340, -0.3262], dtype=torch.bfloat16)
+inputsinputs    stat0:  Full - mean: -0.016213, variance: 0.183880, max: 1.000000, min: -1.000000, non-zeros: 3358656
+inputsinputs    stat1:  first half (1679328 elements) - mean: 0.005986, variance: 0.186451, max: 1.000000, min: -1.000000, non-zeros: 1679328
+inputsinputs    stat2:  first 1000000 elements (magnitude-based) - mean: -0.015328, variance: 0.194884, max: 1.000000, min: -1.000000, non-zeros: 1000000
+inputsinputs    stat3:  first 100000 elements (1/10 of magnitude-based) - mean: 0.040561, variance: 0.123877, max: 1.000000, min: -1.000000, non-zeros: 100000
 inputsinputs'fast_video_grid_thw':
-inputsinputs  Tensor: shape=(1, 2120), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([1, 1, 1, 0])
-inputsinputs    stat0:  Full - mean: 0.082547, variance: 0.075733, max: 1.000000, min: 0.000000, non-zeros: 175
-inputsinputs    stat1:  first half (1060 elements) - mean: 0.000000, variance: 0.000000, max: 0.000000, min: 0.000000, non-zeros: 0
+inputsinputs  Tensor: shape=(17, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 24, 14,  1])...tensor([14,  1, 24, 14])
+inputsinputs    stat0:  Full - mean: 13.000000, variance: 88.666664, max: 24.000000, min: 1.000000, non-zeros: 51
+inputsinputs    stat1:  first half (26 elements) - mean: 12.961538, variance: 92.036980, max: 24.000000, min: 1.000000, non-zeros: 26
+inputsinputs    stat2:  first 10 elements (magnitude-based) - mean: 11.800000, variance: 92.760002, max: 24.000000, min: 1.000000, non-zeros: 10
+inputsinputs    stat3:  first 1 elements (1/10 of magnitude-based) - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 1
+inputsinputs'loss_mask':
+inputsinputs  Tensor: shape=(1, 4121), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([1, 1, 1, 0])
+inputsinputs    stat0:  Full - mean: 0.014317, variance: 0.014112, max: 1.000000, min: 0.000000, non-zeros: 59
+inputsinputs    stat1:  first half (2061 elements) - mean: 0.000000, variance: 0.000000, max: 0.000000, min: 0.000000, non-zeros: 0
 inputsinputs    stat2:  first 1000 elements (magnitude-based) - mean: 0.000000, variance: 0.000000, max: 0.000000, min: 0.000000, non-zeros: 0
 inputsinputs    stat3:  first 100 elements (1/10 of magnitude-based) - mean: 0.000000, variance: 0.000000, max: 0.000000, min: 0.000000, non-zeros: 0
-inputsinputs  Tensor: shape=(135, 3), dtype=torch.int64, device=cpu, data=tensor([ 1, 22, 38,  1])...tensor([38,  1, 22, 38])
-inputsinputs    stat0:  Full - mean: 20.333334, variance: 229.555557, max: 38.000000, min: 1.000000, non-zeros: 405
-inputsinputs    stat1:  first half (203 elements) - mean: 20.246305, variance: 229.141312, max: 38.000000, min: 1.000000, non-zeros: 203
-inputsinputs    stat2:  first 100 elements (magnitude-based) - mean: 20.139999, variance: 230.960403, max: 38.000000, min: 1.000000, non-zeros: 100
-inputsinputs    stat3:  first 10 elements (1/10 of magnitude-based) - mean: 18.400000, variance: 240.240005, max: 38.000000, min: 1.000000, non-zeros: 10
 '''
 import torch
 
@@ -123,7 +128,9 @@ def process_pos_ids(pos_ids, input_ids):
     w = pos_ids[2, 0]
     device = t.device
     N = t.numel()  # 总token数
-
+    fast_vid_pad = 151678
+    vid_pad = 151656
+    image_pad = 151655
     is_image_token = (input_ids == fast_vid_pad) | (input_ids == vid_pad) | (input_ids == image_pad)
     is_image_token = is_image_token[0]
 
@@ -173,8 +180,9 @@ def process_pos_ids(pos_ids, input_ids):
 
 # 测试用例
 if __name__ == "__main__":
-    pass
-
+    pos_ids = inputs["position_ids"]
+    print(process_pos_ids(pos_ids, inputs["input_ids"]))
+    exit()
 
 # 输入是
 pos_ids = torch.tensor([
@@ -217,3 +225,34 @@ is_image_token=[0,0,0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0]
 #以及一个bool类型的
 is_video_token=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0]
 
+'''
+'position_ids': tensor([[[ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
+          17, 18, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19,
+          19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19,
+          19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19,
+          19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 29, 30, 31, 32, 33, 33,
+          33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
+          33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
+          33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
+          33, 33, 33, 33, 33, 33, 33, 43, 44, 45, 46, 47]],
+
+        [[ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
+          17, 18, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 20, 20, 20, 20, 20,
+          20, 20, 20, 20, 20, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 22, 22,
+          22, 22, 22, 22, 22, 22, 22, 22, 23, 23, 23, 23, 23, 23, 23, 23, 23,
+          23, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 29, 30, 31, 32, 33, 33,
+          33, 33, 33, 33, 33, 33, 33, 33, 34, 34, 34, 34, 34, 34, 34, 34, 34,
+          34, 35, 35, 35, 35, 35, 35, 35, 35, 35, 35, 36, 36, 36, 36, 36, 36,
+          36, 36, 36, 36, 37, 37, 37, 37, 37, 37, 37, 37, 37, 37, 38, 38, 38,
+          38, 38, 38, 38, 38, 38, 38, 43, 44, 45, 46, 47]],
+
+        [[ 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16,
+          17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 19, 20, 21, 22, 23,
+          24, 25, 26, 27, 28, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 19, 20,
+          21, 22, 23, 24, 25, 26, 27, 28, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+          28, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34,
+          35, 36, 37, 38, 39, 40, 41, 42, 33, 34, 35, 36, 37, 38, 39, 40, 41,
+          42, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 33, 34, 35, 36, 37, 38,
+          39, 40, 41, 42, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 33, 34, 35,
+          36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]]])}
+'''

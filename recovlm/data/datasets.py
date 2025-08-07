@@ -1379,10 +1379,6 @@ class ChatCompletionVisionDataset(IterableDataset):
         )
 
     if isinstance(self, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast):
-      if 'fast_video_grid_thw' in inputs: print_input_info(
-        inputs,
-        "inputsinputs"
-      )
       inputs["position_ids"] = get_rope_index_slowfast(
           input_ids = inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw", None),

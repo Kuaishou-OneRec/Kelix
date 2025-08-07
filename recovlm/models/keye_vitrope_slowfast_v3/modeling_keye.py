@@ -2765,9 +2765,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.rope_deltas = None  # cache rope_deltas here
 
-        t_size, g_size, w_size = getattr(config, "t_size", 20480), getattr(config, "h_size", 20480), getattr(config, "w_size", 20480)
-        self.thw_embeddings = nn.ModuleDict({
-            "t": nn.Embedding(t_size, config.hidden_size),
+        g_size, w_size = getattr(config, "h_size", 20480), getattr(config, "w_size", 20480)
+        self.hw_embeddings = nn.ModuleDict({
+            # "t": nn.Embedding(t_size, config.hidden_size),
             "h": nn.Embedding(g_size, config.hidden_size),
             "w": nn.Embedding(w_size, config.hidden_size),
         })
@@ -3292,7 +3292,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             is_image_token = is_image_token[0]
 
             # 提取t/h/w维度（形状：[N]）
-            t = pos_ids[0, 0]
+            # t = pos_ids[0, 0]
             h = pos_ids[1, 0]
             w = pos_ids[2, 0]
             device = t.device
@@ -3302,7 +3302,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             is_image = torch.tensor(is_image_token, dtype=torch.bool, device=device)
             
             # 初始化结果张量为长整型（解决类型不匹配问题）
-            new_t = torch.zeros(N, device=device, dtype=torch.long)
+            # new_t = torch.zeros(N, device=device, dtype=torch.long)
             new_h = torch.zeros(N, device=device, dtype=torch.long)
             new_w = torch.zeros(N, device=device, dtype=torch.long)
             
@@ -3325,7 +3325,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     k = len(indices)  # 当前图像的token数量
                     
                     # 处理t维度：1~k递增
-                    new_t[indices] = torch.arange(1, k+1, device=device)
+                    # new_t[indices] = torch.arange(1, k+1, device=device)
                     
                     # 处理h维度：组内最小值为基准
                     group_h = h[indices]
@@ -3337,7 +3337,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             
             # 重组为原始形状[3,1,N]
             return torch.stack([
-                new_t.unsqueeze(0),
+                # new_t.unsqueeze(0),
                 new_h.unsqueeze(0),
                 new_w.unsqueeze(0)
             ], dim=0)
@@ -3403,7 +3403,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         position_ids_ = position_ids + 0
         # print("position_ids_position_ids_", position_ids_)
 
-        learnable_position_ids = process_pos_ids(position_ids.detach() + 0).detach() + 0 
+        learnable_position_ids = process_pos_ids(position_ids)
         position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
         if dist.get_rank() in [0,1]: 
             save_path = f"pos_id_rank{dist.get_rank()}.pth"
@@ -3431,18 +3431,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         # learnable_position_ids[0].max(), learnable_position_ids[0].min(),
         # learnable_position_ids[1].max(), learnable_position_ids[1].min(),
         # learnable_position_ids[2].max(), learnable_position_ids[2].min(),
-        
-        # print(position_ids.shape, inputs_embeds.shape, "inputs_embedsinputs_embeds") # torch.Size([3, 1, 82960]) torch.Size([1, 82960, 4096]) inputs_embedsinputs_embeds
-        # inputs_embeds += self.thw_embeddings["t"](position_ids[0]) + self.thw_embeddings["h"](position_ids[1]) + self.thw_embeddings["w"](position_ids[2])
 
-        if 1:
-            print("learnable_position_idslearnable_position_idslearnable_position_ids", 
-                learnable_position_ids.shape, learnable_position_ids.max(), learnable_position_ids[0].max(),
-                learnable_position_ids[1].max(), learnable_position_ids[2].max())
-            positional_embeddings = self.thw_embeddings["t"](learnable_position_ids[0]) + self.thw_embeddings["h"](learnable_position_ids[1]) + self.thw_embeddings["w"](learnable_position_ids[2])
-            
-            print("positional_embeddingspositional_embeddings", self.thw_embeddings)
-            print("positional_embeddingspositional_embeddings", learnable_position_ids.shape, positional_embeddings.shape, input_ids.shape)
+        positional_embeddings = self.hw_embeddings["h"](learnable_position_ids[0]) + self.hw_embeddings["w"](learnable_position_ids[1])
+
         # if dist.get_rank() in [0]:
         #     print("position_ids_position_ids_", position_ids_.shape, position_ids_)
         #     print("position_idsposition_ids", position_ids.shape, position_ids)
@@ -3473,7 +3464,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            # positional_embeddings=positional_embeddings,
+            positional_embeddings=positional_embeddings,
             **kwargs
         )
 
