@@ -1379,7 +1379,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         )
 
     if isinstance(self, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast):
-      if np.random.rand() < 0.01: print_input_info(
+      print_input_info(
         inputs,
         "inputsinputs"
       )

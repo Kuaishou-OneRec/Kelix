@@ -67,7 +67,39 @@ inputs["position_ids"] = get_rope_index_slowfast(
       )
 print(inputs)
 exit()
-
+'''
+inputsinputsDict: keys=5
+inputsinputs'input_ids':
+inputsinputs  Tensor: shape=(1, 11087), dtype=torch.int64, device=cpu, data=tensor([151644,   8948,    198,   2610])...tensor([   760, 151645,    198, 151643])
+inputsinputs    stat0:  Full - mean: 147248.203125, variance: 622099008.000000, max: 151655.000000, min: 5.000000, non-zeros: 11087
+inputsinputs    stat1:  first half (5544 elements) - mean: 151361.796875, variance: 43310516.000000, max: 151655.000000, min: 13.000000, non-zeros: 5544
+inputsinputs    stat2:  first 10000 elements (magnitude-based) - mean: 151492.421875, variance: 24032590.000000, max: 151655.000000, min: 13.000000, non-zeros: 10000
+inputsinputs    stat3:  first 1000 elements (1/10 of magnitude-based) - mean: 150029.375000, variance: 237947536.000000, max: 151655.000000, min: 13.000000, non-zeros: 1000
+inputsinputs'attention_mask':
+inputsinputs  Tensor: shape=(1, 11087), dtype=torch.int64, device=cpu, data=tensor([1, 1, 1, 1])...tensor([1, 1, 1, 1])
+inputsinputs    stat0:  Full - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 11087
+inputsinputs    stat1:  first half (5544 elements) - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 5544
+inputsinputs    stat2:  first 10000 elements (magnitude-based) - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 10000
+inputsinputs    stat3:  first 1000 elements (1/10 of magnitude-based) - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 1000
+inputsinputs'pixel_values':
+inputsinputs  Tensor: shape=(42952, 3, 14, 14), dtype=torch.bfloat16, device=cpu, data=tensor([1., 1., 1., 1.], dtype=torch.bfloat16)...tensor([1., 1., 1., 1.], dtype=torch.bfloat16)
+inputsinputs    stat0:  Full - mean: 0.948396, variance: 0.069979, max: 1.000000, min: -1.000000, non-zeros: 25255776
+inputsinputs    stat1:  first half (12627888 elements) - mean: 0.909841, variance: 0.117324, max: 1.000000, min: -1.000000, non-zeros: 12627888
+inputsinputs    stat2:  first 10000000 elements (magnitude-based) - mean: 0.906378, variance: 0.125408, max: 1.000000, min: -1.000000, non-zeros: 10000000
+inputsinputs    stat3:  first 1000000 elements (1/10 of magnitude-based) - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 1000000
+inputsinputs'image_grid_thw':
+inputsinputs  Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([  1, 236, 182])...tensor([  1, 236, 182])
+inputsinputs    stat0:  Full - mean: 139.666672, variance: 10100.222656, max: 236.000000, min: 1.000000, non-zeros: 3
+inputsinputs    stat1:  first half (2 elements) - mean: 118.500000, variance: 13806.250000, max: 236.000000, min: 1.000000, non-zeros: 2
+inputsinputs    stat2:  first 1 elements (magnitude-based) - mean: 1.000000, variance: 0.000000, max: 1.000000, min: 1.000000, non-zeros: 1
+inputsinputs    stat3:  no elements (1/10 of magnitude-based <= 0) - mean: nan, variance: nan, max: nan, min: nan, non-zeros: 0
+inputsinputs'loss_mask':
+inputsinputs  Tensor: shape=(1, 11087), dtype=torch.int64, device=cpu, data=tensor([0, 0, 0, 0])...tensor([1, 1, 1, 0])
+inputsinputs    stat0:  Full - mean: 0.027420, variance: 0.026668, max: 1.000000, min: 0.000000, non-zeros: 304
+inputsinputs    stat1:  first half (5544 elements) - mean: 0.000000, variance: 0.000000, max: 0.000000, min: 0.000000, non-zeros: 0
+inputsinputs    stat2:  first 10000 elements (magnitude-based) - mean: 0.000000, variance: 0.000000, max: 0.000000, min: 0.000000, non-zeros: 0
+inputsinputs    stat3:  first 1000 elements (1/10 of magnitude-based) - mean: 0.000000, variance: 0.000000, max: 0.000000, min: 0.000000, non-zeros: 0
+'''
 import torch
 
 def process_pos_ids(pos_ids, input_ids):
