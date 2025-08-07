@@ -3406,11 +3406,14 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         learnable_position_ids = process_pos_ids(position_ids.detach() + 0).detach() + 0 
         position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
-        if 0 and dist.get_rank() in [0,1]: print_input_info(
+        if dist.get_rank() in [0,1]: print_input_info(
             {
                 "position_ids": position_ids,
                 "position_ids_": position_ids_,
                 "learnable_position_ids": learnable_position_ids,
+                "learnable_position_ids[0]": learnable_position_ids[0],
+                "learnable_position_ids[1]": learnable_position_ids[1],
+                "learnable_position_ids[2]": learnable_position_ids[2],
                 "image_grid_thw": image_grid_thw,
                 "video_grid_thw": video_grid_thw,
                 "fast_video_grid_thw": fast_video_grid_thw,
@@ -3432,7 +3435,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         # inputs_embeds += self.thw_embeddings["t"](position_ids[0]) + self.thw_embeddings["h"](position_ids[1]) + self.thw_embeddings["w"](position_ids[2])
 
         if 1:
-            print("learnable_position_idslearnable_position_idslearnable_position_ids", learnable_position_ids.shape, learnable_position_ids.max())
+            print("learnable_position_idslearnable_position_idslearnable_position_ids", 
+                learnable_position_ids.shape, learnable_position_ids.max(), learnable_position_ids[0].max(),
+                learnable_position_ids[1].max(), learnable_position_ids[2].max())
             positional_embeddings = self.thw_embeddings["t"](learnable_position_ids[0]) + self.thw_embeddings["h"](learnable_position_ids[1]) + self.thw_embeddings["w"](learnable_position_ids[2])
             
             print("positional_embeddingspositional_embeddings", self.thw_embeddings)
