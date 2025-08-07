@@ -1262,7 +1262,11 @@ class ChatCompletionVisionDataset(IterableDataset):
       )
 
     if isinstance(self, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast):
-      inputs["position_ids"] = get_rope_index_slowfast(
+      print_input_info(
+        inputs,
+        "inputsinputs"
+      )
+      if np.random.rand() < 0.01: inputs["position_ids"] = get_rope_index_slowfast(
           input_ids = inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw", None),
           video_grid_thw=inputs.get("video_grid_thw", None),

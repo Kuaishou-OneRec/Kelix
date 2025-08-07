@@ -1,3 +1,73 @@
+from PIL import Image, ImageDraw
+from PIL import Image
+import torch
+import sys
+import os
+os.environ["nosp"] = '1'
+sys.path.append("./recovlm/models")
+from keye_vitrope_slowfast_v2.processing_keye import KeyeProcessor
+from keye_vitrope_slowfast_v2.keye_vl_utils import process_vision_info
+# /llm_reco/lingzhixin/recovlm_qw0510/recovlm/recovlm/data/datasets.py
+from recovlm.data.datasets import get_rope_index_slowfast
+from recovlm.utils.ds_utils import print_input_info
+
+'''
+inputs["position_ids"] = get_rope_index_slowfast(
+          input_ids = inputs["input_ids"],
+          image_grid_thw=inputs.get("image_grid_thw", None),
+          video_grid_thw=inputs.get("video_grid_thw", None),
+          fast_video_grid_thw=inputs.get("fast_video_grid_thw", None),
+          image_token_id=self.image_token_id,
+          video_token_id=self.video_token_id,
+          fast_video_token_id=self.fast_video_token_id,
+          spatial_merge_size=self.spatial_merge_size,
+          vision_start_token_id=self.vision_start_token_id,
+      )
+'''
+
+MODEL_DIR = PROCESSOR_DIR = "/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.7/Stage3/8b/1d_vs_3d_rope/rope1d_0.3.1014/step500/global_step500/converted/"
+processor = KeyeProcessor.from_pretrained(PROCESSOR_DIR, use_fast=True, local_files_only=False, trust_remote_code=True)
+messages = [
+        {"role": "user", 
+        "content": 
+        [
+            # {"type": "video", 
+            # "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_1mb.mp4", "video_total_pixels": 28*28*256}, 
+            # {"type": "video", 
+            # "video": ["/llm_reco_ssd/caojiangxia/vllm/test_image.png", "/llm_reco_ssd/caojiangxia/vllm/test_image.png"]},
+            {"type": "video", 
+            "video": "/llm_reco_ssd/caojiangxia/vllm/sample_videos/SampleVideo_1280x720_1mb.mp4", "video_total_pixels": 28*28*256}, 
+            {"type": "text", 
+            "text": "\\What is this?"}]},
+    ]
+text = processor.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=False
+)
+image_inputs, video_inputs = process_vision_info(messages)
+inputs = processor(
+        text=[text],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=True,
+        return_tensors="pt",
+    )
+print_input_info(
+    inputs, "inputsinputs"
+)
+inputs["position_ids"] = get_rope_index_slowfast(
+          input_ids = inputs["input_ids"],
+          image_grid_thw=inputs.get("image_grid_thw", None),
+          video_grid_thw=inputs.get("video_grid_thw", None),
+          fast_video_grid_thw=inputs.get("fast_video_grid_thw", None),
+          image_token_id=151655,
+          video_token_id=151656,
+          fast_video_token_id=151678,
+          spatial_merge_size=28,
+          vision_start_token_id=151652,
+      )
+print(inputs)
+exit()
+
 import torch
 
 def process_pos_ids(pos_ids, input_ids):
@@ -67,4 +137,47 @@ def process_pos_ids(pos_ids, input_ids):
 
 # 测试用例
 if __name__ == "__main__":
-    
+    pass
+
+
+# 输入是
+pos_ids = torch.tensor([
+        [  # t维度（时序ID，连续递增）
+            [0, 1, 2,          # t1, t2, t3
+             3,3,3,3,3,3,3,3, # 第一个图像(4×2，8个patch)
+             11,12,            # t4, t5
+             13,13,13,13,13,13,# 第二个图像(3×2，6个patch)
+             19,               # t6
+             20,20,20,20,
+             20,20,20,20,
+             28,29
+            ]
+        ],
+        [  # h维度（图像h = 前序最大t+1 + 行索引）
+            [0, 1, 2,          # t1-t3：h=t
+             3,3,3,3,4,4,4,4, # 第一个图像：行0→3，行1→4（前序最大t=2）
+             11,12,            # t4-t5：h=t
+             13,13,13,14,14,14,# 第二个图像：行0→13，行1→14（前序最大t=12）
+             19,               # t6：h=t
+             20,21,22,23,
+             20,21,22,23,
+             28,29
+            ]
+        ],
+        [  # w维度（图像w = 前序最大t+1 + 列索引）
+            [0, 1, 2,          # t1-t3：w=t
+             3,4,5,6,3,4,5,6, # 第一个图像：列0-3→3-6（前序最大t=2）
+             11,12,            # t4-t5：w=t
+             13,14,15,13,14,15,# 第二个图像：列0-2→13-15（前序最大t=12）
+             19,               # t6：w=t
+             20,20,20,20,
+             21,21,21,21,
+             28,29
+            ]
+        ]
+    ]) 
+#以及一个bool类型的
+is_image_token=[0,0,0,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0]
+#以及一个bool类型的
+is_video_token=[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,0,0]
+
