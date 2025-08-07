@@ -150,6 +150,7 @@ def print_input_info(data: Any, prefix: str = "", max_str_len: int = 50, return_
     新增功能：当save_path不为None时，将数据处理后（张量detach到CPU）用torch.save保存
     """
     data = convert_dataclass_to_dict(data)
+    print("print_input_infosave_pathsave_path", save_path)
 
     # 辅助函数：递归处理所有张量，detach并移到CPU
     def _detach_to_cpu(obj: Any) -> Any:
