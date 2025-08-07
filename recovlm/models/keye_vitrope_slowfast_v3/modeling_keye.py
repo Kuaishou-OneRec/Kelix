@@ -3292,7 +3292,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             is_image_token = is_image_token[0]
 
             # 提取t/h/w维度（形状：[N]）
-            # t = pos_ids[0, 0]
+            t = pos_ids[0, 0]
             h = pos_ids[1, 0]
             w = pos_ids[2, 0]
             device = t.device
@@ -3400,32 +3400,32 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         # if dist.get_rank() == 0: torch.save(position_ids, "position_ids.pth"); exit()
 
-        position_ids_ = position_ids + 0
+        # position_ids_ = position_ids + 0
         # print("position_ids_position_ids_", position_ids_)
 
         learnable_position_ids = process_pos_ids(position_ids)
         position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
-        if dist.get_rank() in [0,1]: 
-            save_path = f"pos_id_rank{dist.get_rank()}.pth"
-            print_input_info(
-            {
-                "position_ids": position_ids,
-                "position_ids_": position_ids_,
-                "learnable_position_ids": learnable_position_ids,
-                "learnable_position_ids[0]": learnable_position_ids[0],
-                "learnable_position_ids[1]": learnable_position_ids[1],
-                "learnable_position_ids[2]": learnable_position_ids[2],
-                "image_grid_thw": image_grid_thw,
-                "video_grid_thw": video_grid_thw,
-                "fast_video_grid_thw": fast_video_grid_thw,
-                "input_ids": input_ids,
-                # "fast_vid_pad": (input_ids == fast_vid_pad).sum(),
-                # "vid_pad": (input_ids == vid_pad).sum(),
-                # "image_pad": (input_ids == image_pad).sum(),
-            },
-            "position_idsposition_ids: ",
-            save_path=save_path
-        )
+        # if dist.get_rank() in [0,1]: 
+        #     save_path = f"pos_id_rank{dist.get_rank()}.pth"
+        #     print_input_info(
+        #     {
+        #         "position_ids": position_ids,
+        #         "position_ids_": position_ids_,
+        #         "learnable_position_ids": learnable_position_ids,
+        #         "learnable_position_ids[0]": learnable_position_ids[0],
+        #         "learnable_position_ids[1]": learnable_position_ids[1],
+        #         "learnable_position_ids[2]": learnable_position_ids[2],
+        #         "image_grid_thw": image_grid_thw,
+        #         "video_grid_thw": video_grid_thw,
+        #         "fast_video_grid_thw": fast_video_grid_thw,
+        #         "input_ids": input_ids,
+        #         # "fast_vid_pad": (input_ids == fast_vid_pad).sum(),
+        #         # "vid_pad": (input_ids == vid_pad).sum(),
+        #         # "image_pad": (input_ids == image_pad).sum(),
+        #     },
+        #     "position_idsposition_ids: ",
+        #     save_path=save_path
+        # )
         # exit()
         # print("learnable_position_idslearnable_position_ids",
         # learnable_position_ids[0].max(), learnable_position_ids[0].min(),
