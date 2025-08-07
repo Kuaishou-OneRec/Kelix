@@ -1379,7 +1379,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         )
 
     if isinstance(self, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast):
-      print_input_info(
+      if 'fast_video_grid_thw' in inputs: print_input_info(
         inputs,
         "inputsinputs"
       )
