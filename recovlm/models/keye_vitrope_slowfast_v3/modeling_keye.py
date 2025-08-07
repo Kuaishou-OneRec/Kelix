@@ -2766,7 +2766,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.rope_deltas = None  # cache rope_deltas here
 
-        t_size, g_size, w_size = getattr(config, "t_size", 10000), getattr(config, "h_size", 20480), getattr(config, "w_size", 20480)
+        t_size, g_size, w_size = getattr(config, "t_size", 20480), getattr(config, "h_size", 20480), getattr(config, "w_size", 20480)
         self.thw_embeddings = nn.ModuleDict({
             "t": nn.Embedding(t_size, config.hidden_size),
             "h": nn.Embedding(g_size, config.hidden_size),
