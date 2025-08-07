@@ -181,7 +181,8 @@ def print_input_info(data: Any, prefix: str = "", max_str_len: int = 50, return_
             torch.save(data_to_save, save_path)
             print(f"save data to: {save_path}")  # 提示保存成功
         except Exception as e:
-            print(f"save data failed: {str(e)}")  # 捕获保存异常
+            import traceback
+            print(f"save data failed, save_path={save_path}.\nexception: {str(e)}\nTraceback={traceback.format_exc()}")  # 捕获保存异常
 
     lines = []
     try:
