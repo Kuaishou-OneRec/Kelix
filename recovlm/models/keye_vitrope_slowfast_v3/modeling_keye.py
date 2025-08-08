@@ -3283,176 +3283,11 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
 
-
-        def process_pos_ids(pos_ids):
-            fast_vid_pad = 151678
-            vid_pad = 151656
-            image_pad = 151655
-            is_image_token = (input_ids == fast_vid_pad) | (input_ids == vid_pad) | (input_ids == image_pad)
-            is_image_token = is_image_token[0]
-
-            # 提取t/h/w维度（形状：[N]）
-            t = pos_ids[0, 0]
-            h = pos_ids[1, 0]
-            w = pos_ids[2, 0]
-            device = t.device
-            N = t.numel()  # 总token数
-            
-            # 转换图像标记为张量
-            is_image = torch.tensor(is_image_token, dtype=torch.bool, device=device)
-            
-            # 初始化结果张量为长整型（解决类型不匹配问题）
-            # new_t = torch.zeros(N, device=device, dtype=torch.long)
-            new_h = torch.zeros(N, device=device, dtype=torch.long)
-            new_w = torch.zeros(N, device=device, dtype=torch.long)
-            
-            # 处理图像token
-            if is_image.any():
-                # 获取图像token索引
-                img_idx = torch.where(is_image)[0]  # 图像token位置
-                
-                # 计算图像分组（连续索引为同一图像）
-                if len(img_idx) > 1:
-                    group_flags = (img_idx[1:] - img_idx[:-1] > 1)  # 新图像标记
-                    groups = torch.cumsum(torch.cat([torch.tensor([1], device=device), group_flags]), 0) - 1
-                else:
-                    groups = torch.tensor([0], device=device) if len(img_idx) == 1 else torch.tensor([], device=device)
-                
-                # 按图像分组处理
-                for g in torch.unique(groups):
-                    mask = (groups == g)
-                    indices = img_idx[mask]  # 当前图像的所有token索引
-                    k = len(indices)  # 当前图像的token数量
-                    
-                    # 处理t维度：1~k递增
-                    # new_t[indices] = torch.arange(1, k+1, device=device)
-                    
-                    # 处理h维度：组内最小值为基准
-                    group_h = h[indices]
-                    new_h[indices] = group_h - group_h.min() + 1
-                    
-                    # 处理w维度：组内最小值为基准
-                    group_w = w[indices]
-                    new_w[indices] = group_w - group_w.min() + 1
-            
-            # 重组为原始形状[3,1,N]
-            return torch.stack([
-                # new_t.unsqueeze(0),
-                new_h.unsqueeze(0),
-                new_w.unsqueeze(0)
-            ], dim=0)
-
-        def generate_positional_id(thw):
-            """
-            将3x1xL的张量转换为1D positional_id矩阵
-            
-            参数:
-                thw: 形状为(3, 1, L)的PyTorch张量
-            
-            返回:
-                positional_id: 形状为(L,)的1D张量，包含连续的序列编号
-            """
-            # 检查输入形状是否正确
-            assert thw.shape[0] == 3 and thw.shape[1] == 1, "输入必须是3x1xL的张量"
-            
-            # 取出第一位置并flatten
-            seq = thw[0, 0, :].flatten()  # 形状变为(L,)
-            
-            # 识别子序列边界（假设以0为新子序列的开始）
-            subsequence_starts = torch.where(seq == 0)[0].tolist()
-            L = seq.numel()
-            positional_id = torch.zeros_like(seq, dtype=torch.long)
-            
-            # 处理每个子序列
-            for i, start in enumerate(subsequence_starts):
-                # 确定当前子序列的结束位置
-                if i < len(subsequence_starts) - 1:
-                    end = subsequence_starts[i + 1]
-                else:
-                    end = L
-                
-                # 为当前子序列生成连续编号
-                subsequence_length = end - start
-                positional_id[start:end] = torch.arange(subsequence_length, dtype=torch.long)
-            
-            return positional_id
-        # print(cu_seqlens)
-        # print("origgggg", position_ids.shape, cu_seqlens.shape) # origgggg torch.Size([3, 1, 75872]) torch.Size([2])
-        # print(position_ids)
-        # print("position_ids0000", position_ids[0].flatten().tolist())
-        # print("position_ids1111", position_ids[1].flatten().tolist())
-        # print("position_ids2222", position_ids[2].flatten().tolist())
-        # print("position_ids1122", (position_ids[1] + position_ids[2]).flatten().tolist())
-        # # if 'cu_seqlens' in kwargs:
-        # #     cu_seqlens = kwargs["cu_seqlens"]
-        # # else:
-        # #     cu_seqlens = torch.tensor().to()
-        # print("position_ids=", position_ids)
-        # position_ids_ = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
-        # if dist.get_rank() == 0:
-        #     torch.save(
-        #         {
-        #             "position_ids": position_ids.detach().cpu(),
-        #             "position_ids_ori": position_ids_,
-        #         },
-        #         "position_ids.pth"
-        #     )
-
-        # if dist.get_rank() == 0: torch.save(position_ids, "position_ids.pth"); exit()
-
-        # position_ids_ = position_ids + 0
-        # print("position_ids_position_ids_", position_ids_)
-
-        learnable_position_ids = process_pos_ids(position_ids)
-        position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
-        # if dist.get_rank() in [0,1]: 
-        #     save_path = f"pos_id_rank{dist.get_rank()}.pth"
-        #     print_input_info(
-        #     {
-        #         "position_ids": position_ids,
-        #         "position_ids_": position_ids_,
-        #         "learnable_position_ids": learnable_position_ids,
-        #         "learnable_position_ids[0]": learnable_position_ids[0],
-        #         "learnable_position_ids[1]": learnable_position_ids[1],
-        #         "learnable_position_ids[2]": learnable_position_ids[2],
-        #         "image_grid_thw": image_grid_thw,
-        #         "video_grid_thw": video_grid_thw,
-        #         "fast_video_grid_thw": fast_video_grid_thw,
-        #         "input_ids": input_ids,
-        #         # "fast_vid_pad": (input_ids == fast_vid_pad).sum(),
-        #         # "vid_pad": (input_ids == vid_pad).sum(),
-        #         # "image_pad": (input_ids == image_pad).sum(),
-        #     },
-        #     "position_idsposition_ids: ",
-        #     save_path=save_path
-        # )
-        # exit()
-        # print("learnable_position_idslearnable_position_ids",
-        # learnable_position_ids[0].max(), learnable_position_ids[0].min(),
-        # learnable_position_ids[1].max(), learnable_position_ids[1].min(),
-        # learnable_position_ids[2].max(), learnable_position_ids[2].min(),
+        learnable_position_ids = self.process_pos_ids(position_ids)
+        position_ids = self.generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
 
         positional_embeddings = self.hw_embeddings["h"](learnable_position_ids[0]) + self.hw_embeddings["w"](learnable_position_ids[1])
 
-        # if dist.get_rank() in [0]:
-        #     print("position_ids_position_ids_", position_ids_.shape, position_ids_)
-        #     print("position_idsposition_ids", position_ids.shape, position_ids)
-        #     print("learnable_position_ids", learnable_position_ids.shape, learnable_position_ids)
-        # if dist.get_rank() in [0,1]: print_input_info(
-        #     {
-        #         "position_ids_": position_ids_,
-        #         "position_ids": position_ids,
-        #         "learnable_position_ids": learnable_position_ids,
-
-        #     }
-        #     ,
-        #     f"positional_embeddings{dist.get_rank()}: ",
-        #     # save_path=f"positional_embeddings{dist.get_rank()}.pth"
-        # )
-        # position_ids = position_ids[0] # t
-        
-        # print("newposition_ids", position_ids.shape)
-        # print(position_ids.flatten().tolist())
         outputs = self.model(
             input_ids=None,
             position_ids=position_ids,
@@ -3665,7 +3500,99 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         return input_ids, model_kwargs
 
+    def process_pos_ids(self, pos_ids, input_ids):
+        fast_vid_pad = self.config.fast_video_token_id # 151678
+        vid_pad = self.config.video_token_id # 151656
+        image_pad = self.config.image_token_id # 151655
+        is_image_token = (input_ids == fast_vid_pad) | (input_ids == vid_pad) | (input_ids == image_pad)
+        is_image_token = is_image_token[0]
 
+        # 提取t/h/w维度（形状：[N]）
+        t = pos_ids[0, 0]
+        h = pos_ids[1, 0]
+        w = pos_ids[2, 0]
+        device = t.device
+        N = t.numel()  # 总token数
+        
+        # 转换图像标记为张量
+        is_image = torch.tensor(is_image_token, dtype=torch.bool, device=device)
+        
+        # 初始化结果张量为长整型（解决类型不匹配问题）
+        # new_t = torch.zeros(N, device=device, dtype=torch.long)
+        new_h = torch.zeros(N, device=device, dtype=torch.long)
+        new_w = torch.zeros(N, device=device, dtype=torch.long)
+        
+        # 处理图像token
+        if is_image.any():
+            # 获取图像token索引
+            img_idx = torch.where(is_image)[0]  # 图像token位置
+            
+            # 计算图像分组（连续索引为同一图像）
+            if len(img_idx) > 1:
+                group_flags = (img_idx[1:] - img_idx[:-1] > 1)  # 新图像标记
+                groups = torch.cumsum(torch.cat([torch.tensor([1], device=device), group_flags]), 0) - 1
+            else:
+                groups = torch.tensor([0], device=device) if len(img_idx) == 1 else torch.tensor([], device=device)
+            
+            # 按图像分组处理
+            for g in torch.unique(groups):
+                mask = (groups == g)
+                indices = img_idx[mask]  # 当前图像的所有token索引
+                k = len(indices)  # 当前图像的token数量
+                
+                # 处理t维度：1~k递增
+                # new_t[indices] = torch.arange(1, k+1, device=device)
+                
+                # 处理h维度：组内最小值为基准
+                group_h = h[indices]
+                new_h[indices] = group_h - group_h.min() + 1
+                
+                # 处理w维度：组内最小值为基准
+                group_w = w[indices]
+                new_w[indices] = group_w - group_w.min() + 1
+        
+        # 重组为原始形状[3,1,N]
+        return torch.stack([
+            # new_t.unsqueeze(0),
+            new_h.unsqueeze(0),
+            new_w.unsqueeze(0)
+        ], dim=0)
+
+    def generate_positional_id(self, thw):
+        """
+        将3x1xL的张量转换为1D positional_id矩阵
+        
+        参数:
+            thw: 形状为(3, 1, L)的PyTorch张量
+        
+        返回:
+            positional_id: 形状为(L,)的1D张量，包含连续的序列编号
+        """
+        # 检查输入形状是否正确
+        assert thw.shape[0] == 3 and thw.shape[1] == 1, "输入必须是3x1xL的张量"
+        
+        # 取出第一位置并flatten
+        seq = thw[0, 0, :].flatten()  # 形状变为(L,)
+        
+        # 识别子序列边界（假设以0为新子序列的开始）
+        subsequence_starts = torch.where(seq == 0)[0].tolist()
+        L = seq.numel()
+        positional_id = torch.zeros_like(seq, dtype=torch.long)
+        
+        # 处理每个子序列
+        for i, start in enumerate(subsequence_starts):
+            # 确定当前子序列的结束位置
+            if i < len(subsequence_starts) - 1:
+                end = subsequence_starts[i + 1]
+            else:
+                end = L
+            
+            # 为当前子序列生成连续编号
+            subsequence_length = end - start
+            positional_id[start:end] = torch.arange(subsequence_length, dtype=torch.long)
+        
+        return positional_id
+        
 
 class Projector(nn.Module):
 
