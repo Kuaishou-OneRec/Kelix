@@ -3283,7 +3283,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
 
-        learnable_position_ids = self.process_pos_ids(position_ids)
+        learnable_position_ids = self.process_pos_ids(position_ids, input_ids)
         position_ids = self.generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
 
         positional_embeddings = self.hw_embeddings["h"](learnable_position_ids[0]) + self.hw_embeddings["w"](learnable_position_ids[1])
