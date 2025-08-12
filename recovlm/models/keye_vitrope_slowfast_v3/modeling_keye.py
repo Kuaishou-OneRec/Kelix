@@ -2163,7 +2163,6 @@ class KeyeFlashAttention2(KeyeAttention):
         else:
             sliding_window = -1
 
-
         if get_sequence_parallel_world_size() > 1:
             attn_output = self._dist_attn(
                 query=query_states,
@@ -3291,12 +3290,12 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-        print(f"rank{dist.get_rank()}_1111111111", self.hw_embeddings["h"].weight)
 
         learnable_position_ids = self.process_pos_ids(position_ids, input_ids)
         position_ids = self.generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
 
         positional_embeddings = self.hw_embeddings["h"](learnable_position_ids[0]) + self.hw_embeddings["w"](learnable_position_ids[1])
+        inputs_embeds = inputs_embeds + positional_embeddings
 
         outputs = self.model(
             input_ids=None,
@@ -3309,7 +3308,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            positional_embeddings=positional_embeddings,
+            # positional_embeddings=positional_embeddings,
             **kwargs
         )
 
