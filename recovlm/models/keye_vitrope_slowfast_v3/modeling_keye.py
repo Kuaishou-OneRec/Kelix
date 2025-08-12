@@ -3291,6 +3291,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
+        print(f"rank{dist.get_rank()}_1111111111", self.hw_embeddings["h"].weight)
 
         learnable_position_ids = self.process_pos_ids(position_ids, input_ids)
         position_ids = self.generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
