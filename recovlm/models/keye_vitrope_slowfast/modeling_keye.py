@@ -2916,8 +2916,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
                 mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
             mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
-            print("position_idsposition_ids=", position_ids)
-            torch.save(position_ids, "position_ids_1.pth"); exit()
+            # print("position_idsposition_ids=", position_ids)
+            # torch.save(position_ids, "position_ids_1.pth"); exit()
             return position_ids, mrope_position_deltas
         else:
             if attention_mask is not None:

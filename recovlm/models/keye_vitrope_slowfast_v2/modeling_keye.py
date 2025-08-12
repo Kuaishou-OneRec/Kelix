@@ -1094,7 +1094,9 @@ class SiglipEncoder(nn.Module):
         num_heads = config.num_attention_heads
         head_dim = embed_dim // num_heads
         self.layers = nn.ModuleList([SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.rotary_pos_emb = SigLIPRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = SigLIPRotaryEmbedding(head_dim // 2, 
+            config.rope_theta if hasattr(config, "rope_theta") else 10000
+        )
         self.gradient_checkpointing = False
 
     @staticmethod
@@ -1239,7 +1241,14 @@ class SiglipEncoder(nn.Module):
             f"Sequence length should be dividable by sp_world_size={get_sequence_parallel_world_size()}, hidden_states={hidden_states.shape}"
 
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
-        hidden_states = get_local_sequence(hidden_states, seq_idx=1)
+        # hidden_states = get_local_sequence(hidden_states, seq_idx=1)
+
+        if get_sequence_parallel_world_size() > 1:
+            start, end = get_local_sequence_boundary(hidden_states.shape[1])
+            sin, cos = rope_emb
+            rope_emb = (sin[start:end, :], cos[start:end, :])
+            hidden_states = hidden_states[:, start:end, :]
+
         for i, encoder_layer in enumerate( self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + ((hidden_states[:, reversed_window_indices, :],) if use_window_attn else (hidden_states, ))
