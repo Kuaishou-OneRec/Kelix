@@ -75,6 +75,10 @@ from recovlm.models.keye_vitrope_slowfast_v3.modeling_keye import KeyeForConditi
 from recovlm.models.keye_vitrope_slowfast_v3.modeling_keye import  KeyeDecoderLayer as KeyeDecoderLayer_vitrope_slowfast_v3
 from recovlm.models.keye_vitrope_slowfast_v3.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer_vitrope_slowfast_v3
 
+from recovlm.models.keye_vitrope_slowfast_v4.modeling_keye import KeyeForConditionalGeneration as KeyeForConditionalGeneration_vitrope_slowfast_v4
+from recovlm.models.keye_vitrope_slowfast_v4.modeling_keye import  KeyeDecoderLayer as KeyeDecoderLayer_vitrope_slowfast_v4
+from recovlm.models.keye_vitrope_slowfast_v4.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer_vitrope_slowfast_v4
+
 from recovlm.models.internvl import InternVLChatModel
 from recovlm.models.qwen2 import Qwen2DecoderLayer
 from recovlm.models.internvl import InternVisionEncoderLayer
@@ -181,7 +185,7 @@ def get_argument_parser():
                       help="The directory to write the trained model")
 
   parser.add_argument("--model_class", type=str, default="Qwen2_5_VLForConditionalGeneration_moonvit",
-                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_v2', 'KeyeForConditionalGeneration_vitrope_slowfast_v3', 'InternVLChatModel'",)
+                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_v2', 'KeyeForConditionalGeneration_vitrope_slowfast_v3', 'KeyeForConditionalGeneration_vitrope_slowfast_v4', 'InternVLChatModel'",)
   
   parser.add_argument("--model_processor", type=str, default="Qwen2_5_VLProcessor_moonvit",
                       help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit' or 'Qwen3SiglipProcessor' or 'KeyeProcessor' or 'KeyeProcessor_vitrope'")
@@ -503,7 +507,7 @@ def freeze_params(args, model):
       print_rank_0("=" * 50)
     
 
-  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_v2', 'KeyeForConditionalGeneration_vitrope_slowfast_v3']:
+  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_v2', 'KeyeForConditionalGeneration_vitrope_slowfast_v3', 'KeyeForConditionalGeneration_vitrope_slowfast_v4']:
     if args.freeze_llm:
       print_rank_0("Freeze LLM parameters.")
       for name, param in model.named_parameters():
@@ -803,6 +807,7 @@ def train():
       "KeyeForConditionalGeneration_vitrope_slowfast": {KeyeDecoderLayer_vitrope_slowfast, KeyeSiglipEncoderLayer_vitrope_slowfast},
       "KeyeForConditionalGeneration_vitrope_slowfast_v2": {KeyeDecoderLayer_vitrope_slowfast_v2, KeyeSiglipEncoderLayer_vitrope_slowfast_v2},
       "KeyeForConditionalGeneration_vitrope_slowfast_v3": {KeyeDecoderLayer_vitrope_slowfast_v3, KeyeSiglipEncoderLayer_vitrope_slowfast_v3},
+      "KeyeForConditionalGeneration_vitrope_slowfast_v4": {KeyeDecoderLayer_vitrope_slowfast_v4, KeyeSiglipEncoderLayer_vitrope_slowfast_v4},
       "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
     }
     set_activation_checkpointing(
