@@ -3291,6 +3291,14 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 position_ids = position_ids.add(delta)
                 position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
 
+        import copy
+        pos_ids2 = position_ids.clone()
+        pos_ids2 += position_ids.flatten()[-1].item() + 1
+        print(position_ids)
+        print(1111111, position_ids.shape, input_ids.shape)
+        position_ids = torch.cat([position_ids, pos_ids2], -1)
+        input_ids = torch.cat([input_ids.clone(), input_ids.clone()], -1)
+
         learnable_position_ids = self.process_pos_ids(position_ids, input_ids)
         position_ids = self.generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
 
@@ -3510,6 +3518,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         return input_ids, model_kwargs
 
     def process_pos_ids(self, pos_ids, input_ids):
+        
         fast_vid_pad = self.config.fast_video_token_id # 151678
         vid_pad = self.config.video_token_id # 151656
         image_pad = self.config.image_token_id # 151655
@@ -3560,6 +3569,16 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 group_w = w[indices]
                 new_w[indices] = group_w - group_w.min() + 1
         
+        # pos_ids, input_ids
+        torch.save(
+            {
+                "pos_ids": pos_ids,
+                "input_ids": input_ids,
+                "new_h": new_h,
+                "new_w": new_w
+            },
+            "process_pos_ids.pth"
+        )
         # 重组为原始形状[3,1,N]
         return torch.stack([
             # new_t.unsqueeze(0),
@@ -3599,7 +3618,13 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             # 为当前子序列生成连续编号
             subsequence_length = end - start
             positional_id[start:end] = torch.arange(subsequence_length, dtype=torch.long)
-        
+        torch.save(
+            {
+                "thw": thw,
+                "positional_id": positional_id,
+            },
+            "generate_positional_id.pth"
+        )
         return positional_id
         
 
