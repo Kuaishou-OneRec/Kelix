@@ -30,7 +30,8 @@ from transformers.generation import GenerationMixin
 from transformers.integrations import use_kernel_forward_from_hub
 from transformers.modeling_attn_mask_utils import AttentionMaskConverter
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
-from transformers.modeling_layers import GradientCheckpointingLayer
+# from transformers.modeling_layers import GradientCheckpointingLayer
+GradientCheckpointingLayer = nn.Module
 from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -41,7 +42,7 @@ from transformers.modeling_outputs import (
 from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from transformers.processing_utils import Unpack
-from transformers.utils import LossKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from transformers.utils import LossKwargs, can_return_tuple, is_torch_flex_attn_available, logging
 from .configuration_qwen3 import Qwen3Config
 
 
@@ -54,6 +55,7 @@ if is_torch_flex_attn_available():
 logger = logging.get_logger(__name__)
 
 def _print(*args, **kargs):
+    return
     try:
         if torch.distributed.get_rank() == 0:
             print(*args, **kargs)
@@ -318,11 +320,11 @@ class Qwen3DecoderLayer(GradientCheckpointingLayer):
         outputs = (hidden_states,)
         if output_attentions:
             outputs += (self_attn_weights,)
-        _print("44444", hidden_states)
+        # _print("44444", hidden_states)
         return outputs
 
 
-@auto_docstring
+
 class Qwen3PreTrainedModel(PreTrainedModel):
     config_class = Qwen3Config
     base_model_prefix = "model"
@@ -385,7 +387,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-@auto_docstring
+
 class Qwen3Model(Qwen3PreTrainedModel):
     def __init__(self, config: Qwen3Config):
         super().__init__(config)
@@ -410,7 +412,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
         self.embed_tokens = value
 
     @can_return_tuple
-    @auto_docstring
+    
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -461,11 +463,11 @@ class Qwen3Model(Qwen3PreTrainedModel):
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
-
+        # print("position_ids", position_ids)
         hidden_states = inputs_embeds
-        print("=============================")
-        print("qwen3_model_hidden_states", hidden_states)
-        print("=============================")
+        # print("=============================")
+        # print("qwen3_model_hidden_states", hidden_states)
+        # print("=============================")
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
@@ -490,17 +492,17 @@ class Qwen3Model(Qwen3PreTrainedModel):
             )
 
             hidden_states = layer_outputs[0]
-            _print("=============================")
-            _print(f"qwen3_model_hidden_states_layer{i}", hidden_states)
-            _print("=============================")
+            # _print("=============================")
+            # _print(f"qwen3_model_hidden_states_layer{i}", hidden_states)
+            # _print("=============================")
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
-        print("=============================")
-        print("qwen3_model_hidden_states_2", hidden_states)
-        print("=============================")
+        # print("=============================")
+        # print("qwen3_model_hidden_states_2", hidden_states)
+        # print("=============================")
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -671,7 +673,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
-@auto_docstring
+
 class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -705,7 +707,7 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
         return self.model
 
     @can_return_tuple
-    @auto_docstring
+    
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -780,20 +782,7 @@ class Qwen3ForCausalLM(Qwen3PreTrainedModel, GenerationMixin):
         )
 
 
-@auto_docstring(
-    custom_intro="""
-    The Qwen3 Model transformer with a sequence classification head on top (linear layer).
 
-    [`Qwen3ForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """
-)
 class Qwen3ForSequenceClassification(Qwen3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -811,7 +800,7 @@ class Qwen3ForSequenceClassification(Qwen3PreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @auto_docstring
+    
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -880,7 +869,7 @@ class Qwen3ForSequenceClassification(Qwen3PreTrainedModel):
         )
 
 
-@auto_docstring
+
 class Qwen3ForTokenClassification(Qwen3PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -905,7 +894,7 @@ class Qwen3ForTokenClassification(Qwen3PreTrainedModel):
         self.model.embed_tokens = value
 
     @can_return_tuple
-    @auto_docstring
+    
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -951,7 +940,7 @@ class Qwen3ForTokenClassification(Qwen3PreTrainedModel):
         )
 
 
-@auto_docstring
+
 class Qwen3ForQuestionAnswering(Qwen3PreTrainedModel):
     base_model_prefix = "transformer"
 
@@ -970,7 +959,7 @@ class Qwen3ForQuestionAnswering(Qwen3PreTrainedModel):
         self.transformer.embed_tokens = value
 
     @can_return_tuple
-    @auto_docstring
+    
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

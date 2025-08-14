@@ -2753,6 +2753,41 @@ class KeyeCausalLMOutputWithPast(ModelOutput):
     rope_deltas: Optional[torch.LongTensor] = None
 
 
+def generate_positional_id(thw):
+    """
+    将3x1xL的张量转换为1D positional_id矩阵
+    
+    参数:
+        thw: 形状为(3, 1, L)的PyTorch张量
+    
+    返回:
+        positional_id: 形状为(L,)的1D张量，包含连续的序列编号
+    """
+    # 检查输入形状是否正确
+    assert thw.shape[0] == 3 and thw.shape[1] == 1, "输入必须是3x1xL的张量"
+    
+    # 取出第一位置并flatten
+    seq = thw[0, 0, :].flatten()  # 形状变为(L,)
+    
+    # 识别子序列边界（假设以0为新子序列的开始）
+    subsequence_starts = torch.where(seq == 0)[0].tolist()
+    L = seq.numel()
+    positional_id = torch.zeros_like(seq, dtype=torch.long)
+    
+    # 处理每个子序列
+    for i, start in enumerate(subsequence_starts):
+        # 确定当前子序列的结束位置
+        if i < len(subsequence_starts) - 1:
+            end = subsequence_starts[i + 1]
+        else:
+            end = L
+        
+        # 为当前子序列生成连续编号
+        subsequence_length = end - start
+        positional_id[start:end] = torch.arange(subsequence_length, dtype=torch.long)
+    
+    return positional_id
+
 class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     config_class = KeyeConfig
@@ -2975,6 +3010,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
                 mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
             mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
+            position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l
+            # print("position_idsposition_ids", position_ids, mrope_position_deltas)
             return position_ids, mrope_position_deltas
         else:
             if attention_mask is not None:
@@ -2994,7 +3031,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     device=input_ids.device,
                     dtype=input_ids.dtype,
                 )
-
+            position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l
+            # print("position_idsposition_ids", position_ids, mrope_position_deltas)
             return position_ids, mrope_position_deltas
 
     @replace_return_docstrings(output_type=KeyeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -3256,7 +3294,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 or self.rope_deltas is None
                 or (past_key_values is None or past_key_values.get_seq_length() == 0)
             ):
-
+                
                 position_ids, rope_deltas = self.get_rope_index_slowfast(
                     input_ids,
                     image_grid_thw,
@@ -3265,6 +3303,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     attention_mask,
                 )
                 self.rope_deltas = rope_deltas
+                # print("gen111", position_ids, rope_deltas)
 
             # then use the prev pre-calculated rope-deltas to get the correct position ids
             else:
@@ -3279,47 +3318,13 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 if cache_position is not None:  # otherwise `deltas` is an int `0`
                     delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
                 position_ids = position_ids.add(delta)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-
-
-        def generate_positional_id(thw):
-            """
-            将3x1xL的张量转换为1D positional_id矩阵
-            
-            参数:
-                thw: 形状为(3, 1, L)的PyTorch张量
-            
-            返回:
-                positional_id: 形状为(L,)的1D张量，包含连续的序列编号
-            """
-            # 检查输入形状是否正确
-            assert thw.shape[0] == 3 and thw.shape[1] == 1, "输入必须是3x1xL的张量"
-            
-            # 取出第一位置并flatten
-            seq = thw[0, 0, :].flatten()  # 形状变为(L,)
-            
-            # 识别子序列边界（假设以0为新子序列的开始）
-            subsequence_starts = torch.where(seq == 0)[0].tolist()
-            L = seq.numel()
-            positional_id = torch.zeros_like(seq, dtype=torch.long)
-            
-            # 处理每个子序列
-            for i, start in enumerate(subsequence_starts):
-                # 确定当前子序列的结束位置
-                if i < len(subsequence_starts) - 1:
-                    end = subsequence_starts[i + 1]
-                else:
-                    end = L
-                
-                # 为当前子序列生成连续编号
-                subsequence_length = end - start
-                positional_id[start:end] = torch.arange(subsequence_length, dtype=torch.long)
-            
-            return positional_id
+                position_ids = position_ids # .unsqueeze(0).expand(3, -1, -1)
+                # print("gen222", position_ids)
 
         # print(cu_seqlens)
         # print("origgggg", position_ids.shape, cu_seqlens.shape) # origgggg torch.Size([3, 1, 75872]) torch.Size([2])
-        # print(position_ids)
+        # position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l
+        # print(334333, position_ids, self.rope_deltas)
         # print("position_ids0000", position_ids[0].flatten().tolist())
         # print("position_ids1111", position_ids[1].flatten().tolist())
         # print("position_ids2222", position_ids[2].flatten().tolist())
@@ -3327,7 +3332,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         #     cu_seqlens = kwargs["cu_seqlens"]
         # else:
         #     cu_seqlens = torch.tensor().to()
-        position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l
+        
         # print("newposition_ids", position_ids.shape)
         # print(position_ids.shape, "eq000", torch.where(position_ids==0)[0])
         # print("newposition_idsposition_ids", position_ids.flatten().tolist()); 
