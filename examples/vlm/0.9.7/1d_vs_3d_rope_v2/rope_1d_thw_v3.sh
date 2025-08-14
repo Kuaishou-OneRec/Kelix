@@ -20,7 +20,7 @@ MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_07
 
 #OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
 # examples/vlm/0.9.7/1d_vs_3d_rope/rope_1d.sh 
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.7/Stage3/8b/1d_vs_3d_rope_v2/rope1d_thw_v2
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.7/Stage3/8b/1d_vs_3d_rope_v2/rope1d_thw_v3
 
 mkdir -p $OUTPUT_DIR
 mkdir -p /tmp/_wids_cache
