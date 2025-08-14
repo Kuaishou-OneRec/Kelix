@@ -303,8 +303,8 @@ class KeyeProcessor(ProcessorMixin):
                             slow_index += 1
                         elif all_position[index][1][j] == 1: # 当前帧是fast？
                             # video_place_holder_tempale += self.fast_start + "<|fast_placeholder|>" * (fast_videos_token_nums[index][fast_index]//self.image_processor.merge_size//self.image_processor.merge_size) + self.fast_end
-                            _, h_merged, w_merged = fast_videos_token_nums[index][slow_index] // self.image_processor.merge_size
-                            video_place_holder_tempale += self.fast_start +  ("<|fast_placeholder|>" * w_merged + "<|mm_row_sep|>") * h_merged
+                            _, h_merged, w_merged = fast_videos_token_nums[index][fast_index] // self.image_processor.merge_size
+                            video_place_holder_tempale += self.fast_start +  ("<|fast_placeholder|>" * w_merged + "<|mm_row_sep|>") * h_merged + self.fast_end
                             fast_index += 1
                     text[i] = text[i].replace(
                         self.video_token,
