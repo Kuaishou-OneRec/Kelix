@@ -18,6 +18,13 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 # MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714_2w_vtoken
 MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714_sp1
 MODEL_DIR=/mmu_mllm_hdd_2/yangzhuoran/model/Keye_VL_1_5_8B
+# /llm_reco_ssd/zhouyang12/models/Keye-VL-1_5-8B-Base
+# /mmu_mllm_hdd_2/yangzhuoran/model/Keye-VL-1_5-8B-Base
+
+
+
+
+
 #OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
 # examples/vlm/0.9.7/1d_vs_3d_rope/rope_1d.sh 
 # OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.7/Stage3/8b/1d_vs_3d_rope_v2/rope3d

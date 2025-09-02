@@ -721,8 +721,8 @@ def train():
   set_random_seed(args.seed)
 
   ####### for pdb debug #######
-  if dist.get_rank()!=0:
-    dist.barrier()
+  # if dist.get_rank()!=0:
+  #   dist.barrier()
   
   
 
