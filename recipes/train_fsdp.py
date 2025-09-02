@@ -721,13 +721,10 @@ def train():
   set_random_seed(args.seed)
 
   ####### for pdb debug #######
-  # if dist.get_rank()!=0:
-  #   dist.barrier()
-  
-  if dist.get_rank() == 0:
-    import pdb; pdb.set_trace()
-  else:
+  if dist.get_rank()!=0:
     dist.barrier()
+  
+  
 
   ####### for pdb debug #######
   print("args.model_class:", args.model_class)
