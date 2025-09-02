@@ -3049,6 +3049,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 image_embeds = vision_outputs.last_hidden_state
 
                 image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
+
+                print("-----test vq------")
                 #64*7168
                 
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
