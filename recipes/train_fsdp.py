@@ -746,6 +746,7 @@ def train():
 
   if dist.get_rank() == 0:
     with set_default_dtype(torch.bfloat16):
+      print("load_hf_checkpoint--------------:", args.model_dir)
       state_dict = load_hf_checkpoint(args.model_dir)
       state_dict = converter(state_dict)
 
