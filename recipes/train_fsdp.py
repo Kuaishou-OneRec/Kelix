@@ -723,6 +723,8 @@ def train():
   ####### for pdb debug #######
   if dist.get_rank()!=0:
     dist.barrier()
+  
+  import pdb; pdb.set_trace()
   ####### for pdb debug #######
 
 
