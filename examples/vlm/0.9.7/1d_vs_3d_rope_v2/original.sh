@@ -1,6 +1,3 @@
-#!/usr/bin/env bash
-set -e
-
 git config --global user.email 'yangzhuoran@kuaishou.com'
 git config --global user.name 'yangzhuoran'
 
@@ -8,24 +5,26 @@ email=$(git config --get user.email)
 
 # 检查 email 是否为空
 if [[ -z "$email" ]]; then
-        echo "Please set your git email:"
+        echo "Please set you git email:"
         echo "  git config --global user.email 'you@kuaishou.com'"
         exit 1
 else
         echo "Git user.email: $email"
 fi
 
-# 这里不需要 hostfile，多机才用，单机直接跳过
-# sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
+sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
+# MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
+MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714_2w_vtoken
 MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714_sp1
+#OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
+# examples/vlm/0.9.7/1d_vs_3d_rope/rope_1d.sh 
 OUTPUT_DIR=/llm_reco_ssd/yangzhuoran/code/outputs/navit-tar/test_1_5
 
 mkdir -p $OUTPUT_DIR
 mkdir -p /tmp/_wids_cache
 
-# 单机固定为 1
-nnode=1
+nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
 comment="从53Kstage2初始化，sp1，没有视频"
@@ -49,17 +48,24 @@ echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=$PWD:$PYTHONPATH
 
+
 source set_env.sh
 
-# 单机 1 卡：np=1，回环网卡 lo
-MASTER_ADDR=127.0.0.1
+hostfile=/etc/mpi/hostfile_seq
+Port=$(cat /etc/ssh/ssh_config | grep 'Port' | cut -d'"' -f2)
+np=$(cat $hostfile | cut -d'=' -f2 | awk '{sum += $0} END {print sum}')
+TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
+
+
+MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
-np=1
-TCP_NIC=lo
+
 
 nohup mpirun --allow-run-as-root \
-        -np $np \ \
+        -hostfile $hostfile \
         -mca btl self,tcp -mca pml ob1 \
+        -mca plm_rsh_num_concurrent 600 \
+        -mca routed_radix 600 \
         -mca btl_tcp_if_include $TCP_NIC \
         -mca oob_tcp_if_include $TCP_NIC \
         -mca btl_openib_allow_ib false \
@@ -69,9 +75,14 @@ nohup mpirun --allow-run-as-root \
         -x OMPI_MCA_btl_tcp_if_include=$TCP_NIC \
         -x OMPI_MCA_oob_tcp_if_include=$TCP_NIC \
         -x OMPI_MCA_btl_openib_allow_ib=false \
-        -x NCCL_IB_DISABLE=1 \                       # 🚨 禁止 IB
+        -x NCCL_IB_DISABLE=0 \
+        -x NCCL_IB_GID_INDEX=3 \
         -x NCCL_SOCKET_IFNAME=$TCP_NIC \
+        -x NCCL_IB_HCA=mlx5 \
         -x NCCL_DEBUG=WARN \
+        -x NCCL_IB_QPS_PER_CONNECTION=4 \
+        -x NCCL_NET_OVERHEAD=1000 \
+        -x NCCL_IB_TIMEOUT=20 \
         -x LD_PRELOAD=$LD_PRELOAD \
         -x http_proxy="" \
         -x https_proxy="" \
@@ -109,8 +120,8 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
-                --dataset_config examples/vlm/0.9.7/1d_vs_3d_rope_v2/exp_0.5.11.json \
-                --model_class KeyeForConditionalGeneration_vitrope_slowfast \
+		--dataset_config examples/vlm/0.9.7/1d_vs_3d_rope_v2/exp_0.5.11.json \
+		--model_class KeyeForConditionalGeneration_vitrope_slowfast \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias,visual_fast.vision_model.embeddings.packing_position_embedding.weight,fast_mlp_AR.pre_norm.weight,fast_mlp_AR.pre_norm.bias,fast_mlp_AR.linear_1.weight,fast_mlp_AR.linear_1.bias,fast_mlp_AR.linear_2.weight,fast_mlp_AR.linear_2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
@@ -137,3 +148,4 @@ nohup mpirun --allow-run-as-root \
                 --kml_id $KML_ID \
                 --kml_task_id $KML_TASK_ID \
                 --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+
