@@ -17,9 +17,9 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 # MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714_2w_vtoken
 MODEL_DIR=/mmu_mllm_hdd_2/zhouyang12/models/Keye-8B-demo_hf_vit_rope_slowfast_0714_sp1
-MODEL_DIR=/mmu_mllm_hdd_2/yangzhuoran/model/Keye_VL_1_5_8B
+# MODEL_DIR=/mmu_mllm_hdd_2/yangzhuoran/model/Keye_VL_1_5_8B
 # /llm_reco_ssd/zhouyang12/models/Keye-VL-1_5-8B-Base
-# /mmu_mllm_hdd_2/yangzhuoran/model/Keye-VL-1_5-8B-Base
+MODEL_DIR=/mmu_mllm_hdd_2/yangzhuoran/model/Keye-VL-1_5-8B-Base
 
 
 
