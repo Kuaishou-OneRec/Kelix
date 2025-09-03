@@ -188,7 +188,7 @@ class TextAlignedTokenizer(nn.Module):
         # z = self.decoder(z, attention_mask, spatial_shape, output_hidden_states=True).last_hidden_state
         # z = self.decode_task_layer(z)
         # TODO:
-        z = self.decoder(z, attn_mask).last_hidden_state
+        z = self.decoder(z, attn_mask)
         print("z: after decoder: ", z.shape)
         z = self.decode_task_layer(z)
         return z
