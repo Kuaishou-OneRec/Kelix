@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from einops import rearrange
 from torchvision.transforms import Resize
 from transformers import AutoConfig, AutoModel
-from transformers import Siglip2VisionConfig, Siglip2VisionModel
+# from transformers import Siglip2VisionConfig, Siglip2VisionModel
 
 from . import models
 from .utils import ScalingLayer
