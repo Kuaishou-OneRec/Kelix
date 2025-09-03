@@ -4,8 +4,8 @@ from torch import nn
 from transformers.models.siglip.image_processing_siglip import SiglipImageProcessor
 
 from .utils import rank0_print
-from .tok.ta_tok import TextAlignedTokenizer
-from .tok.utils import ScalingLayer
+from ..tok.ta_tok import TextAlignedTokenizer
+from ..tok.utils import ScalingLayer
 
 
 class TATokVisionTower(nn.Module):
