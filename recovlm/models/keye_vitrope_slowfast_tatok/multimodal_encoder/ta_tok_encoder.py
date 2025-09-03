@@ -75,11 +75,13 @@ class TATokVisionTower(nn.Module):
         if pool_scale is None: pool_scale = 1
         if type(images) is list:
             image_features, tokens = [], []
+            image_forward_outs = []
             for image in images:
                 image_forward_out = self.vision_tower(image.to(device=self.device, dtype=self.dtype).unsqueeze(0), pool_scale=pool_scale)
                 image_feature, token = image_forward_out['vq_feats'].to(image.dtype), image_forward_out['bottleneck_rep']
                 image_features.append(image_feature)
                 tokens.append(token)
+                image_forward_outs.append(image_forward_out)
         else:
             image_forward_outs = self.vision_tower(images.to(device=self.device, dtype=self.dtype), pool_scale=pool_scale)
             image_features, tokens = image_forward_outs['vq_feats'].to(images.dtype), image_forward_outs['bottleneck_rep']

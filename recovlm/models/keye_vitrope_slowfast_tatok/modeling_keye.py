@@ -2688,6 +2688,7 @@ class KeyeCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
+    loss_reconstruction: Optional[List[torch.FloatTensor]] = None
     logits: torch.FloatTensor = None
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -3108,7 +3109,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
                 
                 print("-----test vq------")
-                # TODO: VECTOR QUANTIZATION
+                # FIXME: VECTOR QUANTIZATION
                 # print("pixel_values:", pixel_values.shape) # torch.Size([1, 52912, 3, 14, 14])
                 # target: (teacher output:) - image_embeds (make sure teacher freeze)
                 
@@ -3122,8 +3123,12 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 image_features_vq = self.vision_tower(image_embeds, pool_scale=pool_scale)
                 image_forward_outs = image_features_vq['image_forward_outs']
                 # TODO: loss update
-                codebook_loss = image_forward_outs['codebook_loss']
-                reconstruction_loss = image_forward_outs['reconstruction_loss']
+                if type(image_forward_outs) is list:
+                    codebook_loss = torch.mean([image_forward_outs[i]['codebook_loss'] for i in range(len(image_forward_outs))])
+                    reconstruction_loss = torch.mean([image_forward_outs[i]['reconstruction_loss'] for i in range(len(image_forward_outs))])
+                else:
+                    codebook_loss = image_forward_outs['codebook_loss']
+                    reconstruction_loss = image_forward_outs['reconstruction_loss']
                 
                 
 
@@ -3335,7 +3340,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             return (loss,) + output if loss is not None else output
 
         return KeyeCausalLMOutputWithPast(
-            loss=loss,
+            loss=codebook_loss,
+            loss_reconstruction=reconstruction_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,

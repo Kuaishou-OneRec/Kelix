@@ -1289,6 +1289,14 @@ def train():
         local_labels = get_local_sequence(labels, seq_idx=1)
 
         loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
+
+        # TODO: codebook_loss && reconstruction_loss
+        codebook_loss = output.loss
+        print('***codebook_loss***:', codebook_loss)
+        loss_reconstruction = output.loss_reconstruction
+        print('***loss_reconstruction***:', loss_reconstruction)
+        loss = codebook_loss + loss_reconstruction
+        print('***loss_all***:', loss)
         
         # 计算需要检查的位置：所有 loss_mask 为1的位置的前一个位置
         # 因为我们需要检查 input_ids[i+1] == labels[i]
