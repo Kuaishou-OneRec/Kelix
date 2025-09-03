@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 
 from transformers.utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
+from .multi_modal_encoder import *
+from .tok import *
 
 _import_structure = {
     "configuration_keye": ["KeyeConfig"],
