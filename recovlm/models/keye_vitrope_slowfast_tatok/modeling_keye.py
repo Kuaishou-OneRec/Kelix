@@ -3062,13 +3062,13 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 
                 # print("image_embeds.type:", image_embeds.type) # list
 
-                image_embeds = self.mlp_AR(image_embeds, image_grid_thw) # list:
+                image_embeds = self.mlp_AR(image_embeds, image_grid_thw) # list: 6,1452,4096
                 
                 print(" len(image_embeds) after mlp:", len(image_embeds), " len(image_embeds[0]) after mlp:", len(image_embeds[0]), " len(image_embeds[0][0]) after mlp:", len(image_embeds[0][0]))
                 
-                
 
-                
+
+
 
                 
                 print("-----test vq------")
@@ -3077,18 +3077,17 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 # target: (teacher output:) - image_embeds (make sure teacher freeze)
                 
                 # random scale for training, but scale 1 for understanding evaluation
-                '''
+                
                 import random
                 if self.training:
                     pool_scale = random.choice([1, 1, 2, 3])
                 else:
                     pool_scale = 1
                 image_features_vq = self.vision_tower(image_embeds, pool_scale=pool_scale)
-                
                 image_forward_outs = image_features_vq['image_forward_outs']
                 codebook_loss = image_forward_outs['codebook_loss']
                 reconstruction_loss = image_forward_outs['reconstruction_loss']
-                '''
+                
                 
 
 

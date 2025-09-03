@@ -68,7 +68,7 @@ class TextAlignedTokenizer(nn.Module):
         # self.decoder = Siglip2VisionModel(self.decoder_config)
 
         self.encode_task_layer = nn.Sequential(
-            nn.Linear(self.encoder_hidden_dim, self.encoder_hidden_dim),
+            nn.Linear(self.encoder_hidden_dim, self.encoder_hidden_dim), # 4096
             nn.Tanh())
         self.decode_task_layer = nn.Sequential(
             nn.Linear(self.encoder_hidden_dim, self.encoder_hidden_dim),
@@ -112,8 +112,8 @@ class TextAlignedTokenizer(nn.Module):
         return model
 
     def encode(self, x, **kwargs):
-        if x.ndim == 5:
-            x = rearrange(x, 'b c t h w -> (b t) c h w')
+        # if x.ndim == 5:
+        #     x = rearrange(x, 'b c t h w -> (b t) c h w')
         
         # x = self.scale_layer(x)
         # if tuple(x.shape[-2:]) != (self.input_size, self.input_size):
@@ -121,13 +121,13 @@ class TextAlignedTokenizer(nn.Module):
         # vq_feats = self.encoder(x, output_hidden_states=True).hidden_states[self.select_layer_id] 
 
         # TODO:
-        vq_feats = x
+        vq_feats = x # (b, n,c)
 
-        pool_scale = self.pool_scale
-        pool_scale = kwargs.get("pool_scale", pool_scale)
-        if pool_scale != 1:
-            vq_feats = self.avg_pool(vq_feats, pool_scale)
-        vq_feats = self.encode_task_layer(vq_feats.to(x))
+        # pool_scale = self.pool_scale
+        # pool_scale = kwargs.get("pool_scale", pool_scale)
+        # if pool_scale != 1:
+        #     vq_feats = self.avg_pool(vq_feats, pool_scale)
+        vq_feats = self.encode_task_layer(vq_feats.to(x)) # (b, n,c)
         
         bottleneck_out = self.bottleneck(vq_feats)
         z = bottleneck_out.pop('output') # quantized
@@ -169,6 +169,7 @@ class TextAlignedTokenizer(nn.Module):
 
     def forward(self, data, **kwargs):
         # data: video in shape (b, c, t, h, w)
+        # FIXME: data: image in shape (n, c)
         encode_output = self.encode(data, **kwargs)
         vq_feats = encode_output['encoded']
         p = int(vq_feats.shape[1] ** 0.5)
