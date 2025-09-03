@@ -49,7 +49,7 @@ class TextAlignedTokenizer(nn.Module):
         # TODO:
         print("teacher: -------------------", teacher)
         # self.encoder = visual_encoder
-        # self.encoder_hidden_dim = self.encoder.config.hidden_size
+        self.encoder_hidden_dim = visual_encoder.config.hidden_size
 
         # self.decoder = visual_encoder
 
