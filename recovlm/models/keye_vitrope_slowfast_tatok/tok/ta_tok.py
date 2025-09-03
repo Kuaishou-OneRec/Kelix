@@ -127,6 +127,7 @@ class TextAlignedTokenizer(nn.Module):
         # pool_scale = kwargs.get("pool_scale", pool_scale)
         # if pool_scale != 1:
         #     vq_feats = self.avg_pool(vq_feats, pool_scale)
+        print("vq_feats:", vq_feats.shape)
         vq_feats = self.encode_task_layer(vq_feats.to(x)) # (b, n,c)
         
         bottleneck_out = self.bottleneck(vq_feats)
