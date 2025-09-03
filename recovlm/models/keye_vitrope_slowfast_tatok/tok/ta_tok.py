@@ -69,16 +69,16 @@ class TextAlignedTokenizer(nn.Module):
 
         # TODO: decoder init
         self.encoder_hidden_dim = visual_encoder
-        # from recovlm.models.keye_vitrope_slowfast_tatok.modeling_keye import SiglipVisionModel
-        # self.decoder_config = decoder_config
-        # self.decoder_config.update({
-        #     'patch_size': 1,
-        #     'num_hidden_layers': self.decoder_depth,
-        #     'num_channels': self.bottleneck_dim,
-        #     'hidden_size': self.encoder_hidden_dim,
-        # })
-        # self.decoder = SiglipVisionModel(self.decoder_config)
-        self.decoder = TokenDecoder(hidden_dim=self.encoder_hidden_dim, depth=self.decoder_depth)
+        from recovlm.models.keye_vitrope_slowfast_tatok.modeling_keye import SiglipVisionModel
+        self.decoder_config = decoder_config
+        self.decoder_config.update({
+            'patch_size': 1,
+            'num_hidden_layers': self.decoder_depth,
+            'num_channels': self.bottleneck_dim,
+            'hidden_size': self.encoder_hidden_dim,
+        })
+        self.decoder = SiglipVisionModel(self.decoder_config)
+        # self.decoder = TokenDecoder(hidden_dim=self.encoder_hidden_dim, depth=self.decoder_depth)
 
 
         # self.encoder_config = AutoConfig.from_pretrained(teacher)
