@@ -3051,6 +3051,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         if inputs_embeds is None:
             inputs_embeds = self.model.embed_tokens(input_ids)
+            print("inputs_embeds:", inputs_embeds.shape)
 
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)

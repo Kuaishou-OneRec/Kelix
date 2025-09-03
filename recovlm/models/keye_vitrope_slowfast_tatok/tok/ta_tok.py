@@ -167,8 +167,8 @@ class TextAlignedTokenizer(nn.Module):
         # z = self.decoder(z, attention_mask, spatial_shape, output_hidden_states=True).last_hidden_state
         # z = self.decode_task_layer(z)
         # TODO:
-        # z = self.decoder(z, output_hidden_states=True).last_hidden_state
-        # z = self.decode_task_layer(z)
+        z = self.decoder(z, output_hidden_states=True).last_hidden_state
+        z = self.decode_task_layer(z)
         return z
 
     def decode_from_bottleneck(self, bottleneck_rep):
@@ -182,19 +182,20 @@ class TextAlignedTokenizer(nn.Module):
         # FIXME: data: image in shape (b, n, c)
         encode_output = self.encode(data, **kwargs)
         vq_feats = encode_output['encoded'] # quantized
-        print("vq_feats after self.encode(quantized):", vq_feats.shape) # 
+        print("vq_feats after self.encode(quantized):", vq_feats.shape) # torch.Size([1, 414, 1536])
         # p = int(vq_feats.shape[1] ** 0.5)
         # vq_feats = rearrange(vq_feats, 'b (h w) c -> b c h w', h=p, w=p)
         # TODO: decode model
-        # pred_feats = self.decode(vq_feats)
+        pred_feats = self.decode(vq_feats)
 
         # self.input_type: quant
+        print("self.input_type: ", self.input_type)
         if self.input_type == 'quant':
             z = encode_output["regularized_z"] # [b, n, c] quantized
         elif self.input_type == 'indices':
             z = encode_output["bottleneck_rep"] # [b, n] indices
-        # elif self.input_type == 'rec':
-        #     z = pred_feats # [b, n, c] rec
+        elif self.input_type == 'rec':
+            z = pred_feats # [b, n, c] rec
         encode_output['encoded'] = z
 
         # reconstruction_loss = torch.mean((data - pred_feats)**2)
