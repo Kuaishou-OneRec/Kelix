@@ -48,10 +48,10 @@ class TextAlignedTokenizer(nn.Module):
 
         # TODO:
         print("teacher: -------------------", teacher)
-        self.encoder = visual_encoder
-        self.encoder_hidden_dim = self.encoder.config.hidden_size
+        # self.encoder = visual_encoder
+        # self.encoder_hidden_dim = self.encoder.config.hidden_size
 
-        self.decoder = visual_encoder
+        # self.decoder = visual_encoder
 
         # self.encoder_config = AutoConfig.from_pretrained(teacher)
         # self.encoder = AutoModel.from_config(self.encoder_config).vision_model         
@@ -102,7 +102,7 @@ class TextAlignedTokenizer(nn.Module):
         ckpt = torch.load(ckpt_path, map_location='cpu')
         ckpt_kwargs = ckpt["model"]["args"]
         model = cls(visual_encoder=visual_encoder, **kwargs, **ckpt_kwargs) # __init__
-        
+
 
         # sd = ckpt["model"]["sd"]
         # if not load_teacher:
@@ -113,10 +113,13 @@ class TextAlignedTokenizer(nn.Module):
     def encode(self, x, **kwargs):
         if x.ndim == 5:
             x = rearrange(x, 'b c t h w -> (b t) c h w')
-        x = self.scale_layer(x)
-        if tuple(x.shape[-2:]) != (self.input_size, self.input_size):
-            x = self.image_resize(x)
-        vq_feats = self.encoder(x, output_hidden_states=True).hidden_states[self.select_layer_id] # TODO:
+        
+        # x = self.scale_layer(x)
+        # if tuple(x.shape[-2:]) != (self.input_size, self.input_size):
+        #     x = self.image_resize(x)
+        # vq_feats = self.encoder(x, output_hidden_states=True).hidden_states[self.select_layer_id] # TODO:
+
+        vq_feats = x
 
         pool_scale = self.pool_scale
         pool_scale = kwargs.get("pool_scale", pool_scale)
