@@ -102,12 +102,12 @@ class TextAlignedTokenizer(nn.Module):
         ckpt = torch.load(ckpt_path, map_location='cpu')
         ckpt_kwargs = ckpt["model"]["args"]
         model = cls(visual_encoder=visual_encoder, **kwargs, **ckpt_kwargs) # __init__
+        
 
-
-        sd = ckpt["model"]["sd"]
-        if not load_teacher:
-            sd = {k: v for k, v in sd.items() if not k.startswith('teacher')}
-        model.load_state_dict(sd, strict=True)
+        # sd = ckpt["model"]["sd"]
+        # if not load_teacher:
+        #     sd = {k: v for k, v in sd.items() if not k.startswith('teacher')}
+        # model.load_state_dict(sd, strict=True)
         return model
 
     def encode(self, x, **kwargs):
