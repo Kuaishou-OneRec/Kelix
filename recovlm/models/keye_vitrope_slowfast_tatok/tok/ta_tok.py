@@ -107,7 +107,7 @@ class TextAlignedTokenizer(nn.Module):
         x = self.scale_layer(x)
         if tuple(x.shape[-2:]) != (self.input_size, self.input_size):
             x = self.image_resize(x)
-        vq_feats = self.encoder(x, output_hidden_states=True).hidden_states[self.select_layer_id]
+        vq_feats = self.encoder(x, output_hidden_states=True).hidden_states[self.select_layer_id] # TODO:
 
         pool_scale = self.pool_scale
         pool_scale = kwargs.get("pool_scale", pool_scale)
@@ -115,7 +115,7 @@ class TextAlignedTokenizer(nn.Module):
             vq_feats = self.avg_pool(vq_feats, pool_scale)
         vq_feats = self.encode_task_layer(vq_feats.to(x))
         
-        bottleneck_out = self.bottleneck(vq_feats)
+        bottleneck_out = self.bottleneck(vq_feats) # TODO:
         z = bottleneck_out.pop('output') # quantized
 
         return {'encoded': z, 'pool_scale': pool_scale, 'vq_feats': vq_feats, **bottleneck_out}
