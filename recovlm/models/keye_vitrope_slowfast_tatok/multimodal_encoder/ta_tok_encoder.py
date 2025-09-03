@@ -20,27 +20,27 @@ class TATokVisionTower(nn.Module):
 
         self.vision_tower_name = vision_tower
         
-        self.visual_encoder = visual_encoder
+        # self.visual_encoder = visual_encoder
 
         if not delay_load:
             rank0_print(f"Loading vision tower: {vision_tower}")
-            self.load_model()
+            self.load_model(visual_encoder=visual_encoder)
         elif getattr(vision_tower_cfg, "unfreeze_mm_vision_tower", False):
             # TODO: better detector is needed.
             rank0_print(f"The checkpoint seems to contain `vision_tower` weights: `unfreeze_mm_vision_tower`: True.")
-            self.load_model()
+            self.load_model(visual_encoder=visual_encoder)
         elif hasattr(vision_tower_cfg, "mm_tunable_parts") and "mm_vision_tower" in vision_tower_cfg.mm_tunable_parts:
             rank0_print(f"The checkpoint seems to contain `vision_tower` weights: `mm_tunable_parts` contains `mm_vision_tower`.")
-            self.load_model()
+            self.load_model(visual_encoder=visual_encoder)
         else:
             self.cfg_only = self.config
 
-    def load_model(self, device_map=None):
+    def load_model(self, visual_encoder, device_map=None):
         if self.is_loaded:
             rank0_print("{} is already loaded, `load_model` called again, skipping.".format(self.vision_tower_name))
             return
         
-        self.vision_tower = TextAlignedTokenizer.from_checkpoint(self.vision_tower_name, visual_encoder=self.visual_encoder, load_teacher=False).to(device_map)
+        self.vision_tower = TextAlignedTokenizer.from_checkpoint(self.vision_tower_name, visual_encoder=visual_encoder, load_teacher=False).to(device_map)
         self.vision_tower.bottleneck.regularizer.set_eval_deterministic(deterministic=True)
 
         self.vision_tower.input_type = 'rec'
