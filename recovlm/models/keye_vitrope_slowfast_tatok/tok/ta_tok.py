@@ -99,8 +99,9 @@ class TextAlignedTokenizer(nn.Module):
     def from_checkpoint(cls, ckpt, visual_encoder, load_teacher=True, **kwargs):
         # TODO:
         
-        ckpt = torch.load(ckpt_path, map_location='cpu')
-        ckpt_kwargs = ckpt["model"]["args"]
+        # ckpt = torch.load(ckpt_path, map_location='cpu')
+        # ckpt_kwargs = ckpt["model"]["args"]
+        ckpt_kwargs = {'bottleneck': {'name': 'bottleneck', 'args': {'bottleneck_dim': 1536, 'norm': 'none', 'regularizer': {'name': 'simvq', 'args': {'codebook_size': 65536, 'commitment_loss_weight': 0.25, 'codebook_loss_weight': 1.0, 'entropy_loss_weight': 0.0, 'entropy_loss_temperature': 0.01, 'l2_normalized': True, 'stochastic': True, 'stochastic_temperature': 0.03, 'top_k': 4, 'top_k_prob': 0.5, 'residual_weight': 0.1}}}}, 'bottleneck_token_num': 729, 'input_size': 384, 'teacher': 'google/siglip2-so400m-patch14-384', 'ckpt_path': 'google/siglip2-so400m-patch14-384', 'pool_scale': 1, 'rand_scale': True}
         model = cls(visual_encoder=visual_encoder, **kwargs, **ckpt_kwargs) # __init__
 
 
