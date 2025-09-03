@@ -50,7 +50,8 @@ class TextAlignedTokenizer(nn.Module):
         # TODO: decoder init
         self.encoder_hidden_dim = visual_encoder
         # self.decoder = visual_encoder
-        from .modeling_keye import SiglipVisionModel
+        # from modeling_keye import SiglipVisionModel
+        from recovlm.models.keye_vitrope_slowfast_tatok.modeling_keye import SiglipVisionModel
         self.decoder = SiglipVisionModel(decoder_config)
 
         # self.encoder_config = AutoConfig.from_pretrained(teacher)
