@@ -322,8 +322,8 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
                 device="cuda",
                 dtype=sharded_meta_param.dtype,
             )
-        print("param_name:", param_name)
-        print("sharded_meta_param:", sharded_meta_param)
+        # print("param_name:", param_name)
+        # print("sharded_meta_param:", sharded_meta_param)
         mesh = sharded_meta_param.device_mesh
 
         dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))

@@ -2710,7 +2710,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         vision_tower_name = "/mmu_mllm_hdd_2/weimuhao/model/tatok/ta_tok.pth"
         vision_tower_cfg = None
         delay_load = False
-        self.vision_tower = build_vision_tower(vision_tower_name=vision_tower_name, vision_tower_cfg=vision_tower_cfg, visual_encoder=self.visual.config.hidden_size, delay_load=delay_load)
+        self.vision_vector_quantizer = build_vision_tower(vision_tower_name=vision_tower_name, vision_tower_cfg=vision_tower_cfg, visual_encoder=self.visual.config.hidden_size, delay_load=delay_load)
         ######################## TODO: add TA-Tok ########################
 
         # self.visual_fast = SiglipVisionModel(config.fast_vision_config)
@@ -3059,6 +3059,28 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
 
                 print("-----test vq------")
+                # TODO: VECTOR QUANTIZATION
+                print("pixel_values:", pixel_values.shape)
+                print("image_embeds:", image_embeds.shape)
+                # target: (teacher output:) - image_embeds (make sure teacher freeze)
+                
+                # random scale for training, but scale 1 for understanding evaluation
+                import random
+                if self.training:
+                    pool_scale = random.choice([1, 1, 2, 3])
+                else:
+                    pool_scale = 1
+                image_features_vq = self.vision_vector_quantizer(image_embeds, pool_scale=pool_scale)
+                
+                image_forward_outs = image_features_vq['image_forward_outs']
+                codebook_loss = image_forward_outs['codebook_loss']
+                reconstruction_loss = image_forward_outs['reconstruction_loss']
+                
+
+                r# eturn {'image_features': image_features, 'image_tokens': image_tokens}
+                
+
+
                 #64*7168
                 
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()

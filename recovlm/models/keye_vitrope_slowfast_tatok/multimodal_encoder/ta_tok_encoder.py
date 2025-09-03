@@ -83,7 +83,7 @@ class TATokVisionTower(nn.Module):
         else:
             image_forward_outs = self.vision_tower(images.to(device=self.device, dtype=self.dtype), pool_scale=pool_scale)
             image_features, tokens = image_forward_outs['vq_feats'].to(images.dtype), image_forward_outs['bottleneck_rep']
-        return {"image_features": image_features, "tokens": tokens, 'pool_scale': pool_scale} # TODO:
+        return {"image_features": image_features, "tokens": tokens, 'pool_scale': pool_scale, "image_forward_outs":image_forward_outs} # TODO:
 
     @property
     def dummy_feature(self):

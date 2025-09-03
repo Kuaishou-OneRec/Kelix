@@ -60,7 +60,7 @@ class Bottleneck(nn.Module):
         x_hat = self.project_out(regularized_output['regularized_z']) # quantized
         bottleneck_rep = regularized_output.pop('bottleneck_rep') # q_indices
         return {
-            'output': x_hat,
+            'output': x_hat, # quantized
             'bottleneck_rep': bottleneck_rep, # q_indices
             'projected_z': projected_z,
             **regularized_output,
@@ -95,6 +95,7 @@ class SimVectorQuantizer(nn.Module):
                 self.stochastic_temperature_inv = nn.Parameter(torch.tensor(10.0))
 
         # for clear inference code, we remove the codebook init from LLM's embedding
+        # CODEBOOK!!!
         self.embedding = nn.Embedding(self.codebook_size, self.dim)
         self.embedding_proj = nn.Linear(self.dim, self.dim)
 
@@ -108,7 +109,7 @@ class SimVectorQuantizer(nn.Module):
 
     @torch.autocast(device_type='cuda', enabled=False)
     def get_emb(self):
-        emb = self.embedding_proj(self.embedding.weight)
+        emb = self.embedding_proj(self.embedding.weight) # Codebook * W , dimension align !!!
         if self.l2_normalized:
             emb = F.normalize(emb, p=2, dim=-1)
         # assert emb.dtype == torch.float32, f"Embedding weight dtype is {emb.dtype}, expected float32"
@@ -146,9 +147,16 @@ class SimVectorQuantizer(nn.Module):
             q_indices = torch.argmin(d, dim=1)
 
         quantized = F.embedding(q_indices, emb, self.embedding.padding_idx, self.embedding.max_norm,
-            self.embedding.norm_type, self.embedding.scale_grad_by_freq, self.embedding.sparse).view(z.shape)  # (b, n, d)
+            self.embedding.norm_type, self.embedding.scale_grad_by_freq, self.embedding.sparse)
+        
+        
+        codebook_loss = torch.mean((quantized.detach() - z_flattened)**2) + torch.mean((quantized - z_flattened.detach())**2) # (b n) d
+        
+
+        quantized = quantized.view(z.shape)  # (b, n, d)
         
         # preserve gradients
+        # TODO:
         quantized = z + (quantized - z).detach()
 
         if self.same_index_shape:
@@ -158,7 +166,8 @@ class SimVectorQuantizer(nn.Module):
             'unregularized_z': z, # but l2 normalized if l2_normalized=True
             'emb': emb, # but l2 normalized if l2_normalized=True
             'regularized_z': quantized,
-            'bottleneck_rep': q_indices
+            'bottleneck_rep': q_indices,
+            'codebook_loss': codebook_loss
         }
         return return_dict
     

@@ -46,8 +46,8 @@ class TextAlignedTokenizer(nn.Module):
 
         self.bottleneck_dim = bottleneck['args']['bottleneck_dim']
 
-        # TODO:
-        print("teacher: -------------------", teacher)
+        # TODO: decoder init
+        # print("teacher: -------------------", teacher)
         # self.encoder = visual_encoder
         self.encoder_hidden_dim = visual_encoder
 
@@ -79,11 +79,11 @@ class TextAlignedTokenizer(nn.Module):
             'token_nums': self.bottleneck_token_num, 
             'input_dim': self.encoder_hidden_dim, 
             'output_dim': self.bottleneck_dim}
-        self.bottleneck = models.make(bottleneck, args=bottleneck_args)
+        self.bottleneck = models.make(bottleneck, args=bottleneck_args) # vector quantization
 
         self.scale_layer = ScalingLayer(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])   
         self.image_resize = Resize((self.input_size, self.input_size))
-       
+
     def set_vq_eval_deterministic(self, deterministic=True):
         self.bottleneck.regularizer.set_eval_deterministic(deterministic)
 
@@ -97,7 +97,7 @@ class TextAlignedTokenizer(nn.Module):
     
     @classmethod
     def from_checkpoint(cls, ckpt, visual_encoder, load_teacher=True, **kwargs):
-        # TODO:
+        
         
         # ckpt = torch.load(ckpt_path, map_location='cpu')
         # ckpt_kwargs = ckpt["model"]["args"]
@@ -118,8 +118,9 @@ class TextAlignedTokenizer(nn.Module):
         # x = self.scale_layer(x)
         # if tuple(x.shape[-2:]) != (self.input_size, self.input_size):
         #     x = self.image_resize(x)
-        # vq_feats = self.encoder(x, output_hidden_states=True).hidden_states[self.select_layer_id] # TODO:
+        # vq_feats = self.encoder(x, output_hidden_states=True).hidden_states[self.select_layer_id] 
 
+        # TODO:
         vq_feats = x
 
         pool_scale = self.pool_scale
@@ -128,7 +129,7 @@ class TextAlignedTokenizer(nn.Module):
             vq_feats = self.avg_pool(vq_feats, pool_scale)
         vq_feats = self.encode_task_layer(vq_feats.to(x))
         
-        bottleneck_out = self.bottleneck(vq_feats) # TODO:
+        bottleneck_out = self.bottleneck(vq_feats)
         z = bottleneck_out.pop('output') # quantized
 
         return {'encoded': z, 'pool_scale': pool_scale, 'vq_feats': vq_feats, **bottleneck_out}
@@ -172,8 +173,10 @@ class TextAlignedTokenizer(nn.Module):
         vq_feats = encode_output['encoded']
         p = int(vq_feats.shape[1] ** 0.5)
         vq_feats = rearrange(vq_feats, 'b (h w) c -> b c h w', h=p, w=p)
-        pred_feats = self.decode(vq_feats)
+        # TODO: decode model
+        # pred_feats = self.decode(vq_feats)
 
+        # self.input_type: quant
         if self.input_type == 'quant':
             z = encode_output["regularized_z"] # [b, n, c]
         elif self.input_type == 'indices':
@@ -181,4 +184,7 @@ class TextAlignedTokenizer(nn.Module):
         elif self.input_type == 'rec':
             z = pred_feats # [b, n, c]
         encode_output['encoded'] = z
+
+        # reconstruction_loss = torch.mean((data - pred_feats)**2)
+        # encode_output['reconstruction_loss'] = z
         return encode_output
