@@ -179,7 +179,7 @@ class TextAlignedTokenizer(nn.Module):
         z = rearrange(z, 'b c p1 p2 -> b (p1 p2) c')
         return z
 
-    def decode(self, z):
+    def decode(self, z, attn_mask):
         # if z.ndim == 4:
         #     z = rearrange(z, 'b c p1 p2 -> b (p1 p2) c')
         # attention_mask = torch.ones(z.shape[:2], dtype=torch.int, device=z.device)
@@ -188,7 +188,7 @@ class TextAlignedTokenizer(nn.Module):
         # z = self.decoder(z, attention_mask, spatial_shape, output_hidden_states=True).last_hidden_state
         # z = self.decode_task_layer(z)
         # TODO:
-        z = self.decoder(z).last_hidden_state
+        z = self.decoder(z, attn_mask).last_hidden_state
         print("z: after decoder: ", z.shape)
         z = self.decode_task_layer(z)
         return z
