@@ -2705,6 +2705,37 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         self.mlp_AR = Projector(config, config.vision_config)
         self.visual = SiglipVisionModel(config.vision_config)
         print("config.vision_config:", config.vision_config)
+        '''
+        KeyeVisionConfig {
+            "_attn_implementation_autoset": true,
+            "architectures": [
+                "SiglipVisionModel"
+            ],
+            "attention_dropout": 0.0,
+            "auto_map": {
+                "AutoConfig": "configuration_keye.KeyeVisionConfig",
+                "AutoModel": "modeling_keye.SiglipVisionModel"
+            },
+            "has_learnable_position_embedding": true,
+            "hidden_act": "gelu_pytorch_tanh",
+            "hidden_size": 1152,
+            "image_size": 384,
+            "intermediate_size": 4304,
+            "layer_norm_eps": 1e-06,
+            "model_type": "Keye",
+            "num_attention_heads": 16,
+            "num_channels": 3,
+            "num_hidden_layers": 27,
+            "patch_size": 14,
+            "rope_theta": 10000,
+            "spatial_merge_size": 2,
+            "temporal_patch_size": 2,
+            "tokens_per_second": 2,
+            "torch_dtype": "bfloat16",
+            "transformers_version": "4.49.0"
+        }
+
+        '''
 
         ######################## TODO: add TA-Tok ########################
         from .multimodal_encoder.builder import build_vision_tower
@@ -2712,7 +2743,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         vision_tower_cfg = None
         delay_load = False
         self.vision_tower = build_vision_tower(vision_tower_name=vision_tower_name, vision_tower_cfg=vision_tower_cfg, visual_encoder=config.hidden_size, decoder_config=config.vision_config, delay_load=delay_load)
-        print("config.hidden_size:", config.hidden_size)
+        print("config.hidden_size: ", config.hidden_size)
         ######################## TODO: add TA-Tok ########################
 
         # self.visual_fast = SiglipVisionModel(config.fast_vision_config)

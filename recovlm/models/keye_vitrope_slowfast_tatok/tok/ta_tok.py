@@ -52,7 +52,14 @@ class TextAlignedTokenizer(nn.Module):
         # self.decoder = visual_encoder
         # from modeling_keye import SiglipVisionModel
         from recovlm.models.keye_vitrope_slowfast_tatok.modeling_keye import SiglipVisionModel
-        self.decoder = SiglipVisionModel(decoder_config)
+        self.decoder_config = decoder_config
+        self.decoder_config.update({
+            'patch_size': 1,
+            'num_hidden_layers': self.decoder_depth,
+            'num_channels': self.bottleneck_dim,
+            'hidden_size': self.encoder_hidden_dim,
+        })
+        self.decoder = SiglipVisionModel(self.decoder_config)
 
         # self.encoder_config = AutoConfig.from_pretrained(teacher)
         # self.encoder = AutoModel.from_config(self.encoder_config).vision_model         
@@ -152,13 +159,15 @@ class TextAlignedTokenizer(nn.Module):
         return z
 
     def decode(self, z):
-        if z.ndim == 4:
-            z = rearrange(z, 'b c p1 p2 -> b (p1 p2) c')
-        attention_mask = torch.ones(z.shape[:2], dtype=torch.int, device=z.device)
-        p = int(z.shape[1]**0.5)
-        spatial_shape = torch.tensor([[p, p]]*z.shape[0], device=self.device)
-        # TODO:
+        # if z.ndim == 4:
+        #     z = rearrange(z, 'b c p1 p2 -> b (p1 p2) c')
+        # attention_mask = torch.ones(z.shape[:2], dtype=torch.int, device=z.device)
+        # p = int(z.shape[1]**0.5)
+        # spatial_shape = torch.tensor([[p, p]]*z.shape[0], device=self.device)
         # z = self.decoder(z, attention_mask, spatial_shape, output_hidden_states=True).last_hidden_state
+        # z = self.decode_task_layer(z)
+        # TODO:
+        # z = self.decoder(z, output_hidden_states=True).last_hidden_state
         # z = self.decode_task_layer(z)
         return z
 
@@ -173,7 +182,7 @@ class TextAlignedTokenizer(nn.Module):
         # FIXME: data: image in shape (b, n, c)
         encode_output = self.encode(data, **kwargs)
         vq_feats = encode_output['encoded'] # quantized
-        print("vq_feats after self.encode(quantized):", vq_feats.shape)
+        print("vq_feats after self.encode(quantized):", vq_feats.shape) # 
         # p = int(vq_feats.shape[1] ** 0.5)
         # vq_feats = rearrange(vq_feats, 'b (h w) c -> b c h w', h=p, w=p)
         # TODO: decode model
