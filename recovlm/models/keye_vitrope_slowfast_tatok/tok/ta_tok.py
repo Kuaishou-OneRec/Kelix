@@ -43,13 +43,13 @@ class TextAlignedTokenizer(nn.Module):
         self.pool_scale = pool_scale
         self.decoder_depth = decoder_depth
         self.select_layer_id = select_layer_id
-       
+
         self.bottleneck_dim = bottleneck['args']['bottleneck_dim']
 
         # TODO:
         print("teacher: -------------------", teacher)
         # self.encoder = visual_encoder
-        self.encoder_hidden_dim = visual_encoder.config.hidden_size
+        self.encoder_hidden_dim = visual_encoder
 
         # self.decoder = visual_encoder
 

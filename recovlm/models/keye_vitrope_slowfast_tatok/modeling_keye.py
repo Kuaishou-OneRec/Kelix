@@ -2710,7 +2710,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         vision_tower_name = "/mmu_mllm_hdd_2/weimuhao/model/tatok/ta_tok.pth"
         vision_tower_cfg = None
         delay_load = False
-        self.vision_tower = build_vision_tower(vision_tower_name=vision_tower_name, vision_tower_cfg=vision_tower_cfg, visual_encoder=self.visual, delay_load=delay_load)
+        self.vision_tower = build_vision_tower(vision_tower_name=vision_tower_name, vision_tower_cfg=vision_tower_cfg, visual_encoder=self.visual.config.hidden_size, delay_load=delay_load)
         ######################## TODO: add TA-Tok ########################
 
         # self.visual_fast = SiglipVisionModel(config.fast_vision_config)
