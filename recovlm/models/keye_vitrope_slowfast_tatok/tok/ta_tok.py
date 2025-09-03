@@ -170,21 +170,22 @@ class TextAlignedTokenizer(nn.Module):
 
     def forward(self, data, **kwargs):
         # data: video in shape (b, c, t, h, w)
-        # FIXME: data: image in shape (n, c)
+        # FIXME: data: image in shape (b, n, c)
         encode_output = self.encode(data, **kwargs)
-        vq_feats = encode_output['encoded']
-        p = int(vq_feats.shape[1] ** 0.5)
-        vq_feats = rearrange(vq_feats, 'b (h w) c -> b c h w', h=p, w=p)
+        vq_feats = encode_output['encoded'] # quantized
+        print("vq_feats after self.encode(quantized):", vq_feats.shape)
+        # p = int(vq_feats.shape[1] ** 0.5)
+        # vq_feats = rearrange(vq_feats, 'b (h w) c -> b c h w', h=p, w=p)
         # TODO: decode model
         # pred_feats = self.decode(vq_feats)
 
         # self.input_type: quant
         if self.input_type == 'quant':
-            z = encode_output["regularized_z"] # [b, n, c]
+            z = encode_output["regularized_z"] # [b, n, c] quantized
         elif self.input_type == 'indices':
-            z = encode_output["bottleneck_rep"] # [b, n]
+            z = encode_output["bottleneck_rep"] # [b, n] indices
         elif self.input_type == 'rec':
-            z = pred_feats # [b, n, c]
+            z = pred_feats # [b, n, c] rec
         encode_output['encoded'] = z
 
         # reconstruction_loss = torch.mean((data - pred_feats)**2)

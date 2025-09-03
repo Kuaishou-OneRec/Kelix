@@ -3059,14 +3059,16 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
                 
 
-                print(" pixel_values:", pixel_values.shape, " len(image_embeds):", len(image_embeds), " len(image_embeds[0]):", len(image_embeds[0]), " len(image_embeds[0][0]):", len(image_embeds[0][0])) # torch.Size([1, 56616, 3, 14, 14])
+                print(" pixel_values:", pixel_values.shape, " len(image_embeds):", len(image_embeds), " len(image_embeds[0]):", len(image_embeds[0]), " len(image_embeds[0][0]):", len(image_embeds[0][0])) 
+                # torch.Size([1, 6424, 3, 14, 14])
+                # len(image_embeds): 6  len(image_embeds[0]): 396  len(image_embeds[0][0]): 1152
                 
                 # print("image_embeds.type:", image_embeds.type) # list
 
-                image_embeds = self.mlp_AR(image_embeds, image_grid_thw) # list: 6,1452,4096
+                image_embeds = self.mlp_AR(image_embeds, image_grid_thw) # list: 
                 
                 print(" len(image_embeds) after mlp:", len(image_embeds), " len(image_embeds[0]) after mlp:", len(image_embeds[0]), " len(image_embeds[0][0]) after mlp:", len(image_embeds[0][0]))
-                
+                # len(image_embeds) after mlp: 3  len(image_embeds[0]) after mlp: 1500  len(image_embeds[0][0]) after mlp: 4096
 
 
 

@@ -95,7 +95,7 @@ class SimVectorQuantizer(nn.Module):
                 self.stochastic_temperature_inv = nn.Parameter(torch.tensor(10.0))
 
         # for clear inference code, we remove the codebook init from LLM's embedding
-        # CODEBOOK!!!
+        # FIXME: CODEBOOK INIT!!!
         self.embedding = nn.Embedding(self.codebook_size, self.dim)
         self.embedding_proj = nn.Linear(self.dim, self.dim)
 
