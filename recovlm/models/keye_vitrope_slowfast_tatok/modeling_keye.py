@@ -3056,13 +3056,20 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 )
                 image_embeds = vision_outputs.last_hidden_state
 
-                image_embeds = self.mlp_AR(image_embeds, image_grid_thw) # list:
-                print("len(image_embeds):", len(image_embeds))
-                print("len(image_embeds):", len(image_embeds[0]))
-                print("len(image_embeds):", len(image_embeds[0][0]))
-
                 import ipdb
                 ipdb.set_trace()
+
+                print("pixel_values:", pixel_values.shape)
+                print("len(image_embeds):", len(image_embeds))
+                print("image_embeds.type:", image_embeds.type)
+
+                image_embeds = self.mlp_AR(image_embeds, image_grid_thw) # list:
+                
+                print("len(image_embeds):", len(image_embeds))
+                print("len(image_embeds[0]):", len(image_embeds[0]))
+                print("len(image_embeds[0][0]):", len(image_embeds[0][0]))
+
+                
                 print("-----test vq------")
                 # TODO: VECTOR QUANTIZATION
                 # print("pixel_values:", pixel_values.shape) # torch.Size([1, 52912, 3, 14, 14])
