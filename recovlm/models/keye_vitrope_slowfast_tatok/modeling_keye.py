@@ -3058,22 +3058,17 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
                 
 
-                print("pixel_values:", pixel_values.shape)
-                print("len(image_embeds):", len(image_embeds))
-                print("len(image_embeds[0]):", len(image_embeds[0]))
-                print("len(image_embeds[0][0]):", len(image_embeds[0][0]))
-                print("len(image_embeds[0][0][0]):", len(image_embeds[0][0][0]))
+                print(" pixel_values:", pixel_values.shape, " len(image_embeds):", len(image_embeds), " len(image_embeds[0]):", len(image_embeds[0]), " len(image_embeds[0][0]):", len(image_embeds[0][0])) # torch.Size([1, 56616, 3, 14, 14])
+                
                 # print("image_embeds.type:", image_embeds.type) # list
 
                 image_embeds = self.mlp_AR(image_embeds, image_grid_thw) # list:
                 
-                print("len(image_embeds):", len(image_embeds))
-                print("len(image_embeds[0]):", len(image_embeds[0]))
-                print("len(image_embeds[0][0]):", len(image_embeds[0][0]))
-                print("len(image_embeds[0][0][0]):", len(image_embeds[0][0]))
+                print(" len(image_embeds) after mlp:", len(image_embeds), " len(image_embeds[0]) after mlp:", len(image_embeds[0]), " len(image_embeds[0][0]) after mlp:", len(image_embeds[0][0]))
+                
+                
 
-                import pdb
-                pdb.set_trace()
+                
 
                 
                 print("-----test vq------")
