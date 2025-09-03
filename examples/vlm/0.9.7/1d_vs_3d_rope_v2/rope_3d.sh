@@ -27,7 +27,7 @@ MODEL_DIR=/mmu_mllm_hdd_2/yangzhuoran/model/Keye-VL-1_5-8B-Base
 #OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
 # examples/vlm/0.9.7/1d_vs_3d_rope/rope_1d.sh 
 # OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.7/Stage3/8b/1d_vs_3d_rope_v2/rope3d
-OUTPUT_DIR=/llm_reco_ssd/yangzhuoran/code/outputs/navit-tar/test_vq
+OUTPUT_DIR=/llm_reco_ssd/yangzhuoran/code/outputs/navit-tar/tatok_class
 
 mkdir -p $OUTPUT_DIR
 mkdir -p /tmp/_wids_cache
@@ -129,7 +129,7 @@ nohup mpirun --allow-run-as-root \
         bash -c "bash numa_runner.sh python3 recipes/train_fsdp.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
 		--dataset_config examples/vlm/0.9.7/1d_vs_3d_rope_v2/exp_0.5.11.json \
-		--model_class KeyeForConditionalGeneration_vitrope_slowfast \
+		--model_class KeyeForConditionalGeneration_vitrope_slowfast_tatok \
                 --allow_random_init_params 'mlp_AR.pre_norm.weight,mlp_AR.pre_norm.bias,mlp_AR.linear_1.weight,mlp_AR.linear_1.bias,mlp_AR.linear_2.weight,mlp_AR.linear_2.bias,visual_fast.vision_model.embeddings.packing_position_embedding.weight,fast_mlp_AR.pre_norm.weight,fast_mlp_AR.pre_norm.bias,fast_mlp_AR.linear_1.weight,fast_mlp_AR.linear_1.bias,fast_mlp_AR.linear_2.weight,fast_mlp_AR.linear_2.bias,visual.vision_model.head.probe,visual.vision_model.head.attention.in_proj_weight,visual.vision_model.head.attention.in_proj_bias,visual.vision_model.head.attention.out_proj.weight,visual.vision_model.head.attention.out_proj.bias,visual.vision_model.head.layernorm.weight,visual.vision_model.head.layernorm.bias,visual.vision_model.head.mlp.fc1.weight,visual.vision_model.head.mlp.fc1.bias,visual.vision_model.head.mlp.fc2.weight,visual.vision_model.head.mlp.fc2.bias' \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
