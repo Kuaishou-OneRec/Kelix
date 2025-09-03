@@ -24,6 +24,7 @@ class TextAlignedTokenizer(nn.Module):
     def __init__(
         self, 
         visual_encoder,
+        decoder_config,
         bottleneck,
         bottleneck_token_num=256,
         input_size=384,
@@ -47,15 +48,13 @@ class TextAlignedTokenizer(nn.Module):
         self.bottleneck_dim = bottleneck['args']['bottleneck_dim']
 
         # TODO: decoder init
-        # print("teacher: -------------------", teacher)
-        # self.encoder = visual_encoder
         self.encoder_hidden_dim = visual_encoder
-
         # self.decoder = visual_encoder
+        from .modeling_keye import SiglipVisionModel
+        self.decoder = SiglipVisionModel(decoder_config)
 
         # self.encoder_config = AutoConfig.from_pretrained(teacher)
         # self.encoder = AutoModel.from_config(self.encoder_config).vision_model         
-        
         # self.encoder_hidden_dim = self.encoder.config.hidden_size
 
         # self.decoder_config = Siglip2VisionConfig()
@@ -96,13 +95,13 @@ class TextAlignedTokenizer(nn.Module):
         return next(self.parameters()).dtype
     
     @classmethod
-    def from_checkpoint(cls, ckpt, visual_encoder, load_teacher=True, **kwargs):
+    def from_checkpoint(cls, ckpt, visual_encoder, decoder_config, load_teacher=True, **kwargs):
         
         
         # ckpt = torch.load(ckpt_path, map_location='cpu')
         # ckpt_kwargs = ckpt["model"]["args"]
         ckpt_kwargs = {'bottleneck': {'name': 'bottleneck', 'args': {'bottleneck_dim': 1536, 'norm': 'none', 'regularizer': {'name': 'simvq', 'args': {'codebook_size': 65536, 'commitment_loss_weight': 0.25, 'codebook_loss_weight': 1.0, 'entropy_loss_weight': 0.0, 'entropy_loss_temperature': 0.01, 'l2_normalized': True, 'stochastic': True, 'stochastic_temperature': 0.03, 'top_k': 4, 'top_k_prob': 0.5, 'residual_weight': 0.1}}}}, 'bottleneck_token_num': 729, 'input_size': 384, 'teacher': 'google/siglip2-so400m-patch14-384', 'ckpt_path': 'google/siglip2-so400m-patch14-384', 'pool_scale': 1, 'rand_scale': True}
-        model = cls(visual_encoder=visual_encoder, **kwargs, **ckpt_kwargs) # __init__
+        model = cls(visual_encoder=visual_encoder, decoder_config=decoder_config, **kwargs, **ckpt_kwargs) # __init__
 
 
         # sd = ckpt["model"]["sd"]
@@ -120,7 +119,7 @@ class TextAlignedTokenizer(nn.Module):
         #     x = self.image_resize(x)
         # vq_feats = self.encoder(x, output_hidden_states=True).hidden_states[self.select_layer_id] 
 
-        # TODO:
+        # FIXME:
         vq_feats = x # (b, n,c)
 
         pool_scale = self.pool_scale
@@ -184,8 +183,8 @@ class TextAlignedTokenizer(nn.Module):
             z = encode_output["regularized_z"] # [b, n, c] quantized
         elif self.input_type == 'indices':
             z = encode_output["bottleneck_rep"] # [b, n] indices
-        elif self.input_type == 'rec':
-            z = pred_feats # [b, n, c] rec
+        # elif self.input_type == 'rec':
+        #     z = pred_feats # [b, n, c] rec
         encode_output['encoded'] = z
 
         # reconstruction_loss = torch.mean((data - pred_feats)**2)

@@ -2704,13 +2704,14 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.mlp_AR = Projector(config, config.vision_config)
         self.visual = SiglipVisionModel(config.vision_config)
+        print("config.vision_config:", config.vision_config)
 
         ######################## TODO: add TA-Tok ########################
         from .multimodal_encoder.builder import build_vision_tower
-        vision_tower_name = "/mmu_mllm_hdd_2/weimuhao/model/tatok/ta_tok.pth"
+        vision_tower_name = "/mmu_mllm_hdd_2/weimuhao/model/tatok/ta_tok.pth" # no loading from pretrained
         vision_tower_cfg = None
         delay_load = False
-        self.vision_tower = build_vision_tower(vision_tower_name=vision_tower_name, vision_tower_cfg=vision_tower_cfg, visual_encoder=config.hidden_size, delay_load=delay_load)
+        self.vision_tower = build_vision_tower(vision_tower_name=vision_tower_name, vision_tower_cfg=vision_tower_cfg, visual_encoder=config.hidden_size, decoder_config=config.vision_config, delay_load=delay_load)
         print("config.hidden_size:", config.hidden_size)
         ######################## TODO: add TA-Tok ########################
 
