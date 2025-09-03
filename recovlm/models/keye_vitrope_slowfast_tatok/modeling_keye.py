@@ -3124,8 +3124,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 image_forward_outs = image_features_vq['image_forward_outs']
                 # TODO: loss update
                 if type(image_forward_outs) is list:
-                    codebook_loss = torch.mean([image_forward_outs[i]['codebook_loss'] for i in range(len(image_forward_outs))])
-                    reconstruction_loss = torch.mean([image_forward_outs[i]['reconstruction_loss'] for i in range(len(image_forward_outs))])
+                    codebook_loss = torch.mean(torch.tensor([image_forward_outs[i]['codebook_loss'] for i in range(len(image_forward_outs))]))
+                    reconstruction_loss = torch.mean(torch.tensor([image_forward_outs[i]['reconstruction_loss'] for i in range(len(image_forward_outs))]))
                 else:
                     codebook_loss = image_forward_outs['codebook_loss']
                     reconstruction_loss = image_forward_outs['reconstruction_loss']
