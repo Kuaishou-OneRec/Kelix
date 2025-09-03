@@ -9,7 +9,7 @@ from ..tok.utils import ScalingLayer
 
 
 class TATokVisionTower(nn.Module):
-    def __init__(self, vision_tower, vision_tower_cfg, delay_load=False):
+    def __init__(self, vision_tower, vision_tower_cfg, visual_encoder, delay_load=False):
         super().__init__()
 
         self.is_loaded = False
@@ -19,6 +19,8 @@ class TATokVisionTower(nn.Module):
         self.image_processor = SiglipImageProcessor()
 
         self.vision_tower_name = vision_tower
+        
+        self.visual_encoder = visual_encoder
 
         if not delay_load:
             rank0_print(f"Loading vision tower: {vision_tower}")
@@ -38,7 +40,7 @@ class TATokVisionTower(nn.Module):
             rank0_print("{} is already loaded, `load_model` called again, skipping.".format(self.vision_tower_name))
             return
         
-        self.vision_tower = TextAlignedTokenizer.from_checkpoint(self.vision_tower_name, load_teacher=False).to(device_map)
+        self.vision_tower = TextAlignedTokenizer.from_checkpoint(self.vision_tower_name, visual_encoder=self.visual_encoder, load_teacher=False).to(device_map)
         self.vision_tower.bottleneck.regularizer.set_eval_deterministic(deterministic=True)
 
         self.vision_tower.input_type = 'rec'

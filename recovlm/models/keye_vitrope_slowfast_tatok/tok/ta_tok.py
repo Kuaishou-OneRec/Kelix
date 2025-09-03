@@ -23,6 +23,7 @@ ckpt_path = "/mmu_mllm_hdd_2/weimuhao/model/tatok/ta_tok.pth"
 class TextAlignedTokenizer(nn.Module):
     def __init__(
         self, 
+        visual_encoder,
         bottleneck,
         bottleneck_token_num=256,
         input_size=384,
@@ -46,10 +47,16 @@ class TextAlignedTokenizer(nn.Module):
         self.bottleneck_dim = bottleneck['args']['bottleneck_dim']
 
         # TODO:
-        self.encoder_config = AutoConfig.from_pretrained(teacher)
-        self.encoder = AutoModel.from_config(self.encoder_config).vision_model         
-        
+        print("teacher: -------------------", teacher)
+        self.encoder = visual_encoder
         self.encoder_hidden_dim = self.encoder.config.hidden_size
+
+        self.decoder = visual_encoder
+
+        # self.encoder_config = AutoConfig.from_pretrained(teacher)
+        # self.encoder = AutoModel.from_config(self.encoder_config).vision_model         
+        
+        # self.encoder_hidden_dim = self.encoder.config.hidden_size
 
         # self.decoder_config = Siglip2VisionConfig()
         # self.decoder_config.update({
@@ -89,12 +96,12 @@ class TextAlignedTokenizer(nn.Module):
         return next(self.parameters()).dtype
     
     @classmethod
-    def from_checkpoint(cls, ckpt, load_teacher=True, **kwargs):
+    def from_checkpoint(cls, ckpt, visual_encoder, load_teacher=True, **kwargs):
         # TODO:
         
         ckpt = torch.load(ckpt_path, map_location='cpu')
         ckpt_kwargs = ckpt["model"]["args"]
-        model = cls(**kwargs, **ckpt_kwargs)
+        model = cls(visual_encoder=visual_encoder, **kwargs, **ckpt_kwargs) # __init__
 
 
         sd = ckpt["model"]["sd"]
