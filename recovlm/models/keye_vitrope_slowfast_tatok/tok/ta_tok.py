@@ -20,6 +20,24 @@ from huggingface_hub import hf_hub_download
 ckpt_path = "/mmu_mllm_hdd_2/weimuhao/model/tatok/ta_tok.pth"
 
 
+class TokenDecoder(nn.Module):
+    def __init__(self, hidden_dim, depth=3):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            nn.TransformerEncoderLayer(
+                d_model=hidden_dim,
+                nhead=8,
+                batch_first=True
+            )
+            for _ in range(depth)
+        ])
+        self.out_proj = nn.Linear(hidden_dim, hidden_dim)
+
+    def forward(self, x, attn_mask=None):
+        for layer in self.layers:
+            x = layer(x, src_key_padding_mask=attn_mask)
+        return self.out_proj(x)  # [b, n, c]
+
 class TextAlignedTokenizer(nn.Module):
     def __init__(
         self, 
@@ -45,21 +63,23 @@ class TextAlignedTokenizer(nn.Module):
         self.decoder_depth = decoder_depth
         self.select_layer_id = select_layer_id
 
-        self.bottleneck_dim = bottleneck['args']['bottleneck_dim']
+        self.bottleneck_dim = bottleneck['args']['bottleneck_dim'] # self.bottleneck_dim = visual_encoder
+
+        print("self.bottleneck_dim: ", self.bottleneck_dim)
 
         # TODO: decoder init
         self.encoder_hidden_dim = visual_encoder
-        # self.decoder = visual_encoder
-        # from modeling_keye import SiglipVisionModel
-        from recovlm.models.keye_vitrope_slowfast_tatok.modeling_keye import SiglipVisionModel
-        self.decoder_config = decoder_config
-        self.decoder_config.update({
-            'patch_size': 1,
-            'num_hidden_layers': self.decoder_depth,
-            'num_channels': self.bottleneck_dim,
-            'hidden_size': self.encoder_hidden_dim,
-        })
-        self.decoder = SiglipVisionModel(self.decoder_config)
+        # from recovlm.models.keye_vitrope_slowfast_tatok.modeling_keye import SiglipVisionModel
+        # self.decoder_config = decoder_config
+        # self.decoder_config.update({
+        #     'patch_size': 1,
+        #     'num_hidden_layers': self.decoder_depth,
+        #     'num_channels': self.bottleneck_dim,
+        #     'hidden_size': self.encoder_hidden_dim,
+        # })
+        # self.decoder = SiglipVisionModel(self.decoder_config)
+        self.decoder = TokenDecoder(hidden_dim=self.encoder_hidden_dim, depth=self.decoder_depth)
+
 
         # self.encoder_config = AutoConfig.from_pretrained(teacher)
         # self.encoder = AutoModel.from_config(self.encoder_config).vision_model         
@@ -108,7 +128,8 @@ class TextAlignedTokenizer(nn.Module):
         
         # ckpt = torch.load(ckpt_path, map_location='cpu')
         # ckpt_kwargs = ckpt["model"]["args"]
-        ckpt_kwargs = {'bottleneck': {'name': 'bottleneck', 'args': {'bottleneck_dim': 1536, 'norm': 'none', 'regularizer': {'name': 'simvq', 'args': {'codebook_size': 65536, 'commitment_loss_weight': 0.25, 'codebook_loss_weight': 1.0, 'entropy_loss_weight': 0.0, 'entropy_loss_temperature': 0.01, 'l2_normalized': True, 'stochastic': True, 'stochastic_temperature': 0.03, 'top_k': 4, 'top_k_prob': 0.5, 'residual_weight': 0.1}}}}, 'bottleneck_token_num': 729, 'input_size': 384, 'teacher': 'google/siglip2-so400m-patch14-384', 'ckpt_path': 'google/siglip2-so400m-patch14-384', 'pool_scale': 1, 'rand_scale': True}
+        # visual_encoder = 4096 = token embedding dim
+        ckpt_kwargs = {'bottleneck': {'name': 'bottleneck', 'args': {'bottleneck_dim': visual_encoder, 'norm': 'none', 'regularizer': {'name': 'simvq', 'args': {'codebook_size': 65536, 'commitment_loss_weight': 0.25, 'codebook_loss_weight': 1.0, 'entropy_loss_weight': 0.0, 'entropy_loss_temperature': 0.01, 'l2_normalized': True, 'stochastic': True, 'stochastic_temperature': 0.03, 'top_k': 4, 'top_k_prob': 0.5, 'residual_weight': 0.1}}}}, 'bottleneck_token_num': 729, 'input_size': 384, 'teacher': 'google/siglip2-so400m-patch14-384', 'ckpt_path': 'google/siglip2-so400m-patch14-384', 'pool_scale': 1, 'rand_scale': True}
         model = cls(visual_encoder=visual_encoder, decoder_config=decoder_config, **kwargs, **ckpt_kwargs) # __init__
 
 
@@ -167,7 +188,8 @@ class TextAlignedTokenizer(nn.Module):
         # z = self.decoder(z, attention_mask, spatial_shape, output_hidden_states=True).last_hidden_state
         # z = self.decode_task_layer(z)
         # TODO:
-        z = self.decoder(z, output_hidden_states=True).last_hidden_state
+        z = self.decoder(z).last_hidden_state
+        print("z: after decoder: ", z.shape)
         z = self.decode_task_layer(z)
         return z
 
@@ -182,14 +204,17 @@ class TextAlignedTokenizer(nn.Module):
         # FIXME: data: image in shape (b, n, c)
         encode_output = self.encode(data, **kwargs)
         vq_feats = encode_output['encoded'] # quantized
-        print("vq_feats after self.encode(quantized):", vq_feats.shape) # torch.Size([1, 414, 1536])
+        print("vq_feats after self.encode(quantized):", vq_feats.shape) # torch.Size([1, 414, 4096])
         # p = int(vq_feats.shape[1] ** 0.5)
         # vq_feats = rearrange(vq_feats, 'b (h w) c -> b c h w', h=p, w=p)
         # TODO: decode model
-        pred_feats = self.decode(vq_feats)
+        print("self.input_type: ", self.input_type)
+        # pred_feats = self.decode(vq_feats)
+        attn_mask = None
+        pred_feats = self.decode(vq_feats, attn_mask=attn_mask)
 
         # self.input_type: quant
-        print("self.input_type: ", self.input_type)
+        
         if self.input_type == 'quant':
             z = encode_output["regularized_z"] # [b, n, c] quantized
         elif self.input_type == 'indices':
@@ -198,6 +223,13 @@ class TextAlignedTokenizer(nn.Module):
             z = pred_feats # [b, n, c] rec
         encode_output['encoded'] = z
 
-        # reconstruction_loss = torch.mean((data - pred_feats)**2)
-        # encode_output['reconstruction_loss'] = z
+        # Step 4: compute reconstruction loss (MSE on features)
+        if attn_mask is not None:  # mask 掉 padding位置
+            reconstruction_loss = ((data - pred_feats) ** 2) * attn_mask[..., None]
+            reconstruction_loss = reconstruction_loss.sum() / attn_mask.sum()
+        else:
+            reconstruction_loss = F.mse_loss(pred_feats, data)
+
+        print("reconstruction_loss: ", reconstruction_loss)
+        encode_output['reconstruction_loss'] = reconstruction_loss
         return encode_output

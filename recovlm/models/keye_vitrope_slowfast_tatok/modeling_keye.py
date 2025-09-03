@@ -3051,7 +3051,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         if inputs_embeds is None:
             inputs_embeds = self.model.embed_tokens(input_ids)
-            print("inputs_embeds:", inputs_embeds.shape)
+            print("inputs_embeds:", inputs_embeds.shape) # torch.Size([1, 14552, 4096])
 
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
@@ -3121,6 +3121,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     pool_scale = 1
                 image_features_vq = self.vision_tower(image_embeds, pool_scale=pool_scale)
                 image_forward_outs = image_features_vq['image_forward_outs']
+                # TODO: loss update
                 codebook_loss = image_forward_outs['codebook_loss']
                 reconstruction_loss = image_forward_outs['reconstruction_loss']
                 
