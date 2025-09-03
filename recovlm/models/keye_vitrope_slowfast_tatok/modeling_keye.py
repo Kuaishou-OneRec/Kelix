@@ -3065,6 +3065,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 # target: (teacher output:) - image_embeds (make sure teacher freeze)
                 
                 # random scale for training, but scale 1 for understanding evaluation
+                '''
                 import random
                 if self.training:
                     pool_scale = random.choice([1, 1, 2, 3])
@@ -3075,13 +3076,10 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 image_forward_outs = image_features_vq['image_forward_outs']
                 codebook_loss = image_forward_outs['codebook_loss']
                 reconstruction_loss = image_forward_outs['reconstruction_loss']
+                '''
                 
 
-                r# eturn {'image_features': image_features, 'image_tokens': image_tokens}
-                
 
-
-                #64*7168
                 
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 #image_embeds is a list of tensor, each tensor is a image feature,I want to concat them all into a tensor
