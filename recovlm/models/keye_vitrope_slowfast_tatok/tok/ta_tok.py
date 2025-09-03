@@ -3,7 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from torchvision.transforms import Resize
-from transformers import AutoConfig, AutoModel, Siglip2VisionConfig, Siglip2VisionModel
+from transformers import AutoConfig, AutoModel
+from transformers import Siglip2VisionConfig, Siglip2VisionModel
 
 from . import models
 from .utils import ScalingLayer
@@ -49,14 +50,14 @@ class TextAlignedTokenizer(nn.Module):
         
         self.encoder_hidden_dim = self.encoder.config.hidden_size
 
-        self.decoder_config = Siglip2VisionConfig()
-        self.decoder_config.update({
-            'patch_size': 1,
-            'num_hidden_layers': self.decoder_depth,
-            'num_channels': self.bottleneck_dim,
-            'hidden_size': self.encoder_hidden_dim,
-        })
-        self.decoder = Siglip2VisionModel(self.decoder_config)
+        # self.decoder_config = Siglip2VisionConfig()
+        # self.decoder_config.update({
+        #     'patch_size': 1,
+        #     'num_hidden_layers': self.decoder_depth,
+        #     'num_channels': self.bottleneck_dim,
+        #     'hidden_size': self.encoder_hidden_dim,
+        # })
+        # self.decoder = Siglip2VisionModel(self.decoder_config)
 
         self.encode_task_layer = nn.Sequential(
             nn.Linear(self.encoder_hidden_dim, self.encoder_hidden_dim),
@@ -142,8 +143,9 @@ class TextAlignedTokenizer(nn.Module):
         attention_mask = torch.ones(z.shape[:2], dtype=torch.int, device=z.device)
         p = int(z.shape[1]**0.5)
         spatial_shape = torch.tensor([[p, p]]*z.shape[0], device=self.device)
-        z = self.decoder(z, attention_mask, spatial_shape, output_hidden_states=True).last_hidden_state
-        z = self.decode_task_layer(z)
+        # TODO:
+        # z = self.decoder(z, attention_mask, spatial_shape, output_hidden_states=True).last_hidden_state
+        # z = self.decode_task_layer(z)
         return z
 
     def decode_from_bottleneck(self, bottleneck_rep):
