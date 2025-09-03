@@ -45,6 +45,7 @@ class TextAlignedTokenizer(nn.Module):
        
         self.bottleneck_dim = bottleneck['args']['bottleneck_dim']
 
+        # TODO:
         self.encoder_config = AutoConfig.from_pretrained(teacher)
         self.encoder = AutoModel.from_config(self.encoder_config).vision_model         
         
