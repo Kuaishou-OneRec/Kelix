@@ -149,7 +149,7 @@ class SimVectorQuantizer(nn.Module):
         quantized = F.embedding(q_indices, emb, self.embedding.padding_idx, self.embedding.max_norm,
             self.embedding.norm_type, self.embedding.scale_grad_by_freq, self.embedding.sparse)
         
-        
+        # FIXME:
         codebook_loss = torch.mean((quantized.detach() - z_flattened)**2) + torch.mean((quantized - z_flattened.detach())**2) # (b n) d
         
 
