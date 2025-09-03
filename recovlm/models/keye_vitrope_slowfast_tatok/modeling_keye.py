@@ -3056,8 +3056,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 )
                 image_embeds = vision_outputs.last_hidden_state
 
-                import ipdb
-                ipdb.set_trace()
+                
 
                 print("pixel_values:", pixel_values.shape)
                 print("len(image_embeds):", len(image_embeds))
@@ -3068,6 +3067,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 print("len(image_embeds):", len(image_embeds))
                 print("len(image_embeds[0]):", len(image_embeds[0]))
                 print("len(image_embeds[0][0]):", len(image_embeds[0][0]))
+
+                import pdb
+                pdb.set_trace()
 
                 
                 print("-----test vq------")
