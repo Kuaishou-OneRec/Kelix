@@ -3095,6 +3095,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
                 print(" pixel_values:", pixel_values.shape, " len(image_embeds):", len(image_embeds), " len(image_embeds[0]):", len(image_embeds[0]), " len(image_embeds[0][0]):", len(image_embeds[0][0])) 
                 # torch.Size([1, 6424, 3, 14, 14])
+                for i in range(len(image_embeds)):
+                    print(" i:  ", i, ", image_embeds[i].shape: ", image_embeds[i].shape)
                 # len(image_embeds): 6  len(image_embeds[0]): 396  len(image_embeds[0][0]): 1152
                 
                 # print("image_embeds.type:", image_embeds.type) # list
@@ -3124,8 +3126,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 image_forward_outs = image_features_vq['image_forward_outs']
                 # TODO: loss update
                 if type(image_forward_outs) is list:
-                    codebook_loss = torch.mean(torch.tensor([image_forward_outs[i]['codebook_loss'] for i in range(len(image_forward_outs))]))
-                    reconstruction_loss = torch.mean(torch.tensor([image_forward_outs[i]['reconstruction_loss'] for i in range(len(image_forward_outs))]))
+                    codebook_loss = sum([image_forward_outs[i]['codebook_loss'] for i in range(len(image_forward_outs))]) / len(image_forward_outs)
+                    reconstruction_loss = sum([image_forward_outs[i]['reconstruction_loss'] for i in range(len(image_forward_outs))]) / len(image_forward_outs)
                 else:
                     codebook_loss = image_forward_outs['codebook_loss']
                     reconstruction_loss = image_forward_outs['reconstruction_loss']
