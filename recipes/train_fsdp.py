@@ -1323,7 +1323,7 @@ def train():
       with Timer("bwd"):
         print("loss.backward() begin----------")
         loss.backward()
-        print("loss.backward() end----------")
+        
         # grad_logger(model)
 
         clip_grad_by_value(model, args.clip_range)
@@ -1338,6 +1338,7 @@ def train():
           global_step += 1
 
           ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
+          print("loss.backward() end----------")
 
       ########## dataset source monitor ###############
       if args.monitor_datasource_loss:
