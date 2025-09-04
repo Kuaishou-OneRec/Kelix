@@ -232,5 +232,5 @@ class TextAlignedTokenizer(nn.Module):
 
         print("reconstruction_loss: ", reconstruction_loss)
         encode_output['reconstruction_loss'] = reconstruction_loss
-        print("reconstruction_loss:", reconstruction_loss.requires_grad)
+        print("reconstruction_loss.requires_grad:", reconstruction_loss.requires_grad)
         return encode_output
