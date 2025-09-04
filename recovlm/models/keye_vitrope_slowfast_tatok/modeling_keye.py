@@ -2689,11 +2689,11 @@ class KeyeCausalLMOutputWithPast(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     loss_reconstruction: Optional[List[torch.FloatTensor]] = None
-    logits: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    rope_deltas: Optional[torch.LongTensor] = None
+    #logits: torch.FloatTensor = None
+    #past_key_values: Optional[List[torch.FloatTensor]] = None
+    #hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    #attentions: Optional[Tuple[torch.FloatTensor]] = None
+    #rope_deltas: Optional[torch.LongTensor] = None
 
 
 class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
@@ -3348,11 +3348,11 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         return KeyeCausalLMOutputWithPast(
             loss=codebook_loss,
             loss_reconstruction=reconstruction_loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
+            #logits=logits,
+            #past_key_values=outputs.past_key_values,
+            #hidden_states=outputs.hidden_states,
+            #attentions=outputs.attentions,
+            #rope_deltas=self.rope_deltas,
         )
 
     def prepare_inputs_for_generation(

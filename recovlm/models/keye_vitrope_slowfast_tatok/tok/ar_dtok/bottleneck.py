@@ -149,8 +149,8 @@ class SimVectorQuantizer(nn.Module):
         quantized = F.embedding(q_indices, emb, self.embedding.padding_idx, self.embedding.max_norm,
             self.embedding.norm_type, self.embedding.scale_grad_by_freq, self.embedding.sparse)
         
-        print("quantized.requires_grad:", quantized.requires_grad)
-        print("z_flattened.requires_grad:", z_flattened.requires_grad)
+        print("quantized.requires_grad:", quantized.requires_grad) # False
+        print("z_flattened.requires_grad:", z_flattened.requires_grad) # True
         # FIXME:
         codebook_loss = torch.mean((quantized.detach() - z_flattened)**2) + torch.mean((quantized - z_flattened.detach())**2) # (b n) d
         print("codebook_loss.requires_grad:", codebook_loss.requires_grad)
@@ -159,8 +159,8 @@ class SimVectorQuantizer(nn.Module):
         
         # preserve gradients
         # TODO:
-        quantized = z + (quantized - z).detach()
-        print("quantized.requires_grad after detach:", quantized.requires_grad)
+        quantized = z + (quantized - z).detach() # True
+        print("quantized.requires_grad after detach:", quantized.requires_grad) # True
 
         if self.same_index_shape:
             q_indices = q_indices.reshape(quantized.shape[0], quantized.shape[1])
