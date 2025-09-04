@@ -46,8 +46,9 @@ class TATokVisionTower(nn.Module):
         self.vision_tower.input_type = 'rec'
         self.vision_tower.scale_layer = ScalingLayer(mean=[0., 0., 0.], std=[1., 1., 1.])
 
-        self.vision_tower.requires_grad_(False)
-        self.vision_tower.eval()
+        # TODO: 
+        self.vision_tower.requires_grad_(True)
+        # self.vision_tower.eval()
 
         self.pool_scales = [1, 1, 2, 3]
 
