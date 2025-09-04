@@ -1,6 +1,7 @@
 import os
 
-#import torch
+import torch
+torch.autograd.set_detect_anomaly(True)  # 开启异常检测
 
 #torch.use_deterministic_algorithms(True)
 
@@ -41,7 +42,7 @@ from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VL_siglipCheckpointCon
 
 from recovlm.utils.ds_utils import print_input_info
 
-import torch
+#import torch
 import torch.nn as nn
 import torch.distributed as dist
 import torch.nn.functional as F

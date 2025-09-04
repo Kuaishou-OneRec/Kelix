@@ -3130,6 +3130,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     codebook_loss = image_forward_outs['codebook_loss']
                     reconstruction_loss = image_forward_outs['reconstruction_loss']
                 
+                # image_forward_outs[0]['codebook_loss']
+                print("image_forward_outs[0]['codebook_loss'].requires_grad-modeling:", image_forward_outs[0]['codebook_loss'])
                 print("codebook_loss.requires_grad-modeling:", codebook_loss.requires_grad)
                 print("reconstruction_loss.requires_grad-modeling:", reconstruction_loss.requires_grad)
 
