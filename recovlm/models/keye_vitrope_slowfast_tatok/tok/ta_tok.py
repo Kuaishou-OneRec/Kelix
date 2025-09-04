@@ -156,7 +156,7 @@ class TextAlignedTokenizer(nn.Module):
         # if pool_scale != 1:
         #     vq_feats = self.avg_pool(vq_feats, pool_scale)
         print("vq_feats:", vq_feats.shape) # torch.Size([1, 1500, 4096])
-        vq_feats = self.encode_task_layer(vq_feats.to(x)) # (b, n, c)
+        vq_feats = self.encode_task_layer(vq_feats.to(x.device)) # (b, n, c)
         
         bottleneck_out = self.bottleneck(vq_feats)
         z = bottleneck_out.pop('output') # quantized
