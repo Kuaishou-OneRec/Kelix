@@ -3344,6 +3344,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
+        
         return KeyeCausalLMOutputWithPast(
             loss=codebook_loss,
             loss_reconstruction=reconstruction_loss,
