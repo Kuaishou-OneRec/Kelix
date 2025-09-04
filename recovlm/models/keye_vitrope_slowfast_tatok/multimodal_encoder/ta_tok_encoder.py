@@ -48,7 +48,7 @@ class TATokVisionTower(nn.Module):
 
         # TODO: 
         self.vision_tower.requires_grad_(True)
-        # self.vision_tower.eval()
+        self.vision_tower.train()
 
         self.pool_scales = [1, 1, 2, 3]
 
