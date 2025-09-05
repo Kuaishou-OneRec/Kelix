@@ -153,7 +153,8 @@ class SimVectorQuantizer(nn.Module):
         print("quantized.requires_grad:", quantized.requires_grad) # False
         print("z_flattened.requires_grad:", z_flattened.requires_grad) # True
         # FIXME:
-        codebook_loss = torch.mean((quantized.detach() - z_flattened)**2) + torch.mean((quantized - z_flattened.detach())**2) # (b n) d
+        beta = 1000
+        codebook_loss = beta * torch.mean((quantized.detach() - z_flattened)**2) + torch.mean((quantized - z_flattened.detach())**2) # (b n) d
         print("codebook_loss.requires_grad:", codebook_loss.requires_grad)
 
         quantized = quantized.view(z.shape)  # (b, n, d)
