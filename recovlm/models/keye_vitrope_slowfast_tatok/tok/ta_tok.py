@@ -108,8 +108,19 @@ class TextAlignedTokenizer(nn.Module):
             'output_dim': self.bottleneck_dim}
         self.bottleneck = models.make(bottleneck, args=bottleneck_args) # vector quantization
 
-        self.scale_layer = ScalingLayer(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])   
+        # self.scale_layer = ScalingLayer(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])   
         self.image_resize = Resize((self.input_size, self.input_size))
+
+    
+    def set_trainable_modules(self):
+        # 先全部冻结
+        for p in self.parameters():
+            p.requires_grad = False
+
+        # 再解冻需要训练的部分
+        for module in [self.bottleneck, self.decoder, self.encode_task_layer, self.decode_task_layer]:
+            for p in module.parameters():
+                p.requires_grad = True
 
     def set_vq_eval_deterministic(self, deterministic=True):
         self.bottleneck.regularizer.set_eval_deterministic(deterministic)

@@ -1249,6 +1249,14 @@ def train():
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
       labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask) # loss_mask需要保证图片的token不会被预测
       ticker.tick("labels=...")
+      
+      for name, param in model.named_parameters():
+        if param.requires_grad:
+            print(f"{name}: requires_grad=True, shape={param.shape}")
+        # else:
+        #     print(f"{name}: requires_grad=False, shape={param.shape}")
+
+      
       with Timer("Fwd"):
         if args.model_class == "InternVLChatModel":
             output = model(
@@ -1448,8 +1456,8 @@ def train():
           log_dict = {
             # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
             "training/loss": avg_loss,
-            "all_loss": avg_loss,
-            "codebook_loss": codebook_loss,
+            "loss_all": avg_loss,
+            "loss_codebook": codebook_loss,
             "loss_reconstruction:": loss_reconstruction,
             f"training/grad_norm": grad_norm,
             "training/learning_rate": learning_rate,

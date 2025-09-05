@@ -117,6 +117,7 @@ class SimVectorQuantizer(nn.Module):
 
     @torch.autocast(device_type='cuda', enabled=False)
     def forward(self, z):
+        print("self.training in bottleneck: ", self.training)
         emb = self.get_emb()
         z = z.to(emb)
         # z = z.float()

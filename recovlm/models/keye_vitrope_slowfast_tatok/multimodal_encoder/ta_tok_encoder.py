@@ -41,14 +41,17 @@ class TATokVisionTower(nn.Module):
             return
         
         self.vision_tower = TextAlignedTokenizer.from_checkpoint(self.vision_tower_name, visual_encoder=visual_encoder, decoder_config=decoder_config, load_teacher=False).to(device_map)
-        self.vision_tower.bottleneck.regularizer.set_eval_deterministic(deterministic=True)
+        # TODO:
+        # self.vision_tower.bottleneck.regularizer.set_eval_deterministic(deterministic=True)
 
         self.vision_tower.input_type = 'rec'
         self.vision_tower.scale_layer = ScalingLayer(mean=[0., 0., 0.], std=[1., 1., 1.])
 
         # TODO: 
-        self.vision_tower.requires_grad_(False)
-        self.vision_tower.eval()
+        self.vision_tower.set_trainable_modules()
+        # self.vision_tower.requires_grad_(False)
+        # self.vision_tower.eval()
+        self.vision_tower.train()
 
         self.pool_scales = [1, 1, 2, 3]
 
