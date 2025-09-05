@@ -500,7 +500,7 @@ def freeze_params(args, model):
       print_rank_0("Freeze visual encoder parameters.")
       for name, param in model.named_parameters():
         if name.startswith("visual.merger."):
-          print_rank_0(f"Disable visual encoder grad: {name}")
+          print_rank_0(f"Disable visual.merger mlp grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
 
