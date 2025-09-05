@@ -1285,10 +1285,10 @@ def train():
         
 
         # # 提前shift logits & labels
-        # pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
-        #     dtype=labels.dtype).to(device=labels.device, non_blocking=True)
-        # labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
-        # local_labels = get_local_sequence(labels, seq_idx=1)
+        pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
+            dtype=labels.dtype).to(device=labels.device, non_blocking=True)
+        labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
+        local_labels = get_local_sequence(labels, seq_idx=1)
 
         # loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
 
