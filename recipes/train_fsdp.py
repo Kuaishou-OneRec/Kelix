@@ -267,6 +267,10 @@ def get_argument_parser():
 
   parser.add_argument("--freeze_projector", action="store_true",
                       help="Freeze visual projector layers.")
+  
+  parser.add_argument("--update_vision_tower", action="store_true",
+                      help="Update all vision_tower parameters.")
+
 
   parser.add_argument("--use_flash_attention_2", action="store_true",
                       help="Whether to use flash attention 2")
@@ -497,7 +501,7 @@ def freeze_params(args, model):
       print_rank_0("=" * 50)
 
     if args.freeze_projector:
-      print_rank_0("Freeze visual encoder parameters.")
+      print_rank_0("Freeze visual.merger parameters.")
       for name, param in model.named_parameters():
         if name.startswith("visual.merger."):
           print_rank_0(f"Disable visual.merger mlp grad: {name}")
@@ -505,13 +509,14 @@ def freeze_params(args, model):
       print_rank_0("=" * 50)
 
     if args.freeze_visual:
-      print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
+      print_rank_0("Freeze visual encoder parameters.")
       for name, param in model.named_parameters():
         if name.startswith("visual") and not name.startswith("visual.merger."):
           print_rank_0(f"Disable visual encoder grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
     
+
 
   elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_tatok', 'KeyeForConditionalGeneration_vitrope_slowfast_v2', 'KeyeForConditionalGeneration_vitrope_slowfast_v3', 'KeyeForConditionalGeneration_vitrope_slowfast_v4']:
     if args.freeze_llm:
@@ -521,6 +526,7 @@ def freeze_params(args, model):
           print_rank_0(f"Disable LLM grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
+    
     if args.freeze_projector:
       print_rank_0("Freeze visual encoder parameters.")
       for name, param in model.named_parameters():
@@ -528,6 +534,7 @@ def freeze_params(args, model):
           print_rank_0(f"Disable visual encoder grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
+
     if args.freeze_visual:
       print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
       for name, param in model.named_parameters():
@@ -535,6 +542,18 @@ def freeze_params(args, model):
           print_rank_0(f"Disable visual encoder grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
+    
+    if args.update_vision_tower:
+      print_rank_0("Update vision_tower parameters.")
+      for name, param in model.named_parameters():
+        if name.startswith("vision_tower."):
+          print_rank_0(f"Enable vision_tower grad: {name}")
+          param.requires_grad = True
+        else:
+          print_rank_0(f"Freeze params other than vision_tower: {name}")
+          param.requires_grad = False
+      print_rank_0("=" * 50)
+
   #### InternVLChatModel
   # 结构： language_model + ( vision_model + mlp )
   elif args.model_class == 'InternVLChatModel':
@@ -553,6 +572,7 @@ def freeze_params(args, model):
         if name.startswith("vision_model"):
           print_rank_0(f"Disable InternVLChatModel visual encoder(but mot adapter) grad: {name}")
           param.requires_grad = False
+    
   else:
     raise NotImplementedError(f"freeze_params Not support model class: {args.model_class}")
 
