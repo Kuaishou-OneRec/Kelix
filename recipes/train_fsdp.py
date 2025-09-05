@@ -1334,10 +1334,10 @@ def train():
         token_frequency = output.token_frequency
         # print('***token_frequency***:', token_frequency) # (65536,)
         nonzero_count = (token_frequency > 0).sum().item()   
-        total_count = token_frequency.sum().item()         
-        token_util = nonzero_count / total_count if total_count > 0 else 0
+        # total_count = token_frequency.sum().item()  
+        codebook_size = len(token_frequency)       
+        token_util = nonzero_count / codebook_size
         print("使用过的 token 数量:", nonzero_count)
-        print("总 token 次数:", total_count)
         print("token_util:", token_util)
 
         
