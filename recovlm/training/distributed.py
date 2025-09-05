@@ -331,7 +331,7 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
         sharded_tensor = distribute_tensor(
             full_tensor, mesh, sharded_meta_param.placements
         )
-        sharded_sd[param_name] = nn.Parameter(sharded_tensor)
+        sharded_sd[param_name] = nn.Parameter(sharded_tensor) # default: requires_grad=True
         #if dist.get_rank() == 0:
         #    print(f"Load & redistribute: {param_name}")
 

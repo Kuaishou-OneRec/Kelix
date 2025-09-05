@@ -45,7 +45,7 @@ class TATokVisionTower(nn.Module):
         # self.vision_tower.bottleneck.regularizer.set_eval_deterministic(deterministic=True)
 
         self.vision_tower.input_type = 'rec'
-        self.vision_tower.scale_layer = ScalingLayer(mean=[0., 0., 0.], std=[1., 1., 1.])
+        # self.vision_tower.scale_layer = ScalingLayer(mean=[0., 0., 0.], std=[1., 1., 1.])
 
         # TODO: 
         self.vision_tower.set_trainable_modules()

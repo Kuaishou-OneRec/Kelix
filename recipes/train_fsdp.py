@@ -1270,11 +1270,14 @@ def train():
       labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask) # loss_mask需要保证图片的token不会被预测
       ticker.tick("labels=...")
       
+
+      print("######################### Check params requires_grad Begin: #########################")
       for name, param in model.named_parameters():
         if param.requires_grad:
             print(f"{name}: requires_grad=True, shape={param.shape}")
         # else:
         #     print(f"{name}: requires_grad=False, shape={param.shape}")
+      print("######################### Check params requires_grad End: #########################")
 
       
       with Timer("Fwd"):
