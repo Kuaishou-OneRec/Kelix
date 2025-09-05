@@ -1281,15 +1281,16 @@ def train():
         ticker.tick("model.forward")
 
         # (b, N/P, V)
-        logits = output.logits
+        # logits = output.logits
+        
 
-        # 提前shift logits & labels
-        pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
-            dtype=labels.dtype).to(device=labels.device, non_blocking=True)
-        labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
-        local_labels = get_local_sequence(labels, seq_idx=1)
+        # # 提前shift logits & labels
+        # pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
+        #     dtype=labels.dtype).to(device=labels.device, non_blocking=True)
+        # labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
+        # local_labels = get_local_sequence(labels, seq_idx=1)
 
-        loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
+        # loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
 
         # TODO: codebook_loss && reconstruction_loss
         codebook_loss = output.loss
@@ -1341,6 +1342,7 @@ def train():
           print("loss.backward() end----------")
 
       ########## dataset source monitor ###############
+      '''
       if args.monitor_datasource_loss:
         # WARN: assume batch_size = 1
         local_sample_idx = get_local_sequence(sample_idx).squeeze()
@@ -1362,7 +1364,7 @@ def train():
           batch_data_source_tokens[key] += mask.sum().item()
 
         ticker.tick("monitor_datasource_loss")
-
+      
       if args.monitor_datasource_cnt:
         for data_source_name in data_source:
           local_acc_data_source_samples[data_source_name] += 1
@@ -1538,7 +1540,7 @@ def train():
         batch_data_source_loss = collections.defaultdict(float)
         batch_data_source_tokens = collections.defaultdict(int)
         valid_data_source_tokens = collections.defaultdict(int)
-
+      '''
       if (global_step % args.save_checkpoint_per_step == 0 or global_step in [100, 200]) and \
           global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
         
