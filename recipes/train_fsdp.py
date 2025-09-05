@@ -1369,17 +1369,17 @@ def train():
         for data_source_name in data_source:
           local_acc_data_source_samples[data_source_name] += 1
         ticker.tick("monitor_datasource_cnt")
-    
+      '''
       #########################################
       avg_loss = loss.detach()
 
-      total_loss = per_token_loss2.sum()
-      dist.all_reduce(total_loss, op=dist.ReduceOp.SUM)
-      total_mask = local_mask.sum()
-      dist.all_reduce(total_mask, op=dist.ReduceOp.SUM)
+      # total_loss = per_token_loss2.sum()
+      # dist.all_reduce(total_loss, op=dist.ReduceOp.SUM)
+      # total_mask = local_mask.sum()
+      # dist.all_reduce(total_mask, op=dist.ReduceOp.SUM)
       avg_loss = avg_loss.item() / dist.get_world_size()
-      avg_loss = total_loss / total_mask.sum()
-      acc_avg_loss += avg_loss
+      # avg_loss = total_loss / total_mask.sum()
+      # acc_avg_loss += avg_loss
 
       ticker.tick("reduce_acc_avg_loss")
       log_acc_step = args.logging_per_step * args.gradient_accumulation_steps
@@ -1440,7 +1440,7 @@ def train():
           tokens_per_sec_per_gpu_v2 = total_num_tokens / dist.get_world_size() / (end_time - start_time0)
 
 
-          avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
+          # avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
           log_dict = {
             # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
             "training/loss": avg_loss,
@@ -1540,7 +1540,16 @@ def train():
         batch_data_source_loss = collections.defaultdict(float)
         batch_data_source_tokens = collections.defaultdict(int)
         valid_data_source_tokens = collections.defaultdict(int)
-      '''
+      
+
+
+
+
+
+
+
+
+
       if (global_step % args.save_checkpoint_per_step == 0 or global_step in [100, 200]) and \
           global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
         
