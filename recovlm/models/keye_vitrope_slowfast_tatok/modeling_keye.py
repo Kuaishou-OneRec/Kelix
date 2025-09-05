@@ -2750,7 +2750,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         # self.visual_fast = SiglipVisionModel(config.fast_vision_config)
         # self.fast_mlp_AR = Projector(config, config.fast_vision_config)
 
-        self.model = Qwen3Model(config)
+        # self.model = Qwen3Model(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.rope_deltas = None  # cache rope_deltas here
@@ -2758,7 +2758,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-
+    
     def get_input_embeddings(self):
         return self.model.embed_tokens
 
@@ -2776,6 +2776,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.model
+    
 
 
 
@@ -3051,8 +3052,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
-            inputs_embeds = self.model.embed_tokens(input_ids)
-            print("inputs_embeds:", inputs_embeds.shape) # torch.Size([1, 14552, 4096])
+            # inputs_embeds = self.model.embed_tokens(input_ids)
+            # print("inputs_embeds:", inputs_embeds.shape) # torch.Size([1, 14552, 4096])
 
             if pixel_values is not None:
                 pixel_values = pixel_values.type(self.visual.dtype)
@@ -3138,7 +3139,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 print("reconstruction_loss.requires_grad-modeling:", reconstruction_loss.requires_grad)
 
 
-                
+                '''
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 #image_embeds is a list of tensor, each tensor is a image feature,I want to concat them all into a tensor
                 image_embeds = torch.cat(image_embeds,dim=0)
@@ -3156,11 +3157,13 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
                 image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+                '''
 
                 # print_rank_0(f"image pixel_values={pixel_values.shape}, image_grid_thw={image_grid_thw.shape}, n_image_tokens={n_image_tokens}, image_mask={image_mask.shape}, image_embeds={image_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
                 # print_rank_0(f"image_grid_hws={image_grid_hws}, image_grid_thw={image_grid_thw}")
                 # image pixel_values=torch.Size([1, 196, 3, 14, 14]), image_grid_thw=torch.Size([1, 3]), n_image_tokens=49, image_mask=torch.Size([1,376, 3584]), image_embeds=torch.Size([49, 3584]), inputs_embeds=torch.Size([1,376, 3584])
 
+            '''
             if pixel_values_videos is not None:
                 pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
                 pixel_values_videos = pixel_values_videos.unsqueeze(0)
@@ -3273,7 +3276,28 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
+            
+            '''
 
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        '''
         # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
         if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
             # calculate RoPE index once per generation in the pre-fill stage only
@@ -3344,7 +3368,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        
+        '''
+
+
         return KeyeCausalLMOutputWithPast(
             loss=codebook_loss,
             loss_reconstruction=reconstruction_loss,

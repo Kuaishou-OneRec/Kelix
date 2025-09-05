@@ -1372,12 +1372,16 @@ def train():
       '''
       #########################################
       avg_loss = loss.detach()
+      codebook_loss = codebook_loss.detach()
+      loss_reconstruction = loss_reconstruction.detach()
 
       # total_loss = per_token_loss2.sum()
       # dist.all_reduce(total_loss, op=dist.ReduceOp.SUM)
       # total_mask = local_mask.sum()
       # dist.all_reduce(total_mask, op=dist.ReduceOp.SUM)
       avg_loss = avg_loss.item() / dist.get_world_size()
+      codebook_loss = codebook_loss.item() / dist.get_world_size()
+      loss_reconstruction = loss_reconstruction.item() / dist.get_world_size()
       # avg_loss = total_loss / total_mask.sum()
       # acc_avg_loss += avg_loss
 
@@ -1444,7 +1448,9 @@ def train():
           log_dict = {
             # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
             "training/loss": avg_loss,
-            "lm_loss": avg_loss,
+            "all_loss": avg_loss,
+            "codebook_loss": codebook_loss,
+            "loss_reconstruction:": loss_reconstruction,
             f"training/grad_norm": grad_norm,
             "training/learning_rate": learning_rate,
             "training/vision_learning_rate": vision_learning_rate,
