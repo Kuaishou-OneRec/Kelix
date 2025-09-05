@@ -3149,7 +3149,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     codebook_loss = sum([image_forward_outs[i]['codebook_loss'] for i in range(len(image_forward_outs))]) / len(image_forward_outs)
                     reconstruction_loss = sum([image_forward_outs[i]['reconstruction_loss'] for i in range(len(image_forward_outs))]) / len(image_forward_outs)
                     # count token distribution
-                    assert len(image_forward_outs[0]['bottleneck_rep']) == len(image_embeds[0])
+                    print("len(image_forward_outs[0]['bottleneck_rep'][0]):", len(image_forward_outs[0]['bottleneck_rep'][0]))
+                    print("len(image_embeds[0]):", len(image_embeds[0]))
+                    assert len(image_forward_outs[0]['bottleneck_rep'][0]) == len(image_embeds[0])
                     token_frequency_count = self.token_frequency(image_forward_outs) # (65536,)
                 else:
                     codebook_loss = image_forward_outs['codebook_loss']
