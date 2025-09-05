@@ -2750,7 +2750,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         # self.visual_fast = SiglipVisionModel(config.fast_vision_config)
         # self.fast_mlp_AR = Projector(config, config.fast_vision_config)
 
-        # self.model = Qwen3Model(config)
+        self.model = Qwen3Model(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.rope_deltas = None  # cache rope_deltas here
