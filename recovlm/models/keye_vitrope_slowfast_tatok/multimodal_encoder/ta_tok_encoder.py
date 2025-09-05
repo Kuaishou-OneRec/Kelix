@@ -48,7 +48,7 @@ class TATokVisionTower(nn.Module):
         # self.vision_tower.scale_layer = ScalingLayer(mean=[0., 0., 0.], std=[1., 1., 1.])
 
         # TODO: 
-        self.vision_tower.set_trainable_modules()
+        # self.vision_tower.set_trainable_modules()
         # self.vision_tower.requires_grad_(False)
         # self.vision_tower.eval()
         self.vision_tower.train()

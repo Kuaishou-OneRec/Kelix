@@ -2688,7 +2688,8 @@ class KeyeCausalLMOutputWithPast(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    loss_reconstruction: Optional[List[torch.FloatTensor]] = None
+    loss_reconstruction: Optional[torch.FloatTensor] = None
+    token_frequency: Optional[List[torch.LongTensor]] = None
     #logits: torch.FloatTensor = None
     #past_key_values: Optional[List[torch.FloatTensor]] = None
     #hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -2983,6 +2984,24 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             print("position_idsposition_ids222=", position_ids)
             return position_ids, mrope_position_deltas
 
+    
+    def token_frequency(self, image_forward_outs):
+
+        codebook_size = 65536
+
+        # 假设 image_forward_outs[i]['bottleneck_rep'] 是 1D 或 2D 的 LongTensor
+        all_tokens = []
+        for i in range(len(image_forward_outs)):
+            tokens = image_forward_outs[i]['bottleneck_rep'].reshape(-1)  # 展平成 1D
+            all_tokens.append(tokens)
+
+        all_tokens = torch.cat(all_tokens, dim=0)  # 拼成一个长向量
+        token_frequency = torch.bincount(all_tokens, minlength=codebook_size)
+
+        print("token_frequency shape:", token_frequency.shape)  # (65536,)
+        return token_frequency
+
+    
     @replace_return_docstrings(output_type=KeyeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -3129,9 +3148,13 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 if type(image_forward_outs) is list:
                     codebook_loss = sum([image_forward_outs[i]['codebook_loss'] for i in range(len(image_forward_outs))]) / len(image_forward_outs)
                     reconstruction_loss = sum([image_forward_outs[i]['reconstruction_loss'] for i in range(len(image_forward_outs))]) / len(image_forward_outs)
+                    # count token distribution
+                    assert len(image_forward_outs[0]['bottleneck_rep']) == len(image_embeds[0])
+                    token_frequency_count = self.token_frequency(image_forward_outs) # (65536,)
                 else:
                     codebook_loss = image_forward_outs['codebook_loss']
                     reconstruction_loss = image_forward_outs['reconstruction_loss']
+                    token_frequency_count = self.token_frequency([image_forward_outs]) # (65536,)
                 
                 # image_forward_outs[0]['codebook_loss']
                 print("image_forward_outs[0]['codebook_loss'].requires_grad-modeling:", image_forward_outs[0]['codebook_loss'])
@@ -3374,6 +3397,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         return KeyeCausalLMOutputWithPast(
             loss=codebook_loss,
             loss_reconstruction=reconstruction_loss,
+            token_frequency=token_frequency_count,
             #logits=logits,
             #past_key_values=outputs.past_key_values,
             #hidden_states=outputs.hidden_states,

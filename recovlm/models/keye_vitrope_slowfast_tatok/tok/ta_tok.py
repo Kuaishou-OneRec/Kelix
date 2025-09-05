@@ -94,6 +94,7 @@ class TextAlignedTokenizer(nn.Module):
         # })
         # self.decoder = Siglip2VisionModel(self.decoder_config)
 
+        '''
         self.encode_task_layer = nn.Sequential(
             nn.Linear(self.encoder_hidden_dim, self.encoder_hidden_dim), # 4096
             nn.Tanh())
@@ -101,6 +102,7 @@ class TextAlignedTokenizer(nn.Module):
             nn.Linear(self.encoder_hidden_dim, self.encoder_hidden_dim),
             nn.Tanh(),
             nn.Linear(self.encoder_hidden_dim, self.encoder_hidden_dim))
+        '''
 
         bottleneck_args = {
             'token_nums': self.bottleneck_token_num, 
@@ -111,7 +113,7 @@ class TextAlignedTokenizer(nn.Module):
         # self.scale_layer = ScalingLayer(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])   
         self.image_resize = Resize((self.input_size, self.input_size))
 
-    
+    '''
     def set_trainable_modules(self):
         # 先全部冻结
         for p in self.parameters():
@@ -121,6 +123,7 @@ class TextAlignedTokenizer(nn.Module):
         for module in [self.bottleneck, self.decoder, self.encode_task_layer, self.decode_task_layer]:
             for p in module.parameters():
                 p.requires_grad = True
+    '''
 
     def set_vq_eval_deterministic(self, deterministic=True):
         self.bottleneck.regularizer.set_eval_deterministic(deterministic)
@@ -167,7 +170,7 @@ class TextAlignedTokenizer(nn.Module):
         # if pool_scale != 1:
         #     vq_feats = self.avg_pool(vq_feats, pool_scale)
         print("vq_feats:", vq_feats.shape) # torch.Size([1, 1500, 4096])
-        vq_feats = self.encode_task_layer(vq_feats.to(x.device)) # (b, n, c)
+        # vq_feats = self.encode_task_layer(vq_feats.to(x.device)) # (b, n, c)
         
         bottleneck_out = self.bottleneck(vq_feats)
         z = bottleneck_out.pop('output') # quantized
@@ -201,7 +204,7 @@ class TextAlignedTokenizer(nn.Module):
         # TODO:
         z = self.decoder(z, attn_mask)
         print("z: after decoder: ", z.shape)
-        z = self.decode_task_layer(z)
+        # z = self.decode_task_layer(z)
         return z
 
     def decode_from_bottleneck(self, bottleneck_rep):

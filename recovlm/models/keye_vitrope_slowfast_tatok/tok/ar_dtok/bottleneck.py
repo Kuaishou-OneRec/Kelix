@@ -29,17 +29,20 @@ class Bottleneck(nn.Module):
             self.bottleneck_dim = self.input_dim
         
         self.project_dim = self.bottleneck_dim
-
+        
+        '''
         if self.bottleneck_dim > 0:
             self.in_linear = nn.Linear(self.input_dim, self.project_dim)
             self.out_linear = nn.Linear(self.bottleneck_dim, self.output_dim)
         else:
             self.in_linear = self.out_linear = lambda x: x
+        '''
         
         regularizer['args']['dim'] = self.bottleneck_dim
         regularizer['args']['token_nums'] = self.token_nums
         self.regularizer = models.make(regularizer) # simvq
 
+    '''
     def project_in(self, x):
         assert len(x.shape) == 3, "Input shape must be (batch, n_tokens, e_dim)"
         z = self.in_linear(x)
@@ -48,16 +51,19 @@ class Bottleneck(nn.Module):
     def project_out(self, z_cat):
         z = self.out_linear(z_cat)
         return z
+    '''
 
     def decode(self, bottleneck_rep):
         regularized_z = self.regularizer.decode(bottleneck_rep)
         return self.project_out(regularized_z)
 
     def forward(self, x):  
-        z = self.project_in(x)
+        # z = self.project_in(x)
+        z = x
         projected_z = z
         regularized_output = self.regularizer(z)
-        x_hat = self.project_out(regularized_output['regularized_z']) # quantized
+        # x_hat = self.project_out(regularized_output['regularized_z']) # quantized
+        x_hat = regularized_output['regularized_z']
         bottleneck_rep = regularized_output.pop('bottleneck_rep') # q_indices
         return {
             'output': x_hat, # quantized

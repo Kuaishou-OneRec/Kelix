@@ -1330,6 +1330,18 @@ def train():
         print('***loss_reconstruction***:', loss_reconstruction)
         loss = codebook_loss + loss_reconstruction
         print('***loss_all***:', loss)
+
+        token_frequency = output.token_frequency
+        # print('***token_frequency***:', token_frequency) # (65536,)
+        nonzero_count = (token_frequency > 0).sum().item()   
+        total_count = token_frequency.sum().item()         
+        token_util = nonzero_count / total_count if total_count > 0 else 0
+        print("使用过的 token 数量:", nonzero_count)
+        print("总 token 次数:", total_count)
+        print("token_util:", token_util)
+
+        
+
         
         # 计算需要检查的位置：所有 loss_mask 为1的位置的前一个位置
         # 因为我们需要检查 input_ids[i+1] == labels[i]
@@ -1481,7 +1493,8 @@ def train():
             "training/loss": avg_loss,
             "loss_all": avg_loss,
             "loss_codebook": codebook_loss,
-            "loss_reconstruction:": loss_reconstruction,
+            "loss_reconstruction": loss_reconstruction,
+            "token_util": token_util,
             f"training/grad_norm": grad_norm,
             "training/learning_rate": learning_rate,
             "training/vision_learning_rate": vision_learning_rate,
