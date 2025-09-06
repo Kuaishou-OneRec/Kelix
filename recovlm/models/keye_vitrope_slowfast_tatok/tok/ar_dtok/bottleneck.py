@@ -136,9 +136,9 @@ class SimVectorQuantizer(nn.Module):
         assert len(z.shape) == 3, "Input shape must be (batch, n_tokens, e_dim)"
         if self.l2_normalized:
             z = F.normalize(z, p=2, dim=-1)
-        print("z.requires_grad: after l2_normalized", z.requires_grad) # False
+        print("z.requires_grad: after l2_normalized", z.requires_grad) # true
         z_flattened = rearrange(z, 'b n d -> (b n) d')
-        print("z.requires_grad: after flatten", z_flattened.requires_grad) # False
+        print("z.requires_grad: after flatten", z_flattened.requires_grad) # true
 
         if self.stochastic:
             # sample the softmaxed cosine similarity

@@ -546,7 +546,7 @@ def freeze_params(args, model):
     if args.update_vision_tower:
       print_rank_0("Update vision_tower parameters.")
       for name, param in model.named_parameters():
-        if name.startswith("vision_tower."):
+        if name.startswith("vision_tower.") or name.startswith("visual") or name.startswith("mlp_AR") or name.startswith("fast_mlp_AR"):
           print_rank_0(f"Enable vision_tower grad: {name}")
           param.requires_grad = True
         else:
