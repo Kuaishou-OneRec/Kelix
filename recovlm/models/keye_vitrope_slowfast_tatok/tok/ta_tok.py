@@ -109,6 +109,7 @@ class TextAlignedTokenizer(nn.Module):
             'input_dim': self.encoder_hidden_dim, 
             'output_dim': self.bottleneck_dim}
         self.bottleneck = models.make(bottleneck, args=bottleneck_args) # vector quantization
+        self.bottleneck.train()
 
         # self.scale_layer = ScalingLayer(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])   
         self.image_resize = Resize((self.input_size, self.input_size))
