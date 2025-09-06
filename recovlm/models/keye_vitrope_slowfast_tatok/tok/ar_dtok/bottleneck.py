@@ -125,7 +125,8 @@ class SimVectorQuantizer(nn.Module):
     def forward(self, z):
         print("self.training in bottleneck: ", self.training)
         emb = self.get_emb()
-        z = z.to(emb)
+        # z = z.to(emb)
+        z = z.to(dtype=emb.dtype, device=emb.device)
         # z = z.float()
         assert len(z.shape) == 3, "Input shape must be (batch, n_tokens, e_dim)"
         if self.l2_normalized:
@@ -159,9 +160,9 @@ class SimVectorQuantizer(nn.Module):
         print("quantized.requires_grad:", quantized.requires_grad) # False
         print("z_flattened.requires_grad:", z_flattened.requires_grad) # True
         # FIXME:
-        beta = 1000
-        print("quantized value: ", quantized)
-        print("z_flattened value: ", z_flattened)
+        beta = 1
+        # print("quantized value: ", quantized)
+        # print("z_flattened value: ", z_flattened)
         print("quantized shape: ", quantized.shape)
         print("z_flattened shape: ", z_flattened.shape)
         print("q_indices value: ", q_indices)
@@ -173,7 +174,7 @@ class SimVectorQuantizer(nn.Module):
         # preserve gradients
         # TODO:
         quantized = z + (quantized - z).detach() # True
-        print("quantized.requires_grad after detach:", quantized.requires_grad) # True
+        print("quantized.requires_grad after preserve gradients:", quantized.requires_grad) # True
 
         if self.same_index_shape:
             q_indices = q_indices.reshape(quantized.shape[0], quantized.shape[1])
