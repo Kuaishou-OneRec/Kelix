@@ -1271,13 +1271,7 @@ def train():
       ticker.tick("labels=...")
       
 
-      print("######################### Check params requires_grad Begin: #########################")
-      for name, param in model.named_parameters():
-        if param.requires_grad:
-            print(f"{name}: requires_grad=True, shape={param.shape}")
-        # else:
-        #     print(f"{name}: requires_grad=False, shape={param.shape}")
-      print("######################### Check params requires_grad End: #########################")
+      
 
       
       with Timer("Fwd"):
@@ -1313,6 +1307,13 @@ def train():
 
         # (b, N/P, V)
         # logits = output.logits
+        print("######################### Check params requires_grad Begin after model(): #########################")
+        for name, param in model.named_parameters():
+          if param.requires_grad:
+              print(f"{name}: requires_grad=True, shape={param.shape}")
+          else:
+              print(f"{name}: requires_grad=False, shape={param.shape}")
+        print("######################### Check params requires_grad End after model(): #########################")
         
 
         # # 提前shift logits & labels
@@ -1336,6 +1337,7 @@ def train():
         nonzero_count = (token_frequency > 0).sum().item()   
         # total_count = token_frequency.sum().item()  
         codebook_size = len(token_frequency)       
+        assert codebook_size == 65536
         token_util = nonzero_count / codebook_size
         print("使用过的 token 数量:", nonzero_count)
         print("token_util:", token_util)
