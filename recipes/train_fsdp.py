@@ -522,7 +522,7 @@ def freeze_params(args, model):
     if args.freeze_llm:
       print_rank_0("Freeze LLM parameters.")
       for name, param in model.named_parameters():
-        if not (name.startswith("visual") or name.startswith("mlp_AR") or name.startswith("fast_mlp_AR")):
+        if not (name.startswith("visual") or name.startswith("mlp_AR") or name.startswith("fast_mlp_AR")) or name.startswith("vision_tower."):
           print_rank_0(f"Disable LLM grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
