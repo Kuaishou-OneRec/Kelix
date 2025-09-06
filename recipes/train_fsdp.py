@@ -1311,8 +1311,8 @@ def train():
         for name, param in model.named_parameters():
           if param.requires_grad:
               print(f"{name}: requires_grad=True, shape={param.shape}")
-          else:
-              print(f"{name}: requires_grad=False, shape={param.shape}")
+          # else:
+          #     print(f"{name}: requires_grad=False, shape={param.shape}")
         print("######################### Check params requires_grad End after model(): #########################")
         
 

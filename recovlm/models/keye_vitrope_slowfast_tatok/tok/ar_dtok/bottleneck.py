@@ -178,6 +178,18 @@ class SimVectorQuantizer(nn.Module):
         if self.same_index_shape:
             q_indices = q_indices.reshape(quantized.shape[0], quantized.shape[1])
 
+        
+        print("quantized mean/std:", quantized.mean().item(), quantized.std().item())
+        print("z_flattened mean/std:", z_flattened.mean().item(), z_flattened.std().item())
+        print("commitment loss:", torch.mean((quantized.detach() - z_flattened)**2).item())
+        print("embedding loss:", torch.mean((quantized - z_flattened.detach())**2).item())
+        print("total codebook loss:", codebook_loss.item())
+        # 看看 embedding 是否有梯度
+        # emb = self.embedding.weight
+        print("embedding requires_grad:", self.embedding.weight.requires_grad)
+        print("embedding grad:", self.embedding.weight.grad.norm().item() if self.embedding.weight.grad is not None else None)
+
+
         return_dict = {
             'unregularized_z': z, # but l2 normalized if l2_normalized=True
             'emb': emb, # but l2 normalized if l2_normalized=True
