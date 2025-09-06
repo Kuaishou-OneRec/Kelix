@@ -125,8 +125,8 @@ class SimVectorQuantizer(nn.Module):
     def forward(self, z):
         print("self.training in bottleneck: ", self.training)
         emb = self.get_emb()
-        # z = z.to(emb)
-        z = z.to(dtype=emb.dtype, device=emb.device)
+        z = z.to(emb)
+        # z = z.to(dtype=emb.dtype, device=emb.device)
         # z = z.float()
         assert len(z.shape) == 3, "Input shape must be (batch, n_tokens, e_dim)"
         if self.l2_normalized:

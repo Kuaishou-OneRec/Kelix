@@ -143,7 +143,8 @@ class TextAlignedTokenizer(nn.Module):
         # ckpt = torch.load(ckpt_path, map_location='cpu')
         # ckpt_kwargs = ckpt["model"]["args"]
         # visual_encoder = 4096 = token embedding dim
-        ckpt_kwargs = {'bottleneck': {'name': 'bottleneck', 'args': {'bottleneck_dim': visual_encoder, 'norm': 'none', 'regularizer': {'name': 'simvq', 'args': {'codebook_size': 65536, 'commitment_loss_weight': 0.25, 'codebook_loss_weight': 1.0, 'entropy_loss_weight': 0.0, 'entropy_loss_temperature': 0.01, 'l2_normalized': False, 'stochastic': False, 'stochastic_temperature': 0.03, 'top_k': 4, 'top_k_prob': 0.5, 'residual_weight': 0.1}}}}, 'bottleneck_token_num': 729, 'input_size': 384, 'teacher': 'google/siglip2-so400m-patch14-384', 'ckpt_path': 'google/siglip2-so400m-patch14-384', 'pool_scale': 1, 'rand_scale': True}
+        self.l2_normalized = True
+        ckpt_kwargs = {'bottleneck': {'name': 'bottleneck', 'args': {'bottleneck_dim': visual_encoder, 'norm': 'none', 'regularizer': {'name': 'simvq', 'args': {'codebook_size': 65536, 'commitment_loss_weight': 0.25, 'codebook_loss_weight': 1.0, 'entropy_loss_weight': 0.0, 'entropy_loss_temperature': 0.01, 'l2_normalized': self.l2_normalized, 'stochastic': True, 'stochastic_temperature': 0.03, 'top_k': 4, 'top_k_prob': 0.5, 'residual_weight': 0.1}}}}, 'bottleneck_token_num': 729, 'input_size': 384, 'teacher': 'google/siglip2-so400m-patch14-384', 'ckpt_path': 'google/siglip2-so400m-patch14-384', 'pool_scale': 1, 'rand_scale': True}
         model = cls(visual_encoder=visual_encoder, decoder_config=decoder_config, **kwargs, **ckpt_kwargs) # __init__
 
 
@@ -238,6 +239,9 @@ class TextAlignedTokenizer(nn.Module):
         encode_output['encoded'] = z
 
         # Step 4: compute reconstruction loss (MSE on features)
+        if self.l2_normalized:
+            data = F.normalize(data, p=2, dim=-1)
+
         if attn_mask is not None:  # mask 掉 padding位置
             reconstruction_loss = ((data - pred_feats) ** 2) * attn_mask[..., None]
             reconstruction_loss = reconstruction_loss.sum() / attn_mask.sum()
