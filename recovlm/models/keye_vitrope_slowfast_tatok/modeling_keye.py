@@ -3131,6 +3131,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
                 
                 print("-----test vq------")
+                
+
                 # FIXME: VECTOR QUANTIZATION
                 # print("pixel_values:", pixel_values.shape) # torch.Size([1, 52912, 3, 14, 14])
                 # target: (teacher output:) - image_embeds (make sure teacher freeze)
