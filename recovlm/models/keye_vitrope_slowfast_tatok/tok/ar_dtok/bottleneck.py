@@ -41,6 +41,7 @@ class Bottleneck(nn.Module):
         regularizer['args']['dim'] = self.bottleneck_dim
         regularizer['args']['token_nums'] = self.token_nums
         self.regularizer = models.make(regularizer) # simvq
+        self.train(True)
 
     '''
     def project_in(self, x):
@@ -106,6 +107,7 @@ class SimVectorQuantizer(nn.Module):
         # self.embedding_proj = nn.Linear(self.dim, self.dim)
 
         self.same_index_shape = same_index_shape
+        self.train(True)
 
     def set_eval_deterministic(self, deterministic=True):
         self.eval_deterministic = deterministic
@@ -125,6 +127,7 @@ class SimVectorQuantizer(nn.Module):
     @torch.autocast(device_type='cuda', enabled=False)
     def forward(self, z):
         print("self.training in bottleneck: ", self.training) # False???
+        self.train(True)
         emb = self.get_emb()
 
 
