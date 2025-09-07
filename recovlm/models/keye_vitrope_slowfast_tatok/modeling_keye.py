@@ -2746,6 +2746,10 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         delay_load = False
         self.vision_tower = build_vision_tower(vision_tower_name=vision_tower_name, vision_tower_cfg=vision_tower_cfg, visual_encoder=config.hidden_size, decoder_config=config.vision_config, delay_load=delay_load)
         print("config.hidden_size: ", config.hidden_size)
+
+
+        self.teacher = SiglipVisionModel(config.vision_config)
+        self.teacher_mlp_AR = Projector(config, config.vision_config)
         ######################## TODO: add TA-Tok ########################
 
         # self.visual_fast = SiglipVisionModel(config.fast_vision_config)
@@ -3097,6 +3101,27 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
                 sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
                 # image_grid_hws = torch.tensor(image_grid_hws,dtype=torch.int32,device=pixel_values.device)
+                
+                
+                ################################# teacher begin #################################
+                teacher_vision_outputs = self.teacher(
+                    pixel_values=pixel_values, 
+                    image_grid_thw=image_grid_hws,
+                    position_ids=siglip_position_ids,
+                    vision_return_embed_list=True,
+                    interpolate_pos_encoding=True,
+                    sample_indices=sample_indices,
+                    cu_seqlens=cu_seqlens,
+                    return_pooler_output=False,
+                    use_rope=True,
+                    window_size =-1,
+                )
+                teacher_image_embeds = teacher_vision_outputs.last_hidden_state
+                teacher_image_embeds = self.teacher_mlp_AR(teacher_image_embeds, image_grid_thw) # list: 
+                
+                ################################# teacher end   #################################
+                
+                
                 vision_outputs = self.visual(
                     pixel_values=pixel_values, 
                     image_grid_thw=image_grid_hws,
@@ -3144,7 +3169,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     pool_scale = random.choice([1, 1, 2, 3])
                 else:
                     pool_scale = 1
-                image_features_vq = self.vision_tower(image_embeds, pool_scale=pool_scale)
+                image_features_vq = self.vision_tower(image_embeds, teacher_image_embeds, pool_scale=pool_scale)
                 image_forward_outs = image_features_vq['image_forward_outs']
                 # TODO: loss update
                 if type(image_forward_outs) is list:

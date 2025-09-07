@@ -75,7 +75,7 @@ class TATokVisionTower(nn.Module):
     def get_embedding(self):
         return self.vision_tower.bottleneck.regularizer.get_emb()
     
-    def forward(self, images, pool_scale=1):
+    def forward(self, images, teacher_image_embeds, pool_scale=1):
         # load from ENV
         # pool_scale from ENV has the highest priority
         pool_scale = int(os.environ.get('POOL_SCALE', pool_scale))
@@ -84,8 +84,8 @@ class TATokVisionTower(nn.Module):
         if type(images) is list:
             image_features, tokens = [], []
             image_forward_outs = []
-            for image in images:
-                image_forward_out = self.vision_tower(image.to(device=self.device, dtype=self.dtype).unsqueeze(0), pool_scale=pool_scale)
+            for image, teacher_image in zip(images, teacher_image_embeds):
+                image_forward_out = self.vision_tower(image.to(device=self.device, dtype=self.dtype).unsqueeze(0), teacher_image.to(device=self.device, dtype=self.dtype).unsqueeze(0), pool_scale=pool_scale)
                 image_feature, token = image_forward_out['vq_feats'].to(image.dtype), image_forward_out['bottleneck_rep']
                 image_features.append(image_feature)
                 tokens.append(token)

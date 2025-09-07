@@ -224,7 +224,7 @@ class TextAlignedTokenizer(nn.Module):
         z = rearrange(z, 'b (p1 p2) c -> b c p1 p2', p1=p, p2=p)
         return self.decode(z)
 
-    def forward(self, data, **kwargs):
+    def forward(self, data, teacher_data, **kwargs):
         # data: video in shape (b, c, t, h, w)
         # FIXME: data: image in shape (b, n, c)
         encode_output = self.encode(data, **kwargs)
@@ -250,13 +250,13 @@ class TextAlignedTokenizer(nn.Module):
 
         # Step 4: compute reconstruction loss (MSE on features)
         if self.l2_normalized:
-            data = F.normalize(data, p=2, dim=-1)
+            teacher_data = F.normalize(teacher_data, p=2, dim=-1)
 
         if attn_mask is not None:  # mask 掉 padding位置
-            reconstruction_loss = ((data - pred_feats) ** 2) * attn_mask[..., None]
+            reconstruction_loss = ((teacher_data - pred_feats) ** 2) * attn_mask[..., None]
             reconstruction_loss = reconstruction_loss.sum() / attn_mask.sum()
         else:
-            reconstruction_loss = F.mse_loss(pred_feats, data)
+            reconstruction_loss = F.mse_loss(pred_feats, teacher_data)
 
         print("reconstruction_loss: ", reconstruction_loss)
         encode_output['reconstruction_loss'] = reconstruction_loss
