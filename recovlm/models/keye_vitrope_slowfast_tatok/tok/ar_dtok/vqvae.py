@@ -32,7 +32,7 @@ class VQVAE(nn.Module):
             codebook_embed_dim=codebook_embed_dim)
         ckpt = torch.load(ckpt, map_location='cpu')
         self.model.load_state_dict(ckpt['model'])
-        self.model.eval()
+        # self.model.eval()
 
         self.scale_layer = ScalingLayer(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
 

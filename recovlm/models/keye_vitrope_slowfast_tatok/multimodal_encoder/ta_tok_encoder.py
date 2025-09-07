@@ -34,6 +34,8 @@ class TATokVisionTower(nn.Module):
             self.load_model(visual_encoder=visual_encoder, decoder_config=decoder_config)
         else:
             self.cfg_only = self.config
+        
+        self.train(True)
 
     def load_model(self, visual_encoder, decoder_config, device_map=None):
         if self.is_loaded:

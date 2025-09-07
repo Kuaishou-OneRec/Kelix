@@ -103,7 +103,7 @@ class SimVectorQuantizer(nn.Module):
         # for clear inference code, we remove the codebook init from LLM's embedding
         # FIXME: CODEBOOK INIT!!!
         self.embedding = nn.Embedding(self.codebook_size, self.dim)
-        self.embedding_proj = nn.Linear(self.dim, self.dim)
+        # self.embedding_proj = nn.Linear(self.dim, self.dim)
 
         self.same_index_shape = same_index_shape
 
@@ -115,7 +115,8 @@ class SimVectorQuantizer(nn.Module):
 
     @torch.autocast(device_type='cuda', enabled=False)
     def get_emb(self):
-        emb = self.embedding_proj(self.embedding.weight) # Codebook * W , dimension align !!!
+        # emb = self.embedding_proj(self.embedding.weight) # Codebook * W , dimension align !!!
+        emb = self.embedding.weight
         if self.l2_normalized:
             emb = F.normalize(emb, p=2, dim=-1)
         # assert emb.dtype == torch.float32, f"Embedding weight dtype is {emb.dtype}, expected float32"
@@ -123,7 +124,7 @@ class SimVectorQuantizer(nn.Module):
 
     @torch.autocast(device_type='cuda', enabled=False)
     def forward(self, z):
-        print("self.training in bottleneck: ", self.training)
+        print("self.training in bottleneck: ", self.training) # False???
         emb = self.get_emb()
 
 
@@ -163,7 +164,7 @@ class SimVectorQuantizer(nn.Module):
         quantized = F.embedding(q_indices, emb, self.embedding.padding_idx, self.embedding.max_norm,
             self.embedding.norm_type, self.embedding.scale_grad_by_freq, self.embedding.sparse)
         
-        print("quantized.requires_grad:", quantized.requires_grad) # False
+        print("quantized.requires_grad:", quantized.requires_grad) # True
         print("z_flattened.requires_grad:", z_flattened.requires_grad) # True
         # FIXME:
         beta = 1

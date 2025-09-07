@@ -115,6 +115,7 @@ class TextAlignedTokenizer(nn.Module):
         self.image_resize = Resize((self.input_size, self.input_size))
 
         self.l2_normalized = True
+        self.train(True)
 
     '''
     def set_trainable_modules(self):
