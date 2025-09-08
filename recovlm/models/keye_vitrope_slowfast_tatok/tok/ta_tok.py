@@ -79,6 +79,7 @@ class TextAlignedTokenizer(nn.Module):
         #     'hidden_size': self.encoder_hidden_dim,
         # })
         # self.decoder = SiglipVisionModel(self.decoder_config)
+        # TODO: decoder dim???
         self.decoder = TokenDecoder(hidden_dim=self.encoder_hidden_dim, depth=self.decoder_depth)
 
 
@@ -176,7 +177,7 @@ class TextAlignedTokenizer(nn.Module):
         # x.requires_grad_(True)      # 允许后续 decoder 计算梯度
         
 
-        # FIXME:
+        
         vq_feats = x # (b, n,c)
 
         pool_scale = self.pool_scale
@@ -215,7 +216,7 @@ class TextAlignedTokenizer(nn.Module):
         # spatial_shape = torch.tensor([[p, p]]*z.shape[0], device=self.device)
         # z = self.decoder(z, attention_mask, spatial_shape, output_hidden_states=True).last_hidden_state
         # z = self.decode_task_layer(z)
-        # TODO:
+        # TODO: decode model
         z = self.decoder(z, attn_mask)
         print("z: after decoder: ", z.shape)
         # z = self.decode_task_layer(z)
@@ -229,7 +230,7 @@ class TextAlignedTokenizer(nn.Module):
 
     def forward(self, data, teacher_data, **kwargs):
         # data: video in shape (b, c, t, h, w)
-        # FIXME: data: image in shape (b, n, c)
+        # data: image in shape (b, n, c)
         encode_output = self.encode(data, **kwargs)
         vq_feats = encode_output['encoded'] # quantized
         print("vq_feats after self.encode(quantized):", vq_feats.shape) # torch.Size([1, 414, 4096])
