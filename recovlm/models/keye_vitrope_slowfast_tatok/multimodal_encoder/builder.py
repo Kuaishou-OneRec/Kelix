@@ -7,6 +7,6 @@ import torch
 #     return TATokVisionTower(vision_tower, vision_tower_cfg=vision_tower_cfg, **kwargs)
 
 
-def build_vision_tower(vision_tower_name, vision_tower_cfg, visual_encoder, decoder_config, delay_load):
-    return TATokVisionTower(vision_tower=vision_tower_name, vision_tower_cfg=vision_tower_cfg, visual_encoder=visual_encoder, decoder_config=decoder_config, delay_load=delay_load)
+def build_vision_tower(vision_tower_name, vision_tower_cfg, visual_encoder, decoder_config, llm_model, delay_load):
+    return TATokVisionTower(vision_tower=vision_tower_name, vision_tower_cfg=vision_tower_cfg, visual_encoder=visual_encoder, decoder_config=decoder_config, llm_model=llm_model, delay_load=delay_load)
     

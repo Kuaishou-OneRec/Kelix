@@ -16,6 +16,7 @@ class Bottleneck(nn.Module):
         output_dim: int,
         token_nums: int,
         regularizer=None,
+        llm_model=None,
         **kwargs
     ):  
         super().__init__()
@@ -31,6 +32,7 @@ class Bottleneck(nn.Module):
         self.project_dim = self.bottleneck_dim
         
         '''
+        # FIXME: Codebook * W , dimension align !!!
         if self.bottleneck_dim > 0:
             self.in_linear = nn.Linear(self.input_dim, self.project_dim)
             self.out_linear = nn.Linear(self.bottleneck_dim, self.output_dim)
@@ -40,6 +42,7 @@ class Bottleneck(nn.Module):
         
         regularizer['args']['dim'] = self.bottleneck_dim
         regularizer['args']['token_nums'] = self.token_nums
+        regularizer['args']['llm_model'] = llm_model
         self.regularizer = models.make(regularizer) # simvq
         self.train(True)
 
@@ -79,6 +82,7 @@ class SimVectorQuantizer(nn.Module):
     def __init__(
         self,
         dim,
+        llm_model,
         codebook_size,
         l2_normalized=False,
         same_index_shape=True,
@@ -103,7 +107,26 @@ class SimVectorQuantizer(nn.Module):
 
         # for clear inference code, we remove the codebook init from LLM's embedding
         # FIXME: CODEBOOK INIT!!!
+        # self.embedding = nn.Embedding(self.codebook_size, self.dim)
+        with torch.no_grad():
+            # 获取 LLM 的 token embedding 权重
+            llm_emb = llm_model.get_input_embeddings().weight  # shape [vocab_size, dim]
+            # 随机挑选 codebook_size 个向量
+            vocab_size = llm_emb.size(0)
+            indices = torch.randperm(vocab_size)[:self.codebook_size]
+            init_emb = llm_emb[indices].clone()  # [codebook_size, dim]
+        # 用选中的向量初始化 nn.Embedding
         self.embedding = nn.Embedding(self.codebook_size, self.dim)
+        self.embedding.weight.data.copy_(init_emb)
+        # 冻结 codebook
+        self.embedding.weight.requires_grad = False
+
+
+
+
+
+
+
         # self.embedding_proj = nn.Linear(self.dim, self.dim)
 
         self.same_index_shape = same_index_shape
@@ -117,7 +140,7 @@ class SimVectorQuantizer(nn.Module):
 
     @torch.autocast(device_type='cuda', enabled=False)
     def get_emb(self):
-        # emb = self.embedding_proj(self.embedding.weight) # Codebook * W , dimension align !!!
+        # emb = self.embedding_proj(self.embedding.weight) 
         emb = self.embedding.weight
         if self.l2_normalized:
             emb = F.normalize(emb, p=2, dim=-1)

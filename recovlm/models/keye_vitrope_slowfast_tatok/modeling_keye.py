@@ -2740,18 +2740,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         '''
 
-        ######################## TODO: add TA-Tok ########################
-        from .multimodal_encoder.builder import build_vision_tower
-        vision_tower_name = "/mmu_mllm_hdd_2/weimuhao/model/tatok/ta_tok.pth" # no loading from pretrained
-        vision_tower_cfg = None
-        delay_load = False
-        self.vision_tower = build_vision_tower(vision_tower_name=vision_tower_name, vision_tower_cfg=vision_tower_cfg, visual_encoder=config.hidden_size, decoder_config=config.vision_config, delay_load=delay_load)
-        print("config.hidden_size: ", config.hidden_size)
-
-
-        self.teacher = SiglipVisionModel(config.vision_config)
-        self.teacher_mlp_AR = Projector(config, config.vision_config)
-        ######################## TODO: add TA-Tok ########################
+        
 
         # self.visual_fast = SiglipVisionModel(config.fast_vision_config)
         # self.fast_mlp_AR = Projector(config, config.fast_vision_config)
@@ -2760,6 +2749,19 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.rope_deltas = None  # cache rope_deltas here
+
+        ######################## TODO: add TA-Tok ########################
+        from .multimodal_encoder.builder import build_vision_tower
+        vision_tower_name = "/mmu_mllm_hdd_2/weimuhao/model/tatok/ta_tok.pth" # no loading from pretrained
+        vision_tower_cfg = None
+        delay_load = False
+        self.vision_tower = build_vision_tower(vision_tower_name=vision_tower_name, vision_tower_cfg=vision_tower_cfg, visual_encoder=config.hidden_size, decoder_config=config.vision_config, llm_model=self.model, delay_load=delay_load)
+        print("config.hidden_size: ", config.hidden_size)
+
+
+        self.teacher = SiglipVisionModel(config.vision_config)
+        self.teacher_mlp_AR = Projector(config, config.vision_config)
+        ######################## TODO: add TA-Tok ########################
 
         # Initialize weights and apply final processing
         self.post_init()

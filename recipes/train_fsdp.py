@@ -1504,6 +1504,7 @@ def train():
             "loss_codebook": codebook_loss,
             "loss_reconstruction": loss_reconstruction,
             "token_util": token_util,
+            "nonzero_count": nonzero_count,
             f"training/grad_norm": grad_norm,
             "training/learning_rate": learning_rate,
             "training/vision_learning_rate": vision_learning_rate,

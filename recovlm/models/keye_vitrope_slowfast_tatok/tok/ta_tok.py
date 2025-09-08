@@ -46,6 +46,7 @@ class TextAlignedTokenizer(nn.Module):
         bottleneck,
         bottleneck_token_num=256,
         input_size=384,
+        llm_model=None,
         teacher='google/siglip2-so400m-patch14-384',
         input_type='quant', # choose from ['quant', 'rec', 'indices']
         pool_scale=1, # choose from [1, 2, 3]
@@ -103,8 +104,10 @@ class TextAlignedTokenizer(nn.Module):
             nn.Tanh(),
             nn.Linear(self.encoder_hidden_dim, self.encoder_hidden_dim))
         '''
+        
 
         bottleneck_args = {
+            'llm_model': llm_model,
             'token_nums': self.bottleneck_token_num, 
             'input_dim': self.encoder_hidden_dim, 
             'output_dim': self.bottleneck_dim}

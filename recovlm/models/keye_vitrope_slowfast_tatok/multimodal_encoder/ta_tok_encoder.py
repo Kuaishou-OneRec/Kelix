@@ -9,7 +9,7 @@ from ..tok.utils import ScalingLayer
 
 
 class TATokVisionTower(nn.Module):
-    def __init__(self, vision_tower, vision_tower_cfg, visual_encoder, decoder_config, delay_load=False):
+    def __init__(self, vision_tower, vision_tower_cfg, visual_encoder, decoder_config, llm_model, delay_load=False):
         super().__init__()
 
         self.is_loaded = False
@@ -24,26 +24,26 @@ class TATokVisionTower(nn.Module):
 
         if not delay_load:
             rank0_print(f"Loading vision tower: {vision_tower}")
-            self.load_model(visual_encoder=visual_encoder, decoder_config=decoder_config)
+            self.load_model(visual_encoder=visual_encoder, decoder_config=decoder_config, llm_model=llm_model)
         elif getattr(vision_tower_cfg, "unfreeze_mm_vision_tower", False):
             # TODO: better detector is needed.
             rank0_print(f"The checkpoint seems to contain `vision_tower` weights: `unfreeze_mm_vision_tower`: True.")
-            self.load_model(visual_encoder=visual_encoder, decoder_config=decoder_config)
+            self.load_model(visual_encoder=visual_encoder, decoder_config=decoder_config, llm_model=llm_model)
         elif hasattr(vision_tower_cfg, "mm_tunable_parts") and "mm_vision_tower" in vision_tower_cfg.mm_tunable_parts:
             rank0_print(f"The checkpoint seems to contain `vision_tower` weights: `mm_tunable_parts` contains `mm_vision_tower`.")
-            self.load_model(visual_encoder=visual_encoder, decoder_config=decoder_config)
+            self.load_model(visual_encoder=visual_encoder, decoder_config=decoder_config, llm_model=llm_model)
         else:
             self.cfg_only = self.config
         
         self.train(True)
 
-    def load_model(self, visual_encoder, decoder_config, device_map=None):
+    def load_model(self, visual_encoder, decoder_config, llm_model, device_map=None):
         if self.is_loaded:
             rank0_print("{} is already loaded, `load_model` called again, skipping.".format(self.vision_tower_name))
             return
 
         ckpt_kwargs = {'bottleneck': {'name': 'bottleneck', 'args': {'bottleneck_dim': visual_encoder, 'norm': 'none', 'regularizer': {'name': 'simvq', 'args': {'codebook_size': 65536, 'commitment_loss_weight': 0.25, 'codebook_loss_weight': 1.0, 'entropy_loss_weight': 0.0, 'entropy_loss_temperature': 0.01, 'l2_normalized': True, 'stochastic': True, 'stochastic_temperature': 0.03, 'top_k': 4, 'top_k_prob': 0.5, 'residual_weight': 0.1}}}}, 'bottleneck_token_num': 729, 'input_size': 384, 'teacher': 'google/siglip2-so400m-patch14-384', 'ckpt_path': 'google/siglip2-so400m-patch14-384', 'pool_scale': 1, 'rand_scale': True}
-        self.vision_tower = TextAlignedTokenizer(visual_encoder=visual_encoder, decoder_config=decoder_config, load_teacher=False, **ckpt_kwargs).to(device_map) # __init__
+        self.vision_tower = TextAlignedTokenizer(visual_encoder=visual_encoder, decoder_config=decoder_config, load_teacher=False, llm_model=llm_model, **ckpt_kwargs).to(device_map) # __init__
         
         # TODO:
         # self.vision_tower.bottleneck.regularizer.set_eval_deterministic(deterministic=True)
