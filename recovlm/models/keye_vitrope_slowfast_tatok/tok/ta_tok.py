@@ -230,7 +230,7 @@ class TextAlignedTokenizer(nn.Module):
         z = rearrange(z, 'b (p1 p2) c -> b c p1 p2', p1=p, p2=p)
         return self.decode(z)
 
-    def forward(self, data, teacher_data, **kwargs):
+    def forward(self, data, teacher_data, eps=1e-8, **kwargs):
         # data: video in shape (b, c, t, h, w)
         # data: image in shape (b, n, c)
         encode_output = self.encode(data, **kwargs)
@@ -255,7 +255,9 @@ class TextAlignedTokenizer(nn.Module):
         encode_output['encoded'] = z
 
         # Step 4: compute reconstruction loss (MSE on features)
+        print("self.l2_normalized:", self.l2_normalized)
         if self.l2_normalized:
+            print("teacher_data l2_normalized!")
             teacher_data = F.normalize(teacher_data, p=2, dim=-1)
 
         if self.reconstruction_type == "mse":
