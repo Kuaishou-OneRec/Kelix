@@ -27,7 +27,7 @@ MODEL_DIR=/mmu_mllm_hdd_2/yangzhuoran/model/Keye-VL-1_5-8B-Base
 #OUTPUT_DIR=/llm_reco/maosiyang/train_out/0.9.1/keye_2B_stage1/
 # examples/vlm/0.9.7/1d_vs_3d_rope/rope_1d.sh 
 # OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output1/Keye/0.9.7/Stage3/8b/1d_vs_3d_rope_v2/rope3d
-OUTPUT_DIR=/llm_reco_ssd/yangzhuoran/code/outputs/navit-tar/navit_tok_freeze-llm-vit-mlp_non_project_teacher_init-from-llm_no-decoder
+OUTPUT_DIR=/llm_reco_ssd/yangzhuoran/code/outputs/navit-tar/navit_tok_freeze-llm_non_project_teacher_init-from-llm_no-decoder_param
 
 mkdir -p $OUTPUT_DIR
 mkdir -p /tmp/_wids_cache
@@ -134,7 +134,7 @@ nohup mpirun --allow-run-as-root \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
                 --freeze_llm \
-                --max_length 10000 \
+                --max_length 5000 \
                 --learning_rate 2e-5 \
                 --vision_learning_rate 2e-6 \
                 --min_lr 1e-7 \
