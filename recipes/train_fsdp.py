@@ -1366,8 +1366,8 @@ def train():
         print("使用过的 token 数量:", nonzero_count)
         print("token_util:", token_util)
 
-        print("########################### decode ###########################")
-        print("topk_idx id: ", torch.tensor(topk_idx).to(codebook_loss))
+        # print("########################### decode ###########################")
+        # print("topk_idx id: ", torch.tensor(topk_idx).to(codebook_loss))
         # tensor([5920.,  964., 1464., 2304., 2416.,  198.,  976., 2128., 2640., 1808.],device='cuda:7', dtype=torch.bfloat16)
         # topk_idx: [5364, 2303, 5448, 5924, 1777, 1640, 1924, 2102, 811, 1173]
         # topk_idx_token = tokenizer.decode(torch.tensor(topk_idx).to(codebook_loss.device))
