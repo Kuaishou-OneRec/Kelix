@@ -68,6 +68,8 @@ class TextAlignedTokenizer(nn.Module):
 
         print("self.bottleneck_dim: ", self.bottleneck_dim)
 
+        self.reconstruction_type = 'cosine'
+
         # TODO: decoder init
         self.encoder_hidden_dim = visual_encoder
         # from recovlm.models.keye_vitrope_slowfast_tatok.modeling_keye import SiglipVisionModel
@@ -256,11 +258,26 @@ class TextAlignedTokenizer(nn.Module):
         if self.l2_normalized:
             teacher_data = F.normalize(teacher_data, p=2, dim=-1)
 
-        if attn_mask is not None:  # mask 掉 padding位置
-            reconstruction_loss = ((teacher_data - pred_feats) ** 2) * attn_mask[..., None]
-            reconstruction_loss = reconstruction_loss.sum() / attn_mask.sum()
-        else:
-            reconstruction_loss = F.mse_loss(pred_feats, teacher_data)
+        if self.reconstruction_type == "mse":
+            if attn_mask is not None:  # mask 掉 padding位置
+                reconstruction_loss = ((teacher_data - pred_feats) ** 2) * attn_mask[..., None]
+                reconstruction_loss = reconstruction_loss.sum() / attn_mask.sum()
+            else:
+                reconstruction_loss = F.mse_loss(pred_feats, teacher_data)
+        else: # cosine similarity
+            pred_norm = pred_feats / (pred_feats.norm(dim=-1, keepdim=True) + eps)
+            teacher_norm = teacher_data / (teacher_data.norm(dim=-1, keepdim=True) + eps)
+
+            cos_sim = (pred_norm * teacher_norm).sum(dim=-1)  # [B, T]
+            cos_loss = 1 - cos_sim  # [B, T]
+            print("cos_loss:", cos_loss.shape)
+
+            if attn_mask is not None:
+                cos_loss = cos_loss * attn_mask  # mask 掉 padding
+                reconstruction_loss = cos_loss.sum() / attn_mask.sum()
+            else:
+                reconstruction_loss = cos_loss.mean()
+
 
         print("reconstruction_loss: ", reconstruction_loss)
         encode_output['reconstruction_loss'] = reconstruction_loss

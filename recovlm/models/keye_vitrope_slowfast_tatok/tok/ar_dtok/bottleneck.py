@@ -120,14 +120,12 @@ class SimVectorQuantizer(nn.Module):
         self.embedding.weight.data.copy_(init_emb)
         # 冻结 codebook
         self.embedding.weight.requires_grad = False
+        self.embedding_proj = nn.Linear(self.dim, self.dim)
 
 
 
 
-
-
-
-        # self.embedding_proj = nn.Linear(self.dim, self.dim)
+        
 
         self.same_index_shape = same_index_shape
         self.train(True)
@@ -140,7 +138,7 @@ class SimVectorQuantizer(nn.Module):
 
     @torch.autocast(device_type='cuda', enabled=False)
     def get_emb(self):
-        # emb = self.embedding_proj(self.embedding.weight) 
+        emb = self.embedding_proj(self.embedding.weight) 
         emb = self.embedding.weight
         if self.l2_normalized:
             emb = F.normalize(emb, p=2, dim=-1)
@@ -199,7 +197,7 @@ class SimVectorQuantizer(nn.Module):
         print("quantized shape: ", quantized.shape)
         print("z_flattened shape: ", z_flattened.shape)
         print("q_indices value: ", q_indices)
-        codebook_loss = beta * torch.mean((quantized.detach() - z_flattened)**2) + torch.mean((quantized - z_flattened.detach())**2) # (b n) d
+        codebook_loss = beta * (torch.mean((quantized.detach() - z_flattened)**2) + torch.mean((quantized - z_flattened.detach())**2)) # (b n) d
         print("codebook_loss.requires_grad:", codebook_loss.requires_grad)
 
         quantized = quantized.view(z.shape)  # (b, n, d)
