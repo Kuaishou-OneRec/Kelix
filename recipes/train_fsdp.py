@@ -1283,8 +1283,10 @@ def train():
 
       print("########################### decode ###########################")
       print("batch['input_ids'][0]: ", batch['input_ids'][0])
+      # batch['input_ids'][0]:  tensor([151644,   8948,    198,  ..., 151643, 151643, 151643], device='cuda:3')
       input_text = tokenizer.decode(batch['input_ids'][0])
       print("input_text:", input_text)
+      # <|im_start|>system .......
 
       print("######################### Check params requires_grad Begin before model(): #########################")
       for name, param in model.named_parameters():
@@ -1363,6 +1365,14 @@ def train():
         token_util = nonzero_count / codebook_size
         print("使用过的 token 数量:", nonzero_count)
         print("token_util:", token_util)
+
+        print("########################### decode ###########################")
+        print("topk_idx id: ", torch.tensor(topk_idx).to(codebook_loss))
+        # batch['input_ids'][0]:  tensor([151644,   8948,    198,  ..., 151643, 151643, 151643], device='cuda:3')
+        # topk_idx: [5364, 2303, 5448, 5924, 1777, 1640, 1924, 2102, 811, 1173]
+        topk_idx_token = tokenizer.decode(torch.tensor(topk_idx).to(codebook_loss.device))
+        print("topk_idx token:", topk_idx_token)
+        # <|im_start|>system .......
 
         
 
