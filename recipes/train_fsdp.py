@@ -1168,6 +1168,8 @@ def train():
 
       if show_cnt > 0 and dist.get_rank() <= 8:
         with Timer("Show data"):
+          print("########################### decode ###########################")
+          print("batch['input_ids'][0]: ", batch['input_ids'][0])
           input_text = tokenizer.decode(batch['input_ids'][0])
           time.sleep(float(dist.get_rank()) * 0.3)
           print(
@@ -1347,7 +1349,7 @@ def train():
         print("used_codes:", nonzero_count, "topk_counts:", topk_vals.tolist(), "topk_idx:", topk_idx.tolist())
         # total_count = token_frequency.sum().item()  
         codebook_size = len(token_frequency)       
-        assert codebook_size == 65536
+        assert codebook_size == 8192
         token_util = nonzero_count / codebook_size
         print("使用过的 token 数量:", nonzero_count)
         print("token_util:", token_util)

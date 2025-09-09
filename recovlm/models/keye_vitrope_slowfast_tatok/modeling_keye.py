@@ -2993,8 +2993,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
     
     def token_frequency(self, image_forward_outs):
-
-        codebook_size = 65536
+        # TODO: change codebook_size
+        codebook_size = 8192
 
         # 假设 image_forward_outs[i]['bottleneck_rep'] 是 1D 或 2D 的 LongTensor
         all_tokens = []

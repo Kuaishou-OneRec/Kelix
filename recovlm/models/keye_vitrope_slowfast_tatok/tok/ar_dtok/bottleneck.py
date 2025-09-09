@@ -192,7 +192,7 @@ class SimVectorQuantizer(nn.Module):
         print("quantized.requires_grad:", quantized.requires_grad) # True
         print("z_flattened.requires_grad:", z_flattened.requires_grad) # True
         # FIXME:
-        beta = 1
+        beta = 100
         # print("quantized value: ", quantized)
         # print("z_flattened value: ", z_flattened)
         print("quantized shape: ", quantized.shape)

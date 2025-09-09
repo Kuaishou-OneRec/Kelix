@@ -135,8 +135,8 @@ nohup mpirun --allow-run-as-root \
                 --monitor_datasource_cnt \
                 --freeze_llm \
                 --max_length 5000 \
-                --learning_rate 2e-5 \
-                --vision_learning_rate 2e-6 \
+                --learning_rate 2e-4 \
+                --vision_learning_rate 2e-5 \
                 --min_lr 1e-7 \
                 --weight_decay 0.01 \
                 --lr_scheduler_type cosine \
