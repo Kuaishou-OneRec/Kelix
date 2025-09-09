@@ -1154,10 +1154,7 @@ def train():
     # print(f"rank={torch.distributed.get_rank()}, pid={os.getpid()}, begin_training")
     ticker.tick("while_True")
 
-    print("########################### decode ###########################")
-    print("batch['input_ids'][0]: ", batch['input_ids'][0])
-    input_text = tokenizer.decode(batch['input_ids'][0])
-    print("input_text: ", input_text)
+    
 
 
           
@@ -1173,6 +1170,11 @@ def train():
       ticker.tick("next_batch")
 
       micro_step += 1
+
+      print("########################### decode ###########################")
+      print("batch['input_ids'][0]: ", batch['input_ids'][0])
+      input_text = tokenizer.decode(batch['input_ids'][0])
+      print("input_text: ", input_text)
 
       if show_cnt > 0 and dist.get_rank() <= 8:
         with Timer("Show data"):
