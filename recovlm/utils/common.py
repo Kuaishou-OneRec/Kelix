@@ -46,13 +46,13 @@ def get_optimizer_grouped_parameters(model,
     if p.requires_grad:
       if any(nd in n for nd in no_decay_name_list):
         # no weight decay params
-        if n.startswith("visual"):
+        if n.startswith("visual") or n.startswith("vision_tower"):
           vit_nowd_params_group.append((n, p))
         else:
           llm_nowd_params_group.append((n, p))
       else:
         # weight decay params
-        if n.startswith("visual"):
+        if n.startswith("visual") or n.startswith("vision_tower"):
           vit_wd_params_group.append((n, p))
         else:
           llm_wd_params_group.append((n, p))

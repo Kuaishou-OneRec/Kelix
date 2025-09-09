@@ -119,13 +119,14 @@ class SimVectorQuantizer(nn.Module):
         self.embedding = nn.Embedding(self.codebook_size, self.dim)
         self.embedding.weight.data.copy_(init_emb)
         # 冻结 codebook
-        self.embedding.weight.requires_grad = False
+        # TODO:
+        self.embedding.weight.requires_grad = Flase
         self.embedding_proj = nn.Linear(self.dim, self.dim)
 
 
 
 
-        
+
 
         self.same_index_shape = same_index_shape
         self.train(True)

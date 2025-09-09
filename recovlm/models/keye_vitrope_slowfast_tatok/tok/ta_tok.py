@@ -244,7 +244,7 @@ class TextAlignedTokenizer(nn.Module):
         attn_mask = None
         pred_feats = self.decode(vq_feats, attn_mask=attn_mask)
         # TODO: no decoder
-        pred_feats = vq_feats
+        # pred_feats = vq_feats
 
         # self.input_type: quant
         

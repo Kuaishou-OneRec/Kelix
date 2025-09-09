@@ -522,7 +522,8 @@ def freeze_params(args, model):
     if args.freeze_llm:
       print_rank_0("Freeze LLM parameters.")
       for name, param in model.named_parameters():
-        if not (name.startswith("vision_tower.")):
+        if not (name.startswith("visual.") or name.startswith("mlp_AR.") or name.startswith("vision_tower.")):
+          # if not (name.startswith("vision_tower.")):
           print_rank_0(f"Disable LLM grad: {name}")
           param.requires_grad = False
       print_rank_0("=" * 50)
@@ -1342,6 +1343,8 @@ def train():
         token_frequency = output.token_frequency
         # print('***token_frequency***:', token_frequency) # (65536,)
         nonzero_count = (token_frequency > 0).sum().item()   
+        topk_vals, topk_idx = torch.topk(token_frequency, 10)
+        print("used_codes:", nonzero_count, "topk_counts:", topk_vals.tolist(), "topk_idx:", topk_idx.tolist())
         # total_count = token_frequency.sum().item()  
         codebook_size = len(token_frequency)       
         assert codebook_size == 65536
