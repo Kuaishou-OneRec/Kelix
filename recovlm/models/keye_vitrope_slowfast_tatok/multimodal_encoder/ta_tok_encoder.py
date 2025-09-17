@@ -20,8 +20,6 @@ class TATokVisionTower(nn.Module):
 
         self.vision_tower_name = vision_tower
         
-        # self.visual_encoder = visual_encoder
-
         if not delay_load:
             rank0_print(f"Loading vision tower: {vision_tower}")
             self.load_model(visual_encoder=visual_encoder, decoder_config=decoder_config, llm_model=llm_model)
