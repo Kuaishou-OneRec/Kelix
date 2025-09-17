@@ -256,7 +256,7 @@ def get_argument_parser():
 
   ############ Training Args ############
 
-  parser.add_argument("--clip_range", type=float, default=None,
+  parser.add_argument("--clip_range", type=float, default=1.0,
                       help="The gradient clip range.")
 
   parser.add_argument("--freeze_llm", action="store_true",
@@ -1361,7 +1361,7 @@ def train():
         print("used_codes:", nonzero_count, "topk_counts:", topk_vals.tolist(), "topk_idx:", topk_idx.tolist())
         # total_count = token_frequency.sum().item()  
         codebook_size = len(token_frequency)       
-        assert codebook_size == 8192
+        assert codebook_size == 65536
         token_util = nonzero_count / codebook_size
         print("使用过的 token 数量:", nonzero_count)
         print("token_util:", token_util)
