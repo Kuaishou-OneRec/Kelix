@@ -5,7 +5,7 @@ from einops import rearrange
 
 from .. import models
 from ..models import register
-
+from utils import select_representative_embeddings_for_codebook
 
 @register("bottleneck")
 class Bottleneck(nn.Module):
@@ -31,14 +31,14 @@ class Bottleneck(nn.Module):
         
         self.project_dim = self.bottleneck_dim
         
-        '''
+        
         # FIXME: Codebook * W , dimension align !!!
         if self.bottleneck_dim > 0:
             self.in_linear = nn.Linear(self.input_dim, self.project_dim)
             self.out_linear = nn.Linear(self.bottleneck_dim, self.output_dim)
         else:
             self.in_linear = self.out_linear = lambda x: x
-        '''
+    
         
         regularizer['args']['dim'] = self.bottleneck_dim
         regularizer['args']['token_nums'] = self.token_nums
@@ -46,7 +46,6 @@ class Bottleneck(nn.Module):
         self.regularizer = models.make(regularizer) # simvq
         self.train(True)
 
-    '''
     def project_in(self, x):
         assert len(x.shape) == 3, "Input shape must be (batch, n_tokens, e_dim)"
         z = self.in_linear(x)
@@ -55,19 +54,18 @@ class Bottleneck(nn.Module):
     def project_out(self, z_cat):
         z = self.out_linear(z_cat)
         return z
-    '''
 
     def decode(self, bottleneck_rep):
         regularized_z = self.regularizer.decode(bottleneck_rep)
         return self.project_out(regularized_z)
 
     def forward(self, x):  
-        # z = self.project_in(x)
-        z = x
+        z = self.project_in(x)
+        # z = x
         projected_z = z
         regularized_output = self.regularizer(z)
-        # x_hat = self.project_out(regularized_output['regularized_z']) # quantized
-        x_hat = regularized_output['regularized_z']
+        x_hat = self.project_out(regularized_output['regularized_z']) # quantized
+        # x_hat = regularized_output['regularized_z']
         bottleneck_rep = regularized_output.pop('bottleneck_rep') # q_indices
         return {
             'output': x_hat, # quantized
@@ -107,14 +105,15 @@ class SimVectorQuantizer(nn.Module):
 
         # for clear inference code, we remove the codebook init from LLM's embedding
         # FIXME: CODEBOOK INIT!!!
-        # self.embedding = nn.Embedding(self.codebook_size, self.dim)
         with torch.no_grad():
-            # 获取 LLM 的 token embedding 权重
             llm_emb = llm_model.get_input_embeddings().weight  # shape [vocab_size, dim]
-            # 随机挑选 codebook_size 个向量
-            vocab_size = llm_emb.size(0)
-            indices = torch.randperm(vocab_size)[:self.codebook_size]
-            init_emb = llm_emb[indices].clone()  # [codebook_size, dim]
+
+            init_emb, selected_indices = select_representative_embeddings_for_codebook(
+                llm_embeddings=llm_emb,
+                codebook_size=self.codebook_size,
+                normalize=True  # 推荐归一化以确保语义覆盖
+            )
+
         # 用选中的向量初始化 nn.Embedding
         self.embedding = nn.Embedding(self.codebook_size, self.dim)
         self.embedding.weight.data.copy_(init_emb)
@@ -140,7 +139,7 @@ class SimVectorQuantizer(nn.Module):
     @torch.autocast(device_type='cuda', enabled=False)
     def get_emb(self):
         emb = self.embedding_proj(self.embedding.weight) 
-        emb = self.embedding.weight
+        # emb = self.embedding.weight
         if self.l2_normalized:
             emb = F.normalize(emb, p=2, dim=-1)
         # assert emb.dtype == torch.float32, f"Embedding weight dtype is {emb.dtype}, expected float32"

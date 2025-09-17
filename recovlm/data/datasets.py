@@ -3211,10 +3211,37 @@ class NaiveParquetDataset(IterableDataset):
       chosen = None
       rejected = None
 
-      if "messages" in raw_row_data:
-        messages = raw_row_data["messages"]
-        if isinstance(messages, str):
-          messages = json.loads(messages)
+      # if "messages" in raw_row_data:
+      #   messages = raw_row_data["messages"]
+      #   if isinstance(messages, str):
+      #     messages = json.loads(messages)
+
+      if "image" in raw_row_data:
+        image = raw_row_data["image"]
+        messages = [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "image",
+                "image": image
+              },
+              {
+                "type": "text",
+                "text": "Please describe the image."
+              }
+            ]
+          },
+          {
+            "role": "assistant",
+            "content": [
+              {
+                "type": "text",
+                "text": "The image is a beautiful landscape."
+              }
+            ]
+          }
+        ]
           
       if "segments" in raw_row_data:
         segments = raw_row_data["segments"]

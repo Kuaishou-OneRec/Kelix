@@ -71,49 +71,29 @@ class TextAlignedTokenizer(nn.Module):
         self.reconstruction_type = 'cosine'
 
         # TODO: decoder init
-        self.encoder_hidden_dim = visual_encoder
-        # from recovlm.models.keye_vitrope_slowfast_tatok.modeling_keye import SiglipVisionModel
-        # self.decoder_config = decoder_config
-        # self.decoder_config.update({
-        #     'patch_size': 1,
-        #     'num_hidden_layers': self.decoder_depth,
-        #     'num_channels': self.bottleneck_dim,
-        #     'hidden_size': self.encoder_hidden_dim,
-        # })
-        # self.decoder = SiglipVisionModel(self.decoder_config)
+        self.encoder_hidden_dim = visual_encoder # 这里的 visual_encoder 是 input_dim 
+
         # TODO: decoder dim???
         self.decoder = TokenDecoder(hidden_dim=self.encoder_hidden_dim, depth=self.decoder_depth)
 
 
-        # self.encoder_config = AutoConfig.from_pretrained(teacher)
-        # self.encoder = AutoModel.from_config(self.encoder_config).vision_model         
-        # self.encoder_hidden_dim = self.encoder.config.hidden_size
-
-        # self.decoder_config = Siglip2VisionConfig()
-        # self.decoder_config.update({
-        #     'patch_size': 1,
-        #     'num_hidden_layers': self.decoder_depth,
-        #     'num_channels': self.bottleneck_dim,
-        #     'hidden_size': self.encoder_hidden_dim,
-        # })
-        # self.decoder = Siglip2VisionModel(self.decoder_config)
-
-        '''
         self.encode_task_layer = nn.Sequential(
             nn.Linear(self.encoder_hidden_dim, self.encoder_hidden_dim), # 4096
             nn.Tanh())
+
         self.decode_task_layer = nn.Sequential(
             nn.Linear(self.encoder_hidden_dim, self.encoder_hidden_dim),
             nn.Tanh(),
             nn.Linear(self.encoder_hidden_dim, self.encoder_hidden_dim))
-        '''
         
 
         bottleneck_args = {
             'llm_model': llm_model,
             'token_nums': self.bottleneck_token_num, 
             'input_dim': self.encoder_hidden_dim, 
-            'output_dim': self.bottleneck_dim}
+            'output_dim': self.bottleneck_dim
+        }
+
         self.bottleneck = models.make(bottleneck, args=bottleneck_args) # vector quantization
         self.bottleneck.train()
 
@@ -175,19 +155,20 @@ class TextAlignedTokenizer(nn.Module):
         #     x = self.image_resize(x)
         # vq_feats = self.encoder(x, output_hidden_states=True).hidden_states[self.select_layer_id] 
         # TODO: 
-        x = x.detach()       # 避免梯度回传到 ViT（可选）
-        x.requires_grad_(True)      # 允许后续 decoder 计算梯度
+        # x = x.detach()       # 避免梯度回传到 ViT（可选）
+        # x.requires_grad_(True)      # 允许后续 decoder 计算梯度
         
 
         
         vq_feats = x # (b, n,c)
 
+        # pooling not work
         pool_scale = self.pool_scale
         pool_scale = kwargs.get("pool_scale", pool_scale)
         # if pool_scale != 1:
         #     vq_feats = self.avg_pool(vq_feats, pool_scale)
         print("vq_feats:", vq_feats.shape) # torch.Size([1, 1500, 4096])
-        # vq_feats = self.encode_task_layer(vq_feats.to(x.device)) # (b, n, c)
+        vq_feats = self.encode_task_layer(vq_feats.to(x.device)) # (b, n, c)
         print("vq_feats.requires_grad:", vq_feats.requires_grad)
         bottleneck_out = self.bottleneck(vq_feats)
         z = bottleneck_out.pop('output') # quantized
@@ -220,8 +201,9 @@ class TextAlignedTokenizer(nn.Module):
         # z = self.decode_task_layer(z)
         # TODO: decode model
         z = self.decoder(z, attn_mask)
+        z = self.decode_task_layer(z)
         print("z: after decoder: ", z.shape)
-        # z = self.decode_task_layer(z)
+
         return z
 
     def decode_from_bottleneck(self, bottleneck_rep):
@@ -256,17 +238,15 @@ class TextAlignedTokenizer(nn.Module):
             z = pred_feats # [b, n, c] rec
         encode_output['encoded'] = z
 
-        # Step 4: compute reconstruction loss (MSE on features)
-        print("self.l2_normalized:", self.l2_normalized)
-        if self.l2_normalized:
-            print("teacher_data l2_normalized!")
-            teacher_data = F.normalize(teacher_data, p=2, dim=-1)
 
         if self.reconstruction_type == "mse":
             if attn_mask is not None:  # mask 掉 padding位置
                 reconstruction_loss = ((teacher_data - pred_feats) ** 2) * attn_mask[..., None]
                 reconstruction_loss = reconstruction_loss.sum() / attn_mask.sum()
             else:
+                if self.l2_normalized:
+                    print("teacher_data l2_normalized!")
+                    teacher_data = F.normalize(teacher_data, p=2, dim=-1)
                 reconstruction_loss = F.mse_loss(pred_feats, teacher_data)
         else: # cosine similarity
             pred_norm = pred_feats / (pred_feats.norm(dim=-1, keepdim=True) + eps)

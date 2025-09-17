@@ -42,7 +42,35 @@ class TATokVisionTower(nn.Module):
             rank0_print("{} is already loaded, `load_model` called again, skipping.".format(self.vision_tower_name))
             return
 
-        ckpt_kwargs = {'bottleneck': {'name': 'bottleneck', 'args': {'bottleneck_dim': visual_encoder, 'norm': 'none', 'regularizer': {'name': 'simvq', 'args': {'codebook_size': 8192, 'commitment_loss_weight': 0.25, 'codebook_loss_weight': 1.0, 'entropy_loss_weight': 0.1, 'entropy_loss_temperature': 0.5, 'l2_normalized': True, 'stochastic': True, 'stochastic_temperature': 0.3, 'top_k': 10, 'top_k_prob': 0.5, 'residual_weight': 0.2}}}}, 'bottleneck_token_num': 729, 'input_size': 384, 'teacher': 'google/siglip2-so400m-patch14-384', 'ckpt_path': 'google/siglip2-so400m-patch14-384', 'pool_scale': 1, 'rand_scale': True}
+        ckpt_kwargs = {
+            'bottleneck': {
+                'name': 'bottleneck', 
+                'args': {
+                    # 'bottleneck_dim': visual_encoder, 
+                    'bottleneck_dim': 1536,
+                    'norm': 'none', 
+                    'regularizer': {
+                        'name': 'simvq', 
+                        'args': {
+                            'codebook_size': 65536, 
+                            'commitment_loss_weight': 0.25, 
+                            'codebook_loss_weight': 1.0, 
+                            'entropy_loss_weight': 0.1, 
+                            'entropy_loss_temperature': 0.5, 
+                            'l2_normalized': True, 
+                            'stochastic': True, 
+                            'stochastic_temperature': 0.3, 
+                            'top_k': 10, 
+                            'top_k_prob': 0.5, 
+                            'residual_weight': 0.2}}}}, 
+            'bottleneck_token_num': 729, 
+            'input_size': 384, 
+            'teacher': 'google/siglip2-so400m-patch14-384', 
+            'ckpt_path': 'google/siglip2-so400m-patch14-384', 
+            'pool_scale': 1, 
+            'rand_scale': True}
+
+            
         self.vision_tower = TextAlignedTokenizer(visual_encoder=visual_encoder, decoder_config=decoder_config, load_teacher=False, llm_model=llm_model, **ckpt_kwargs).to(device_map) # __init__
         
         # TODO:

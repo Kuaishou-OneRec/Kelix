@@ -2761,6 +2761,25 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         self.teacher = SiglipVisionModel(config.vision_config)
         self.teacher_mlp_AR = Projector(config, config.vision_config)
+
+        # 🔧 冻结teacher模型
+        print("冻结teacher模型参数...")
+
+        for param in self.teacher.parameters():
+            param.requires_grad = False
+        for param in self.teacher_mlp_AR.parameters():
+            param.requires_grad = False
+
+        # 设置teacher为eval模式
+        self.teacher.eval()
+        self.teacher_mlp_AR.eval()
+        
+        print(f"Teacher模型冻结完成")
+        print(f"Teacher参数数量: {sum(p.numel() for p in self.teacher.parameters())}")
+        print(f"Teacher可训练参数: {sum(p.numel() for p in self.teacher.parameters() if p.requires_grad)}")
+        
+        # Initialize w
+
         ######################## TODO: add TA-Tok ########################
 
         # Initialize weights and apply final processing
@@ -2994,7 +3013,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
     
     def token_frequency(self, image_forward_outs):
         # TODO: change codebook_size
-        codebook_size = 8192
+        # codebook_size = 8192
+        codebook_size = 65536
 
         # 假设 image_forward_outs[i]['bottleneck_rep'] 是 1D 或 2D 的 LongTensor
         all_tokens = []
@@ -3107,21 +3127,22 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 
                 
                 ################################# teacher begin #################################
-                teacher_vision_outputs = self.teacher(
-                    pixel_values=pixel_values, 
-                    image_grid_thw=image_grid_hws,
-                    position_ids=siglip_position_ids,
-                    vision_return_embed_list=True,
-                    interpolate_pos_encoding=True,
-                    sample_indices=sample_indices,
-                    cu_seqlens=cu_seqlens,
-                    return_pooler_output=False,
-                    use_rope=True,
-                    window_size =-1,
-                )
-                teacher_image_embeds = teacher_vision_outputs.last_hidden_state
-                teacher_image_embeds = self.teacher_mlp_AR(teacher_image_embeds, image_grid_thw) # list: 
-                
+                with torch.no_grad():
+                    teacher_vision_outputs = self.teacher(
+                        pixel_values=pixel_values, 
+                        image_grid_thw=image_grid_hws,
+                        position_ids=siglip_position_ids,
+                        vision_return_embed_list=True,
+                        interpolate_pos_encoding=True,
+                        sample_indices=sample_indices,
+                        cu_seqlens=cu_seqlens,
+                        return_pooler_output=False,
+                        use_rope=True,
+                        window_size =-1,
+                    )
+                    teacher_image_embeds = teacher_vision_outputs.last_hidden_state
+                    teacher_image_embeds = self.teacher_mlp_AR(teacher_image_embeds, image_grid_thw) # list: 
+                    
                 ################################# teacher end   #################################
                 
                 
@@ -3142,17 +3163,13 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 
 
                 print(" pixel_values:", pixel_values.shape, " len(image_embeds):", len(image_embeds), " len(image_embeds[0]):", len(image_embeds[0]), " len(image_embeds[0][0]):", len(image_embeds[0][0])) 
-                # torch.Size([1, 6424, 3, 14, 14])
                 for i in range(len(image_embeds)):
                     print(" i:  ", i, ", image_embeds[i].shape: ", image_embeds[i].shape)
-                # len(image_embeds): 6  len(image_embeds[0]): 396  len(image_embeds[0][0]): 1152
                 
-                # print("image_embeds.type:", image_embeds.type) # list
 
                 image_embeds = self.mlp_AR(image_embeds, image_grid_thw) # list: 
                 
                 print(" len(image_embeds) after mlp:", len(image_embeds), " len(image_embeds[0]) after mlp:", len(image_embeds[0]), " len(image_embeds[0][0]) after mlp:", len(image_embeds[0][0]))
-                # len(image_embeds) after mlp: 3  len(image_embeds[0]) after mlp: 1500  len(image_embeds[0][0]) after mlp: 4096
 
 
 
@@ -3161,11 +3178,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 print("-----test vq------")
                 
 
-                # FIXME: VECTOR QUANTIZATION
-                # print("pixel_values:", pixel_values.shape) # torch.Size([1, 52912, 3, 14, 14])
-                # target: (teacher output:) - image_embeds (make sure teacher freeze)
-                
-                # random scale for training, but scale 1 for understanding evaluation
+
                 
                 import random
                 if self.training:
@@ -3194,247 +3207,11 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                 print("reconstruction_loss.requires_grad-modeling:", reconstruction_loss.requires_grad)
 
 
-                '''
-                n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
-                #image_embeds is a list of tensor, each tensor is a image feature,I want to concat them all into a tensor
-                image_embeds = torch.cat(image_embeds,dim=0)
-                n_image_features = image_embeds.shape[0]
-                if n_image_tokens != n_image_features:
-                    fast_image_embeds = torch.cat(fast_image_embeds,dim=0)
-                    raise ValueError(
-                        f"Image features and image tokens do not match: tokens: {n_image_tokens}, slow features {n_image_features - fast_image_embeds.shape[0]}, fast features {fast_image_embeds.shape[0]}"
-                    )
-
-                mask = (input_ids == self.config.image_token_id)
-                mask_unsqueezed = mask.unsqueeze(-1)
-                mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
-                image_mask = mask_expanded.to(inputs_embeds.device)
-
-                image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
-                '''
-
-                # print_rank_0(f"image pixel_values={pixel_values.shape}, image_grid_thw={image_grid_thw.shape}, n_image_tokens={n_image_tokens}, image_mask={image_mask.shape}, image_embeds={image_embeds.shape}, inputs_embeds={inputs_embeds.shape}")
-                # print_rank_0(f"image_grid_hws={image_grid_hws}, image_grid_thw={image_grid_thw}")
-                # image pixel_values=torch.Size([1, 196, 3, 14, 14]), image_grid_thw=torch.Size([1, 3]), n_image_tokens=49, image_mask=torch.Size([1,376, 3584]), image_embeds=torch.Size([49, 3584]), inputs_embeds=torch.Size([1,376, 3584])
-
-            '''
-            if pixel_values_videos is not None:
-                pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
-                pixel_values_videos = pixel_values_videos.unsqueeze(0)
-                siglip_position_ids = list()
-                video_grid_hws = list()
-                sample_indices = list()
-                cu_seqlens = [0]
-
-                for idx, thw in enumerate(video_grid_thw):
-                    thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
-                    numel = np.prod(thw_tuple)
-
-                    video_grid_hws.append(thw_tuple)
-                    video_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
-                    siglip_position_ids.append(video_position_ids)
-                    sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
-                    cu_seqlens.append(cu_seqlens[-1] + numel)
-                siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values_videos.device)
-                cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values_videos.device)
-                sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values_videos.device)
-
-                vision_outputs = self.visual(
-                    pixel_values=pixel_values_videos, 
-                    image_grid_thw=video_grid_hws,
-                    position_ids=siglip_position_ids,
-                    vision_return_embed_list=True,
-                    interpolate_pos_encoding=True,
-                    sample_indices=sample_indices,
-                    cu_seqlens=cu_seqlens,
-                    return_pooler_output=False,
-                    use_rope=True,
-                    window_size = -1,
-                )
-                video_embeds = vision_outputs.last_hidden_state
-                video_embeds = self.mlp_AR(video_embeds, video_grid_thw)
-
-                if fast_pixel_values_videos is not None:
-                    ############## fast vit start ##############
-                    fast_pixel_values_videos = fast_pixel_values_videos.type(self.visual.dtype)
-                    fast_pixel_values_videos = fast_pixel_values_videos.unsqueeze(0)
-                    fast_siglip_position_ids = list()
-                    fast_video_grid_hws = list()
-                    fast_sample_indices = list()
-                    fast_cu_seqlens = [0]
-
-                    for idx, thw in enumerate(fast_video_grid_thw):
-                        thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
-                        numel = np.prod(thw_tuple)
-
-                        fast_video_grid_hws.append(thw_tuple)
-                        video_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
-                        fast_siglip_position_ids.append(video_position_ids)
-                        fast_sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
-                        fast_cu_seqlens.append(fast_cu_seqlens[-1] + numel)
-                    fast_siglip_position_ids = torch.concat(fast_siglip_position_ids, dim=0).to(fast_pixel_values_videos.device)
-                    fast_cu_seqlens = torch.tensor(fast_cu_seqlens, dtype=torch.int32).to(fast_pixel_values_videos.device)
-                    fast_sample_indices = torch.concat(fast_sample_indices, dim=0).to(fast_pixel_values_videos.device)
-
-                    fast_vision_outputs = self.visual(
-                        pixel_values=fast_pixel_values_videos, 
-                        image_grid_thw=fast_video_grid_hws,
-                        position_ids=fast_siglip_position_ids,
-                        vision_return_embed_list=True,
-                        interpolate_pos_encoding=True,
-                        sample_indices=fast_sample_indices,
-                        cu_seqlens=fast_cu_seqlens,
-                        return_pooler_output=False,
-                        use_rope=True,
-                        window_size = -1,
-                    )
-                    fast_video_embeds = fast_vision_outputs.last_hidden_state
-                    fast_video_embeds = self.mlp_AR(fast_video_embeds, fast_video_grid_thw)
-                    ############## fast vit end ##############
-
-                    ############## fast scatter start##############
-                    n_fast_video_tokens = (input_ids == self.config.fast_video_token_id).sum().item()
-                    fast_video_embeds = torch.cat(fast_video_embeds,dim=0)
-                    n_fast_video_features = fast_video_embeds.shape[0]
-                    if n_fast_video_tokens != n_fast_video_features:
-                        raise ValueError(
-                            f"Fast!!! video features and video tokens do not match: tokens: {n_fast_video_tokens}, features {n_fast_video_features}"
-                        )
-
-                    mask = input_ids == self.config.fast_video_token_id
-                    mask_unsqueezed = mask.unsqueeze(-1)
-                    mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
-                    video_mask = mask_expanded.to(inputs_embeds.device)
-
-                    fast_video_embeds = fast_video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                    inputs_embeds = inputs_embeds.masked_scatter(video_mask, fast_video_embeds)
-                    ############## fast scatter end##############
-
-                    # print("cjx video debug: slow part {}, fast part {}".format(pixel_values_videos.size(), fast_pixel_values_videos.size()))
-
-                n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
-                video_embeds = torch.cat(video_embeds,dim=0)
-                n_video_features = video_embeds.shape[0]
-                if n_video_tokens != n_video_features:
-                    raise ValueError(
-                        f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
-                    )
-
-                mask = input_ids == self.config.video_token_id
-                mask_unsqueezed = mask.unsqueeze(-1)
-                mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
-                video_mask = mask_expanded.to(inputs_embeds.device)
-
-                video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-                inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-
-            if attention_mask is not None:
-                attention_mask = attention_mask.to(inputs_embeds.device)
-            
-            '''
-
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        '''
-        # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
-        if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
-            # calculate RoPE index once per generation in the pre-fill stage only
-            if (
-                (cache_position is not None and cache_position[0] == 0)
-                or self.rope_deltas is None
-                or (past_key_values is None or past_key_values.get_seq_length() == 0)
-            ):
-                position_ids, rope_deltas = self.get_rope_index_slowfast(
-                    input_ids,
-                    image_grid_thw,
-                    video_grid_thw,
-                    fast_video_grid_thw,
-                    attention_mask,
-                )
-                self.rope_deltas = rope_deltas
-                # import pdb
-                # pdb.set_trace()
-            # then use the prev pre-calculated rope-deltas to get the correct position ids
-            else:
-                batch_size, seq_length, _ = inputs_embeds.shape
-                delta = (
-                    (cache_position[0] + self.rope_deltas).to(inputs_embeds.device)
-                    if cache_position is not None
-                    else 0
-                )
-                position_ids = torch.arange(seq_length, device=inputs_embeds.device)
-                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-                if cache_position is not None:  # otherwise `deltas` is an int `0`
-                    delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
-                position_ids = position_ids.add(delta)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-        # else:
-        #     print("input_ids {} check and position_ids {} check.".format(input_ids.cpu().tolist(), position_ids.cpu().tolist()))
-        outputs = self.model(
-            input_ids=None,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
-            **kwargs
-        )
-
-        hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
-        
-        loss = None
-        if labels is not None:
-            # Upcast to float if we need to compute the loss to avoid potential precision issues
-            logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            shift_logits = shift_logits.view(-1, self.config.vocab_size)
-            shift_labels = shift_labels.view(-1)
-            # Enable model parallelism
-            shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        '''
-
 
         return KeyeCausalLMOutputWithPast(
             loss=codebook_loss,
             loss_reconstruction=reconstruction_loss,
             token_frequency=token_frequency_count,
-            #logits=logits,
-            #past_key_values=outputs.past_key_values,
-            #hidden_states=outputs.hidden_states,
-            #attentions=outputs.attentions,
-            #rope_deltas=self.rope_deltas,
         )
 
     def prepare_inputs_for_generation(
