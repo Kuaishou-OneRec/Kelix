@@ -5,7 +5,7 @@ from einops import rearrange
 
 from .. import models
 from ..models import register
-from utils import select_representative_embeddings_for_codebook
+from .utils import select_representative_embeddings_for_codebook
 
 @register("bottleneck")
 class Bottleneck(nn.Module):
