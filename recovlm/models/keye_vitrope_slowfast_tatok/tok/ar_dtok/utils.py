@@ -34,6 +34,6 @@ def select_representative_embeddings_for_codebook(llm_embeddings, codebook_size,
     _, selected_indices = torch.topk(avg_distances, codebook_size, largest=True)
     selected_embeddings = llm_embeddings[selected_indices]
     
-    print(f"选择完成！平均距离范围: [{avg_distances[selected_indices].min().item():.4f}, {avg_distances[selected_indices].max().item():.4f}]")    
+    # print(f"选择完成！平均距离范围: [{avg_distances[selected_indices].min().item():.4f}, {avg_distances[selected_indices].max().item():.4f}]")    
     
     return selected_embeddings, selected_indices
