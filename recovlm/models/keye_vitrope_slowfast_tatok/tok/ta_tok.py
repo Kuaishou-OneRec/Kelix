@@ -91,7 +91,8 @@ class TextAlignedTokenizer(nn.Module):
             'llm_model': llm_model,
             'token_nums': self.bottleneck_token_num, 
             'input_dim': self.encoder_hidden_dim, 
-            'output_dim': self.bottleneck_dim
+            'output_dim': self.encoder_hidden_dim,
+            'bottleneck_dim': self.bottleneck_dim
         }
 
         self.bottleneck = models.make(bottleneck, args=bottleneck_args) # vector quantization
