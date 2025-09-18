@@ -5,7 +5,7 @@ from einops import rearrange
 
 from .. import models
 from ..models import register
-from .utils import select_representative_embeddings_for_codebook
+from utils import select_representative_embeddings_for_codebook
 
 @register("bottleneck")
 class Bottleneck(nn.Module):
@@ -107,7 +107,7 @@ class SimVectorQuantizer(nn.Module):
         # FIXME: CODEBOOK INIT!!!
         with torch.no_grad():
             llm_emb = llm_model.get_input_embeddings().weight  # shape [vocab_size, dim]
-
+            llm_emb_dim = llm_model.get_input_embeddings().weight.shape[1]
             init_emb, selected_indices = select_representative_embeddings_for_codebook(
                 llm_embeddings=llm_emb,
                 codebook_size=self.codebook_size,
@@ -115,12 +115,12 @@ class SimVectorQuantizer(nn.Module):
             )
 
         # 用选中的向量初始化 nn.Embedding
-        self.embedding = nn.Embedding(self.codebook_size, self.dim)
+        self.embedding = nn.Embedding(self.codebook_size, llm_emb_dim)
         self.embedding.weight.data.copy_(init_emb)
         # 冻结 codebook
         # TODO:
         self.embedding.weight.requires_grad = False
-        self.embedding_proj = nn.Linear(self.dim, self.dim)
+        self.embedding_proj = nn.Linear(llm_emb_dim, self.dim)
 
 
 
