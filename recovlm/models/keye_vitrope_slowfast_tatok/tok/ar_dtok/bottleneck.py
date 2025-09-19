@@ -74,7 +74,6 @@ class Bottleneck(nn.Module):
             **regularized_output,
         }
 
-
 @register("simvq")
 class SimVectorQuantizer(nn.Module):
     def __init__(
@@ -139,8 +138,7 @@ class SimVectorQuantizer(nn.Module):
     @torch.autocast(device_type='cuda', enabled=False)
     def get_emb(self):
         emb = self.embedding_proj(self.embedding.weight) 
-        # emb = self.embedding.weight
-        if self.l2_normalized:
+         if self.l2_normalized:
             emb = F.normalize(emb, p=2, dim=-1)
         # assert emb.dtype == torch.float32, f"Embedding weight dtype is {emb.dtype}, expected float32"
         return emb
@@ -155,9 +153,6 @@ class SimVectorQuantizer(nn.Module):
         print("z.requires_grad: before to", z.requires_grad) # 
         z = z.to(emb)
         print("z.requires_grad: afater to ", z.requires_grad) # 
-        
-        # z = z.to(dtype=emb.dtype, device=emb.device)
-        # z = z.float()
 
         assert len(z.shape) == 3, "Input shape must be (batch, n_tokens, e_dim)"
         if self.l2_normalized:
@@ -197,16 +192,13 @@ class SimVectorQuantizer(nn.Module):
         print("quantized shape: ", quantized.shape)
         print("z_flattened shape: ", z_flattened.shape)
         print("q_indices value: ", q_indices)
-        codebook_loss = beta * (torch.mean((quantized.detach() - z_flattened)**2) + torch.mean((quantized - z_flattened.detach())**2)) # (b n) d
-        # codebook_loss = beta *  torch.mean((quantized - z_flattened.detach())**2)
         print("codebook_loss.requires_grad:", codebook_loss.requires_grad)
 
         quantized = quantized.view(z.shape)  # (b, n, d)
         
-        # preserve gradients
-        # TODO:
-        # quantized = z + (quantized - z).detach() # True
-        quantized = z.detach() + quantized - z
+        quantized = z + (quantized - z).detach() # True
+        codebook_loss = beta * (torch.mean((quantized.detach() - z_flattened)**2) + torch.mean((quantized - z_flattened.detach())**2)) # (b n) d
+
         print("quantized.requires_grad after preserve gradients:", quantized.requires_grad) # True
 
         if self.same_index_shape:
