@@ -158,6 +158,7 @@ class SimVectorQuantizer(nn.Module):
         
         # z = z.to(dtype=emb.dtype, device=emb.device)
         # z = z.float()
+        
         assert len(z.shape) == 3, "Input shape must be (batch, n_tokens, e_dim)"
         if self.l2_normalized:
             z = F.normalize(z, p=2, dim=-1)
@@ -197,6 +198,7 @@ class SimVectorQuantizer(nn.Module):
         print("z_flattened shape: ", z_flattened.shape)
         print("q_indices value: ", q_indices)
         codebook_loss = beta * (torch.mean((quantized.detach() - z_flattened)**2) + torch.mean((quantized - z_flattened.detach())**2)) # (b n) d
+        # codebook_loss = beta *  torch.mean((quantized - z_flattened.detach())**2)
         print("codebook_loss.requires_grad:", codebook_loss.requires_grad)
 
         quantized = quantized.view(z.shape)  # (b, n, d)
