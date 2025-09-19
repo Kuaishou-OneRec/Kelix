@@ -190,10 +190,9 @@ class SimVectorQuantizer(nn.Module):
         
         print("quantized.requires_grad:", quantized.requires_grad) # True
         print("z_flattened.requires_grad:", z_flattened.requires_grad) # True
+
         # FIXME:
-        beta = 100
-        # print("quantized value: ", quantized)
-        # print("z_flattened value: ", z_flattened)
+        beta = 1
         print("quantized shape: ", quantized.shape)
         print("z_flattened shape: ", z_flattened.shape)
         print("q_indices value: ", q_indices)
@@ -239,7 +238,6 @@ class SimVectorQuantizer(nn.Module):
         # get quantized latent vectors
         emb = self.get_emb()
         z_q = F.embedding(indices_flatten, emb)
-        # z_q = self.embedding(indices_flatten)
         if self.l2_normalized:
             z_q = F.normalize(z_q, p=2, dim=-1)
 

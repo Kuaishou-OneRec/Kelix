@@ -51,7 +51,7 @@ class TATokVisionTower(nn.Module):
                         'name': 'simvq', 
                         'args': {
                             'codebook_size': 65536, 
-                            'commitment_loss_weight': 0.25, 
+                            'commitment_loss_weight': 1.0, 
                             'codebook_loss_weight': 1.0, 
                             'entropy_loss_weight': 0.1, 
                             'entropy_loss_temperature': 0.5, 
@@ -74,7 +74,9 @@ class TATokVisionTower(nn.Module):
         # TODO:
         # self.vision_tower.bottleneck.regularizer.set_eval_deterministic(deterministic=True)
 
-        self.vision_tower.input_type = 'rec'
+        # self.vision_tower.input_type = 'rec'
+        self.vision_tower.input_type = 'quant'
+
         # self.vision_tower.scale_layer = ScalingLayer(mean=[0., 0., 0.], std=[1., 1., 1.])
 
         # TODO: 
