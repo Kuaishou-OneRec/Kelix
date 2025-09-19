@@ -138,7 +138,7 @@ class SimVectorQuantizer(nn.Module):
     @torch.autocast(device_type='cuda', enabled=False)
     def get_emb(self):
         emb = self.embedding_proj(self.embedding.weight) 
-         if self.l2_normalized:
+        if self.l2_normalized:
             emb = F.normalize(emb, p=2, dim=-1)
         # assert emb.dtype == torch.float32, f"Embedding weight dtype is {emb.dtype}, expected float32"
         return emb
@@ -197,6 +197,7 @@ class SimVectorQuantizer(nn.Module):
         quantized = quantized.view(z.shape)  # (b, n, d)
         
         quantized = z + (quantized - z).detach() # True
+
         codebook_loss = beta * (torch.mean((quantized.detach() - z_flattened)**2) + torch.mean((quantized - z_flattened.detach())**2)) # (b n) d
 
         print("quantized.requires_grad after preserve gradients:", quantized.requires_grad) # True
@@ -210,8 +211,6 @@ class SimVectorQuantizer(nn.Module):
         print("commitment loss:", torch.mean((quantized.detach() - z_flattened)**2).item())
         print("embedding loss:", torch.mean((quantized - z_flattened.detach())**2).item())
         print("total codebook loss:", codebook_loss.item())
-        # 看看 embedding 是否有梯度
-        # emb = self.embedding.weight
         print("embedding requires_grad:", self.embedding.weight.requires_grad)
         print("embedding grad:", self.embedding.weight.grad.norm().item() if self.embedding.weight.grad is not None else None)
 
