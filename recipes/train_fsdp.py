@@ -1353,7 +1353,7 @@ def train():
         print('***loss_reconstruction***:', loss_reconstruction)
         # NOTE: using this code for common loss calulate
         # loss = codebook_loss + loss_reconstruction
-        losss = codebook_loss # NOTE: only using codebook_loss
+        loss = codebook_loss # NOTE: only using codebook_loss
         print('***loss_all***:', loss)
 
         token_frequency = output.token_frequency
