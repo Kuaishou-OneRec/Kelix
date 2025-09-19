@@ -158,7 +158,7 @@ class SimVectorQuantizer(nn.Module):
         
         # z = z.to(dtype=emb.dtype, device=emb.device)
         # z = z.float()
-        
+
         assert len(z.shape) == 3, "Input shape must be (batch, n_tokens, e_dim)"
         if self.l2_normalized:
             z = F.normalize(z, p=2, dim=-1)
@@ -205,7 +205,8 @@ class SimVectorQuantizer(nn.Module):
         
         # preserve gradients
         # TODO:
-        quantized = z + (quantized - z).detach() # True
+        # quantized = z + (quantized - z).detach() # True
+        quantized = z.detach() + quantized - z
         print("quantized.requires_grad after preserve gradients:", quantized.requires_grad) # True
 
         if self.same_index_shape:
