@@ -1356,18 +1356,6 @@ def train():
         loss = codebook_loss # NOTE: only using codebook_loss
         print('***loss_all***:', loss)
 
-        # token_frequency = output.token_frequency
-        # # print('***token_frequency***:', token_frequency) # (65536,)
-        # nonzero_count = (token_frequency > 0).sum().item()   
-        # topk_vals, topk_idx = torch.topk(token_frequency, 10)
-        # print("used_codes:", nonzero_count, "topk_counts:", topk_vals.tolist(), "topk_idx:", topk_idx.tolist())
-        # # total_count = token_frequency.sum().item()  
-        # codebook_size = len(token_frequency)       
-        # assert codebook_size == 65536
-        # token_util = nonzero_count / codebook_size
-        # print("使用过的 token 数量:", nonzero_count)
-        # print("token_util:", token_util)
-        
         ############ NOTE: add global batchsize ############ 
         token_frequency = output.token_frequency
 
