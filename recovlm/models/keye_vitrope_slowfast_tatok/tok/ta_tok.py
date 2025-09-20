@@ -157,8 +157,8 @@ class TextAlignedTokenizer(nn.Module):
         # vq_feats = self.encoder(x, output_hidden_states=True).hidden_states[self.select_layer_id] 
 
         # TODO: using this code to freeze vit
-        # x = x.detach()       # 避免梯度回传到 ViT（可选）
-        # x.requires_grad_(True)      # 允许后续 decoder 计算梯度
+        x = x.detach()       # 避免梯度回传到 ViT（可选）
+        x.requires_grad_(True)      # 允许后续 decoder 计算梯度
         
 
         vq_feats = x # (b, n,c)
