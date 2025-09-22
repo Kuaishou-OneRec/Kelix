@@ -30,7 +30,7 @@ MODEL_DIR=/mmu_mllm_hdd_2/yangzhuoran/model/Keye-VL-1_5-8B-Base
 # OUTPUT_DIR=/llm_reco_ssd/yangzhuoran/code/outputs/navit-tar/navit_tok_freeze-llm_non_project_teacher_init-from-llm_no-decoder_param_8node
 # OUTPUT_DIR=/mmu_mllm_hdd_2/chuchenglong/outputs/navit-tar/demo_using_projector_codebook_65536_vq_dim_1536_freeze_Teacher_freeze_vit_wo_rec_loss
 # OUTPUT_DIR=/mmu_mllm_hdd_2/chuchenglong/outputs/navit-tar/test
-OUTPUT_DIR=/mmu_mllm_hdd_2/chuchenglong/outputs/navit-tar/freeze_vit_correct_codebook_loss
+# OUTPUT_DIR=/mmu_mllm_hdd_2/chuchenglong/outputs/navit-tar/freeze_vit_correct_codebook_loss
 
 mkdir -p $OUTPUT_DIR
 mkdir -p /tmp/_wids_cache
