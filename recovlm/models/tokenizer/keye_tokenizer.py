@@ -1028,6 +1028,7 @@ class Projector(nn.Module):
 
 class KeyeTokenizer(PreTrainedModel):
     config_class = KeyeVL1_5Config
+    _supports_flash_attn_2 = True
     def __init__(self, config: KeyeVL1_5Config):
         super().__init__()
         self.config = config
