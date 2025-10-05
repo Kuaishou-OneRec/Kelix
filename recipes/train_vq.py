@@ -851,13 +851,6 @@ def train():
 
   dist.barrier()
 
-  tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True)
-  image_token_id = tokenizer.encode('<im_patch>')[0]  if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|image_pad|>')[0]
-  video_token_id = tokenizer.encode('<vi_patch>')[0]  if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|video_pad|>')[0]
-  fast_video_token_id = -9999 if len(tokenizer.encode('<|fast_video_pad|>'))  > 1 else tokenizer.encode('<|fast_video_pad|>')[0] 
-  image_start_id = tokenizer.encode("</image>")[0] if args.model_class == 'InternVLChatModel' else tokenizer.encode('<|vision_start|>')[0]
-  frame_id = -9999 if len(tokenizer.encode('<|frame|>'))  > 1 else tokenizer.encode('<|frame|>')[0] 
-
   if dist.get_rank() == 0:
     with open(os.path.join(args.output_dir,
         f"dataset-{args.commit_id}-{timestamp}.json"), 'w',
@@ -1020,17 +1013,6 @@ def train():
       ticker.tick("next_batch")
 
       micro_step += 1
-
-      if show_cnt > 0 and dist.get_rank() <= 8:
-        with Timer("Show data"):
-          print("########################### decode ###########################")
-          print("batch['input_ids'][0]: ", batch['input_ids'][0])
-          input_text = tokenizer.decode(batch['input_ids'][0])
-          time.sleep(float(dist.get_rank()) * 0.3)
-          print(
-              f"Input Text:\n\n{input_text}\n" + "=" * 100 + "\n\n")
-          print_input_info(batch, f"rank{dist.get_rank()}")
-          show_cnt -= 1
       # continue
       data_source = batch.pop("data_source", None) # dataset source list cur batch
 
@@ -1132,8 +1114,6 @@ def train():
       print("########################### decode ###########################")
       print("batch['input_ids'][0]: ", batch['input_ids'][0])
       # batch['input_ids'][0]:  tensor([151644,   8948,    198,  ..., 151643, 151643, 151643], device='cuda:3')
-      input_text = tokenizer.decode(batch['input_ids'][0])
-      print("input_text:", input_text)
       # <|im_start|>system .......
 
       print("######################### Check params requires_grad Begin before model(): #########################")
