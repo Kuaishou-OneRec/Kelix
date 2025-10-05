@@ -566,8 +566,7 @@ class KeyeVL1_5VisionPreTrainedModel(PreTrainedModel):
     _no_split_modules = [
         "KeyeVL1_5TextEmbeddings",
         "KeyeVL1_5VisionEmbeddings",
-        "KeyeVL1_5VisionEncoderLayer",
-        "KeyeVL1_5VisionModelMultiheadAttentionPoolingHead",
+        "KeyeVL1_5VisionEncoderLayer"
     ]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -597,10 +596,6 @@ class KeyeVL1_5VisionPreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.fc2.weight)
             nn.init.normal_(module.fc1.bias, std=1e-6)
             nn.init.normal_(module.fc2.bias, std=1e-6)
-        elif isinstance(module, KeyeVL1_5VisionModelMultiheadAttentionPoolingHead):
-            nn.init.xavier_uniform_(module.probe.data)
-            nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
-            nn.init.zeros_(module.attention.in_proj_bias.data)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
             lecun_normal_(module.weight)
             if module.bias is not None:
@@ -780,9 +775,6 @@ class KeyeVL1_5VisionTransformer(nn.Module):
         self.embeddings = KeyeVL1_5VisionEmbeddings(config)
         self.encoder = KeyeVL1_5VisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
-        if self.use_head:
-            self.head = KeyeVL1_5VisionModelMultiheadAttentionPoolingHead(config)
 
     # @can_return_tuple
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=KeyeVL1_5VisionConfig)
@@ -851,30 +843,6 @@ class KeyeVL1_5VisionTransformer(nn.Module):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-
-class KeyeVL1_5VisionModelMultiheadAttentionPoolingHead(nn.Module):
-    """Multihead Attention Pooling."""
-
-    def __init__(self, config: KeyeVL1_5VisionConfig):
-        super().__init__()
-
-        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = KeyeVL1_5VisionMLP(config)
-
-    def forward(self, hidden_state, key_padding_mask=None):
-        batch_size = hidden_state.shape[0]
-        probe = self.probe.repeat(batch_size, 1, 1)
-
-        hidden_state = self.attention(probe, hidden_state, hidden_state, key_padding_mask=key_padding_mask)[0]
-
-        residual = hidden_state
-        hidden_state = self.layernorm(hidden_state)
-        hidden_state = residual + self.mlp(hidden_state)
-
-        return hidden_state[:, 0]
 
 
 class KeyeVL1_5VisionModel(KeyeVL1_5VisionPreTrainedModel):
