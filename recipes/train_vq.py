@@ -86,6 +86,7 @@ from recovlm.models.keye_vitrope_slowfast_v3.modeling_keye import SiglipEncoderL
 from recovlm.models.keye_vitrope_slowfast_v4.modeling_keye import KeyeForConditionalGeneration as KeyeForConditionalGeneration_vitrope_slowfast_v4
 from recovlm.models.keye_vitrope_slowfast_v4.modeling_keye import  KeyeDecoderLayer as KeyeDecoderLayer_vitrope_slowfast_v4
 from recovlm.models.keye_vitrope_slowfast_v4.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer_vitrope_slowfast_v4
+from recovlm.models.tokenizer.keye_tokenizer import KeyeVL1_5VisionEncoderLayer, KeyeImageTokenizer
 
 from recovlm.models.internvl import InternVLChatModel
 from recovlm.models.qwen2 import Qwen2DecoderLayer
