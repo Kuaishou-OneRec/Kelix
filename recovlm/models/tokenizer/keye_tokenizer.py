@@ -1030,7 +1030,7 @@ class KeyeTokenizer(PreTrainedModel):
     config_class = KeyeVL1_5Config
     _supports_flash_attn_2 = True
     def __init__(self, config: KeyeVL1_5Config):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.mlp_AR = Projector(config.hidden_size, config.vision_config.hidden_size)
         self.visual = KeyeVL1_5VisionModel(config.vision_config)
