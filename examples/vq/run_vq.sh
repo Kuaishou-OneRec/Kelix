@@ -140,5 +140,5 @@ nohup mpirun --allow-run-as-root \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
                 --comment '$comment' \
-                --commit_id $git_hash > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+                --commit_id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
