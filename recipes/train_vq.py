@@ -598,9 +598,6 @@ def train():
   assert all([args.commit_id, args.seed, args.comment]), \
     "Git commit, seed, and comment is required for reproducibility"
 
-  assert all([args.kml_id, args.kml_task_id]), \
-    "Kml task infomation, for task alive monitor."
-
   assert any([args.save_checkpoint_per_step, args.save_checkpoint_every_epoch]), \
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
       "save_checkpoint_every_epoch should be set."
