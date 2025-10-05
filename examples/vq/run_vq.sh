@@ -140,8 +140,5 @@ nohup mpirun --allow-run-as-root \
                 --merge_checkpoint_dtype bf16 \
                 --merge_checkpoint_output_file pytorch_model.bin \
                 --comment '$comment' \
-                --commit_id $git_hash \
-                --kml_id $KML_ID \
-                --kml_task_id $KML_TASK_ID \
-                --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+                --commit_id $git_hash > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
