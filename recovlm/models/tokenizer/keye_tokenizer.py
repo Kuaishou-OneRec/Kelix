@@ -559,7 +559,7 @@ class KeyeVL1_5VisionPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = KeyeVL1_5Config
+    config_class = KeyeVL1_5VisionConfig
     base_model_prefix = "kevevl_vision"
     supports_gradient_checkpointing = True
 
