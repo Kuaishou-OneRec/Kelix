@@ -1000,7 +1000,7 @@ class KeyeImageTokenizer(PreTrainedModel):
     # TODO: use KeyeImageTokenizerConfig
     config_class = KeyeImageTokenizerConfig
     _supports_flash_attn_2 = True
-    def __init__(self, config: KeyeImageTokenizerConfig):
+    def __init__(self, config: KeyeImageTokenizerConfig, **kwargs):
         super().__init__(config)
         self.config = config
         self.mlp_AR = Projector(config.vision_config.hidden_size, config.llm_hidden_size)
