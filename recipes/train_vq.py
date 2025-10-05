@@ -262,10 +262,10 @@ def get_argument_parser():
   parser.add_argument("--clip_range", type=float, default=1.0,
                       help="The gradient clip range.")
 
-  parser.add_argument("--freeze_llm", action="store_true",
+  parser.add_argument("--freeze_projector", action="store_true",
                       help="Freeze all LLM parameters (language model weights will not be updated during training).")
 
-  parser.add_argument("--freeze_visual", action="store_true",
+  parser.add_argument("--freeze_vit", action="store_true",
                       help="Freeze all visual encoder parameters except visual projector layers.")
 
   parser.add_argument("--freeze_projector", action="store_true",
