@@ -763,6 +763,7 @@ def train():
   optimizer_grouped_parameters = get_optimizer_grouped_parameters(
     model,
     learning_rate=args.learning_rate,
+    vision_learning_rate=args.learning_rate,
     weight_decay=args.weight_decay
   )
 
