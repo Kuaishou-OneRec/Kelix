@@ -212,8 +212,6 @@ class KeyeImageTokenizerConfig(PretrainedConfig):
         self.embedding_dim = embedding_dim
         self.llm_hidden_size = llm_hidden_size
         self.merge_size = merge_size
-        self.decoder_config = decoder_config
-        self.vision_config = vision_config
 
 
         # Validate the correctness of rotary position embeddings parameters
