@@ -312,20 +312,6 @@ def get_argument_parser():
 
   parser.add_argument("--monitor_image_tokens", action="store_true",
                       help="Whether to monitor image tokens. Note that this involves with an gather operation, which is time-consuming")
-
-  ############ System Vars ############
-
-  parser.add_argument("--kml_id", type=str, default=None,
-                      help="KML_ID")
-
-  parser.add_argument("--enable_profile", action="store_true",
-                      help="init torch profile")
-
-  parser.add_argument("--kml_task_id", type=str, default=None,
-                      help="KML_TASK_ID")
-  
-  parser.add_argument("--heartbeat_monitor", action="store_true",
-                      help="Whether to upload heartbeat to remote")
   
   return parser
 
@@ -624,8 +610,6 @@ def train():
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
   local_world_size = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_SIZE", 0))
   cpu_bind = get_numa_bind_info(local_rank, local_world_size)
-  os.environ["KML_ID"] = args.kml_id
-  os.environ["KML_TASK_ID"] = args.kml_task_id
 
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
@@ -705,8 +689,6 @@ def train():
     tb_writer = SummaryWriter(log_dir=os.path.join(args.output_dir, "log"))
     tb_writer.add_text("comment", args.comment, 0)
     tb_writer.add_text("comment_id", args.commit_id, 0)
-    tb_writer.add_text("kml_id", args.kml_id, 0)
-    tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
 
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
