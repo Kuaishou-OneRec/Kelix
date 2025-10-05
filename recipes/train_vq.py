@@ -267,9 +267,6 @@ def get_argument_parser():
 
   parser.add_argument("--freeze_vit", action="store_true",
                       help="Freeze all visual encoder parameters except visual projector layers.")
-
-  parser.add_argument("--freeze_projector", action="store_true",
-                      help="Freeze visual projector layers.")
   
   parser.add_argument("--update_vision_tower", action="store_true",
                       help="Update all vision_tower parameters.")
