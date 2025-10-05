@@ -241,8 +241,13 @@ def shard_model(
         for m in layers:
             fully_shard(m, **fsdp_kwargs)
             num_layers_sharded += 1
+    elif model_class == 'KeyeImageTokenizer':
+        # TODO: support encoder
+        layers = list(model.decoder.layers)
+        for m in layers:
+            fully_shard(m, **fsdp_kwargs)
+            num_layers_sharded += 1
     else: 
-
         assert model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit', "Qwen2_5_VLForConditionalGeneration_siglip","Qwen3_VLForConditionalGeneration_siglip",'Qwen3SiglipForConditionalGeneration_navit','KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_tatok', 'KeyeForConditionalGeneration_vitrope_slowfast_v2', 'KeyeForConditionalGeneration_vitrope_slowfast_v3', 'KeyeForConditionalGeneration_vitrope_slowfast_v4']
         layers = list(model.visual.vision_model.encoder.layers) + list(model.model.layers)
         for m in layers:

@@ -1092,7 +1092,8 @@ class KeyeImageTokenizer(PreTrainedModel):
 
         reconstruction_loss = F.mse_loss(x_rec, image_embeds)
 
-        loss = codebook_loss + reconstruction_loss
+        # TODO: fix hard code, support beta
+        loss = 1.0 * codebook_loss + reconstruction_loss
         return {
             "loss": loss,
             "codebook_loss": codebook_loss,
