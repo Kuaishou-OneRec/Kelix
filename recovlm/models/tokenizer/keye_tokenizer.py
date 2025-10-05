@@ -1028,7 +1028,8 @@ class Projector(nn.Module):
         return hidden_states
 
 
-class KeyeTokenizer(PreTrainedModel):
+class KeyeImageTokenizer(PreTrainedModel):
+    # TODO: use KeyeImageTokenizerConfig
     config_class = KeyeVL1_5Config
     _supports_flash_attn_2 = True
     def __init__(self, config: KeyeVL1_5Config):
@@ -1043,7 +1044,7 @@ class KeyeTokenizer(PreTrainedModel):
             num_embeddings=8192,
             embedding_dim=128,
             commitment_cost=0.25)
-        # 使用一个三层的Siglip
+        # using a three-layer KeyeVL1_5VisionEncoder, just for reconstruction
         self.decoder = KeyeVL1_5VisionEncoder(
             config=KeyeVL1_5VisionConfig(
                 hidden_size=128,
@@ -1098,6 +1099,21 @@ class KeyeTokenizer(PreTrainedModel):
     def forward(self,
                 x: torch.Tensor,
                 image_grid_thw: List[Tuple[int, int, int]]):
+        """
+        Args:
+            x: (num_patches, C, H, W)
+            image_grid_thw: (num_images, 3)
+        Returns:
+            dict:
+                loss: (float)
+                codebook_loss: (batch_size, )
+                reconstruction_loss: (float)
+                perplexity: (float)
+                x_recon: (seqlen, hidden_size)
+                indices: (seqlen, )
+                z_q: (seqlen, 128)
+                image_embeds: (seqlen, hidden_size)
+        """
         image_embeds = self.encode(x, image_grid_thw)
         z_e = self.encoder(image_embeds)
         z_q, codebook_loss, indices, perplexity = self.quantizer(z_e)
@@ -1116,6 +1132,7 @@ class KeyeTokenizer(PreTrainedModel):
             "perplexity": perplexity,
             "x_recon": x_recon,
             "indices": indices,
+            "z_e": z_e,
             "z_q": z_q,
             "image_embeds": image_embeds,
         }
