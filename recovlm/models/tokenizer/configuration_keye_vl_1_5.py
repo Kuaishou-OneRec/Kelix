@@ -60,7 +60,7 @@ class KeyeVL1_5VisionConfig(PretrainedConfig):
         self.tokens_per_second = tokens_per_second
 
 
-class KeyeVL1_5Config(PretrainedConfig):
+class KeyeImageTokenizerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`KeyeVL1_5Model`]. It is used to instantiate a
     Keye-VL-1.5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -166,8 +166,11 @@ class KeyeVL1_5Config(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "KeyeVL1_5"
-    sub_configs = {"vision_config": KeyeVL1_5VisionConfig}
+    model_type = "KeyeImageTokenizer"
+    sub_configs = {
+        "vision_config": KeyeVL1_5VisionConfig,
+        "decoder_config": KeyeVL1_5VisionConfig,
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `KeyeVL1_5`
     base_model_tp_plan = {
@@ -187,67 +190,40 @@ class KeyeVL1_5Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=152064,
-        hidden_size=8192,
-        intermediate_size=29568,
-        num_hidden_layers=80,
-        num_attention_heads=64,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        max_position_embeddings=131072,
-        initializer_range=0.02,
-        rms_norm_eps=1e-05,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=8000000.0,
-        use_sliding_window=False,
-        sliding_window=4096,
-        max_window_layers=80,
-        attention_dropout=0.0,
+        codebook_size=8192,
+        embedding_dim=128,
+        llm_hidden_size=4096,
+        merge_size=2,
+        decoder_config=None,
         vision_config=None,
-        rope_scaling=None,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
             self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
             self.vision_config = self.sub_configs["vision_config"]()
+        
+        if isinstance(decoder_config, dict):
+            self.decoder_config = self.sub_configs["decoder_config"](**decoder_config)
+        elif decoder_config is None:
+            self.decoder_config = self.sub_configs["decoder_config"]()
 
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window
-        self.max_window_layers = max_window_layers
+        self.codebook_size = codebook_size
+        self.embedding_dim = embedding_dim
+        self.llm_hidden_size = llm_hidden_size
+        self.merge_size = merge_size
+        self.decoder_config = decoder_config
+        self.vision_config = vision_config
 
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
 
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, move it to 'rope_type'.
         # and change type from 'mrope' to 'default' because `mrope` does default RoPE calculations
         # one can set it to "linear"/"dynamic" etc. to have scaled RoPE
         # TODO: @raushan update config in the hub
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            if self.rope_scaling["type"] == "mrope":
-                self.rope_scaling["type"] = "default"
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self, ignore_keys={"mrope_section"})
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
-__all__ = ["KeyeVL1_5Config"]
+__all__ = ["KeyeImageTokenizerConfig", "KeyeVL1_5VisionConfig"]

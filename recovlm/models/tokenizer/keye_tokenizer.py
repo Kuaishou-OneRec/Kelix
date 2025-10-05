@@ -49,7 +49,7 @@ from transformers.utils import (
     torch_int,
     is_flash_attn_greater_or_equal_2_10
 )
-from .configuration_keye_vl_1_5 import KeyeVL1_5Config, KeyeVL1_5VisionConfig
+from .configuration_keye_vl_1_5 import KeyeVL1_5VisionConfig, KeyeImageTokenizerConfig
 
 
 import warnings
@@ -998,31 +998,32 @@ class Projector(nn.Module):
 
 class KeyeImageTokenizer(PreTrainedModel):
     # TODO: use KeyeImageTokenizerConfig
-    config_class = KeyeVL1_5Config
+    config_class = KeyeImageTokenizerConfig
     _supports_flash_attn_2 = True
-    def __init__(self, config: KeyeVL1_5Config):
+    def __init__(self, config: KeyeImageTokenizerConfig):
         super().__init__(config)
         self.config = config
-        self.mlp_AR = Projector(config.vision_config.hidden_size, config.hidden_size)
+        self.mlp_AR = Projector(config.vision_config.hidden_size, config.llm_hidden_size)
         self.visual = KeyeVL1_5VisionModel(config.vision_config)
         # TODO: fix hard code, 128 is the embedding dimension of the codebook
-        self.encoder = nn.Linear(config.hidden_size, 128)
+        self.encoder = nn.Linear(config.llm_hidden_size, config.embedding_dim)
         # TODO: fix hard code
         self.quantizer = VectorQuantizer(
-            num_embeddings=8192,
-            embedding_dim=128,
+            num_embeddings=config.codebook_size,
+            embedding_dim=config.embedding_dim,
             commitment_cost=0.25)
         # using a three-layer KeyeVL1_5VisionEncoder, just for reconstruction
         self.decoder = KeyeVL1_5VisionEncoder(
-            config=KeyeVL1_5VisionConfig(
-                hidden_size=128,
-                intermediate_size=384,
-                num_hidden_layers=3,
-                num_attention_heads=8,
-                hidden_act="gelu_pytorch_tanh",
-                layer_norm_eps=1e-6,
-                attention_dropout=0.0,
-            )
+            # config=KeyeVL1_5VisionConfig(
+            #     hidden_size=128,
+            #     intermediate_size=384,
+            #     num_hidden_layers=3,
+            #     num_attention_heads=8,
+            #     hidden_act="gelu_pytorch_tanh",
+            #     layer_norm_eps=1e-6,
+            #     attention_dropout=0.0,
+            # )
+            config=config.decoder_config
         )
         self.post_init()
 
