@@ -1034,7 +1034,7 @@ class KeyeTokenizer(PreTrainedModel):
     def __init__(self, config: KeyeVL1_5Config):
         super().__init__(config)
         self.config = config
-        self.mlp_AR = Projector(config.hidden_size, config.vision_config.hidden_size)
+        self.mlp_AR = Projector(config.vision_config.hidden_size, config.hidden_size)
         self.visual = KeyeVL1_5VisionModel(config.vision_config)
         # TODO: fix hard code, 128 is the embedding dimension of the codebook
         self.encoder = nn.Linear(config.hidden_size, 128)
