@@ -1027,6 +1027,7 @@ class Projector(nn.Module):
 
 
 class KeyeTokenizer(PreTrainedModel):
+    config_class = KeyeVL1_5Config
     def __init__(self, config: KeyeVL1_5Config):
         super().__init__()
         self.config = config
