@@ -60,6 +60,8 @@ from torch.nn.init import _calculate_fan_in_and_fan_out
 from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 
+from .vq import VectorQuantizer
+
 
 
 assert is_flash_attn_2_available()
