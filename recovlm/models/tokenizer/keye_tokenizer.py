@@ -1031,14 +1031,20 @@ class KeyeImageTokenizer(PreTrainedModel):
                x: torch.Tensor,
                image_grid_thw: List[Tuple[int, int, int]]):
         device = x.device
+        print("device", device)
         total_patches = image_grid_thw.prod(dim=1)
+        print("total_patches", total_patches)
         width = torch.repeat_interleave(image_grid_thw[:, 2], total_patches)
+        print("width", width)
         
         cu_seqlens = total_patches.cumsum(0)
+        print("cu_seqlens", cu_seqlens)
 
         arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
+        print("arange", arange)
         image_position_ids = arange - torch.repeat_interleave(
             cu_seqlens.to(device) - total_patches, total_patches)
+        
 
         width_position_ids = torch.remainder(image_position_ids, width)
         height_position_ids = torch.div(image_position_ids, width, rounding_mode="floor")
@@ -1046,6 +1052,7 @@ class KeyeImageTokenizer(PreTrainedModel):
         width_position_ids = width_position_ids.to(device)
         height_position_ids = height_position_ids.to(device)
 
+        print("lllll")
         vision_outputs = self.visual(
             pixel_values=x, 
             image_grid_thw=image_grid_thw,
@@ -1060,6 +1067,7 @@ class KeyeImageTokenizer(PreTrainedModel):
             width_position_ids=width_position_ids,
             height_position_ids=height_position_ids,
         )
+        print("uuuuu")
         image_embeds = vision_outputs.last_hidden_state
 
         image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
