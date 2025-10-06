@@ -1021,27 +1021,13 @@ def train():
       # batch['input_ids'][0]:  tensor([151644,   8948,    198,  ..., 151643, 151643, 151643], device='cuda:3')
       # <|im_start|>system .......
 
-      print("######################### Check params requires_grad Begin before model(): #########################")
-      for name, param in model.named_parameters():
-          if param.requires_grad:
-              print(f"{name}: requires_grad=True, shape={param.shape}")
-          # else:
-          #     print(f"{name}: requires_grad=False, shape={param.shape}")
-      print("######################### Check params requires_grad End before model(): #########################")
-        
       with Timer("Fwd"):
         print(pixel_values.shape)
         print(image_grid_thw.shape)
         output = model(
           x=pixel_values,
           image_grid_thw=image_grid_thw
-        )
-        print("######################### Check params requires_grad Begin after model(): #########################")
-        for name, param in model.named_parameters():
-          if param.requires_grad:
-              print(f"{name}: requires_grad=True, shape={param.shape}")
-        print("######################### Check params requires_grad End after model(): #########################")
-        
+        )    
 
         # TODO: codebook_loss && reconstruction_loss
         total_loss = output["loss"]
