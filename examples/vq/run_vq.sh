@@ -17,6 +17,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/KeyeImageTokenizer_init/
 OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_test/8B/
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
