@@ -729,6 +729,7 @@ def train():
     model_class=args.model_class,
     fp32_reduce=args.fp32_reduce
   )
+  print("rank ", dist.get_rank())
   dist.barrier()
 
   with Timer("Load state dict"):
