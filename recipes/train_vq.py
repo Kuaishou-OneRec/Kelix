@@ -1044,6 +1044,12 @@ def train():
       ###################
       # 打印 token 数量
 
+      token_count = input_ids.numel() / args.sequence_parallel_size  # 计算 token 数量
+      print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
+      num_tokens = token_count
+
+      num_samples = (sample_idx.max() + 1).sum()  / args.sequence_parallel_size
+
       total_num_samples += num_samples
       total_num_tokens += num_tokens
 
@@ -1095,15 +1101,9 @@ def train():
         #   image_max_seqlen_q=batch.get("image_max_seqlen_q", None),
         #   image_max_seqlen_k=batch.get("image_max_seqlen_k", None),
         #   fast_pixel_values_videos=fast_pixel_values_videos,
-        #   fast_video_grid_thw=fast_video_grid_thw, 
-        #   position_ids=position_ids
-        # )
         output = model(
           x=pixel_values,
           image_grid_thw=image_grid_thw
-        )
-        ticker.tick("model.forward")
-
         # (b, N/P, V)
         # logits = output.logits
         print("######################### Check params requires_grad Begin after model(): #########################")
@@ -1150,15 +1150,9 @@ def train():
         #   codebook_size = len(token_frequency)       
         #   print("global used_codes:", nonzero_count, "topk_counts:", topk_vals.tolist(), "topk_idx:", topk_idx.tolist())
         #   token_util = nonzero_count / codebook_size
-        #   print("global token_util:", token_util)
-
-        # print("########################### decode ###########################")
         # print("topk_idx id: ", torch.tensor(topk_idx).to(codebook_loss))
         # tensor([5920.,  964., 1464., 2304., 2416.,  198.,  976., 2128., 2640., 1808.],device='cuda:7', dtype=torch.bfloat16)
         # topk_idx: [5364, 2303, 5448, 5924, 1777, 1640, 1924, 2102, 811, 1173]
-        # topk_idx_token = tokenizer.decode(torch.tensor(topk_idx).to(codebook_loss.device))
-        # print("topk_idx token:", topk_idx_token)
-        # <|im_start|>system .......
 
         
 
@@ -1310,22 +1304,10 @@ def train():
           print_rank_0(
             f"Step: {global_step}, Loss: {avg_loss}, "
             f"Learning Rate: {learning_rate}, "
-            f"Grad Norm: {grad_norm}, "
-            f"Sec per Step: {sec_per_step}",
-            format_dict_or_list(log_dict),
-            "\n", format_dict_or_list({"mfu_stats": mfu_stats.mfu_per_step_per_gpu, "ticker": ticker.stat()})
-          )        
-
           # upload heart_beat to remote
           if args.heartbeat_monitor:
             heart_beat(int(acc_num_tokens))
 
-        acc_avg_loss = 0.0
-        acc_num_samples = 0
-        acc_num_tokens = 0
-
-        batch_data_source_loss = collections.defaultdict(float)
-        batch_data_source_tokens = collections.defaultdict(int)
         valid_data_source_tokens = collections.defaultdict(int)
       
       if (global_step % args.save_checkpoint_per_step == 0 or global_step in [100, 200]) and \
@@ -1350,25 +1332,10 @@ def train():
                       },
                       optimizer=optimizer,
                       lr_scheduler=lr_scheduler,
-                      dataloader=data_iter if use_flops_balance else  dataloader,
-                      app_state=app_state.set_call_back(converter.revert), # app_state.set_call_back(state_dict), # no need to convert 
-                      dist_checkpointer=dist_checkpointer
-                  )
-        ticker.tick(f"save_ckpt*{args.save_checkpoint_per_step * args.gradient_accumulation_steps}") 
-
-      # print_rank_0(f"ticker_info: { format ticker.stat()}")
-      iter_ticker.tick("iter_ticker")
       if torch_profiler: torch_profiler.step()
-
-
-  save_model_checkpoint(
                       model=model,
                       save_dir=args.output_dir,
                       tag=f"step{global_step}",
-                      global_step=global_step,
-                      client_state={
-                          "total_num_valid_tokens": total_num_valid_tokens,
-                          "total_num_tokens": total_num_tokens,
                           "total_num_samples": total_num_samples,
                           "total_data_source_samples": total_data_source_samples,
                           "total_data_source_tokens": total_data_source_tokens,
