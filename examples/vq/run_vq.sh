@@ -18,6 +18,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/KeyeImageTokenizer_init/
 OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_test/8B/
 
+rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
 mkdir -p /tmp/_wids_cache
