@@ -1305,6 +1305,11 @@ def train():
           print_rank_0(
             f"Step: {global_step}, Loss: {avg_loss}, "
             f"Learning Rate: {learning_rate}, "
+            f"Grad Norm: {grad_norm}, "
+            f"Sec per Step: {sec_per_step}",
+            format_dict_or_list(log_dict),
+            "\n", format_dict_or_list({"mfu_stats": mfu_stats.mfu_per_step_per_gpu, "ticker": ticker.stat()})
+          )
           # upload heart_beat to remote
           if args.heartbeat_monitor:
             heart_beat(int(acc_num_tokens))
@@ -1324,7 +1329,6 @@ def train():
                       tag=f"step{global_step}",
                       global_step=global_step,
                       client_state={
-                          "total_num_valid_tokens": total_num_valid_tokens,
                           "total_num_tokens": total_num_tokens,
                           "total_num_samples": total_num_samples,
                           "total_data_source_samples": total_data_source_samples,
@@ -1333,6 +1337,11 @@ def train():
                       },
                       optimizer=optimizer,
                       lr_scheduler=lr_scheduler,
+                      dataloader=data_iter if use_flops_balance else  dataloader,
+                      app_state=app_state.set_call_back(converter.revert), # app_state.set_call_back(state_dict), # no need to convert 
+                      dist_checkpointer=dist_checkpointer
+                  )
+        ticker.tick(f"save_ckpt*{args.save_checkpoint_per_step * args.gradient_accumulation_steps}") 
       if torch_profiler: torch_profiler.step()
   save_model_checkpoint(
                       model=model,
