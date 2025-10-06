@@ -1133,8 +1133,6 @@ def train():
             "perf/epoch_idx": epoch_idx,
           }
           start_time = end_time
-          if args.monitor_image_tokens: 
-            log_dict.update(colleced_token_stasts)
           ticker.tick(f"log_dict*{log_acc_step}")
 
           ticker_stats = {}
@@ -1154,9 +1152,6 @@ def train():
             f"Sec per Step: {sec_per_step}",
             format_dict_or_list(log_dict),
           )
-          # upload heart_beat to remote
-          if args.heartbeat_monitor:
-            heart_beat(int(acc_num_tokens))
 
         valid_data_source_tokens = collections.defaultdict(int)
       
