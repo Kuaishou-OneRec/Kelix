@@ -981,8 +981,6 @@ def train():
       data_source = batch.pop("data_source", None) # dataset source list cur batch
 
       to_cuda(batch)
-      print(batch["pixel_values"])
-      continue
       ticker.tick("to_cuda(batch)")
       
 
