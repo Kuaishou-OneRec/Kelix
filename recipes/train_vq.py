@@ -1104,6 +1104,7 @@ def train():
         output = model(
           x=pixel_values,
           image_grid_thw=image_grid_thw
+        )
         # (b, N/P, V)
         # logits = output.logits
         print("######################### Check params requires_grad Begin after model(): #########################")
