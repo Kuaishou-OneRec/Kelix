@@ -115,7 +115,7 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        bash -c "bash numa_runner.sh python3 recipes/train_vq.py --model_dir $MODEL_DIR \
+        bash -c "python3 recipes/train_vq.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --dataset_config examples/vq/stage3.json \
                 --model_class KeyeImageTokenizer \

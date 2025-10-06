@@ -616,15 +616,10 @@ def train():
   use_flops_balance = dataset_config.get("use_flops_balance", False)
 
   if use_flops_balance:
-    try:
-      dataloader = get_dataloader(name=dataset, **dataset_config,
-                                  resume_dataloader=args.resume_dataloader,
-                                  resume_from=resume_from,
-                                  snapshot_step=args.save_checkpoint_per_step // 2)
-    except: 
-      import traceback
-      traceback.print_exc()
-      dataloader = get_dataloader_v2(name=dataset, **dataset_config)
+    dataloader = get_dataloader(name=dataset, **dataset_config,
+                                resume_dataloader=args.resume_dataloader,
+                                resume_from=resume_from,
+                                snapshot_step=args.save_checkpoint_per_step // 2)
 
     data_iter = dataloader._get_iterator()
 
@@ -860,13 +855,7 @@ def train():
 
   if not use_flops_balance:
     with Timer("Build dataloader"):
-      try:  dataloader = get_dataloader_v2(name=dataset, **dataset_config)
-      except: 
-        import traceback
-        print_rank_0(f"get_dataloader_v2 error: {traceback.format_exc()}")
-        print_rank_0(f"get_dataloader_v2 retry for get_dataloader")
-        traceback.print_exc()
-        dataloader = get_dataloader(name=dataset, **dataset_config)
+      dataloader = get_dataloader(name=dataset, **dataset_config)
       if args.resume_dataloader and dataloader_state_dict is not None:
         dataloader.load_state_dict(dataloader_state_dict)
 
