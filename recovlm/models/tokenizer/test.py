@@ -5,6 +5,10 @@ model_path = "/llm_reco_ssd/zhouyang12/models/KeyeImageTokenizer_init/"
 
 tokenizer = KeyeImageTokenizer.from_pretrained(model_path, _attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16)
 
+sd = tokenizer.state_dict()
+
+print(sd)
+
 tokenizer.to("cuda:0")
 
 x = torch.randn((16, 3, 14, 14), dtype=torch.bfloat16)

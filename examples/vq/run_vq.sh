@@ -18,6 +18,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/KeyeImageTokenizer_init/
 OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_test/8B/
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
@@ -116,7 +117,8 @@ nohup mpirun --allow-run-as-root \
 	-x TOKENIZERS_PARALLELISM=false \
         -x http_proxy=\
         -x https_proxy=\
-        bash -c "python3 recipes/train_vq.py --model_dir $MODEL_DIR \
+        with_nccl_local_env \
+        bash -c "bash numa_runner.sh python3 recipes/train_vq.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --dataset_config examples/vq/stage3.json \
                 --model_class KeyeImageTokenizer \

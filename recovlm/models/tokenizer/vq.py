@@ -31,7 +31,9 @@ class VectorQuantizer(nn.Module):
         """
         distances = torch.cdist(e, self.embedding.weight, p=2).pow(2)
         indices = torch.argmin(distances, dim=1).unsqueeze(1)
+        print(indices)
         z_q = self.embedding(indices).squeeze(1)
+        print("zq", z_q)
         # Compute the loss
         e_latent_loss = F.mse_loss(z_q.detach(), e)
         q_latent_loss = F.mse_loss(z_q, e.detach())
@@ -39,6 +41,9 @@ class VectorQuantizer(nn.Module):
         
         # Straight-through gradient, pass the gradient of the quantized features to the encoder
         z_q_st = e + (z_q - e).detach()
+        print("e", e)
+        print("zq", z_q) 
+        print("z_q_st", z_q_st)
         
         # Compute perplexity
         # a more efficient method: use bincount to directly count frequencies
