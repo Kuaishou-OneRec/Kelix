@@ -974,31 +974,19 @@ def train():
     # print(f"rank={torch.distributed.get_rank()}, pid={os.getpid()}, begin_training")
     ticker.tick("while_True")
 
-    with contextlib.ExitStack() as ctx:
-
-      if torch_profiler: ctx.enter_context(torch_profiler)
-
-      ticker.tick("enter_context(torch_profiler)")
-
-      try: 
-        batch = input_fn()
-      except StopIteration: break
-      ticker.tick("next_batch")
+    for batch in gather_by_group(dataloader, get_sequence_parallel_group()):
 
       micro_step += 1
       # continue
       data_source = batch.pop("data_source", None) # dataset source list cur batch
 
-      #print(f"X=0, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       to_cuda(batch)
+      print(batch["pixel_values"])
+      continue
       ticker.tick("to_cuda(batch)")
-      #rint(f"X=1, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       
 
       ###### dataset checker ######
-      # print("micro_step{}, data_source{}.".format(micro_step, data_source))
-      # dist.barrier()
-      # continue
 
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
@@ -1032,7 +1020,6 @@ def train():
       
 
       print("########################### decode ###########################")
-      print("batch['input_ids'][0]: ", batch['input_ids'][0])
       # batch['input_ids'][0]:  tensor([151644,   8948,    198,  ..., 151643, 151643, 151643], device='cuda:3')
       # <|im_start|>system .......
 
@@ -1045,43 +1032,14 @@ def train():
       print("######################### Check params requires_grad End before model(): #########################")
         
       with Timer("Fwd"):
-        # if args.model_class == "InternVLChatModel":
-        #     output = model(
-        #       input_ids = input_ids, attention_mask=attention_mask,
-        #       pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
-        #       image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-        #       image_flags = image_flags,
-        #       cu_seqlens=cu_seqlens
-        #     )
-        # else:
-        # image_position_ids = batch.get("image_position_ids", None)
-        # image_grid_hws = batch.get("image_grid_hws", None)
-        # image_sample_indices = batch.get("image_sample_indices", None)
-        # image_cu_seqlens = batch.get("image_cu_seqlens", None)
-        # second_per_grid_ts = batch.get("second_per_grid_ts", None)
-        # output = model(
-        #   input_ids = input_ids, attention_mask=attention_mask,
-        #   pixel_values=pixel_values, pixel_values_videos=pixel_values_videos,
-        #   image_grid_thw=image_grid_thw, video_grid_thw=video_grid_thw,
-        #   cu_seqlens=cu_seqlens, image_position_ids=image_position_ids,
-        #   image_grid_hws=image_grid_hws, image_sample_indices=image_sample_indices,
-        #   image_cu_seqlens=image_cu_seqlens,
-        #   max_seqlen_q=batch.get("max_seqlen_q", None),
-        #   image_max_seqlen_q=batch.get("image_max_seqlen_q", None),
-        #   image_max_seqlen_k=batch.get("image_max_seqlen_k", None),
-        #   fast_pixel_values_videos=fast_pixel_values_videos,
-        # output = model(
-        #   x=pixel_values,
-        #   image_grid_thw=image_grid_thw
-        # )
-        # (b, N/P, V)
-        # logits = output.logits
+        output = model(
+          x=pixel_values,
+          image_grid_thw=image_grid_thw
+        )
         print("######################### Check params requires_grad Begin after model(): #########################")
         for name, param in model.named_parameters():
           if param.requires_grad:
               print(f"{name}: requires_grad=True, shape={param.shape}")
-          # else:
-          #     print(f"{name}: requires_grad=False, shape={param.shape}")
         print("######################### Check params requires_grad End after model(): #########################")
         
 
@@ -1090,44 +1048,15 @@ def train():
         codebook_loss = output["codebook_loss"]
         reconstruction_loss = output["reconstruction_loss"]
         perplexity = output["perplexity"]
-        # codebook_loss = output.loss
-        # print('***codebook_loss***:', codebook_loss)
-        # loss_reconstruction = output.loss_reconstruction
-        # print('***loss_reconstruction***:', loss_reconstruction)
-        # # NOTE: using this code for common loss calulate
-        # # loss = codebook_loss + loss_reconstruction
-        # loss = codebook_loss # NOTE: only using codebook_loss
+
         print(f"loss: {total_loss}, codebook_loss: {codebook_loss}, reconstruction_loss: {reconstruction_loss}, perplexity: {perplexity}")
         # TODO: support global perplexity
 
         ############ NOTE: add global batchsize ############ 
-        # token_frequency = output.token_frequency
 
-        # global_token_frequency = token_frequency.clone()
-
-        # dist.all_reduce(global_token_frequency, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-        # if dist.get_rank() == 0:
-        #   nonzero_count = (token_frequency > 0).sum().item()
-        #   topk_vals, topk_idx = torch.topk(token_frequency, 10)
-        #   codebook_size = len(token_frequency)       
-        #   print("global used_codes:", nonzero_count, "topk_counts:", topk_vals.tolist(), "topk_idx:", topk_idx.tolist())
-        #   token_util = nonzero_count / codebook_size
-        # print("topk_idx id: ", torch.tensor(topk_idx).to(codebook_loss))
-        # tensor([5920.,  964., 1464., 2304., 2416.,  198.,  976., 2128., 2640., 1808.],device='cuda:7', dtype=torch.bfloat16)
-        # topk_idx: [5364, 2303, 5448, 5924, 1777, 1640, 1924, 2102, 811, 1173]
-
-        
-
-        
-        # 计算需要检查的位置：所有 loss_mask 为1的位置的前一个位置
-        # 因为我们需要检查 input_ids[i+1] == labels[i]
-
-      # print(f"X=111, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       with Timer("bwd"):
         print("loss.backward() begin----------")
         loss.backward()
-        
-        # grad_logger(model)
 
         clip_grad_by_value(model, args.clip_range)
         ticker.tick("loss.backward")
@@ -1150,27 +1079,16 @@ def train():
       codebook_loss = codebook_loss.detach()
       reconstruction_loss = reconstruction_loss.detach()
 
-      # total_loss = per_token_loss2.sum()
-      # dist.all_reduce(total_loss, op=dist.ReduceOp.SUM)
-      # total_mask = local_mask.sum()
-      # dist.all_reduce(total_mask, op=dist.ReduceOp.SUM)
       avg_loss = avg_loss.item() / dist.get_world_size()
       codebook_loss = codebook_loss.item() / dist.get_world_size()
       reconstruction_loss = reconstruction_loss.item() / dist.get_world_size()
-      # avg_loss = total_loss / total_mask.sum()
-      # acc_avg_loss += avg_loss
 
       ticker.tick("reduce_acc_avg_loss")
       log_acc_step = args.logging_per_step * args.gradient_accumulation_steps
 
       if global_step % args.logging_per_step == 0 and \
               (micro_step + 1) % args.gradient_accumulation_steps == 0:
-
-        if args.monitor_image_tokens: 
-          token_stasts.collect_image_token_stats(num_image_tokens2)
-          vid_token_stasts.collect_image_token_stats(num_video_tokens2)
-          colleced_token_stasts = token_stasts.stats()  
-          vid_colleced_token_stasts = vid_token_stasts.stats()       
+    
         ticker.tick(f"token_stasts*{log_acc_step}")
 
         with Timer("reduce data source metrics"):
@@ -1210,7 +1128,7 @@ def train():
             "loss/total": avg_loss,
             "loss/codebook": codebook_loss,
             "loss/reconstruction": reconstruction_loss,
-            "token_util": token_util,
+            "perplexity": perplexity,
             "nonzero_count": nonzero_count,
             "training/grad_norm": grad_norm,
             "training/learning_rate": learning_rate,
@@ -1233,7 +1151,6 @@ def train():
           start_time = end_time
           if args.monitor_image_tokens: 
             log_dict.update(colleced_token_stasts)
-            log_dict.update(vid_colleced_token_stasts)
           ticker.tick(f"log_dict*{log_acc_step}")
 
           ticker_stats = {}
