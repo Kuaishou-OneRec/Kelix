@@ -1031,7 +1031,7 @@ class KeyeImageTokenizer(PreTrainedModel):
                x: torch.Tensor,
                image_grid_thw: List[Tuple[int, int, int]]):
         device = x.device
-        print("device", device)
+        print("device", device, x.shape, image_grid_thw.shape)
         total_patches = image_grid_thw.prod(dim=1)
         print("total_patches", total_patches)
         width = torch.repeat_interleave(image_grid_thw[:, 2], total_patches)
