@@ -615,31 +615,11 @@ def train():
     dataset_config["max_length"] = args.max_length
   use_flops_balance = dataset_config.get("use_flops_balance", False)
 
-  if use_flops_balance:
-    dataloader = get_dataloader(name=dataset, **dataset_config,
-                                resume_dataloader=args.resume_dataloader,
-                                resume_from=resume_from,
-                                snapshot_step=args.save_checkpoint_per_step // 2)
-
-    data_iter = dataloader._get_iterator()
-
-    batch_queue = queue.Queue(maxsize=8)
-    batch_prefetcher = threading.Thread(
-      target=data_prefetch_fn,
-      args=(data_iter, batch_queue, args.sequence_parallel_size),
-      daemon=True)
-    batch_prefetcher.start()
 
   # torch init
   torch.cuda.set_device(local_rank)
   torch.distributed.init_process_group(rank=rank, world_size=world_size, timeout=process_group_timeout)
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
-
-  if use_flops_balance:
-    p = psutil.Process(os.getpid())
-    p.cpu_affinity(cpu_bind[8:])
-    print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind[8:]}")
-
 
   ### initialize model parallel group
   initialize_model_parallel(args.sequence_parallel_size)
@@ -858,11 +838,10 @@ def train():
       f.write(json.dumps(
         dataset_config, ensure_ascii=False, indent=2) + "\n")
 
-  if not use_flops_balance:
-    with Timer("Build dataloader"):
-      dataloader = get_dataloader(name=dataset, **dataset_config)
-      if args.resume_dataloader and dataloader_state_dict is not None:
-        dataloader.load_state_dict(dataloader_state_dict)
+  with Timer("Build dataloader"):
+    dataloader = get_dataloader(name=dataset, **dataset_config)
+    if args.resume_dataloader and dataloader_state_dict is not None:
+      dataloader.load_state_dict(dataloader_state_dict)
 
 
   ##############
@@ -1091,10 +1070,10 @@ def train():
         #   image_max_seqlen_q=batch.get("image_max_seqlen_q", None),
         #   image_max_seqlen_k=batch.get("image_max_seqlen_k", None),
         #   fast_pixel_values_videos=fast_pixel_values_videos,
-        output = model(
-          x=pixel_values,
-          image_grid_thw=image_grid_thw
-        )
+        # output = model(
+        #   x=pixel_values,
+        #   image_grid_thw=image_grid_thw
+        # )
         # (b, N/P, V)
         # logits = output.logits
         print("######################### Check params requires_grad Begin after model(): #########################")
