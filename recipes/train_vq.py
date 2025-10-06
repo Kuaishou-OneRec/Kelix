@@ -1056,10 +1056,6 @@ def train():
       acc_num_samples += num_samples
       acc_num_tokens += num_tokens
       ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
-
-      input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
-      labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask) # loss_mask需要保证图片的token不会被预测
-      ticker.tick("labels=...")
       
 
       print("########################### decode ###########################")
@@ -1116,14 +1112,6 @@ def train():
         print("######################### Check params requires_grad End after model(): #########################")
         
 
-        # # 提前shift logits & labels
-        pad = torch.full((labels.shape[0], 1), loss_fn.ignore_index,
-            dtype=labels.dtype).to(device=labels.device, non_blocking=True)
-        labels = torch.cat([labels[:, 1:], pad], dim=-1) # shift
-        local_labels = get_local_sequence(labels, seq_idx=1)
-
-        # loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
-
         # TODO: codebook_loss && reconstruction_loss
         total_loss = output["loss"]
         codebook_loss = output["codebook_loss"]
@@ -1160,23 +1148,6 @@ def train():
         
         # 计算需要检查的位置：所有 loss_mask 为1的位置的前一个位置
         # 因为我们需要检查 input_ids[i+1] == labels[i]
-        check_mask = torch.zeros_like(loss_mask)
-        check_mask[:, :-1] = loss_mask[:, 1:]  # 将 loss_mask 右移一位
-
-        # 提取需要检查的标签位置
-        masked_labels = labels[check_mask.bool()]
-
-        # 提取对应的 input_ids（右移后应匹配）
-        shifted_input_ids = input_ids[:, 1:][loss_mask[:, 1:].bool()]
-
-        # 断言：在 loss_mask 为1的位置之前，input_ids[i+1] == labels[i]
-        assert torch.equal(masked_labels, shifted_input_ids), \
-            f"标签与输入不匹配：\n" \
-            f"标签位置: {masked_labels}\n" \
-            f"输入位置: {shifted_input_ids}\n" \
-            f"差异位置: {torch.nonzero(masked_labels != shifted_input_ids, as_tuple=True)}"
-        ################# label check #################
-        ticker.tick("loss_fn")
 
       # print(f"X=111, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       with Timer("bwd"):
