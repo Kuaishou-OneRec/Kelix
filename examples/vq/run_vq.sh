@@ -116,7 +116,6 @@ nohup mpirun --allow-run-as-root \
 	-x TOKENIZERS_PARALLELISM=false \
         -x http_proxy=\
         -x https_proxy=\
-        with_nccl_local_env \
         bash -c "python3 recipes/train_vq.py --model_dir $MODEL_DIR \
                 --output_dir $OUTPUT_DIR \
                 --dataset_config examples/vq/stage3.json \
