@@ -1084,6 +1084,7 @@ class KeyeImageTokenizer(PreTrainedModel):
                 image_embeds: (seqlen, hidden_size)
         """
         image_embeds = self.encode(x, image_grid_thw)
+        print(image_embeds)
         z_e = self.encoder(image_embeds)
         z_q, codebook_loss, indices, perplexity = self.quantizer(z_e)
         # TODO: fix hard code, merge size is 4
