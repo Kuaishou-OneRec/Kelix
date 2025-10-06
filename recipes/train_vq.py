@@ -743,6 +743,10 @@ def train():
         print_rank_0("Initialize RoPE")
         m.rope_init()
 
+  print(model)
+  for name, param in model.named_parameters():
+    print(name, param.device)
+
   if state_dict is not None:
     del state_dict
   
