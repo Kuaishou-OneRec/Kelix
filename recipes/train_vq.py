@@ -1126,7 +1126,6 @@ def train():
             "perf/samples_per_step_per_gpu": samples_per_step_per_gpu,
             "perf/num_sample_per_sec_per_gpu": total_num_samples / (end_time - start_time) / dist.get_world_size(),
 
-            **mfu_stats.mfu(end_time - start_time, global_step - global_step0),
             "perf/samples_per_step_per_gpu_v2": samples_per_step_per_gpu_v2,
             "perf/samples_per_sec_per_gpu_v2": samples_per_sec_per_gpu_v2,
             "perf/tokens_per_step_per_gpu_v2": tokens_per_step_per_gpu_v2,
@@ -1154,7 +1153,6 @@ def train():
             f"Grad Norm: {grad_norm}, "
             f"Sec per Step: {sec_per_step}",
             format_dict_or_list(log_dict),
-            "\n", format_dict_or_list({"mfu_stats": mfu_stats.mfu_per_step_per_gpu, "ticker": ticker.stat()})
           )
           # upload heart_beat to remote
           if args.heartbeat_monitor:
