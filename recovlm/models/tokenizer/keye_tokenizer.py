@@ -289,42 +289,44 @@ class KeyeVL1_5VisionEmbeddings(nn.Module):
     ) -> torch.Tensor:
         has_learnable_position_embedding = self.has_learnable_position_embedding
         # assert has_learnable_position_embedding == False
+        target_dtype = self.patch_embedding.weight.dtype
+        assert position_ids is not None
+        from einops import rearrange
         if pixel_values.dim() == 5:
-            assert position_ids is not None
-            from einops import rearrange
             batch_size, squence_len, channel, height, width = pixel_values.shape
-            target_dtype = self.patch_embedding.weight.dtype
             pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
-            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-            embeddings = patch_embeds.flatten(-2).squeeze(-1)
-            embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=squence_len)
-
-            # todo: not dubug
-            if has_learnable_position_embedding:
-                if interpolate_pos_encoding and image_grid_thw is not None:
-                    # flatten_image_grid_thw = self.flatten_list(image_grid_thw)
-                    assert batch_size == 1
-                    start = 0
-                    image_embedding_list = list()
-                    assert image_grid_thw.prod(1).sum().item() == embeddings.shape[1]
-                    # assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (flatten_image_grid_thw, embeddings.shape)
-                    embeddings = embeddings.squeeze(0)
-                    tmp_embeddings = list()
-                    for image_grid in image_grid_thw:
-                        t, h, w = image_grid
-                        end = start + t * h * w
-                        image_embeddings = embeddings[start: end, :]
-                        position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0)
-                        position_embedding = position_embedding[position_ids[start: start + h * w]].repeat(t, 1)
-                        image_embeddings = image_embeddings + position_embedding
-                        tmp_embeddings.append(image_embeddings)
-                        start = end
-                    embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
-                else:
-                    embeddings = embeddings + self.packing_position_embedding(position_ids)
-            return embeddings
         else:
-            raise NotImplementedError(str(pixel_values.shape))
+            squence_len, channel, height, width = pixel_values.shape
+            batch_size = 1
+
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        embeddings = patch_embeds.flatten(-2).squeeze(-1)
+        embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=squence_len)
+
+        # todo: not dubug
+        if has_learnable_position_embedding:
+            if interpolate_pos_encoding and image_grid_thw is not None:
+                # flatten_image_grid_thw = self.flatten_list(image_grid_thw)
+                assert batch_size == 1
+                start = 0
+                image_embedding_list = list()
+                assert image_grid_thw.prod(1).sum().item() == embeddings.shape[1]
+                # assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (flatten_image_grid_thw, embeddings.shape)
+                embeddings = embeddings.squeeze(0)
+                tmp_embeddings = list()
+                for image_grid in image_grid_thw:
+                    t, h, w = image_grid
+                    end = start + t * h * w
+                    image_embeddings = embeddings[start: end, :]
+                    position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0)
+                    position_embedding = position_embedding[position_ids[start: start + h * w]].repeat(t, 1)
+                    image_embeddings = image_embeddings + position_embedding
+                    tmp_embeddings.append(image_embeddings)
+                    start = end
+                embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
+            else:
+                embeddings = embeddings + self.packing_position_embedding(position_ids)
+        return embeddings
 
 
 def eager_attention_forward(
@@ -393,7 +395,6 @@ class KeyeVL1_5VisionAttention(nn.Module):
         """Input shape: Batch x Time x Channel"""
         use_flash_attn = (cu_seqlens is not None) and self.config._attn_implementation == "flash_attention_2"
 
-
         batch_size, seq_length, embed_dim = hidden_states.shape
 
         queries = self.q_proj(hidden_states)
@@ -403,7 +404,6 @@ class KeyeVL1_5VisionAttention(nn.Module):
         queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim)
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim)
-
 
         if self.q_norm is not None and self.k_norm is not None:
             queries = self.q_norm(queries)
@@ -609,9 +609,8 @@ class KeyeVL1_5VisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`KeyeVL1_5VisionEncoderLayer`].
-
     Args:
-        config: KeyeVL1_5Config
+        config: KeyeVL1_5VisionConfig
     """
 
     def __init__(self, config: KeyeVL1_5VisionConfig):
@@ -671,6 +670,7 @@ class KeyeVL1_5VisionEncoder(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
         height_position_ids: Optional[torch.Tensor] = None,
         width_position_ids: Optional[torch.Tensor] = None,
         use_rope: Optional[bool] = False,
@@ -686,10 +686,8 @@ class KeyeVL1_5VisionEncoder(nn.Module):
                 than the model's internal embedding lookup matrix.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
-
                 [What are attention masks?](../glossary#attention-mask)
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -719,6 +717,8 @@ class KeyeVL1_5VisionEncoder(nn.Module):
         hidden_states = inputs_embeds
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
         if use_rope is True:
+            # flatten_image_grid_thw = self.flatten_list(image_grid_thw)
+            #assert sum([np.prod(x) for x in flatten_image_grid_thw]) == hidden_states.shape[1], (flatten_image_grid_thw, hidden_states.shape)
 
             pids = torch.stack([height_position_ids, width_position_ids], dim=-1)
             max_grid_size = pids.max() + 1
@@ -728,7 +728,6 @@ class KeyeVL1_5VisionEncoder(nn.Module):
             rope_emb = (rope_emb.cos(), rope_emb.sin())
         else:
             rope_emb = None
-
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
         for i, encoder_layer in enumerate( self.layers):
             if output_hidden_states:
@@ -750,7 +749,7 @@ class KeyeVL1_5VisionEncoder(nn.Module):
                     cu_seqlens=cu_seqlens,
                     rope_emb=rope_emb,
                 )
-
+            
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -764,7 +763,6 @@ class KeyeVL1_5VisionEncoder(nn.Module):
             hidden_states=encoder_states,
             attentions=all_attentions,
         )
-
 
 class KeyeVL1_5VisionTransformer(nn.Module):
     def __init__(self, config: KeyeVL1_5VisionConfig):
@@ -1014,34 +1012,52 @@ class KeyeImageTokenizer(PreTrainedModel):
             commitment_cost=0.25)
         # using a three-layer KeyeVL1_5VisionEncoder, just for reconstruction
         self.decoder = KeyeVL1_5VisionEncoder(
-            # config=KeyeVL1_5VisionConfig(
-            #     hidden_size=128,
-            #     intermediate_size=384,
-            #     num_hidden_layers=3,
-            #     num_attention_heads=8,
-            #     hidden_act="gelu_pytorch_tanh",
-            #     layer_norm_eps=1e-6,
-            #     attention_dropout=0.0,
-            # )
             config=config.decoder_config
         )
+        self.final_projector  = nn.Linear(config.embedding_dim, config.llm_hidden_size)
         self.post_init()
+    
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        # TODO: fix hard code
+        # std = 0.02
+        # if isinstance(module, (nn.Linear, nn.Conv3d)):
+        #     module.weight.data.normal_(mean=0.0, std=std)
+        #     if module.bias is not None:
+        #         module.bias.data.zero_()
+
+        if isinstance(module, KeyeVL1_5VisionAttention):
+            nn.init.xavier_uniform_(module.q_proj.weight)
+            nn.init.xavier_uniform_(module.k_proj.weight)
+            nn.init.xavier_uniform_(module.v_proj.weight)
+            nn.init.xavier_uniform_(module.out_proj.weight)
+            nn.init.zeros_(module.q_proj.bias)
+            nn.init.zeros_(module.k_proj.bias)
+            nn.init.zeros_(module.v_proj.bias)
+            nn.init.zeros_(module.out_proj.bias)
+        elif isinstance(module, KeyeVL1_5VisionMLP):
+            nn.init.xavier_uniform_(module.fc1.weight)
+            nn.init.xavier_uniform_(module.fc2.weight)
+            nn.init.normal_(module.fc1.bias, std=1e-6)
+            nn.init.normal_(module.fc2.bias, std=1e-6)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            lecun_normal_(module.weight)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
 
     def encode(self,
                x: torch.Tensor,
                image_grid_thw: List[Tuple[int, int, int]]):
         device = x.device
-        print("device", device, x.shape, image_grid_thw.shape)
         total_patches = image_grid_thw.prod(dim=1)
-        print("total_patches", total_patches)
         width = torch.repeat_interleave(image_grid_thw[:, 2], total_patches)
-        print("width", width)
         
         cu_seqlens = total_patches.cumsum(0)
-        print("cu_seqlens", cu_seqlens)
 
         arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
-        print("arange", arange)
         image_position_ids = arange - torch.repeat_interleave(
             cu_seqlens.to(device) - total_patches, total_patches)
         
@@ -1052,7 +1068,6 @@ class KeyeImageTokenizer(PreTrainedModel):
         width_position_ids = width_position_ids.to(device)
         height_position_ids = height_position_ids.to(device)
 
-        print("lllll")
         vision_outputs = self.visual(
             pixel_values=x, 
             image_grid_thw=image_grid_thw,
@@ -1067,7 +1082,6 @@ class KeyeImageTokenizer(PreTrainedModel):
             width_position_ids=width_position_ids,
             height_position_ids=height_position_ids,
         )
-        print("uuuuu")
         image_embeds = vision_outputs.last_hidden_state
 
         image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
@@ -1092,15 +1106,32 @@ class KeyeImageTokenizer(PreTrainedModel):
                 image_embeds: (seqlen, hidden_size)
         """
         image_embeds = self.encode(x, image_grid_thw)
-        print(image_embeds)
         z_e = self.encoder(image_embeds)
         z_q, codebook_loss, indices, perplexity = self.quantizer(z_e)
+        
         # TODO: fix hard code, merge size is 4
+        device = x.device
+        total_patches = image_grid_thw.prod(dim=1) // 4
+        width = torch.repeat_interleave(image_grid_thw[:, 2] // 2, total_patches)
         cu_seqlens = image_grid_thw.prod(dim=1).cumsum(0) // 4
-        x_recon = self.decoder(
-            inputs_embeds=z_q, cu_seqlens=cu_seqlens)
 
-        reconstruction_loss = F.mse_loss(x_rec, image_embeds)
+        arange = torch.arange(cu_seqlens[-1], dtype=torch.long, device=device)
+        image_position_ids = arange - torch.repeat_interleave(
+            cu_seqlens.to(device) - total_patches, total_patches)
+        
+        width_position_ids = torch.remainder(image_position_ids, width)
+        height_position_ids = torch.div(image_position_ids, width, rounding_mode="floor")
+        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0).to(dtype=torch.int32, device=device)
+        width_position_ids = width_position_ids.to(device)
+        height_position_ids = height_position_ids.to(device)
+        x_recon = self.decoder(
+            inputs_embeds=z_q.unsqueeze(0),
+            cu_seqlens=cu_seqlens,
+            width_position_ids=width_position_ids,
+            height_position_ids=height_position_ids, 
+            use_rope=True).last_hidden_state
+        x_recon = self.final_projector(x_recon).squeeze()
+        reconstruction_loss = F.mse_loss(x_recon, image_embeds)
 
         # TODO: fix hard code, support beta
         loss = 1.0 * codebook_loss + reconstruction_loss
