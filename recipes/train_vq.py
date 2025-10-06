@@ -1115,7 +1115,6 @@ def train():
             "loss/codebook": codebook_loss,
             "loss/reconstruction": reconstruction_loss,
             "perplexity": perplexity,
-            "nonzero_count": nonzero_count,
             "training/grad_norm": grad_norm,
             "training/learning_rate": learning_rate,
             "perf/sec_per_step": sec_per_step,
