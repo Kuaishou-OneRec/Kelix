@@ -1025,7 +1025,7 @@ def train():
         print(pixel_values.shape)
         print(image_grid_thw.shape)
         output = model(
-          x=pixel_values,
+          pixel_values=pixel_values,
           image_grid_thw=image_grid_thw
         )    
 
