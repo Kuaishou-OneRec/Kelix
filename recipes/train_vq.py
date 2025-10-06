@@ -1030,12 +1030,12 @@ def train():
         )    
 
         # TODO: codebook_loss && reconstruction_loss
-        total_loss = output["loss"]
+        loss = output["loss"]
         codebook_loss = output["codebook_loss"]
         reconstruction_loss = output["reconstruction_loss"]
         perplexity = output["perplexity"]
 
-        print(f"loss: {total_loss}, codebook_loss: {codebook_loss}, reconstruction_loss: {reconstruction_loss}, perplexity: {perplexity}")
+        print(f"loss: {loss}, codebook_loss: {codebook_loss}, reconstruction_loss: {reconstruction_loss}, perplexity: {perplexity}")
         # TODO: support global perplexity
 
         ############ NOTE: add global batchsize ############ 
