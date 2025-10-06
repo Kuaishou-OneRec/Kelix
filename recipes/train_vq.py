@@ -1333,9 +1333,13 @@ def train():
                       optimizer=optimizer,
                       lr_scheduler=lr_scheduler,
       if torch_profiler: torch_profiler.step()
+  save_model_checkpoint(
                       model=model,
                       save_dir=args.output_dir,
                       tag=f"step{global_step}",
+                      global_step=global_step,
+                      client_state={
+                          "total_num_tokens": total_num_tokens,
                           "total_num_samples": total_num_samples,
                           "total_data_source_samples": total_data_source_samples,
                           "total_data_source_tokens": total_data_source_tokens,
