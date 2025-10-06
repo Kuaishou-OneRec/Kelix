@@ -913,7 +913,6 @@ def train():
       # metrics = metrics_queue.get()
       global_step, log_dict, ticker_stats, ds_loss, ds_tokens, ds_samples = metrics_queue.get()
       total_num_samples = log_dict["perf/total_num_samples"]
-      total_num_valid_tokens = log_dict["perf/valid_total_num_tokens"]
       for name, data in log_dict.items():
         if data is not None and tb_writer:
           # print(f"add_data_{global_step}", global_step, log_dict, ticker_stats, ds_loss, ds_tokens, ds_samples)
@@ -923,15 +922,6 @@ def train():
               data,
               global_step=global_step,
               new_style=True)
-
-          # log metric by valid tokens
-          if name.startswith("training/"):
-            tb_writer.add_scalar(
-              f"x_token_{name}",
-              data,
-              global_step=total_num_valid_tokens / grad_acc_steps,
-              new_style=True
-            )
 
       for name, data in ticker_stats.items():
         tb_writer.add_scalar(f"ticker/{name}", data, global_step=global_step, new_style=True)
