@@ -1041,69 +1041,14 @@ def train():
       image_flags = batch.get("image_flags", None)
       epoch_idx = batch.get("epoch_idx", torch.tensor([0])).cpu().item()
       #####slowfast######
-      fast_pixel_values_videos = batch.get("fast_pixel_values_videos", None)
-      fast_video_grid_thw = batch.get("fast_video_grid_thw", None)
       ###################
       # 打印 token 数量
-      if not use_flops_balance or True:
-        token_count = input_ids.numel() / args.sequence_parallel_size  # 计算 token 数量
-        print_rank_0(f"Iteration {micro_step}: Token count = {token_count}")
-        num_tokens = token_count
-
-        num_samples = (sample_idx.max() + 1).sum()  / args.sequence_parallel_size
-
-        image_tokens_ids = input_ids == image_token_id
-        num_image_tokens = image_tokens_ids.sum().item() / args.sequence_parallel_size
-        num_image_tokens2 = num_image_tokens
-
-        video_tokens_ids = (input_ids == video_token_id) | (input_ids == fast_video_token_id)
-        num_video_tokens = video_tokens_ids.sum().item() / args.sequence_parallel_size
-        num_video_tokens2 = num_video_tokens
-        num_images = round(num_image_tokens / 256) if args.model_class == "InternVLChatModel" else -1 # (((input_ids == image_start_id) | (input_ids == frame_id)).sum().item() / args.sequence_parallel_size)
-        if num_images == -1: 
-          num_images = sum([v.shape[0] for k, v in batch.items() if 'grid_thw' in k], 0)
-
-        # num_image_tokens, num_tokens, num_samples, num_images
-        mfu_stats.set(
-          max(num_image_tokens, 1) + max(num_video_tokens, 1), 
-          max(num_tokens, 1), 
-          max(1, num_samples.detach().item()), 
-          max(num_images, 1)
-        )
-
-        # num_tokens - (sample_idx == -1).sum()
-        num_valid_tokens = torch.nonzero(loss_mask[0] == 1)[-1].item() / args.sequence_parallel_size + 1 # 我们可以采取补全的方式packing最后一个样本，所以需要按照最后一个loss是位置计算有效样本数量 
-        token_metrics = torch.tensor(
-          [num_tokens, num_samples, num_valid_tokens, num_image_tokens, num_video_tokens]).cuda(non_blocking=True)
-
-        ticker.tick("token_metrics_init")
-        
-        dist.all_reduce(
-          token_metrics, op=dist.ReduceOp.SUM, group=get_data_parallel_group())
-        ticker.tick("token_metrics_reduce")
-
-        # print(f"rank={torch.distributed.get_rank()}, pid={os.getpid()}, token_metrics.detach")
-        num_tokens, num_samples, num_valid_tokens, num_image_tokens, num_video_tokens = token_metrics.detach().cpu().numpy() * args.sequence_parallel_size
-        ticker.tick("token_metrics.detach().cpu().numpy()")
-      else:
-        num_image_tokens2 = (input_ids == 151667).sum().item()
-        num_tokens = batch.get("num_tokens", 0)
-        num_samples = batch.get("num_samples", 0)
-        num_valid_tokens = batch.get("num_valid_tokens", num_tokens)
-        num_image_tokens = batch.get("num_image_tokens", 0)
-        print_rank_0(f"Iteration {micro_step}: Token count = {num_tokens}")
 
       total_num_samples += num_samples
       total_num_tokens += num_tokens
-      total_num_valid_tokens += num_valid_tokens
-      total_num_image_tokens += num_image_tokens
-      total_num_video_tokens += num_video_tokens
 
       acc_num_samples += num_samples
       acc_num_tokens += num_tokens
-      acc_valid_num_tokens += num_valid_tokens
-      acc_num_image_tokens += num_image_tokens
-      acc_num_video_tokens += num_video_tokens
       ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
 
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
@@ -1310,21 +1255,9 @@ def train():
             acc_num_samples  / (end_time - start_time) / dist.get_world_size()
           samples_per_step_per_gpu = \
             acc_num_samples  / dist.get_world_size()
-          valid_tokens_per_sec_per_gpu = \
-            acc_valid_num_tokens / (end_time - start_time) / dist.get_world_size()
-          image_tokens_per_sec_per_gpu = \
-            acc_num_image_tokens / (end_time - start_time) / dist.get_world_size()
-          video_tokens_per_sec_per_gpu = \
-            acc_num_video_tokens / (end_time - start_time) / dist.get_world_size()
 
           samples_per_step_per_gpu_v2 = total_num_samples / dist.get_world_size() / global_step
           samples_per_sec_per_gpu_v2 = total_num_samples / dist.get_world_size() / (end_time - start_time0)
-
-          image_tokens_per_step_per_gpu_v2 = total_num_image_tokens / dist.get_world_size() / global_step
-          image_tokens_per_sec_per_gpu_v2 = total_num_image_tokens / dist.get_world_size() / (end_time - start_time0)
-
-          video_tokens_per_step_per_gpu_v2 = total_num_video_tokens / dist.get_world_size() / global_step
-          video_tokens_per_sec_per_gpu_v2 = total_num_video_tokens / dist.get_world_size() / (end_time - start_time0)
 
 
           tokens_per_step_per_gpu_v2 = total_num_tokens / dist.get_world_size() / global_step
@@ -1350,25 +1283,10 @@ def train():
             "perf/num_sample_per_gpu": total_num_samples / dist.get_world_size(),
             "perf/samples_per_step_per_gpu": samples_per_step_per_gpu,
             "perf/num_sample_per_sec_per_gpu": total_num_samples / (end_time - start_time) / dist.get_world_size(),
-            "perf/valid_total_num_tokens": total_num_valid_tokens ,
-            "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu ,
-            "perf/image_tokens_per_sec_per_gpu": image_tokens_per_sec_per_gpu,
-            "perf/video_tokens_per_sec_per_gpu": video_tokens_per_sec_per_gpu,
 
-            "perf/image_token_ratio_by_valid": image_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
-
-            "perf/video_token_ratio_by_valid": video_tokens_per_sec_per_gpu / valid_tokens_per_sec_per_gpu,
-
-            "perf/valid_token_ratio": total_num_valid_tokens / total_num_tokens,
-            "perf/image_token_per_sample_per_gpu":total_num_image_tokens / total_num_samples,
-            "perf/video_token_per_sample_per_gpu":total_num_video_tokens / total_num_samples,
             **mfu_stats.mfu(end_time - start_time, global_step - global_step0),
             "perf/samples_per_step_per_gpu_v2": samples_per_step_per_gpu_v2,
             "perf/samples_per_sec_per_gpu_v2": samples_per_sec_per_gpu_v2,
-            "perf/image_tokens_per_step_per_gpu_v2": image_tokens_per_step_per_gpu_v2,
-            "perf/image_tokens_per_sec_per_gpu_v2": image_tokens_per_sec_per_gpu_v2,
-            "perf/video_tokens_per_step_per_gpu_v2": video_tokens_per_step_per_gpu_v2,
-            "perf/video_tokens_per_sec_per_gpu_v2": video_tokens_per_sec_per_gpu_v2,
             "perf/tokens_per_step_per_gpu_v2": tokens_per_step_per_gpu_v2,
             "perf/tokens_per_sec_per_gpu_v2": tokens_per_sec_per_gpu_v2,
             "perf/epoch_idx": epoch_idx,
@@ -1405,8 +1323,6 @@ def train():
         acc_avg_loss = 0.0
         acc_num_samples = 0
         acc_num_tokens = 0
-        acc_valid_num_tokens = 0
-        acc_num_image_tokens = 0
 
         batch_data_source_loss = collections.defaultdict(float)
         batch_data_source_tokens = collections.defaultdict(int)
