@@ -2398,7 +2398,6 @@ class Projector(nn.Module):
         return hidden_states
 
 class KeyeImageTokenizer(PreTrainedModel):
-    # TODO: use KeyeImageTokenizerConfig
     config_class = KeyeImageTokenizerConfig
     _supports_flash_attn_2 = True
     def __init__(self, config: KeyeImageTokenizerConfig, **kwargs):
@@ -2444,7 +2443,7 @@ class KeyeImageTokenizer(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-    def encode(
+    def get_image_embeds(
         self,
         pixel_values: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
@@ -2546,31 +2545,46 @@ class KeyeImageTokenizer(PreTrainedModel):
                 z_q: (seqlen, 128)
                 image_embeds: (seqlen, hidden_size)
         """
-        image_embeds = self.encode(pixel_values, image_grid_thw)
+        # 思路：LLM带着NaViT训完之后，连续视觉特征已经对齐了LLM的输入表征空间，如果我们能将这个连续特征尽可能无损离散化，
+        # 理论上LLM就可以利用这些离散特征做视觉理解+生成。这里给出的是一个非端到端训练的Tokenizer，预期会比直接K-means要好
 
+
+        # 将原始pixel用NaViT编码成image_embeds，在image_embeds维度上做重建
+        # NaViT已经和LLM对齐过，训练的时候freeze，Tokenizer的目的是将已经对齐过的连续视觉特征尽可能无损量化到离散空间
+        image_embeds = self.get_image_embeds(pixel_values, image_grid_thw)
+
+        # 一个简单的编码器，将image_embeds编码成z_e，通常会降低维度，保证码本比较好学
+        # 最简单的做法是Linear projector直接降维，当然也可以使用一个小的siglip
         z_e = self.encoder(image_embeds)
-        z_q, codebook_loss, indices, perplexity = self.quantizer(z_e)
 
-        print(z_q.shape)
+        # 量化
+        vq_outputs = self.quantizer(z_e)
+        
+        # 量化后的特征，这个是需要输入给decoder的
+        z_q = vq_outputs["z_q"]
+
+        # 两个码本相关的loss，目的是为了让码本embedding和z_e尽可能接近
+        # 码本loss只是一个约束，并不是我们的优化目标
+        codebook_loss = vq_outputs["codebook_loss"]
+        commitment_loss = vq_outputs["commitment_loss"]
+
+        # 量化后的索引，这个是以后需要用的，Tokenizer就是为了学这个东西，完成pixel_values -> indices的映射
+        indices = vq_outputs["indices"]
 
         cu_seqlens = [0]
         image_grid_hws = list()
-        #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
         pro = 0
         for idx, thw in enumerate(image_grid_thw):
             thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
-            # TODO: fix hard code
+            # TODO: fix hard code, merge size is 4
             numel = np.prod(thw_tuple) // 4
             image_grid_hws.append(thw_tuple)
-            # image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
-            # siglip_position_ids.append(image_position_ids)
-            # sample_indices.append(torch.full((numel, ), idx, dtype=torch.int64))
             cu_seqlens.append(cu_seqlens[-1] + numel)
-            
-        # siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
+
         cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(z_q.device)
         
-        # TODO: fix hard code, merge size is 4
+        # 解码，如果一个简单的decoder可以从z_q重建出x_recon，可以认为z_q成功压缩了image_embeds的关键信息
+        # 但需要注意，z_q不是关键，关键是indices，tokenizer学到的离散表示就是indices，码本向量随时可以丢掉
         x_recon = self.decoder(
             inputs_embeds=z_q.unsqueeze(0),
             cu_seqlens=cu_seqlens,
@@ -2579,16 +2593,13 @@ class KeyeImageTokenizer(PreTrainedModel):
         x_recon = self.final_projector(x_recon).squeeze()
         reconstruction_loss = F.mse_loss(x_recon, image_embeds)
 
-        # TODO: fix hard code, support beta
-        loss = 1.0 * codebook_loss + reconstruction_loss
         return {
-            "loss": loss,
             "codebook_loss": codebook_loss,
+            "commitment_loss": commitment_loss,
             "reconstruction_loss": reconstruction_loss,
-            "perplexity": perplexity,
-            "x_recon": x_recon,
             "indices": indices,
+            "x_recon": x_recon,
+            "x": image_embeds,
             "z_e": z_e,
             "z_q": z_q,
-            "image_embeds": image_embeds,
         }

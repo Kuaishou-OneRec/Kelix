@@ -872,7 +872,6 @@ def train():
   mfu_stats = MFUStats(args)
   batch_data_source_loss = collections.defaultdict(float)
   batch_data_source_tokens = collections.defaultdict(int)
-  valid_data_source_tokens = collections.defaultdict(int)
   grad_norm = 0.0
 
   # get_sequence_parallel_group("gloo")
@@ -1012,26 +1011,74 @@ def train():
       # <|im_start|>system .......
 
       with Timer("Fwd"):
-        print(pixel_values.shape)
-        print(image_grid_thw.shape)
         output = model(
           pixel_values=pixel_values,
           image_grid_thw=image_grid_thw
         )    
 
         # TODO: codebook_loss && reconstruction_loss
-        loss = output["loss"]
         codebook_loss = output["codebook_loss"]
+        commitment_loss = output["commitment_loss"]
         reconstruction_loss = output["reconstruction_loss"]
-        perplexity = output["perplexity"]
+        indices = output["indices"]
 
-        print(f"loss: {loss}, codebook_loss: {codebook_loss}, reconstruction_loss: {reconstruction_loss}, perplexity: {perplexity}")
-        # TODO: support global perplexity
+
+
+        loss = reconstruction_loss + \
+          args.alpha * (codebook_loss + args.beta * commitment_loss)
+
+        # Compute global perplexity across all ranks
+        with torch.no_grad():
+          # Get codebook size from model config
+          codebook_size = model.config.codebook_size
+          
+          # Flatten indices for current rank
+          local_indices = indices.flatten()  # shape: (local_batch_size,)
+          local_batch_size = local_indices.shape[0]
+          
+          # Step 1: Gather batch sizes from all ranks
+          world_size = dist.get_world_size()
+          batch_sizes = torch.zeros(world_size, dtype=torch.long, device=local_indices.device)
+          dist.all_gather_into_tensor(batch_sizes, torch.tensor([local_batch_size], dtype=torch.long, device=local_indices.device))
+          
+          # Step 2: Prepare padded tensor for all_gather (pad to max batch size)
+          max_batch_size = batch_sizes.max().item()
+          padded_indices = torch.zeros(max_batch_size, dtype=local_indices.dtype, device=local_indices.device)
+          padded_indices[:local_batch_size] = local_indices
+          
+          # Step 3: Gather indices from all ranks
+          gathered_indices_list = [torch.zeros(max_batch_size, dtype=local_indices.dtype, device=local_indices.device) 
+                                   for _ in range(world_size)]
+          dist.all_gather(gathered_indices_list, padded_indices)
+          
+          # Step 4: Concatenate valid indices (remove padding)
+          global_indices = []
+          for rank_idx, rank_indices in enumerate(gathered_indices_list):
+            valid_size = batch_sizes[rank_idx].item()
+            global_indices.append(rank_indices[:valid_size])
+          global_indices = torch.cat(global_indices, dim=0)
+          
+          # Step 5: Compute global perplexity
+          # Count frequency of each codebook entry
+          counts = torch.bincount(global_indices, minlength=codebook_size)
+          total_samples = global_indices.shape[0]
+          
+          # Calculate probabilities
+          avg_probs = counts.float() / total_samples
+          
+          # Only compute for non-zero probabilities to avoid log(0)
+          non_zero_probs = avg_probs[avg_probs > 0]
+          
+          # Perplexity = exp(entropy) = exp(-sum(p * log(p)))
+          entropy = -torch.sum(non_zero_probs * torch.log(non_zero_probs + 1e-10))
+          global_perplexity = torch.exp(entropy)
+          
+          # Calculate codebook usage
+          codebook_usage = (counts > 0).sum().float() / codebook_size
 
         ############ NOTE: add global batchsize ############ 
 
       with Timer("bwd"):
-        print("loss.backward() begin----------")
         loss.backward()
 
         clip_grad_by_value(model, args.clip_range)
@@ -1046,18 +1093,21 @@ def train():
           global_step += 1
 
           ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
-          print("loss.backward() end----------")
 
       ########## dataset source monitor ###############
 
       #########################################
       avg_loss = loss.detach()
       codebook_loss = codebook_loss.detach()
+      commitment_loss = commitment_loss.detach()
       reconstruction_loss = reconstruction_loss.detach()
 
       avg_loss = avg_loss.item() / dist.get_world_size()
       codebook_loss = codebook_loss.item() / dist.get_world_size()
+      commitment_loss = commitment_loss.item() / dist.get_world_size()
       reconstruction_loss = reconstruction_loss.item() / dist.get_world_size()
+      perplexity = global_perplexity.item()
+      codebook_usage_ratio = codebook_usage.item()
 
       ticker.tick("reduce_acc_avg_loss")
       log_acc_step = args.logging_per_step * args.gradient_accumulation_steps
@@ -1070,7 +1120,6 @@ def train():
         with Timer("reduce data source metrics"):
           batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
           batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
-          valid_data_source_tokens = dist_reduce_dict(valid_data_source_tokens)
           total_data_source_samples = dist_reduce_dict(
             local_acc_data_source_samples, group=get_data_parallel_group())
           for ds_key, ds_num_tokens in batch_data_source_tokens.items():
@@ -1100,11 +1149,12 @@ def train():
           # avg_loss = acc_avg_loss / args.gradient_accumulation_steps / args.logging_per_step
           log_dict = {
             # max_image_tokens, min_image_tokens, mean_image_tokens, std_image_tokens
-            "training/loss": avg_loss,
             "loss/total": avg_loss,
             "loss/codebook": codebook_loss,
+            "loss/commitment": commitment_loss,
             "loss/reconstruction": reconstruction_loss,
-            "perplexity": perplexity,
+            "metrics/perplexity": perplexity,
+            "metrics/codebook_usage": codebook_usage_ratio,
             "training/grad_norm": grad_norm,
             "training/learning_rate": learning_rate,
             "perf/sec_per_step": sec_per_step,
