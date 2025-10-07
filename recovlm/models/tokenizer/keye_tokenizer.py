@@ -2410,8 +2410,7 @@ class KeyeImageTokenizer(PreTrainedModel):
         # TODO: fix hard code
         self.quantizer = VectorQuantizer(
             num_embeddings=config.codebook_size,
-            embedding_dim=config.embedding_dim,
-            commitment_cost=0.25)
+            embedding_dim=config.embedding_dim)
         # using a three-layer KeyeVL1_5VisionEncoder, just for reconstruction
         self.decoder = SiglipEncoder(
             config=config.decoder_config
