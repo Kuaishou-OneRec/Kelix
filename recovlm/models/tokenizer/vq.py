@@ -43,7 +43,7 @@ class VectorQuantizer(nn.Module):
         # TODO: 1）使用fp32计算，2）对z_e和e做normalization，确保均值方差一致
         z_q = z_e + (e - z_e).detach()
         # 理解下z_q:
-        # z_q其实就是量化后的embedding(e)，但直接使用e输入到decoder，梯度无法回传到encoder，encoder的优化方向就会跑偏
+        # z_q其实就是量化后的embedding(e)，但直接使用e输入到decoder，梯度无法回传到encoder
         #  z_e + stop_gradient(e - z_e)，前向时就等于e，
         # 反向时，传导到z_q的梯度会直接接到z_e上，但这里能work的前提是e和z_e没有差太远，所以需要加码本loss
         

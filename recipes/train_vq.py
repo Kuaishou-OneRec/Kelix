@@ -262,6 +262,12 @@ def get_argument_parser():
   parser.add_argument("--clip_range", type=float, default=1.0,
                       help="The gradient clip range.")
 
+  parser.add_argument("--alpha", type=float, default=1.0,
+                      help="Weight for codebook and commitment loss in VQ-VAE training.")
+
+  parser.add_argument("--beta", type=float, default=0.25,
+                      help="Weight for commitment loss in VQ-VAE training.")
+
   parser.add_argument("--freeze_projector", action="store_true",
                       help="Freeze all LLM parameters (language model weights will not be updated during training).")
 
@@ -1004,11 +1010,6 @@ def train():
       acc_num_samples += num_samples
       acc_num_tokens += num_tokens
       ticker.tick("acc_valid_num_tokens+=num_valid_tokens")
-      
-
-      print("########################### decode ###########################")
-      # batch['input_ids'][0]:  tensor([151644,   8948,    198,  ..., 151643, 151643, 151643], device='cuda:3')
-      # <|im_start|>system .......
 
       with Timer("Fwd"):
         output = model(

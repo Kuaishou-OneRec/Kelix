@@ -16,7 +16,7 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 
 # MODEL_DIR=/llm_reco_ssd/luoxinchen/output/RecoVLM/Qwen2-VL-7B-stage1-v0.0.36/global_step90000-hf
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/KeyeImageTokenizer_init/
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_test/8B/
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_test/8B_v2/
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
 rm -rf $OUTPUT_DIR
@@ -27,7 +27,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="vq_test"
+comment="vq_v2"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -124,8 +124,10 @@ nohup mpirun --allow-run-as-root \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
 		--monitor_image_tokens \
-                --max_length 16000 \
+                --max_length 32000 \
                 --learning_rate 2e-4 \
+                --alpha 1.0 \
+                --beta 0.25 \
                 --min_lr 2e-4 \
                 --weight_decay 0.1 \
                 --lr_scheduler_type cosine \
