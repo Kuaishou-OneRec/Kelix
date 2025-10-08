@@ -2438,6 +2438,8 @@ class KeyeImageTokenizer(PreTrainedModel):
             lecun_normal_(module.weight)
             if module.bias is not None:
                 nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            default_flax_embed_init(module.weight)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)

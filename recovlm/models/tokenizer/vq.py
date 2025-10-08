@@ -16,7 +16,7 @@ class VectorQuantizer(nn.Module):
         
         # Initialize the codebook
         self.embedding = nn.Embedding(num_embeddings, embedding_dim)
-        self.embedding.weight.data.uniform_(-1 / num_embeddings, 1 / num_embeddings)
+        # self.embedding.weight.data.uniform_(-1 / em, 1 / num_embeddings)
         
     def forward(self, z_e: torch.Tensor):
         """
@@ -46,13 +46,6 @@ class VectorQuantizer(nn.Module):
         # z_q其实就是量化后的embedding(e)，但直接使用e输入到decoder，梯度无法回传到encoder
         #  z_e + stop_gradient(e - z_e)，前向时就等于e，
         # 反向时，传导到z_q的梯度会直接接到z_e上，但这里能work的前提是e和z_e没有差太远，所以需要加码本loss
-        
-        # Compute perplexity
-        # a more efficient method: use bincount to directly count frequencies
-        # counts = torch.bincount(indices.flatten(), minlength=self.num_embeddings)
-        # avg_probs = counts.float() / indices.shape[0]
-        # non_zero_probs = avg_probs[avg_probs > 0]
-        # perplexity = torch.exp(-torch.sum(non_zero_probs * torch.log(non_zero_probs)))
         
         return {
             "z_q": z_q,
