@@ -54,15 +54,15 @@ class VectorQuantizer(nn.Module):
         probs = F.softmax(logits, dim=1)
         
         # Sample from the distribution
-        if self.training:
-            print("Trainingxxxxxxxxx Softmax sampling")
-            # During training, use sampling for diversity
-            # Note: self.training is automatically set by parent model's .train()/.eval()
-            indices = torch.multinomial(probs, num_samples=1).squeeze(1)
-        else:
-            # During inference, use deterministic selection (argmax)
-            # Note: self.training is automatically set by parent model's .train()/.eval()
-            indices = torch.argmax(probs, dim=1)
+        # if self.training:
+        print("Trainingxxxxxxxxx Softmax sampling")
+        # During training, use sampling for diversity
+        # Note: self.training is automatically set by parent model's .train()/.eval()
+        indices = torch.multinomial(probs, num_samples=1).squeeze(1)
+        # else:
+        #     # During inference, use deterministic selection (argmax)
+        #     # Note: self.training is automatically set by parent model's .train()/.eval()
+        #     indices = torch.argmax(probs, dim=1)
             
         return indices, probs
     
