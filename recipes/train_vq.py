@@ -128,6 +128,26 @@ from recovlm.utils.ds_utils import format_dict_or_list
 from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor
 
 
+def get_quantizer_from_model(model):
+  """Helper function to get quantizer from potentially FSDP wrapped model"""
+  if hasattr(model, 'quantizer'):
+    return model.quantizer
+  elif hasattr(model, '_fsdp_wrapped_module') and hasattr(model._fsdp_wrapped_module, 'quantizer'):
+    return model._fsdp_wrapped_module.quantizer
+  elif hasattr(model, 'module') and hasattr(model.module, 'quantizer'):
+    return model.module.quantizer
+  else:
+    # Debug: print available attributes to help troubleshoot
+    attrs = [attr for attr in dir(model) if not attr.startswith('_')]
+    print_rank_0(f"WARNING: quantizer not found in model. Available attrs: {attrs[:10]}...")
+    # Try to find it recursively in submodules
+    for name, module in model.named_modules():
+      if hasattr(module, 'quantizer'):
+        print_rank_0(f"Found quantizer in submodule: {name}")
+        return module.quantizer
+  return None
+
+
 # Logger 初始化
 #logging.basicConfig(level=logging.INFO)  # 设置日志级别
 #logger = logging.getLogger(__name__)  # 创建 logger 实例
@@ -763,6 +783,15 @@ def train():
     if param.requires_grad:
       print_rank_0(f"params not freeze: {name}")
   print_rank_0("=" * 50)
+  
+  # Debug: Check quantizer initialization
+  quantizer = get_quantizer_from_model(model)
+  if quantizer:
+    print_rank_0(f"✅ Found quantizer: sampling_mode={quantizer.sampling_mode}, "
+                 f"init_temperature={quantizer.temperature}, "
+                 f"current_temperature={quantizer._current_temperature}")
+  else:
+    print_rank_0("❌ Quantizer not found in model!")
 
   # Split weights in two groups, one with weight decay and the other not.
   optimizer_grouped_parameters = get_optimizer_grouped_parameters(
@@ -1112,8 +1141,13 @@ def train():
           optimizer.zero_grad()
           
           # Update temperature for softmax sampling (if using softmax mode)
-          if hasattr(model, 'quantizer') and hasattr(model.quantizer, 'update_temperature'):
-            model.quantizer.update_temperature()
+          quantizer = get_quantizer_from_model(model)
+          if quantizer and hasattr(quantizer, 'update_temperature'):
+            old_temp = quantizer._current_temperature
+            quantizer.update_temperature()
+            new_temp = quantizer._current_temperature
+            if global_step % args.logging_per_step == 0:
+              print_rank_0(f"VQ temperature updated: {old_temp:.4f} -> {new_temp:.4f}")
           
           global_step += 1
 
@@ -1136,8 +1170,9 @@ def train():
       
       # Get current temperature for softmax sampling
       current_temperature = 0.0
-      if hasattr(model, 'quantizer') and hasattr(model.quantizer, 'current_temperature'):
-        current_temperature = model.quantizer.current_temperature.item()
+      quantizer = get_quantizer_from_model(model)
+      if quantizer and hasattr(quantizer, '_current_temperature'):
+        current_temperature = quantizer._current_temperature
 
       ticker.tick("reduce_acc_avg_loss")
       log_acc_step = args.logging_per_step * args.gradient_accumulation_steps

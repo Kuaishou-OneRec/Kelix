@@ -53,23 +53,26 @@ class VectorQuantizer(nn.Module):
         
         # Sample from the distribution
         if self.training:
+            print("Trainingxxxxxxxxx Softmax sampling")
             # During training, use sampling for diversity
+            # Note: self.training is automatically set by parent model's .train()/.eval()
             indices = torch.multinomial(probs, num_samples=1).squeeze(1)
         else:
-            # During inference, can choose to be deterministic (argmax) or sample
-            # Here we use argmax for consistency
+            # During inference, use deterministic selection (argmax)
+            # Note: self.training is automatically set by parent model's .train()/.eval()
             indices = torch.argmax(probs, dim=1)
             
         return indices, probs
     
     def update_temperature(self):
         """Update temperature with decay (call this once per training step)"""
-        if self.training:
-            new_temp = max(
-                self._current_temperature * self.temperature_decay, 
-                self.min_temperature
-            )
-            self._current_temperature = new_temp
+        # Always update temperature when called (we only call this during training)
+        # Removed self.training check as it may not be reliable in FSDP environment
+        new_temp = max(
+            self._current_temperature * self.temperature_decay, 
+            self.min_temperature
+        )
+        self._current_temperature = new_temp
     
     def forward(self, z_e: torch.Tensor):
         """
