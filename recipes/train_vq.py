@@ -268,6 +268,21 @@ def get_argument_parser():
   parser.add_argument("--beta", type=float, default=0.25,
                       help="Weight for commitment loss in VQ-VAE training.")
 
+  ############ VQ Sampling Args ############
+  
+  parser.add_argument("--vq_sampling_mode", type=str, default="argmin", 
+                      choices=["argmin", "softmax"],
+                      help="VQ sampling mode: 'argmin' for traditional nearest neighbor, 'softmax' for probabilistic sampling.")
+
+  parser.add_argument("--vq_temperature", type=float, default=1.0,
+                      help="Initial temperature for softmax sampling (only used when vq_sampling_mode='softmax').")
+
+  parser.add_argument("--vq_temperature_decay", type=float, default=0.999,
+                      help="Temperature decay rate per training step for softmax sampling.")
+
+  parser.add_argument("--vq_min_temperature", type=float, default=0.1,
+                      help="Minimum temperature for softmax sampling.")
+
   parser.add_argument("--freeze_projector", action="store_true",
                       help="Freeze all LLM parameters (language model weights will not be updated during training).")
 
@@ -671,7 +686,11 @@ def train():
     model = KeyeImageTokenizer.from_pretrained(
       args.model_dir, _attn_implementation="flash_attention_2",
       use_cache = False,
-      ignore_mismatched_sizes=True, 
+      ignore_mismatched_sizes=True,
+      vq_sampling_mode=args.vq_sampling_mode,
+      vq_temperature=args.vq_temperature,
+      vq_temperature_decay=args.vq_temperature_decay,
+      vq_min_temperature=args.vq_min_temperature,
     )
 
   # if args.enable_gradient_checkpointing:
@@ -1091,6 +1110,11 @@ def train():
           optimizer.step()
           lr_scheduler.step()
           optimizer.zero_grad()
+          
+          # Update temperature for softmax sampling (if using softmax mode)
+          if hasattr(model, 'quantizer') and hasattr(model.quantizer, 'update_temperature'):
+            model.quantizer.update_temperature()
+          
           global_step += 1
 
           ticker.tick(f"optimizer.step*{args.gradient_accumulation_steps}")
@@ -1109,6 +1133,11 @@ def train():
       reconstruction_loss = reconstruction_loss.item() / dist.get_world_size()
       perplexity = global_perplexity.item()
       codebook_usage_ratio = codebook_usage.item()
+      
+      # Get current temperature for softmax sampling
+      current_temperature = 0.0
+      if hasattr(model, 'quantizer') and hasattr(model.quantizer, 'current_temperature'):
+        current_temperature = model.quantizer.current_temperature.item()
 
       ticker.tick("reduce_acc_avg_loss")
       log_acc_step = args.logging_per_step * args.gradient_accumulation_steps
@@ -1156,6 +1185,7 @@ def train():
             "loss/reconstruction": reconstruction_loss,
             "metrics/perplexity": perplexity,
             "metrics/codebook_usage": codebook_usage_ratio,
+            "metrics/vq_temperature": current_temperature,
             "training/grad_norm": grad_norm,
             "training/learning_rate": learning_rate,
             "perf/sec_per_step": sec_per_step,

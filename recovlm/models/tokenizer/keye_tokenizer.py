@@ -2400,7 +2400,12 @@ class Projector(nn.Module):
 class KeyeImageTokenizer(PreTrainedModel):
     config_class = KeyeImageTokenizerConfig
     _supports_flash_attn_2 = True
-    def __init__(self, config: KeyeImageTokenizerConfig, **kwargs):
+    def __init__(self, config: KeyeImageTokenizerConfig, 
+                 vq_sampling_mode="argmin",
+                 vq_temperature=1.0,
+                 vq_temperature_decay=0.999,
+                 vq_min_temperature=0.1,
+                 **kwargs):
         super().__init__(config)
         self.config = config
         self.mlp_AR = Projector(config.vision_config.hidden_size, config.llm_hidden_size)
@@ -2410,7 +2415,11 @@ class KeyeImageTokenizer(PreTrainedModel):
         # TODO: fix hard code
         self.quantizer = VectorQuantizer(
             num_embeddings=config.codebook_size,
-            embedding_dim=config.embedding_dim)
+            embedding_dim=config.embedding_dim,
+            sampling_mode=vq_sampling_mode,
+            temperature=vq_temperature,
+            temperature_decay=vq_temperature_decay,
+            min_temperature=vq_min_temperature)
         # using a three-layer KeyeVL1_5VisionEncoder, just for reconstruction
         self.decoder = SiglipEncoder(
             config=config.decoder_config
