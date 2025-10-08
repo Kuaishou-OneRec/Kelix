@@ -26,8 +26,14 @@ class VectorQuantizer(nn.Module):
         self.embedding = nn.Embedding(num_embeddings, embedding_dim)
         # self.embedding.weight.data.uniform_(-1 / num_embeddings, 1 / num_embeddings)
         
-        # Register temperature as a buffer so it's saved/loaded with the model
-        self.register_buffer('current_temperature', torch.tensor(temperature))
+        # Initialize current temperature (not as buffer to avoid loading issues)
+        self._current_temperature = temperature
+    
+    @property
+    def current_temperature(self):
+        """Get current temperature as a tensor on the correct device"""
+        device = self.embedding.weight.device
+        return torch.tensor(self._current_temperature, device=device, dtype=torch.float32)
         
     def _get_indices_argmin(self, distances):
         """Traditional argmin selection"""
@@ -60,10 +66,10 @@ class VectorQuantizer(nn.Module):
         """Update temperature with decay (call this once per training step)"""
         if self.training:
             new_temp = max(
-                self.current_temperature * self.temperature_decay, 
+                self._current_temperature * self.temperature_decay, 
                 self.min_temperature
             )
-            self.current_temperature.fill_(new_temp)
+            self._current_temperature = new_temp
     
     def forward(self, z_e: torch.Tensor):
         """
