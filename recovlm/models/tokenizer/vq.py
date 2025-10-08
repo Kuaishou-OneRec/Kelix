@@ -15,6 +15,8 @@ class VectorQuantizer(nn.Module):
                 min_temperature: float = 0.1):
         super(VectorQuantizer, self).__init__()
         
+        print(f"[DEBUG] VectorQuantizer.__init__: sampling_mode={sampling_mode}, temperature={temperature}")
+        
         self.embedding_dim = embedding_dim
         self.num_embeddings = num_embeddings
         self.sampling_mode = sampling_mode  # "argmin" or "softmax"
@@ -91,9 +93,12 @@ class VectorQuantizer(nn.Module):
         
         # Select indices based on sampling mode
         sampling_probs = None
+        print(f"[DEBUG] VectorQuantizer sampling_mode: {self.sampling_mode}")
         if self.sampling_mode == "argmin":
+            print("[DEBUG] Using argmin selection")
             indices = self._get_indices_argmin(distances)
         elif self.sampling_mode == "softmax":
+            print("[DEBUG] Using softmax sampling")
             indices, sampling_probs = self._get_indices_softmax(distances)
         else:
             raise ValueError(f"Unknown sampling_mode: {self.sampling_mode}")

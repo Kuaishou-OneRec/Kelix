@@ -2400,12 +2400,24 @@ class Projector(nn.Module):
 class KeyeImageTokenizer(PreTrainedModel):
     config_class = KeyeImageTokenizerConfig
     _supports_flash_attn_2 = True
+    
     def __init__(self, config: KeyeImageTokenizerConfig, 
                  vq_sampling_mode="argmin",
                  vq_temperature=1.0,
                  vq_temperature_decay=0.999,
                  vq_min_temperature=0.1,
                  **kwargs):
+        # Check if VQ parameters are stored from from_pretrained
+        if hasattr(self.__class__, '_vq_params'):
+            vq_params = self.__class__._vq_params
+            vq_sampling_mode = vq_params.get('vq_sampling_mode', vq_sampling_mode)
+            vq_temperature = vq_params.get('vq_temperature', vq_temperature)
+            vq_temperature_decay = vq_params.get('vq_temperature_decay', vq_temperature_decay)
+            vq_min_temperature = vq_params.get('vq_min_temperature', vq_min_temperature)
+            print(f"[DEBUG] Using VQ params from from_pretrained: mode={vq_sampling_mode}")
+        else:
+            print(f"[DEBUG] Using default VQ params: mode={vq_sampling_mode}")
+            
         super().__init__(config)
         self.config = config
         self.mlp_AR = Projector(config.vision_config.hidden_size, config.llm_hidden_size)
@@ -2426,6 +2438,36 @@ class KeyeImageTokenizer(PreTrainedModel):
         )
         self.final_projector  = nn.Linear(config.embedding_dim, config.llm_hidden_size)
         self.post_init()
+    
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        """
+        Override from_pretrained to handle VQ sampling parameters
+        """
+        # Extract VQ parameters from kwargs before calling super().from_pretrained()
+        vq_sampling_mode = kwargs.pop('vq_sampling_mode', 'argmin')
+        vq_temperature = kwargs.pop('vq_temperature', 1.0)
+        vq_temperature_decay = kwargs.pop('vq_temperature_decay', 0.999)
+        vq_min_temperature = kwargs.pop('vq_min_temperature', 0.1)
+        
+        print(f"[DEBUG] from_pretrained called with VQ params: mode={vq_sampling_mode}, temp={vq_temperature}")
+        
+        # Store VQ parameters temporarily
+        cls._vq_params = {
+            'vq_sampling_mode': vq_sampling_mode,
+            'vq_temperature': vq_temperature,
+            'vq_temperature_decay': vq_temperature_decay,
+            'vq_min_temperature': vq_min_temperature,
+        }
+        
+        # Call the parent's from_pretrained
+        model = super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
+        
+        # Clean up temporary storage
+        if hasattr(cls, '_vq_params'):
+            delattr(cls, '_vq_params')
+            
+        return model
     
     def _init_weights(self, module):
         """Initialize the weights"""
