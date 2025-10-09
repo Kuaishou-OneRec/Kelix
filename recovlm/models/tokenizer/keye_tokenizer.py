@@ -2427,7 +2427,8 @@ class KeyeImageTokenizer(PreTrainedModel):
         self.encoder = SiglipEncoder(
             config=config.encoder_config
         )
-        self.projector = nn.Linear(config.embedding_dim, config.embedding_dim) 
+        self.projector = nn.Linear(config.embedding_dim, config.embedding_dim)
+        self.norm = nn.LayerNorm(config.embedding_dim, eps=1e-6)
         # TODO: fix hard code
         self.quantizer = VectorQuantizer(
             num_embeddings=config.codebook_size,
@@ -2631,7 +2632,7 @@ class KeyeImageTokenizer(PreTrainedModel):
             image_grid_thw=image_grid_hws,
             use_rope=True).last_hidden_state.squeeze()
         
-        z_e = self.projector(z_e)
+        z_e = self.projector(self.norm(z_e))
 
         # 量化
         vq_outputs = self.quantizer(z_e)
