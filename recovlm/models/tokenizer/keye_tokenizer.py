@@ -2423,7 +2423,10 @@ class KeyeImageTokenizer(PreTrainedModel):
         self.mlp_AR = Projector(config.vision_config.hidden_size, config.llm_hidden_size)
         self.visual = SiglipVisionModel(config.vision_config)
         # TODO: fix hard code, 128 is the embedding dimension of the codebook
-        self.encoder = nn.Linear(config.llm_hidden_size, config.embedding_dim)
+        self.encoder_projector = nn.Linear(config.llm_hidden_size, config.embedding_dim)
+        self.encoder = SiglipEncoder(
+            config=config.encoder_config
+        ) 
         # TODO: fix hard code
         self.quantizer = VectorQuantizer(
             num_embeddings=config.codebook_size,
@@ -2605,9 +2608,27 @@ class KeyeImageTokenizer(PreTrainedModel):
         # NaViT已经和LLM对齐过，训练的时候freeze，Tokenizer的目的是将已经对齐过的连续视觉特征尽可能无损量化到离散空间
         image_embeds = self.get_image_embeds(pixel_values, image_grid_thw)
 
+        cu_seqlens = [0]
+        image_grid_hws = list()
+        pro = 0
+        for idx, thw in enumerate(image_grid_thw):
+            thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
+            # TODO: fix hard code, merge size is 4
+            numel = np.prod(thw_tuple) // 4
+            image_grid_hws.append(thw_tuple)
+            cu_seqlens.append(cu_seqlens[-1] + numel)
+
+        cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(z_q.device)
+
         # 一个简单的编码器，将image_embeds编码成z_e，通常会降低维度，保证码本比较好学
         # 最简单的做法是Linear projector直接降维，当然也可以使用一个小的siglip
-        z_e = self.encoder(image_embeds)
+        h = self.encoder_projector(image_embeds)
+
+        z_e = self.encoder(
+            inputs_embeds=h,
+            cu_seqlens=cu_seqlens,
+            image_grid_thw=image_grid_hws,
+            use_rope=True).last_hidden_state
 
         # 量化
         vq_outputs = self.quantizer(z_e)
@@ -2622,18 +2643,6 @@ class KeyeImageTokenizer(PreTrainedModel):
 
         # 量化后的索引，这个是以后需要用的，Tokenizer就是为了学这个东西，完成pixel_values -> indices的映射
         indices = vq_outputs["indices"]
-
-        cu_seqlens = [0]
-        image_grid_hws = list()
-        pro = 0
-        for idx, thw in enumerate(image_grid_thw):
-            thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
-            # TODO: fix hard code, merge size is 4
-            numel = np.prod(thw_tuple) // 4
-            image_grid_hws.append(thw_tuple)
-            cu_seqlens.append(cu_seqlens[-1] + numel)
-
-        cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(z_q.device)
         
         # 解码，如果一个简单的decoder可以从z_q重建出x_recon，可以认为z_q成功压缩了image_embeds的关键信息
         # 但需要注意，z_q不是关键，关键是indices，tokenizer学到的离散表示就是indices，码本向量随时可以丢掉

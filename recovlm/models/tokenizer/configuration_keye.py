@@ -370,6 +370,7 @@ class KeyeImageTokenizerConfig(PretrainedConfig):
     model_type = "KeyeImageTokenizer"
     sub_configs = {
         "vision_config": KeyeVisionConfig,
+        "encoder_config": KeyeVisionConfig,
         "decoder_config": KeyeVisionConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -408,6 +409,12 @@ class KeyeImageTokenizerConfig(PretrainedConfig):
             self.decoder_config = self.sub_configs["decoder_config"](**decoder_config)
         elif decoder_config is None:
             self.decoder_config = self.sub_configs["decoder_config"]()
+
+        if isinstance(encoder_config, dict):
+            self.encoder_config = self.sub_configs["encoder_config"](**encoder_config)
+        elif encoder_config is None:
+            self.encoder_config = self.sub_configs["encoder_config"]()
+
 
         self.codebook_size = codebook_size
         self.embedding_dim = embedding_dim
