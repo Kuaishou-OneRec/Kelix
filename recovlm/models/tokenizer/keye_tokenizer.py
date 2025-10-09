@@ -2423,10 +2423,11 @@ class KeyeImageTokenizer(PreTrainedModel):
         self.mlp_AR = Projector(config.vision_config.hidden_size, config.llm_hidden_size)
         self.visual = SiglipVisionModel(config.vision_config)
         # TODO: fix hard code, 128 is the embedding dimension of the codebook
-        self.encoder_projector = nn.Linear(config.llm_hidden_size, config.embedding_dim)
+        self.down_projector = nn.Linear(config.llm_hidden_size, config.embedding_dim)
         self.encoder = SiglipEncoder(
             config=config.encoder_config
-        ) 
+        )
+        self.projector = nn.Linear(config.embedding_dim, config.embedding_dim) 
         # TODO: fix hard code
         self.quantizer = VectorQuantizer(
             num_embeddings=config.codebook_size,
@@ -2622,13 +2623,15 @@ class KeyeImageTokenizer(PreTrainedModel):
 
         # 一个简单的编码器，将image_embeds编码成z_e，通常会降低维度，保证码本比较好学
         # 最简单的做法是Linear projector直接降维，当然也可以使用一个小的siglip
-        h = self.encoder_projector(image_embeds)
+        h = self.down_projector(image_embeds)
 
         z_e = self.encoder(
             inputs_embeds=h,
             cu_seqlens=cu_seqlens,
             image_grid_thw=image_grid_hws,
             use_rope=True).last_hidden_state
+        
+        z_e = self.projector(z_e)
 
         # 量化
         vq_outputs = self.quantizer(z_e)

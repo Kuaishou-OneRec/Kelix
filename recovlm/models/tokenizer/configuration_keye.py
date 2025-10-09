@@ -396,6 +396,7 @@ class KeyeImageTokenizerConfig(PretrainedConfig):
         embedding_dim=128,
         llm_hidden_size=4096,
         merge_size=2,
+        encoder_config=None,
         decoder_config=None,
         vision_config=None,
         **kwargs,
