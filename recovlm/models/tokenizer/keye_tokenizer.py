@@ -2619,7 +2619,7 @@ class KeyeImageTokenizer(PreTrainedModel):
             image_grid_hws.append(thw_tuple)
             cu_seqlens.append(cu_seqlens[-1] + numel)
 
-        cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(z_q.device)
+        cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(image_embeds.device)
 
         # 一个简单的编码器，将image_embeds编码成z_e，通常会降低维度，保证码本比较好学
         # 最简单的做法是Linear projector直接降维，当然也可以使用一个小的siglip
