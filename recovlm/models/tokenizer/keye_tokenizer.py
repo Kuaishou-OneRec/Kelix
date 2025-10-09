@@ -2629,7 +2629,7 @@ class KeyeImageTokenizer(PreTrainedModel):
             inputs_embeds=h.unsqueeze(0),
             cu_seqlens=cu_seqlens,
             image_grid_thw=image_grid_hws,
-            use_rope=True).last_hidden_state
+            use_rope=True).last_hidden_state.squeeze()
         
         z_e = self.projector(z_e)
 
