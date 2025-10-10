@@ -124,7 +124,7 @@ nohup mpirun --allow-run-as-root \
                 --monitor_datasource_loss \
                 --monitor_datasource_cnt \
 		--monitor_image_tokens \
-                --max_length 200000 \
+                --max_length 20000 \
                 --learning_rate 2e-4 \
                 --alpha 1.0 \
                 --gamma 1.0 \
