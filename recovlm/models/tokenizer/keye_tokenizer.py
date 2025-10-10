@@ -2429,6 +2429,7 @@ class KeyeImageTokenizer(PreTrainedModel):
         )
         self.projector = nn.Linear(config.embedding_dim, config.embedding_dim)
         self.norm = nn.LayerNorm(config.embedding_dim, eps=1e-6)
+        self.norm1 = nn.LayerNorm(config.embedding_dim, eps=1e-6)
         # TODO: fix hard code
         self.quantizer = VectorQuantizer(
             num_embeddings=config.codebook_size,
@@ -2651,7 +2652,7 @@ class KeyeImageTokenizer(PreTrainedModel):
         # 解码，如果一个简单的decoder可以从z_q重建出x_recon，可以认为z_q成功压缩了image_embeds的关键信息
         # 但需要注意，z_q不是关键，关键是indices，tokenizer学到的离散表示就是indices，码本向量随时可以丢掉
         x_recon = self.decoder(
-            inputs_embeds=z_q.unsqueeze(0),
+            inputs_embeds=self.norm1(z_q.unsqueeze(0)),
             cu_seqlens=cu_seqlens,
             image_grid_thw=image_grid_hws,
             use_rope=True).last_hidden_state
