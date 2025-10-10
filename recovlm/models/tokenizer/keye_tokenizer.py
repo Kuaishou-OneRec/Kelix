@@ -2702,10 +2702,10 @@ class KeyeImageTokenizer(PreTrainedModel):
         # Compute semantic alignment loss using KL divergence on text embedding distributions
         with torch.no_grad():  # Don't update text_embeddings
             # Compute semantic distribution for original image embeddings
-            original_dist = self.compute_distribution(image_embeds, temperature=1.0)
+            original_dist = self.compute_distribution(image_embeds, temperature=0.01)
             
         # Compute semantic distribution for reconstructed embeddings (with gradients)
-        recon_dist = self.compute_distribution(x_recon, temperature=1.0)
+        recon_dist = self.compute_distribution(x_recon, temperature=0.01)
         
         # KL divergence loss: KL(original_dist || recon_dist)
         # We want recon_dist to match original_dist
