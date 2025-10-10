@@ -399,6 +399,9 @@ class KeyeImageTokenizerConfig(PretrainedConfig):
         encoder_config=None,
         decoder_config=None,
         vision_config=None,
+        # Text embedding parameters for semantic alignment loss
+        text_vocab_size=151936,
+        text_embedding_dim=4096,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -421,6 +424,10 @@ class KeyeImageTokenizerConfig(PretrainedConfig):
         self.embedding_dim = embedding_dim
         self.llm_hidden_size = llm_hidden_size
         self.merge_size = merge_size
+        
+        # Text embedding parameters for semantic alignment loss
+        self.text_vocab_size = text_vocab_size
+        self.text_embedding_dim = text_embedding_dim
 
 
         # Validate the correctness of rotary position embeddings parameters

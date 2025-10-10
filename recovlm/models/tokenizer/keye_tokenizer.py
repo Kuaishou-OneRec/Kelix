@@ -576,7 +576,7 @@ class SiglipVisionEmbeddings(nn.Module):
             stride=self.patch_size,
             padding="valid",
         )
-
+        
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
         self.cache_position_embedding = dict()
@@ -2430,6 +2430,19 @@ class KeyeImageTokenizer(PreTrainedModel):
         self.projector = nn.Linear(config.embedding_dim, config.embedding_dim)
         self.norm = nn.LayerNorm(config.embedding_dim, eps=1e-6)
         self.norm1 = nn.LayerNorm(config.embedding_dim, eps=1e-6)
+        self.text_embeddings = nn.Embedding(
+            config.text_vocab_size, config.llm_hidden_size)
+        
+        # Initialize text embeddings from config (will be loaded from pretrained weights)
+        # Freeze text embeddings (they don't participate in training)
+        for param in self.text_embeddings.parameters():
+            param.requires_grad = False
+        print(f"[INFO] Text embeddings frozen: vocab_size={config.text_vocab_size}, dim={config.text_embedding_dim}")
+        
+        # # Initialize text embeddings with small random values if not loaded from pretrained
+        # with torch.no_grad():
+        #     self.text_embeddings.weight.data.normal_(0, 0.02)
+        
         # TODO: fix hard code
         self.quantizer = VectorQuantizer(
             num_embeddings=config.codebook_size,
@@ -2444,6 +2457,33 @@ class KeyeImageTokenizer(PreTrainedModel):
         )
         self.final_projector  = nn.Linear(config.embedding_dim, config.llm_hidden_size)
         self.post_init()
+
+    def compute_distribution(self, hidden_states: torch.Tensor, temperature: float = 1.0):
+        """
+        Compute probability distribution over text vocabulary for given hidden states
+        
+        Args:
+            hidden_states: (seq_len, llm_hidden_size) - tokens to compute distribution for
+            temperature: temperature for softmax (default: 1.0)
+        Returns:
+            distributions: (seq_len, text_vocab_size) - probability distributions
+        """
+        
+        # Compute similarities to all text embeddings
+        text_embeds = self.text_embeddings.weight  # (text_vocab_size, llm_hidden_size)
+        
+        # Normalize for cosine similarity
+        hidden_states_norm = F.normalize(hidden_states, p=2, dim=1)  # (seq_len, llm_hidden_size)
+        text_embeds_norm = F.normalize(text_embeds, p=2, dim=1)  # (text_vocab_size, llm_hidden_size)
+        
+        # Compute cosine similarities
+        similarities = torch.matmul(hidden_states_norm, text_embeds_norm.t())  # (seq_len, text_vocab_size)
+        
+        # Apply temperature scaling and softmax
+        logits = similarities / temperature
+        distributions = F.softmax(logits, dim=1)  # (seq_len, text_vocab_size)
+        
+        return distributions
     
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -2659,10 +2699,27 @@ class KeyeImageTokenizer(PreTrainedModel):
         x_recon = self.final_projector(x_recon).squeeze()
         reconstruction_loss = F.mse_loss(x_recon, image_embeds)
 
+        # Compute semantic alignment loss using KL divergence on text embedding distributions
+        with torch.no_grad():  # Don't update text_embeddings
+            # Compute semantic distribution for original image embeddings
+            original_dist = self.compute_distribution(image_embeds, temperature=1.0)
+            
+        # Compute semantic distribution for reconstructed embeddings (with gradients)
+        recon_dist = self.compute_distribution(x_recon, temperature=1.0)
+        
+        # KL divergence loss: KL(original_dist || recon_dist)
+        # We want recon_dist to match original_dist
+        kl_loss = F.kl_div(
+            torch.log(recon_dist + 1e-8),  # log probabilities for recon
+            original_dist,                  # target probabilities  
+            reduction='batchmean'
+        )
+        
         return {
             "codebook_loss": codebook_loss,
             "commitment_loss": commitment_loss,
             "reconstruction_loss": reconstruction_loss,
+            "kl_loss": kl_loss,
             "indices": indices,
             "x_recon": x_recon,
             "x": image_embeds,

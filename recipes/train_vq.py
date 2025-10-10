@@ -303,6 +303,10 @@ def get_argument_parser():
   parser.add_argument("--vq_min_temperature", type=float, default=0.1,
                       help="Minimum temperature for softmax sampling.")
 
+  parser.add_argument("--gamma", type=float, default=0.1,
+                      help="Weight for semantic alignment KL divergence loss. Controls how much the reconstructed " \
+                           "embeddings should preserve their distribution over text vocabulary. Range: 0.0-1.0")
+
   parser.add_argument("--freeze_projector", action="store_true",
                       help="Freeze all LLM parameters (language model weights will not be updated during training).")
 
@@ -1065,16 +1069,17 @@ def train():
           image_grid_thw=image_grid_thw
         )    
 
-        # TODO: codebook_loss && reconstruction_loss
+        # Extract all losses from model output
         codebook_loss = output["codebook_loss"]
         commitment_loss = output["commitment_loss"]
         reconstruction_loss = output["reconstruction_loss"]
+        kl_loss = output.get("kl_loss", torch.tensor(0.0).to(reconstruction_loss.device))
         indices = output["indices"]
 
-
-
+        # Combined loss: reconstruction + VQ losses + semantic alignment loss
         loss = reconstruction_loss + \
-          args.alpha * (codebook_loss + args.beta * commitment_loss)
+          args.alpha * (codebook_loss + args.beta * commitment_loss) + \
+          args.gamma * kl_loss
 
         # Compute global perplexity across all ranks
         with torch.no_grad():
@@ -1160,11 +1165,13 @@ def train():
       codebook_loss = codebook_loss.detach()
       commitment_loss = commitment_loss.detach()
       reconstruction_loss = reconstruction_loss.detach()
+      kl_loss = kl_loss.detach()
 
       avg_loss = avg_loss.item() / dist.get_world_size()
       codebook_loss = codebook_loss.item() / dist.get_world_size()
       commitment_loss = commitment_loss.item() / dist.get_world_size()
       reconstruction_loss = reconstruction_loss.item() / dist.get_world_size()
+      kl_loss_value = kl_loss.item() / dist.get_world_size()
       perplexity = global_perplexity.item()
       codebook_usage_ratio = codebook_usage.item()
       
@@ -1218,6 +1225,7 @@ def train():
             "loss/codebook": codebook_loss,
             "loss/commitment": commitment_loss,
             "loss/reconstruction": reconstruction_loss,
+            "loss/kl": kl_loss_value,
             "metrics/perplexity": perplexity,
             "metrics/codebook_usage": codebook_usage_ratio,
             "metrics/vq_temperature": current_temperature,
