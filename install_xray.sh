@@ -20,13 +20,8 @@ function apt_install_func() {
         rm -f /etc/apt/sources.list && mv /etc/apt/sources.list.bak /etc/apt/sources.list
     fi
 }
-<<<<<<< HEAD
-# Step0: 多机安装，尝试选择可读写的最大可用量ceph网盘路径
-=======
-
 
 # Step0: 多机安装
->>>>>>> 0.9.3.keyframe
 install_dir=$1
 if [ "$install_dir" == "all" ]; then
     ceph_df_info=$(xargs -I{} df -B 1G {} < <(awk '{print $3}' < <(grep -E "type ceph [^a-z]rw[^a-z]" < <(mount))))

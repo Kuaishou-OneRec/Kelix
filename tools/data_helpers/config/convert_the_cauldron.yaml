@@ -1,9 +1,0 @@
-output_dir: /llm_reco_ssd/luoxinchen/dataset/Stage2/the_cauldron
-shard_size: 10000
-dataset:
-  class_name: TheCaulDronDataset
-  kwargs:
-    path: /llm_reco_ssd/luoxinchen/dataset/the_cauldron/
-converter:
-  class_name: TheCaulDronConverter
-  kwargs: {}

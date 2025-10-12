@@ -1,6 +1,0 @@
-dataset_url: /llm_reco_ssd/luoxinchen/dataset/cc12m/index.json
-output_dir: /llm_reco_ssd/luoxinchen/dataset/cc12m/cleaned_v1
-output_shard_size: 10000
-filters:
-  - class_name: CC12MSampleFilter
-    kwargs: {}
