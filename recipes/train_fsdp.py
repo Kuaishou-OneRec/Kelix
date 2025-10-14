@@ -91,6 +91,7 @@ from recovlm.models.internvl import InternVisionEncoderLayer
 
 from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
 from recovlm.data.dataloaders import get_dataloader
+from muse.data.datasets import create_dataset, get_worker_info
 
 from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
 from recovlm.utils.numa_bind import get_numa_bind_info
@@ -214,6 +215,15 @@ def get_argument_parser():
 
   parser.add_argument("--max_length", type=int, default=None,
                       help="Max tokens per sentence in corpus")
+
+  parser.add_argument("--shuffle_buffer_size", type=int, default=0,
+                      help="Size of shuffle buffer for local data shuffling (0 to disable)")
+
+  parser.add_argument("--enable_dataset_checkpointing", action="store_true",
+                      help="Enable dataset checkpoint recovery")
+
+  parser.add_argument("--dataset_checkpoint_interval", type=int, default=1000,
+                      help="Interval for saving dataset checkpoints (in samples)")
 
   ############ Learning Rate Args ############
   parser.add_argument("--lr_scheduler_type", type=str, default="cosine_with_min_lr",
@@ -708,6 +718,11 @@ def train():
   dataset_config["model_class"] = args.model_class
   if args.max_length:
     dataset_config["max_length"] = args.max_length
+  
+  # Add shuffle buffer and checkpoint parameters
+  dataset_config["shuffle_buffer_size"] = args.shuffle_buffer_size
+  dataset_config["enable_checkpointing"] = args.enable_dataset_checkpointing
+  dataset_config["checkpoint_interval"] = args.dataset_checkpoint_interval
   use_flops_balance = dataset_config.get("use_flops_balance", False)
 
   if use_flops_balance:
@@ -1671,6 +1686,15 @@ def train():
       iter_ticker.tick("iter_ticker")
       if torch_profiler: torch_profiler.step()
 
+
+  # Save final dataset checkpoint if enabled
+  if args.enable_dataset_checkpointing and hasattr(dataloader, 'dataset'):
+    try:
+      worker_id, _ = get_worker_info()
+      dataloader.dataset.save_checkpoint(worker_id, global_step)
+      print_rank_0(f"Saved final dataset checkpoint at step {global_step}")
+    except Exception as e:
+      print_rank_0(f"Failed to save final dataset checkpoint: {e}")
 
   save_model_checkpoint(
                       model=model,
