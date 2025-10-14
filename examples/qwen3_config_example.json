@@ -1,0 +1,55 @@
+{
+  "model": {
+    "model_class": "Qwen3Model",
+    "model_dir": "/path/to/qwen3/model",
+    "vocab_size": 151936,
+    "hidden_size": 4096,
+    "num_hidden_layers": 32,
+    "num_attention_heads": 32,
+    "num_key_value_heads": 32,
+    "head_dim": 128,
+    "intermediate_size": 11008,
+    "max_position_embeddings": 32768,
+    "rope_theta": 10000.0,
+    "attention_dropout": 0.0,
+    "attention_function": "flash",
+    "rms_norm_eps": 1e-6,
+    "use_flash_attention_2": true,
+    "enable_gradient_checkpointing": true
+  },
+  "dataset": {
+    "dataset_config": "/path/to/dataset/config.json",
+    "data_format": "chatml",
+    "max_length": 8192,
+    "batch_size": 2,
+    "num_workers": 8
+  },
+  "training": {
+    "optimizer": {
+      "learning_rate": 0.0001,
+      "weight_decay": 0.1,
+      "beta1": 0.9,
+      "beta2": 0.999
+    },
+    "scheduler": {
+      "lr_scheduler_type": "cosine_with_min_lr",
+      "num_warmup_steps": 500,
+      "num_training_steps": 50000,
+      "min_lr": 0.00001
+    },
+    "checkpoint": {
+      "output_dir": "/path/to/qwen3/output",
+      "save_checkpoint_per_step": 5000,
+      "auto_resume_local_latest": true
+    },
+    "logging": {
+      "logging_per_step": 50,
+      "comment": "Qwen3 fine-tuning experiment",
+      "commit_id": "qwen3_v1"
+    },
+    "gradient_accumulation_steps": 8,
+    "clip_range": 1.0,
+    "seed": 42
+  }
+}
+

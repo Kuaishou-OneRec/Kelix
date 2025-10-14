@@ -1,9 +1,0 @@
-url: "http://localhost:30000/v1/chat/completions"
-folder_path: "/llm_reco_ssd/huqigen"
-image_folder: "photo_0207_1k/4fd811bcd31248778b219127ce4639da/"
-excel_file_path: "0207_1k.xlsx"
-output_filename : "deepseek_0207_1k_response_with_cmt_cot.txt"
-prompt_pre: "你是一个短视频平台内容理解专家，为了将该视频推荐给潜在感兴趣的用户，请结合短视频的视频抽帧结果、ocr 结果、asr 结果以及平台内所有用户对这个视频评论信息判断用户是否会对这个视频满意。请充分考虑评论信息，结合这些信息提炼出该视频所有的看点。用中文进行回答。请深呼吸并一步步仔细思考，请输出思考过程和结果。"
-prompt_end: "。请在回答的最后给出最终的满意度判断结果，只包含满意/不满意两种类型，格式为：【结果：满意/不满意】"
-enable_cmt: true
-is_debug: false

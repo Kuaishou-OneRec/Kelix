@@ -15,38 +15,10 @@ from muse.layers.kv_cache import KVCache
 logger = logging.getLogger(__name__)
 
 
-class MultiHeadAttention(nn.Module):
-    """Multi-headed attention layer with support for grouped query
-    attention (GQA) introduced in https://arxiv.org/abs/2305.13245v1.
-
-    GQA is a version of multiheaded attention (MHA) which uses fewer
-    key/value heads than query heads by grouping n query heads for each
-    key and value head. Multi-Query Attention is an extreme
-    version where we have a single key and value head shared by all
-    query heads.
-
-    Following is an example of MHA, GQA and MQA with num_heads = 4
-
-    (credit for the documentation:
-    `litgpt.Config <https://github.com/Lightning-AI/litgpt/blob/eda1aaaf391fd689664f95487ab03dc137e213fd/litgpt/config.py>`_).
-
-
-    ::
-
-        ┌───┐┌───┐┌───┐┌───┐     ┌───┐    ┌───┐             ┌───┐
-        │ v ││ v ││ v ││ v │     │ v │    │ v │             │ v │
-        └───┘└───┘└───┘└───┘     └───┘    └───┘             └───┘
-        │    │    │    │         │        │                 │
-        ┌───┐┌───┐┌───┐┌───┐     ┌───┐    ┌───┐             ┌───┐
-        │ k ││ k ││ k ││ k │     │ k │    │ k │             │ k │
-        └───┘└───┘└───┘└───┘     └───┘    └───┘             └───┘
-        │    │    │    │      ┌──┴──┐  ┌──┴──┐      ┌────┬──┴─┬────┐
-        ┌───┐┌───┐┌───┐┌───┐  ┌───┐┌───┐┌───┐┌───┐  ┌───┐┌───┐┌───┐┌───┐
-        │ q ││ q ││ q ││ q │  │ q ││ q ││ q ││ q │  │ q ││ q ││ q ││ q │
-        └───┘└───┘└───┘└───┘  └───┘└───┘└───┘└───┘  └───┘└───┘└───┘└───┘
-        ◀──────────────────▶  ◀──────────────────▶  ◀──────────────────▶
-                MHA                    GQA                   MQA
-        n_kv_heads =4          n_kv_heads=2           n_kv_heads=1
+class Qwen3Attention(nn.Module):
+    """
+    Basically, it is standard multihead attention, but with QK-norm applied before
+    the RoPE. It is unusual for most of the models, but Qwen3 became an exception to the rule.
 
     Args:
         embed_dim (int): embedding dimension for the model
@@ -71,7 +43,6 @@ class MultiHeadAttention(nn.Module):
         is_causal (bool): sets the default mask to causal when no mask is provided
         attn_dropout (float): dropout value passed onto the scaled_dot_product_attention function.
             Default value is 0.0.
-
     Raises:
         ValueError:
             If ``num_heads % num_kv_heads != 0``, **or**
@@ -98,7 +69,6 @@ class MultiHeadAttention(nn.Module):
         max_seq_len: int = 4096,
         is_causal: bool = True,
         attn_dropout: float = 0.0,
-        attention_function: str = "eager",
     ) -> None:
         super().__init__()
         if num_heads % num_kv_heads != 0:
@@ -137,6 +107,7 @@ class MultiHeadAttention(nn.Module):
         self.k_norm = k_norm
         self.pos_embeddings = pos_embeddings
 
+        # Use flex attention if supported and we are sample packing
         self._attention_function = get_attention_function(attention_function)
 
         # this flag indicates whether to update the kv-cache during forward
@@ -149,7 +120,6 @@ class MultiHeadAttention(nn.Module):
     ) -> None:
         """Setup key value caches for attention calculation. If called
         after kv_cache is already setup, this will be skipped.
-
         Args:
             batch_size (int): batch size for the caches.
             dtype (torch.dtype): dtype for the caches.
@@ -185,22 +155,20 @@ class MultiHeadAttention(nn.Module):
         *,
         mask: Optional[torch.Tensor] = None,
         input_pos: Optional[torch.Tensor] = None,
-        **kwargs
+        **kwargs,
     ) -> torch.Tensor:
         """
         Args:
             x (torch.Tensor): input tensor with shape [b x s_x x d] for the query
             y (Optional[torch.Tensor]): second input tensor with shape [b x s_y x d], is the input
                 for k and v. For self attention, x=y. Optional only with kv_cache enabled.
-            mask (Optional[torch.Tensor]): Used to mask the scores after the query-key multiplication
+            mask (Optional[_MaskType]): Used to mask the scores after the query-key multiplication
                 and before the softmax. Either:
-
                 A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_seq_len]``,
                 or ``[b x s x self.decoder_max_cache_seq_len]`` if using KV-cacheing with encoder/decoder layers.
                 A value of True in row ``i`` and column ``j`` means token ``i`` attends to token ``j``. A value of False means
                 token ``i`` does not attend to token ``j``. If no mask is specified, a causal mask
                 is used by default.
-
                 A :class:`~torch.nn.attention.flex_attention.BlockMask` for document masking in a packed sequence
                 created via `create_block_mask <https://pytorch.org/blog/flexattention/#mask-mods>`_. We  use
                 :func:`~torch.nn.attention.flex_attention.flex_attention` when computing attention with block masks.
@@ -210,21 +178,10 @@ class MultiHeadAttention(nn.Module):
                 of each token relative to its sample when packed, shape [b x s].
                 During inference, this indicates the position of the current token.
                 If none, assume the index of the token is its position id. Default is None.
-            **kwargs: Additional keyword arguments to pass to the attention function. Common kwargs include:
-                - cu_seqlens (torch.Tensor): cu_seqlens for the query and key, required if sample packing is used.
-                  A int tensor with shape (N+1,) where N is the number of samples in a sequence.
-                  e.g., [0, 10, 15, 40] means 3 samples with length 10, 5, 25 respectively.
-                - window_size (int): sliding window size for local attention, default is -1 (no window).
-                - cu_seqlens_q (torch.Tensor): cu_seqlens for the query specifically.
-                - cu_seqlens_k (torch.Tensor): cu_seqlens for the key specifically.
-                Note: Available kwargs depend on the attention_function being used.
-
         Raises:
             ValueError: If no ``y`` input and ``kv_cache`` is not enabled.
-
         Returns:
             torch.Tensor: output tensor with attention applied
-
         Notation used for tensor shapes:
             - b: batch size
             - s_x: sequence length for x
@@ -246,16 +203,17 @@ class MultiHeadAttention(nn.Module):
         q_per_kv = self.num_heads // self.num_kv_heads
         q = q.view(b, s_x, self.num_kv_heads * q_per_kv, self.head_dim)
 
-        # Apply positional embeddings
+        # Normalize q
+        if self.q_norm is not None:
+            q = q.transpose(1, 2)
+            q = self.q_norm(q)
+            q = q.transpose(1, 2)
+
+        # Apply positional embeddings after q-norm
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
 
-        # [b, n_h, s_x, h_d]
         q = q.transpose(1, 2)
-
-        # Normalize q
-        if self.q_norm is not None:
-            q = self.q_norm(q)
 
         if y is None:
             if self.kv_cache is None or not self.cache_enabled:
@@ -266,7 +224,6 @@ class MultiHeadAttention(nn.Module):
             v = self.kv_cache.v_cache
         else:
             # Update k and v shape, positional embeddings, and normalization
-
             # k,v shape [b, s_y, num_kv_heads * head_dim]
             k = self.k_proj(y)
             v = self.v_proj(y)
@@ -275,16 +232,20 @@ class MultiHeadAttention(nn.Module):
             # k,v shape: [b, s_y, n_kv, h_d]
             k = k.view(b, s_y, -1, self.head_dim)
             v = v.view(b, s_y, -1, self.head_dim)
+
+            # Normalize k
+            if self.k_norm is not None:
+                k = k.transpose(1, 2)
+                k = self.k_norm(k)
+                k = k.transpose(1, 2)
+
+            # Apply positional embeddings after k-norm
             if self.pos_embeddings is not None:
                 k = self.pos_embeddings(k, input_pos=input_pos)
 
             # k,v shape: [b, n_kv, s_y, h_d]
             k = k.transpose(1, 2)
             v = v.transpose(1, 2)
-
-            # Normalize k
-            if self.k_norm is not None:
-                k = self.k_norm(k)
 
             # Update key-value cache
             if self.kv_cache is not None and self.cache_enabled:
@@ -299,12 +260,13 @@ class MultiHeadAttention(nn.Module):
             v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
 
         output = self._attention_function(
-            q=q,
-            k=k,
-            v=v,
-            is_causal=self.is_causal,
-            attn_dropout=self.attn_dropout,
-            **kwargs
+            q,
+            k,
+            v,
+            mask=mask,
+            dropout_p=self.attn_dropout if self.training else 0.0,
+            is_causal=self.kv_cache is None and mask is None and self.is_causal,
+            **kwargs,
         )
 
         # reshape the output to be the same shape as the input

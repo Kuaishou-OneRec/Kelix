@@ -1,0 +1,78 @@
+{
+  "model": {
+    "model_class": "Qwen2_5_VLForConditionalGeneration_moonvit",
+    "model_dir": "/path/to/pretrained/model",
+    "use_flash_attention_2": true,
+    "enable_gradient_checkpointing": true,
+    "compile": false,
+    "fp32_weight": false,
+    "fp32_reduce": false,
+    "reshard_after_forward": true,
+    "prefetch_parameters": false,
+    "model_processor": "Qwen2_5_VLProcessor_moonvit",
+    "allow_random_init_params": ""
+  },
+  "dataset": {
+    "dataset_config": "/path/to/dataset/config.json",
+    "dataset": "my_dataset",
+    "data_format": "chatml",
+    "min_visual_tokens": 16,
+    "max_visual_tokens": 512,
+    "max_length": 2048,
+    "batch_size": 4,
+    "num_workers": 4,
+    "use_flops_balance": false
+  },
+  "training": {
+    "optimizer": {
+      "learning_rate": 0.0002,
+      "vision_learning_rate": 0.00002,
+      "vision_lr_layer_decay": 0.9,
+      "weight_decay": 0.1,
+      "beta1": 0.9,
+      "beta2": 0.95
+    },
+    "scheduler": {
+      "lr_scheduler_type": "cosine_with_min_lr",
+      "num_warmup_steps": 100,
+      "num_decay_steps": 10000,
+      "num_training_steps": 10000,
+      "num_epochs": 1,
+      "min_lr": 0.000001
+    },
+    "checkpoint": {
+      "output_dir": "/path/to/output",
+      "save_checkpoint_per_step": 1000,
+      "save_checkpoint_every_epoch": false,
+      "resume_from": null,
+      "resume_from_tag": null,
+      "resume_dataloader": false,
+      "load_weights_only": false,
+      "auto_resume_local_latest": false,
+      "merge_checkpoint": false,
+      "merge_checkpoint_dtype": "fp16",
+      "merge_checkpoint_output_file": "pytorch_model.bin"
+    },
+    "logging": {
+      "logging_per_step": 100,
+      "monitor_datasource_loss": false,
+      "monitor_datasource_cnt": false,
+      "monitor_image_tokens": false,
+      "comment": "Example training run",
+      "commit_id": "abc123",
+      "heartbeat_monitor": false,
+      "enable_profile": false
+    },
+    "gradient_accumulation_steps": 4,
+    "clip_range": 1.0,
+    "freeze_llm": false,
+    "freeze_visual": false,
+    "freeze_projector": false,
+    "update_vision_tower": false,
+    "sequence_parallel_size": 1,
+    "seed": 123,
+    "kml_id": "your_kml_id",
+    "kml_task_id": "your_kml_task_id"
+  }
+}
+

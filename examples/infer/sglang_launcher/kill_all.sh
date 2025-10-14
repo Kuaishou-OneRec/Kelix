@@ -1,1 +1,0 @@
-mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c 'pkill -f "sglang"'
