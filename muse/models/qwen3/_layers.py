@@ -14,6 +14,14 @@ from muse.layers.kv_cache import KVCache
 
 logger = logging.getLogger(__name__)
 
+def qwen3_mlp(dim: int, hidden_dim: int) -> FeedForward:
+    """
+    Build the MLP layer associated with the Qwen2 model.
+    """
+    gate_proj = nn.Linear(dim, hidden_dim, bias=False)
+    down_proj = nn.Linear(hidden_dim, dim, bias=False)
+    up_proj = nn.Linear(dim, hidden_dim, bias=False)
+    return FeedForward(gate_proj=gate_proj, down_proj=down_proj, up_proj=up_proj)
 
 class Qwen3Attention(nn.Module):
     """

@@ -4,18 +4,17 @@ import time
 import torch
 import torch.distributed as dist
 
-from flash_attn import flash_attn_varlen_func
-
 from recovlm.utils.common import print_rank_0, Timer
-
 import datetime
-process_group_timeout = datetime.timedelta(minutes=60*24)
+
+process_group_timeout = datetime.timedelta(minutes=60 * 24)
 
 _SEQUENCE_PARALLEL_GROUP = None
 _SEQUENCE_PARALLEL_GROUP_GLOO = None
 _DATA_PARALLEL_GROUP = None
 
-def initialize_model_parallel(sequence_parallel_size):
+# TODO: Support tensor parallel, currently only support sequence parallel.
+def initialize_model_parallel(sequence_parallel_size: int):
     world_size = dist.get_world_size()
     num_sequence_parallel_groups: int = world_size // sequence_parallel_size
     num_data_parallel_groups: int = sequence_parallel_size
@@ -45,7 +44,8 @@ def worker_init_fn(worker_id):
             str(int(os.environ["MASTER_PORT"]) + worker_id + 1)
     os.environ["MASTER_PORT"] = os.environ["WORKER_MASTER_PORT"]
     dist.init_process_group(
-        "gloo", rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"]),timeout=process_group_timeout
+        "gloo", rank=int(os.environ["RANK"]), world_size=int(os.environ["WORLD_SIZE"]),
+        timeout=process_group_timeout
     )
 
 def get_sequence_parallel_group(backend="nccl"):
@@ -65,14 +65,14 @@ def get_sequence_parallel_rank():
     """Get the sequence parallel rank."""
     return dist.get_rank(group=get_sequence_parallel_group())
 
-def get_local_sequence_boundary(seq_len):
+def get_local_sequence_boundary(seq_len: int) -> Tuple[int, int]:
     sp_size = get_sequence_parallel_world_size()
     sp_rank = get_sequence_parallel_rank()
     local_seqlen = seq_len // sp_size
     start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
     return start, end
 
-def get_local_sequence(sequence: torch.Tensor, seq_idx: int = 1):
+def get_local_sequence(sequence: torch.Tensor, seq_idx: int = 1) -> torch.Tensor:
     if get_sequence_parallel_world_size() > 1:
         seq_len = sequence.shape[seq_idx]
         start, end = get_local_sequence_boundary(seq_len)
@@ -81,34 +81,37 @@ def get_local_sequence(sequence: torch.Tensor, seq_idx: int = 1):
         slices[seq_idx] = slice(start, end)
         # Use the slice object to index the tensor
         local_sequence = sequence[tuple(slices)]
-
         return local_sequence
     return sequence
 
-def get_data_parallel_group():
+def get_data_parallel_group() -> dist.ProcessGroup:
     return _DATA_PARALLEL_GROUP
 
-def get_data_parallel_rank():
+def get_data_parallel_rank() -> int:
     return dist.get_rank(group=get_data_parallel_group())
 
-def get_data_parallel_world_size():
+def get_data_parallel_world_size() -> int:
     return dist.get_world_size(group=get_data_parallel_group())
 
 def all_to_all_4D(
-    input: torch.tensor, scatter_idx: int = 2, gather_idx: int = 1, group=None, use_sync: bool = False
-) -> torch.tensor:
+    input: torch.Tensor,
+    scatter_idx: int = 2,
+    gather_idx: int = 1,
+    group: dist.ProcessGroup = None,
+    use_sync: bool = False
+) -> torch.Tensor:
     """
     all-to-all for QKV
 
     Args:
-        input (torch.tensor): a tensor sharded along dim scatter dim
+        input (torch.Tensor): a tensor sharded along dim scatter dim
         scatter_idx (int): default 1
         gather_idx (int): default 2
         group : torch process group
         use_sync (bool): whether to synchronize after all-to-all
 
     Returns:
-        torch.tensor: resharded tensor (bs, seqlen/P, hc, hs)
+        torch.Tensor: resharded tensor (bs, seqlen/P, hc, hs)
     """
     assert (
         input.dim() == 4
@@ -117,7 +120,8 @@ def all_to_all_4D(
     seq_world_size = dist.get_world_size(group)
 
     if scatter_idx == 2 and gather_idx == 1:
-        # input (torch.tensor): a tensor sharded along dim 1 (bs, seqlen/P, hc, hs) output: (bs, seqlen, hc/P, hs)
+        # input (torch.Tensor): a tensor sharded along dim 1 (bs, seqlen/P, hc, hs)
+        # output: (bs, seqlen, hc/P, hs)
         bs, shard_seqlen, hc, hs = input.shape
         seqlen = shard_seqlen * seq_world_size
         shard_hc = hc // seq_world_size
@@ -149,7 +153,8 @@ def all_to_all_4D(
         return output
 
     elif scatter_idx == 1 and gather_idx == 2:
-        # input (torch.tensor): a tensor sharded along dim 1 (bs, seqlen, hc/P, hs) output: (bs, seqlen/P, hc, hs)
+        # input (torch.Tensor): a tensor sharded along dim 1 (bs, seqlen, hc/P, hs) output: (bs, seqlen/P, hc, hs)
+        # output: (bs, seqlen/P, hc, hs)
         bs, seqlen, shard_hc, hs = input.shape
         hc = shard_hc * seq_world_size
         shard_seqlen = seqlen // seq_world_size
@@ -215,20 +220,20 @@ class SeqAllToAll4D(torch.autograd.Function):
         )
 
 def all_gather(
-    input_tensor: torch.tensor,
+    input_tensor: torch.Tensor,
     group: dist.ProcessGroup = None,
     gather_idx: int = 0,
-    use_sync: bool = False) -> torch.tensor:
+    use_sync: bool = False) -> torch.Tensor:
     """
     all-gather for Sequence
 
     Args:
-        inputs (torch.tensor): a tensor to gather, with shape (bs, seqlen/P, h)
+        inputs (torch.Tensor): a tensor to gather, with shape (bs, seqlen/P, h)
         group : torch process group
         use_sync (bool): whether to synchronize after all-gather
 
     Returns:
-        torch.tensor: gathered tensor (bs, seqlen, h)
+        torch.Tensor: gathered tensor (bs, seqlen, h)
     """
 
     seq_world_size = dist.get_world_size(group)
@@ -282,75 +287,14 @@ class AllGather(torch.autograd.Function):
             None,
         )
 
-class UlyssesAttention(torch.nn.Module):
-    """UlyssesAttention, current support FA2 with packing only.
-
-        scatter_idx (int): scatter_idx for all2all comm
-        gather_idx (int): gather_idx for all2all comm
+def gather_batches(buffer: List[Any], group: dist.ProcessGroup):
     """
-
-    def __init__(
-        self,
-        scatter_idx: int = 2,
-        gather_idx: int = 1) -> None:
-
-        super(UlyssesAttention, self).__init__()
-        self.spg = get_sequence_parallel_group()
-        self.scatter_idx = scatter_idx
-        self.gather_idx = gather_idx
-
-    def forward(
-        self,
-        query: torch.Tensor,
-        key: torch.Tensor,
-        value: torch.Tensor,
-        **kwargs
-    ) -> torch.Tensor:
-
-        # (b, N/P, h, d) -> (b, N, h/P, d)
-        q = SeqAllToAll4D.apply(self.spg, query, self.scatter_idx, self.gather_idx)
-        k = SeqAllToAll4D.apply(self.spg, key, self.scatter_idx, self.gather_idx)
-        v = SeqAllToAll4D.apply(self.spg, value, self.scatter_idx, self.gather_idx)
-        # print_rank_0(kwargs)
-        dropout_p = kwargs.get("dropout_p", 0.0)
-        causal = kwargs.get("causal", False)
-        sliding_window = kwargs.get("sliding_window", -1)
-        
-        cu_seqlens = kwargs.get("cu_seqlens")
-        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
-
-        cu_seqlens = cu_seqlens.to(torch.int32)
-
-        attn_output = flash_attn_varlen_func(
-            q.squeeze(0),
-            k.squeeze(0),
-            v.squeeze(0),
-            cu_seqlens,
-            cu_seqlens,
-            max_seqlen,
-            max_seqlen,
-            dropout_p=dropout_p,
-            window_size=(sliding_window, sliding_window),
-            causal=causal
-        )
-
-        # if isinstance(attn_output, tuple):
-        #     attn_output = attn_output[0]
-
-        output = SeqAllToAll4D.apply(
-            self.spg, attn_output.unsqueeze(0), self.gather_idx, self.scatter_idx
-        )
-
-        return output
-
-def gather_batches(buffer, group):
-    from recovlm.utils.ds_utils import print_input_info
-
+    Gather batches from all ranks in the group.
+    """
     world_size = dist.get_world_size(group)
     if world_size > 1:
       with Timer("Gather batches"):
         gathered_batches = [None for _ in range(world_size)]
-        import time
         start = time.time()
         dist.all_gather_object(
             object_list=gathered_batches, obj=buffer,
@@ -362,7 +306,11 @@ def gather_batches(buffer, group):
     print_rank_0(f"Num batches: {len(gathered_batches)}")
     return gathered_batches
 
-def gather_by_group(dataloader, group, buffer_size=1):
+def gather_by_group(dataloader: Iterable[Any],
+                    group: dist.ProcessGroup, buffer_size: int = 1) -> List[Any]:
+    """
+    Gather batches from all ranks in the group.
+    """
     buffer = []
     for batch in dataloader:
         buffer.append(batch)

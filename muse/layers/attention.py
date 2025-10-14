@@ -298,6 +298,12 @@ class MultiHeadAttention(nn.Module):
             k = k.unsqueeze(2).expand(expand_shape).flatten(1, 2)
             v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
 
+        if get_sequence_parallel_world_size() > 1:
+            spg = get_sequence_parallel_group()
+            q = SeqAllToAll4D.apply(spg, q, 2, 1)
+            k = SeqAllToAll4D.apply(spg, k, 2, 1)
+            v = SeqAllToAll4D.apply(spg, v, 2, 1)
+
         output = self._attention_function(
             q=q,
             k=k,
@@ -307,6 +313,9 @@ class MultiHeadAttention(nn.Module):
             **kwargs
         )
 
+        if get_sequence_parallel_world_size() > 1:
+            spg = get_sequence_parallel_group()
+            output = SeqAllToAll4D.apply(spg, output, 1, 2)
         # reshape the output to be the same shape as the input
         output = output.transpose(1, 2).contiguous().view(b, s_x, -1)
         return self.output_proj(output)
