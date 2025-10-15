@@ -1,4 +1,5 @@
 from typing import Dict, Any, List, Optional, Union, Tuple
+from collections.abc import Iterator
 import random
 import json
 import os
@@ -121,13 +122,23 @@ def load_parquet(path: str, rank: int = 0, worker: int = 0) -> ParquetFile:
             f"Original error: {e}\nCache error: {e2}")
     print(f"Retrying for path={path} / {cache_fn}")
 
-class ParquetDataset(IterableDataset):
+class Reader(Iterator):
+  def __init__(self,
+               source: Union[List[str], str]):
+    self.source = source
+  
+  def __iter__(self):
+    return self
+  
+  def __next__(self):
+    raise NotImplementedError("Subclass must implement this method")
+
+class ParquetReader(Reader):
     """
     IterableDataset for parquet files, consuming files in order.
     """
-    def __init__(self, files, rank=0):
-      self.rank = rank
-      self.files = files
+    def __init__(self, source: Union[List[str], str]):
+      super().__init__(source)
 
     def _parser(self, row, filename):
         key = "unknown"
@@ -169,49 +180,38 @@ class ParquetDataset(IterableDataset):
             return None
 
     def __iter__(self,):
-        worker_id, _  = get_worker_info()
-        for fn in tqdm(self.files):
-            try:
-                parquet_file = load_parquet(fn, rank=self.rank, worker=worker_id)
-            except Exception as e:
-                print(f"open parquet fail {fn=}, error_msg={traceback.format_exc()}")
-                continue
-            df = parquet_file.to_pandas()
-            for idx, row in tqdm(df.iterrows(), total=len(df), desc=f"{worker_id=} Reading {fn}"):
-                try:
-                    sample = self._parser(row, fn)
-                    if sample is not None:
-                        yield sample
-                except Exception as e:
-                    print(f"Error processing row {idx} in {fn}: {str(e)}")
-                    continue
+      rank = get_data_parallel_rank()
+      worker_id, _  = get_worker_info()
+      for fn in tqdm(self.source):
+        try:
+          parquet_file = load_parquet(fn, rank=rank, worker=worker_id)
+        except Exception as e:
+          print(f"open parquet fail {fn=}, error_msg={traceback.format_exc()}")
+          continue
+        df = parquet_file.to_pandas()
+        for idx, row in tqdm(df.iterrows(), total=len(df), desc=f"{worker_id=} Reading {fn}"):
+          try:
+            sample = self._parser(row, fn)
+            if sample is not None:
+              yield sample
+          except Exception as e:
+            print(f"Error processing row {idx} in {fn}: {str(e)}")
+            continue
 
 class DistributedDataset(IterableDataset):
   def __init__(self,
-               rank: int = 0,
-               world_size: int = 1,
-               num_workers: int = 8,
-               seed: int = 1024):
-    self.rank = rank
-    self.world_size = world_size
-    self.num_workers = num_workers
-    self.seed = seed
-  
-  def __iter__(self):
-    raise NotImplementedError("Subclass must implement this method")
-
-class FileBasedDataset(DistributedDataset):
-  def __init__(
-      self,
-      sources: str,
-      rank: int = 0,
-      world_size: int = 1,
-      num_workers: int=8,
-      seed: int=1024,
-      num_epochs: int=1,
-      shard_by: str = "auto",
-      reader: str = "parquet",
-      **kwargs):
+               source: str,
+               num_workers: int=8,
+               seed: int=1024,
+               num_epochs: int=1,
+               shard_by: str = "auto",
+               reader: str = "parquet",
+               shuffle_buffer_size: int = 0,
+               enable_checkpointing: bool = False,
+               packing: bool = False,
+               padding: bool = False,
+               balancing: bool = False,
+               **kwargs):
     """
     Distributed dataset supporting three sharding modes:
     - shard_by="auto": Auto-select (default), uses 'files' if num_files >= total_workers, else 'samples'
@@ -224,19 +224,27 @@ class FileBasedDataset(DistributedDataset):
     - Very few files but many samples: use "samples"
     - Uncertain: use "auto" (default)
     """
-    super().__init__(rank=rank, world_size=world_size, num_workers=num_workers, seed=seed)
+    self.rank = get_data_parallel_rank()
+    self.world_size = get_data_parallel_world_size()
+    self.num_workers = num_workers
+    self.seed = seed
+    self.shuffle_buffer_size = shuffle_buffer_size
+    self.enable_checkpointing = enable_checkpointing
+    self.packing = packing
+    self.padding = padding
+    self.balancing = balancing
     assert shard_by in ["auto", "files", "samples"], \
-        f"shard_by must be 'auto', 'files' or 'samples', got {shard_by}"
-    
+      f"shard_by must be 'auto', 'files' or 'samples', got {shard_by}"
+
     self.rng = random.Random(seed)
     self.num_epochs = num_epochs
-    self.sources = sources
+    self.source = source
     self.shard_by = shard_by
     self.reader = reader
     self.kwargs = kwargs
     
     # Initialize attributes
-    self._all_files = []
+    self._files = []
     self._actual_shard_by = shard_by
 
     self.dataset = self._build()
@@ -244,22 +252,23 @@ class FileBasedDataset(DistributedDataset):
   def _load_file_list(self) -> List[str]:
     """Load file list"""
     files = []
-    if isinstance(self.sources, list):
-        files = self.sources
-    elif self.sources.endswith(".json"):
-      with open(self.sources, "r") as fp:
+    if isinstance(self.source, list):
+        files = self.source
+    elif self.source.endswith(".json"):
+      with open(self.source, "r") as fp:
         files = json.loads(fp.read())
         files = sorted([
           fn for fn in files if fn.endswith(".parquet")])
     else:
-      folder = Path(self.sources)
+      # TODO: support hdfs
+      folder = Path(self.source)
       files = list(map(str, folder.rglob("*.parquet")))
     
     return files
-  
+
   def _get_reader_class(self):
     if self.reader == "parquet":
-      return ParquetDataset
+      return ParquetReader
     else:
       raise ValueError(f"Unsupported reader: {self.reader}")
 
@@ -268,7 +277,8 @@ class FileBasedDataset(DistributedDataset):
     files = self._load_file_list()
     assert len(files) > 0, f"No file found for rank{self.rank}"
 
-    # Shuffle file list with fixed seed (all ranks and workers use same seed to ensure consistent order)
+    # Shuffle file list with fixed seed 
+    # (all ranks and workers use same seed to ensure consistent order)
     files_rng = random.Random(self.rng.getstate()[1][0])  # Use initial seed
     files_rng.shuffle(files)
 
@@ -308,7 +318,7 @@ class FileBasedDataset(DistributedDataset):
         f"total_files={len(files)}, total_parallel_workers={total_workers}")
       
       # Store all files, distribute by worker in __iter__
-      self._all_files = files
+      self._files = files
       self._actual_shard_by = "files"
       dataset = None  # Lazy creation
     else:
@@ -317,9 +327,9 @@ class FileBasedDataset(DistributedDataset):
         f"DistributedDataset [shard_by=samples] "
         f"rank={self.rank}/{self.world_size}, num_workers={self.num_workers}, "
         f"total_files={len(files)}")
-      
+
       self._actual_shard_by = "samples"
-      dataset = self._get_reader_class()(files, rank=self.rank)
+      dataset = self._get_reader_class()(source=files)
     
     return dataset
 
@@ -327,9 +337,7 @@ class FileBasedDataset(DistributedDataset):
               sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
     raise NotImplementedError("Subclass must implement this method")
 
-
-
-  def __iter__(self):
+  def _get_reader_iter(self):
     worker_id, num_workers = get_worker_info()
     
     if self._actual_shard_by == "files":
@@ -339,26 +347,24 @@ class FileBasedDataset(DistributedDataset):
       total_workers = self.world_size * self.num_workers
       
       # Distribute files by global worker index
-      files_for_this_worker = self._all_files[global_worker_id::total_workers]
-      
+      files_for_this_worker = self._files[global_worker_id::total_workers]
+
       print(
         f"  Worker[rank={self.rank}, worker={worker_id}, global={global_worker_id}] "
         f"processing {len(files_for_this_worker)} files")
       
       # Create dataset for current worker
-      dataset = self._get_reader_class()(
-        files_for_this_worker, 
-        rank=self.rank
-      )
+      reader = self._get_reader_class()(files_for_this_worker)
       
       # Process all samples sequentially (files already distributed)
-      for sample in dataset:
-        inputs = self.process(sample)
-        yield inputs
+      for sample in reader:
+        yield sample
     else:
       # Sample sharding mode: need to consider both rank and worker sharding
-      for idx, sample in enumerate(self.dataset):
+      for idx, sample in enumerate(self.reader):
         if idx % self.world_size == self.rank and \
                 idx % num_workers == worker_id:
-          inputs = self.process(sample)
-          yield inputs
+          yield sample
+
+  def __iter__(self):
+    pass
