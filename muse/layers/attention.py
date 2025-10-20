@@ -10,6 +10,9 @@ from typing import Optional
 import torch
 from torch import nn
 from muse.layers.attention_utils import get_attention_function
+from muse.training.parallel import get_sequence_parallel_world_size, \
+    get_sequence_parallel_group, SeqAllToAll4D
+
 from muse.layers.kv_cache import KVCache
 
 logger = logging.getLogger(__name__)

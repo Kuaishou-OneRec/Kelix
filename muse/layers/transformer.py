@@ -37,7 +37,7 @@ class TransformerSelfAttentionLayer(nn.Module):
         mlp_norm: Optional[nn.Module] = None,
         sa_scale: Optional[nn.Module] = None,
         mlp_scale: Optional[nn.Module] = None,
-        mask_mod: Optional[Callable[[_MaskType, int, int, int], _MaskType]] = None,
+        mask_mod: Optional[Callable[[torch.Tensor, int, int, int], torch.Tensor]] = None,
     ) -> None:
         super().__init__()
         self.attn = attn

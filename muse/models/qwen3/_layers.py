@@ -5,11 +5,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-from typing import Optional
+from typing import Optional, Literal
 
 import torch
 from torch import nn
 from muse.layers.attention_utils import get_attention_function
+from muse.layers.feed_forward import FeedForward
 from muse.layers.kv_cache import KVCache
 
 logger = logging.getLogger(__name__)
@@ -77,6 +78,7 @@ class Qwen3Attention(nn.Module):
         max_seq_len: int = 4096,
         is_causal: bool = True,
         attn_dropout: float = 0.0,
+        attention_function: Literal["eager", "flash_attention_2"] = "eager",
     ) -> None:
         super().__init__()
         if num_heads % num_kv_heads != 0:

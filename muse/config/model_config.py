@@ -35,21 +35,24 @@ class Qwen3Config(ModelConfig):
         default=151936,
         description="Vocabulary size"
     )
-    hidden_size: int = Field(
+    embed_dim: int = Field(
         default=4096,
         description="Hidden dimension size"
     )
-    num_hidden_layers: int = Field(
+    num_layers: int = Field(
         default=32,
         description="Number of transformer layers"
     )
-
+    tie_word_embeddings: bool = Field(
+        default=True,
+        description="Whether to tie the word embeddings"
+    )
     # Attention configuration
-    num_attention_heads: int = Field(
+    num_heads: int = Field(
         default=32,
         description="Number of attention heads"
     )
-    num_key_value_heads: int = Field(
+    num_kv_heads: int = Field(
         default=32,
         description="Number of key-value heads for GQA/MQA"
     )
@@ -57,41 +60,59 @@ class Qwen3Config(ModelConfig):
         default=128,
         description="Dimension of each attention head"
     )
-    
-    # Feed-forward configuration
-    intermediate_size: int = Field(
-        default=11008,
-        description="Intermediate size in FFN"
-    )
-    
-    # Position embeddings
-    max_position_embeddings: int = Field(
-        default=32768,
-        description="Maximum sequence length"
-    )
-    rope_theta: float = Field(
-        default=10000.0,
-        description="RoPE theta parameter"
-    )
-    
-    # Attention settings
-    attention_dropout: float = Field(
+    attn_dropout: float = Field(
         default=0.0,
         ge=0.0,
         le=1.0,
         description="Attention dropout probability"
     )
-    attention_function: Literal["eager", "flash_attention2"] = Field(
+    attention_function: Literal["eager", "flash_attention_2"] = Field(
         default="eager",
         description="Attention implementation to use"
     )
+    q_proj_bias: bool = Field(
+        default=False,
+        description="Whether to use bias in the q_proj layer"
+    )
+    k_proj_bias: bool = Field(
+        default=False,
+        description="Whether to use bias in the k_proj layer"
+    )
+    v_proj_bias: bool = Field(
+        default=False,
+        description="Whether to use bias in the v_proj layer"
+    )
+    
+    # Feed-forward configuration
+    intermediate_dim: int = Field(
+        default=11008,
+        description="Intermediate size in FFN"
+    )
+    
+    # Position embeddings
+    max_seq_len: int = Field(
+        default=32768,
+        description="Maximum sequence length"
+    )
+    rope_base: float = Field(
+        default=10000.0,
+        description="RoPE theta parameter"
+    )
     
     # Normalization
-    rms_norm_eps: float = Field(
+    norm_eps: float = Field(
         default=1e-6,
         description="RMS normalization epsilon"
     )
-    
+    q_norm: bool = Field(
+        default=True,
+        description="Whether to use normalization in the q_proj layer"
+    )
+    k_norm: bool = Field(
+        default=True,
+        description="Whether to use normalization in the k_proj layer"
+    )
+
     @field_validator("num_attention_heads")
     @classmethod
     def validate_num_heads(cls, v, info):
