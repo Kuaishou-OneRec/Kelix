@@ -11,7 +11,6 @@ from typing import Any, Callable, cast, Dict, List, Optional, Tuple
 import torch
 import torch.distributed as dist
 from torch import nn
-from recovlm.utils.ds_utils import format_dict_or_list
 from torch.distributed._composable.fsdp import CPUOffloadPolicy, fully_shard, MixedPrecisionPolicy
 from torch.distributed._tensor import distribute_tensor, DTensor
 from torch.distributed._tensor.placement_types import DTensorSpec, TensorMeta
