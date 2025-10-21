@@ -58,17 +58,29 @@ class EagerAttention:
         """Implements standard eager attention"""
         # Calculate attention scores
         dim = q.size(-1)
+        
+        # Handle custom mask if provided
+        mask = kwargs.get('mask', None)
+        
         scores = torch.matmul(q, k.transpose(-2, -1)) / (dim ** 0.5)
+        
+        # Apply custom mask (if provided)
+        if mask is not None:
+            # mask shape: [b, s_q, s_k] or [b, n_h, s_q, s_k]
+            # scores shape: [b, n_h, s_q, s_k]
+            # If mask doesn't have the head dimension, unsqueeze it
+            if mask.dim() == 3:
+                mask = mask.unsqueeze(1)  # [b, 1, s_q, s_k]
+            scores = scores + mask
         
         # Apply causal mask
         if is_causal:
-            seq_len = q.size(-2)
-            causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=q.device), diagonal=1).bool()
-            scores = scores.masked_fill(causal_mask, -float('inf'))
-        
-        # Apply custom mask (if provided)
-        if 'attn_mask' in kwargs and kwargs['attn_mask'] is not None:
-            scores = scores.masked_fill(kwargs['attn_mask'], -float('inf'))
+            # For cross attention, we only apply causal mask if q and k have the same sequence length
+            q_seq_len = q.size(-2)
+            k_seq_len = k.size(-2)
+            if q_seq_len == k_seq_len:
+                causal_mask = torch.triu(torch.ones(q_seq_len, q_seq_len, device=q.device), diagonal=1).bool()
+                scores = scores.masked_fill(causal_mask, -float('inf'))
             
         # Calculate attention weights
         attn_weights = F.softmax(scores, dim=-1)
