@@ -10,8 +10,6 @@ import torch
 from torch import nn
 from muse.layers.attention import MultiHeadAttention
 
-from muse.utils import deprecated
-
 
 class TransformerSelfAttentionLayer(nn.Module):
     """
