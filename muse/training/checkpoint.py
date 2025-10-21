@@ -29,7 +29,7 @@ from torch.distributed.checkpoint.stateful import Stateful
 from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict, get_model_state_dict, set_model_state_dict
 
 
-from recovlm.utils import print_rank_0
+from muse.utils.common import print_rank_0
 
 def load_safetensors(path):
   tensors = {}
