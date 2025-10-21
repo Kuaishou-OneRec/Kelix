@@ -4,7 +4,7 @@ import time
 import torch
 import torch.distributed as dist
 
-from recovlm.utils.common import print_rank_0, Timer
+from muse.utils.common import print_rank_0, Timer
 import datetime
 
 process_group_timeout = datetime.timedelta(minutes=60 * 24)
