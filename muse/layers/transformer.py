@@ -409,12 +409,6 @@ class TransformerDecoder(nn.Module):
         self.encoder_max_cache_seq_len = None
         self.decoder_max_cache_seq_len = None
 
-    @deprecated("Please use LinearCrossEntropyLoss instead")
-    def set_num_output_chunks(self, num_output_chunks: int) -> None:
-        """Used to save memory in combination with :class:`~torchtune.modules.loss.CEWithChunkedOutputLoss`.
-        This should be called before the first forward pass, in the recipe."""
-        self.num_output_chunks = num_output_chunks
-
     def setup_caches(
         self,
         batch_size: int,
