@@ -488,28 +488,6 @@ class TransformerDecoder(nn.Module):
         for layer in self.layers:
             layer.reset_cache()
 
-    @deprecated("Please use self.skip_output_layer=True and use a linear loss instead")
-    def chunked_output(self, last_hidden_state: torch.Tensor) -> list[torch.Tensor]:
-        """
-        Apply output projection in chunks. This should be applied in conjunction with
-        :class:`~torchtune.modules.loss.CEWithChunkedOutputLoss` as upcasting to fp32 is done there.
-
-        To use this method, you should first call
-        :func:`~torchtune.modules.TransformerDecoder.set_num_output_chunks`.
-
-        Args:
-            last_hidden_state (torch.Tensor): last hidden state of the decoder, having shape
-                [b, seq_len, embed_dim].
-
-        Returns:
-            list[torch.Tensor]: List of num_chunks output tensors, each with shape
-                [b, seq_len/num_chunks, out_dim], where out_dim is usually the vocab size.
-        """
-        return [
-            self.output(chunk)
-            for chunk in last_hidden_state.tensor_split(self.num_output_chunks, dim=1)
-        ]
-
     def _validate_inputs(
         self,
         tokens: Optional[torch.Tensor],
