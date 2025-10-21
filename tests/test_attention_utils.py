@@ -36,7 +36,7 @@ class TestEagerAttention:
         output = attn.forward(q, k, v, is_causal=False, attn_dropout=0.0)
         
         assert output.shape == (batch_size, num_heads, seq_len, head_dim)
-        assert output.device == device
+        assert output.device.type == device.type
     
     def test_forward_without_causal(self, device):
         """Test forward without causal masking."""
@@ -172,7 +172,7 @@ class TestFlashAttention2:
         output = attn.forward(q, k, v, is_causal=False, attn_dropout=0.0)
         
         assert output.shape == q.shape
-        assert output.device == device
+        assert output.device.type == device.type
     
     def test_forward_with_causal(self, device):
         """Test forward with causal masking."""

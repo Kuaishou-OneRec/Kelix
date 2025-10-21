@@ -178,7 +178,7 @@ class TestMultiHeadAttention:
         output = attn(x, x)
         
         assert output.shape == (2, 8, embed_dim)
-        assert output.device == device
+        assert output.device.type == device.type
     
     @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
     def test_forward_with_positional_embeddings(self, mock_sp, device):

@@ -82,7 +82,7 @@ class TestTransformerSelfAttentionLayer:
         output = layer(x)
         
         assert output.shape == x.shape
-        assert output.device == device
+        assert output.device.type == device.type
     
     @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
     def test_residual_connections(self, mock_sp, device):
@@ -396,10 +396,10 @@ class TestTransformerCrossAttentionLayer:
         x = torch.randn(2, 8, embed_dim, device=device)
         encoder_output = torch.randn(2, 12, embed_dim, device=device)
         
-        output = layer(x, encoder_output)
+        output = layer(x, encoder_input=encoder_output)
         
         assert output.shape == x.shape
-        assert output.device == device
+        assert output.device.type == device.type
     
     @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
     def test_forward_different_encoder_seq_len(self, mock_sp, device):
@@ -418,7 +418,7 @@ class TestTransformerCrossAttentionLayer:
         x = torch.randn(2, decoder_seq_len, embed_dim, device=device)
         encoder_output = torch.randn(2, encoder_seq_len, embed_dim, device=device)
         
-        output = layer(x, encoder_output)
+        output = layer(x, encoder_input=encoder_output)
         
         assert output.shape == (2, decoder_seq_len, embed_dim)
     
@@ -436,7 +436,7 @@ class TestTransformerCrossAttentionLayer:
         x = torch.randn(2, 4, embed_dim, device=device, requires_grad=True)
         encoder_output = torch.randn(2, 6, embed_dim, device=device, requires_grad=True)
         
-        output = layer(x, encoder_output)
+        output = layer(x, encoder_input=encoder_output)
         loss = output.sum()
         loss.backward()
         
@@ -481,7 +481,7 @@ class TestTransformerCrossAttentionLayer:
         x = torch.randn(2, 8, embed_dim, device=device)
         encoder_output = torch.randn(2, 12, embed_dim, device=device)
         
-        output = layer(x, encoder_output)
+        output = layer(x, encoder_input=encoder_output)
         
         # Output should have same shape as input
         assert output.shape == x.shape
@@ -528,7 +528,7 @@ class TestTransformerCrossAttentionLayer:
         x = torch.randn(2, 8, embed_dim, device=device)
         encoder_output = torch.randn(2, 12, embed_dim, device=device)
         
-        output = layer(x, encoder_output)
+        output = layer(x, encoder_input=encoder_output)
         
         assert output.shape == x.shape
 

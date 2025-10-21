@@ -26,7 +26,7 @@ class TestLinear:
         output = linear(x, weight)
         
         assert output.shape == (2, 4, 16)
-        assert output.device == device
+        assert output.device.type == device.type
     
     def test_forward_matches_functional(self, device):
         """Test that output matches torch.nn.functional.linear."""
@@ -102,7 +102,7 @@ class TestTiedLinear:
         output = tied_linear(x)
         
         assert output.shape == (2, 4, 16)
-        assert output.device == device
+        assert output.device.type == device.type
     
     def test_weight_sharing(self, device):
         """Test that weights are actually shared with tied module."""

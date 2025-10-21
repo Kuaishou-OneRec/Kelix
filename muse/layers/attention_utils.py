@@ -38,6 +38,16 @@ class AttentionFunction(Protocol):
 class EagerAttention:
     """Standard eager attention implementation, conforming to AttentionFunction protocol"""
     
+    def __call__(self,
+                 q: torch.Tensor,
+                 k: torch.Tensor,
+                 v: torch.Tensor,
+                 is_causal: bool = False,
+                 attn_dropout: float = 0.0,
+                 **kwargs: Any) -> torch.Tensor:
+        """Make the class callable, delegates to forward method"""
+        return self.forward(q, k, v, is_causal, attn_dropout, **kwargs)
+    
     def forward(self,
                 q: torch.Tensor,
                 k: torch.Tensor,
@@ -53,7 +63,7 @@ class EagerAttention:
         # Apply causal mask
         if is_causal:
             seq_len = q.size(-2)
-            causal_mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1).bool()
+            causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=q.device), diagonal=1).bool()
             scores = scores.masked_fill(causal_mask, -float('inf'))
         
         # Apply custom mask (if provided)
@@ -75,6 +85,16 @@ class EagerAttention:
 class FlashAttention2:
     """FlashAttention2 implementation, also conforming to AttentionFunction protocol"""
     
+    def __call__(self,
+                 q: torch.Tensor,
+                 k: torch.Tensor,
+                 v: torch.Tensor,
+                 is_causal: bool = False,
+                 attn_dropout: float = 0.0,
+                 **kwargs: Any) -> torch.Tensor:
+        """Make the class callable, delegates to forward method"""
+        return self.forward(q, k, v, is_causal, attn_dropout, **kwargs)
+    
     def forward(self,
                 q: torch.Tensor,
                 k: torch.Tensor,
@@ -95,13 +115,14 @@ class FlashAttention2:
         if cu_seqlens is not None and cu_seqlens_k is None:
             cu_seqlens_k = cu_seqlens
         
+        max_seqlen_q = None
+        max_seqlen_k = None
         if cu_seqlens_q is not None:
             max_seqlen_q = (cu_seqlens_q[1:] - cu_seqlens_q[:-1]).max().item()
+            cu_seqlens_q = cu_seqlens_q.to(torch.int32)
         if cu_seqlens_k is not None:
             max_seqlen_k = (cu_seqlens_k[1:] - cu_seqlens_k[:-1]).max().item()
-        
-        cu_seqlens_q = cu_seqlens_q.to(torch.int32)
-        cu_seqlens_k = cu_seqlens_k.to(torch.int32)
+            cu_seqlens_k = cu_seqlens_k.to(torch.int32)
 
         window_size = kwargs.get("window_size", -1)
         if cu_seqlens_q is None or cu_seqlens_k is None:
@@ -127,7 +148,9 @@ class FlashAttention2:
                 causal=is_causal
             )
         # TODO: support return_attn_weights
-        return attn_output.unsqueeze(0)
+        if attn_output is not None:
+            return attn_output.unsqueeze(0)
+        return None
 
 
 

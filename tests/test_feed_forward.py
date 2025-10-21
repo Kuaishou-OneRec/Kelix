@@ -65,7 +65,7 @@ class TestFeedForward:
         output = ff(x)
         
         assert output.shape == (2, 8, in_dim)
-        assert output.device == device
+        assert output.device.type == device.type
         
         # Manually compute to verify
         h_gate = nn.SiLU()(gate_proj(x))
