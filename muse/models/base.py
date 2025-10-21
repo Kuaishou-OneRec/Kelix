@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+from typing import Callable
+from functools import partial
 
 class Model(nn.Module):
     def __init__(self, config):
@@ -21,25 +23,45 @@ class Model(nn.Module):
     def init_weights(self):
         raise NotImplementedError(
             "Subclass must implement init_weights method")
+
+    def get_initializer(self, name: str) -> Callable[[torch.Tensor], None]:
+        """Return a initializer function for the given name
+        Args:
+            name (str): The name of the parameter
+        Returns:
+            A callable function that takes a tensor(parameter weight) and initializes it,
+            e.g,
+                return partial(
+                    nn.init.kaiming_normal_, 
+                    a=0, mode='fan_in', nonlinearity='relu'
+                )
+        Examples:
+            >>> model.get_initializer("layers.0.attention.q_proj.weight")(q_proj.weight)
+        """
+        raise NotImplementedError(
+            "Subclass must implement get_initializer method")
     
     def train(self):
+        """Set the model to training mode"""
         raise NotImplementedError(
             "Subclass must implement train method")
     
     def eval(self):
+        """Set the model to evaluation mode"""
         raise NotImplementedError(
             "Subclass must implement eval method")
     
     @property
     def training(self):
-        pass
+        """Return whether the model is in training mode"""
+        return self.training
 
-    def get_checkpointing_modules(self):
+    def get_checkpointable_module_classes(self):
+        """Return a list of module classes that should be checkpointed"""
         raise NotImplementedError(
-            "Subclass must implement get_checkpointing_policy method")
+            "Subclass must implement get_checkpointable_module_classes method")
 
-        
-
-# case1: pass model_config and random init (5%)
-# case2: pass model_dir and random init (5%)
-# case3: pass model_dir and init from pretrained (90%)
+    def get_layers_to_shard(self):
+        """Return a list of layers that should be sharded"""
+        raise NotImplementedError(
+            "Subclass must implement get_layers_to_shard method")

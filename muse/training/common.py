@@ -3,6 +3,11 @@ from typing import Dict, Any, Union, Optional, Generator, \
 
 import torch
 from torch import Tensor
+import math
+import os
+import shutil
+from pathlib import Path
+import torch.distributed as dist
 
 import contextlib
 
@@ -116,13 +121,6 @@ def get_global_grad_norm(model):
             if param.grad is not None]
     return get_total_norm(grads, norm_type=2.0)
 
-
-import torch
-import math
-import os
-import shutil  # 用于删除文件夹及内容
-from pathlib import Path
-import torch.distributed as dist
 
 
 def compute_fsdp_zero2_grad_norm(model, ignore_unused_parameters=True):

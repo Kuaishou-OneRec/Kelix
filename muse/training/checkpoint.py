@@ -9,11 +9,7 @@ import torch
 from pathlib import Path
 from safetensors import safe_open
 import torch.distributed as dist
-import deepspeed
 from concurrent.futures import Future
-
-from muse.training.distributed import get_world_size_and_rank
-from muse.utils.common import print_rank_0, print_rank_n
 
 from torch.distributed.checkpoint import (
     async_save,
@@ -26,10 +22,11 @@ from torch.distributed.checkpoint import (
 from torch.distributed.checkpoint.metadata import Metadata, STATE_DICT_TYPE
 import torch.distributed.checkpoint as dcp
 from torch.distributed.checkpoint.stateful import Stateful
-from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict, get_model_state_dict, set_model_state_dict
+from torch.distributed.checkpoint.state_dict import get_model_state_dict, set_model_state_dict
 
+from muse.training.distributed import get_world_size_and_rank
+from muse.utils.common import print_rank_0, print_rank_n
 
-from muse.utils.common import print_rank_0
 
 def load_safetensors(path):
   tensors = {}
@@ -37,57 +34,6 @@ def load_safetensors(path):
     for k in f.keys():
       tensors[k] = f.get_tensor(k)
   return tensors
-
-
-def load_zero3_state_dict(model, model_dir):
-
-  missing_keys: List[str] = []
-  unexpected_keys: List[str] = []
-  error_msgs: List[str] = []
-
-  if dist.get_rank() == 0:
-    state_dict = collections.OrderedDict()
-    patterns = glob.glob(os.path.join(model_dir, "model-*.safetensors"))
-    for model_path in patterns:
-      # state_dict.update(torch.load(model_path, map_location="cpu"))
-      state_dict.update(load_safetensors(model_path))
-
-    # copy state_dict so _load_from_state_dict can modify it
-    metadata = getattr(state_dict, '_metadata', None)
-    if metadata is not None:
-      # mypy isn't aware that "_metadata" exists in state_dict
-      state_dict._metadata = metadata  # type: ignore[attr-defined]
-  else:
-    state_dict = None
-
-  dist.barrier()
-
-  def load(module, local_state_dict, prefix=""):
-    # because zero3 puts placeholders in model params, this context
-    # manager gathers (unpartitions) the params of the current layer, then loads from
-    # the state dict and then re-partitions them again
-    with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
-      if dist.get_rank() == 0:
-        local_metadata = {} if metadata is None else metadata.get(
-            prefix[:-1], {})
-        print_rank_0(f"Load: {prefix}")
-        module._load_from_state_dict(
-            state_dict, prefix, local_metadata, True,
-            missing_keys, unexpected_keys, error_msgs
-        )
-
-    for name, child in module._modules.items():
-      if child is not None:
-        child_prefix = prefix + name + '.'
-        if state_dict:
-          child_state_dict = {
-              k: v for k, v in local_state_dict.items() if
-              k.startswith(child_prefix)}
-        else:
-          child_state_dict = None
-        load(child, child_state_dict, child_prefix)
-
-  load(model, state_dict, prefix="")
 
 def load_dist_attn_state_dict(src, dst):
   # src: state_dict
@@ -102,7 +48,10 @@ def load_dist_attn_state_dict(src, dst):
   dst.load_state_dict(new_state_dict, strict=True)
 
 def safe_torch_load(
-    checkpoint_path: Union[Path, str], weights_only: bool = True, mmap: bool = True) -> Dict[str, Any]:
+    checkpoint_path: Union[Path, str],
+    weights_only: bool = True,
+    mmap: bool = True,
+) -> Dict[str, Any]:
     """
     Utility to load a checkpoint file onto CPU in a safe manner. Provides separate handling for
     safetensors files.
@@ -172,7 +121,7 @@ def load_hf_checkpoint(model_dir):
     del state_dict
     gc.collect()
   return merged_state_dict
-      
+
 def gather_cpu_state_dict(
     model: "FSDPModule",  # noqa
     is_rank_zero: bool

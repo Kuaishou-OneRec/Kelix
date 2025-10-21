@@ -7,7 +7,7 @@
 import logging
 import os
 from itertools import chain
-from typing import Any, Callable, cast, Dict, List, Optional, Tuple
+from typing import Any, Callable, cast, Dict, List, Optional, Tuple, Union
 import torch
 import torch.distributed as dist
 from torch import nn
@@ -29,6 +29,8 @@ from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.fsdp import ShardingStrategy
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.optim import Optimizer
+
+from muse.utils.common import format_dict_or_list, print_rank_n
 
 
 torch_version = torch.__version__
@@ -162,52 +164,32 @@ def get_shard_conditions(
         >>> ["layers.0", "decoder.layers.1", "embedding"]
     """
 
-    # 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration'
+    if names_to_match and name in names_to_match:
+        return True
 
-    if model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit', "Qwen2_5_VLForConditionalGeneration_siglip","Qwen3_VLForConditionalGeneration_siglip",'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_tatok', 'KeyeForConditionalGeneration_vitrope_slowfast_v2', 'KeyeForConditionalGeneration_vitrope_slowfast_v3', 'KeyeForConditionalGeneration_vitrope_slowfast_v4']:
-        if names_to_match and name in names_to_match:
-            return True
+    name_list = name.split(".")
+    if len(name_list) >= 2:
+        res = name_list[-2] == "layers" and str.isdigit(name_list[-1])
+        return res
 
-        name_list = name.split(".")
-        if len(name_list) >= 2:
-            res = name_list[-2] == "layers" and str.isdigit(name_list[-1])
-            return res
-
-        return False
-    elif model_class in ['InternVLChatModel']:
-        name_list = name.split(".")
-        if len(name_list) >= 2:
-            res = name_list[-2] == "layers" and str.isdigit(name_list[-1])
-            return res
-    else:
-        raise NotImplementedError(f"Model class {model_class} not supported.")
+    return False
 
 
 def shard_model(
-    model: nn.Module,
-    shard_conditions: List[Callable[[str, nn.Module], bool]],
+    model: "Model", # noqa: F821, muse.models.base.Model
     *,
     cpu_offload: bool,
     reshard_after_forward: bool = True,
+    prefetch_params_in_forward: bool = True,
     dp_mesh: Optional[DeviceMesh] = None,
     fp32_weight=True,
-    prefetch_parameters=False,
-    model_class='InternVLChatModel',
     fp32_reduce=True,
-    param_dtype=torch.bfloat16
-    ) -> None:
+    param_dtype=torch.bfloat16) -> None:
     """
     Utility to shard a model with FSDP using the PyTorch Distributed fully_shard API.
 
-    This method will over the model's named modules from the bottom-up and apply shard modules
-    based on whether they meet any of the criteria from shard_conditions.
-
     Args:
-        model (TransformerDecoder): Model to shard with FSDP.
-        shard_conditions (List[Callable[[str, nn.Module], bool]]): A list of functions to determine
-            which modules to shard with FSDP. Each function should take module name (relative to root)
-            and the module itself, returning True if FSDP should shard the module and False otherwise.
-            If any of shard_conditions return True for a given module, it will be sharded by FSDP.
+        model (Model): Model to shard with FSDP.
         cpu_offload (bool): If set to True, FSDP will offload parameters, gradients, and optimizer
             states to CPU.
         reshard_after_forward (bool): Whether to reshard parameters and buffers after
@@ -217,12 +199,12 @@ def shard_model(
             Default to None.
 
     Raises:
-        ValueError: If no layer modules were sharded, indicating that no shard_condition was triggered.
+        ValueError: If no layer modules were sharded.
     """
     fsdp_kwargs = {"reshard_after_forward": reshard_after_forward, "mesh": dp_mesh}
-    fp32_reduce=True
-    print(fsdp_kwargs)
-    if fp32_weight: fsdp_kwargs["mp_policy"] = MixedPrecisionPolicy(param_dtype=param_dtype, reduce_dtype=torch.float32 if fp32_reduce else torch.bfloat16)
+    fp32_reduce = True
+    if fp32_weight: fsdp_kwargs["mp_policy"] = MixedPrecisionPolicy(
+        param_dtype=param_dtype, reduce_dtype=torch.float32 if fp32_reduce else torch.bfloat16)
     if cpu_offload:
         fsdp_kwargs["offload_policy"] = CPUOffloadPolicy()
 
@@ -230,43 +212,16 @@ def shard_model(
     # lowest-level modules first
     num_layers_sharded = 0
 
-    if model_class == 'InternVLChatModel':
-        layers = list(model.vision_model.encoder.layers) + list(model.language_model.model.layers)
-        for m in layers:
-            fully_shard(m, **fsdp_kwargs)
-            num_layers_sharded += 1
-    elif model_class in ['Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration']:
-        layers = [model.visual.vision_model.encoder] + list(model.model.layers)
-        for m in layers:
-            fully_shard(m, **fsdp_kwargs)
-            num_layers_sharded += 1
-    elif model_class == 'KeyeImageTokenizer':
-        # TODO: support encoder
-        layers = list(model.decoder.layers)
-        for m in layers:
-            fully_shard(m, **fsdp_kwargs)
-            num_layers_sharded += 1
-    else: 
-        assert model_class in ['Qwen2VLForConditionalGeneration', 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit', "Qwen2_5_VLForConditionalGeneration_siglip","Qwen3_VLForConditionalGeneration_siglip",'Qwen3SiglipForConditionalGeneration_navit','KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_tatok', 'KeyeForConditionalGeneration_vitrope_slowfast_v2', 'KeyeForConditionalGeneration_vitrope_slowfast_v3', 'KeyeForConditionalGeneration_vitrope_slowfast_v4']
-        layers = list(model.visual.vision_model.encoder.layers) + list(model.model.layers)
-        for m in layers:
-            fully_shard(m, **fsdp_kwargs)
-            num_layers_sharded += 1
-            # layers.append(m)
-
-
-    # print('=' * 40)
-    # if num_layers_sharded == 0:
-    #     raise ValueError(
-    #         "No layer modules were sharded. Please check if shard conditions are working as expected."
-    #     )
+    layers = model.get_shard_layers()
+    for m in layers:
+        fully_shard(m, **fsdp_kwargs)
+        num_layers_sharded += 1
 
     # Finally shard the entire model to account for any stragglers
     fully_shard(model, **fsdp_kwargs)
 
-    if True:
+    if prefetch_params_in_forward:
         prev = None
-        #for i_layer, layer in reversed(list(traverse_modules(model))):
         for layer in reversed(layers):
             if prev is not None:
                 layer.set_modules_to_forward_prefetch([prev])
@@ -275,9 +230,11 @@ def shard_model(
         model.set_modules_to_forward_prefetch([prev])
 
 
-def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any], allow_random_init_params=None):
-    # allow_random_init_params = ['mlp_AR.pre_norm.weight', 'mlp_AR.pre_norm.bias', 'mlp_AR.linear_1.weight', 'mlp_AR.linear_1.bias', 'mlp_AR.linear_2.weight', 'mlp_AR.linear_2.bias']
-    if isinstance(allow_random_init_params, str): allow_random_init_params = allow_random_init_params.split(',')
+def load_from_full_model_state_dict(model: "FSDPModule",
+                                    full_sd: Dict[str, Any],
+                                    allow_random_init_params: Optional[Union[str, List[str]]] = None):
+    if isinstance(allow_random_init_params, str):
+        allow_random_init_params = allow_random_init_params.split(',')
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
     if dist.get_rank() == 0:
@@ -289,25 +246,35 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
         extra_full_ds = {
             k:(v.shape, v.device, v.dtype) for k, v in full_sd.items() if k in extra_full_ds
         }
-        print(f"full_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in full_sd.items()})}")
-        print(f"meta_sharded_sd=\n{format_dict_or_list({k:(v.shape, v.device, v.dtype) for k, v in meta_sharded_sd.items()})}")
+
+        print_rank_n(
+            f"full_sd={format_dict_or_list({k:(v.shape, v.device, v.dtype) \
+                for k, v in full_sd.items()})}")
+        print_rank_n(
+            f"meta_sharded_sd={format_dict_or_list({k:(v.shape, v.device, v.dtype) \
+                for k, v in meta_sharded_sd.items()})}")
 
         device0 = full_sd[list(full_sd)[0]]
         for k in extra_meta_sharded_sd:
             if allow_random_init_params is not None and k in allow_random_init_params:
-                # full_sd[k] = meta_sharded_sd[k].clone()
-                full_sd[k] = torch.rand(extra_meta_sharded_sd[k][0]) * 0.1 # ) .to(device0)
-                if full_sd[k].ndim >= 2:
-                    nn.init.kaiming_normal_(full_sd[k], a=0, mode='fan_in', nonlinearity='relu')
-                else:
-                    nn.init.zeros_(full_sd[k])  # 最常见
+                full_sd[k] = torch.rand(extra_meta_sharded_sd[k][0]) * 0.1
+                model.get_initializer(k)(full_sd[k])
+                # if full_sd[k].ndim >= 2:
+                #     # TODO(@zhouyang12): use a more robust way to initialize the weights
+                #     nn.init.kaiming_normal_(full_sd[k], a=0, mode='fan_in', nonlinearity='relu')
+                # else:
+                #     nn.init.zeros_(full_sd[k])  # 最常见
                 full_sd[k] = full_sd[k].to(device0)
-                # full_sd[k] = meta_sharded_sd[k].clone().to(device0)
-                print(f"random init k={k}, {extra_meta_sharded_sd[k]}\n, meta_sharded_sd={meta_sharded_sd[k]} \nfull={full_sd[k]}")
+                print_rank_n(
+                    f"random init k={k}, {extra_meta_sharded_sd[k]}\n, "
+                    f"meta_sharded_sd={meta_sharded_sd[k]} \nfull={full_sd[k]}")
 
         assert len(meta_sharded_sd) == len(full_sd), \
-            f"Sharded State Dict doesn't equal to Full State Dict, {len(meta_sharded_sd) } v.s {len(full_sd)}" + "\n" + \
-            f"extra_meta_sharded_sd={format_dict_or_list(extra_meta_sharded_sd)}, extra_full_ds={format_dict_or_list(extra_full_ds)}"
+            f"Sharded State Dict doesn't equal to Full State Dict, " \
+            f"{len(meta_sharded_sd) } v.s {len(full_sd)}\n" + \
+            f"extra_meta_sharded_sd={format_dict_or_list(extra_meta_sharded_sd)}, " \
+            f"extra_full_ds={format_dict_or_list(extra_full_ds)}"
+
         assert sorted(list(meta_sharded_sd.keys())) == sorted(list(full_sd.keys())), \
             "Keys of Sharded State Dict doesn't equal to Full State Dict"
 
@@ -326,8 +293,7 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
                 device="cuda",
                 dtype=sharded_meta_param.dtype,
             )
-        # print("param_name:", param_name)
-        # print("sharded_meta_param:", sharded_meta_param)
+
         mesh = sharded_meta_param.device_mesh
 
         dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
@@ -336,8 +302,6 @@ def load_from_full_model_state_dict(model: "FSDPModule", full_sd: Dict[str, Any]
             full_tensor, mesh, sharded_meta_param.placements
         )
         sharded_sd[param_name] = nn.Parameter(sharded_tensor) # default: requires_grad=True
-        #if dist.get_rank() == 0:
-        #    print(f"Load & redistribute: {param_name}")
 
     model.load_state_dict(sharded_sd, assign=True)
 
