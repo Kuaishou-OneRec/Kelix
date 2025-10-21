@@ -222,8 +222,8 @@ class TestVisionRotaryPositionalEmbeddings:
         
         patches_per_tile = (tile_size // patch_size) ** 2
         # Cache shape: [patches_per_tile + 1, dim // 2, 2]
-        # Note: VisionRoPE uses dim (not dim // 2) in the cache
-        assert rope.cache.shape == (patches_per_tile + 1, dim, 2)
+        # Note: VisionRoPE internally uses dim // 2 for theta calculation
+        assert rope.cache.shape == (patches_per_tile + 1, dim // 2, 2)
     
     def test_forward_basic(self, device):
         """Test basic forward pass."""

@@ -297,7 +297,10 @@ class MultiHeadAttention(nn.Module):
         # as the query tensor by copying values across the relevant dim
         # k,v shape: [b, n_kv, s, h_d] -> [b, n_h, s, h_d]
         if self.num_heads != self.num_kv_heads:
-            expand_shape = (b, self.num_kv_heads, q_per_kv, -1, self.head_dim)
+            # For cross attention, we need to handle different sequence lengths
+            # k,v have shape [b, n_kv, s_y, h_d], q has shape [b, n_h, s_x, h_d]
+            # We need to expand k,v to [b, n_h, s_y, h_d]
+            expand_shape = (b, self.num_kv_heads, q_per_kv, k.size(2), self.head_dim)
             k = k.unsqueeze(2).expand(expand_shape).flatten(1, 2)
             v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
 
