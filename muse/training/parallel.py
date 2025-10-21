@@ -1,4 +1,4 @@
-from typing import Any, Tuple
+from typing import Any, Tuple, List, Iterable
 import os
 import time
 import torch
@@ -13,7 +13,7 @@ _SEQUENCE_PARALLEL_GROUP = None
 _SEQUENCE_PARALLEL_GROUP_GLOO = None
 _DATA_PARALLEL_GROUP = None
 
-# TODO: Support tensor parallel, currently only support sequence parallel.
+
 def initialize_model_parallel(sequence_parallel_size: int):
     world_size = dist.get_world_size()
     num_sequence_parallel_groups: int = world_size // sequence_parallel_size
