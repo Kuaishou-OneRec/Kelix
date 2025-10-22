@@ -53,13 +53,13 @@ class KVCache:
         Update cache with new key and value tensors.
         
         Args:
-            k (torch.Tensor): Key tensor with shape [b, n_kv, s, h_d]
-            v (torch.Tensor): Value tensor with shape [b, n_kv, s, h_d]
+            k (torch.Tensor): Key tensor with shape [b, s, n_kv, h_d]
+            v (torch.Tensor): Value tensor with shape [b, s, n_kv, h_d]
             
         Returns:
             Tuple[torch.Tensor, torch.Tensor]: Updated key and value caches
         """
-        seq_len = k.size(2)
+        seq_len = k.size(1)
         
         # Move cache to same device as input if needed
         if self.k_cache.device != k.device:
@@ -67,14 +67,14 @@ class KVCache:
             self.v_cache = self.v_cache.to(v.device)
         
         # Update cache
-        self.k_cache[:, :, self.cache_pos:self.cache_pos + seq_len] = k
-        self.v_cache[:, :, self.cache_pos:self.cache_pos + seq_len] = v
+        self.k_cache[:, self.cache_pos:self.cache_pos + seq_len, :] = k
+        self.v_cache[:, self.cache_pos:self.cache_pos + seq_len, :] = v
         self.cache_pos += seq_len
         
         # Return the full cache up to current position
         return (
-            self.k_cache[:, :, :self.cache_pos],
-            self.v_cache[:, :, :self.cache_pos]
+            self.k_cache[:, :self.cache_pos, :],
+            self.v_cache[:, :self.cache_pos, :]
         )
     
     def reset(self):

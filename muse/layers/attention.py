@@ -253,9 +253,6 @@ class MultiHeadAttention(nn.Module):
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
 
-        # [b, n_h, s_x, h_d]
-        q = q.transpose(1, 2)
-
         # Normalize q
         if self.q_norm is not None:
             q = self.q_norm(q)
@@ -281,10 +278,6 @@ class MultiHeadAttention(nn.Module):
             if self.pos_embeddings is not None:
                 k = self.pos_embeddings(k, input_pos=input_pos)
 
-            # k,v shape: [b, n_kv, s_y, h_d]
-            k = k.transpose(1, 2)
-            v = v.transpose(1, 2)
-
             # Normalize k
             if self.k_norm is not None:
                 k = self.k_norm(k)
@@ -306,6 +299,10 @@ class MultiHeadAttention(nn.Module):
 
         if get_sequence_parallel_world_size() > 1:
             spg = get_sequence_parallel_group()
+            # If sequence parallel is enabled, the input is sharded along
+            # the sequence length dimension. We need to recover the original 
+            # sequence length before the attention function.
+            # q, k, v: [b, s_x, n_h, h_d] -> [b, s_x * P, n_h // P, h_d]
             q = SeqAllToAll4D.apply(spg, q, 2, 1)
             k = SeqAllToAll4D.apply(spg, k, 2, 1)
             v = SeqAllToAll4D.apply(spg, v, 2, 1)
@@ -321,7 +318,8 @@ class MultiHeadAttention(nn.Module):
 
         if get_sequence_parallel_world_size() > 1:
             spg = get_sequence_parallel_group()
+            # output: [b, s_x * P, n_h // P, h_d] -> [b, s_x, n_h, h_d]
             output = SeqAllToAll4D.apply(spg, output, 1, 2)
         # reshape the output to be the same shape as the input
-        output = output.transpose(1, 2).contiguous().view(b, s_x, -1)
+        output = output.contiguous().view(b, s_x, -1)
         return self.output_proj(output)
