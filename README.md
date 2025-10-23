@@ -11,6 +11,7 @@ PYTHONPATH=. python3 tests/qwen3navit/test_keye_demo_2b.py
 - **Data Handling**: The project includes scripts to handle and preprocess data, ensuring compatibility with the training pipeline.
 - **Training Pipeline**: A comprehensive training pipeline that supports fine-tuning on custom datasets.
 - **Evaluation**: Tools to evaluate the performance of the trained models on various benchmarks.
+- **Model Registry**: Dynamic model loading system for flexible training script configuration. Load models by name instead of hardcoded imports. See [Model Registry Guide](muse/models/README.md) for details.
 
 ## Getting Started
 
@@ -30,6 +31,27 @@ PYTHONPATH=. python3 tests/qwen3navit/test_keye_demo_2b.py
     ```bash
     pip install -r requirements.txt
     ```
+
+### Quick Start: Using the Model Registry
+
+Load models dynamically by name in your training scripts:
+
+```python
+from muse.models import get_model_class, list_models
+from muse.config import Qwen3Config
+
+# List available models
+print("Available models:", list_models())
+
+# Load model by name
+model_cls = get_model_class("Qwen3Model")
+
+# Create and use the model
+config = Qwen3Config(vocab_size=32000, embed_dim=2048, num_layers=24, num_heads=16)
+model = model_cls(config)
+```
+
+See [examples/train_with_registry.py](examples/train_with_registry.py) for a complete example and [docs/MODEL_REGISTRY_MIGRATION.md](docs/MODEL_REGISTRY_MIGRATION.md) for migration guide.
 
 ### Data Preparation
 

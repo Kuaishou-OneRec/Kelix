@@ -7,6 +7,9 @@ from muse.layers.linear import TiedLinear
 import torch.nn as nn
 from muse.models.qwen3._layers import qwen3_mlp, Qwen3Attention
 
+# Import will be done when muse.models is imported, avoiding circular import
+# The actual registration happens in __init__.py after import
+
 class Qwen3Model(Model):
     def __init__(self, config: Qwen3Config):
         super().__init__(config)
@@ -65,6 +68,21 @@ class Qwen3Model(Model):
 
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
+    
+    def get_layers_to_shard(self):
+        return [self.model.layers]
 
-    def get_checkpointing_modules(self):
+    def get_checkpointable_module_classes(self):
         return {TransformerSelfAttentionLayer}
+
+    def convert_hf_state_dict(self,
+                              hf_state_dict: Dict[str, torch.Tensor],
+                              **kwargs) -> Dict[str, torch.Tensor]:
+        """Convert a Hugging Face state dictionary to a model state dictionary
+        Args:
+            hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
+            **kwargs: Additional keyword arguments.
+        Returns:
+            A dictionary of model state.
+        """
+        return hf_state_dict

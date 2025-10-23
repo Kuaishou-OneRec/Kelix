@@ -71,6 +71,19 @@ class Model(nn.Module):
             "Subclass must implement get_checkpointable_module_classes method")
 
     def get_layers_to_shard(self):
-        """Return a list of layers that should be sharded"""
+        """Return a list of layers that should be sharded by FSDP"""
         raise NotImplementedError(
             "Subclass must implement get_layers_to_shard method")
+    
+    def convert_hf_state_dict(self,
+                             hf_state_dict: Dict[str, torch.Tensor],
+                             **kwargs) -> Dict[str, torch.Tensor]:
+        """Convert a Hugging Face state dictionary to a model state dictionary
+        Args:
+            hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
+            **kwargs: Additional keyword arguments.
+        Returns:
+            A dictionary of model state.
+        """
+        raise NotImplementedError(
+            "Subclass must implement convert_hf_state_dict method")
