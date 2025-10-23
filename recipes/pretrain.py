@@ -1,134 +1,33 @@
-import os
-
-import torch
-torch.autograd.set_detect_anomaly(True)  # 开启异常检测
-
-#torch.use_deterministic_algorithms(True)
-
 from typing import Dict, Any, Union, Optional
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+import torch
 import datetime
-process_group_timeout = datetime.timedelta(minutes=60*24)
-
 import contextlib
 import gc
 gc.disable()
 import argparse
 import time
 import collections
-from collections import defaultdict
-import datetime
-import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-import glob
-import json
-import logging
-import pickle
-import itertools
-import contextlib
-import multiprocessing as mp
-import psutil
-import threading
-import queue
-import traceback
-from functools import partial
-from tools.mfu.flops_counter import MFUStats
-
-from recovlm.training.checkpoint import AppState, DistributedCheckpointer
-from recovlm.models.qwen2_vl.checkpoint import Qwen2VLCheckpointConverter
-from recovlm.models.internvl.checkpoint import InternVLCheckpointConverter
-from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VL_moonvitCheckpointConverter
-from recovlm.models.qwen_2_5_vl.checkpoint import Qwen2_5_VL_siglipCheckpointConverter
-
-
-from recovlm.utils.ds_utils import print_input_info
-
-#import torch
+import json #noqa: F401
+import multiprocessing as mp #noqa: F401
+import psutil #noqa: F401
 import torch.nn as nn
 import torch.distributed as dist
 import torch.nn.functional as F
 import numpy as np
-
 from pathlib import Path
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from transformers import AutoTokenizer
-from recovlm.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
-from recovlm.models.qwen2_vl import Qwen2VLForConditionalGeneration
+from collections import defaultdict
 
-from recovlm.models.qwen_2_5_vl import Qwen2_5_VLForConditionalGeneration
-from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLForConditionalGeneration_moonvit,Qwen2_5_VLForConditionalGeneration_siglip,Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration_siglip_navit
-from recovlm.models.qwen_2_5_vl.processing_qwen2_5_vl import Qwen2_5_VLProcessor_moonvit,Qwen2_5_VLProcessor_siglip
-from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipForConditionalGeneration_navit
-from recovlm.models.keye.modeling_keye import KeyeForConditionalGeneration, KeyeDecoderLayer
-from recovlm.models.keye.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer
-from recovlm.models.keye_vitrope.modeling_keye import KeyeForConditionalGeneration as KeyeForConditionalGeneration_vitrope, KeyeDecoderLayer as KeyeDecoderLayer_vitrope
-from recovlm.models.keye_vitrope.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer_vitrope
+torch.autograd.set_detect_anomaly(True)
 
-from recovlm.models.keye_vitrope_slowfast_tatok.modeling_keye import KeyeForConditionalGeneration as KeyeForConditionalGeneration_vitrope_slowfast_tatok
-from recovlm.models.keye_vitrope_slowfast_tatok.modeling_keye import  KeyeDecoderLayer as KeyeDecoderLayer_vitrope_slowfast_tatok
-from recovlm.models.keye_vitrope_slowfast_tatok.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer_vitrope_slowfast_tatok
-
-from recovlm.models.keye_vitrope_slowfast.modeling_keye import KeyeForConditionalGeneration as KeyeForConditionalGeneration_vitrope_slowfast
-from recovlm.models.keye_vitrope_slowfast.modeling_keye import  KeyeDecoderLayer as KeyeDecoderLayer_vitrope_slowfast
-from recovlm.models.keye_vitrope_slowfast.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer_vitrope_slowfast
-
-from recovlm.models.keye_vitrope_slowfast_v2.modeling_keye import KeyeForConditionalGeneration as KeyeForConditionalGeneration_vitrope_slowfast_v2
-from recovlm.models.keye_vitrope_slowfast_v2.modeling_keye import  KeyeDecoderLayer as KeyeDecoderLayer_vitrope_slowfast_v2
-from recovlm.models.keye_vitrope_slowfast_v2.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer_vitrope_slowfast_v2
-
-from recovlm.models.keye_vitrope_slowfast_v3.modeling_keye import KeyeForConditionalGeneration as KeyeForConditionalGeneration_vitrope_slowfast_v3
-from recovlm.models.keye_vitrope_slowfast_v3.modeling_keye import  KeyeDecoderLayer as KeyeDecoderLayer_vitrope_slowfast_v3
-from recovlm.models.keye_vitrope_slowfast_v3.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer_vitrope_slowfast_v3
-
-from recovlm.models.keye_vitrope_slowfast_v4.modeling_keye import KeyeForConditionalGeneration as KeyeForConditionalGeneration_vitrope_slowfast_v4
-from recovlm.models.keye_vitrope_slowfast_v4.modeling_keye import  KeyeDecoderLayer as KeyeDecoderLayer_vitrope_slowfast_v4
-from recovlm.models.keye_vitrope_slowfast_v4.modeling_keye import SiglipEncoderLayer as KeyeSiglipEncoderLayer_vitrope_slowfast_v4
-
-from recovlm.models.internvl import InternVLChatModel
-from recovlm.models.qwen2 import Qwen2DecoderLayer
-from recovlm.models.internvl import InternVisionEncoderLayer
-
-from recovlm.data.dataloaders_v2 import get_dataloader as get_dataloader_v2
-from recovlm.data.dataloaders import get_dataloader
-from muse.data.datasets import create_dataset, get_worker_info
-
-from recovlm.utils.merge_checkpoints import convert_zero_checkpoint_to_state_dict
-from recovlm.utils.numa_bind import get_numa_bind_info
-from recovlm.losses import CrossEntropyLoss
-from recovlm.utils.common import set_random_seed, to_cuda, to_device, print_rank_0, \
-  get_optimizer_grouped_parameters, dist_reduce_dict, Timer, heart_beat
-from recovlm.training.lr_schedulers import get_scheduler
-
-from recovlm.training.parallel import get_sequence_parallel_group, \
-  get_sequence_parallel_rank, get_sequence_parallel_world_size, \
-  get_local_sequence_boundary, initialize_model_parallel, gather_by_group, \
-  get_local_sequence, get_data_parallel_group, get_data_parallel_world_size, \
-  get_data_parallel_rank, gather_batches
-
-from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
-
-from recovlm.training.distributed import shard_model, get_shard_conditions, \
-  load_from_full_model_state_dict
-from recovlm.training.checkpoint import load_hf_checkpoint
-
-from recovlm.training.activations import set_activation_checkpointing
-
-from recovlm.training.common import set_default_dtype, get_global_grad_norm, clip_grad_by_value, compute_fsdp_zero2_grad_norm
-
-from recovlm.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLDecoderLayer, Qwen2VLVisionBlock
-from recovlm.models.qwen_2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock
-from recovlm.models.qwen3siglip.modeling_qwen3siglip import Qwen3SiglipDecoderLayer
-from recipes.ViT.training.models.MoonVision.modeling_kimi_vl import MoonVitEncoderLayer
-from recipes.ViT.training.models.siglip.modeling_siglip import SiglipEncoderLayer
-from recovlm.utils.time_tracker import TimeTracker
-from recovlm.utils.ds_utils import format_dict_or_list
-from recovlm.models.qwen3siglip.processing_qwen3siglip import Qwen3SiglipProcessor
+process_group_timeout = datetime.timedelta(minutes=60*24)
 
 
-# Logger 初始化
-#logging.basicConfig(level=logging.INFO)  # 设置日志级别
-#logger = logging.getLogger(__name__)  # 创建 logger 实例
+from muse.training.checkpoint import AppState, DistributedCheckpointer #noqa: F401
 
 def get_argument_parser():
   parser = argparse.ArgumentParser()
@@ -139,9 +38,6 @@ def get_argument_parser():
 
   parser.add_argument("--resume_from", type=str, default=None,
                       help="Specify the checkpoint directory to resume from.")
-
-  parser.add_argument("--resume_from_tag", type=str, default=None,
-                      help="Specify the checkpoint tag to resume from.")
   
   parser.add_argument("--resume_dataloader", action="store_true",
                       help="Whether to resume dataloader checkpoint")
@@ -154,8 +50,6 @@ def get_argument_parser():
   
   parser.add_argument("--fp32_weight", action="store_true",
                       help="Whether use fp32 for model weight updating")
-
-
 
   parser.add_argument("--fp32_reduce", action="store_true",
                       help="Whether use fp32 for model gradient reduction")
@@ -191,27 +85,14 @@ def get_argument_parser():
   parser.add_argument("--output_dir", type=str, default=None,
                       help="The directory to write the trained model")
 
-  parser.add_argument("--model_class", type=str, default="Qwen2_5_VLForConditionalGeneration_moonvit",
-                      help="The model class, one of 'Qwen2VLForConditionalGeneration' or 'Qwen2_5_VLForConditionalGeneration','Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen2_5_VLForConditionalGeneration_siglip_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_tatok', 'KeyeForConditionalGeneration_vitrope_slowfast_v2', 'KeyeForConditionalGeneration_vitrope_slowfast_v3', 'KeyeForConditionalGeneration_vitrope_slowfast_v4', 'InternVLChatModel'",)
-  
-  parser.add_argument("--model_processor", type=str, default="Qwen2_5_VLProcessor_moonvit",
-                      help="The model processor class, one of 'Qwen2VLProcessor' or 'Qwen2_5_VLProcessor' or 'Qwen2_5_VLProcessor_moonvit' or 'Qwen3SiglipProcessor' or 'KeyeProcessor' or 'KeyeProcessor_vitrope'")
+  parser.add_argument("--model_class", type=str, default="Qwen3Model",
+                      help="The model class name.",)
 
   ############ Dataset args ############
-  parser.add_argument("--dataset_config", type=str, default=None,
-                      help="The comma seperated path of indexed json file.")
-
   parser.add_argument("--dataset", type=str, default=None,
                       help="The comma seperated path of indexed json file.")
-  
-  parser.add_argument("--data_format", type=str, default="chatml",
-                      help="The data format of training, one of `chatml` and `completion`")
-
-  parser.add_argument("--min_visual_tokens", type=int, default=16,
-                      help="The max visual tokens to use")
-
-  parser.add_argument("--max_visual_tokens", type=int, default=512,
-                      help="The max visual tokens to use")
+  parser.add_argument("--dataset_config", type=str, default=None,
+                      help="The comma seperated path of indexed json file.")
 
   parser.add_argument("--max_length", type=int, default=None,
                       help="Max tokens per sentence in corpus")
@@ -247,13 +128,6 @@ def get_argument_parser():
   ############ Optimizer Args ############
   parser.add_argument("--learning_rate", type=float, default=2e-4,
                       help="The peak learning rate for optimizer.")
-  
-  parser.add_argument("--vision_learning_rate", type=float, default=-1.0,
-                      help="The peak vit learning rate for optimizer." \
-                           "Note: vision_learning_rate will be set to learning_rate if vision_learning_rate < 0.0")
-  
-  parser.add_argument("--vision_lr_layer_decay", type=float, default=1.0,
-                      help="Decay vit learning rate by layers.")
 
   parser.add_argument("--weight_decay", type=float, default=0.1,
                       help="The weight decay for Adam Optimizer")
@@ -268,19 +142,6 @@ def get_argument_parser():
 
   parser.add_argument("--clip_range", type=float, default=1.0,
                       help="The gradient clip range.")
-
-  parser.add_argument("--freeze_llm", action="store_true",
-                      help="Freeze all LLM parameters (language model weights will not be updated during training).")
-
-  parser.add_argument("--freeze_visual", action="store_true",
-                      help="Freeze all visual encoder parameters except visual projector layers.")
-
-  parser.add_argument("--freeze_projector", action="store_true",
-                      help="Freeze visual projector layers.")
-  
-  parser.add_argument("--update_vision_tower", action="store_true",
-                      help="Update all vision_tower parameters.")
-
 
   parser.add_argument("--use_flash_attention_2", action="store_true",
                       help="Whether to use flash attention 2")
@@ -318,27 +179,14 @@ def get_argument_parser():
   parser.add_argument("--monitor_datasource_cnt", action="store_true",
                       help="Whether to monitor cnt of each datasource")
 
-  parser.add_argument("--monitor_image_tokens", action="store_true",
-                      help="Whether to monitor image tokens. Note that this involves with an gather operation, which is time-consuming")
-
   ############ System Vars ############
-
-  parser.add_argument("--kml_id", type=str, default=None,
-                      help="KML_ID")
 
   parser.add_argument("--enable_profile", action="store_true",
                       help="init torch profile")
-
-  parser.add_argument("--kml_task_id", type=str, default=None,
-                      help="KML_TASK_ID")
-  
-  parser.add_argument("--heartbeat_monitor", action="store_true",
-                      help="Whether to upload heartbeat to remote")
   
   return parser
 
-
-
+# TODO: move to muse.utils
 def _init_profiler(output_dir) -> None:
     import torch.distributed as D
     import os
@@ -499,96 +347,14 @@ def get_resume_info(args):
 
 
 def freeze_params(args, model):
+  params_to_freeze = args.freeze_params.split(",")
 
-  #### qwen
-  if args.model_class in  ["Qwen2VLForConditionalGeneration", "Qwen2_5_VLForConditionalGeneration"]:
-    if args.freeze_llm:
-      print_rank_0("Freeze LLM parameters.")
-      for name, param in model.named_parameters():
-        if not name.startswith("visual"):
-          print_rank_0(f"Disable LLM grad: {name}")
-          param.requires_grad = False
-      print_rank_0("=" * 50)
-
-    if args.freeze_projector:
-      print_rank_0("Freeze visual.merger parameters.")
-      for name, param in model.named_parameters():
-        if name.startswith("visual.merger."):
-          print_rank_0(f"Disable visual.merger mlp grad: {name}")
-          param.requires_grad = False
-      print_rank_0("=" * 50)
-
-    if args.freeze_visual:
-      print_rank_0("Freeze visual encoder parameters.")
-      for name, param in model.named_parameters():
-        if name.startswith("visual") and not name.startswith("visual.merger."):
-          print_rank_0(f"Disable visual encoder grad: {name}")
-          param.requires_grad = False
-      print_rank_0("=" * 50)
-    
-
-
-  elif args.model_class in ['Qwen2_5_VLForConditionalGeneration_moonvit','Qwen2_5_VLForConditionalGeneration_siglip', 'Qwen3SiglipForConditionalGeneration_navit', 'KeyeForConditionalGeneration', 'KeyeForConditionalGeneration_vitrope', 'KeyeForConditionalGeneration_vitrope_slowfast', 'KeyeForConditionalGeneration_vitrope_slowfast_tatok', 'KeyeForConditionalGeneration_vitrope_slowfast_v2', 'KeyeForConditionalGeneration_vitrope_slowfast_v3', 'KeyeForConditionalGeneration_vitrope_slowfast_v4']:
-    if args.freeze_llm:
-      print_rank_0("Freeze LLM parameters.")
-      for name, param in model.named_parameters():
-        if not (name.startswith("visual.") or name.startswith("mlp_AR.") or name.startswith("vision_tower.")):
-          # if not (name.startswith("vision_tower.")):
-          print_rank_0(f"Disable LLM grad: {name}")
-          param.requires_grad = False
-      print_rank_0("=" * 50)
-    
-    if args.freeze_projector:
-      print_rank_0("Freeze visual encoder parameters.")
-      for name, param in model.named_parameters():
-        if name.startswith("mlp_AR") or name.startswith("fast_mlp_AR"):
-          print_rank_0(f"Disable visual encoder grad: {name}")
-          param.requires_grad = False
-      print_rank_0("=" * 50)
-
-    if args.freeze_visual:
-      print_rank_0("Freeze visual encoder parameters. Train visual adapter parameters")
-      for name, param in model.named_parameters():
-        if name.startswith("visual"):
-          print_rank_0(f"Disable visual encoder grad: {name}")
-          param.requires_grad = False
-      print_rank_0("=" * 50)
-    
-    if args.update_vision_tower:
-      print_rank_0("Update vision_tower parameters.")
-      for name, param in model.named_parameters():
-        if name.startswith("vision_tower.") or name.startswith("visual") or name.startswith("mlp_AR") or name.startswith("fast_mlp_AR"):
-          print_rank_0(f"Enable vision_tower grad: {name}")
-          param.requires_grad = True
-        else:
-          print_rank_0(f"Freeze params other than vision_tower: {name}")
-          param.requires_grad = False
-      print_rank_0("=" * 50)
-
-  #### InternVLChatModel
-  # 结构： language_model + ( vision_model + mlp )
-  elif args.model_class == 'InternVLChatModel':
-    if args.freeze_llm:
-      for name, param in model.named_parameters():
-        if name.startswith("language_model"): 
-          print_rank_0(f"Disable InternVLChatModel language_model grad: {name}")
-          param.requires_grad = False
-    if args.freeze_projector:
-      for name, param in model.named_parameters():
-        if name.startswith("mlp"): 
-          print_rank_0(f"Disable InternVLChatModel visual encoder grad: {name}")
-          param.requires_grad = False
-    if args.freeze_visual:
-      for name, param in model.named_parameters():
-        if name.startswith("vision_model"):
-          print_rank_0(f"Disable InternVLChatModel visual encoder(but mot adapter) grad: {name}")
-          param.requires_grad = False
-    
-  else:
-    raise NotImplementedError(f"freeze_params Not support model class: {args.model_class}")
-
-
-
+  print_rank_0("Freeze parameters.")
+  for name, param in model.named_parameters():
+    if re.match(params_to_freeze, name):
+      print_rank_0(f"Freeze: {name}")
+      param.requires_grad = False
+  print_rank_0("=" * 50)
 
 class TokenStats:
   def __init__(self, args, _type='image'):
@@ -604,7 +370,9 @@ class TokenStats:
       world_size = dist.get_world_size()
       rank = dist.get_rank()
       input_tensor = torch.tensor([num_image_tokens], dtype=torch.long).cuda()
-      all_image_tokens = list(torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) if rank == 0 else None
+      all_image_tokens = list(
+        torch.zeros(world_size, dtype=torch.long).cuda().chunk(world_size) ) \
+          if rank == 0 else None
       dist.gather(input_tensor, gather_list=all_image_tokens, dst=0)
 
       if rank == 0:
@@ -690,14 +458,9 @@ def train():
 
   # check vision_lr
   assert args.learning_rate > 0.0
-  if args.vision_learning_rate < 0.0:
-    args.vision_learning_rate = args.learning_rate
 
   assert all([args.commit_id, args.seed, args.comment]), \
     "Git commit, seed, and comment is required for reproducibility"
-
-  assert all([args.kml_id, args.kml_task_id]), \
-    "Kml task infomation, for task alive monitor."
 
   assert any([args.save_checkpoint_per_step, args.save_checkpoint_every_epoch]), \
       "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
@@ -706,10 +469,6 @@ def train():
   rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
   world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
   local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
-  local_world_size = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_SIZE", 0))
-  cpu_bind = get_numa_bind_info(local_rank, local_world_size)
-  os.environ["KML_ID"] = args.kml_id
-  os.environ["KML_TASK_ID"] = args.kml_task_id
 
   ##############
   with open(args.dataset_config, encoding="utf-8") as f:
@@ -725,35 +484,11 @@ def train():
   dataset_config["checkpoint_interval"] = args.dataset_checkpoint_interval
   use_flops_balance = dataset_config.get("use_flops_balance", False)
 
-  if use_flops_balance:
-    try:
-      dataloader = get_dataloader(name=dataset, **dataset_config,
-                                  resume_dataloader=args.resume_dataloader,
-                                  resume_from=resume_from,
-                                  snapshot_step=args.save_checkpoint_per_step//2)
-    except: 
-      import traceback
-      traceback.print_exc()
-      dataloader = get_dataloader_v2(name=dataset, **dataset_config)
-
-    data_iter = dataloader._get_iterator()
-
-    batch_queue = queue.Queue(maxsize=8)
-    batch_prefetcher = threading.Thread(
-      target=data_prefetch_fn,
-      args=(data_iter, batch_queue, args.sequence_parallel_size),
-      daemon=True)
-    batch_prefetcher.start()
 
   # torch init
   torch.cuda.set_device(local_rank)
   torch.distributed.init_process_group(rank=rank, world_size=world_size, timeout=process_group_timeout)
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
-
-  if use_flops_balance:
-    p = psutil.Process(os.getpid())
-    p.cpu_affinity(cpu_bind[8:])
-    print(f"train_process: rank={dist.get_rank()}, pid={os.getpid()}, bind={cpu_bind[8:]}")
 
 
   ### initialize model parallel group
@@ -762,14 +497,9 @@ def train():
 
   set_random_seed(args.seed)
 
-  ####### for pdb debug #######
-  # if dist.get_rank()!=0:
-  #   dist.barrier()
-  
-  
 
   ####### for pdb debug #######
-  print("args.model_class:", args.model_class)
+  print_rank_0("args.model_class:", args.model_class)
 
 
   state_dict = None
@@ -810,63 +540,22 @@ def train():
     tb_writer = SummaryWriter(log_dir=os.path.join(args.output_dir, "log"))
     tb_writer.add_text("comment", args.comment, 0)
     tb_writer.add_text("comment_id", args.commit_id, 0)
-    tb_writer.add_text("kml_id", args.kml_id, 0)
-    tb_writer.add_text("kml_task_id", args.kml_task_id, 0)
 
-
+  # TODO: get_model from model class
   with set_default_dtype(torch.bfloat16), torch.device("meta"):
-    model = eval(args.model_class).from_pretrained(
-      args.model_dir, _attn_implementation="flash_attention_2",use_cache = False, ignore_mismatched_sizes=True, 
-    )
-    if args.model_class == "Qwen2_5_VLForConditionalGeneration_moonvit":  
-      state_dict = torch.load("/llm_reco/maosiyang/model/qwen_moonvit/qwen2_5_vl_moonvit_state_dict.pth")
-      model.load_state_dict(state_dict)
-    
-    if args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip":
-      state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip/global_step1000/model_float32.pth", weights_only=True)
-      model.load_state_dict(state_dict)
-    
-    if args.model_class == "Qwen2_5_VLForConditionalGeneration_siglip_navit":
-      state_dict = torch.load("/llm_reco_ssd/zangdunju/output2/RecoVLM/SigLIP/siglip_navit/global_step1000/model_float32.pth", weights_only=True)
-      model.load_state_dict(state_dict)
-    #msyTODO: add siglip
+    model = eval(args.model_class).from_pretrained(args.model_dir)
   
-  # 暂时注释（caojiangxia）
-  # check all param & buffer on meta device 
-  # for tensor in itertools.chain(model.parameters(), model.buffers()):
-  #   assert tensor.device == torch.device("meta")
-
   if args.enable_gradient_checkpointing:
     print_rank_0("Enable gradient checkpointing")
-    # 使用FSDP时，hf的gradient_checkpointing_enable()不会生效
-    # model.gradient_checkpointing_enable(
-    #     gradient_checkpointing_kwargs={"use_reentrant": False})
 
-    auto_wrap_policy_mapping = {
-      "Qwen2VLForConditionalGeneration": {Qwen2VLDecoderLayer, Qwen2VLVisionBlock},
-      "Qwen2_5_VLForConditionalGeneration": {Qwen2_5_VLDecoderLayer, Qwen2_5_VLVisionBlock},
-      "Qwen2_5_VLForConditionalGeneration_moonvit": {Qwen2_5_VLDecoderLayer, MoonVitEncoderLayer},
-      "Qwen2_5_VLForConditionalGeneration_siglip": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
-      "Qwen3SiglipForConditionalGeneration_navit": {Qwen3SiglipDecoderLayer, SiglipEncoderLayer},
-      "Qwen2_5_VLForConditionalGeneration_siglip_navit": {Qwen2_5_VLDecoderLayer, SiglipEncoderLayer},
-      "KeyeForConditionalGeneration":  {KeyeDecoderLayer, KeyeSiglipEncoderLayer},
-      "KeyeForConditionalGeneration_vitrope":  {KeyeDecoderLayer_vitrope, KeyeSiglipEncoderLayer_vitrope},
-      "KeyeForConditionalGeneration_vitrope_slowfast": {KeyeDecoderLayer_vitrope_slowfast, KeyeSiglipEncoderLayer_vitrope_slowfast},
-      "KeyeForConditionalGeneration_vitrope_slowfast_tatok": {KeyeDecoderLayer_vitrope_slowfast_tatok, KeyeSiglipEncoderLayer_vitrope_slowfast_tatok},
-      "KeyeForConditionalGeneration_vitrope_slowfast_v2": {KeyeDecoderLayer_vitrope_slowfast_v2, KeyeSiglipEncoderLayer_vitrope_slowfast_v2},
-      "KeyeForConditionalGeneration_vitrope_slowfast_v3": {KeyeDecoderLayer_vitrope_slowfast_v3, KeyeSiglipEncoderLayer_vitrope_slowfast_v3},
-      "KeyeForConditionalGeneration_vitrope_slowfast_v4": {KeyeDecoderLayer_vitrope_slowfast_v4, KeyeSiglipEncoderLayer_vitrope_slowfast_v4},
-      "InternVLChatModel":{Qwen2DecoderLayer,InternVisionEncoderLayer}
-    }
     set_activation_checkpointing(
-      model, auto_wrap_policy=auto_wrap_policy_mapping[args.model_class]
+      model, auto_wrap_policy=model.get_checkpointable_module_classes()
     )
 
     
-  if args.fp32_weight: model = model.float()
+  if args.fp32_weight: model = model.float() # upcast fp32 to maintain master weight.
   shard_model(
     model=model,
-    shard_conditions=[partial(get_shard_conditions, model_class=args.model_class)],
     cpu_offload=False,
     reshard_after_forward=args.reshard_after_forward,
     dp_mesh=device_mesh,
