@@ -1,22 +1,31 @@
 import torch
 import torch.nn as nn
-from typing import Callable
+from typing import Callable, Optional
 from functools import partial
+from muse.config.model_config import ModelConfig
 
 class Model(nn.Module):
-    def __init__(self, config):
-        super().__init__(config)
+    """Base class for all models.
+    """
+    def __init__(self, config: ModelConfig):
+        super().__init__()
         self.config = config
     
     def forward(self, *args, **kwargs):
         pass
 
     def from_pretrained(self,
-                        model_dir,
-                        load_weights=True,
-                        allow_random_init_params=None,
-                        random_init_ratio=0.05,
-                        ):
+                        model_dir: str,
+                        load_weights: bool = True,
+                        allow_random_init_params: Optional[str] = None,
+                        **kwargs):
+        """Load weights from a pretrained model.
+        Args:
+            model_dir (str): The directory to load the weights from.
+            load_weights (bool): Whether to load the weights.
+            allow_random_init_params (Optional[str]): The parameters to allow random initialization.
+            **kwargs: Additional keyword arguments.
+        """
         raise NotImplementedError(
             "Subclass must implement from_pretrained method")
 
