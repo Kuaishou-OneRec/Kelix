@@ -35,18 +35,6 @@ def load_safetensors(path):
       tensors[k] = f.get_tensor(k)
   return tensors
 
-def load_dist_attn_state_dict(src, dst):
-  # src: state_dict
-  # dst: module
-  new_state_dict = collections.OrderedDict()
-  for k, v in src.items():
-    if re.match(r"model.layers.(\d+).self_attn.*", k):
-      new_k = re.sub(r'self_attn', 'self_attn.local_attn', k)
-      print_rank_0(f"Replace key from {k} to {new_k}")
-      k = new_k
-    new_state_dict[k] = v
-  dst.load_state_dict(new_state_dict, strict=True)
-
 def safe_torch_load(
     checkpoint_path: Union[Path, str],
     weights_only: bool = True,
@@ -234,7 +222,7 @@ class DistributedCheckpointer(CheckpointerInterface):
       self,
       state_dict: STATE_DICT_TYPE,
       output_dir,
-      tag: Optional[Union[str, int]] = None,
+      checkpoint_id: Optional[Union[str, int]] = None,
       save_async: bool = False) -> None:
     """
     Save a distributed checkpoint to storage.
@@ -248,8 +236,8 @@ class DistributedCheckpointer(CheckpointerInterface):
       save_async (bool): If True, save the checkpoint asynchronously
     """
     checkpoint_path = output_dir
-    if tag is not None:
-      checkpoint_path = Path(output_dir) / f"{self._checkpoint_dir_prefix}{tag}"
+    if checkpoint_id is not None:
+      checkpoint_path = Path(output_dir) / f"{self._checkpoint_dir_prefix}{checkpoint_id}"
     print_rank_0(f"Saving checkpoint to {checkpoint_path}")
 
     if self._checkpoint_future and not self._checkpoint_future.done():
@@ -361,10 +349,3 @@ class AppState(Stateful):
       self.model,
       model_state_dict=state_dict["model"],
     )
-
-class CheckpointConverter:
-  def __init__(self, model_dir: Optional[str] = None):
-    self.model_dir = model_dir
-
-  def __call__(self, state_dict: STATE_DICT_TYPE) -> STATE_DICT_TYPE:
-    return state_dict

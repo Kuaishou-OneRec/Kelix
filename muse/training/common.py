@@ -18,7 +18,7 @@ from torch.utils._foreach_utils import (
 )
 
 @contextlib.contextmanager
-def set_default_dtype(dtype: torch.dtype) -> Generator[None, None, None]:
+def set_default_dtype(dtype: str) -> Generator[None, None, None]:
     """
     Context manager to set torch's default dtype.
 
@@ -35,6 +35,15 @@ def set_default_dtype(dtype: torch.dtype) -> Generator[None, None, None]:
         torch.bfloat16
 
     """
+    if dtype == "bfloat16":
+        dtype = torch.bfloat16
+    elif dtype == "float16":
+        dtype = torch.float16
+    elif dtype == "float32":
+        dtype = torch.float32
+    else:
+        raise ValueError(f"Invalid dtype: {dtype}")
+
     old_dtype = torch.get_default_dtype()
     torch.set_default_dtype(dtype)
     try:

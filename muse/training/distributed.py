@@ -234,7 +234,7 @@ def load_from_full_model_state_dict(model: "FSDPModule",
                                     full_sd: Dict[str, Any],
                                     allow_random_init_params: Optional[Union[str, List[str]]] = None):
     if isinstance(allow_random_init_params, str):
-        allow_random_init_params = allow_random_init_params.split(',')
+      allow_random_init_params = allow_random_init_params.split(',')
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
     if dist.get_rank() == 0:
@@ -259,11 +259,6 @@ def load_from_full_model_state_dict(model: "FSDPModule",
             if allow_random_init_params is not None and k in allow_random_init_params:
                 full_sd[k] = torch.rand(extra_meta_sharded_sd[k][0]) * 0.1
                 model.get_initializer(k)(full_sd[k])
-                # if full_sd[k].ndim >= 2:
-                #     # TODO(@zhouyang12): use a more robust way to initialize the weights
-                #     nn.init.kaiming_normal_(full_sd[k], a=0, mode='fan_in', nonlinearity='relu')
-                # else:
-                #     nn.init.zeros_(full_sd[k])  # 最常见
                 full_sd[k] = full_sd[k].to(device0)
                 print_rank_n(
                     f"random init k={k}, {extra_meta_sharded_sd[k]}\n, "

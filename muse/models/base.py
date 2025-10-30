@@ -14,11 +14,12 @@ class Model(nn.Module):
     def forward(self, *args, **kwargs):
         pass
 
-    def from_pretrained(self,
+    @classmethod
+    def from_pretrained(cls,
                         model_dir: str,
                         load_weights: bool = True,
                         allow_random_init_params: Optional[str] = None,
-                        **kwargs):
+                        **kwargs) -> "Model":
         """Load weights from a pretrained model.
         Args:
             model_dir (str): The directory to load the weights from.
@@ -74,10 +75,35 @@ class Model(nn.Module):
         """Return a list of layers that should be sharded by FSDP"""
         raise NotImplementedError(
             "Subclass must implement get_layers_to_shard method")
+
+    def rope_init(self):
+        """Initialize the RoPE for the model if needed"""
+        pass
+
+    def get_optimizer_grouped_parameters(
+            self,
+            learning_rate: float,
+            weight_decay: float) -> List[Dict[str, Any]]:
+        """Get the optimizer grouped parameters for AdamW optimizer
+        Args:
+            learning_rate (float): The learning rate.
+            weight_decay (float): The weight decay.
+        Returns:
+            A list of optimizer grouped parameters for AdamW optimizer.
+        """
+        optimizer_grouped_parameters = [
+          {
+            "params": [p for n, p in self.named_parameters() 
+                       if p.requires_grad],
+            "weight_decay": weight_decay,
+            "lr": learning_rate,
+          },
+        ]
     
-    def convert_hf_state_dict(self,
-                             hf_state_dict: Dict[str, torch.Tensor],
-                             **kwargs) -> Dict[str, torch.Tensor]:
+    @classmethod
+    def convert_hf_state_dict(cls,
+                              hf_state_dict: Dict[str, torch.Tensor],
+                              **kwargs) -> Dict[str, torch.Tensor]:
         """Convert a Hugging Face state dictionary to a model state dictionary
         Args:
             hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
@@ -85,5 +111,10 @@ class Model(nn.Module):
         Returns:
             A dictionary of model state.
         """
-        raise NotImplementedError(
-            "Subclass must implement convert_hf_state_dict method")
+        return hf_state_dict
+
+    @classmethod
+    def get_hf_state_dict(cls,
+                          state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """Convert the model state dict to the Hugging Face format"""
+        return state_dict
