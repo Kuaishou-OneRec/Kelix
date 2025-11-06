@@ -1,12 +1,11 @@
 import torch
 import torch.nn as nn
-from typing import Callable, Optional
+from typing import Callable, Optional, List, Dict, Any
 from functools import partial
 from muse.config.model_config import ModelConfig
 
 class Model(nn.Module):
-    """Base class for all models.
-    """
+    """Base class for all models."""
     def __init__(self, config: ModelConfig):
         super().__init__()
         self.config = config
@@ -118,3 +117,8 @@ class Model(nn.Module):
                           state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
         """Convert the model state dict to the Hugging Face format"""
         return state_dict
+    
+    def generate(self, *args, **kwargs):
+        """Generate text from the model"""
+        raise NotImplementedError(
+            "Subclass must implement generate method")

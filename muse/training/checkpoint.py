@@ -22,7 +22,7 @@ from torch.distributed.checkpoint import (
 from torch.distributed.checkpoint.metadata import Metadata, STATE_DICT_TYPE
 import torch.distributed.checkpoint as dcp
 from torch.distributed.checkpoint.stateful import Stateful
-from torch.distributed.checkpoint.state_dict import get_model_state_dict, set_model_state_dict
+from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
 
 from muse.training.distributed import get_world_size_and_rank
 from muse.utils.common import print_rank_0, print_rank_n
@@ -324,28 +324,26 @@ class AppState(Stateful):
     state dict methods on the model and optimizer.
   """
 
-  def __init__(self, model, optimizer=None, call_back=None):
+  def __init__(self, model, optimizer=None):
     self.model = model
-    self.call_back = call_back
-
-  def set_call_back(self, cb):
-    self.call_back = cb
-    return self
+    self.optimizer = optimizer
 
   def state_dict(self):
     # this line automatically manages FSDP FQN's, as well as sets the 
     # default state dict type to FSDP.SHARDED_STATE_DICT
-    model_state_dict = \
-      get_model_state_dict(self.model)
-    if self.call_back is not None:
-      model_state_dict = self.call_back(model_state_dict)
+    model_state_dict, optimizer_state_dict = \
+      get_state_dict(self.model, self.optimizer)
+
     return {
-      "model": model_state_dict
+      "model": model_state_dict,
+      "optim": optimizer_state_dict
     }
 
   def load_state_dict(self, state_dict):
     # sets our state dicts on the model and optimizer, now that we've loaded
-    set_model_state_dict(
+    set_state_dict(
       self.model,
+      self.optimizer,
       model_state_dict=state_dict["model"],
+      optimizer_state_dict=state_dict["optim"],
     )

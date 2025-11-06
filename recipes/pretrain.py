@@ -9,6 +9,7 @@ import collections
 import json
 import logging
 import threading
+import itertools
 import queue
 import traceback
 import torch.nn as nn
@@ -73,17 +74,20 @@ def get_argument_parser():
                       help="The model class name registered in muse.models.",)
 
   parser.add_argument("--model-config", type=str, default=None,
-                      help="The config file of the model to train, e.g. model_dir/config.json")
+                      help="The config file path of the model to train, e.g. model_dir/config.json")
 
   ############ Dataset args ############
   parser.add_argument("--dataset-class", type=str, default=None,
-                      help="The dataset class name.")
+                      help="The dataset class name registered in muse.datasets.")
 
   parser.add_argument("--dataset-config", type=str, default=None,
-                      help="The comma seperated path of indexed json file.")
+                      help="The config file path of the dataset to train.")
 
   parser.add_argument("--max-length", type=int, default=None,
                       help="Max tokens per sentence in corpus")
+  
+  parser.add_argument("--batch-size", type=int, default=None,
+                      help="Batch size for training")
 
   parser.add_argument("--shuffle-buffer-size", type=int, default=0,
                       help="Size of shuffle buffer for local data shuffling (0 to disable)")
@@ -93,9 +97,6 @@ def get_argument_parser():
 
   parser.add_argument("--packing", action="store_true", default=True,
                       help="Whether to use packing for dataset")
-  
-  parser.add_argument("--no-packing", action="store_false", dest="packing",
-                      help="Disable packing for dataset")
 
   ############ Checkpoint args ############
   parser.add_argument("--model-dir", type=str, default=None,
@@ -146,10 +147,10 @@ def get_argument_parser():
                       help="Whether use fp32 for model gradient reduction")
 
   parser.add_argument("--reshard-after-forward", action="store_true",
-                      help="enable reshard_after_forward to enable Zero3 (default)")
+                      help="Reshard params after forward pass, aka Zero3.")
   
   parser.add_argument("--prefetch-params-in-forward", action="store_true",
-                      help="prefetch fsdp parameters")
+                      help="Prefetch parameters in forward pass.")
 
   parser.add_argument("--compile", action="store_true",
                       help="compile model.")
@@ -396,17 +397,6 @@ def train():
   arg_parser = get_argument_parser()
   args = arg_parser.parse_args()
 
-  resume_from, ckpt_id, rewrite_resume_flag = get_resume_info(args)
-  
-  if rewrite_resume_flag:
-    args.resume_dataloader = True
-    args.load_weights_only = False
-    print_rank_0(f"WARN: --resume_dataloader is rewrited to True \n" \
-                 f"WARN: --load_weights_only is rewrited to False \n")
-
-  # check vision_lr
-  assert args.learning_rate > 0.0
-
   assert all([args.commit_id, args.seed, args.comment]), \
     "Git commit, seed, and comment is required for reproducibility"
 
@@ -450,13 +440,22 @@ def train():
 
   set_random_seed(args.seed)
 
+  if dist.get_rank() == 0:
+    args_str = json.dumps(vars(args), indent=2, ensure_ascii=False)
+    print_rank_0(f"Training Arguments:\n{args_str}")
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+    with open(os.path.join(args.output_dir,
+          f"args-{args.commit_id}-{timestamp}.json"), 'w',
+        encoding="utf-8") as f:
+      f.write(args_str + "\n")
+
   # Get model class from registry
   print_rank_0(f"Available models: {list_models()}")
   print_rank_0(f"Loading model class: {args.model_class}")
   
   try:
     model_cls = get_model_class(args.model_class)
-    print_rank_0(f"Successfully loaded model class: {model_cls.__name__}")
+    print_rank_0(f"Get model class: {model_cls.__name__}")
   except KeyError:
     print_rank_0(
       f"Unavailable model: {args.model_class}, " \
@@ -466,7 +465,7 @@ def train():
   # Load state dict and convert using model's converter
   state_dict = None
   
-  if dist.get_rank() == 0:
+  if args.model_dir and dist.get_rank() == 0:
     with set_default_dtype(args.model_dtype):
       print_rank_0(f"Loading checkpoint from: {args.model_dir}")
       hf_state_dict = load_hf_checkpoint(args.model_dir)
@@ -474,15 +473,6 @@ def train():
       state_dict = model_cls.convert_hf_state_dict(hf_state_dict)
 
   dist.barrier()
-
-  if dist.get_rank() == 0:
-    args_str = json.dumps(vars(args), indent=2, ensure_ascii=False)
-    print_rank_0(f"Training Arguments:\n{args_str}")
-    timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-    with open(os.path.join(args.output_dir,
-          f"args-{args.commit_id}-{timestamp}.json"), 'w',
-        encoding="utf-8") as f:
-      f.write(args_str + "\n")
 
   tb_writer = None
   if dist.get_rank() == 0:
@@ -547,10 +537,12 @@ def train():
 
   # Print trainable parameters
   print_rank_0("=" * 50)
-  print_rank_0("Trainable parameters:")
+  print_rank_0("Parameters:")
   for name, param in model.named_parameters():
     if param.requires_grad:
       print_rank_0(f"  {name}: {param.shape}")
+    else:
+      print_rank_0(f"  {name}: {param.shape} (not trainable)")
   print_rank_0("=" * 50)
 
   # TODO: support other optimizers
@@ -575,12 +567,8 @@ def train():
 
   total_num_tokens = 0
   total_num_samples = 0
-  total_num_valid_tokens = 0
-  dataloader_state_dict = None
-  local_acc_data_source_samples = collections.defaultdict(int)
-  total_data_source_tokens = collections.defaultdict(int)
   global_step = 0
-  app_state = AppState(model=model)
+  app_state = AppState(model=model, optimizer=optimizer)
   dist_checkpointer = DistributedCheckpointer()
 
   if ckpt_id:
@@ -597,7 +585,7 @@ def train():
     client_state = {}
 
     # 获取state_dict用于加载
-    state_dict = {"app": app_state.set_call_back(model.convert_hf_state_dict)}
+    state_dict = {"app": app_state}
               
     # 使用DCP API加载分片数据
     dist_checkpointer.load_checkpoint(
