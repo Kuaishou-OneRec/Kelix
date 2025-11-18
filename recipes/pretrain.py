@@ -705,70 +705,28 @@ def train():
       if global_step % args.logging_per_step == 0 and \
               (micro_step + 1) % args.gradient_accumulation_steps == 0:
 
-        # Reduce metrics across ranks
-        with Timer("Reduce metrics"):
-          batch_data_source_loss = dist_reduce_dict(batch_data_source_loss)
-          batch_data_source_tokens = dist_reduce_dict(batch_data_source_tokens)
-          total_data_source_samples = dist_reduce_dict(
-            local_acc_data_source_samples, group=get_data_parallel_group())
-          for ds_key, ds_num_tokens in batch_data_source_tokens.items():
-            total_data_source_tokens[ds_key] += ds_num_tokens
-
         if dist.get_rank() == 0:
-          model_lrs = lr_scheduler.get_last_lr()
-          learning_rate = model_lrs[0]
+          learning_rate = lr_scheduler.get_last_lr()[0]
           end_time = time.time()
           sec_per_step = (end_time - start_time) / args.logging_per_step
-          tokens_per_sec_per_gpu = acc_num_tokens / (end_time - start_time) / dist.get_world_size()
-          samples_per_sec_per_gpu = acc_num_samples / (end_time - start_time) / dist.get_world_size()
-          valid_tokens_per_sec_per_gpu = acc_valid_num_tokens / (end_time - start_time) / dist.get_world_size()
 
           avg_loss_value = acc_avg_loss / args.logging_per_step
           
           log_dict = {
             "training/loss": avg_loss_value,
             "training/grad_norm": grad_norm,
-            "training/learning_rate": learning_rate,
-            "perf/sec_per_step": sec_per_step,
-            "perf/tokens_per_sec_per_gpu": tokens_per_sec_per_gpu,
-            "perf/samples_per_sec_per_gpu": samples_per_sec_per_gpu,
-            "perf/valid_tokens_per_sec_per_gpu": valid_tokens_per_sec_per_gpu,
-            "perf/total_num_tokens": total_num_tokens,
-            "perf/total_num_samples": total_num_samples,
-            "perf/total_num_valid_tokens": total_num_valid_tokens,
-            "perf/valid_token_ratio": total_num_valid_tokens / max(total_num_tokens, 1),
-            "perf/epoch_idx": epoch_idx,
+            "training/learning_rate": learning_rate
           }
           start_time = end_time
 
-          total_data_source_samples_dict = dict(total_data_source_samples) if total_data_source_samples else {}
-          metrics_info = (global_step, log_dict, {}, batch_data_source_loss, batch_data_source_tokens, total_data_source_samples_dict)
+          metrics_info = (global_step, log_dict)
           tb_metrics_q.put(metrics_info)
           
           print_rank_0(
             f"Step: {global_step}, Loss: {avg_loss_value:.4f}, "
-            f"LR: {learning_rate:.2e}, GradNorm: {grad_norm:.2f}, "
-            f"Tokens/sec: {tokens_per_sec_per_gpu:.0f}, "
-            f"Samples/sec: {samples_per_sec_per_gpu:.2f}"
+            f"Learning Rate: {learning_rate:.2e}, GradNorm: {grad_norm:.2f}"
           )
-
-        # Reset accumulated metrics
-        acc_avg_loss = 0.0
-        acc_num_samples = 0
-        acc_num_tokens = 0
-        acc_valid_num_tokens = 0
-        batch_data_source_loss = collections.defaultdict(float)
-        batch_data_source_tokens = collections.defaultdict(int)
-      
-
-
-
-
-
-
-
-
-
+    
       if (global_step % args.save_checkpoint_per_step == 0 or global_step in [100, 200]) and \
           global_step > 0 and (micro_step + 1) % args.gradient_accumulation_steps == 0:
         
@@ -781,13 +739,6 @@ def train():
             save_dir=args.output_dir,
             tag=f"step{global_step}",
             global_step=global_step,
-            client_state={
-              "total_num_valid_tokens": total_num_valid_tokens,
-              "total_num_tokens": total_num_tokens,
-              "total_num_samples": total_num_samples,
-              "total_data_source_samples": total_data_source_samples,
-              "total_data_source_tokens": total_data_source_tokens,
-            },
             optimizer=optimizer,
             lr_scheduler=lr_scheduler,
             dataloader=dataloader,
