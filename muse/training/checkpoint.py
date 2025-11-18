@@ -188,6 +188,12 @@ class DistributedCheckpointer(CheckpointerInterface):
       return os.path.join(self._output_dir, latest_checkpoint_dir)
     return None
 
+  def get_checkpoint_path(self, checkpoint_dir: str, tag: Union[str, int] = "latest") -> str:
+    if tag == "latest":
+      return self.get_latest_checkpoint(checkpoint_dir)
+    else:
+      return Path(checkpoint_dir) / str(tag)
+
   def load_checkpoint(self,
                       state_dict: STATE_DICT_TYPE,
                       checkpoint_path: Optional[str] = None,
@@ -200,11 +206,8 @@ class DistributedCheckpointer(CheckpointerInterface):
     if not checkpoint_path:
       assert checkpoint_dir and tag, \
         "checkpoint_dir and tag should be provided if checkpoint_path is None"
-      if tag == "latest":
-        checkpoint_path = self.get_latest_checkpoint(checkpoint_dir)
-      else:
-        checkpoint_path = Path(checkpoint_dir) / str(tag)
-
+      checkpoint_path = self.get_checkpoint_path(checkpoint_dir, tag)
+  
     if not checkpoint_path:
       raise ValueError("No checkpoint path provided.")
 
@@ -291,20 +294,20 @@ class DistributedCheckpointer(CheckpointerInterface):
         "for checkpointing to finish...",
         rank=self._rank
       )
-
       self._checkpoint_future.add_done_callback(callback)
+
     else:
       print_rank_0(
         f"Saving model checkpoint synchronously to {checkpoint_path}.",
       )
 
       save(
-          state_dict=state_dict,
-          storage_writer=FileSystemWriter(
-            checkpoint_path,
-            thread_count=4
-          ),
-          process_group=self._process_group,
+        state_dict=state_dict,
+        storage_writer=FileSystemWriter(
+          checkpoint_path,
+          thread_count=4
+        ),
+        process_group=self._process_group,
       )
 
     print_rank_0(
