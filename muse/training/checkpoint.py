@@ -100,10 +100,10 @@ def load_hf_checkpoint(model_dir):
         # Ensure that the state dict is a flat dict of keys and tensors. Breaking this assumption
         # will break recipe code
         if not isinstance(value, torch.Tensor):
-            raise ValueError(
-                f"Expected all values in the state dict to be torch.Tensor. "
-                f"Found {key}={type(value)} instead."
-            )
+          raise ValueError(
+            f"Expected all values in the state dict to be torch.Tensor. "
+            f"Found {key}={type(value)} instead."
+          )
     merged_state_dict.update(state_dict)
 
     # delete the state_dict to free up memory; TODO check if this del is needed

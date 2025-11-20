@@ -16,6 +16,7 @@ from tqdm import tqdm
 from torch.utils.data import IterableDataset
 from fastparquet import ParquetFile
 from torch.utils.data import DataLoader
+from muse.training.parallel import get_data_parallel_rank, get_data_parallel_world_size
 
 PARQUET_CACHE_DIR = os.environ.get("PARQUET_CACHE_DIR", "/code/dataset_cache")
 
@@ -361,10 +362,63 @@ class DistributedDataset(IterableDataset):
         yield sample
     else:
       # Sample sharding mode: need to consider both rank and worker sharding
-      for idx, sample in enumerate(self.reader):
+      for idx, sample in enumerate(self.dataset):
         if idx % self.world_size == self.rank and \
                 idx % num_workers == worker_id:
           yield sample
 
   def __iter__(self):
-    pass
+    """Iterate through the dataset, processing samples and handling epochs."""
+    from collections import deque
+    
+    for epoch in range(self.num_epochs):
+      # Get samples from reader
+      samples = self._get_reader_iter()
+      
+      # Handle shuffling with buffer
+      if self.shuffle_buffer_size > 0:
+        buffer = deque(maxlen=self.shuffle_buffer_size)
+        
+        # Fill buffer initially
+        for sample in samples:
+          buffer.append(sample)
+          if len(buffer) >= self.shuffle_buffer_size:
+            # Randomly select one from buffer
+            # Convert to list for random access and removal
+            buffer_list = list(buffer)
+            idx = self.rng.randint(0, len(buffer_list) - 1)
+            selected = buffer_list.pop(idx)
+            # Rebuild buffer from remaining items
+            buffer.clear()
+            buffer.extend(buffer_list)
+            
+            # Process and yield
+            try:
+              processed = self.process(selected)
+              if processed is not None:
+                yield processed
+            except Exception as e:
+              print(f"Error processing sample: {e}")
+              continue
+        
+        # Yield remaining samples in buffer (shuffle and process)
+        buffer_list = list(buffer)
+        self.rng.shuffle(buffer_list)
+        for selected in buffer_list:
+          try:
+            processed = self.process(selected)
+            if processed is not None:
+              yield processed
+          except Exception as e:
+            print(f"Error processing sample: {e}")
+            continue
+      else:
+        # No shuffling, process samples directly
+        for sample in samples:
+          try:
+            processed = self.process(sample)
+            if processed is not None:
+              yield processed
+          except Exception as e:
+            print(f"Error processing sample: {e}")
+            continue

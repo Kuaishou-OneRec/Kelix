@@ -27,7 +27,7 @@ torch.autograd.set_detect_anomaly(True)
 import gc
 gc.disable()
 
-process_group_timeout = datetime.timedelta(minutes = 60*24)
+process_group_timeout = datetime.timedelta(minutes=60*24)
 
 # TODO:
 # 1. Add dataset checkpointing
