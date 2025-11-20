@@ -27,11 +27,15 @@ torch.autograd.set_detect_anomaly(True)
 import gc
 gc.disable()
 
-process_group_timeout = datetime.timedelta(minutes=60*24)
+process_group_timeout = datetime.timedelta(minutes = 60*24)
+
+# TODO:
+# 1. Add dataset checkpointing
+# 2. Add wandb support
+# 3. Add perf logging support
 
 # Muse imports
 from muse.models import get_model_class, list_models
-from muse.config import Qwen3Config
 from muse.training.distributed import (
     shard_model, 
     load_from_full_model_state_dict,
@@ -40,7 +44,9 @@ from muse.training.distributed import (
 from muse.training.checkpoint import (
     AppState, 
     DistributedCheckpointer,
-    load_hf_checkpoint
+    load_hf_checkpoint,
+    get_checkpoint_path,
+    save_checkpoint
 )
 from muse.training.common import (
     set_default_dtype, 
@@ -256,128 +262,6 @@ def _init_profiler(output_dir) -> None:
     return torch_profiler
 
 # TODO: move to muse.training.checkpoint
-def save_model_checkpoint(
-    model,
-    save_dir: str,
-    tag: str = None,
-    client_state=None,
-    optimizer = None,
-    dataloader = None,
-    lr_scheduler=None,
-    app_state: AppState = None,
-    dist_checkpointer: DistributedCheckpointer = None,
-    global_step: int = None,
-):
-    """保存FSDP+TP模型的checkpoint
-
-    Args:
-        model: FSDP wrapped model
-        save_dir: The directory to save the checkpoint
-        checkpoint_id: The id of the checkpoint, if not specified, use timestamp
-        client_state: The additional state to save
-        dataloader: The dataloader to save
-        lr_scheduler: The learning rate scheduler to save
-        app_state: The app state to save
-        dist_checkpointer: The dist checkpointer to save
-        global_step: The global step to save
-    """
-    if dist.get_rank() == 0:
-      os.makedirs(save_dir, exist_ok=True)
-    
-    # 生成checkpoint标签
-    if tag is None:
-      if global_step:
-        tag = f"global_step{global_step}"
-      else:
-        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        tag = f"ckpt_{timestamp}"
-
-
-    ckpt_path = os.path.join(save_dir, tag)
-    if dist.get_rank() == 0:
-      os.makedirs(ckpt_path, exist_ok=True)
-
-      # Update latest file
-      with open(os.path.join(save_dir, "latest"), "w") as f:
-        f.write(tag)
-    
-    dist.barrier()
-
-    # Configure FSDP state_dict
-    full_state_dict_config = FullStateDictConfig(
-      offload_to_cpu=True,
-      rank0_only=True,
-    )
-
-    try:
-        dist_checkpointer.save_checkpoint(
-          state_dict={"app": app_state},
-          output_dir=ckpt_path,           
-          tag=tag
-        )
-
-        # Save dataloader state (if any)
-        if dataloader is not None:
-          try:
-            dataloader_state = {
-              "dataloader_state_dict": dataloader.state_dict()
-            }
-            dataloader_path = os.path.join(ckpt_path, "dataloader_ckpt")
-            if dist.get_rank() == 0:
-              os.makedirs(dataloader_path, exist_ok=True)
-            dist.barrier()
-            
-            # Save dataloader state for each rank
-            torch.save(
-              dataloader_state,
-              os.path.join(dataloader_path, f"rank{dist.get_rank()}.pt")
-            )
-            print_rank_0(f"Saved dataloader state to {dataloader_path}")
-          except:
-              import traceback
-              logging.error(
-                f"Failed to save dataloader state! dataloader" \
-                f"({type(dataloader)})={dataloader} \n" \
-                f"traceback:{traceback.format_exc()}")
-
-        optimizer_path = os.path.join(ckpt_path, "optimizer_ckpt")
-        optimizer_state = {
-          "optimizer_state_dict": optimizer.state_dict(),
-          "scheduler_state_dict": lr_scheduler.state_dict(),
-        }
-        if dist.get_rank() == 0:
-          os.makedirs(optimizer_path, exist_ok=True)
-        dist.barrier()
-        torch.save(
-          optimizer_state,
-          os.path.join(optimizer_path, f"rank{dist.get_rank()}.pt")
-        )
-        print_rank_0(f"Saved dataloader state to {optimizer_path}")
-    except Exception as e:
-        logging.error(f"Failed to save checkpoint: {str(e)}")
-        raise e
-    
-    finally:
-        # Ensure all processes are synchronized
-        dist.barrier()
-
-
-def get_resume_info(args):
-  if args.checkpoint_dir and os.path.exists(args.checkpoint_dir):
-    checkpoint_dir = args.checkpoint_dir
-    if args.checkpoint_id:
-      checkpoint_id = args.checkpoint_id
-    else:
-      latest_file = os.path.join(checkpoint_dir, "latest")
-      if os.path.exists(latest_file):
-        with open(latest_file, encoding="utf-8") as f:
-          checkpoint_id = f.read().strip()
-    checkpoint_path = os.path.join(checkpoint_dir, checkpoint_id)
-    if not os.path.exists(checkpoint_path):
-      raise ValueError(f"Checkpoint path {checkpoint_path} does not exist")
-    return checkpoint_dir, checkpoint_id
-  else:
-    return None, None
 
 def train():
   arg_parser = get_argument_parser()
@@ -410,7 +294,6 @@ def train():
   use_dataset_load_balance = dataset_config.get("use_load_balance", False) or \
     args.use_dataset_load_balance
 
-
   # torch init
   torch.cuda.set_device(local_rank)
   torch.distributed.init_process_group(
@@ -418,7 +301,6 @@ def train():
     timeout=process_group_timeout
   )
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
-
 
   ### initialize model parallel group
   # Currently only support sequence parallelism
@@ -516,7 +398,7 @@ def train():
   # Check if all tensors are initialized
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
     assert tensor.device != torch.device("meta"), \
-        f"{name} not initialized, device={tensor.device}"
+      f"{name} not initialized, device={tensor.device}"
 
   if args.compile:
     model = torch.compile(model)
@@ -555,8 +437,6 @@ def train():
     min_lr=args.min_lr
   )
 
-  total_num_tokens = 0
-  total_num_samples = 0
   global_step = 0
   app_state = AppState(model=model, optimizer=optimizer)
   dist_checkpointer = DistributedCheckpointer()
@@ -567,7 +447,7 @@ def train():
 
     state_dict = {"app": app_state}
     # TODO: add get_checkpoint_path to utils
-    checkpoint_path = dist_checkpointer.get_checkpoint_path(
+    checkpoint_path = get_checkpoint_path(
       args.checkpoint_dir, args.checkpoint_id)
 
     dist_checkpointer.load_checkpoint(
@@ -620,8 +500,6 @@ def train():
     return loss
 
   start_time = time.time()
-  start_time0 = start_time
-  show_cnt = 1
 
   grad_norm = 0.0
   micro_step = 0
@@ -636,7 +514,6 @@ def train():
   tb_metrics_q = queue.Queue(maxsize=8)
   def write_tb_async(tb_writer, metrics_queue):
     while True:
-      # metrics = metrics_queue.get()
       global_step, log_dict = metrics_queue.get()
       for name, data in log_dict.items():
         if data is not None and tb_writer:
@@ -682,7 +559,6 @@ def train():
         logits = output.logits if hasattr(output, 'logits') else output
         loss = compute_loss(logits, labels, ignore_index=-100)
 
-      # print(f"X=111, rank={dist.get_rank()} current_gpu_memory: {torch.cuda.max_memory_allocated() / 1024 / 1024} MB")
       # Backward pass
       with Timer("Backward"):
         loss.backward()
@@ -703,7 +579,7 @@ def train():
       log_acc_step = args.logging_per_step * args.gradient_accumulation_steps
 
       if global_step % args.logging_per_step == 0 and \
-              (micro_step + 1) % args.gradient_accumulation_steps == 0:
+        (micro_step + 1) % args.gradient_accumulation_steps == 0:
 
         if dist.get_rank() == 0:
           learning_rate = lr_scheduler.get_last_lr()[0]
@@ -734,53 +610,21 @@ def train():
         gc.collect()
 
         with Timer("save checkpoint"):
-          save_model_checkpoint(
-            model=model,
-            save_dir=args.output_dir,
-            tag=f"step{global_step}",
-            global_step=global_step,
-            optimizer=optimizer,
-            lr_scheduler=lr_scheduler,
-            dataloader=dataloader,
-            app_state=app_state.set_call_back(converter.revert),
-            dist_checkpointer=dist_checkpointer
+          save_checkpoint(
+            app_state=app_state,
+            dist_checkpointer=dist_checkpointer,
+            checkpoint_dir=args.output_dir,
+            global_step=global_step
           )
 
       if torch_profiler:
         torch_profiler.step()
 
-
-  # Save final dataset checkpoint if enabled
-  if args.enable_dataset_checkpointing and dataloader is not None and hasattr(dataloader, 'dataset'):
-    try:
-      dataloader.dataset.save_checkpoint(dist.get_rank(), global_step)
-      print_rank_0(f"Saved final dataset checkpoint at step {global_step}")
-    except Exception as e:
-      print_rank_0(f"Failed to save final dataset checkpoint: {e}")
-
-  save_model_checkpoint(
-                      model=model,
-                      save_dir=args.output_dir,
-                      tag=f"step{global_step}",
-                      global_step=global_step,
-                      client_state={
-                          "total_num_valid_tokens": total_num_valid_tokens,
-                          "total_num_tokens": total_num_tokens,
-                          "total_num_samples": total_num_samples,
-                          "total_data_source_samples": total_data_source_samples,
-                          "total_data_source_tokens": total_data_source_tokens,
-                      },
-                      optimizer=optimizer,
-                      lr_scheduler=lr_scheduler,
-                      dataloader=data_iter if use_flops_balance else dataloader,
-                      app_state=app_state.set_call_back(converter.revert), # app_state.set_call_back(state_dict),
-                      dist_checkpointer=dist_checkpointer,
-                  )
+  save_checkpoint(
+    app_state=app_state,
+    dist_checkpointer=dist_checkpointer,
+    checkpoint_dir=args.output_dir,
+    global_step=global_step)
 
 if __name__ == "__main__":
   train()
-
-
-
-
-

@@ -27,6 +27,7 @@ from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_di
 from muse.training.distributed import get_world_size_and_rank
 from muse.utils.common import print_rank_0, print_rank_n
 
+CHECKPOINT_ID_PREFIX = "global_step"
 
 def load_safetensors(path):
   tensors = {}
@@ -41,13 +42,13 @@ def safe_torch_load(
     mmap: bool = True,
 ) -> Dict[str, Any]:
     """
-    Utility to load a checkpoint file onto CPU in a safe manner. Provides separate handling for
-    safetensors files.
+    Utility to load a checkpoint file onto CPU in a safe manner. 
+    Provides separate handling for safetensors files.
 
     Args:
         checkpoint_path (Union[Path, str]): Path to the checkpoint file.
         weights_only (bool): Whether to load only tensors, primitive types, and dictionaries
-            (passthrough to torch.load). Default: True
+          (passthrough to torch.load). Default: True
         mmap (bool): Whether to mmap from disk into CPU memory. Default: True
 
     Returns:
@@ -57,27 +58,28 @@ def safe_torch_load(
         ValueError: If the checkpoint file is not found or cannot be loaded.
     """
     try:
-        # convert the path into a string since pathlib Path and mmap don't work
-        # well together
-        is_safetensors_file = (
-            True if str(checkpoint_path).endswith(".safetensors") else False
+      # convert the path into a string since pathlib Path and mmap don't work
+      # well together
+      is_safetensors_file = (
+        True if str(checkpoint_path).endswith(".safetensors") else False
+      )
+      if is_safetensors_file:
+        result = {}
+        from safetensors import safe_open
+        with safe_open(checkpoint_path, framework="pt", device="cpu") as f:
+          for k in f.keys():
+            result[k] = f.get_tensor(k)
+        state_dict = result
+      else:
+        state_dict = torch.load(
+          str(checkpoint_path),
+          map_location="cpu",
+          mmap=mmap,
+          weights_only=weights_only,
         )
-        if is_safetensors_file:
-            result = {}
-            from safetensors import safe_open
-            with safe_open(checkpoint_path, framework="pt", device="cpu") as f:
-                for k in f.keys():
-                    result[k] = f.get_tensor(k)
-            state_dict = result
-        else:
-            state_dict = torch.load(
-                str(checkpoint_path),
-                map_location="cpu",
-                mmap=mmap,
-                weights_only=weights_only,
-            )
     except Exception as e:
-        raise ValueError(f"Unable to load checkpoint from {checkpoint_path}. ") from e
+      raise ValueError(
+        f"Unable to load checkpoint from {checkpoint_path}. ") from e
     return state_dict
 
 def load_hf_checkpoint(model_dir):
@@ -92,8 +94,7 @@ def load_hf_checkpoint(model_dir):
     ckpt_paths = sorted(glob.glob(os.path.join(model_dir, "*.bin")))
   # _checkpoint_paths are already sorted so simply enumerate to generate the right id
   for cpt_idx, cpt_path in enumerate(ckpt_paths):
-    #print_rank_0(f"Load checkpoints: {cpt_idx}/{len(ckpt_paths)}")
-    print(f"Load checkpoints: {cpt_idx}/{len(ckpt_paths)}")
+    print_rank_0(f"Load checkpoints: {cpt_idx}/{len(ckpt_paths)}")
     state_dict = safe_torch_load(cpt_path)
     for key, value in state_dict.items():
         # Ensure that the state dict is a flat dict of keys and tensors. Breaking this assumption
@@ -147,8 +148,20 @@ class CheckpointerInterface(Protocol):
   def save_checkpoint(self, state_dict: Dict[str, Any], **kwargs) -> None:
     ...
 
-class HFCheckpointer(CheckpointerInterface):
-  pass
+def get_latest_checkpoint_path(checkpoint_dir: str) -> str:
+  if os.path.exists(os.path.join(checkpoint_dir, "latest")):
+    with open(os.path.join(checkpoint_dir, "latest"), "r") as f:
+      latest_checkpoint_dir = f.read().strip()
+    return os.path.join(checkpoint_dir, latest_checkpoint_dir)
+  else:
+    return None
+
+def get_checkpoint_path(checkpoint_dir: str,
+                        checkpoint_id: Optional[str] = None) -> str:
+  if checkpoint_id:
+    return os.path.join(checkpoint_dir, checkpoint_id)
+  else:
+    return get_latest_checkpoint_path(checkpoint_dir)
 
 class DistributedCheckpointer(CheckpointerInterface):
   """
@@ -166,50 +179,16 @@ class DistributedCheckpointer(CheckpointerInterface):
       self,
       process_group: Optional[dist.ProcessGroup] = None) -> None:
     self._checkpoint_future = None
-    self._checkpoint_dir_prefix = "global_step"
     _, self._rank = get_world_size_and_rank()
     self._process_group: Optional[dist.ProcessGroup] = process_group
 
-  def get_latest_checkpoint(self, checkpoint_dir: str):
-    checkpoint_dir_pattern = re.compile(f"{self._checkpoint_dir_prefix}(\\d+)")
-    checkpoint_paths = [
-        name
-        for name in os.listdir(checkpoint_dir)
-        if re.match(checkpoint_dir_pattern, name)
-        and os.path.isfile(
-            os.path.join(self._output_dir, name, self._metadata_file)
-        )
-    ]
-
-    if checkpoint_paths:
-      latest_checkpoint_dir = sorted(
-        checkpoint_paths, key=lambda x: int(x.split("_")[-1])
-      )[-1]
-      return os.path.join(self._output_dir, latest_checkpoint_dir)
-    return None
-
-  def get_checkpoint_path(self, checkpoint_dir: str, tag: Union[str, int] = "latest") -> str:
-    if tag == "latest":
-      return self.get_latest_checkpoint(checkpoint_dir)
-    else:
-      return Path(checkpoint_dir) / str(tag)
-
   def load_checkpoint(self,
                       state_dict: STATE_DICT_TYPE,
-                      checkpoint_path: Optional[str] = None,
-                      checkpoint_dir: Optional[str] = None,
-                      tag: Union[str, int] = "latest") -> Dict[str, Any]:
+                      checkpoint_path: str) -> Dict[str, Any]:
     """
     Load a Distributed checkpoint saved at the <checkpoint_path>
     If no path is provided, latest intermediate checkpoint is loaded.
     """
-    if not checkpoint_path:
-      assert checkpoint_dir and tag, \
-        "checkpoint_dir and tag should be provided if checkpoint_path is None"
-      checkpoint_path = self.get_checkpoint_path(checkpoint_dir, tag)
-  
-    if not checkpoint_path:
-      raise ValueError("No checkpoint path provided.")
 
     print_rank_0(f"Loading checkpoint from {checkpoint_path}")
 
@@ -224,8 +203,7 @@ class DistributedCheckpointer(CheckpointerInterface):
   def save_checkpoint(
       self,
       state_dict: STATE_DICT_TYPE,
-      output_dir,
-      checkpoint_id: Optional[Union[str, int]] = None,
+      checkpoint_path: str,
       save_async: bool = False) -> None:
     """
     Save a distributed checkpoint to storage.
@@ -235,12 +213,9 @@ class DistributedCheckpointer(CheckpointerInterface):
 
     Args:
       state_dict (Dict[str, Any]): Checkpoint state dict to be written out to file
-      tag (int): Checkpoint tag. Used to create the checkpoint file name, generally step
+      checkpoint_path (str): Path to save the checkpoint
       save_async (bool): If True, save the checkpoint asynchronously
     """
-    checkpoint_path = output_dir
-    if checkpoint_id is not None:
-      checkpoint_path = Path(output_dir) / f"{self._checkpoint_dir_prefix}{checkpoint_id}"
     print_rank_0(f"Saving checkpoint to {checkpoint_path}")
 
     if self._checkpoint_future and not self._checkpoint_future.done():
@@ -350,3 +325,42 @@ class AppState(Stateful):
       model_state_dict=state_dict["model"],
       optimizer_state_dict=state_dict["optim"],
     )
+
+
+# TODO: support saving dataloader, lr_scheduler, training states, etc.
+def save_checkpoint(
+    app_state: AppState,
+    dist_checkpointer: DistributedCheckpointer,
+    checkpoint_dir: str,
+    global_step: int = None
+  ) -> None:
+    """Utility function to checkpoint tranining states.
+
+    Args:
+        app_state: The app state to save
+        dist_checkpointer: The dist checkpointer to save
+        checkpoint_dir: The directory to save the checkpoint
+        global_step: The global step to save the checkpoint
+    """
+    if dist.get_rank() == 0:
+      os.makedirs(checkpoint_dir, exist_ok=True)
+    
+    checkpoint_id = f"{CHECKPOINT_ID_PREFIX}{global_step}"
+
+    checkpoint_path = get_checkpoint_path(
+      checkpoint_dir, checkpoint_id)
+
+    if dist.get_rank() == 0:
+      os.makedirs(checkpoint_path, exist_ok=True)
+
+      # Update latest file
+      with open(os.path.join(checkpoint_dir, "latest"), "w") as f:
+        f.write(checkpoint_id + "\n")
+    
+    dist.barrier()
+
+    dist_checkpointer.save_checkpoint(
+      state_dict={"app": app_state},
+      checkpoint_path=checkpoint_path
+    )
+    dist.barrier()
