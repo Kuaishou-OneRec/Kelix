@@ -3,7 +3,7 @@ from transformers import AutoTokenizer
 from muse.data.datasets.base import DistributedDataset
 from muse.data.prompts import PromptLoader
 
-class Qwen3Dataset(DistributedDataset):
+class ChatMLDataset(DistributedDataset):
   def __init__(self,
                sources: Union[str, List[str]],
                rank: int = 0,
@@ -11,62 +11,66 @@ class Qwen3Dataset(DistributedDataset):
                num_workers: int=8,
                seed: int=1024,
                system_prompt: str = "default",
+               use_system_prompt: bool = True,
+               add_prompt_loss: bool = True,
+               tokenizer_path: str = None,
                **kwargs):
     super().__init__(
       sources=sources, rank=rank, world_size=world_size,
       num_workers=num_workers, seed=seed, **kwargs)
     prompt_loader = PromptLoader()
     self.system_prompt = prompt_loader.load(system_prompt)
-    self.tokenizer_path = kwargs.get("tokenizer_path", None)
-    self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
+    self.use_system_prompt = use_system_prompt
+    self.tokenizer_path = tokenizer_path
+    if self.tokenizer_path:
+      self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
+    else:
+      self.tokenizer = None
 
   def process(self,
               sample: Dict[str, Any]):
-    assert "messages" in sample["json"], \
-        f"sample must contain `messages` key, but got {sample['json'].keys()}"
+    assert "row" in sample, \
+      f"sample must contain `row` key, but got {sample.keys()}"
 
-    messages = sample["json"]["messages"]
+    row = sample["row"]
+    messages = json.loads(row.get("messages", "[]"))
 
-    transformed_messages = []
-    valid_message = True
-    for msg in messages:
-        role = msg.get("role")
-        content_list = msg.get("content")
-        if role and isinstance(content_list, list) and content_list and content_list[0].get("type") == "text":
-            text_content = content_list[0].get("text")
-            if text_content is not None:
-                transformed_messages.append({"role": role, "content": text_content})
-            else:
-                valid_message = False
-                break
-        else:
-            valid_message = False
-            break
-    
-    if not valid_message or not transformed_messages:
-      print(f"Warning: Message format is incorrect. Data: {messages}")
+    assert isinstance(messages, list) and len(messages) > 0, \
+      f"messages must be a non-empty list, but got {messages}"
 
-    if not messages or messages[0]["role"] != "system":
+    if self.use_system_prompt and not messages[0]["role"] == "system":
       system = {"role": "system", "content": self.system_prompt}
       messages.insert(0, system)
+    
+    input_ids = []
+    loss_mask = []
 
-    text = self.tokenizer.apply_chat_template(
-      transformed_messages,
-      tokenize=False,
-      add_generation_prompt=True
-    )
+    for turn in messages:
+      if turn["role"] == "system":
+        _input_ids = self.tokenizer.apply_chat_template(turn, add_generation_prompt=False)
+        _loss_mask = [int(self.add_prompt_loss)] * len(_input_ids)
+        input_ids.extend(_input_ids)
+        loss_mask.extend(_loss_mask)
+      elif turn["role"] == "user":
+        _input_ids = self.tokenizer.apply_chat_template(turn, add_generation_prompt=True)
+        _loss_mask = [int(self.add_prompt_loss)] * len(_input_ids)
+        input_ids.extend(_input_ids)
+        loss_mask.extend(_loss_mask)
+      elif turn["role"] == "assistant":
+        _input_ids = self.tokenizer.apply_chat_template(turn)
+        _loss_mask = [1] * len(_input_ids)
+        input_ids.extend(_input_ids)
+        loss_mask.extend(_loss_mask)
+      else:
+        raise ValueError(f"Invalid role: {turn['role']}")
+
+    # batchify
+    input_ids = torch.tensor(input_ids).unsqueeze(0)
+    loss_mask = torch.tensor(loss_mask).unsqueeze(0)
 
     return {
-      "vllm_inputs": {
-        "prompt": text,
-      },
-      "annotation": "",
-      "image_path": "",
-      "video_path": "",
-      "metadata": sample["raw"].loc["metadata"],
-      "source": sample["json"]["source"],
-      "__key__": sample["__key__"],
-      "__url__": sample["__url__"],
+      "input_ids": input_ids,
+      "loss_mask": loss_mask,
     }
 
    

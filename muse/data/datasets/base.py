@@ -142,35 +142,16 @@ class ParquetReader(Reader):
       super().__init__(source)
 
     def _parser(self, row, filename):
-        key = "unknown"
         try:
-            assert "messages" in row, "messages is not in row"
-            messages = json.loads(row["messages"])
-
-            images = row["images"]
-            videos = row["videos"]
-            source = row["source"]
-            key = row["uuid"]
+            source = row.get("source", "unknown")
+            key = row.get("uuid", "unknown")
 
             samples = {
                 "__key__": key,
                 "__url__": filename,
-                "raw": row,
-                "json": {
-                    "source": source,
-                    "messages": messages,
-                }
+                "source": source,
+                "row": row
             }
-            images = json.loads(images)
-            videos = json.loads(videos)
-
-            for img_key, image in images.items():
-              if self.is_load_image:
-                image = load_image(image)
-              if image:
-                samples[img_key] = image
-            for vid_key, video in videos.items():
-                samples[vid_key] = video
 
             return samples
 
@@ -192,7 +173,7 @@ class ParquetReader(Reader):
         df = parquet_file.to_pandas()
         for idx, row in tqdm(df.iterrows(), total=len(df), desc=f"{worker_id=} Reading {fn}"):
           try:
-            sample = self._parser(row, fn)
+            sample = self._parser(row.to_dict(), fn)
             if sample is not None:
               yield sample
           except Exception as e:
@@ -367,58 +348,11 @@ class DistributedDataset(IterableDataset):
                 idx % num_workers == worker_id:
           yield sample
 
+  def process(self, sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+    raise NotImplementedError("Subclass must implement this method")
+
   def __iter__(self):
     """Iterate through the dataset, processing samples and handling epochs."""
-    from collections import deque
-    
     for epoch in range(self.num_epochs):
-      # Get samples from reader
-      samples = self._get_reader_iter()
-      
-      # Handle shuffling with buffer
-      if self.shuffle_buffer_size > 0:
-        buffer = deque(maxlen=self.shuffle_buffer_size)
-        
-        # Fill buffer initially
-        for sample in samples:
-          buffer.append(sample)
-          if len(buffer) >= self.shuffle_buffer_size:
-            # Randomly select one from buffer
-            # Convert to list for random access and removal
-            buffer_list = list(buffer)
-            idx = self.rng.randint(0, len(buffer_list) - 1)
-            selected = buffer_list.pop(idx)
-            # Rebuild buffer from remaining items
-            buffer.clear()
-            buffer.extend(buffer_list)
-            
-            # Process and yield
-            try:
-              processed = self.process(selected)
-              if processed is not None:
-                yield processed
-            except Exception as e:
-              print(f"Error processing sample: {e}")
-              continue
-        
-        # Yield remaining samples in buffer (shuffle and process)
-        buffer_list = list(buffer)
-        self.rng.shuffle(buffer_list)
-        for selected in buffer_list:
-          try:
-            processed = self.process(selected)
-            if processed is not None:
-              yield processed
-          except Exception as e:
-            print(f"Error processing sample: {e}")
-            continue
-      else:
-        # No shuffling, process samples directly
-        for sample in samples:
-          try:
-            processed = self.process(sample)
-            if processed is not None:
-              yield processed
-          except Exception as e:
-            print(f"Error processing sample: {e}")
-            continue
+      for sample in self._get_reader_iter():
+        yield self.process(sample)
