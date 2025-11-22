@@ -351,8 +351,31 @@ class DistributedDataset(IterableDataset):
   def process(self, sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
     raise NotImplementedError("Subclass must implement this method")
 
+  def pack_sample(self,
+                  inputs: Dict[str, torch.Tensor],
+                  new_inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    raise NotImplementedError("Subclass must implement this method")
+  
+  def get_sample_length(self, sample: Dict[str, torch.Tensor]) -> int:
+    raise NotImplementedError("Subclass must implement this method")
+
   def __iter__(self):
     """Iterate through the dataset, processing samples and handling epochs."""
-    for epoch in range(self.num_epochs):
+    inputs = {}
+    cu_seqlen = [0]
+    for _ in range(self.num_epochs):
       for sample in self._get_reader_iter():
-        yield self.process(sample)
+        new_inputs = self.process(sample)
+        if not new_inputs:
+          continue
+        if self.packing:
+          new_sample_length = self.get_sample_length(new_inputs)
+          if self.get_sample_length(inputs) + new_sample_length > self.max_length:
+            yield inputs
+            inputs = {}
+            cu_seqlen = [0]
+          cu_seqlen.append(cu_seqlen[-1] + new_sample_length)
+          inputs = self.pack_sample(inputs, new_inputs)
+          inputs["cu_seqlen"] = cu_seqlen
+        else:
+          yield new_inputs
