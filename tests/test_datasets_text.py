@@ -344,7 +344,7 @@ class TestTextDataset:
             dataset = TextDataset(
                 sources=[str(parquet_path)],
                 tokenizer_path="test/tokenizer",
-                max_length_per_sample=20,
+                max_length_per_sample=15,
                 add_system_prompt=False
             )
 
@@ -358,7 +358,7 @@ class TestTextDataset:
             result = dataset.process_messages(messages)
             assert result is not None
             # Should be truncated to max_length
-            assert result["input_ids"].shape[1] <= 10
+            assert result["input_ids"].shape[1] <= 15
 
     @patch('muse.data.datasets.text.AutoTokenizer')
     def test_process_messages_padding(self, mock_tokenizer_class):
