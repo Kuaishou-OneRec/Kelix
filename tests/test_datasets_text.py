@@ -219,7 +219,10 @@ class TestTextDataset:
             assert result is not None
             # Check that loss_mask has non-zero values for prompts
             loss_mask = result["loss_mask"]
-            assert torch.sum(loss_mask) > 0
+
+            print("loss_mask: ", loss_mask)
+            print("input_ids: ", result["input_ids"])
+            assert torch.sum(loss_mask) < 0
 
     @patch('muse.data.datasets.text.AutoTokenizer')
     def test_process_messages_no_response(self, mock_tokenizer_class):
@@ -491,6 +494,7 @@ class TestTextDataset:
             assert packed["input_ids"].shape[1] == 5  # 3 + 2
             assert packed["loss_mask"].shape[1] == 5
             assert packed["position_ids"].shape[1] == 5
+            assert packed["cu_seqlen"] == [0, 3, 5]
 
     @patch('muse.data.datasets.text.AutoTokenizer')
     def test_get_sample_length(self, mock_tokenizer_class):
