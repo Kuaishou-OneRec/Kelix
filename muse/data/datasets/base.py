@@ -354,6 +354,19 @@ class DistributedDataset(IterableDataset):
   def process(self, sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
     raise NotImplementedError("Subclass must implement this method")
 
+  # TODO: use get messages or get segments.
+  def get_content(self,
+                  sample: Dict[str, Any],
+                  key: str) -> List[Dict[str, Any]]:
+    """Get content from sample"""
+    row = sample.get("row", {})
+    content = row.get(key, "[]")
+    try:
+      content = json.loads(content)
+    except json.JSONDecodeError:
+      return []
+    return content
+
   def pack_sample(self,
                   inputs: Dict[str, torch.Tensor],
                   new_inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
