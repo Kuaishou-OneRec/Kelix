@@ -361,9 +361,12 @@ class DistributedDataset(IterableDataset):
     """Get content from sample"""
     row = sample.get("row", {})
     content = row.get(key, "[]")
+    print("content", content)
     try:
       content = json.loads(content)
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+      print(f"Error loading json: {e}")
+      print(f"content: {content}")
       return []
     return content
 
