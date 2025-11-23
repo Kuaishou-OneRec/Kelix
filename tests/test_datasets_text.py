@@ -38,6 +38,7 @@ class MockTokenizer:
         tokens = []
         # Split by whitespace characters
         words = re.split(r'\s+', text.strip())
+        print("words: ", words)
         
         for word in words:
             if not word:
@@ -581,7 +582,7 @@ class TestChatTemplateRendering:
 
         template_loader = TemplateLoader()
         template_content = template_loader.load("chat")
-        template = Template(template_content)
+        template = Template(template_content, trim_blocks=True, lstrip_blocks=True)
 
         # Test system message rendering
         messages = [
