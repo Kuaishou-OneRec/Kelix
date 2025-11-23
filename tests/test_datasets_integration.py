@@ -156,7 +156,8 @@ class TestTextDatasetIntegration:
             tokenizer_path="test/tokenizer",
             num_workers=1
         )
-
+        for sample in dataset:
+            print("sample", sample)
         samples = list(dataset)
         # TODO: debug
         print("samples", samples)
