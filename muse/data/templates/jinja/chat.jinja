@@ -8,8 +8,11 @@
 {%- for message in messages -%}
     {%- if add_default_system and loop.first and message['role'] != 'system' -%}<|im_start|>system
 You are a helpful assistant.<|im_end|>
+
     {%- endif -%}
-    {%- if add_prefix -%}<|im_start|>{{ message['role'] }}{%- endif -%}
+    {%- if add_prefix -%}<|im_start|>{{ message['role'] }}
+
+    {%- endif -%}
     {%- if message['content'] is string -%}{{ message['content'] }}
     {%- else -%}
         {%- for content in message['content'] -%}
@@ -23,6 +26,7 @@ You are a helpful assistant.<|im_end|>
         {%- endfor -%}
     {%- endif -%}
     {%- if add_suffix -%}<|im_end|>
+
     {%- endif -%}
 {%- endfor -%}
 {%- if add_generation_prompt -%}<|im_start|>assistant
