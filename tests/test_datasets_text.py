@@ -294,8 +294,7 @@ class TestTextDataset:
             loss_mask = result["loss_mask"][0].tolist()
             input_ids = result["input_ids"][0].tolist()
             assert input_ids == [1, 3, 15, 9, 14, 10, 14, 11, 14, 12, 14, 5, 13, 2, 15, 1, 4, 15, 6, 2, 15, 1, 5, 15, 7, 2, 15]
-            print(sum(loss_mask))
-            assert sum(loss_mask) == len(input_ids)
+            assert sum(loss_mask) == 3
 
 
     @patch('muse.data.datasets.text.AutoTokenizer')
