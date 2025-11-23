@@ -165,6 +165,8 @@ class ParquetReader(Reader):
 class DistributedDataset(IterableDataset):
   def __init__(self,
                sources: Union[List[str], str],
+               rank: int = 0,
+               world_size: int = 1,
                num_workers: int=8,
                seed: int=1024,
                num_epochs: int=1,
@@ -189,8 +191,8 @@ class DistributedDataset(IterableDataset):
     - Very few files but many samples: use "samples"
     - Uncertain: use "auto" (default)
     """
-    self.rank = kwargs.get("rank", get_data_parallel_rank())
-    self.world_size = kwargs.get("world_size", get_data_parallel_world_size())
+    self.rank = rank
+    self.world_size = world_size
     self.num_workers = num_workers
     self.seed = seed
     self.shuffle_buffer_size = shuffle_buffer_size

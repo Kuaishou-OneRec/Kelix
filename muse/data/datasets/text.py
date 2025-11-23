@@ -26,7 +26,7 @@ class TextDataset(DistributedDataset):
                **kwargs):
     super().__init__(
       sources=sources, num_workers=num_workers,
-      seed=seed, **kwargs)
+      seed=seed, rank=rank, world_size=world_size, **kwargs)
     prompt_loader = PromptLoader()
     self.system_prompt = prompt_loader.load(system_prompt)
     self.add_system_prompt = add_system_prompt
@@ -87,7 +87,11 @@ class TextDataset(DistributedDataset):
         raise ValueError(f"Invalid role: {turn['role']}")
     
     # pad to multiple of pad_to_multiple_of
-    pad_length = self.pad_to_multiple_of - len(input_ids) % self.pad_to_multiple_of
+    remainder = len(input_ids) % self.pad_to_multiple_of
+    if remainder == 0:
+      pad_length = 0
+    else:
+      pad_length = self.pad_to_multiple_of - remainder
     if pad_length > 0:
       input_ids = input_ids + [self.tokenizer.pad_token_id] * pad_length
       loss_mask = loss_mask + [0] * pad_length
@@ -122,11 +126,15 @@ class TextDataset(DistributedDataset):
       if segment["type"] == "text":
         _input_ids = self.tokenizer.encode(segment["text"])
         _loss_mask = [1] * len(_input_ids)
-        input_ids.extend(_input_ids)
-        loss_mask.extend(_loss_mask)
+      input_ids.extend(_input_ids)
+      loss_mask.extend(_loss_mask)
     
     # pad to multiple of pad_to_multiple_of
-    pad_length = self.pad_to_multiple_of - len(input_ids) % self.pad_to_multiple_of
+    remainder = len(input_ids) % self.pad_to_multiple_of
+    if remainder == 0:
+      pad_length = 0
+    else:
+      pad_length = self.pad_to_multiple_of - remainder
     if pad_length > 0:
       input_ids = input_ids + [self.tokenizer.pad_token_id] * pad_length
       loss_mask = loss_mask + [0] * pad_length

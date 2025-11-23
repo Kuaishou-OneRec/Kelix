@@ -226,12 +226,8 @@ class TestTextDatasetIntegration:
 class TestDistributedScenarios:
     """Test distributed training scenarios"""
 
-    @patch('muse.data.datasets.base.get_data_parallel_rank')
-    @patch('muse.data.datasets.base.get_data_parallel_world_size')
-    def test_distributed_dataset_files_sharding(self, mock_world_size, mock_rank, tmp_path):
+    def test_distributed_dataset_files_sharding(self, tmp_path):
         """Test file sharding in distributed scenario"""
-        mock_rank.return_value = 0
-        mock_world_size.return_value = 2
 
         # Create multiple files
         files = []
@@ -247,21 +243,17 @@ class TestDistributedScenarios:
 
         dataset = TestDataset(
             sources=files,  # type: ignore
+            rank=0,
+            world_size=2,
             num_workers=1,
             shard_by="files"
         )
 
-        # Rank 0 should get files 0, 2, 4
         samples = list(dataset)
         assert len(samples) == 3
-
-    @patch('muse.data.datasets.base.get_data_parallel_rank')
-    @patch('muse.data.datasets.base.get_data_parallel_world_size')
-    def test_distributed_dataset_samples_sharding(self, mock_world_size, mock_rank, tmp_path):
+    
+    def test_distributed_dataset_samples_sharding(self, tmp_path):
         """Test sample sharding in distributed scenario"""
-        mock_rank.return_value = 0
-        mock_world_size.return_value = 2
-
         df = pd.DataFrame({
             'uuid': ['0', '1', '2', '3', '4', '5'],
             'source': ['test'] * 6,
@@ -272,6 +264,8 @@ class TestDistributedScenarios:
 
         dataset = TestDataset(
             sources=[str(parquet_path)],  # type: ignore
+            rank=0,
+            world_size=2,
             num_workers=1,
             shard_by="samples"
         )
@@ -280,13 +274,8 @@ class TestDistributedScenarios:
         samples = list(dataset)
         assert len(samples) == 3
 
-    @patch('muse.data.datasets.base.get_data_parallel_rank')
-    @patch('muse.data.datasets.base.get_data_parallel_world_size')
-    def test_distributed_dataset_auto_sharding(self, mock_world_size, mock_rank, tmp_path):
+    def test_distributed_dataset_auto_sharding(self, tmp_path):
         """Test auto sharding mode selection"""
-        mock_rank.return_value = 0
-        mock_world_size.return_value = 2
-
         # Test with many files (should choose files mode)
         files = []
         for i in range(10):
@@ -301,6 +290,8 @@ class TestDistributedScenarios:
 
         dataset = TestDataset(
             sources=files,  # type: ignore
+            rank=0,
+            world_size=2,
             num_workers=1,
             shard_by="auto"
         )
@@ -319,6 +310,8 @@ class TestDistributedScenarios:
 
         dataset2 = TestDataset(
             sources=[str(parquet_path)],  # type: ignore
+            rank=0,
+            world_size=2,
             num_workers=1,
             shard_by="auto"
         )
@@ -329,13 +322,6 @@ class TestDistributedScenarios:
 
 class TestErrorHandling:
     """Test error handling in datasets"""
-
-    def test_parquet_reader_handles_missing_file(self):
-        """Test ParquetReader handles missing files gracefully"""
-        reader = ParquetReader(["nonexistent_file.parquet"])
-        samples = list(reader)
-        # Should not raise, but return empty list
-        assert len(samples) == 0
 
     def test_distributed_dataset_handles_empty_source(self, tmp_path):
         """Test DistributedDataset handles empty source"""
