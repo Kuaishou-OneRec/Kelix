@@ -35,17 +35,6 @@ def get_worker_info():
     pass
   return worker, num_workers
 
-# def get_world_size_and_rank():
-#   rank = os.environ.get("RANK", 0)
-#   world_size = os.environ.get("WORLD_SIZE", 1)
-#   try:
-#     import torch.distributed as dist
-#     rank = dist.get_rank()
-#     world_size = dist.get_world_size()
-#   except:
-#     pass
-#   return rank, world_size
-
 def is_image_exist(image_path: str) -> bool:
   return bool(image_path) and os.path.exists(image_path) \
     and os.path.getsize(image_path) > 0
@@ -140,25 +129,15 @@ class ParquetReader(Reader):
     def __init__(self, source: Union[List[str], str]):
       super().__init__(source)
 
-    def _parser(self, row, filename):
-        try:
-            source = row.get("source", "unknown")
-            key = row.get("uuid", "unknown")
-
-            samples = {
-                "__key__": key,
-                "__url__": filename,
-                "source": source,
-                "row": row
-            }
-
-            return samples
-
-        except Exception as e:
-            print(
-                f"ParquetDataset parse sample error, __url__={filename}, __key__={key},"
-                f"err_msg={traceback.format_exc()}")
-            return None
+    def _parser(self,
+                row: Dict[str, Any],
+                filename: str,
+                index: int,
+                size: int) -> Dict[str, Any]:
+      row["__file__"] = filename
+      row["__index__"] = index
+      row["__total__"] = size
+      return row
 
     def __iter__(self,):
       rank = get_data_parallel_rank()
@@ -174,7 +153,7 @@ class ParquetReader(Reader):
             df.iterrows(), total=len(df),
             desc=f"[rank={rank}, worker={worker_id}] {fn}"):
           try:
-            sample = self._parser(row.to_dict(), fn)
+            sample = self._parser(row.to_dict(), fn, idx, len(df))
             if sample is not None:
               yield sample
           except Exception as e:
@@ -353,22 +332,6 @@ class DistributedDataset(IterableDataset):
 
   def process(self, sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
     raise NotImplementedError("Subclass must implement this method")
-
-  # TODO: use get messages or get segments.
-  def get_content(self,
-                  sample: Dict[str, Any],
-                  key: str) -> List[Dict[str, Any]]:
-    """Get content from sample"""
-    row = sample.get("row", {})
-    content = row.get(key, "[]")
-    print("content", content)
-    try:
-      content = json.loads(content)
-    except json.JSONDecodeError as e:
-      print(f"Error loading json: {e}")
-      print(f"content: {content}")
-      return []
-    return content
 
   def pack_sample(self,
                   inputs: Dict[str, torch.Tensor],
