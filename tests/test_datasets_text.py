@@ -25,6 +25,11 @@ class MockTokenizer:
             'hello': 6,
             'world': 7,
             'test': 8,
+            'You': 9,
+            'are': 10,
+            'a': 11,
+            'helpful': 12,
+            ".": 13
         }
         # Sort vocab keys by length (longest first) for max prefix matching
         self._sorted_vocab_keys = sorted(self.vocab.keys(), key=len, reverse=True)
@@ -188,7 +193,7 @@ class TestTextDataset:
             dataset = TextDataset(
                 sources=[str(parquet_path)],
                 tokenizer_path="test/tokenizer",
-                add_system_prompt=True,
+                add_system_prompt=False,
                 add_prompt_loss=False
             )
 
