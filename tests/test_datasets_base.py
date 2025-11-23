@@ -253,7 +253,7 @@ class TestDistributedDataset:
             num_workers=1,
             seed=42
         )
-        assert isinstance(dataset.source, list) or len(dataset._files) > 0
+        assert isinstance(dataset.sources, list) or len(dataset._files) > 0
         assert dataset.num_workers == 1
         assert dataset.seed == 42
 
@@ -364,7 +364,7 @@ class TestDistributedDataset:
 
         with pytest.raises(AssertionError, match="shard_by must be"):
             DistributedDataset(
-                source=[str(parquet_path)],  # type: ignore
+                sources=[str(parquet_path)],  # type: ignore
                 shard_by="invalid"
             )
 
@@ -416,22 +416,27 @@ class TestDistributedDataset:
         samples = list(dataset)
         assert len(samples) == 3  # Should repeat 3 times
 
-    @patch('muse.data.datasets.base.get_data_parallel_rank')
-    @patch('muse.data.datasets.base.get_data_parallel_world_size')
-    def test_distributed_dataset_rank_world_size(self, mock_world_size, mock_rank):
-        """Test DistributedDataset uses correct rank and world_size"""
-        mock_rank.return_value = 1
-        mock_world_size.return_value = 4
+    def test_distributed_dataset_rank_world_size(self, tmp_path):
+        """Test DistributedDataset uses correct rank and world_size from parameters"""
+        df = pd.DataFrame({'uuid': ['1'], 'source': ['test']})
+        parquet_path = tmp_path / "test.parquet"
+        df.to_parquet(parquet_path)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            df = pd.DataFrame({'uuid': ['1'], 'source': ['test']})
-            parquet_path = Path(tmpdir) / "test.parquet"
-            df.to_parquet(parquet_path)
+        # Test with explicit rank and world_size
+        dataset = DistributedDataset(
+            sources=[str(parquet_path)],
+            rank=1,
+            world_size=4,
+            num_workers=1
+        )
+        assert dataset.rank == 1
+        assert dataset.world_size == 4
 
-            dataset = DistributedDataset(
-                sources=[str(parquet_path)],  # type: ignore
-                num_workers=1
-            )
-            assert dataset.rank == 1
-            assert dataset.world_size == 4
+        # Test with default values
+        dataset_default = DistributedDataset(
+            sources=[str(parquet_path)],
+            num_workers=1
+        )
+        assert dataset_default.rank == 0
+        assert dataset_default.world_size == 1
 
