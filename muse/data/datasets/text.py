@@ -161,6 +161,9 @@ class TextDataset(DistributedDataset):
   def process(self, sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
     messages = self.get_content(sample, "messages")
     segments = self.get_content(sample, "segments")
+    print("messages", messages)
+    print("segments", segments)
+    # TODO: debug
     if messages:
       return self.process_messages(messages)
     elif segments:
