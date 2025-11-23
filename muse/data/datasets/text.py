@@ -11,7 +11,7 @@ from jinja2 import Template
 
 class TextDataset(DistributedDataset):
   def __init__(self,
-               sources: Union[str, List[str]],
+               sources: Union[List[str], str],
                rank: int = 0,
                world_size: int = 1,
                num_workers: int=8,

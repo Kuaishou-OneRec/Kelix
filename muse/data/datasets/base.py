@@ -47,7 +47,7 @@ def get_worker_info():
 #   return rank, world_size
 
 def is_image_exist(image_path: str) -> bool:
-  return image_path and os.path.exists(image_path) \
+  return bool(image_path) and os.path.exists(image_path) \
     and os.path.getsize(image_path) > 0
 
 def load_image(image: str) -> Optional[Image.Image]:
@@ -161,8 +161,8 @@ class ParquetReader(Reader):
             return None
 
     def __iter__(self,):
-      # rank = get_data_parallel_rank()
-      # worker_id, _  = get_worker_info()
+      rank = get_data_parallel_rank()
+      worker_id, _  = get_worker_info()
       for fn in tqdm(self.source):
         try:
           parquet_file = load_parquet(fn)
@@ -170,7 +170,9 @@ class ParquetReader(Reader):
           print(f"open parquet fail {fn=}, error_msg={traceback.format_exc()}")
           continue
         df = parquet_file.to_pandas()
-        for idx, row in tqdm(df.iterrows(), total=len(df), desc=f"{worker_id=} Reading {fn}"):
+        for idx, row in tqdm(
+            df.iterrows(), total=len(df),
+            desc=f"[rank={rank}, worker={worker_id}] {fn}"):
           try:
             sample = self._parser(row.to_dict(), fn)
             if sample is not None:
@@ -181,7 +183,9 @@ class ParquetReader(Reader):
 
 class DistributedDataset(IterableDataset):
   def __init__(self,
-               source: str,
+               sources: Union[List[str], str],
+               rank: int = 0,
+               world_size: int = 1,
                num_workers: int=8,
                seed: int=1024,
                num_epochs: int=1,
@@ -205,8 +209,8 @@ class DistributedDataset(IterableDataset):
     - Very few files but many samples: use "samples"
     - Uncertain: use "auto" (default)
     """
-    self.rank = kwargs.get("rank", get_data_parallel_rank())
-    self.world_size = kwargs.get("world_size", get_data_parallel_world_size())
+    self.rank = rank
+    self.world_size = world_size
     self.num_workers = num_workers
     self.seed = seed
     self.shuffle_buffer_size = shuffle_buffer_size
@@ -219,7 +223,7 @@ class DistributedDataset(IterableDataset):
 
     self.rng = random.Random(seed)
     self.num_epochs = num_epochs
-    self.source = source
+    self.sources = sources
     self.shard_by = shard_by
     self.reader = reader
     self.kwargs = kwargs
@@ -233,16 +237,16 @@ class DistributedDataset(IterableDataset):
   def _load_file_list(self) -> List[str]:
     """Load file list"""
     files = []
-    if isinstance(self.source, list):
-        files = self.source
-    elif self.source.endswith(".json"):
-      with open(self.source, "r") as fp:
+    if isinstance(self.sources, list):
+        files = self.sources
+    elif self.sources.endswith(".json"):
+      with open(self.sources, "r") as fp:
         files = json.loads(fp.read())
         files = sorted([
           fn for fn in files if fn.endswith(".parquet")])
     else:
       # TODO: support hdfs
-      folder = Path(self.source)
+      folder = Path(self.sources)
       files = list(map(str, folder.rglob("*.parquet")))
     
     return files
