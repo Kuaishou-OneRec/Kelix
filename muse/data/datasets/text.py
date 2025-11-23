@@ -32,7 +32,10 @@ class TextDataset(DistributedDataset):
     self.add_system_prompt = add_system_prompt
     self.add_prompt_loss = add_prompt_loss
     template_loader = TemplateLoader()
-    self.chat_template = Template(template_loader.load(chat_template))
+    self.chat_template = Template(
+      template_loader.load(chat_template),
+      trim_blocks=True,
+      lstrip_blocks=True)
     self.tokenizer_path = tokenizer_path
     if self.tokenizer_path:
       self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
