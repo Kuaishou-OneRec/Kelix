@@ -100,6 +100,9 @@ class TextDataset(DistributedDataset):
       input_ids = input_ids[:self.max_length_per_sample]
       loss_mask = loss_mask[:self.max_length_per_sample]
     
+    print("loss_mask: ", loss_mask)
+    print("input_ids: ", input_ids)
+    
     # if not loss_mask is all 0, return None
     if sum(loss_mask) == 0:
       return None
