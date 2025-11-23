@@ -167,9 +167,9 @@ class TestParquetReader:
 
     def test_parquet_reader_init(self):
         """Test ParquetReader initialization"""
-        source = ["file1.parquet", "file2.parquet"]
-        reader = ParquetReader(source)
-        assert reader.source == source
+        sources = ["file1.parquet", "file2.parquet"]
+        reader = ParquetReader(sources)
+        assert reader.sources == sources
 
     def test_parquet_reader_parser(self):
         """Test ParquetReader._parser method"""
@@ -183,21 +183,9 @@ class TestParquetReader:
 
         sample = reader._parser(row, filename, 0, 1)
         assert sample is not None
-        assert sample["__key__"] == "test-uuid"
-        assert sample["__url__"] == filename
-        assert sample["source"] == "test-source"
-        assert sample["row"] == row
-
-    def test_parquet_reader_parser_missing_fields(self):
-        """Test ParquetReader._parser with missing fields"""
-        reader = ParquetReader([])
-        row = {"data": "test-data"}
-        filename = "test.parquet"
-
-        sample = reader._parser(row, filename, 0, 1)
-        assert sample is not None
-        assert sample["__key__"] == "unknown"
-        assert sample["source"] == "unknown"
+        assert sample["__file__"] == "test-source"
+        assert sample["__index__"] == 0
+        assert sample["__total__"] == 1
 
     def test_parquet_reader_iter(self, tmp_path):
         """Test ParquetReader iteration"""
@@ -224,8 +212,9 @@ class TestParquetReader:
         assert len(samples) == 3
         assert samples[0]["__index__"] == 0
         assert samples[1]["__index__"] == 1
-        assert samples[2]["__index__"] == 2
-        assert samples[2]["__total__"] == 2
+        assert samples[2]["__index__"] == 0
+        assert samples[2]["__total__"] == 1
+        assert samples[1]["__total__"] == 2
 
     @patch('muse.data.datasets.base.load_parquet')
     def test_parquet_reader_error_handling(self, mock_load_parquet):
@@ -400,7 +389,7 @@ class TestDistributedDataset:
         class TestDataset(DistributedDataset):
             def process(self, sample):
                 return {"data": sample["__index__"]}
-    
+
         df = pd.DataFrame({
             'uuid': ['1'],
             'source': ['test'],

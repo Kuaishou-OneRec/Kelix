@@ -175,6 +175,7 @@ class DistributedDataset(IterableDataset):
                packing: bool = False,
                padding: bool = False,
                balancing: bool = False,
+               max_length: int = 0,
                **kwargs):
     """
     Distributed dataset supporting three sharding modes:
@@ -195,6 +196,9 @@ class DistributedDataset(IterableDataset):
     self.shuffle_buffer_size = shuffle_buffer_size
     self.enable_checkpointing = enable_checkpointing
     self.packing = packing
+    self.max_length = max_length
+    if self.packing:
+      assert self.max_length > 0, "max_length must be set when packing is enabled"
     self.padding = padding
     self.balancing = balancing
     assert shard_by in ["auto", "files", "samples"], \
