@@ -596,7 +596,7 @@ class TestChatTemplateRendering:
         ]
         rendered = template.render(messages=messages)
         
-        assert rendered == "<|im_start|>system\nYou are a helpful assistant.\n<|im_end|>\n<|im_start|>user\nHello, how are you?\n<|im_end|>\n"
+        assert rendered == "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nHello, how are you?<|im_end|>\n"
 
         # Test system message rendering without default system
         messages = [
@@ -605,7 +605,7 @@ class TestChatTemplateRendering:
 
         rendered_default_system = template.render(messages=messages, add_default_system=True)
 
-        assert rendered_default_system == "<|im_start|>system\nYou are a helpful assistant.\n<|im_end|>\n<|im_start|>user\nHello, how are you?\n<|im_end|>\n"
+        assert rendered_default_system == "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nHello, how are you?<|im_end|>\n"
 
 
         # Test system message rendering without default system
@@ -615,7 +615,7 @@ class TestChatTemplateRendering:
 
         rendered_no_system = template.render(messages=messages)
 
-        assert rendered_no_system == "<|im_start|>user\nHello, how are you?\n<|im_end|>\n"
+        assert rendered_no_system == "<|im_start|>user\nHello, how are you?<|im_end|>\n"
 
     def test_chat_template_user_message(self):
         """Test chat template rendering for user message"""
@@ -630,7 +630,7 @@ class TestChatTemplateRendering:
         messages = [{"role": "user", "content": "Hello, how are you?"}]
         rendered = template.render(messages=messages)
         
-        assert rendered == "<|im_start|>user\nHello, how are you?\n<|im_end|>"
+        assert rendered == "<|im_start|>user\nHello, how are you?<|im_end|>"
 
         # Test user message with add_generation_prompt
         rendered_with_prompt = template.render(
@@ -638,7 +638,7 @@ class TestChatTemplateRendering:
             add_generation_prompt=True
         )
     
-        assert rendered_with_prompt == "<|im_start|>user\nHello, how are you?\n<|im_end|>\n<|im_start|>assistant\n"
+        assert rendered_with_prompt == "<|im_start|>user\nHello, how are you?<|im_end|>\n<|im_start|>assistant\n"
 
     def test_chat_template_assistant_message(self):
         """Test chat template rendering for assistant message"""
@@ -653,14 +653,14 @@ class TestChatTemplateRendering:
         messages = [{"role": "assistant", "content": "I'm doing well, thank you!"}]
         rendered = template.render(messages=messages)
         
-        assert rendered == "<|im_start|>assistant\nI'm doing well, thank you!\n<|im_end|>\n"
+        assert rendered == "<|im_start|>assistant\nI'm doing well, thank you!<|im_end|>\n"
 
         # Test assistant message without prefix
         rendered_no_prefix = template.render(
             messages=messages,
             add_prefix=False
         )
-        assert rendered_no_prefix == "I'm doing well, thank you!\n<|im_end|>\n"
+        assert rendered_no_prefix == "I'm doing well, thank you!<|im_end|>\n"
 
     def test_chat_template_multi_turn_conversation(self):
         """Test chat template rendering for multi-turn conversation"""
@@ -680,4 +680,4 @@ class TestChatTemplateRendering:
         
         rendered = template.render(messages=messages)
         
-        assert rendered == "<|im_start|>user\nA\n<|im_end|>\n<|im_start|>assistant\nB\n<|im_end|>\n<|im_start|>user\nC\n<|im_end|>\n<|im_start|>assistant\nD\n<|im_end|>\n"
+        assert rendered == "<|im_start|>user\nA<|im_end|>\n<|im_start|>assistant\nB<|im_end|>\n<|im_start|>user\nC<|im_end|>\n<|im_start|>assistant\nD<|im_end|>\n"
