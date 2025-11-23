@@ -25,8 +25,8 @@ class TextDataset(DistributedDataset):
                pad_to_multiple_of: int = 1,
                **kwargs):
     super().__init__(
-      sources=sources, rank=rank, world_size=world_size,
-      num_workers=num_workers, seed=seed, **kwargs)
+      sources=sources, num_workers=num_workers,
+      seed=seed, **kwargs)
     prompt_loader = PromptLoader()
     self.system_prompt = prompt_loader.load(system_prompt)
     self.add_system_prompt = add_system_prompt
@@ -183,4 +183,6 @@ class TextDataset(DistributedDataset):
   
   def get_sample_length(self, sample: Dict[str, torch.Tensor]) -> int:
     """Get sample length"""
+    if "input_ids" not in sample:
+      return 0
     return sample["input_ids"].shape[1]

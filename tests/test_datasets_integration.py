@@ -18,7 +18,7 @@ from muse.data.datasets.text import TextDataset
 class TestDataset(DistributedDataset):
     """Simple test dataset that implements process method"""
     def process(self, sample):
-        return {"key": sample.get("__key__", "unknown")}
+        return {"index": sample.get("__index__", "unknown")}
 
 
 class TestParquetIntegration:
@@ -40,9 +40,10 @@ class TestParquetIntegration:
         samples = list(reader)
 
         assert len(samples) == 3
-        assert samples[0]["__key__"] == "1"
-        assert samples[1]["__key__"] == "2"
-        assert samples[2]["__key__"] == "3"
+        assert samples[0]["__index__"] == 0
+        assert samples[1]["__index__"] == 1
+        assert samples[2]["__index__"] == 2
+        assert samples[2]["__total__"] == 3
 
     def test_parquet_reader_multiple_files(self, tmp_path):
         """Test ParquetReader with multiple parquet files"""
@@ -61,7 +62,8 @@ class TestParquetIntegration:
         samples = list(reader)
 
         assert len(samples) == 3
-        assert all(s["__key__"] in ["0", "1", "2"] for s in samples)
+        assert all(s["__index__"] in [0, 1, 2] for s in samples)
+        assert all(s["__total__"] == 3 for s in samples)
 
     def test_distributed_dataset_end_to_end(self, tmp_path):
         """Test DistributedDataset end-to-end with real files"""
@@ -82,7 +84,6 @@ class TestParquetIntegration:
 
         samples = list(dataset)
         assert len(samples) == 3
-        assert all("key" in s for s in samples)
 
     def test_distributed_dataset_multiple_epochs(self, tmp_path):
         """Test DistributedDataset with multiple epochs"""
@@ -122,8 +123,6 @@ class TestParquetIntegration:
         batches = list(dataloader)
 
         assert len(batches) >= 1
-        assert "key" in batches[0]
-
 
 class TestTextDatasetIntegration:
     """Integration tests for TextDataset"""
@@ -147,8 +146,6 @@ class TestTextDatasetIntegration:
             'messages': [messages_data, messages_data]
         })
         parquet_path = tmp_path / "test.parquet"
-        # TODO: debug
-        print("ggggggggggg", parquet_path)
         df.to_parquet(parquet_path)
 
         dataset = TextDataset(

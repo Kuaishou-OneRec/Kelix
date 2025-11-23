@@ -181,7 +181,7 @@ class TestParquetReader:
         }
         filename = "test.parquet"
 
-        sample = reader._parser(row, filename)
+        sample = reader._parser(row, filename, 0, 1)
         assert sample is not None
         assert sample["__key__"] == "test-uuid"
         assert sample["__url__"] == filename
@@ -194,7 +194,7 @@ class TestParquetReader:
         row = {"data": "test-data"}
         filename = "test.parquet"
 
-        sample = reader._parser(row, filename)
+        sample = reader._parser(row, filename, 0, 1)
         assert sample is not None
         assert sample["__key__"] == "unknown"
         assert sample["source"] == "unknown"
@@ -222,9 +222,10 @@ class TestParquetReader:
 
         samples = list(reader)
         assert len(samples) == 3
-        assert samples[0]["__key__"] == "1"
-        assert samples[1]["__key__"] == "2"
-        assert samples[2]["__key__"] == "3"
+        assert samples[0]["__index__"] == 0
+        assert samples[1]["__index__"] == 1
+        assert samples[2]["__index__"] == 2
+        assert samples[2]["__total__"] == 2
 
     @patch('muse.data.datasets.base.load_parquet')
     def test_parquet_reader_error_handling(self, mock_load_parquet):
@@ -373,7 +374,7 @@ class TestDistributedDataset:
         # Create a simple dataset that implements process
         class TestDataset(DistributedDataset):
             def process(self, sample):
-                return {"data": sample["__key__"]}
+                return {"data": sample["__index__"]}
 
         df = pd.DataFrame({
             'uuid': ['1', '2'],
@@ -391,14 +392,15 @@ class TestDistributedDataset:
 
         samples = list(dataset)
         assert len(samples) == 2
-        assert samples[0]["data"] == "1"
+        assert samples[0]["data"] == 0
+        assert samples[1]["data"] == 1
 
     def test_distributed_dataset_multiple_epochs(self, tmp_path):
         """Test DistributedDataset with multiple epochs"""
         class TestDataset(DistributedDataset):
             def process(self, sample):
-                return {"data": sample["__key__"]}
-
+                return {"data": sample["__index__"]}
+    
         df = pd.DataFrame({
             'uuid': ['1'],
             'source': ['test'],
