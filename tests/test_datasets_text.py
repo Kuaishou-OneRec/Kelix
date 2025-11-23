@@ -624,7 +624,7 @@ class TestChatTemplateRendering:
 
         template_loader = TemplateLoader()
         template_content = template_loader.load("chat")
-        template = Template(template_content)
+        template = Template(template_content, trim_blocks=True, lstrip_blocks=True)
 
         # Test user message with default settings
         messages = [{"role": "user", "content": "Hello, how are you?"}]
@@ -647,7 +647,7 @@ class TestChatTemplateRendering:
 
         template_loader = TemplateLoader()
         template_content = template_loader.load("chat")
-        template = Template(template_content)
+        template = Template(template_content, trim_blocks=True, lstrip_blocks=True)
 
         # Test assistant message with default settings
         messages = [{"role": "assistant", "content": "I'm doing well, thank you!"}]
@@ -669,7 +669,7 @@ class TestChatTemplateRendering:
 
         template_loader = TemplateLoader()
         template_content = template_loader.load("chat")
-        template = Template(template_content)
+        template = Template(template_content, trim_blocks=True, lstrip_blocks=True)
 
         messages = [
             {"role": "user", "content": "A"},
