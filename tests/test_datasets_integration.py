@@ -148,7 +148,7 @@ class TestTextDatasetIntegration:
         })
         parquet_path = tmp_path / "test.parquet"
         # TODO: debug
-        print(parquet_path)
+        print("ggggggggggg", parquet_path)
         df.to_parquet(parquet_path)
 
         dataset = TextDataset(
@@ -158,6 +158,8 @@ class TestTextDatasetIntegration:
         )
 
         samples = list(dataset)
+        # TODO: debug
+        print("samples", samples)
         assert len(samples) == 2
         assert all("input_ids" in s for s in samples)
         assert all("loss_mask" in s for s in samples)
@@ -322,7 +324,7 @@ class TestDistributedScenarios:
         df.to_parquet(parquet_path)
 
         dataset2 = TestDataset(
-            source=[str(parquet_path)],  # type: ignore
+            sources=[str(parquet_path)],  # type: ignore
             num_workers=1,
             shard_by="auto"
         )
