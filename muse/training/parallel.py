@@ -9,29 +9,29 @@ import datetime
 
 process_group_timeout = datetime.timedelta(minutes=60 * 24)
 
-_SEQUENCE_PARALLEL_GROUP = None
-_SEQUENCE_PARALLEL_GROUP_GLOO = None
+_CONTEXT_PARALLEL_GROUP = None
+_CONTEXT_PARALLEL_GROUP_GLOO = None
 _DATA_PARALLEL_GROUP = None
 
 
-def initialize_model_parallel(sequence_parallel_size: int):
+def initialize_model_parallel(context_parallel_size: int):
     world_size = dist.get_world_size()
-    num_sequence_parallel_groups: int = world_size // sequence_parallel_size
-    num_data_parallel_groups: int = sequence_parallel_size
-    global _SEQUENCE_PARALLEL_GROUP
-    global _SEQUENCE_PARALLEL_GROUP_GLOO
+    num_context_parallel_groups: int = world_size // context_parallel_size
+    num_data_parallel_groups: int = context_parallel_size
+    global _CONTEXT_PARALLEL_GROUP
+    global _CONTEXT_PARALLEL_GROUP_GLOO
     global _DATA_PARALLEL_GROUP
-    for i in range(num_sequence_parallel_groups):
-        ranks = range(i * sequence_parallel_size, (i + 1) * sequence_parallel_size)
-        print_rank_0(f"Sequence Parallel Group: {i}, Ranks: {ranks}")
+    for i in range(num_context_parallel_groups):
+        ranks = range(i * context_parallel_size, (i + 1) * context_parallel_size)
+        print_rank_0(f"Context Parallel Group: {i}, Ranks: {ranks}")
         group = torch.distributed.new_group(ranks)
         group_gloo = torch.distributed.new_group(ranks, backend="gloo")
         rank = dist.get_rank()
         if rank in ranks:
-            _SEQUENCE_PARALLEL_GROUP = group
-            _SEQUENCE_PARALLEL_GROUP_GLOO = group_gloo
+            _CONTEXT_PARALLEL_GROUP = group
+            _CONTEXT_PARALLEL_GROUP_GLOO = group_gloo
     for i in range(num_data_parallel_groups):
-        ranks = [r for r in range(world_size) if r % sequence_parallel_size == i]
+        ranks = [r for r in range(world_size) if r % context_parallel_size == i]
         print_rank_0(f"Data Parallel Group: {i}, Ranks: {ranks}")
         group = torch.distributed.new_group(ranks)
         rank = dist.get_rank()
@@ -48,32 +48,32 @@ def worker_init_fn(worker_id):
         timeout=process_group_timeout
     )
 
-def get_sequence_parallel_group(backend="nccl"):
-    """Get the sequence parallel group the caller rank belongs to."""
+def get_context_parallel_group(backend="nccl"):
+    """Get the context parallel group the caller rank belongs to."""
     if backend == "nccl":
-        return _SEQUENCE_PARALLEL_GROUP
+        return _CONTEXT_PARALLEL_GROUP
     elif backend == "gloo":
-        return _SEQUENCE_PARALLEL_GROUP_GLOO
+        return _CONTEXT_PARALLEL_GROUP_GLOO
     else:
-        raise NotImplementedError(f"Unsupport sequence parallel backend: {backend}")
+        raise NotImplementedError(f"Unsupport context parallel backend: {backend}")
 
-def get_sequence_parallel_world_size():
-    """Get the sequence parallel world size."""
-    return dist.get_world_size(group=get_sequence_parallel_group())
+def get_context_parallel_world_size():
+    """Get the context parallel world size."""
+    return dist.get_world_size(group=get_context_parallel_group())
 
-def get_sequence_parallel_rank():
-    """Get the sequence parallel rank."""
-    return dist.get_rank(group=get_sequence_parallel_group())
+def get_context_parallel_rank():
+    """Get the context parallel rank."""
+    return dist.get_rank(group=get_context_parallel_group())
 
 def get_local_sequence_boundary(seq_len: int) -> Tuple[int, int]:
-    sp_size = get_sequence_parallel_world_size()
-    sp_rank = get_sequence_parallel_rank()
-    local_seqlen = seq_len // sp_size
-    start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
+    cp_size = get_context_parallel_world_size()
+    cp_rank = get_context_parallel_rank()
+    local_seqlen = seq_len // cp_size
+    start, end = cp_rank * local_seqlen, (cp_rank + 1) * local_seqlen
     return start, end
 
 def get_local_sequence(sequence: torch.Tensor, seq_idx: int = 1) -> torch.Tensor:
-    if get_sequence_parallel_world_size() > 1:
+    if get_context_parallel_world_size() > 1:
         seq_len = sequence.shape[seq_idx]
         start, end = get_local_sequence_boundary(seq_len)
         # Create a slice object for the specified dimension
@@ -88,16 +88,10 @@ def get_data_parallel_group() -> dist.ProcessGroup:
     return _DATA_PARALLEL_GROUP
 
 def get_data_parallel_rank() -> int:
-    if dist.is_initialized() and get_data_parallel_group() is not None:
-        return dist.get_rank(group=get_data_parallel_group())
-    else:
-        return 0
+    return dist.get_rank(group=get_data_parallel_group())
 
 def get_data_parallel_world_size() -> int:
-    if dist.is_initialized() and get_data_parallel_group() is not None:
-        return dist.get_world_size(group=get_data_parallel_group())
-    else:
-        return 1
+    return dist.get_world_size(group=get_data_parallel_group())
 
 def all_to_all_4D(
     input: torch.Tensor,
@@ -132,7 +126,7 @@ def all_to_all_4D(
         seqlen = shard_seqlen * seq_world_size
         shard_hc = hc // seq_world_size
 
-        # transpose groups of heads with the seq-len parallel dimension, so that we can scatter them!
+        # transpose groups of heads with the context parallel dimension, so that we can scatter them!
         # (bs, seqlen/P, hc, hs) -reshape-> (bs, seq_len/P, P, hc/P, hs) -transpose(0,2)-> (P, seq_len/P, bs, hc/P, hs)
         input_t = (
             input.reshape(bs, shard_seqlen, seq_world_size, shard_hc, hs)
@@ -166,7 +160,7 @@ def all_to_all_4D(
         shard_seqlen = seqlen // seq_world_size
         seq_world_size = dist.get_world_size(group)
 
-        # transpose groups of heads with the seq-len parallel dimension, so that we can scatter them!
+        # transpose groups of heads with the context parallel dimension, so that we can scatter them!
         # (bs, seqlen, hc/P, hs) -reshape-> (bs, P, seq_len/P, hc/P, hs) -transpose(0, 3)-> (hc/P, P, seqlen/P, bs, hs) -transpose(0, 1) -> (P, hc/P, seqlen/P, bs, hs)
         input_t = (
             input.reshape(bs, seq_world_size, shard_seqlen, shard_hc, hs)
@@ -231,7 +225,7 @@ def all_gather(
     gather_idx: int = 0,
     use_sync: bool = False) -> torch.Tensor:
     """
-    all-gather for Sequence
+    all-gather for Context
 
     Args:
         inputs (torch.Tensor): a tensor to gather, with shape (bs, seqlen/P, h)

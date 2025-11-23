@@ -220,7 +220,6 @@ class TestTextDataset:
             assert result is not None
             assert "input_ids" in result
             assert "loss_mask" in result
-            assert "position_ids" in result
             assert result["input_ids"].shape[0] == 1  # batch dimension
 
     @patch('muse.data.datasets.text.AutoTokenizer')
@@ -420,7 +419,6 @@ class TestTextDataset:
             assert result is not None
             assert "input_ids" in result
             assert "loss_mask" in result
-            assert "position_ids" in result
 
     @patch('muse.data.datasets.text.AutoTokenizer')
     def test_process_segments_empty(self, mock_tokenizer_class):
@@ -554,20 +552,17 @@ class TestTextDataset:
 
             inputs = {
                 "input_ids": torch.tensor([[1, 2, 3]]),
-                "loss_mask": torch.tensor([[1, 1, 1]]),
-                "position_ids": torch.tensor([[0, 1, 2]])
+                "loss_mask": torch.tensor([[1, 1, 1]])
             }
 
             new_inputs = {
                 "input_ids": torch.tensor([[4, 5]]),
-                "loss_mask": torch.tensor([[1, 1]]),
-                "position_ids": torch.tensor([[0, 1]])
+                "loss_mask": torch.tensor([[1, 1]])
             }
 
             packed = dataset.pack_sample([inputs, new_inputs])
             assert packed["input_ids"].shape[1] == 5  # 3 + 2
             assert packed["loss_mask"].shape[1] == 5
-            assert packed["position_ids"].shape[1] == 5
             assert packed["cu_seqlen"] == [0, 3, 5]
 
     @patch('muse.data.datasets.text.AutoTokenizer')

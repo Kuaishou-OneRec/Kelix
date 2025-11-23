@@ -53,7 +53,7 @@ class TestTransformerSelfAttentionLayer:
         
         return layer
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_initialization(self, mock_sp, device):
         """Test TransformerSelfAttentionLayer can be initialized."""
         layer = self.create_test_layer(
@@ -67,7 +67,7 @@ class TestTransformerSelfAttentionLayer:
         assert isinstance(layer.attn, MultiHeadAttention)
         assert isinstance(layer.mlp, FeedForward)
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_forward_basic(self, mock_sp, device):
         """Test basic forward pass."""
         embed_dim = 64
@@ -84,7 +84,7 @@ class TestTransformerSelfAttentionLayer:
         assert output.shape == x.shape
         assert output.device.type == device.type
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_residual_connections(self, mock_sp, device):
         """Test that residual connections are applied."""
         embed_dim = 64
@@ -108,7 +108,7 @@ class TestTransformerSelfAttentionLayer:
         # (though normalization may affect this slightly)
         assert output.shape == x.shape
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_with_mask(self, mock_sp, device):
         """Test forward with attention mask."""
         embed_dim = 64
@@ -127,7 +127,7 @@ class TestTransformerSelfAttentionLayer:
         
         assert output.shape == x.shape
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_with_input_pos(self, mock_sp, device):
         """Test forward with input_pos for positional encoding."""
         embed_dim = 64
@@ -148,7 +148,7 @@ class TestTransformerSelfAttentionLayer:
         
         assert output.shape == x.shape
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_gradient_flow(self, mock_sp, device):
         """Test gradients flow through the layer."""
         embed_dim = 32
@@ -210,7 +210,7 @@ class TestTransformerSelfAttentionLayer:
         layer.reset_cache()
         assert layer.attn.kv_cache.cache_pos == 0
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_with_scale_modules(self, mock_sp, device):
         """Test with scale modules for attention and MLP."""
         embed_dim = 64
@@ -253,7 +253,7 @@ class TestTransformerSelfAttentionLayer:
         
         assert output.shape == x.shape
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_with_mask_mod(self, mock_sp, device):
         """Test with mask modification function."""
         embed_dim = 64
@@ -335,7 +335,7 @@ class TestTransformerCrossAttentionLayer:
         
         return layer
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_initialization(self, mock_sp, device):
         """Test TransformerCrossAttentionLayer can be initialized."""
         layer = self.create_test_layer(
@@ -382,7 +382,7 @@ class TestTransformerCrossAttentionLayer:
                 mlp_norm=RMSNorm(embed_dim).to(device),
             )
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_forward_basic(self, mock_sp, device):
         """Test basic forward pass."""
         embed_dim = 64
@@ -401,7 +401,7 @@ class TestTransformerCrossAttentionLayer:
         assert output.shape == x.shape
         assert output.device.type == device.type
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_forward_different_encoder_seq_len(self, mock_sp, device):
         """Test forward with different encoder sequence length."""
         embed_dim = 64
@@ -422,7 +422,7 @@ class TestTransformerCrossAttentionLayer:
         
         assert output.shape == (2, decoder_seq_len, embed_dim)
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_gradient_flow(self, mock_sp, device):
         """Test gradients flow through the layer."""
         embed_dim = 32
@@ -467,7 +467,7 @@ class TestTransformerCrossAttentionLayer:
         
         assert layer.caches_are_setup()
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_residual_connections(self, mock_sp, device):
         """Test that residual connections are applied."""
         embed_dim = 64
@@ -486,7 +486,7 @@ class TestTransformerCrossAttentionLayer:
         # Output should have same shape as input
         assert output.shape == x.shape
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_with_scale_modules(self, mock_sp, device):
         """Test with scale modules for cross-attention and MLP."""
         embed_dim = 64

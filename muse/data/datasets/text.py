@@ -68,7 +68,6 @@ class TextDataset(DistributedDataset):
           messages=[turn],
           add_generation_prompt=True
         )
-        print("user text: ", [turn], _text)
         _input_ids = self.tokenizer.encode(_text)
         _loss_mask = [prompt_loss_mask] * len(_input_ids)
         input_ids.extend(_input_ids)
@@ -78,7 +77,6 @@ class TextDataset(DistributedDataset):
           messages=[turn],
           add_prefix=False
         )
-        print("assistant text: ", [turn],_text)
         _input_ids = self.tokenizer.encode(_text)
         _loss_mask = [1] * len(_input_ids)
         input_ids.extend(_input_ids)
@@ -100,9 +98,6 @@ class TextDataset(DistributedDataset):
       input_ids = input_ids[:self.max_length_per_sample]
       loss_mask = loss_mask[:self.max_length_per_sample]
     
-    print("loss_mask: ", loss_mask)
-    print("input_ids: ", input_ids)
-    
     # if not loss_mask is all 0, return None
     if sum(loss_mask) == 0:
       return None
@@ -110,12 +105,10 @@ class TextDataset(DistributedDataset):
     # batchify
     input_ids = torch.tensor(input_ids).unsqueeze(0)
     loss_mask = torch.tensor(loss_mask).unsqueeze(0)
-    position_ids = torch.arange(len(input_ids)).unsqueeze(0)
 
     return {
       "input_ids": input_ids,
-      "loss_mask": loss_mask,
-      "position_ids": position_ids,
+      "loss_mask": loss_mask
     }
 
   def process_segments(self,
@@ -153,12 +146,10 @@ class TextDataset(DistributedDataset):
     # batchify
     input_ids = torch.tensor(input_ids).unsqueeze(0)
     loss_mask = torch.tensor(loss_mask).unsqueeze(0)
-    position_ids = torch.arange(len(input_ids)).unsqueeze(0)
 
     return {
       "input_ids": input_ids,
-      "loss_mask": loss_mask,
-      "position_ids": position_ids,
+      "loss_mask": loss_mask
     }
   
   def get_content(self,
@@ -195,7 +186,7 @@ class TextDataset(DistributedDataset):
     """Pack new_sample into buffer"""
     inputs = {}
 
-    for key in ["input_ids", "loss_mask", "position_ids"]:
+    for key in ["input_ids", "loss_mask"]:
       inputs[key] = torch.cat([sample[key] for sample in buffer], dim=-1)
 
     cu_seqlen = [0]

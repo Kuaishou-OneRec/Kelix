@@ -231,10 +231,10 @@ class TrainingConfig(BaseConfig):
     )
     
     # Parallelism
-    sequence_parallel_size: int = Field(
+    context_parallel_size: int = Field(
         default=1,
         ge=1,
-        description="Sequence parallelism size"
+        description="Context parallelism size"
     )
     
     # Reproducibility

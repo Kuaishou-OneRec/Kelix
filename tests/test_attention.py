@@ -156,7 +156,7 @@ class TestMultiHeadAttention:
                 k_norm=None,
             )
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_forward_self_attention(self, mock_sp, device):
         """Test forward pass for self-attention."""
         embed_dim = 64
@@ -180,7 +180,7 @@ class TestMultiHeadAttention:
         assert output.shape == (2, 8, embed_dim)
         assert output.device.type == device.type
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_forward_with_positional_embeddings(self, mock_sp, device):
         """Test forward with positional embeddings."""
         embed_dim = 64
@@ -206,7 +206,7 @@ class TestMultiHeadAttention:
         
         assert output.shape == (2, 8, embed_dim)
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_forward_with_qk_norm(self, mock_sp, device):
         """Test forward with query and key normalization."""
         embed_dim = 64
@@ -231,7 +231,7 @@ class TestMultiHeadAttention:
         
         assert output.shape == (2, 8, embed_dim)
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_forward_gqa(self, mock_sp, device):
         """Test forward pass with GQA."""
         embed_dim = 64
@@ -255,7 +255,7 @@ class TestMultiHeadAttention:
         
         assert output.shape == (2, 8, embed_dim)
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_gradient_flow(self, mock_sp, device):
         """Test gradients flow through attention."""
         embed_dim = 32
@@ -351,7 +351,7 @@ class TestMultiHeadAttention:
         with pytest.raises(RuntimeError, match="Key value caches are not setup"):
             attn.reset_cache()
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_forward_without_y_and_no_cache_raises_error(self, mock_sp, device):
         """Test that forward without y and no cache raises ValueError."""
         embed_dim = 64
@@ -374,7 +374,7 @@ class TestMultiHeadAttention:
         with pytest.raises(ValueError, match="Must provide y input or use kv_cache"):
             attn(x, y=None)
     
-    @patch('muse.layers.attention.get_sequence_parallel_world_size', return_value=1)
+    @patch('muse.layers.attention.get_context_parallel_world_size', return_value=1)
     def test_is_causal_parameter(self, mock_sp, device):
         """Test is_causal parameter is properly stored."""
         embed_dim = 64

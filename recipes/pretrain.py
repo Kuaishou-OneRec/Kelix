@@ -57,9 +57,10 @@ from muse.training.common import (
 from muse.training.lr_schedulers import get_scheduler
 from muse.training.activations import set_activation_checkpointing
 from muse.training.parallel import (
-    get_sequence_parallel_group,
-    get_sequence_parallel_world_size,
-    get_data_parallel_group,
+    get_context_parallel_group,
+    get_context_parallel_world_size,
+    get_data_parallel_rank,
+    get_data_parallel_world_size,
     get_local_sequence,
     initialize_model_parallel,
     gather_by_group
@@ -71,6 +72,8 @@ from muse.utils.common import (
     to_device,
     dist_reduce_dict
 )
+from muse.data.datasets import TextDataset
+from muse.losses.ce import CrossEntropyLoss
 
 def get_argument_parser():
   parser = argparse.ArgumentParser()
@@ -210,8 +213,8 @@ def get_argument_parser():
   parser.add_argument("--allow-random-init-params", type=str, default='',
                       help="Parameter names to allow random initialization")
   
-  parser.add_argument("--sequence-parallel-size", type=int, default=1,
-                      help="Sequence parallelism size")
+  parser.add_argument("--context-parallel-size", type=int, default=1,
+                      help="Context parallelism size")
 
   parser.add_argument("--logging-per-step", type=int, default=100,
                       help="The number of steps to log training info")
@@ -287,12 +290,6 @@ def train():
   dataset_config["model_class"] = args.model_class
   if args.max_length:
     dataset_config["max_length"] = args.max_length
-  
-  # Add shuffle buffer and checkpoint parameters
-  dataset_config["shuffle_buffer_size"] = args.shuffle_buffer_size
-  dataset_config["enable_checkpointing"] = args.enable_dataset_checkpointing
-  use_dataset_load_balance = dataset_config.get("use_load_balance", False) or \
-    args.use_dataset_load_balance
 
   # torch init
   torch.cuda.set_device(local_rank)
@@ -303,9 +300,9 @@ def train():
   device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
 
   ### initialize model parallel group
-  # Currently only support sequence parallelism
-  initialize_model_parallel(sequence_parallel_size=args.sequence_parallel_size)
-  print_rank_0(f"Sequence parallel size: {get_sequence_parallel_world_size()}")
+  # Currently only support context parallelism
+  initialize_model_parallel(context_parallel_size=args.context_parallel_size)
+  print_rank_0(f"Context parallel size: {get_context_parallel_world_size()}")
   print_rank_0(f"Data parallel size: {get_data_parallel_world_size()}")
 
   set_random_seed(args.seed)
@@ -474,12 +471,18 @@ def train():
   # Note: For now, assume dataloader is provided via dataset config
   # TODO: Implement proper dataloader creation using muse.data
   dataloader = None
-  if not use_flops_balance:
-    with Timer("Build dataloader"):
-      # This would need to be implemented based on muse.data API
-      # For now, skipping to allow script to run for testing
-      print_rank_0("Warning: Dataloader creation not yet implemented for new API")
-      print_rank_0(f"Dataset config: {dataset_config}")
+  with Timer("Build dataloader"):
+    # This would need to be implemented based on muse.data API
+    # For now, skipping to allow script to run for testing
+    print_rank_0(f"Building dataloader with config: {dataset_config}")
+    dataset = TextDataset(**dataset_config)
+    dataloader = DataLoader(
+      dataset,
+      batch_size=1,
+      shuffle=False,
+      num_workers=dataset_config["num_workers"],
+      collate_fn=lambda x: x[0]
+    )
 
   ##############
   torch_profiler = _init_profiler(
@@ -488,25 +491,18 @@ def train():
 
   # TODO: move to muse.losses
   # Simple cross-entropy loss for language modeling
-  def compute_loss(logits, labels, ignore_index=-100):
-    """Compute cross-entropy loss for language modeling."""
-    shift_logits = logits[..., :-1, :].contiguous()
-    shift_labels = labels[..., 1:].contiguous()
-    loss = F.cross_entropy(
-      shift_logits.view(-1, shift_logits.size(-1)),
-      shift_labels.view(-1),
-      ignore_index=ignore_index
-    )
-    return loss
+
+  loss_fn = CrossEntropyLoss(ignore_index=-100, shift_labels=True)
 
   start_time = time.time()
 
   grad_norm = 0.0
   micro_step = 0
+  acc_avg_loss = 0.0
 
   # Setup data iterator
   if dataloader is not None:
-    data_iter = iter(gather_by_group(dataloader, get_sequence_parallel_group()))
+    data_iter = iter(gather_by_group(dataloader, get_context_parallel_group()))
   else:
     print_rank_0("Warning: No dataloader available. Training loop will not run.")
     data_iter = iter([])
@@ -544,8 +540,6 @@ def train():
       # Extract batch data
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
-      attention_mask = batch.get("attention_mask", None)
-      sample_idx = batch.get("sample_idx", None)
 
       # Prepare labels for loss computation
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
@@ -553,11 +547,11 @@ def train():
 
       # Forward pass
       with Timer("Forward"):
-        output = model(input_ids=input_ids, attention_mask=attention_mask)
+        output = model(input_ids=input_ids)
         
         # Compute loss for language modeling
         logits = output.logits if hasattr(output, 'logits') else output
-        loss = compute_loss(logits, labels, ignore_index=-100)
+        loss = loss_fn(logits, labels)
 
       # Backward pass
       with Timer("Backward"):
@@ -576,7 +570,6 @@ def train():
       acc_avg_loss += avg_loss
 
       # Logging
-      log_acc_step = args.logging_per_step * args.gradient_accumulation_steps
 
       if global_step % args.logging_per_step == 0 and \
         (micro_step + 1) % args.gradient_accumulation_steps == 0:
@@ -584,7 +577,6 @@ def train():
         if dist.get_rank() == 0:
           learning_rate = lr_scheduler.get_last_lr()[0]
           end_time = time.time()
-          sec_per_step = (end_time - start_time) / args.logging_per_step
 
           avg_loss_value = acc_avg_loss / args.logging_per_step
           

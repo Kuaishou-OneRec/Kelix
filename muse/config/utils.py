@@ -141,7 +141,7 @@ def load_config_from_args(args: argparse.Namespace) -> Dict[str, Any]:
     training_attrs = [
         'gradient_accumulation_steps', 'clip_range',
         'freeze_llm', 'freeze_visual', 'freeze_projector',
-        'update_vision_tower', 'sequence_parallel_size', 'seed',
+        'update_vision_tower', 'context_parallel_size', 'seed',
         'kml_id', 'kml_task_id'
     ]
     for attr in training_attrs:

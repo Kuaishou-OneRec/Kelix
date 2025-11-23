@@ -3,15 +3,15 @@ from logging.config import dictConfig
 
 DEFAULT_LOGGING_CONFIG = {
     "handlers": {
-        "recovlm": {
+        "muse": {
             "class": "logging.StreamHandler",
             "level": "INFO",
             "stream": "ext://sys.stdout",
         },
     },
     "loggers": {
-        "recovlm": {
-            "handlers": ["recovlm"],
+        "muse": {
+            "handlers": ["muse"],
             "level": "INFO",
             "propagate": False,
         },

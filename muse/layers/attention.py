@@ -10,8 +10,8 @@ from typing import Optional
 import torch
 from torch import nn
 from muse.layers.attention_utils import get_attention_function
-from muse.training.parallel import get_sequence_parallel_world_size, \
-    get_sequence_parallel_group, SeqAllToAll4D
+from muse.training.parallel import get_context_parallel_world_size, \
+    get_context_parallel_group, SeqAllToAll4D
 
 from muse.layers.kv_cache import KVCache
 
@@ -297,15 +297,15 @@ class MultiHeadAttention(nn.Module):
             k = k.unsqueeze(2).expand(expand_shape).flatten(1, 2)
             v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
 
-        if get_sequence_parallel_world_size() > 1:
-            spg = get_sequence_parallel_group()
-            # If sequence parallel is enabled, the input is sharded along
+        if get_context_parallel_world_size() > 1:
+            cpg = get_context_parallel_group()
+            # If context parallel is enabled, the input is sharded along
             # the sequence length dimension. We need to recover the original 
             # sequence length before the attention function.
             # q, k, v: [b, s_x, n_h, h_d] -> [b, s_x * P, n_h // P, h_d]
-            q = SeqAllToAll4D.apply(spg, q, 2, 1)
-            k = SeqAllToAll4D.apply(spg, k, 2, 1)
-            v = SeqAllToAll4D.apply(spg, v, 2, 1)
+            q = SeqAllToAll4D.apply(cpg, q, 2, 1)
+            k = SeqAllToAll4D.apply(cpg, k, 2, 1)
+            v = SeqAllToAll4D.apply(cpg, v, 2, 1)
 
         output = self._attention_function(
             q=q,
@@ -316,10 +316,10 @@ class MultiHeadAttention(nn.Module):
             **kwargs
         )
 
-        if get_sequence_parallel_world_size() > 1:
-            spg = get_sequence_parallel_group()
+        if get_context_parallel_world_size() > 1:
+            cpg = get_context_parallel_group()
             # output: [b, s_x * P, n_h // P, h_d] -> [b, s_x, n_h, h_d]
-            output = SeqAllToAll4D.apply(spg, output, 1, 2)
+            output = SeqAllToAll4D.apply(cpg, output, 1, 2)
         # reshape the output to be the same shape as the input
         output = output.contiguous().view(b, s_x, -1)
         return self.output_proj(output)
