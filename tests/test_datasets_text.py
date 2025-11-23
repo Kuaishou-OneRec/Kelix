@@ -349,7 +349,7 @@ class TestTextDataset:
             )
 
             # Create a long message
-            long_content = " ".join(["hello"] * 3)
+            long_content = " ".join(["hello"] * 2)
             messages = [
                 {"role": "user", "content": long_content},
                 {"role": "assistant", "content": "world"}
