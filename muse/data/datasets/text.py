@@ -66,6 +66,7 @@ class TextDataset(DistributedDataset):
           add_system_prompt=False,
           add_generation_prompt=True
         )
+        print("text: ", _text)
         _input_ids = self.tokenizer.encode(_text)
         _loss_mask = [prompt_loss_mask] * len(_input_ids)
         input_ids.extend(_input_ids)
