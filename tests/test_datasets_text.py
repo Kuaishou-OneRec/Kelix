@@ -344,11 +344,12 @@ class TestTextDataset:
             dataset = TextDataset(
                 sources=[str(parquet_path)],
                 tokenizer_path="test/tokenizer",
-                max_length_per_sample=10
+                max_length_per_sample=10,
+                add_system_prompt=False
             )
 
             # Create a long message
-            long_content = " ".join(["word"] * 5)
+            long_content = " ".join(["word"] * 6)
             messages = [
                 {"role": "user", "content": long_content},
                 {"role": "assistant", "content": "response"}
