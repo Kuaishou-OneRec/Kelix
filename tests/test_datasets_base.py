@@ -183,7 +183,7 @@ class TestParquetReader:
 
         sample = reader._parser(row, filename, 0, 1)
         assert sample is not None
-        assert sample["__file__"] == "test-source"
+        assert sample["__file__"] == "test.parquet"
         assert sample["__index__"] == 0
         assert sample["__total__"] == 1
 

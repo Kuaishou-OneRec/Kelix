@@ -487,7 +487,7 @@ class TestTextDataset:
                 "position_ids": torch.tensor([[0, 1]])
             }
 
-            packed = dataset.pack_sample(inputs, new_inputs)
+            packed = dataset.pack_sample([inputs, new_inputs])
             assert packed["input_ids"].shape[1] == 5  # 3 + 2
             assert packed["loss_mask"].shape[1] == 5
             assert packed["position_ids"].shape[1] == 5
