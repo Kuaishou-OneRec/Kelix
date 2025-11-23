@@ -368,6 +368,8 @@ class DistributedDataset(IterableDataset):
     cu_seqlen = [0]
     for _ in range(self.num_epochs):
       for sample in self._get_reader_iter():
+        # TODO: debug
+        print(sample)
         new_inputs = self.process(sample)
         if not new_inputs:
           continue

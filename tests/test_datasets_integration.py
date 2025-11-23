@@ -147,6 +147,8 @@ class TestTextDatasetIntegration:
             'messages': [messages_data, messages_data]
         })
         parquet_path = tmp_path / "test.parquet"
+        # TODO: debug
+        print(parquet_path)
         df.to_parquet(parquet_path)
 
         dataset = TextDataset(
