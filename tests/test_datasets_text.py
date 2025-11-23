@@ -344,7 +344,7 @@ class TestTextDataset:
             dataset = TextDataset(
                 sources=[str(parquet_path)],
                 tokenizer_path="test/tokenizer",
-                max_length_per_sample=10,
+                max_length_per_sample=20,
                 add_system_prompt=False
             )
 
