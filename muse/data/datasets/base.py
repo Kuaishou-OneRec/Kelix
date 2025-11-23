@@ -15,9 +15,7 @@ from pathlib import Path
 from tqdm import tqdm
 from torch.utils.data import IterableDataset
 from fastparquet import ParquetFile
-from torch.utils.data import DataLoader
 from muse.training.parallel import get_data_parallel_rank, get_data_parallel_world_size
-
 PARQUET_CACHE_DIR = os.environ.get("PARQUET_CACHE_DIR", "/code/dataset_cache")
 
 def is_hdfs(path: str) -> bool:
@@ -29,7 +27,6 @@ def get_worker_info():
   num_workers = 1
   try:
     import torch.utils.data
-
     worker_info = torch.utils.data.get_worker_info()
     if worker_info is not None:
       worker = worker_info.id
@@ -38,16 +35,16 @@ def get_worker_info():
     pass
   return worker, num_workers
 
-def get_world_size_and_rank():
-  rank = os.environ.get("RANK", 0)
-  world_size = os.environ.get("WORLD_SIZE", 1)
-  try:
-    import torch.distributed as dist
-    rank = dist.get_rank()
-    world_size = dist.get_world_size()
-  except:
-    pass
-  return rank, world_size
+# def get_world_size_and_rank():
+#   rank = os.environ.get("RANK", 0)
+#   world_size = os.environ.get("WORLD_SIZE", 1)
+#   try:
+#     import torch.distributed as dist
+#     rank = dist.get_rank()
+#     world_size = dist.get_world_size()
+#   except:
+#     pass
+#   return rank, world_size
 
 def is_image_exist(image_path: str) -> bool:
   return image_path and os.path.exists(image_path) \
@@ -77,8 +74,10 @@ def calculate_text_hash(text):
   hash_object.update(text.encode('utf-8'))
   return hash_object.hexdigest()
 
-def load_parquet(path: str, rank: int = 0, worker: int = 0) -> ParquetFile:
+def load_parquet(path: str) -> ParquetFile:
   """Load a parquet file, with fallback to local cache if HDFS read fails."""
+  rank = get_data_parallel_rank()
+  worker, _ = get_worker_info()
   retry: int = 10
   max_cache_files: int = 10
 
@@ -162,11 +161,11 @@ class ParquetReader(Reader):
             return None
 
     def __iter__(self,):
-      rank = get_data_parallel_rank()
-      worker_id, _  = get_worker_info()
+      # rank = get_data_parallel_rank()
+      # worker_id, _  = get_worker_info()
       for fn in tqdm(self.source):
         try:
-          parquet_file = load_parquet(fn, rank=rank, worker=worker_id)
+          parquet_file = load_parquet(fn)
         except Exception as e:
           print(f"open parquet fail {fn=}, error_msg={traceback.format_exc()}")
           continue
@@ -206,8 +205,8 @@ class DistributedDataset(IterableDataset):
     - Very few files but many samples: use "samples"
     - Uncertain: use "auto" (default)
     """
-    self.rank = get_data_parallel_rank()
-    self.world_size = get_data_parallel_world_size()
+    self.rank = kwargs.get("rank", get_data_parallel_rank())
+    self.world_size = kwargs.get("world_size", get_data_parallel_world_size())
     self.num_workers = num_workers
     self.seed = seed
     self.shuffle_buffer_size = shuffle_buffer_size

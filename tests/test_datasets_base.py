@@ -18,7 +18,6 @@ from io import BytesIO
 from muse.data.datasets.base import (
     is_hdfs,
     get_worker_info,
-    get_world_size_and_rank,
     is_image_exist,
     load_image,
     calculate_text_hash,
@@ -57,30 +56,6 @@ class TestUtilityFunctions:
         worker, num_workers = get_worker_info()
         assert worker == 2
         assert num_workers == 4
-
-    @patch.dict(os.environ, {}, clear=True)
-    def test_get_world_size_and_rank_no_distributed(self):
-        """Test get_world_size_and_rank without distributed environment"""
-        rank, world_size = get_world_size_and_rank()
-        assert rank == 0
-        assert world_size == 1
-
-    @patch.dict(os.environ, {'RANK': '2', 'WORLD_SIZE': '4'})
-    def test_get_world_size_and_rank_from_env(self):
-        """Test get_world_size_and_rank from environment variables"""
-        rank, world_size = get_world_size_and_rank()
-        assert rank == 2
-        assert world_size == 4
-
-    @patch('torch.distributed.get_rank')
-    @patch('torch.distributed.get_world_size')
-    def test_get_world_size_and_rank_from_distributed(self, mock_world_size, mock_rank):
-        """Test get_world_size_and_rank from torch.distributed"""
-        mock_rank.return_value = 1
-        mock_world_size.return_value = 8
-        rank, world_size = get_world_size_and_rank()
-        assert rank == 1
-        assert world_size == 8
 
     def test_is_image_exist(self, tmp_path):
         """Test image existence check"""
@@ -154,7 +129,7 @@ class TestUtilityFunctions:
         parquet_path = tmp_path / "test.parquet"
         df.to_parquet(parquet_path)
 
-        parquet_file = load_parquet(str(parquet_path), rank=0, worker=0)
+        parquet_file = load_parquet(str(parquet_path))
         assert parquet_file is not None
         loaded_df = parquet_file.to_pandas()
         assert len(loaded_df) == 3
@@ -183,7 +158,7 @@ class TestUtilityFunctions:
         df = pd.DataFrame({'uuid': ['1'], 'source': ['test']})
         df.to_parquet(cache_fn)
 
-        parquet_file = load_parquet(hdfs_path, rank=0, worker=0)
+        parquet_file = load_parquet(hdfs_path)
         assert parquet_file is not None
 
 

@@ -15,7 +15,14 @@ import os
 
 
 def print_rank_n(*msg, rank=0):
-  if dist.get_rank() == rank:
+  """
+  Print message only on specified rank.
+  If torch.distributed is not initialized, behaves like regular print (all ranks are 0).
+  """
+  if not dist.is_initialized():
+    # If dist is not initialized, treat as rank 0 and always print
+    print(*msg)
+  elif dist.get_rank() == rank:
     print(*msg)
 
 def print_rank_0(*msg):

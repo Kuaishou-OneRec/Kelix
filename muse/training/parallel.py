@@ -88,10 +88,16 @@ def get_data_parallel_group() -> dist.ProcessGroup:
     return _DATA_PARALLEL_GROUP
 
 def get_data_parallel_rank() -> int:
-    return dist.get_rank(group=get_data_parallel_group())
+    if dist.is_initialized() and get_data_parallel_group() is not None:
+        return dist.get_rank(group=get_data_parallel_group())
+    else:
+        return 0
 
 def get_data_parallel_world_size() -> int:
-    return dist.get_world_size(group=get_data_parallel_group())
+    if dist.is_initialized() and get_data_parallel_group() is not None:
+        return dist.get_world_size(group=get_data_parallel_group())
+    else:
+        return 1
 
 def all_to_all_4D(
     input: torch.Tensor,
