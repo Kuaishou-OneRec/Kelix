@@ -283,7 +283,7 @@ class TestTextDataset:
 
             result = dataset.process_messages(messages)
             # Check that loss_mask has non-zero values for prompts
-            loss_mask = result["loss_mask"]
+            loss_mask = result["loss_mask"][0].tolist()
             input_ids = result["input_ids"][0].tolist()
             assert input_ids == [1, 3, 15, 9, 14, 10, 14, 11, 14, 12, 14, 5, 13, 2, 15, 1, 4, 15, 6, 2, 15, 1, 5, 15, 7, 2, 15]
             assert sum(loss_mask) == len(input_ids)
@@ -291,7 +291,7 @@ class TestTextDataset:
             dataset.add_prompt_loss = False
             result = dataset.process_messages(messages)
             
-            loss_mask = result["loss_mask"]
+            loss_mask = result["loss_mask"][0].tolist()
             input_ids = result["input_ids"][0].tolist()
             assert input_ids == [1, 3, 15, 9, 14, 10, 14, 11, 14, 12, 14, 5, 13, 2, 15, 1, 4, 15, 6, 2, 15, 1, 5, 15, 7, 2, 15]
             print(sum(loss_mask))
