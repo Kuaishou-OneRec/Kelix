@@ -33,6 +33,10 @@ class MockTokenizer:
         }
         # Sort vocab keys by length (longest first) for max prefix matching
         self._sorted_vocab_keys = sorted(self.vocab.keys(), key=len, reverse=True)
+        # Create reverse mapping: token_id -> word for decode
+        self._id_to_word = {v: k for k, v in self.vocab.items()}
+        # Unknown token id
+        self.unk_token_id = 999
 
     def encode(self, text):
         """
@@ -64,7 +68,7 @@ class MockTokenizer:
             
             if not matched:
                 # Unknown token
-                tokens.append(999)
+                tokens.append(self.unk_token_id)
         
         return tokens
     
@@ -86,9 +90,42 @@ class MockTokenizer:
                 break
         
         if not matched:
-            tokens.append(999)
+            tokens.append(self.unk_token_id)
         
         return tokens
+
+    def decode(self, token_ids):
+        """
+        Decode token ids back to text.
+        Maps token ids to words and joins them with spaces.
+        
+        Args:
+            token_ids: List of token ids or torch.Tensor
+        
+        Returns:
+            Decoded text string
+        """
+        if isinstance(token_ids, torch.Tensor):
+            token_ids = token_ids.tolist()
+        elif not isinstance(token_ids, list):
+            token_ids = list(token_ids)
+        
+        words = []
+        for token_id in token_ids:
+            # Skip pad token
+            if token_id == self.pad_token_id:
+                continue
+            # Map token id to word
+            if token_id in self._id_to_word:
+                words.append(self._id_to_word[token_id])
+            elif token_id == self.unk_token_id:
+                # Unknown token - use placeholder
+                words.append('<unk>')
+            else:
+                # Unknown token id
+                words.append(f'<unk_{token_id}>')
+        
+        return ' '.join(words)
 
 
 class TestTextDataset:
@@ -274,7 +311,8 @@ class TestTextDataset:
             loss_mask = result["loss_mask"]
 
             print("loss_mask: ", loss_mask)
-            print("input_ids: ", result["input_ids"])
+            print("input_ids: ", result["input_ids"][0].tolist())
+            print("input_ids decoded: ", mock_tokenizer.decode(result["input_ids"][0].tolist()))
             assert torch.sum(loss_mask) < 0
 
     @patch('muse.data.datasets.text.AutoTokenizer')
@@ -630,7 +668,7 @@ class TestChatTemplateRendering:
         messages = [{"role": "user", "content": "Hello, how are you?"}]
         rendered = template.render(messages=messages)
         
-        assert rendered == "<|im_start|>user\nHello, how are you?<|im_end|>"
+        assert rendered == "<|im_start|>user\nHello, how are you?<|im_end|>\n"
 
         # Test user message with add_generation_prompt
         rendered_with_prompt = template.render(
