@@ -146,21 +146,11 @@ class TextDataset(DistributedDataset):
       "loss_mask": loss_mask,
       "position_ids": position_ids,
     }
-  
-  def get_content(self,
-                  sample: Dict[str, Any],
-                  key: str) -> List[Dict[str, Any]]:
-    """Get content from sample"""
-    content = sample.get(key, "[]")
-    try:
-      content = json.loads(content)
-    except json.JSONDecodeError:
-      return []
-    return content
 
   def process(self, sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
     messages = self.get_content(sample, "messages")
     segments = self.get_content(sample, "segments")
+    print("sample", sample)
     print("messages", messages)
     print("segments", segments)
     # TODO: debug
