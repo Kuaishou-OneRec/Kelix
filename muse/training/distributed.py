@@ -247,12 +247,17 @@ def load_from_full_model_state_dict(model: "FSDPModule",
             k:(v.shape, v.device, v.dtype) for k, v in full_sd.items() if k in extra_full_ds
         }
 
-        print_rank_n(
-            f"full_sd={format_dict_or_list({k:(v.shape, v.device, v.dtype) \
-                for k, v in full_sd.items()})}")
-        print_rank_n(
-            f"meta_sharded_sd={format_dict_or_list({k:(v.shape, v.device, v.dtype) \
-                for k, v in meta_sharded_sd.items()})}")
+        full_sd_info = {
+            k: (v.shape, v.device, v.dtype)
+            for k, v in full_sd.items()
+        }
+        print_rank_n(f"full_sd={format_dict_or_list(full_sd_info)}")
+        
+        meta_sharded_sd_info = {
+            k: (v.shape, v.device, v.dtype)
+            for k, v in meta_sharded_sd.items()
+        }
+        print_rank_n(f"meta_sharded_sd={format_dict_or_list(meta_sharded_sd_info)}")
 
         device0 = full_sd[list(full_sd)[0]]
         for k in extra_meta_sharded_sd:
