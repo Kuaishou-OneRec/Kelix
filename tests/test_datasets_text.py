@@ -217,7 +217,6 @@ class TestTextDataset:
             ]
 
             result = dataset.process_messages(messages)
-            print(result)
             assert result is not None
             assert "input_ids" in result
             assert "loss_mask" in result
@@ -283,14 +282,21 @@ class TestTextDataset:
             ]
 
             result = dataset.process_messages(messages)
-            assert result is not None
             # Check that loss_mask has non-zero values for prompts
             loss_mask = result["loss_mask"]
+            input_ids = result["input_ids"][0].tolist()
+            assert input_ids == [1, 3, 15, 9, 14, 10, 14, 11, 14, 12, 14, 5, 13, 2, 15, 1, 4, 15, 6, 2, 15, 1, 5, 15, 7, 2, 15]
+            assert sum(loss_mask) == len(input_ids)
 
-            print("loss_mask: ", loss_mask)
-            print("input_ids: ", result["input_ids"][0].tolist())
-            print("input_ids decoded: ", mock_tokenizer.decode(result["input_ids"][0].tolist()))
-            assert torch.sum(loss_mask) < 0
+            dataset.add_prompt_loss = False
+            result = dataset.process_messages(messages)
+            
+            loss_mask = result["loss_mask"]
+            input_ids = result["input_ids"][0].tolist()
+            assert input_ids == [1, 3, 15, 9, 14, 10, 14, 11, 14, 12, 14, 5, 13, 2, 15, 1, 4, 15, 6, 2, 15, 1, 5, 15, 7, 2, 15]
+            print(sum(loss_mask))
+            assert sum(loss_mask) == len(input_ids)
+
 
     @patch('muse.data.datasets.text.AutoTokenizer')
     def test_process_messages_no_response(self, mock_tokenizer_class):
