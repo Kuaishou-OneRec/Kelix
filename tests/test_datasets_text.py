@@ -26,16 +26,62 @@ class MockTokenizer:
             'world': 7,
             'test': 8,
         }
+        # Sort vocab keys by length (longest first) for max prefix matching
+        self._sorted_vocab_keys = sorted(self.vocab.keys(), key=len, reverse=True)
 
     def encode(self, text):
-        """Simple encoding that splits by space and maps to vocab"""
+        """
+        Encode text using max prefix matching.
+        First split by whitespace, then match each token against vocab using longest prefix match.
+        """
+        import re
         tokens = []
-        for word in text.split():
-            if word in self.vocab:
-                tokens.append(self.vocab[word])
-            else:
+        # Split by whitespace characters
+        words = re.split(r'\s+', text.strip())
+        
+        for word in words:
+            if not word:
+                continue
+            
+            # Max prefix matching: find the longest matching prefix in vocab
+            matched = False
+            for vocab_key in self._sorted_vocab_keys:
+                if word.startswith(vocab_key):
+                    tokens.append(self.vocab[vocab_key])
+                    # Handle remaining part of the word
+                    remaining = word[len(vocab_key):]
+                    if remaining:
+                        # Recursively encode remaining part
+                        tokens.extend(self._encode_word(remaining))
+                    matched = True
+                    break
+            
+            if not matched:
                 # Unknown token
                 tokens.append(999)
+        
+        return tokens
+    
+    def _encode_word(self, word):
+        """Helper method to encode a single word using max prefix matching"""
+        if not word:
+            return []
+        
+        tokens = []
+        # Find longest matching prefix
+        matched = False
+        for vocab_key in self._sorted_vocab_keys:
+            if word.startswith(vocab_key):
+                tokens.append(self.vocab[vocab_key])
+                remaining = word[len(vocab_key):]
+                if remaining:
+                    tokens.extend(self._encode_word(remaining))
+                matched = True
+                break
+        
+        if not matched:
+            tokens.append(999)
+        
         return tokens
 
 
@@ -151,6 +197,7 @@ class TestTextDataset:
             ]
 
             result = dataset.process_messages(messages)
+            print(result)
             assert result is not None
             assert "input_ids" in result
             assert "loss_mask" in result
@@ -520,6 +567,111 @@ class TestTextDataset:
                 "input_ids": torch.tensor([[1, 2, 3, 4, 5]])
             }
 
-            length = dataset.get_sample_length(sample)
-            assert length == 5
+        length = dataset.get_sample_length(sample)
+        assert length == 5
 
+
+class TestChatTemplateRendering:
+    """Test chat jinja template rendering"""
+
+    def test_chat_template_system_message(self):
+        """Test chat template rendering for system message"""
+        from muse.data.templates import TemplateLoader
+        from jinja2 import Template
+
+        template_loader = TemplateLoader()
+        template_content = template_loader.load("chat")
+        template = Template(template_content)
+
+        # Test system message rendering
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello, how are you?"}
+        ]
+        rendered = template.render(messages=messages)
+        
+        assert rendered == "<|im_start|>system\nYou are a helpful assistant.\n<|im_end|>\n<|im_start|>user\nHello, how are you?\n<|im_end|>\n"
+
+        # Test system message rendering without default system
+        messages = [
+            {"role": "user", "content": "Hello, how are you?"}
+        ]
+
+        rendered_default_system = template.render(messages=messages, add_default_system=True)
+
+        assert rendered_default_system == "<|im_start|>system\nYou are a helpful assistant.\n<|im_end|>\n<|im_start|>user\nHello, how are you?\n<|im_end|>\n"
+
+
+        # Test system message rendering without default system
+        messages = [
+            {"role": "user", "content": "Hello, how are you?"}
+        ]
+
+        rendered_no_system = template.render(messages=messages)
+
+        assert rendered_no_system == "<|im_start|>user\nHello, how are you?\n<|im_end|>\n"
+
+    def test_chat_template_user_message(self):
+        """Test chat template rendering for user message"""
+        from muse.data.templates import TemplateLoader
+        from jinja2 import Template
+
+        template_loader = TemplateLoader()
+        template_content = template_loader.load("chat")
+        template = Template(template_content)
+
+        # Test user message with default settings
+        messages = [{"role": "user", "content": "Hello, how are you?"}]
+        rendered = template.render(messages=messages)
+        
+        assert rendered == "<|im_start|>user\nHello, how are you?\n<|im_end|>"
+
+        # Test user message with add_generation_prompt
+        rendered_with_prompt = template.render(
+            messages=messages,
+            add_generation_prompt=True
+        )
+    
+        assert rendered_with_prompt == "<|im_start|>user\nHello, how are you?\n<|im_end|>\n<|im_start|>assistant\n"
+
+    def test_chat_template_assistant_message(self):
+        """Test chat template rendering for assistant message"""
+        from muse.data.templates import TemplateLoader
+        from jinja2 import Template
+
+        template_loader = TemplateLoader()
+        template_content = template_loader.load("chat")
+        template = Template(template_content)
+
+        # Test assistant message with default settings
+        messages = [{"role": "assistant", "content": "I'm doing well, thank you!"}]
+        rendered = template.render(messages=messages)
+        
+        assert rendered == "<|im_start|>assistant\nI'm doing well, thank you!\n<|im_end|>\n"
+
+        # Test assistant message without prefix
+        rendered_no_prefix = template.render(
+            messages=messages,
+            add_prefix=False
+        )
+        assert rendered_no_prefix == "I'm doing well, thank you!\n<|im_end|>\n"
+
+    def test_chat_template_multi_turn_conversation(self):
+        """Test chat template rendering for multi-turn conversation"""
+        from muse.data.templates import TemplateLoader
+        from jinja2 import Template
+
+        template_loader = TemplateLoader()
+        template_content = template_loader.load("chat")
+        template = Template(template_content)
+
+        messages = [
+            {"role": "user", "content": "A"},
+            {"role": "assistant", "content": "B"},
+            {"role": "user", "content": "C"},
+            {"role": "assistant", "content": "D"}
+        ]
+        
+        rendered = template.render(messages=messages)
+        
+        assert rendered == "<|im_start|>user\nA\n<|im_end|>\n<|im_start|>assistant\nB\n<|im_end|>\n<|im_start|>user\nC\n<|im_end|>\n<|im_start|>assistant\nD\n<|im_end|>\n"

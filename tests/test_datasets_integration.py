@@ -153,11 +153,7 @@ class TestTextDatasetIntegration:
             tokenizer_path="test/tokenizer",
             num_workers=1
         )
-        for sample in dataset:
-            print("sample", sample)
         samples = list(dataset)
-        # TODO: debug
-        print("samples", samples)
         assert len(samples) == 2
         assert all("input_ids" in s for s in samples)
         assert all("loss_mask" in s for s in samples)

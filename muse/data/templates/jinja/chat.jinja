@@ -1,6 +1,6 @@
 {% set image_count = namespace(value=0) %}
 {% set video_count = namespace(value=0) %}
-{% set add_system = add_system | default(True) %}
+{% set add_default_system = add_default_system | default(False) %}
 {% set add_prefix = add_prefix | default(True) %}
 {% set add_suffix = add_suffix | default(True) %}
 {% set add_vision_id = add_vision_id | default(False) %}

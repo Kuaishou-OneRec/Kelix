@@ -63,10 +63,9 @@ class TextDataset(DistributedDataset):
       elif turn["role"] == "user":
         _text = self.chat_template.render(
           messages=[turn],
-          add_system_prompt=False,
           add_generation_prompt=True
         )
-        print("text: ", _text)
+        print("user text: ", _text)
         _input_ids = self.tokenizer.encode(_text)
         _loss_mask = [prompt_loss_mask] * len(_input_ids)
         input_ids.extend(_input_ids)
@@ -74,9 +73,9 @@ class TextDataset(DistributedDataset):
       elif turn["role"] == "assistant":
         _text = self.chat_template.render(
           messages=[turn],
-          add_system_prompt=False,
           add_prefix=False
         )
+        print("assistant text: ", _text)
         _input_ids = self.tokenizer.encode(_text)
         _loss_mask = [1] * len(_input_ids)
         input_ids.extend(_input_ids)
