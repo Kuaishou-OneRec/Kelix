@@ -249,7 +249,7 @@ class TestDistributedDataset:
 
         # DistributedDataset accepts list as source (even though type hint says str)
         dataset = DistributedDataset(
-            source=[str(parquet_path)],
+            sources=[str(parquet_path)],
             num_workers=1,
             seed=42
         )
@@ -270,7 +270,7 @@ class TestDistributedDataset:
             json.dump([str(parquet_path)], f)
 
         dataset = DistributedDataset(
-            source=str(json_path),
+            sources=str(json_path),
             num_workers=1
         )
         assert len(dataset._files) > 0 or dataset.dataset is not None
@@ -285,7 +285,7 @@ class TestDistributedDataset:
         df.to_parquet(parquet_path)
 
         dataset = DistributedDataset(
-            source=str(tmp_path),
+            sources=str(tmp_path),
             num_workers=1
         )
         # Should find the parquet file
@@ -303,7 +303,7 @@ class TestDistributedDataset:
 
         # Use list as source (supported by _load_file_list)
         dataset = DistributedDataset(
-            source=files,  # type: ignore
+            sources=files,  # type: ignore
             num_workers=1,
             shard_by="auto"
         )
@@ -318,7 +318,7 @@ class TestDistributedDataset:
         df.to_parquet(parquet_path)
 
         dataset = DistributedDataset(
-            source=[str(parquet_path)],  # type: ignore
+            sources=[str(parquet_path)],  # type: ignore
             num_workers=10,  # More workers than files
             shard_by="auto"
         )
@@ -335,7 +335,7 @@ class TestDistributedDataset:
             files.append(str(parquet_path))
 
         dataset = DistributedDataset(
-            source=files,  # type: ignore
+            sources=files,  # type: ignore
             num_workers=2,
             shard_by="files"
         )
@@ -349,7 +349,7 @@ class TestDistributedDataset:
         df.to_parquet(parquet_path)
 
         dataset = DistributedDataset(
-            source=[str(parquet_path)],  # type: ignore
+            sources=[str(parquet_path)],  # type: ignore
             num_workers=2,
             shard_by="samples"
         )
@@ -384,7 +384,7 @@ class TestDistributedDataset:
         df.to_parquet(parquet_path)
 
         dataset = TestDataset(
-            source=[str(parquet_path)],  # type: ignore
+            sources=[str(parquet_path)],  # type: ignore
             num_workers=1,
             packing=False
         )
@@ -408,7 +408,7 @@ class TestDistributedDataset:
         df.to_parquet(parquet_path)
 
         dataset = TestDataset(
-            source=[str(parquet_path)],  # type: ignore
+            sources=[str(parquet_path)],  # type: ignore
             num_workers=1,
             num_epochs=3
         )
@@ -429,7 +429,7 @@ class TestDistributedDataset:
             df.to_parquet(parquet_path)
 
             dataset = DistributedDataset(
-                source=[str(parquet_path)],  # type: ignore
+                sources=[str(parquet_path)],  # type: ignore
                 num_workers=1
             )
             assert dataset.rank == 1

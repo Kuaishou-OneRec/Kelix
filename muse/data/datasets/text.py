@@ -30,6 +30,7 @@ class TextDataset(DistributedDataset):
     prompt_loader = PromptLoader()
     self.system_prompt = prompt_loader.load(system_prompt)
     self.add_system_prompt = add_system_prompt
+    self.add_prompt_loss = add_prompt_loss
     template_loader = TemplateLoader()
     self.chat_template = Template(template_loader.load(chat_template))
     self.tokenizer_path = tokenizer_path

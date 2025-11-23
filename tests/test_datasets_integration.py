@@ -75,7 +75,7 @@ class TestParquetIntegration:
         df.to_parquet(parquet_path)
 
         dataset = TestDataset(
-            source=[str(parquet_path)],  # type: ignore
+            sources=[str(parquet_path)],  # type: ignore
             num_workers=1,
             num_epochs=1
         )
@@ -95,7 +95,7 @@ class TestParquetIntegration:
         df.to_parquet(parquet_path)
 
         dataset = TestDataset(
-            source=[str(parquet_path)],  # type: ignore
+            sources=[str(parquet_path)],  # type: ignore
             num_workers=1,
             num_epochs=3
         )
@@ -114,7 +114,7 @@ class TestParquetIntegration:
         df.to_parquet(parquet_path)
 
         dataset = TestDataset(
-            source=[str(parquet_path)],  # type: ignore
+            sources=[str(parquet_path)],  # type: ignore
             num_workers=1
         )
 
@@ -248,7 +248,7 @@ class TestDistributedScenarios:
             files.append(str(parquet_path))
 
         dataset = TestDataset(
-            source=files,  # type: ignore
+            sources=files,  # type: ignore
             num_workers=1,
             shard_by="files"
         )
@@ -273,7 +273,7 @@ class TestDistributedScenarios:
         df.to_parquet(parquet_path)
 
         dataset = TestDataset(
-            source=[str(parquet_path)],  # type: ignore
+            sources=[str(parquet_path)],  # type: ignore
             num_workers=1,
             shard_by="samples"
         )
@@ -302,7 +302,7 @@ class TestDistributedScenarios:
             files.append(str(parquet_path))
 
         dataset = TestDataset(
-            source=files,  # type: ignore
+            sources=files,  # type: ignore
             num_workers=1,
             shard_by="auto"
         )
@@ -343,7 +343,7 @@ class TestErrorHandling:
         """Test DistributedDataset handles empty source"""
         with pytest.raises(AssertionError, match="No file found"):
             dataset = TestDataset(
-                source=[],  # type: ignore
+                sources=[],  # type: ignore
                 num_workers=1
             )
 
@@ -356,7 +356,7 @@ class TestErrorHandling:
             # Depending on implementation, might raise different errors
             try:
                 dataset = TestDataset(
-                    source=str(json_path),
+                    sources=str(json_path),
                     num_workers=1
                 )
             except Exception as e:
