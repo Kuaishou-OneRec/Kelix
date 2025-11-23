@@ -352,7 +352,7 @@ class TestTextDataset:
             long_content = " ".join(["hello"] * 2)
             messages = [
                 {"role": "user", "content": long_content},
-                {"role": "assistant", "content": "world"}
+                {"role": "assistant", "content": "world world"}
             ]
 
             result = dataset.process_messages(messages)
