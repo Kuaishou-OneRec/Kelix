@@ -65,7 +65,7 @@ class TextDataset(DistributedDataset):
           messages=[turn],
           add_generation_prompt=True
         )
-        print("user text: ", _text)
+        print("user text: ", [turn], _text)
         _input_ids = self.tokenizer.encode(_text)
         _loss_mask = [prompt_loss_mask] * len(_input_ids)
         input_ids.extend(_input_ids)
@@ -75,7 +75,7 @@ class TextDataset(DistributedDataset):
           messages=[turn],
           add_prefix=False
         )
-        print("assistant text: ", _text)
+        print("assistant text: ", [turn],_text)
         _input_ids = self.tokenizer.encode(_text)
         _loss_mask = [1] * len(_input_ids)
         input_ids.extend(_input_ids)
