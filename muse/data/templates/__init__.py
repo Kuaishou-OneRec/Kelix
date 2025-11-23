@@ -29,7 +29,7 @@ class TemplateLoader:
   def __init__(self, library_dir: Optional[str] = None):
     if not library_dir:
       cur_dir = os.path.dirname(os.path.abspath(__file__))
-      library_dir = os.path.join(cur_dir, "templates")
+      library_dir = os.path.join(cur_dir, "jinja")
     self.library_dir = library_dir
 
   def load(self, path_or_template: Optional[str] = None) -> str:
