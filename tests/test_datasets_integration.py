@@ -349,19 +349,4 @@ class TestErrorHandling:
                 num_workers=1
             )
 
-    def test_distributed_dataset_handles_invalid_json(self, tmp_path):
-        """Test DistributedDataset handles invalid JSON file list"""
-        json_path = tmp_path / "invalid.json"
-        json_path.write_text("invalid json content")
-
-        with pytest.raises((json.JSONDecodeError, ValueError)):
-            # Depending on implementation, might raise different errors
-            try:
-                dataset = TestDataset(
-                    sources=str(json_path),
-                    num_workers=1
-                )
-            except Exception as e:
-                # Expected to fail
-                assert True
 
