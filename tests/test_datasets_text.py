@@ -29,7 +29,9 @@ class MockTokenizer:
             'are': 10,
             'a': 11,
             'helpful': 12,
-            ".": 13
+            ".": 13,
+            " ": 14,
+            "\n": 15
         }
         # Sort vocab keys by length (longest first) for max prefix matching
         self._sorted_vocab_keys = sorted(self.vocab.keys(), key=len, reverse=True)
@@ -41,63 +43,37 @@ class MockTokenizer:
     def encode(self, text):
         """
         Encode text using max prefix matching.
-        First split by whitespace, then match each token against vocab using longest prefix match.
+        Directly match the entire text against vocab using longest prefix match,
+        preserving whitespace characters if they are in the vocab.
         """
-        import re
         tokens = []
-        # Split by whitespace characters
-        words = re.split(r'\s+', text.strip())
-        print("words: ", words)
+        remaining_text = text
         
-        for word in words:
-            if not word:
-                continue
-            
-            # Max prefix matching: find the longest matching prefix in vocab
+        while remaining_text:
             matched = False
+            # Try to find the longest matching prefix in vocab
             for vocab_key in self._sorted_vocab_keys:
-                if word.startswith(vocab_key):
+                if remaining_text.startswith(vocab_key):
                     tokens.append(self.vocab[vocab_key])
-                    # Handle remaining part of the word
-                    remaining = word[len(vocab_key):]
-                    if remaining:
-                        # Recursively encode remaining part
-                        tokens.extend(self._encode_word(remaining))
+                    remaining_text = remaining_text[len(vocab_key):]
                     matched = True
                     break
             
             if not matched:
-                # Unknown token
-                tokens.append(self.unk_token_id)
+                # No match found, use unknown token for the first character
+                if remaining_text:
+                    tokens.append(self.unk_token_id)
+                    remaining_text = remaining_text[1:]  # Skip one character
+                else:
+                    break
         
         return tokens
     
-    def _encode_word(self, word):
-        """Helper method to encode a single word using max prefix matching"""
-        if not word:
-            return []
-        
-        tokens = []
-        # Find longest matching prefix
-        matched = False
-        for vocab_key in self._sorted_vocab_keys:
-            if word.startswith(vocab_key):
-                tokens.append(self.vocab[vocab_key])
-                remaining = word[len(vocab_key):]
-                if remaining:
-                    tokens.extend(self._encode_word(remaining))
-                matched = True
-                break
-        
-        if not matched:
-            tokens.append(self.unk_token_id)
-        
-        return tokens
 
     def decode(self, token_ids):
         """
         Decode token ids back to text.
-        Maps token ids to words and joins them with spaces.
+        Maps token ids to words and concatenates them directly (whitespace is preserved as tokens).
         
         Args:
             token_ids: List of token ids or torch.Tensor
@@ -110,22 +86,23 @@ class MockTokenizer:
         elif not isinstance(token_ids, list):
             token_ids = list(token_ids)
         
-        words = []
+        text_parts = []
         for token_id in token_ids:
             # Skip pad token
             if token_id == self.pad_token_id:
                 continue
             # Map token id to word
             if token_id in self._id_to_word:
-                words.append(self._id_to_word[token_id])
+                text_parts.append(self._id_to_word[token_id])
             elif token_id == self.unk_token_id:
                 # Unknown token - use placeholder
-                words.append('<unk>')
+                text_parts.append('<unk>')
             else:
                 # Unknown token id
-                words.append(f'<unk_{token_id}>')
+                text_parts.append(f'<unk_{token_id}>')
         
-        return ' '.join(words)
+        # Directly concatenate (whitespace is already in vocab as tokens)
+        return ''.join(text_parts)
 
 
 class TestTextDataset:
