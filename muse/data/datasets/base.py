@@ -347,8 +347,8 @@ class DistributedDataset(IterableDataset):
 
   def __iter__(self):
     """Iterate through the dataset, processing samples and handling epochs."""
-    inputs = {}
-    cu_seqlen = [0]
+    buffer = []
+    current_length = 0
     for _ in range(self.num_epochs):
       for sample in self._get_reader_iter():
         new_inputs = self.process(sample)
@@ -356,12 +356,13 @@ class DistributedDataset(IterableDataset):
           continue
         if self.packing:
           new_sample_length = self.get_sample_length(new_inputs)
-          if self.get_sample_length(inputs) + new_sample_length > self.max_length:
-            yield inputs
-            inputs = {}
-            cu_seqlen = [0]
-          cu_seqlen.append(cu_seqlen[-1] + new_sample_length)
-          inputs = self.pack_sample(inputs, new_inputs)
-          inputs["cu_seqlen"] = cu_seqlen
+          if current_length + new_sample_length > self.max_length:
+            yield self.pack_sample(buffer)
+            buffer = []
+            current_length = 0
+          buffer.append(new_inputs)
+          current_length += new_sample_length
         else:
           yield new_inputs
+    if self.packing and len(buffer) > 0:
+      yield self.pack_sample(buffer)

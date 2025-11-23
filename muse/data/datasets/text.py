@@ -169,20 +169,26 @@ class TextDataset(DistributedDataset):
       return self.process_segments(segments)
     else:
       return None
-    
-  def pack_sample(self,
-                  inputs: Dict[str, torch.Tensor],
-                  new_inputs: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-    """Pack new_inputs into inputs"""
-    for key in new_inputs:
-      if not key in inputs:
-        inputs[key] = new_inputs[key]
-        continue
-      inputs[key] = torch.cat([inputs[key], new_inputs[key]], dim=-1)
-    return inputs
-  
+
   def get_sample_length(self, sample: Dict[str, torch.Tensor]) -> int:
     """Get sample length"""
     if "input_ids" not in sample:
       return 0
     return sample["input_ids"].shape[1]
+
+  def pack_sample(self,
+                  buffer: List[Dict[str, torch.Tensor]]) -> List[Dict[str, Any]]:
+    """Pack new_sample into buffer"""
+    inputs = {}
+
+    for key in ["input_ids", "loss_mask", "position_ids"]:
+      inputs[key] = torch.cat([sample[key] for sample in buffer], dim=-1)
+
+    cu_seqlen = [0]
+    for sample in buffer:
+      cu_seqlen.append(cu_seqlen[-1] + self.get_sample_length(sample))    
+    
+    inputs["cu_seqlen"] = cu_seqlen
+  
+    return inputs
+  

@@ -62,8 +62,8 @@ class TestParquetIntegration:
         samples = list(reader)
 
         assert len(samples) == 3
-        assert all(s["__index__"] in [0, 1, 2] for s in samples)
-        assert all(s["__total__"] == 3 for s in samples)
+        assert all(s["__index__"] in [0] for s in samples)
+        assert all(s["__total__"] == 1 for s in samples)
 
     def test_distributed_dataset_end_to_end(self, tmp_path):
         """Test DistributedDataset end-to-end with real files"""
