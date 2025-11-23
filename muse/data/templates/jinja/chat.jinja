@@ -11,7 +11,8 @@ You are a helpful assistant.<|im_end|>
 {% endif %}
 {% if add_prefix %}<|im_start|>{{ message['role'] }}{% endif %}
 {% if message['content'] is string %}{{ message['content'] }}
-{% else %}{% for content in message['content'] %}
+{% else %}
+{% for content in message['content'] %}
 {% if content['type'] == 'image' or 'image' in content or 'image_url' in content %}
 {% set image_count.value = image_count.value + 1 %}
 {% if add_vision_id %}Picture {{ image_count.value }}: {% endif %}<|vision_start|><|image_pad|><|vision_end|>
@@ -19,6 +20,8 @@ You are a helpful assistant.<|im_end|>
 {% set video_count.value = video_count.value + 1 %}
 {% if add_vision_id %}Video {{ video_count.value }}: {% endif %}<|vision_start|><|video_pad|><|vision_end|>
 {% elif 'text' in content %}{{ content['text'] }}{% endif %}
+{% endfor %}
+{% endif %}
 {% if add_suffix %}<|im_end|>
 {% endif %}
 {% endfor %}
