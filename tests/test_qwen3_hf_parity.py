@@ -96,7 +96,7 @@ def test_qwen3_logits_align_with_hf_checkpoint():
         add_generation_prompt=True,
         enable_thinking=True # Switches between thinking and non-thinking modes. Default is True.
     )
-    model_inputs = tokenizer([text], return_tensors="pt").to(model.device)
+    model_inputs = tokenizer([text], return_tensors="pt").to(hf_model.device)
 
     # conduct text completion
     generated_ids = hf_model.generate(
