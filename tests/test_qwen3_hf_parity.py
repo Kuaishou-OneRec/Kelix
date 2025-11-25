@@ -402,6 +402,111 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     muse_model.eval()
     hf_model.eval()
 
+    # Register hooks to capture intermediate activations
+    hf_activations = {}
+    muse_activations = {}
+    
+    def make_hf_hook(name):
+        def hook(module, input, output):
+            # Handle different output formats
+            if isinstance(output, tuple):
+                hf_activations[name] = output[0].detach().clone()
+            else:
+                hf_activations[name] = output.detach().clone()
+        return hook
+    
+    def make_muse_hook(name):
+        def hook(module, input, output):
+            # Handle different output formats
+            if isinstance(output, tuple):
+                muse_activations[name] = output[0].detach().clone()
+            else:
+                muse_activations[name] = output.detach().clone()
+        return hook
+    
+    # Register hooks for HF model
+    hf_hooks = []
+    
+    # Embedding layer
+    if hasattr(hf_model.model, 'embed_tokens'):
+        hf_hooks.append(
+            hf_model.model.embed_tokens.register_forward_hook(
+                make_hf_hook("embedding")
+            )
+        )
+    
+    # Transformer layers
+    for i in range(len(hf_model.model.layers)):
+        hf_hooks.append(
+            hf_model.model.layers[i].register_forward_hook(
+                make_hf_hook(f"layer_{i}")
+            )
+        )
+    
+    # Final norm
+    if hasattr(hf_model.model, 'norm'):
+        hf_hooks.append(
+            hf_model.model.norm.register_forward_hook(
+                make_hf_hook("final_norm")
+            )
+        )
+    
+    # Output layer (lm_head)
+    if hasattr(hf_model, 'lm_head'):
+        hf_hooks.append(
+            hf_model.lm_head.register_forward_hook(
+                make_hf_hook("output")
+            )
+        )
+    
+    # Register hooks for Muse model
+    muse_hooks = []
+    
+    # Embedding layer
+    if hasattr(muse_model.model, 'tok_embeddings'):
+        muse_hooks.append(
+            muse_model.model.tok_embeddings.register_forward_hook(
+                make_muse_hook("embedding")
+            )
+        )
+    
+    # Transformer layers
+    for i in range(len(muse_model.model.layers)):
+        muse_hooks.append(
+            muse_model.model.layers[i].register_forward_hook(
+                make_muse_hook(f"layer_{i}")
+            )
+        )
+    
+    # Final norm
+    if hasattr(muse_model.model, 'norm'):
+        muse_hooks.append(
+            muse_model.model.norm.register_forward_hook(
+                make_muse_hook("final_norm")
+            )
+        )
+    
+    # Output layer - hook the TransformerDecoder's forward output (which includes unembed)
+    # This captures the logits after unembed, matching HF's lm_head output
+    # We'll compare this separately, so we hook it with a different name
+    if hasattr(muse_model.model, 'output'):
+        # Hook the output layer's forward call
+        # Note: unembed calls self.output(h), so we hook output directly
+        from muse.layers.linear import TiedLinear
+        if isinstance(muse_model.model.output, TiedLinear):
+            # For TiedLinear, hook the linear operation
+            muse_hooks.append(
+                muse_model.model.output.linear.register_forward_hook(
+                    make_muse_hook("output_before_float")
+                )
+            )
+        else:
+            muse_hooks.append(
+                muse_model.model.output.register_forward_hook(
+                    make_muse_hook("output_before_float")
+                )
+            )
+    
     # Get HF model logits
     with torch.no_grad():
         hf_outputs = hf_model(**model_inputs)
@@ -418,6 +523,117 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     # For this test, we assume no padding, so we omit the mask
     with torch.no_grad():
         muse_logits = muse_model(tokens=muse_tokens)
+    
+    # Remove hooks
+    for hook in hf_hooks:
+        hook.remove()
+    for hook in muse_hooks:
+        hook.remove()
+    
+    # Compare activations layer by layer
+    print(f"\n{'='*60}")
+    print("Layer-by-Layer Activation Comparison")
+    print(f"{'='*60}")
+    
+    # Compare embedding
+    if "embedding" in hf_activations and "embedding" in muse_activations:
+        hf_emb = hf_activations["embedding"].to(dtype=dtype)
+        muse_emb = muse_activations["embedding"].to(dtype=dtype)
+        emb_diff = (hf_emb - muse_emb).abs()
+        max_diff = emb_diff.max().item()
+        mean_diff = emb_diff.mean().item()
+        print(f"\nEmbedding output:")
+        print(f"  Shape: HF={hf_emb.shape}, Muse={muse_emb.shape}")
+        print(f"  Max diff: {max_diff:.6e}")
+        print(f"  Mean diff: {mean_diff:.6e}")
+        if max_diff > 1e-4:
+            print(f"  ⚠️  Large difference detected!")
+        else:
+            print(f"  ✓ Match!")
+    
+    # Compare transformer layers
+    first_mismatch_layer = None
+    for i in range(muse_config.num_layers):
+        hf_key = f"layer_{i}"
+        muse_key = f"layer_{i}"
+        if hf_key in hf_activations and muse_key in muse_activations:
+            hf_act = hf_activations[hf_key].to(dtype=dtype)
+            muse_act = muse_activations[muse_key].to(dtype=dtype)
+            act_diff = (hf_act - muse_act).abs()
+            max_diff = act_diff.max().item()
+            mean_diff = act_diff.mean().item()
+            relative_diff = (act_diff / (hf_act.abs() + 1e-8)).max().item()
+            
+            status = "✓ Match!" if max_diff < 1e-4 else "⚠️  Mismatch!"
+            print(f"\nLayer {i} output:")
+            print(f"  Shape: HF={hf_act.shape}, Muse={muse_act.shape}")
+            print(f"  Max diff: {max_diff:.6e}")
+            print(f"  Mean diff: {mean_diff:.6e}")
+            print(f"  Max relative diff: {relative_diff:.6e}")
+            print(f"  {status}")
+            
+            if max_diff > 1e-4 and first_mismatch_layer is None:
+                first_mismatch_layer = i
+                print(f"  ⚠️  First mismatch detected at layer {i}!")
+    
+    # Compare final norm
+    if "final_norm" in hf_activations and "final_norm" in muse_activations:
+        hf_norm = hf_activations["final_norm"].to(dtype=dtype)
+        muse_norm = muse_activations["final_norm"].to(dtype=dtype)
+        norm_diff = (hf_norm - muse_norm).abs()
+        max_diff = norm_diff.max().item()
+        mean_diff = norm_diff.mean().item()
+        print(f"\nFinal norm output:")
+        print(f"  Shape: HF={hf_norm.shape}, Muse={muse_norm.shape}")
+        print(f"  Max diff: {max_diff:.6e}")
+        print(f"  Mean diff: {mean_diff:.6e}")
+        if max_diff > 1e-4:
+            print(f"  ⚠️  Large difference detected!")
+        else:
+            print(f"  ✓ Match!")
+    
+    # Compare output layer (lm_head for HF, output for Muse)
+    # Note: Muse's output goes through unembed which applies norm and then output
+    # HF's lm_head takes norm output and produces logits
+    if "output" in hf_activations:
+        hf_out = hf_activations["output"].to(dtype=dtype)
+        # For Muse, we need to compare with the final norm output before unembed
+        # since HF's lm_head takes norm output as input
+        if "final_norm" in muse_activations:
+            muse_norm_out = muse_activations["final_norm"].to(dtype=dtype)
+            # Compare the input to output layer (norm output)
+            print(f"\nOutput layer input (norm output):")
+            print(f"  Shape: HF (to lm_head)={hf_model.model.norm.weight.shape if hasattr(hf_model.model, 'norm') else 'N/A'}, Muse={muse_norm_out.shape}")
+            # Note: We can't directly compare HF's norm output without hooking it
+            # So we skip this comparison
+        
+        # Compare output layer outputs if available
+        if "output_before_float" in muse_activations:
+            muse_out = muse_activations["output_before_float"].to(dtype=dtype)
+            # Note: Muse's output is before .float() conversion in unembed
+            # HF's output is the final logits
+            out_diff = (hf_out - muse_out).abs()
+            max_diff = out_diff.max().item()
+            mean_diff = out_diff.mean().item()
+            print(f"\nOutput layer output (logits before dtype conversion):")
+            print(f"  Shape: HF={hf_out.shape}, Muse={muse_out.shape}")
+            print(f"  Max diff: {max_diff:.6e}")
+            print(f"  Mean diff: {mean_diff:.6e}")
+            if max_diff > 1e-4:
+                print(f"  ⚠️  Large difference detected!")
+            else:
+                print(f"  ✓ Match!")
+    
+    # Summary
+    print(f"\n{'='*60}")
+    print("Activation Comparison Summary")
+    print(f"{'='*60}")
+    if first_mismatch_layer is not None:
+        print(f"⚠️  First mismatch detected at layer {first_mismatch_layer}")
+        print(f"   All layers before layer {first_mismatch_layer} match correctly.")
+    else:
+        print(f"✓ All intermediate activations match!")
+    print(f"{'='*60}\n")
     
     # Note: TransformerDecoder.unembed() converts output to float32 for numerical stability
     # Convert to match HF model's dtype for comparison
