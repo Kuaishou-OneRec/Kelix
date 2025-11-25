@@ -1328,7 +1328,7 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                     # Sum differences per row (query position)
                                                     row_diffs = weights_diff.sum(dim=-1)  # [b, h, seq_len]
                                                     max_row_diff_per_head = row_diffs.max(dim=-1)[0]  # [b, h]
-                                                    print(f"            Max row diff per head: {max_row_diff_per_head[0].cpu().numpy()}")
+                                                    print(f"            Max row diff per head: {max_row_diff_per_head[0].float().cpu().numpy()}")
                                                     
                                                     # Find rows with most differences
                                                     max_row_diff_idx = row_diffs.argmax(dim=-1)  # [b, h] - which row has max diff
