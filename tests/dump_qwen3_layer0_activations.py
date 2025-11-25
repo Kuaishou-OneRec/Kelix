@@ -1,8 +1,8 @@
 """
-Dump all intermediate activations from Muse Qwen3 Layer 0 for debugging.
+Dump all intermediate activations from both HF and Muse Qwen3 Layer 0 for debugging.
 
 This script captures all inputs/outputs at each step of the first transformer layer
-and saves them to files for offline analysis.
+for both HF and Muse models, and saves them to files for offline comparison.
 """
 
 import os
@@ -67,14 +67,181 @@ def _build_qwen3_config(hf_cfg):
     )
 
 
-def dump_layer0_activations(checkpoint_dir, output_dir="layer0_dumps", prompt=None):
+def dump_hf_layer0_activations(hf_model, model_inputs, output_dir):
+    """Dump HF model Layer 0 activations."""
+    import os
+    
+    hf_activations = {}
+    
+    def make_hf_hook(name, storage):
+        def hook(module, input, output):
+            if isinstance(input, tuple):
+                storage[f"{name}_input"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in input]
+            else:
+                storage[f"{name}_input"] = input.detach().clone() if isinstance(input, torch.Tensor) else input
+            
+            if isinstance(output, tuple):
+                storage[f"{name}_output"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in output]
+            else:
+                storage[f"{name}_output"] = output.detach().clone() if isinstance(output, torch.Tensor) else output
+        return hook
+    
+    def make_hf_pre_hook(name, storage):
+        def hook(module, input):
+            if isinstance(input, tuple):
+                storage[f"{name}_input"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in input]
+            else:
+                storage[f"{name}_input"] = input.detach().clone() if isinstance(input, torch.Tensor) else input
+        return hook
+    
+    # Get HF Layer 0
+    hf_layer_0 = hf_model.model.layers[0]
+    hf_attn_0 = hf_layer_0.self_attn
+    
+    hf_hooks = []
+    
+    # Hook embedding
+    hf_hooks.append(hf_model.model.embed_tokens.register_forward_hook(
+        make_hf_hook("embedding", hf_activations)
+    ))
+    
+    # Hook Layer 0
+    hf_hooks.append(hf_layer_0.register_forward_pre_hook(
+        make_hf_pre_hook("layer0", hf_activations)
+    ))
+    
+    # Hook input_layernorm (sa_norm)
+    hf_hooks.append(hf_layer_0.input_layernorm.register_forward_hook(
+        make_hf_hook("layer0_input_layernorm", hf_activations)
+    ))
+    
+    # Hook attention module
+    hf_hooks.append(hf_attn_0.register_forward_pre_hook(
+        make_hf_pre_hook("attn0", hf_activations)
+    ))
+    
+    # Hook q_proj
+    hf_hooks.append(hf_attn_0.q_proj.register_forward_hook(
+        make_hf_hook("attn0_q_proj", hf_activations)
+    ))
+    
+    # Hook q_norm
+    if hasattr(hf_attn_0, 'q_norm') and hf_attn_0.q_norm is not None:
+        hf_hooks.append(hf_attn_0.q_norm.register_forward_hook(
+            make_hf_hook("attn0_q_norm", hf_activations)
+        ))
+    
+    # Hook k_proj
+    hf_hooks.append(hf_attn_0.k_proj.register_forward_hook(
+        make_hf_hook("attn0_k_proj", hf_activations)
+    ))
+    
+    # Hook k_norm
+    if hasattr(hf_attn_0, 'k_norm') and hf_attn_0.k_norm is not None:
+        hf_hooks.append(hf_attn_0.k_norm.register_forward_hook(
+            make_hf_hook("attn0_k_norm", hf_activations)
+        ))
+    
+    # Hook v_proj
+    hf_hooks.append(hf_attn_0.v_proj.register_forward_hook(
+        make_hf_hook("attn0_v_proj", hf_activations)
+    ))
+    
+    # Hook attention forward to capture qkv after RoPE and attention output
+    def hf_attn_forward_hook(module, input, output):
+        # HF attention returns (hidden_states, attn_weights)
+        if isinstance(output, tuple):
+            hf_activations['attn0_output'] = output[0].detach().clone()
+            if len(output) > 1 and output[1] is not None:
+                hf_activations['attn0_attn_weights'] = output[1].detach().clone()
+        else:
+            hf_activations['attn0_output'] = output.detach().clone()
+    
+    hf_hooks.append(hf_attn_0.register_forward_hook(hf_attn_forward_hook))
+    
+    # Hook o_proj (output_proj)
+    hf_hooks.append(hf_attn_0.o_proj.register_forward_pre_hook(
+        make_hf_pre_hook("attn0_o_proj", hf_activations)
+    ))
+    hf_hooks.append(hf_attn_0.o_proj.register_forward_hook(
+        make_hf_hook("attn0_o_proj", hf_activations)
+    ))
+    
+    # Hook post_attention_layernorm (mlp_norm)
+    hf_hooks.append(hf_layer_0.post_attention_layernorm.register_forward_hook(
+        make_hf_hook("layer0_post_attention_layernorm", hf_activations)
+    ))
+    
+    # Hook MLP components
+    hf_mlp = hf_layer_0.mlp
+    hf_hooks.append(hf_mlp.gate_proj.register_forward_hook(
+        make_hf_hook("layer0_mlp_gate_proj", hf_activations)
+    ))
+    hf_hooks.append(hf_mlp.up_proj.register_forward_hook(
+        make_hf_hook("layer0_mlp_up_proj", hf_activations)
+    ))
+    hf_hooks.append(hf_mlp.down_proj.register_forward_hook(
+        make_hf_hook("layer0_mlp_down_proj", hf_activations)
+    ))
+    
+    # Hook MLP output
+    hf_hooks.append(hf_mlp.register_forward_hook(
+        make_hf_hook("layer0_mlp", hf_activations)
+    ))
+    
+    # Hook Layer 0 output
+    hf_hooks.append(hf_layer_0.register_forward_hook(
+        make_hf_hook("layer0", hf_activations)
+    ))
+    
+    # Forward pass
+    print("Running HF forward pass to capture activations...")
+    with torch.no_grad():
+        hf_outputs = hf_model(**model_inputs, output_attentions=True)
+    
+    # Remove hooks
+    for hook in hf_hooks:
+        hook.remove()
+    
+    # Save HF activations
+    hf_output_dir = os.path.join(output_dir, "hf")
+    os.makedirs(hf_output_dir, exist_ok=True)
+    
+    for name, value in hf_activations.items():
+        if isinstance(value, torch.Tensor):
+            torch.save(value.cpu(), os.path.join(hf_output_dir, f"{name}.pt"))
+        elif isinstance(value, (list, tuple)):
+            saved_items = []
+            for item in value:
+                if isinstance(item, torch.Tensor):
+                    saved_items.append(item.cpu())
+                else:
+                    saved_items.append(item)
+            torch.save(saved_items, os.path.join(hf_output_dir, f"{name}.pt"))
+        elif isinstance(value, dict):
+            saved_dict = {}
+            for k, v in value.items():
+                if isinstance(v, torch.Tensor):
+                    saved_dict[k] = v.cpu()
+                else:
+                    saved_dict[k] = v
+            torch.save(saved_dict, os.path.join(hf_output_dir, f"{name}.pt"))
+        else:
+            torch.save(value, os.path.join(hf_output_dir, f"{name}.pt"))
+    
+    print(f"✓ Saved {len(hf_activations)} HF activation tensors to {hf_output_dir}")
+    return hf_activations
+
+
+def dump_layer0_activations(checkpoint_dir, output_dir="layer0_dumps", prompt=None, dump_hf=True):
     """
-    Dump all intermediate activations from Muse Qwen3 Layer 0.
+    Dump all intermediate activations from both HF and Muse Qwen3 Layer 0.
     
     Args:
         checkpoint_dir: Path to HF checkpoint directory
         output_dir: Directory to save dumped activations
         prompt: Input prompt (default: simple test prompt)
+        dump_hf: Whether to dump HF activations (default: True)
     """
     torch.manual_seed(0)
     if torch.cuda.is_available():
@@ -126,7 +293,20 @@ def dump_layer0_activations(checkpoint_dir, output_dir="layer0_dumps", prompt=No
     muse_model = muse_model.to(device=device, dtype=dtype)
     muse_model.eval()
     
-    # Storage for all activations
+    # Ensure eager attention
+    import os
+    os.environ["TRANSFORMERS_ATTENTION_IMPLEMENTATION"] = "eager"
+    hf_model.config._attn_implementation = "eager"
+    hf_model.eval()
+    
+    # Dump HF activations first
+    if dump_hf:
+        print("\n" + "=" * 80)
+        print("Dumping HF Model Activations")
+        print("=" * 80)
+        hf_activations = dump_hf_layer0_activations(hf_model, model_inputs, output_dir)
+    
+    # Storage for Muse activations
     activations = {}
     
     # Hook functions to capture activations
@@ -269,14 +449,16 @@ def dump_layer0_activations(checkpoint_dir, output_dir="layer0_dumps", prompt=No
     ))
     
     # Hook MLP components
+    # Muse uses FeedForward with w1, w2, w3 instead of gate_proj, down_proj, up_proj
     mlp = layer_0.mlp
-    hooks.append(mlp.gate_proj.register_forward_hook(
+    hooks.append(mlp.w1.register_forward_hook(
         make_hook("layer0_mlp_gate_proj", activations)
     ))
-    hooks.append(mlp.up_proj.register_forward_hook(
-        make_hook("layer0_mlp_up_proj", activations)
-    ))
-    hooks.append(mlp.down_proj.register_forward_hook(
+    if mlp.w3 is not None:
+        hooks.append(mlp.w3.register_forward_hook(
+            make_hook("layer0_mlp_up_proj", activations)
+        ))
+    hooks.append(mlp.w2.register_forward_hook(
         make_hook("layer0_mlp_down_proj", activations)
     ))
     
@@ -307,10 +489,13 @@ def dump_layer0_activations(checkpoint_dir, output_dir="layer0_dumps", prompt=No
     for hook in hooks:
         hook.remove()
     
-    # Save activations
-    print(f"Saving activations to {output_dir}...")
+    # Save Muse activations
+    muse_output_dir = os.path.join(output_dir, "muse")
+    os.makedirs(muse_output_dir, exist_ok=True)
     
-    # Save metadata
+    print(f"\nSaving Muse activations to {muse_output_dir}...")
+    
+    # Save metadata (shared between HF and Muse)
     metadata = {
         "config": {
             "embed_dim": muse_config.embed_dim,
@@ -331,12 +516,16 @@ def dump_layer0_activations(checkpoint_dir, output_dir="layer0_dumps", prompt=No
         "device": str(device),
         "dtype": str(dtype),
     }
+    # Save metadata to both directories
     torch.save(metadata, os.path.join(output_dir, "metadata.pt"))
+    torch.save(metadata, os.path.join(muse_output_dir, "metadata.pt"))
+    if dump_hf:
+        torch.save(metadata, os.path.join(os.path.join(output_dir, "hf"), "metadata.pt"))
     
-    # Save each activation
+    # Save each Muse activation
     for name, value in activations.items():
         if isinstance(value, torch.Tensor):
-            torch.save(value.cpu(), os.path.join(output_dir, f"{name}.pt"))
+            torch.save(value.cpu(), os.path.join(muse_output_dir, f"{name}.pt"))
         elif isinstance(value, (list, tuple)):
             # Save list/tuple of tensors
             saved_items = []
@@ -345,7 +534,7 @@ def dump_layer0_activations(checkpoint_dir, output_dir="layer0_dumps", prompt=No
                     saved_items.append(item.cpu())
                 else:
                     saved_items.append(item)
-            torch.save(saved_items, os.path.join(output_dir, f"{name}.pt"))
+            torch.save(saved_items, os.path.join(muse_output_dir, f"{name}.pt"))
         elif isinstance(value, dict):
             # Save dict (e.g., kwargs)
             saved_dict = {}
@@ -354,13 +543,13 @@ def dump_layer0_activations(checkpoint_dir, output_dir="layer0_dumps", prompt=No
                     saved_dict[k] = v.cpu()
                 else:
                     saved_dict[k] = v
-            torch.save(saved_dict, os.path.join(output_dir, f"{name}.pt"))
+            torch.save(saved_dict, os.path.join(muse_output_dir, f"{name}.pt"))
         else:
             # Save other types as-is
-            torch.save(value, os.path.join(output_dir, f"{name}.pt"))
+            torch.save(value, os.path.join(muse_output_dir, f"{name}.pt"))
     
-    print(f"✓ Saved {len(activations)} activation tensors to {output_dir}")
-    print(f"\nActivation names:")
+    print(f"✓ Saved {len(activations)} Muse activation tensors to {muse_output_dir}")
+    print(f"\nMuse activation names:")
     for name in sorted(activations.keys()):
         value = activations[name]
         if isinstance(value, torch.Tensor):
@@ -381,17 +570,26 @@ if __name__ == "__main__":
     checkpoint_dir = sys.argv[1] if len(sys.argv) > 1 else "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base"
     output_dir = sys.argv[2] if len(sys.argv) > 2 else "layer0_dumps"
     prompt = sys.argv[3] if len(sys.argv) > 3 else None
+    dump_hf_flag = sys.argv[4].lower() != "false" if len(sys.argv) > 4 else True
     
     print(f"Checkpoint: {checkpoint_dir}")
     print(f"Output directory: {output_dir}")
+    print(f"Dump HF: {dump_hf_flag}")
     if prompt:
         print(f"Prompt: {prompt}")
     
     activations, output_dir = dump_layer0_activations(
         checkpoint_dir=checkpoint_dir,
         output_dir=output_dir,
-        prompt=prompt
+        prompt=prompt,
+        dump_hf=dump_hf_flag
     )
     
-    print(f"\n✓ Dump complete! Files saved to: {output_dir}")
+    print(f"\n" + "=" * 80)
+    print(f"✓ Dump complete!")
+    print(f"=" * 80)
+    print(f"Files saved to:")
+    print(f"  - HF activations: {os.path.join(output_dir, 'hf')}")
+    print(f"  - Muse activations: {os.path.join(output_dir, 'muse')}")
+    print(f"  - Metadata: {os.path.join(output_dir, 'metadata.pt')}")
 
