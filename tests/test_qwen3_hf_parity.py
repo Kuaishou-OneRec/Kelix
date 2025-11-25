@@ -1184,7 +1184,7 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                             
                                             # Show some sample scores
                                             print(f"            Sample scores (first head, first 5x5):")
-                                            sample_scores = muse_scores[0, 0, :5, :5].cpu().numpy()
+                                            sample_scores = muse_scores[0, 0, :5, :5].float().cpu().numpy()
                                             for i in range(5):
                                                 print(f"              {sample_scores[i, :]}")
                                             
@@ -1203,7 +1203,7 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                             
                                             # Show some sample weights
                                             print(f"            Sample weights (first head, first 5x5):")
-                                            sample_weights = muse_weights[0, 0, :5, :5].cpu().numpy()
+                                            sample_weights = muse_weights[0, 0, :5, :5].float().cpu().numpy()
                                             for i in range(5):
                                                 print(f"              {sample_weights[i, :]}")
                                             
