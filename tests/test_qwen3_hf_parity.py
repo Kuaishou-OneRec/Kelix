@@ -970,9 +970,10 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                             muse_hooks.append(muse_attn_0.pos_embeddings.register_forward_hook(muse_rope_hook))
                                         
                                         # 7. Hook attention function inputs (q, k, v before attention)
-                                        # We need to wrap the attention function to capture inputs
+                                        # We need to wrap the attention function to capture inputs and kwargs
                                         original_muse_attn_fn = muse_attn_0._attention_function
                                         muse_attn_fn_inputs = {}
+                                        muse_attn_fn_kwargs = {}
                                         
                                         def muse_attn_fn_wrapper(*args, **kwargs):
                                             # Capture q, k, v
@@ -984,6 +985,10 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                 muse_attn_fn_inputs['q'] = kwargs['q'].detach().clone()
                                                 muse_attn_fn_inputs['k'] = kwargs['k'].detach().clone()
                                                 muse_attn_fn_inputs['v'] = kwargs['v'].detach().clone()
+                                            
+                                            # Capture kwargs (especially mask and is_causal)
+                                            muse_attn_fn_kwargs.clear()
+                                            muse_attn_fn_kwargs.update(kwargs)
                                             
                                             # Call original function
                                             result = original_muse_attn_fn(*args, **kwargs)
@@ -1236,6 +1241,16 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                         else:
                                                             print(f"              ✓ Match! Q unchanged after RoPE")
                                             
+                                            # Check what kwargs were passed to attention function
+                                            print(f"\n          Attention function kwargs:")
+                                            for key, value in muse_attn_fn_kwargs.items():
+                                                if isinstance(value, torch.Tensor):
+                                                    print(f"            {key}: shape={value.shape}, dtype={value.dtype}")
+                                                    if value.numel() < 100:  # Only print small tensors
+                                                        print(f"              Values: {value.float().cpu().numpy()}")
+                                                else:
+                                                    print(f"            {key}: {value}")
+                                            
                                             # Manually compute attention scores and weights for comparison
                                             print(f"\n          Manual attention computation:")
                                             # Compute scores: q @ k^T / sqrt(head_dim)
@@ -1254,16 +1269,31 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                             # Store scores before masking for comparison
                                             muse_intermediates['scores_before_mask'] = muse_scores.detach().clone()
                                             
+                                            # Apply mask from kwargs if provided
+                                            mask = muse_attn_fn_kwargs.get('mask', None)
+                                            is_causal = muse_attn_fn_kwargs.get('is_causal', False)
+                                            
+                                            muse_scores_after_mask = muse_scores.clone()
+                                            
+                                            # Apply custom mask if provided
+                                            if mask is not None:
+                                                print(f"            Applying custom mask: shape={mask.shape}")
+                                                if mask.dim() == 3:
+                                                    mask = mask.unsqueeze(1)  # [b, 1, s_q, s_k]
+                                                muse_scores_after_mask = muse_scores_after_mask + mask
+                                            
                                             # Apply causal mask
-                                            seq_len = muse_scores.shape[-1]
-                                            causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1).bool()
-                                            muse_scores_masked = muse_scores.masked_fill(causal_mask, float('-inf'))
+                                            if is_causal:
+                                                seq_len = muse_scores_after_mask.shape[-1]
+                                                causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1).bool()
+                                                muse_scores_after_mask = muse_scores_after_mask.masked_fill(causal_mask, float('-inf'))
+                                                print(f"            Applied causal mask")
                                             
                                             # Store scores after masking
-                                            muse_intermediates['scores_after_mask'] = muse_scores_masked.detach().clone()
+                                            muse_intermediates['scores_after_mask'] = muse_scores_after_mask.detach().clone()
                                             
                                             # Compute weights
-                                            muse_weights = torch.nn.functional.softmax(muse_scores_masked, dim=-1)
+                                            muse_weights = torch.nn.functional.softmax(muse_scores_after_mask, dim=-1)
                                             
                                             # Store weights for comparison
                                             muse_intermediates['manual_weights'] = muse_weights.detach().clone()
@@ -1279,8 +1309,8 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                             for i in range(5):
                                                 print(f"              {sample_weights[i, :]}")
                                             
-                                            # Try to compute HF attention scores if we can hook into their computation
-                                            # For now, let's compare the scores that lead to the weight differences
+                                            # Try to compute HF attention scores by reverse engineering from weights
+                                            # If we have HF weights, we can try to infer the scores (though this is approximate)
                                             print(f"\n          Analyzing attention weight differences:")
                                             if 'attn_weights' in hf_intermediates and 'manual_weights' in muse_intermediates:
                                                 hf_weights = hf_intermediates['attn_weights'].to(device=device, dtype=dtype)
@@ -1293,20 +1323,64 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                 
                                                 if num_large_diffs > 0:
                                                     print(f"            Found {num_large_diffs} positions with diff > 0.1")
+                                                    
+                                                    # Analyze which rows/columns have the most differences
+                                                    # Sum differences per row (query position)
+                                                    row_diffs = weights_diff.sum(dim=-1)  # [b, h, seq_len]
+                                                    max_row_diff_per_head = row_diffs.max(dim=-1)[0]  # [b, h]
+                                                    print(f"            Max row diff per head: {max_row_diff_per_head[0].cpu().numpy()}")
+                                                    
+                                                    # Find rows with most differences
+                                                    max_row_diff_idx = row_diffs.argmax(dim=-1)  # [b, h] - which row has max diff
+                                                    print(f"            Rows with max diff per head: {max_row_diff_idx[0].cpu().numpy()}")
+                                                    
                                                     # Get some example positions
-                                                    large_diff_positions = torch.nonzero(large_diff_mask)[:5]
-                                                    print(f"            Example large diff positions:")
-                                                    for pos in large_diff_positions:
-                                                        b, h, i, j = pos[0].item(), pos[1].item(), pos[2].item(), pos[3].item()
-                                                        hf_val = hf_weights[b, h, i, j].item()
-                                                        muse_val = muse_manual_weights[b, h, i, j].item()
-                                                        diff_val = weights_diff[b, h, i, j].item()
-                                                        print(f"              Position ({b}, {h}, {i}, {j}): HF={hf_val:.6f}, Muse={muse_val:.6f}, Diff={diff_val:.6f}")
+                                                    large_diff_positions = torch.nonzero(large_diff_mask)[:10]
+                                                    print(f"            Example large diff positions (showing scores comparison):")
+                                                    
+                                                    if 'scores_after_mask' in muse_intermediates:
+                                                        muse_scores_masked = muse_intermediates['scores_after_mask'].to(device=device, dtype=dtype)
                                                         
-                                                        # Check corresponding scores
-                                                        if 'scores_after_mask' in muse_intermediates:
-                                                            muse_score = muse_intermediates['scores_after_mask'][b, h, i, j].item()
-                                                            print(f"                Muse score at this position: {muse_score:.4f}")
+                                                        # Try to infer HF scores from HF weights (inverse softmax)
+                                                        # For a row of weights w, the scores s satisfy: w_i = exp(s_i) / sum(exp(s_j))
+                                                        # So: s_i = log(w_i) + log(sum(exp(s_j)))
+                                                        # The constant log(sum(exp(s_j))) is the same for all i in the row
+                                                        # We can compute: s_i = log(w_i) + C, where C is chosen so that softmax(s) = w
+                                                        # Actually, we can compute: s_i = log(w_i) - log(w_max) + s_max_approx
+                                                        # But this is tricky. Let's just compare the log-weights
+                                                        hf_log_weights = torch.log(hf_weights + 1e-10)  # Add small epsilon to avoid log(0)
+                                                        muse_log_weights = torch.log(muse_manual_weights + 1e-10)
+                                                        
+                                                        for pos in large_diff_positions:
+                                                            b, h, i, j = pos[0].item(), pos[1].item(), pos[2].item(), pos[3].item()
+                                                            hf_w = hf_weights[b, h, i, j].item()
+                                                            muse_w = muse_manual_weights[b, h, i, j].item()
+                                                            diff_w = weights_diff[b, h, i, j].item()
+                                                            
+                                                            muse_score = muse_scores_masked[b, h, i, j].item()
+                                                            hf_log_w = hf_log_weights[b, h, i, j].item()
+                                                            muse_log_w = muse_log_weights[b, h, i, j].item()
+                                                            
+                                                            print(f"              Position ({b}, {h}, {i}, {j}):")
+                                                            print(f"                Weights: HF={hf_w:.6f}, Muse={muse_w:.6f}, Diff={diff_w:.6f}")
+                                                            print(f"                Log-weights: HF={hf_log_w:.4f}, Muse={muse_log_w:.4f}, Diff={abs(hf_log_w-muse_log_w):.4f}")
+                                                            print(f"                Muse score: {muse_score:.4f}")
+                                                            
+                                                            # Check the entire row to see weight distribution
+                                                            if j == 0:  # Only print once per row
+                                                                print(f"                Row {i} weights (HF vs Muse):")
+                                                                hf_row = hf_weights[b, h, i, :].float().cpu().numpy()
+                                                                muse_row = muse_manual_weights[b, h, i, :].float().cpu().numpy()
+                                                                row_diff = (hf_weights[b, h, i, :] - muse_manual_weights[b, h, i, :]).abs().float().cpu().numpy()
+                                                                print(f"                  HF:   {hf_row[:8]}")
+                                                                print(f"                  Muse: {muse_row[:8]}")
+                                                                print(f"                  Diff: {row_diff[:8]}")
+                                                                print(f"                  Row sum: HF={hf_row.sum():.6f}, Muse={muse_row.sum():.6f}")
+                                                                
+                                                                # Check corresponding scores
+                                                                muse_row_scores = muse_scores_masked[b, h, i, :].float().cpu().numpy()
+                                                                print(f"                  Muse scores: {muse_row_scores[:8]}")
+                                                                print(f"                  Muse scores range: [{muse_row_scores.min():.4f}, {muse_row_scores.max():.4f}]")
                                             
                                             # Compare with HF attn_weights if available
                                             if 'attn_weights' in hf_intermediates:
