@@ -75,6 +75,18 @@ class Qwen3Model(Model):
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
     
+    def eval(self):
+        """Set the model to evaluation mode"""
+        super().eval()
+        self.model.eval()
+        return self
+    
+    def train(self, mode: bool = True):
+        """Set the model to training mode"""
+        super().train(mode)
+        self.model.train(mode)
+        return self
+    
     def get_layers_to_shard(self):
         return [self.model.layers]
 
