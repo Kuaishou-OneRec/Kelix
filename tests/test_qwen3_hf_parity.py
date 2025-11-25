@@ -65,7 +65,6 @@ def _build_qwen3_config(hf_cfg: Dict[str, Any]) -> Qwen3Config:
     )
 
 
-@pytest.mark.integration
 def test_qwen3_logits_align_with_hf_checkpoint():
     """Ensure Muse Qwen3 logits match the Hugging Face reference model."""
     # checkpoint_dir = os.environ.get(CHECKPOINT_ENV)
