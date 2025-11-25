@@ -155,17 +155,98 @@ def dump_hf_layer0_activations(hf_model, model_inputs, output_dir):
         make_hf_hook("attn0_v_proj", hf_activations)
     ))
     
-    # Hook attention forward to capture qkv after RoPE and attention output
-    def hf_attn_forward_hook(module, input, output):
-        # HF attention returns (hidden_states, attn_weights)
+    # Hook attention forward to capture intermediate values
+    # We need to monkey-patch the forward method to capture qkv after RoPE
+    original_forward = hf_attn_0.forward
+    
+    def patched_forward(self, hidden_states, position_embeddings, attention_mask, **kwargs):
+        # Capture input
+        hf_activations['attn0_input'] = hidden_states.detach().clone()
+        
+        # Run original forward but capture intermediate values
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+        
+        # q_proj -> view -> q_norm -> transpose
+        q_proj_out = self.q_proj(hidden_states)
+        hf_activations['attn0_q_proj_after_view'] = q_proj_out.view(hidden_shape).detach().clone()
+        query_states = self.q_norm(q_proj_out.view(hidden_shape))
+        hf_activations['attn0_q_norm_before_transpose'] = query_states.detach().clone()
+        query_states = query_states.transpose(1, 2)
+        
+        # k_proj -> view -> k_norm -> transpose
+        k_proj_out = self.k_proj(hidden_states)
+        hf_activations['attn0_k_proj_after_view'] = k_proj_out.view(hidden_shape).detach().clone()
+        key_states = self.k_norm(k_proj_out.view(hidden_shape))
+        hf_activations['attn0_k_norm_before_transpose'] = key_states.detach().clone()
+        key_states = key_states.transpose(1, 2)
+        
+        # v_proj -> view -> transpose
+        v_proj_out = self.v_proj(hidden_states)
+        hf_activations['attn0_v_proj_after_view'] = v_proj_out.view(hidden_shape).detach().clone()
+        value_states = v_proj_out.view(hidden_shape).transpose(1, 2)
+        
+        # Apply RoPE (copy from modeling_qwen3.py apply_rotary_pos_emb)
+        cos, sin = position_embeddings
+        # apply_rotary_pos_emb logic (unsqueeze_dim=1 for [b, h, s, d] format)
+        def rotate_half(x):
+            x1 = x[..., : x.shape[-1] // 2]
+            x2 = x[..., x.shape[-1] // 2 :]
+            return torch.cat((-x2, x1), dim=-1)
+        
+        cos = cos.unsqueeze(1)  # unsqueeze_dim=1 for [b, h, s, d] format
+        sin = sin.unsqueeze(1)
+        query_states_rope = (query_states * cos) + (rotate_half(query_states) * sin)
+        key_states_rope = (key_states * cos) + (rotate_half(key_states) * sin)
+        
+        hf_activations['attn0_q_after_rope'] = query_states_rope.detach().clone()
+        hf_activations['attn0_k_after_rope'] = key_states_rope.detach().clone()
+        hf_activations['attn0_v_before_attn'] = value_states.detach().clone()
+        
+        # Call attention function (eager_attention_forward logic)
+        # repeat_kv logic
+        def repeat_kv(hidden_states, n_rep):
+            batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+            if n_rep == 1:
+                return hidden_states
+            hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+            return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+        
+        key_states_expanded = repeat_kv(key_states_rope, self.num_key_value_groups)
+        value_states_expanded = repeat_kv(value_states, self.num_key_value_groups)
+        
+        attn_weights = torch.matmul(query_states_rope, key_states_expanded.transpose(2, 3)) * self.scaling
+        if attention_mask is not None:
+            causal_mask = attention_mask[:, :, :, : key_states_expanded.shape[-2]]
+            attn_weights = attn_weights + causal_mask
+        
+        attn_weights = torch.nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states_rope.dtype)
+        attn_weights = torch.nn.functional.dropout(attn_weights, p=0.0 if not self.training else self.attention_dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states_expanded)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        
+        hf_activations['attn0_attn_weights'] = attn_weights.detach().clone()
+        hf_activations['attn0_output_before_reshape'] = attn_output.detach().clone()
+        
+        # Reshape and output projection
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        hf_activations['attn0_output_before_o_proj'] = attn_output.detach().clone()
+        attn_output = self.o_proj(attn_output)
+        
+        return attn_output, attn_weights
+    
+    # Monkey patch the forward method
+    import types
+    hf_attn_0.forward = types.MethodType(patched_forward, hf_attn_0)
+    
+    # Also hook the final output
+    def hf_attn_final_hook(module, input, output):
         if isinstance(output, tuple):
             hf_activations['attn0_output'] = output[0].detach().clone()
-            if len(output) > 1 and output[1] is not None:
-                hf_activations['attn0_attn_weights'] = output[1].detach().clone()
         else:
             hf_activations['attn0_output'] = output.detach().clone()
     
-    hf_hooks.append(hf_attn_0.register_forward_hook(hf_attn_forward_hook))
+    hf_hooks.append(hf_attn_0.register_forward_hook(hf_attn_final_hook))
     
     # Hook o_proj (output_proj)
     hf_hooks.append(hf_attn_0.o_proj.register_forward_pre_hook(
@@ -206,6 +287,9 @@ def dump_hf_layer0_activations(hf_model, model_inputs, output_dir):
     print("Running HF forward pass to capture activations...")
     with torch.no_grad():
         hf_outputs = hf_model(**model_inputs, output_attentions=True)
+    
+    # Restore original forward method
+    hf_attn_0.forward = original_forward
     
     # Remove hooks
     for hook in hf_hooks:
