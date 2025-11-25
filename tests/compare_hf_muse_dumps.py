@@ -32,6 +32,30 @@ def compare_tensors(name, hf_tensor, muse_tensor, atol=1e-3, rtol=1e-3):
         print("  ⚠️  Muse tensor not found")
         return False
     
+    # Handle list/tuple inputs
+    if isinstance(hf_tensor, (list, tuple)):
+        if len(hf_tensor) == 1 and isinstance(hf_tensor[0], torch.Tensor):
+            hf_tensor = hf_tensor[0]
+        else:
+            print(f"  ⚠️  HF value is a list/tuple with {len(hf_tensor)} items, cannot compare directly")
+            return False
+    
+    if isinstance(muse_tensor, (list, tuple)):
+        if len(muse_tensor) == 1 and isinstance(muse_tensor[0], torch.Tensor):
+            muse_tensor = muse_tensor[0]
+        else:
+            print(f"  ⚠️  Muse value is a list/tuple with {len(muse_tensor)} items, cannot compare directly")
+            return False
+    
+    # Check if both are tensors
+    if not isinstance(hf_tensor, torch.Tensor):
+        print(f"  ⚠️  HF value is not a tensor: {type(hf_tensor)}")
+        return False
+    
+    if not isinstance(muse_tensor, torch.Tensor):
+        print(f"  ⚠️  Muse value is not a tensor: {type(muse_tensor)}")
+        return False
+    
     # Handle shape differences
     if hf_tensor.shape != muse_tensor.shape:
         print(f"  Shape mismatch:")
