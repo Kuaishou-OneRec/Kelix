@@ -842,14 +842,53 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                             
                                             # Check if shapes match before comparing
                                             if hf_step.shape != muse_step.shape:
-                                                print(f"        ⚠️  Shape mismatch! Cannot compare values.")
-                                                print(f"        Note: This may be due to different normalization implementations.")
-                                                # Try to reshape if possible (for q_norm/k_norm which may have different layouts)
+                                                print(f"        ⚠️  Shape mismatch! Attempting to reshape for comparison.")
+                                                print(f"        Note: This may be due to different tensor layouts.")
+                                                
+                                                # Try to reshape to match shapes
+                                                hf_reshaped = None
+                                                muse_reshaped = None
+                                                
+                                                # For q_norm/k_norm, shapes might be:
+                                                # HF: [batch, seq_len, num_heads, head_dim]
+                                                # Muse: [batch, num_heads, seq_len, head_dim]
                                                 if step_name in ["q_norm", "k_norm"]:
-                                                    # q_norm/k_norm may have different tensor layouts
-                                                    # Try to reshape to compare
+                                                    if len(hf_step.shape) == 4 and len(muse_step.shape) == 4:
+                                                        # Check if it's a transpose issue
+                                                        if (hf_step.shape[0] == muse_step.shape[0] and
+                                                            hf_step.shape[1] == muse_step.shape[2] and
+                                                            hf_step.shape[2] == muse_step.shape[1] and
+                                                            hf_step.shape[3] == muse_step.shape[3]):
+                                                            # HF: [b, s, h, d] -> Muse: [b, h, s, d]
+                                                            hf_reshaped = hf_step.transpose(1, 2)
+                                                            muse_reshaped = muse_step
+                                                            print(f"        Reshaped: HF {hf_step.shape} -> {hf_reshaped.shape} (transpose(1,2))")
+                                                        elif (hf_step.shape[0] == muse_step.shape[0] and
+                                                              hf_step.shape[2] == muse_step.shape[1] and
+                                                              hf_step.shape[1] == muse_step.shape[2] and
+                                                              hf_step.shape[3] == muse_step.shape[3]):
+                                                            # Muse: [b, h, s, d] -> HF: [b, s, h, d]
+                                                            muse_reshaped = muse_step.transpose(1, 2)
+                                                            hf_reshaped = hf_step
+                                                            print(f"        Reshaped: Muse {muse_step.shape} -> {muse_reshaped.shape} (transpose(1,2))")
+                                                
+                                                # If reshaped successfully, compare
+                                                if hf_reshaped is not None and muse_reshaped is not None:
+                                                    if hf_reshaped.shape == muse_reshaped.shape:
+                                                        step_diff = (hf_reshaped - muse_reshaped).abs()
+                                                        max_step_diff = step_diff.max().item()
+                                                        mean_step_diff = step_diff.mean().item()
+                                                        print(f"        Max diff (after reshape): {max_step_diff:.6e}")
+                                                        print(f"        Mean diff (after reshape): {mean_step_diff:.6e}")
+                                                        if max_step_diff > 1e-4:
+                                                            print(f"        ⚠️  Mismatch after reshape!")
+                                                        else:
+                                                            print(f"        ✓ Match after reshape!")
+                                                    else:
+                                                        print(f"        Could not match shapes even after transpose")
+                                                else:
+                                                    # Fallback: flatten and compare if total elements match
                                                     try:
-                                                        # Flatten and compare if total elements match
                                                         hf_flat = hf_step.flatten()
                                                         muse_flat = muse_step.flatten()
                                                         if hf_flat.shape == muse_flat.shape:
@@ -859,6 +898,8 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                             print(f"        Flattened comparison:")
                                                             print(f"          Max diff: {max_step_diff:.6e}")
                                                             print(f"          Mean diff: {mean_step_diff:.6e}")
+                                                            if max_step_diff > 1e-4:
+                                                                print(f"          ⚠️  Mismatch!")
                                                         else:
                                                             print(f"        Total elements: HF={hf_flat.numel()}, Muse={muse_flat.numel()}")
                                                     except Exception as e:
