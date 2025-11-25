@@ -100,11 +100,11 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     model_inputs = tokenizer([text], return_tensors="pt").to(hf_model.device)
 
     # conduct text completion
-    generated_ids = hf_model.generate(
-        **model_inputs,
-        max_new_tokens=32768
-    )
-    output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist() 
+    # generated_ids = hf_model.generate(
+    #     **model_inputs,
+    #     max_new_tokens=32768
+    # )
+    # output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist() 
 
 
     hf_state_dict = hf_model.state_dict()
@@ -956,13 +956,18 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                             muse_hooks.append(muse_attn_0.k_norm.register_forward_hook(muse_k_norm_hook))
                                         
                                         # 6. Hook RoPE (pos_embeddings) outputs
+                                        rope_call_count = {'q': 0, 'k': 0}
                                         if hasattr(muse_attn_0, 'pos_embeddings') and muse_attn_0.pos_embeddings is not None:
-                                            def muse_rope_q_hook(module, input, output):
-                                                muse_intermediates['q_after_rope'] = output.detach().clone()
-                                            def muse_rope_k_hook(module, input, output):
-                                                muse_intermediates['k_after_rope'] = output.detach().clone()
-                                            # Note: RoPE might be called multiple times, we'll hook it
-                                            # For now, we'll capture after all processing
+                                            def muse_rope_hook(module, input, output):
+                                                # RoPE is called for both q and k
+                                                # First call is for q, second is for k
+                                                if rope_call_count['q'] == 0:
+                                                    muse_intermediates['q_after_rope'] = output.detach().clone()
+                                                    rope_call_count['q'] += 1
+                                                elif rope_call_count['k'] == 0:
+                                                    muse_intermediates['k_after_rope'] = output.detach().clone()
+                                                    rope_call_count['k'] += 1
+                                            muse_hooks.append(muse_attn_0.pos_embeddings.register_forward_hook(muse_rope_hook))
                                         
                                         # 7. Hook attention function inputs (q, k, v before attention)
                                         # We need to wrap the attention function to capture inputs
@@ -1126,44 +1131,129 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                 if tensor_name in muse_attn_fn_inputs:
                                                     muse_tensor = muse_attn_fn_inputs[tensor_name].to(device=device, dtype=dtype)
                                                     print(f"            Muse {tensor_name}: shape={muse_tensor.shape}")
+                                                    print(f"              Range: [{muse_tensor.min().item():.4f}, {muse_tensor.max().item():.4f}]")
+                                                    print(f"              Mean: {muse_tensor.mean().item():.6f}, Std: {muse_tensor.std().item():.6f}")
+                                            
+                                            # Compare q and k after RoPE if available
+                                            print(f"\n          RoPE outputs comparison:")
+                                            if 'q_after_rope' in muse_intermediates:
+                                                muse_q_rope = muse_intermediates['q_after_rope'].to(device=device, dtype=dtype)
+                                                print(f"            Muse q after RoPE: shape={muse_q_rope.shape}")
+                                                print(f"              Range: [{muse_q_rope.min().item():.4f}, {muse_q_rope.max().item():.4f}]")
+                                                print(f"              Mean: {muse_q_rope.mean().item():.6f}, Std: {muse_q_rope.std().item():.6f}")
+                                            
+                                            if 'k_after_rope' in muse_intermediates:
+                                                muse_k_rope = muse_intermediates['k_after_rope'].to(device=device, dtype=dtype)
+                                                print(f"            Muse k after RoPE: shape={muse_k_rope.shape}")
+                                                print(f"              Range: [{muse_k_rope.min().item():.4f}, {muse_k_rope.max().item():.4f}]")
+                                                print(f"              Mean: {muse_k_rope.mean().item():.6f}, Std: {muse_k_rope.std().item():.6f}")
+                                            
+                                            # Compare q and k values before attention function
+                                            print(f"\n          Q and K values before attention function:")
+                                            muse_q = muse_attn_fn_inputs['q'].to(device=device, dtype=dtype)
+                                            muse_k = muse_attn_fn_inputs['k'].to(device=device, dtype=dtype)
+                                            
+                                            # Check if q and k match after RoPE
+                                            if 'q_after_rope' in muse_intermediates:
+                                                muse_q_rope = muse_intermediates['q_after_rope'].to(device=device, dtype=dtype)
+                                                # q_after_rope might need transpose to match q in attention function
+                                                if muse_q_rope.shape != muse_q.shape:
+                                                    # Try transpose
+                                                    if (muse_q_rope.shape[0] == muse_q.shape[0] and
+                                                        muse_q_rope.shape[1] == muse_q.shape[2] and
+                                                        muse_q_rope.shape[2] == muse_q.shape[1] and
+                                                        muse_q_rope.shape[3] == muse_q.shape[3]):
+                                                        muse_q_rope_t = muse_q_rope.transpose(1, 2)
+                                                        q_rope_diff = (muse_q - muse_q_rope_t).abs()
+                                                        print(f"            Q after RoPE vs Q in attention function:")
+                                                        print(f"              Max diff: {q_rope_diff.max().item():.6e}")
+                                                        print(f"              Mean diff: {q_rope_diff.mean().item():.6e}")
+                                                        if q_rope_diff.max().item() > 1e-4:
+                                                            print(f"              ⚠️  Mismatch! Q changed after RoPE")
+                                                        else:
+                                                            print(f"              ✓ Match! Q unchanged after RoPE")
                                             
                                             # Manually compute attention scores and weights for comparison
-                                            if 'q' in muse_attn_fn_inputs and 'k' in muse_attn_fn_inputs:
-                                                muse_q = muse_attn_fn_inputs['q'].to(device=device, dtype=dtype)
-                                                muse_k = muse_attn_fn_inputs['k'].to(device=device, dtype=dtype)
+                                            print(f"\n          Manual attention computation:")
+                                            # Compute scores: q @ k^T / sqrt(head_dim)
+                                            head_dim = muse_q.shape[-1]
+                                            muse_scores = torch.matmul(muse_q, muse_k.transpose(-2, -1)) / (head_dim ** 0.5)
+                                            print(f"            Scores shape: {muse_scores.shape}")
+                                            print(f"            Scores range: [{muse_scores.min().item():.4f}, {muse_scores.max().item():.4f}]")
+                                            print(f"            Scores mean: {muse_scores.mean().item():.6f}, std: {muse_scores.std().item():.6f}")
+                                            
+                                            # Show some sample scores
+                                            print(f"            Sample scores (first head, first 5x5):")
+                                            sample_scores = muse_scores[0, 0, :5, :5].cpu().numpy()
+                                            for i in range(5):
+                                                print(f"              {sample_scores[i, :]}")
+                                            
+                                            # Apply causal mask
+                                            seq_len = muse_scores.shape[-1]
+                                            causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1).bool()
+                                            muse_scores_masked = muse_scores.masked_fill(causal_mask, float('-inf'))
+                                            
+                                            # Compute weights
+                                            muse_weights = torch.nn.functional.softmax(muse_scores_masked, dim=-1)
+                                            print(f"\n            Attention weights:")
+                                            print(f"              Weights shape: {muse_weights.shape}")
+                                            print(f"              Weights range: [{muse_weights.min().item():.6f}, {muse_weights.max().item():.6f}]")
+                                            print(f"              Weights mean: {muse_weights.mean().item():.6f}, std: {muse_weights.std().item():.6f}")
+                                            print(f"              Weights sum per row (should be 1.0): min={muse_weights.sum(dim=-1).min().item():.6f}, max={muse_weights.sum(dim=-1).max().item():.6f}")
+                                            
+                                            # Show some sample weights
+                                            print(f"            Sample weights (first head, first 5x5):")
+                                            sample_weights = muse_weights[0, 0, :5, :5].cpu().numpy()
+                                            for i in range(5):
+                                                print(f"              {sample_weights[i, :]}")
+                                            
+                                            # Compare with HF attn_weights if available
+                                            if 'attn_weights' in hf_intermediates:
+                                                hf_weights = hf_intermediates['attn_weights'].to(device=device, dtype=dtype)
+                                                print(f"\n            Comparing attention weights with HF:")
+                                                print(f"              HF shape: {hf_weights.shape}, Muse shape: {muse_weights.shape}")
+                                                print(f"              HF range: [{hf_weights.min().item():.6f}, {hf_weights.max().item():.6f}]")
+                                                print(f"              HF mean: {hf_weights.mean().item():.6f}, std: {hf_weights.std().item():.6f}")
                                                 
-                                                print(f"\n          Manual attention computation:")
-                                                # Compute scores: q @ k^T / sqrt(head_dim)
-                                                head_dim = muse_q.shape[-1]
-                                                muse_scores = torch.matmul(muse_q, muse_k.transpose(-2, -1)) / (head_dim ** 0.5)
-                                                print(f"            Scores shape: {muse_scores.shape}")
-                                                print(f"            Scores range: [{muse_scores.min().item():.4f}, {muse_scores.max().item():.4f}]")
-                                                
-                                                # Apply causal mask
-                                                seq_len = muse_scores.shape[-1]
-                                                causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1).bool()
-                                                muse_scores_masked = muse_scores.masked_fill(causal_mask, float('-inf'))
-                                                
-                                                # Compute weights
-                                                muse_weights = torch.nn.functional.softmax(muse_scores_masked, dim=-1)
-                                                print(f"            Weights shape: {muse_weights.shape}")
-                                                print(f"            Weights sum (should be ~seq_len): {muse_weights.sum(dim=-1).mean().item():.4f}")
-                                                
-                                                # Compare with HF attn_weights if available
-                                                if 'attn_weights' in hf_intermediates:
-                                                    hf_weights = hf_intermediates['attn_weights'].to(device=device, dtype=dtype)
-                                                    print(f"\n            Comparing attention weights:")
-                                                    print(f"              HF shape: {hf_weights.shape}, Muse shape: {muse_weights.shape}")
-                                                    if hf_weights.shape == muse_weights.shape:
-                                                        weights_diff = (hf_weights - muse_weights).abs()
-                                                        max_weights_diff = weights_diff.max().item()
-                                                        mean_weights_diff = weights_diff.mean().item()
-                                                        print(f"              Max diff: {max_weights_diff:.6e}")
-                                                        print(f"              Mean diff: {mean_weights_diff:.6e}")
-                                                        if max_weights_diff > 1e-4:
-                                                            print(f"              ⚠️  Attention weights mismatch!")
-                                                        else:
-                                                            print(f"              ✓ Attention weights match!")
+                                                if hf_weights.shape == muse_weights.shape:
+                                                    weights_diff = (hf_weights - muse_weights).abs()
+                                                    max_weights_diff = weights_diff.max().item()
+                                                    mean_weights_diff = weights_diff.mean().item()
+                                                    relative_diff = (weights_diff / (hf_weights.abs() + 1e-8)).max().item()
+                                                    print(f"              Max diff: {max_weights_diff:.6e}")
+                                                    print(f"              Mean diff: {mean_weights_diff:.6e}")
+                                                    print(f"              Max relative diff: {relative_diff:.6e}")
+                                                    
+                                                    # Find where the max difference occurs
+                                                    max_diff_idx = weights_diff.argmax()
+                                                    max_diff_pos = torch.unravel_index(max_diff_idx, weights_diff.shape)
+                                                    print(f"              Max diff position: {max_diff_pos}")
+                                                    print(f"              HF value at max diff: {hf_weights[max_diff_pos].item():.6f}")
+                                                    print(f"              Muse value at max diff: {muse_weights[max_diff_pos].item():.6f}")
+                                                    
+                                                    if max_weights_diff > 1e-4:
+                                                        print(f"              ⚠️  Attention weights mismatch!")
+                                                        # Show distribution of differences
+                                                        diff_flat = weights_diff.flatten()
+                                                        print(f"              Diff distribution:")
+                                                        print(f"                < 1e-6: {(diff_flat < 1e-6).sum().item()} ({100*(diff_flat < 1e-6).sum().item()/diff_flat.numel():.1f}%)")
+                                                        print(f"                < 1e-4: {(diff_flat < 1e-4).sum().item()} ({100*(diff_flat < 1e-4).sum().item()/diff_flat.numel():.1f}%)")
+                                                        print(f"                < 1e-2: {(diff_flat < 1e-2).sum().item()} ({100*(diff_flat < 1e-2).sum().item()/diff_flat.numel():.1f}%)")
+                                                        print(f"                >= 1e-2: {(diff_flat >= 1e-2).sum().item()} ({100*(diff_flat >= 1e-2).sum().item()/diff_flat.numel():.1f}%)")
+                                                    else:
+                                                        print(f"              ✓ Attention weights match!")
+                                                else:
+                                                    print(f"              ⚠️  Shape mismatch! Cannot compare directly.")
+                                                    # Try to reshape if possible
+                                                    if hf_weights.numel() == muse_weights.numel():
+                                                        hf_weights_flat = hf_weights.flatten()
+                                                        muse_weights_flat = muse_weights.flatten()
+                                                        flat_diff = (hf_weights_flat - muse_weights_flat).abs()
+                                                        print(f"              Flattened comparison:")
+                                                        print(f"                Max diff: {flat_diff.max().item():.6e}")
+                                                        print(f"                Mean diff: {flat_diff.mean().item():.6e}")
+                                            else:
+                                                print(f"\n            ⚠️  HF attention weights not available for comparison")
                                         
                                         print(f"\n      {'='*60}\n")
                                         
