@@ -749,26 +749,20 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     # 4.4 Manually compute and compare attention scores and weights
     print("\n4.4 Attention Scores and Weights:")
     
-    # Get attention mask
-    hf_attention_mask = model_inputs.get('attention_mask', None)
-    if hf_attention_mask is not None:
-        # Convert to causal mask format if needed
-        seq_len = model_inputs['input_ids'].shape[1]
-        causal_mask = torch.triu(
-            torch.ones(seq_len, seq_len, device=device, dtype=torch.bool),
-            diagonal=1
-        )
-        causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)  # [1, 1, seq_len, seq_len]
-        causal_mask = causal_mask * float('-inf')
-    else:
-        causal_mask = None
-    
     # Manual attention computation for comparison
     # We'll compute from Muse's qkv inputs
     if 'q' in muse_attn_fn_inputs and 'k' in muse_attn_fn_inputs and 'v' in muse_attn_fn_inputs:
         muse_q = muse_attn_fn_inputs['q'].to(device=device, dtype=dtype)
         muse_k = muse_attn_fn_inputs['k'].to(device=device, dtype=dtype)
         muse_v = muse_attn_fn_inputs['v'].to(device=device, dtype=dtype)
+        
+        # Check for NaN/Inf in inputs
+        if torch.isnan(muse_q).any() or torch.isinf(muse_q).any():
+            print("  ⚠️  NaN/Inf detected in muse_q!")
+        if torch.isnan(muse_k).any() or torch.isinf(muse_k).any():
+            print("  ⚠️  NaN/Inf detected in muse_k!")
+        if torch.isnan(muse_v).any() or torch.isinf(muse_v).any():
+            print("  ⚠️  NaN/Inf detected in muse_v!")
         
         # Check actual shapes - Muse may have already expanded k/v for GQA
         print(f"  Muse qkv shapes:")
@@ -793,17 +787,38 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                 batch, num_kv_heads, num_key_value_groups, seq_len, head_dim
             ).reshape(batch, muse_num_heads, seq_len, head_dim)
         
-        # Compute attention scores
+        # Compute attention scores: q @ k^T * scaling
         muse_scores = torch.matmul(muse_q, muse_k_expanded.transpose(-2, -1)) * muse_scaling
         
-        # Apply mask if provided
-        if causal_mask is not None:
-            muse_scores = muse_scores + causal_mask
+        # Check scores before mask
+        if torch.isnan(muse_scores).any() or torch.isinf(muse_scores).any():
+            print("  ⚠️  NaN/Inf detected in scores before mask!")
+            print(f"    Scores stats: min={muse_scores.min().item():.6f}, max={muse_scores.max().item():.6f}, mean={muse_scores.mean().item():.6f}")
+        
+        # Apply causal mask (upper triangular mask)
+        seq_len = muse_q.shape[2]
+        causal_mask = torch.triu(
+            torch.ones(seq_len, seq_len, device=device, dtype=dtype),
+            diagonal=1
+        )
+        causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)  # [1, 1, seq_len, seq_len]
+        causal_mask = causal_mask.masked_fill(causal_mask == 1, float('-inf'))
+        muse_scores = muse_scores + causal_mask
+        
+        # Check scores after mask
+        if torch.isnan(muse_scores).any() or torch.isinf(muse_scores).any():
+            print("  ⚠️  NaN/Inf detected in scores after mask!")
+            # Replace inf with a large negative value for softmax
+            muse_scores = torch.where(torch.isinf(muse_scores), torch.tensor(-1e9, device=device, dtype=dtype), muse_scores)
         
         # Compute attention weights
         muse_weights = torch.nn.functional.softmax(
             muse_scores.float(), dim=-1
         ).to(dtype)
+        
+        # Check weights
+        if torch.isnan(muse_weights).any():
+            print("  ⚠️  NaN detected in weights!")
         
         # Compute attention output
         muse_attn_output_manual = torch.matmul(muse_weights, muse_v_expanded)
@@ -822,21 +837,48 @@ def test_qwen3_logits_align_with_hf_checkpoint():
             compare_tensors(hf_weights, muse_weights, "attention weights")
         
         # Compare attention output
+        # HF attention output is [batch, seq_len, embed_dim] after reshape and output_proj
+        # Muse attention output from attention function is [batch, num_heads, seq_len, head_dim]
+        # We need to reshape Muse output to compare with HF's before_o_proj
         print(f"\n  Comparing attention output:")
-        compare_tensors(
-            hf_intermediates['attn_output'],
-            muse_intermediates['attn_output'],
-            "attention output"
-        )
+        muse_attn_output_reshaped = muse_intermediates['attn_output'].transpose(1, 2).contiguous()  # [batch, seq_len, num_heads, head_dim]
+        batch_size, seq_len, num_heads, head_dim = muse_attn_output_reshaped.shape
+        muse_attn_output_reshaped = muse_attn_output_reshaped.reshape(batch_size, seq_len, -1)  # [batch, seq_len, embed_dim]
         
-        # Compare before output projection
-        if 'before_o_proj' in hf_intermediates and 'before_output_proj' in muse_intermediates:
-            print(f"\n  Comparing before output projection:")
+        # Compare with HF's before_o_proj (which is the attention output before output_proj)
+        if 'before_o_proj' in hf_intermediates:
             compare_tensors(
                 hf_intermediates['before_o_proj'],
-                muse_intermediates['before_output_proj'],
-                "before output_proj"
+                muse_attn_output_reshaped,
+                "attention output (before output_proj)"
             )
+        else:
+            # Fallback: compare with HF's attn_output (which is after output_proj)
+            compare_tensors(
+                hf_intermediates['attn_output'],
+                muse_intermediates['attn_output'],
+                "attention output"
+            )
+        
+        # Compare before output projection
+        # HF's before_o_proj is already compared above
+        # Now compare after output_proj
+        if 'before_output_proj' in muse_intermediates:
+            print(f"\n  Muse before_output_proj shape: {muse_intermediates['before_output_proj'].shape}")
+            # This should match HF's attn_output (which is after output_proj)
+            if 'attn_output' in hf_intermediates:
+                print(f"  HF attn_output (after output_proj) shape: {hf_intermediates['attn_output'].shape}")
+                # Reshape Muse's before_output_proj to match HF's shape
+                muse_before_output_proj = muse_intermediates['before_output_proj']
+                if len(muse_before_output_proj.shape) == 4:  # [batch, num_heads, seq_len, head_dim]
+                    muse_before_output_proj = muse_before_output_proj.transpose(1, 2).contiguous()
+                    batch_size, seq_len, num_heads, head_dim = muse_before_output_proj.shape
+                    muse_before_output_proj = muse_before_output_proj.reshape(batch_size, seq_len, -1)
+                compare_tensors(
+                    hf_intermediates['attn_output'],
+                    muse_before_output_proj,
+                    "after output_proj"
+                )
     
     # Cleanup hooks
     for hook in hf_hooks:
