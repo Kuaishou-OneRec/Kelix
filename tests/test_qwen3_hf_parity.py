@@ -770,10 +770,21 @@ def test_qwen3_logits_align_with_hf_checkpoint():
         muse_k = muse_attn_fn_inputs['k'].to(device=device, dtype=dtype)
         muse_v = muse_attn_fn_inputs['v'].to(device=device, dtype=dtype)
         
-        # Repeat kv for GQA
-        num_key_value_groups = muse_num_heads // muse_num_kv_heads
-        if num_key_value_groups > 1:
-            # Repeat k and v
+        # Check actual shapes - Muse may have already expanded k/v for GQA
+        print(f"  Muse qkv shapes:")
+        print(f"    q: {muse_q.shape}")
+        print(f"    k: {muse_k.shape}")
+        print(f"    v: {muse_v.shape}")
+        
+        # Muse's attention function receives k/v that may already be expanded
+        # If k/v shape matches q shape in head dimension, they're already expanded
+        if muse_k.shape[1] == muse_num_heads:
+            # Already expanded
+            muse_k_expanded = muse_k
+            muse_v_expanded = muse_v
+        else:
+            # Need to expand for GQA
+            num_key_value_groups = muse_num_heads // muse_num_kv_heads
             batch, num_kv_heads, seq_len, head_dim = muse_k.shape
             muse_k_expanded = muse_k.unsqueeze(2).expand(
                 batch, num_kv_heads, num_key_value_groups, seq_len, head_dim
@@ -781,9 +792,6 @@ def test_qwen3_logits_align_with_hf_checkpoint():
             muse_v_expanded = muse_v.unsqueeze(2).expand(
                 batch, num_kv_heads, num_key_value_groups, seq_len, head_dim
             ).reshape(batch, muse_num_heads, seq_len, head_dim)
-        else:
-            muse_k_expanded = muse_k
-            muse_v_expanded = muse_v
         
         # Compute attention scores
         muse_scores = torch.matmul(muse_q, muse_k_expanded.transpose(-2, -1)) * muse_scaling
