@@ -1007,20 +1007,25 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                     hf_intermediates['attn_weights'] = output[1].detach().clone()
                                             else:
                                                 hf_intermediates['attn_output'] = output.detach().clone()
-                                        hf_hooks.append(hf_attn_0.self_attn.register_forward_hook(hf_attn_forward_hook))
+                                        # hf_attn_0 is already the attention module, not a layer containing it
+                                        hf_hooks.append(hf_attn_0.register_forward_hook(hf_attn_forward_hook))
                                         
                                         # Hook HF q_proj, k_proj, v_proj
-                                        def hf_q_proj_hook(module, input, output):
-                                            hf_intermediates['q_after_proj'] = output.detach().clone()
-                                        hf_hooks.append(hf_attn_0.q_proj.register_forward_hook(hf_q_proj_hook))
+                                        # Check if attributes exist (HF uses different naming)
+                                        if hasattr(hf_attn_0, 'q_proj'):
+                                            def hf_q_proj_hook(module, input, output):
+                                                hf_intermediates['q_after_proj'] = output.detach().clone()
+                                            hf_hooks.append(hf_attn_0.q_proj.register_forward_hook(hf_q_proj_hook))
                                         
-                                        def hf_k_proj_hook(module, input, output):
-                                            hf_intermediates['k_after_proj'] = output.detach().clone()
-                                        hf_hooks.append(hf_attn_0.k_proj.register_forward_hook(hf_k_proj_hook))
+                                        if hasattr(hf_attn_0, 'k_proj'):
+                                            def hf_k_proj_hook(module, input, output):
+                                                hf_intermediates['k_after_proj'] = output.detach().clone()
+                                            hf_hooks.append(hf_attn_0.k_proj.register_forward_hook(hf_k_proj_hook))
                                         
-                                        def hf_v_proj_hook(module, input, output):
-                                            hf_intermediates['v_after_proj'] = output.detach().clone()
-                                        hf_hooks.append(hf_attn_0.v_proj.register_forward_hook(hf_v_proj_hook))
+                                        if hasattr(hf_attn_0, 'v_proj'):
+                                            def hf_v_proj_hook(module, input, output):
+                                                hf_intermediates['v_after_proj'] = output.detach().clone()
+                                            hf_hooks.append(hf_attn_0.v_proj.register_forward_hook(hf_v_proj_hook))
                                         
                                         # Hook HF q_norm, k_norm
                                         if hasattr(hf_attn_0, 'q_norm') and hf_attn_0.q_norm is not None:
@@ -1033,13 +1038,20 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                 hf_intermediates['k_after_norm'] = output.detach().clone()
                                             hf_hooks.append(hf_attn_0.k_norm.register_forward_hook(hf_k_norm_hook))
                                         
-                                        # Hook HF output_proj input
-                                        def hf_before_output_proj_hook(module, input, output):
-                                            if isinstance(input, tuple):
-                                                hf_intermediates['before_output_proj'] = input[0].detach().clone()
-                                            else:
-                                                hf_intermediates['before_output_proj'] = input.detach().clone()
-                                        hf_hooks.append(hf_attn_0.o_proj.register_forward_pre_hook(hf_before_output_proj_hook))
+                                        # Hook HF output_proj input (HF uses o_proj)
+                                        hf_output_proj_module = None
+                                        if hasattr(hf_attn_0, 'o_proj'):
+                                            hf_output_proj_module = hf_attn_0.o_proj
+                                        elif hasattr(hf_attn_0, 'output_proj'):
+                                            hf_output_proj_module = hf_attn_0.output_proj
+                                        
+                                        if hf_output_proj_module is not None:
+                                            def hf_before_output_proj_hook(module, input, output):
+                                                if isinstance(input, tuple):
+                                                    hf_intermediates['before_output_proj'] = input[0].detach().clone()
+                                                else:
+                                                    hf_intermediates['before_output_proj'] = input.detach().clone()
+                                            hf_hooks.append(hf_output_proj_module.register_forward_pre_hook(hf_before_output_proj_hook))
                                         
                                         # Re-run forward pass
                                         with torch.no_grad():
