@@ -123,6 +123,47 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     # Convert and load state dict
     state_dict = muse_model.convert_hf_state_dict(hf_state_dict)
     
+    # Get Muse model's expected state dict keys
+    muse_model_state_dict = muse_model.state_dict()
+    muse_expected_keys = set(muse_model_state_dict.keys())
+    converted_keys = set(state_dict.keys())
+    
+    # Check key matching
+    print(f"\n{'='*60}")
+    print("Weight Loading Check")
+    print(f"{'='*60}")
+    print(f"HF state dict keys: {len(hf_state_dict)}")
+    print(f"Converted state dict keys: {len(state_dict)}")
+    print(f"Muse model expected keys: {len(muse_expected_keys)}")
+    
+    # Find missing and extra keys
+    missing_in_converted = muse_expected_keys - converted_keys
+    extra_in_converted = converted_keys - muse_expected_keys
+    skipped_keys = set(hf_state_dict.keys()) - set(
+        muse_model.convert_hf_state_dict(hf_state_dict).keys()
+    )
+    
+    if missing_in_converted:
+        print(f"\n⚠️  Missing keys in converted state dict ({len(missing_in_converted)}):")
+        for key in sorted(list(missing_in_converted))[:20]:
+            print(f"  - {key}")
+        if len(missing_in_converted) > 20:
+            print(f"  ... and {len(missing_in_converted) - 20} more")
+    
+    if extra_in_converted:
+        print(f"\n⚠️  Extra keys in converted state dict ({len(extra_in_converted)}):")
+        for key in sorted(list(extra_in_converted))[:20]:
+            print(f"  - {key}")
+        if len(extra_in_converted) > 20:
+            print(f"  ... and {len(extra_in_converted) - 20} more")
+    
+    if skipped_keys:
+        print(f"\nℹ️  Skipped keys during conversion ({len(skipped_keys)}):")
+        for key in sorted(list(skipped_keys))[:20]:
+            print(f"  - {key}")
+        if len(skipped_keys) > 20:
+            print(f"  ... and {len(skipped_keys) - 20} more")
+    
     # Convert state dict tensors to target dtype and device
     for key, tensor in state_dict.items():
         if isinstance(tensor, torch.Tensor):
@@ -134,9 +175,91 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     )
     
     if missing_keys:
-        print(f"Warning: Missing keys: {missing_keys[:10]}...")
+        print(f"\n⚠️  Missing keys after load_state_dict ({len(missing_keys)}):")
+        for key in missing_keys[:20]:
+            print(f"  - {key}")
+        if len(missing_keys) > 20:
+            print(f"  ... and {len(missing_keys) - 20} more")
+    else:
+        print(f"\n✓ All expected keys loaded successfully")
+    
     if unexpected_keys:
-        print(f"Warning: Unexpected keys: {unexpected_keys[:10]}...")
+        print(f"\n⚠️  Unexpected keys after load_state_dict ({len(unexpected_keys)}):")
+        for key in unexpected_keys[:20]:
+            print(f"  - {key}")
+        if len(unexpected_keys) > 20:
+            print(f"  ... and {len(unexpected_keys) - 20} more")
+    
+    # Compare some key weights to verify correctness
+    print(f"\n{'='*60}")
+    print("Weight Value Comparison (Sample)")
+    print(f"{'='*60}")
+    
+    # Check embedding layer
+    if "model.tok_embeddings.weight" in state_dict:
+        hf_embed_key = "model.embed_tokens.weight"
+        if hf_embed_key in hf_state_dict:
+            hf_embed = hf_state_dict[hf_embed_key].to(device=device, dtype=dtype)
+            muse_embed = state_dict["model.tok_embeddings.weight"]
+            embed_diff = (hf_embed - muse_embed).abs()
+            print(f"Embedding layer:")
+            print(f"  Shape: HF={hf_embed.shape}, Muse={muse_embed.shape}")
+            print(f"  Max diff: {embed_diff.max().item():.6e}")
+            print(f"  Mean diff: {embed_diff.mean().item():.6e}")
+            if embed_diff.max().item() > 1e-5:
+                print(f"  ⚠️  Large difference detected!")
+    
+    # Check first layer attention weights
+    for layer_idx in [0]:
+        for weight_name in ["q_proj.weight", "k_proj.weight", "v_proj.weight"]:
+            hf_key = f"model.layers.{layer_idx}.self_attn.{weight_name}"
+            muse_key = f"model.layers.{layer_idx}.attn.{weight_name}"
+            if hf_key in hf_state_dict and muse_key in state_dict:
+                hf_weight = hf_state_dict[hf_key].to(device=device, dtype=dtype)
+                muse_weight = state_dict[muse_key]
+                weight_diff = (hf_weight - muse_weight).abs()
+                print(f"Layer {layer_idx} {weight_name}:")
+                print(f"  Shape: HF={hf_weight.shape}, Muse={muse_weight.shape}")
+                print(f"  Max diff: {weight_diff.max().item():.6e}")
+                print(f"  Mean diff: {weight_diff.mean().item():.6e}")
+                if weight_diff.max().item() > 1e-5:
+                    print(f"  ⚠️  Large difference detected!")
+    
+    # Check output layer
+    # Note: If tie_word_embeddings=True, lm_head.weight is skipped in conversion
+    # and should match tok_embeddings.weight instead
+    if "model.output.weight" in state_dict:
+        hf_output_key = "lm_head.weight"
+        if hf_output_key in hf_state_dict:
+            hf_output = hf_state_dict[hf_output_key].to(device=device, dtype=dtype)
+            muse_output = state_dict["model.output.weight"]
+            output_diff = (hf_output - muse_output).abs()
+            print(f"Output layer:")
+            print(f"  Shape: HF={hf_output.shape}, Muse={muse_output.shape}")
+            print(f"  Max diff: {output_diff.max().item():.6e}")
+            print(f"  Mean diff: {output_diff.mean().item():.6e}")
+            if output_diff.max().item() > 1e-5:
+                print(f"  ⚠️  Large difference detected!")
+    elif muse_config.tie_word_embeddings:
+        # If tie_word_embeddings, output should match embeddings
+        print(f"Output layer: Tied with embeddings (tie_word_embeddings=True)")
+        if "model.tok_embeddings.weight" in state_dict:
+            # Check if model.output is actually TiedLinear
+            from muse.layers.linear import TiedLinear
+            if isinstance(muse_model.model.output, TiedLinear):
+                muse_output_weight = muse_model.model.output.tied_module.weight
+                muse_embed_weight = muse_model.model.tok_embeddings.weight
+                if muse_output_weight is muse_embed_weight:
+                    print(f"  ✓ Output layer correctly tied with embeddings")
+                else:
+                    print(f"  ⚠️  Output layer not properly tied!")
+                    # Compare values
+                    weight_diff = (muse_output_weight - muse_embed_weight).abs()
+                    print(f"  Max diff between tied weights: {weight_diff.max().item():.6e}")
+            else:
+                print(f"  ⚠️  Output layer is not TiedLinear!")
+    
+    print(f"{'='*60}\n")
 
     # Move Muse model to same device and dtype as HF model
     # This ensures all parameters and buffers are on the correct device/dtype
