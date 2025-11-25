@@ -112,10 +112,94 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     muse_config = _build_qwen3_config(hf_config_dict)
     muse_model = Qwen3Model(muse_config)
 
+    # Convert and load state dict
     state_dict = muse_model.convert_hf_state_dict(hf_state_dict)
-    print(state_dict.keys())
+    
+    # Handle missing keys (e.g., if tie_word_embeddings=True, lm_head is skipped)
+    missing_keys, unexpected_keys = muse_model.load_state_dict(
+        state_dict, strict=False
+    )
+    
+    if missing_keys:
+        print(f"Warning: Missing keys: {missing_keys[:10]}...")
+    if unexpected_keys:
+        print(f"Warning: Unexpected keys: {unexpected_keys[:10]}...")
 
-    muse_model.load_state_dict(state_dict)
+    # Move Muse model to same device and dtype as HF model
+    device = next(hf_model.parameters()).device
+    dtype = next(hf_model.parameters()).dtype
+    muse_model = muse_model.to(device=device, dtype=dtype)
+    muse_model.eval()
+    hf_model.eval()
+
+    # Get HF model logits
+    with torch.no_grad():
+        hf_outputs = hf_model(**model_inputs)
+        hf_logits = hf_outputs.logits
+
+    # Get Muse model logits
+    # Muse model expects 'tokens' instead of 'input_ids'
+    # For simple cases without padding, we can omit mask and use default causal mask
+    muse_tokens = model_inputs["input_ids"]
+    
+    # Note: Muse model uses default causal mask if mask is not provided
+    # If attention_mask is needed (e.g., for padding), it should be converted
+    # from HF format [batch, seq_len] to Muse format [batch, seq_len, seq_len]
+    # For this test, we assume no padding, so we omit the mask
+    with torch.no_grad():
+        muse_logits = muse_model(tokens=muse_tokens)
+
+    # Compare logits
+    print(f"\n{'='*60}")
+    print("Logits Comparison")
+    print(f"{'='*60}")
+    print(f"HF logits shape: {hf_logits.shape}")
+    print(f"Muse logits shape: {muse_logits.shape}")
+    print(f"HF logits dtype: {hf_logits.dtype}")
+    print(f"Muse logits dtype: {muse_logits.dtype}")
+    
+    # Ensure same dtype for comparison
+    if hf_logits.dtype != muse_logits.dtype:
+        muse_logits = muse_logits.to(dtype=hf_logits.dtype)
+    
+    # Calculate differences
+    diff = (hf_logits - muse_logits).abs()
+    max_diff = diff.max().item()
+    mean_diff = diff.mean().item()
+    max_diff_per_token = diff.max(dim=-1)[0].max().item()
+    
+    print(f"\nMax absolute difference: {max_diff:.6e}")
+    print(f"Mean absolute difference: {mean_diff:.6e}")
+    print(f"Max difference per token: {max_diff_per_token:.6e}")
+    
+    # Check if logits are close
+    # Use reasonable tolerance for floating point comparison
+    rtol = 1e-4
+    atol = 1e-4
+    
+    is_close = torch.allclose(hf_logits, muse_logits, rtol=rtol, atol=atol)
+    print(f"\nLogits match (rtol={rtol}, atol={atol}): {is_close}")
+    
+    if not is_close:
+        # Find positions with largest differences
+        max_diff_pos = diff.argmax()
+        max_diff_pos_3d = torch.unravel_index(max_diff_pos, diff.shape)
+        print(f"\nLargest difference at position: {max_diff_pos_3d}")
+        print(f"HF value: {hf_logits[max_diff_pos_3d].item():.6f}")
+        print(f"Muse value: {muse_logits[max_diff_pos_3d].item():.6f}")
+        print(f"Difference: {diff[max_diff_pos_3d].item():.6e}")
+    
+    # Assert that logits are close (with reasonable tolerance)
+    assert torch.allclose(
+        hf_logits, muse_logits, rtol=rtol, atol=atol
+    ), (
+        f"Logits do not match! "
+        f"Max diff: {max_diff:.6e}, Mean diff: {mean_diff:.6e}"
+    )
+    
+    print(f"\n{'='*60}")
+    print("✓ Logits comparison passed!")
+    print(f"{'='*60}")
 
 
 if __name__ == "__main__":
