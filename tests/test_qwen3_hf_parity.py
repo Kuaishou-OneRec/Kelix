@@ -679,8 +679,13 @@ def test_qwen3_logits_align_with_hf_checkpoint():
         hf_outputs = hf_model(**model_inputs, output_attentions=True)
         hf_logits = hf_outputs.logits
         
-        # Muse forward
-        muse_logits = muse_model(**model_inputs)
+        # Muse forward - Muse model expects 'tokens' instead of 'input_ids'
+        muse_inputs = {"tokens": model_inputs["input_ids"]}
+        if "attention_mask" in model_inputs:
+            # Muse expects mask in shape [batch, seq_len, seq_len] for causal mask
+            # For now, we'll let Muse use default causal mask
+            pass
+        muse_logits = muse_model(**muse_inputs)
     
     print("  ✓ Forward pass completed\n")
     
