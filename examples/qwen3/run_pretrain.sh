@@ -18,7 +18,7 @@ script_name=$(basename "$0" .sh)
 # MODEL_DIR=/llm_reco_ssd/zhouyang12/models/KeyeImageTokenizer_exp_121_old/
 # MODEL_DIR=/llm_reco_ssd/zhouyang12/models/KeyeImageTokenizer_exp_121_old_8b
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/qwen3/${script_name}/
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/qwen3/test
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
