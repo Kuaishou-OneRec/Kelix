@@ -1163,14 +1163,37 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                         print(f"\n      {'='*60}\n")
                                         
                                         # Compare attention output before output_proj
-                                        if 'output' in hf_attn_before_output_proj and 'output' in muse_attn_before_output_proj:
-                                            hf_attn_out = hf_attn_before_output_proj['output'].to(device=device, dtype=dtype)
-                                            muse_attn_out = muse_attn_before_output_proj['output'].to(device=device, dtype=dtype)
+                                        # Note: We already compared 'before_output_proj' in steps_to_compare above
+                                        # But let's also check 'attn_output' which is the raw attention function output
+                                        if 'attn_output' in hf_intermediates and 'attn_output' in muse_intermediates:
+                                            hf_attn_out = hf_intermediates['attn_output'].to(device=device, dtype=dtype)
+                                            muse_attn_out = muse_intermediates['attn_output'].to(device=device, dtype=dtype)
                                             
-                                            print(f"\n        Attention output (before output_proj):")
+                                            print(f"\n        Raw attention function output:")
                                             print(f"          Shape: HF={hf_attn_out.shape}, Muse={muse_attn_out.shape}")
                                             
-                                            if hf_attn_out.shape == muse_attn_out.shape:
+                                            # Muse attention output is [b, num_heads, seq_len, head_dim]
+                                            # HF attention output is [b, seq_len, embed_dim] (already reshaped)
+                                            # Need to reshape Muse output for comparison
+                                            if len(muse_attn_out.shape) == 4 and len(hf_attn_out.shape) == 3:
+                                                # Muse: [b, num_heads, seq_len, head_dim] -> [b, seq_len, num_heads * head_dim]
+                                                b, num_heads, seq_len, head_dim = muse_attn_out.shape
+                                                muse_attn_out_reshaped = muse_attn_out.transpose(1, 2).contiguous().view(b, seq_len, -1)
+                                                
+                                                if muse_attn_out_reshaped.shape == hf_attn_out.shape:
+                                                    attn_out_diff = (hf_attn_out - muse_attn_out_reshaped).abs()
+                                                    max_attn_out_diff = attn_out_diff.max().item()
+                                                    mean_attn_out_diff = attn_out_diff.mean().item()
+                                                    print(f"          After reshape Muse to HF format:")
+                                                    print(f"            Max diff: {max_attn_out_diff:.6e}")
+                                                    print(f"            Mean diff: {mean_attn_out_diff:.6e}")
+                                                    if max_attn_out_diff > 1e-4:
+                                                        print(f"            ⚠️  Mismatch! Problem is in attention computation itself.")
+                                                    else:
+                                                        print(f"            ✓ Match! Problem is in output_proj.")
+                                                else:
+                                                    print(f"          ⚠️  Cannot reshape: Muse={muse_attn_out_reshaped.shape}, HF={hf_attn_out.shape}")
+                                            elif hf_attn_out.shape == muse_attn_out.shape:
                                                 attn_out_diff = (hf_attn_out - muse_attn_out).abs()
                                                 max_attn_out_diff = attn_out_diff.max().item()
                                                 mean_attn_out_diff = attn_out_diff.mean().item()
@@ -1180,6 +1203,26 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                     print(f"          ⚠️  Mismatch! Problem is in attention computation itself.")
                                                 else:
                                                     print(f"          ✓ Match! Problem is in output_proj.")
+                                            else:
+                                                print(f"          ⚠️  Shape mismatch! Cannot compare directly.")
+                                        
+                                        # Compare before_output_proj (already done in steps_to_compare, but add more details)
+                                        if 'before_output_proj' in hf_intermediates and 'before_output_proj' in muse_intermediates:
+                                            hf_before = hf_intermediates['before_output_proj'].to(device=device, dtype=dtype)
+                                            muse_before = muse_intermediates['before_output_proj'].to(device=device, dtype=dtype)
+                                            
+                                            if hf_before.shape == muse_before.shape:
+                                                before_diff = (hf_before - muse_before).abs()
+                                                max_before_diff = before_diff.max().item()
+                                                mean_before_diff = before_diff.mean().item()
+                                                if max_before_diff > 1e-4:
+                                                    print(f"\n        ⚠️  before_output_proj values mismatch!")
+                                                    print(f"          Max diff: {max_before_diff:.6e}")
+                                                    print(f"          Mean diff: {mean_before_diff:.6e}")
+                                                    print(f"          → This suggests the problem is before output_proj")
+                                                else:
+                                                    print(f"\n        ✓ before_output_proj values match!")
+                                                    print(f"          → Problem is likely in output_proj weights or computation")
                                                     
                                                     # Deep dive into output_proj
                                                     print(f"\n        {'='*50}")
