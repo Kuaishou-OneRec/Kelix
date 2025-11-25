@@ -9,6 +9,7 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from muse.config import Qwen3Config
 from muse.models.qwen3 import Qwen3Model
+from muse.training.common import set_default_dtype
 
 
 def _build_qwen3_config(hf_cfg: Dict[str, Any]) -> Qwen3Config:
@@ -110,7 +111,8 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     hf_config_dict = hf_model.config.to_dict()
 
     muse_config = _build_qwen3_config(hf_config_dict)
-    muse_model = Qwen3Model(muse_config)
+    with set_default_dtype(torch.bfloat16):
+        muse_model = Qwen3Model(muse_config)
 
     # Convert and load state dict
     state_dict = muse_model.convert_hf_state_dict(hf_state_dict)
