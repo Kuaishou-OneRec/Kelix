@@ -836,17 +836,43 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                         if step_name in hf_attn_internals and step_name in muse_attn_internals:
                                             hf_step = hf_attn_internals[step_name].to(device=device, dtype=dtype)
                                             muse_step = muse_attn_internals[step_name].to(device=device, dtype=dtype)
-                                            step_diff = (hf_step - muse_step).abs()
-                                            max_step_diff = step_diff.max().item()
-                                            mean_step_diff = step_diff.mean().item()
+                                            
                                             print(f"\n      Attention {step_name}:")
                                             print(f"        Shape: HF={hf_step.shape}, Muse={muse_step.shape}")
-                                            print(f"        Max diff: {max_step_diff:.6e}")
-                                            print(f"        Mean diff: {mean_step_diff:.6e}")
-                                            if max_step_diff > 1e-4:
-                                                print(f"        ⚠️  Mismatch!")
+                                            
+                                            # Check if shapes match before comparing
+                                            if hf_step.shape != muse_step.shape:
+                                                print(f"        ⚠️  Shape mismatch! Cannot compare values.")
+                                                print(f"        Note: This may be due to different normalization implementations.")
+                                                # Try to reshape if possible (for q_norm/k_norm which may have different layouts)
+                                                if step_name in ["q_norm", "k_norm"]:
+                                                    # q_norm/k_norm may have different tensor layouts
+                                                    # Try to reshape to compare
+                                                    try:
+                                                        # Flatten and compare if total elements match
+                                                        hf_flat = hf_step.flatten()
+                                                        muse_flat = muse_step.flatten()
+                                                        if hf_flat.shape == muse_flat.shape:
+                                                            step_diff = (hf_flat - muse_flat).abs()
+                                                            max_step_diff = step_diff.max().item()
+                                                            mean_step_diff = step_diff.mean().item()
+                                                            print(f"        Flattened comparison:")
+                                                            print(f"          Max diff: {max_step_diff:.6e}")
+                                                            print(f"          Mean diff: {mean_step_diff:.6e}")
+                                                        else:
+                                                            print(f"        Total elements: HF={hf_flat.numel()}, Muse={muse_flat.numel()}")
+                                                    except Exception as e:
+                                                        print(f"        Could not reshape for comparison: {e}")
                                             else:
-                                                print(f"        ✓ Match!")
+                                                step_diff = (hf_step - muse_step).abs()
+                                                max_step_diff = step_diff.max().item()
+                                                mean_step_diff = step_diff.mean().item()
+                                                print(f"        Max diff: {max_step_diff:.6e}")
+                                                print(f"        Mean diff: {mean_step_diff:.6e}")
+                                                if max_step_diff > 1e-4:
+                                                    print(f"        ⚠️  Mismatch!")
+                                                else:
+                                                    print(f"        ✓ Match!")
                                     
                                     print(f"    {'-'*50}\n")
                             else:
