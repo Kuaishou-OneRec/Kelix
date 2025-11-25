@@ -1251,13 +1251,22 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                             for i in range(5):
                                                 print(f"              {sample_scores[i, :]}")
                                             
+                                            # Store scores before masking for comparison
+                                            muse_intermediates['scores_before_mask'] = muse_scores.detach().clone()
+                                            
                                             # Apply causal mask
                                             seq_len = muse_scores.shape[-1]
                                             causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1).bool()
                                             muse_scores_masked = muse_scores.masked_fill(causal_mask, float('-inf'))
                                             
+                                            # Store scores after masking
+                                            muse_intermediates['scores_after_mask'] = muse_scores_masked.detach().clone()
+                                            
                                             # Compute weights
                                             muse_weights = torch.nn.functional.softmax(muse_scores_masked, dim=-1)
+                                            
+                                            # Store weights for comparison
+                                            muse_intermediates['manual_weights'] = muse_weights.detach().clone()
                                             print(f"\n            Attention weights:")
                                             print(f"              Weights shape: {muse_weights.shape}")
                                             print(f"              Weights range: [{muse_weights.min().item():.6f}, {muse_weights.max().item():.6f}]")
@@ -1269,6 +1278,35 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                             sample_weights = muse_weights[0, 0, :5, :5].float().cpu().numpy()
                                             for i in range(5):
                                                 print(f"              {sample_weights[i, :]}")
+                                            
+                                            # Try to compute HF attention scores if we can hook into their computation
+                                            # For now, let's compare the scores that lead to the weight differences
+                                            print(f"\n          Analyzing attention weight differences:")
+                                            if 'attn_weights' in hf_intermediates and 'manual_weights' in muse_intermediates:
+                                                hf_weights = hf_intermediates['attn_weights'].to(device=device, dtype=dtype)
+                                                muse_manual_weights = muse_intermediates['manual_weights'].to(device=device, dtype=dtype)
+                                                
+                                                # Find positions with large differences
+                                                weights_diff = (hf_weights - muse_manual_weights).abs()
+                                                large_diff_mask = weights_diff > 0.1
+                                                num_large_diffs = large_diff_mask.sum().item()
+                                                
+                                                if num_large_diffs > 0:
+                                                    print(f"            Found {num_large_diffs} positions with diff > 0.1")
+                                                    # Get some example positions
+                                                    large_diff_positions = torch.nonzero(large_diff_mask)[:5]
+                                                    print(f"            Example large diff positions:")
+                                                    for pos in large_diff_positions:
+                                                        b, h, i, j = pos[0].item(), pos[1].item(), pos[2].item(), pos[3].item()
+                                                        hf_val = hf_weights[b, h, i, j].item()
+                                                        muse_val = muse_manual_weights[b, h, i, j].item()
+                                                        diff_val = weights_diff[b, h, i, j].item()
+                                                        print(f"              Position ({b}, {h}, {i}, {j}): HF={hf_val:.6f}, Muse={muse_val:.6f}, Diff={diff_val:.6f}")
+                                                        
+                                                        # Check corresponding scores
+                                                        if 'scores_after_mask' in muse_intermediates:
+                                                            muse_score = muse_intermediates['scores_after_mask'][b, h, i, j].item()
+                                                            print(f"                Muse score at this position: {muse_score:.4f}")
                                             
                                             # Compare with HF attn_weights if available
                                             if 'attn_weights' in hf_intermediates:
