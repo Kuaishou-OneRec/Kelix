@@ -915,64 +915,237 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                 else:
                                                     print(f"        ✓ Match!")
                                     
-                                    # If output_proj mismatches, check attention function inputs/outputs
+                                    # Comprehensive step-by-step attention debugging
                                     if step_name == "output_proj" and max_step_diff > 1e-4:
-                                        print(f"\n      {'-'*50}")
-                                        print(f"      Debugging Attention Function")
-                                        print(f"      {'-'*50}")
+                                        print(f"\n      {'='*60}")
+                                        print(f"      Comprehensive Step-by-Step Attention Debugging")
+                                        print(f"      {'='*60}")
                                         
-                                        # Hook attention output (before output_proj) by hooking the attention module's forward
-                                        # We'll capture the output right before output_proj is called
-                                        hf_attn_before_output_proj = {}
-                                        muse_attn_before_output_proj = {}
+                                        # Store all intermediate values
+                                        hf_intermediates = {}
+                                        muse_intermediates = {}
                                         
-                                        def make_attn_output_hook(name, store_dict):
-                                            def hook(module, input, output):
-                                                # For HF, output is a tuple (hidden_states, attn_weights)
-                                                # For Muse, output is just hidden_states
-                                                if isinstance(output, tuple):
-                                                    store_dict['output'] = output[0].detach().clone()
-                                                else:
-                                                    store_dict['output'] = output.detach().clone()
-                                            return hook
+                                        # Hook all intermediate steps for Muse
+                                        muse_hooks = []
                                         
-                                        # Hook the attention module output (before output_proj)
-                                        # For HF, hook self_attn output
-                                        # For Muse, hook attn output
-                                        attn_output_hooks = []
+                                        # 1. Hook q after q_proj
+                                        def muse_q_proj_hook(module, input, output):
+                                            muse_intermediates['q_after_proj'] = output.detach().clone()
+                                        muse_hooks.append(muse_attn_0.q_proj.register_forward_hook(muse_q_proj_hook))
                                         
-                                        if hasattr(hf_attn_0, 'self_attn'):
-                                            attn_output_hooks.append(
-                                                hf_attn_0.self_attn.register_forward_hook(
-                                                    make_attn_output_hook('hf', hf_attn_before_output_proj)
-                                                )
-                                            )
+                                        # 2. Hook k after k_proj
+                                        def muse_k_proj_hook(module, input, output):
+                                            muse_intermediates['k_after_proj'] = output.detach().clone()
+                                        muse_hooks.append(muse_attn_0.k_proj.register_forward_hook(muse_k_proj_hook))
                                         
-                                        if hasattr(muse_attn_0, 'attn'):
-                                            # For Muse, we need to hook right before output_proj
-                                            # Let's hook the output_proj input instead
-                                            def muse_output_proj_hook(module, input, output):
-                                                if isinstance(input, tuple):
-                                                    muse_attn_before_output_proj['output'] = input[0].detach().clone()
-                                                else:
-                                                    muse_attn_before_output_proj['output'] = input.detach().clone()
+                                        # 3. Hook v after v_proj
+                                        def muse_v_proj_hook(module, input, output):
+                                            muse_intermediates['v_after_proj'] = output.detach().clone()
+                                        muse_hooks.append(muse_attn_0.v_proj.register_forward_hook(muse_v_proj_hook))
+                                        
+                                        # 4. Hook q after q_norm (if exists)
+                                        if hasattr(muse_attn_0, 'q_norm') and muse_attn_0.q_norm is not None:
+                                            def muse_q_norm_hook(module, input, output):
+                                                muse_intermediates['q_after_norm'] = output.detach().clone()
+                                            muse_hooks.append(muse_attn_0.q_norm.register_forward_hook(muse_q_norm_hook))
+                                        
+                                        # 5. Hook k after k_norm (if exists)
+                                        if hasattr(muse_attn_0, 'k_norm') and muse_attn_0.k_norm is not None:
+                                            def muse_k_norm_hook(module, input, output):
+                                                muse_intermediates['k_after_norm'] = output.detach().clone()
+                                            muse_hooks.append(muse_attn_0.k_norm.register_forward_hook(muse_k_norm_hook))
+                                        
+                                        # 6. Hook RoPE (pos_embeddings) outputs
+                                        if hasattr(muse_attn_0, 'pos_embeddings') and muse_attn_0.pos_embeddings is not None:
+                                            def muse_rope_q_hook(module, input, output):
+                                                muse_intermediates['q_after_rope'] = output.detach().clone()
+                                            def muse_rope_k_hook(module, input, output):
+                                                muse_intermediates['k_after_rope'] = output.detach().clone()
+                                            # Note: RoPE might be called multiple times, we'll hook it
+                                            # For now, we'll capture after all processing
+                                        
+                                        # 7. Hook attention function inputs (q, k, v before attention)
+                                        # We need to wrap the attention function to capture inputs
+                                        original_muse_attn_fn = muse_attn_0._attention_function
+                                        muse_attn_fn_inputs = {}
+                                        
+                                        def muse_attn_fn_wrapper(*args, **kwargs):
+                                            # Capture q, k, v
+                                            if len(args) >= 3:
+                                                muse_attn_fn_inputs['q'] = args[0].detach().clone()
+                                                muse_attn_fn_inputs['k'] = args[1].detach().clone()
+                                                muse_attn_fn_inputs['v'] = args[2].detach().clone()
+                                            elif 'q' in kwargs:
+                                                muse_attn_fn_inputs['q'] = kwargs['q'].detach().clone()
+                                                muse_attn_fn_inputs['k'] = kwargs['k'].detach().clone()
+                                                muse_attn_fn_inputs['v'] = kwargs['v'].detach().clone()
                                             
-                                            attn_output_hooks.append(
-                                                muse_attn_0.output_proj.register_forward_pre_hook(
-                                                    muse_output_proj_hook
-                                                )
-                                            )
+                                            # Call original function
+                                            result = original_muse_attn_fn(*args, **kwargs)
+                                            muse_intermediates['attn_output'] = result.detach().clone()
+                                            return result
+                                        
+                                        muse_attn_0._attention_function = muse_attn_fn_wrapper
+                                        
+                                        # 8. Hook output before output_proj
+                                        def muse_before_output_proj_hook(module, input, output):
+                                            if isinstance(input, tuple):
+                                                muse_intermediates['before_output_proj'] = input[0].detach().clone()
+                                            else:
+                                                muse_intermediates['before_output_proj'] = input.detach().clone()
+                                        muse_hooks.append(muse_attn_0.output_proj.register_forward_pre_hook(muse_before_output_proj_hook))
+                                        
+                                        # For HF, hook similar steps
+                                        hf_hooks = []
+                                        
+                                        # Hook HF attention module's forward to capture intermediates
+                                        def hf_attn_forward_hook(module, input, output):
+                                            # HF returns (hidden_states, attn_weights) tuple
+                                            if isinstance(output, tuple):
+                                                hf_intermediates['attn_output'] = output[0].detach().clone()
+                                                if len(output) > 1:
+                                                    hf_intermediates['attn_weights'] = output[1].detach().clone()
+                                            else:
+                                                hf_intermediates['attn_output'] = output.detach().clone()
+                                        hf_hooks.append(hf_attn_0.self_attn.register_forward_hook(hf_attn_forward_hook))
+                                        
+                                        # Hook HF q_proj, k_proj, v_proj
+                                        def hf_q_proj_hook(module, input, output):
+                                            hf_intermediates['q_after_proj'] = output.detach().clone()
+                                        hf_hooks.append(hf_attn_0.q_proj.register_forward_hook(hf_q_proj_hook))
+                                        
+                                        def hf_k_proj_hook(module, input, output):
+                                            hf_intermediates['k_after_proj'] = output.detach().clone()
+                                        hf_hooks.append(hf_attn_0.k_proj.register_forward_hook(hf_k_proj_hook))
+                                        
+                                        def hf_v_proj_hook(module, input, output):
+                                            hf_intermediates['v_after_proj'] = output.detach().clone()
+                                        hf_hooks.append(hf_attn_0.v_proj.register_forward_hook(hf_v_proj_hook))
+                                        
+                                        # Hook HF q_norm, k_norm
+                                        if hasattr(hf_attn_0, 'q_norm') and hf_attn_0.q_norm is not None:
+                                            def hf_q_norm_hook(module, input, output):
+                                                hf_intermediates['q_after_norm'] = output.detach().clone()
+                                            hf_hooks.append(hf_attn_0.q_norm.register_forward_hook(hf_q_norm_hook))
+                                        
+                                        if hasattr(hf_attn_0, 'k_norm') and hf_attn_0.k_norm is not None:
+                                            def hf_k_norm_hook(module, input, output):
+                                                hf_intermediates['k_after_norm'] = output.detach().clone()
+                                            hf_hooks.append(hf_attn_0.k_norm.register_forward_hook(hf_k_norm_hook))
+                                        
+                                        # Hook HF output_proj input
+                                        def hf_before_output_proj_hook(module, input, output):
+                                            if isinstance(input, tuple):
+                                                hf_intermediates['before_output_proj'] = input[0].detach().clone()
+                                            else:
+                                                hf_intermediates['before_output_proj'] = input.detach().clone()
+                                        hf_hooks.append(hf_attn_0.o_proj.register_forward_pre_hook(hf_before_output_proj_hook))
                                         
                                         # Re-run forward pass
                                         with torch.no_grad():
-                                            hf_attn_before_output_proj.clear()
-                                            muse_attn_before_output_proj.clear()
+                                            hf_intermediates.clear()
+                                            muse_intermediates.clear()
+                                            muse_attn_fn_inputs.clear()
                                             _ = hf_model(**model_inputs)
                                             _ = muse_model(tokens=muse_tokens)
                                         
                                         # Remove hooks
-                                        for hook in attn_output_hooks:
+                                        for hook in muse_hooks + hf_hooks:
                                             hook.remove()
+                                        muse_attn_0._attention_function = original_muse_attn_fn
+                                        
+                                        # Compare all intermediate steps
+                                        steps_to_compare = [
+                                            ('q_after_proj', 'q after q_proj'),
+                                            ('k_after_proj', 'k after k_proj'),
+                                            ('v_after_proj', 'v after v_proj'),
+                                            ('q_after_norm', 'q after q_norm'),
+                                            ('k_after_norm', 'k after k_norm'),
+                                            ('before_output_proj', 'before output_proj'),
+                                            ('attn_output', 'attention output'),
+                                        ]
+                                        
+                                        print(f"\n        Step-by-Step Comparison:")
+                                        for key, description in steps_to_compare:
+                                            if key in hf_intermediates and key in muse_intermediates:
+                                                hf_val = hf_intermediates[key].to(device=device, dtype=dtype)
+                                                muse_val = muse_intermediates[key].to(device=device, dtype=dtype)
+                                                
+                                                print(f"\n          {description}:")
+                                                print(f"            Shape: HF={hf_val.shape}, Muse={muse_val.shape}")
+                                                
+                                                if hf_val.shape == muse_val.shape:
+                                                    diff = (hf_val - muse_val).abs()
+                                                    max_diff = diff.max().item()
+                                                    mean_diff = diff.mean().item()
+                                                    print(f"            Max diff: {max_diff:.6e}")
+                                                    print(f"            Mean diff: {mean_diff:.6e}")
+                                                    if max_diff > 1e-4:
+                                                        print(f"            ⚠️  Mismatch!")
+                                                    else:
+                                                        print(f"            ✓ Match!")
+                                                else:
+                                                    print(f"            ⚠️  Shape mismatch!")
+                                                    # Try transpose for q_norm/k_norm
+                                                    if key in ['q_after_norm', 'k_after_norm']:
+                                                        if (len(hf_val.shape) == 4 and len(muse_val.shape) == 4 and
+                                                            hf_val.shape[0] == muse_val.shape[0] and
+                                                            hf_val.shape[1] == muse_val.shape[2] and
+                                                            hf_val.shape[2] == muse_val.shape[1] and
+                                                            hf_val.shape[3] == muse_val.shape[3]):
+                                                            hf_val_t = hf_val.transpose(1, 2)
+                                                            diff = (hf_val_t - muse_val).abs()
+                                                            max_diff = diff.max().item()
+                                                            mean_diff = diff.mean().item()
+                                                            print(f"            After transpose: Max diff={max_diff:.6e}, Mean diff={mean_diff:.6e}")
+                                        
+                                        # Check attention function inputs
+                                        if 'q' in muse_attn_fn_inputs:
+                                            print(f"\n          Attention function inputs (q, k, v):")
+                                            for tensor_name in ['q', 'k', 'v']:
+                                                if tensor_name in muse_attn_fn_inputs:
+                                                    muse_tensor = muse_attn_fn_inputs[tensor_name].to(device=device, dtype=dtype)
+                                                    print(f"            Muse {tensor_name}: shape={muse_tensor.shape}")
+                                            
+                                            # Manually compute attention scores and weights for comparison
+                                            if 'q' in muse_attn_fn_inputs and 'k' in muse_attn_fn_inputs:
+                                                muse_q = muse_attn_fn_inputs['q'].to(device=device, dtype=dtype)
+                                                muse_k = muse_attn_fn_inputs['k'].to(device=device, dtype=dtype)
+                                                
+                                                print(f"\n          Manual attention computation:")
+                                                # Compute scores: q @ k^T / sqrt(head_dim)
+                                                head_dim = muse_q.shape[-1]
+                                                muse_scores = torch.matmul(muse_q, muse_k.transpose(-2, -1)) / (head_dim ** 0.5)
+                                                print(f"            Scores shape: {muse_scores.shape}")
+                                                print(f"            Scores range: [{muse_scores.min().item():.4f}, {muse_scores.max().item():.4f}]")
+                                                
+                                                # Apply causal mask
+                                                seq_len = muse_scores.shape[-1]
+                                                causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1).bool()
+                                                muse_scores_masked = muse_scores.masked_fill(causal_mask, float('-inf'))
+                                                
+                                                # Compute weights
+                                                muse_weights = torch.nn.functional.softmax(muse_scores_masked, dim=-1)
+                                                print(f"            Weights shape: {muse_weights.shape}")
+                                                print(f"            Weights sum (should be ~seq_len): {muse_weights.sum(dim=-1).mean().item():.4f}")
+                                                
+                                                # Compare with HF attn_weights if available
+                                                if 'attn_weights' in hf_intermediates:
+                                                    hf_weights = hf_intermediates['attn_weights'].to(device=device, dtype=dtype)
+                                                    print(f"\n            Comparing attention weights:")
+                                                    print(f"              HF shape: {hf_weights.shape}, Muse shape: {muse_weights.shape}")
+                                                    if hf_weights.shape == muse_weights.shape:
+                                                        weights_diff = (hf_weights - muse_weights).abs()
+                                                        max_weights_diff = weights_diff.max().item()
+                                                        mean_weights_diff = weights_diff.mean().item()
+                                                        print(f"              Max diff: {max_weights_diff:.6e}")
+                                                        print(f"              Mean diff: {mean_weights_diff:.6e}")
+                                                        if max_weights_diff > 1e-4:
+                                                            print(f"              ⚠️  Attention weights mismatch!")
+                                                        else:
+                                                            print(f"              ✓ Attention weights match!")
+                                        
+                                        print(f"\n      {'='*60}\n")
                                         
                                         # Compare attention output before output_proj
                                         if 'output' in hf_attn_before_output_proj and 'output' in muse_attn_before_output_proj:
@@ -991,7 +1164,89 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                 if max_attn_out_diff > 1e-4:
                                                     print(f"          ⚠️  Mismatch! Problem is in attention computation itself.")
                                                 else:
-                                                    print(f"          ✓ Match! Problem is in output_proj weights.")
+                                                    print(f"          ✓ Match! Problem is in output_proj.")
+                                                    
+                                                    # Deep dive into output_proj
+                                                    print(f"\n        {'='*50}")
+                                                    print(f"        Deep Dive: output_proj Analysis")
+                                                    print(f"        {'='*50}")
+                                                    
+                                                    # Get output_proj weights
+                                                    hf_output_proj_weight = None
+                                                    muse_output_proj_weight = None
+                                                    
+                                                    if hasattr(hf_attn_0, 'o_proj'):
+                                                        hf_output_proj_weight = hf_attn_0.o_proj.weight.data.to(device=device, dtype=dtype)
+                                                    elif hasattr(hf_attn_0, 'output_proj'):
+                                                        hf_output_proj_weight = hf_attn_0.output_proj.weight.data.to(device=device, dtype=dtype)
+                                                    
+                                                    if hasattr(muse_attn_0, 'output_proj'):
+                                                        muse_output_proj_weight = muse_attn_0.output_proj.weight.data.to(device=device, dtype=dtype)
+                                                    
+                                                    if hf_output_proj_weight is not None and muse_output_proj_weight is not None:
+                                                        print(f"\n          output_proj weights:")
+                                                        print(f"            Shape: HF={hf_output_proj_weight.shape}, Muse={muse_output_proj_weight.shape}")
+                                                        
+                                                        if hf_output_proj_weight.shape == muse_output_proj_weight.shape:
+                                                            weight_diff = (hf_output_proj_weight - muse_output_proj_weight).abs()
+                                                            max_weight_diff = weight_diff.max().item()
+                                                            mean_weight_diff = weight_diff.mean().item()
+                                                            print(f"            Max diff: {max_weight_diff:.6e}")
+                                                            print(f"            Mean diff: {mean_weight_diff:.6e}")
+                                                            if max_weight_diff > 1e-5:
+                                                                print(f"            ⚠️  Weight mismatch!")
+                                                            else:
+                                                                print(f"            ✓ Weights match!")
+                                                        
+                                                        # Manually compute output_proj to verify
+                                                        print(f"\n          Manual output_proj computation:")
+                                                        
+                                                        # HF: o_proj(input)
+                                                        hf_manual_out = None
+                                                        if hasattr(hf_attn_0, 'o_proj'):
+                                                            hf_manual_out = torch.nn.functional.linear(
+                                                                hf_attn_out, hf_output_proj_weight
+                                                            )
+                                                        elif hasattr(hf_attn_0, 'output_proj'):
+                                                            hf_manual_out = torch.nn.functional.linear(
+                                                                hf_attn_out, hf_output_proj_weight
+                                                            )
+                                                        
+                                                        # Muse: output_proj(input)
+                                                        muse_manual_out = None
+                                                        if hasattr(muse_attn_0, 'output_proj'):
+                                                            muse_manual_out = torch.nn.functional.linear(
+                                                                muse_attn_out, muse_output_proj_weight
+                                                            )
+                                                        
+                                                        if hf_manual_out is not None and muse_manual_out is not None:
+                                                            print(f"            Manual output shape: HF={hf_manual_out.shape}, Muse={muse_manual_out.shape}")
+                                                            
+                                                            if hf_manual_out.shape == muse_manual_out.shape:
+                                                                manual_diff = (hf_manual_out - muse_manual_out).abs()
+                                                                max_manual_diff = manual_diff.max().item()
+                                                                mean_manual_diff = manual_diff.mean().item()
+                                                                print(f"            Max diff: {max_manual_diff:.6e}")
+                                                                print(f"            Mean diff: {mean_manual_diff:.6e}")
+                                                                
+                                                                # Compare with actual output_proj output
+                                                                if 'output_proj' in hf_attn_internals and 'output_proj' in muse_attn_internals:
+                                                                    hf_actual_out = hf_attn_internals['output_proj'].to(device=device, dtype=dtype)
+                                                                    muse_actual_out = muse_attn_internals['output_proj'].to(device=device, dtype=dtype)
+                                                                    
+                                                                    hf_vs_manual = (hf_actual_out - hf_manual_out).abs()
+                                                                    muse_vs_manual = (muse_actual_out - muse_manual_out).abs()
+                                                                    
+                                                                    print(f"\n            Verification:")
+                                                                    print(f"              HF actual vs manual: max={hf_vs_manual.max().item():.6e}")
+                                                                    print(f"              Muse actual vs manual: max={muse_vs_manual.max().item():.6e}")
+                                                                    
+                                                                    if hf_vs_manual.max().item() < 1e-5 and muse_vs_manual.max().item() < 1e-5:
+                                                                        print(f"              ✓ Manual computation matches actual output")
+                                                                        print(f"              → Problem is likely in input shape/format or weight loading")
+                                                                    else:
+                                                                        print(f"              ⚠️  Manual computation differs from actual output")
+                                                                        print(f"              → Problem is in output_proj implementation")
                                             else:
                                                 print(f"          ⚠️  Shape mismatch!")
                                                 # Try to reshape if possible
