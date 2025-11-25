@@ -673,15 +673,16 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                             )
                         )
                     
-                    # Re-run forward pass for layer 0 with detailed hooks
+                    # Re-run forward pass through the full model to capture submodule activations
+                    # This ensures all necessary setup (like position embeddings) is done
                     with torch.no_grad():
-                        # HF model - need to get to layer 0
-                        hf_emb_out = hf_model.model.embed_tokens(model_inputs["input_ids"])
-                        hf_layer_0_out = hf_layer_0(hf_emb_out)
+                        # Clear previous activations
+                        hf_layer_0_activations.clear()
+                        muse_layer_0_activations.clear()
                         
-                        # Muse model
-                        muse_emb_out = muse_model.model.tok_embeddings(muse_tokens)
-                        muse_layer_0_out = muse_layer_0(muse_emb_out)
+                        # Run full forward pass - hooks will capture layer 0 submodules
+                        _ = hf_model(**model_inputs)
+                        _ = muse_model(tokens=muse_tokens)
                     
                     # Remove detailed hooks
                     for hook in detailed_hf_hooks:
