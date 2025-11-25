@@ -60,11 +60,6 @@ class Model(nn.Module):
         raise NotImplementedError(
             "Subclass must implement eval method")
     
-    @property
-    def training(self):
-        """Return whether the model is in training mode"""
-        return self.training
-
     def get_checkpointable_module_classes(self):
         """Return a list of module classes that should be checkpointed"""
         raise NotImplementedError(

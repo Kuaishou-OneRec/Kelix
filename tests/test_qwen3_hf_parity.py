@@ -5,18 +5,10 @@ Integration test to ensure Muse Qwen3 matches Hugging Face logits.
 import os
 from typing import Any, Dict
 
-import pytest
-
-torch = pytest.importorskip("torch")
-transformers = pytest.importorskip("transformers")
-
-AutoTokenizer = transformers.AutoTokenizer
-AutoModelForCausalLM = transformers.AutoModelForCausalLM
-
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
 from muse.config import Qwen3Config
 from muse.models.qwen3 import Qwen3Model
-
-CHECKPOINT_ENV = "HF_QWEN3_CHECKPOINT"
 
 
 def _build_qwen3_config(hf_cfg: Dict[str, Any]) -> Qwen3Config:
@@ -142,3 +134,6 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     #     atol=5e-4,
     # )
 
+
+if __name__ == "__main__":
+    test_qwen3_logits_align_with_hf_checkpoint()
