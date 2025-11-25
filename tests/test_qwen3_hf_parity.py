@@ -575,6 +575,139 @@ def test_qwen3_logits_align_with_hf_checkpoint():
             if max_diff > 1e-4 and first_mismatch_layer is None:
                 first_mismatch_layer = i
                 print(f"  ⚠️  First mismatch detected at layer {i}!")
+                
+                # For the first mismatched layer, do detailed debugging
+                if i == 0:
+                    print(f"\n{'='*60}")
+                    print(f"Detailed Debugging for Layer {i}")
+                    print(f"{'='*60}")
+                    
+                    # Check layer input (should match previous layer output or embedding)
+                    if i == 0 and "embedding" in hf_activations and "embedding" in muse_activations:
+                        hf_layer_input = hf_activations["embedding"].to(device=device, dtype=dtype)
+                        muse_layer_input = muse_activations["embedding"].to(device=device, dtype=dtype)
+                        input_diff = (hf_layer_input - muse_layer_input).abs()
+                        print(f"\nLayer {i} input (embedding output):")
+                        print(f"  Max diff: {input_diff.max().item():.6e}")
+                        print(f"  Mean diff: {input_diff.mean().item():.6e}")
+                        if input_diff.max().item() > 1e-4:
+                            print(f"  ⚠️  Layer input already mismatches!")
+                        else:
+                            print(f"  ✓ Layer input matches")
+                    
+                    # Register detailed hooks for first layer submodules
+                    hf_layer_0 = hf_model.model.layers[0]
+                    muse_layer_0 = muse_model.model.layers[0]
+                    
+                    hf_layer_0_activations = {}
+                    muse_layer_0_activations = {}
+                    
+                    def make_detailed_hf_hook(name):
+                        def hook(module, input, output):
+                            if isinstance(output, tuple):
+                                hf_layer_0_activations[name] = output[0].detach().clone()
+                            else:
+                                hf_layer_0_activations[name] = output.detach().clone()
+                        return hook
+                    
+                    def make_detailed_muse_hook(name):
+                        def hook(module, input, output):
+                            if isinstance(output, tuple):
+                                muse_layer_0_activations[name] = output[0].detach().clone()
+                            else:
+                                muse_layer_0_activations[name] = output.detach().clone()
+                        return hook
+                    
+                    detailed_hf_hooks = []
+                    detailed_muse_hooks = []
+                    
+                    # Hook HF layer 0 submodules
+                    if hasattr(hf_layer_0, 'input_layernorm'):
+                        detailed_hf_hooks.append(
+                            hf_layer_0.input_layernorm.register_forward_hook(
+                                make_detailed_hf_hook("sa_norm")
+                            )
+                        )
+                    if hasattr(hf_layer_0, 'self_attn'):
+                        detailed_hf_hooks.append(
+                            hf_layer_0.self_attn.register_forward_hook(
+                                make_detailed_hf_hook("attention")
+                            )
+                        )
+                    if hasattr(hf_layer_0, 'post_attention_layernorm'):
+                        detailed_hf_hooks.append(
+                            hf_layer_0.post_attention_layernorm.register_forward_hook(
+                                make_detailed_hf_hook("mlp_norm")
+                            )
+                        )
+                    if hasattr(hf_layer_0, 'mlp'):
+                        detailed_hf_hooks.append(
+                            hf_layer_0.mlp.register_forward_hook(
+                                make_detailed_hf_hook("mlp")
+                            )
+                        )
+                    
+                    # Hook Muse layer 0 submodules
+                    if hasattr(muse_layer_0, 'sa_norm'):
+                        detailed_muse_hooks.append(
+                            muse_layer_0.sa_norm.register_forward_hook(
+                                make_detailed_muse_hook("sa_norm")
+                            )
+                        )
+                    if hasattr(muse_layer_0, 'attn'):
+                        detailed_muse_hooks.append(
+                            muse_layer_0.attn.register_forward_hook(
+                                make_detailed_muse_hook("attention")
+                            )
+                        )
+                    if hasattr(muse_layer_0, 'mlp_norm'):
+                        detailed_muse_hooks.append(
+                            muse_layer_0.mlp_norm.register_forward_hook(
+                                make_detailed_muse_hook("mlp_norm")
+                            )
+                        )
+                    if hasattr(muse_layer_0, 'mlp'):
+                        detailed_muse_hooks.append(
+                            muse_layer_0.mlp.register_forward_hook(
+                                make_detailed_muse_hook("mlp")
+                            )
+                        )
+                    
+                    # Re-run forward pass for layer 0 with detailed hooks
+                    with torch.no_grad():
+                        # HF model - need to get to layer 0
+                        hf_emb_out = hf_model.model.embed_tokens(model_inputs["input_ids"])
+                        hf_layer_0_out = hf_layer_0(hf_emb_out)
+                        
+                        # Muse model
+                        muse_emb_out = muse_model.model.tok_embeddings(muse_tokens)
+                        muse_layer_0_out = muse_layer_0(muse_emb_out)
+                    
+                    # Remove detailed hooks
+                    for hook in detailed_hf_hooks:
+                        hook.remove()
+                    for hook in detailed_muse_hooks:
+                        hook.remove()
+                    
+                    # Compare submodule outputs
+                    submodules_to_check = ["sa_norm", "attention", "mlp_norm", "mlp"]
+                    for submod_name in submodules_to_check:
+                        if submod_name in hf_layer_0_activations and submod_name in muse_layer_0_activations:
+                            hf_submod = hf_layer_0_activations[submod_name].to(device=device, dtype=dtype)
+                            muse_submod = muse_layer_0_activations[submod_name].to(device=device, dtype=dtype)
+                            submod_diff = (hf_submod - muse_submod).abs()
+                            max_submod_diff = submod_diff.max().item()
+                            mean_submod_diff = submod_diff.mean().item()
+                            print(f"\n  Layer {i} {submod_name}:")
+                            print(f"    Shape: HF={hf_submod.shape}, Muse={muse_submod.shape}")
+                            print(f"    Max diff: {max_submod_diff:.6e}")
+                            print(f"    Mean diff: {mean_submod_diff:.6e}")
+                            if max_submod_diff > 1e-4:
+                                print(f"    ⚠️  Mismatch!")
+                            else:
+                                print(f"    ✓ Match!")
+                    
+                    print(f"{'='*60}\n")
     
     # Compare final norm
     if "final_norm" in hf_activations and "final_norm" in muse_activations:
