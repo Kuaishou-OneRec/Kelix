@@ -453,9 +453,15 @@ def dump_layer0_activations(checkpoint_dir, output_dir="layer0_dumps", prompt=No
     ))
     
     # Hook attention module inputs
-    hooks.append(attn_0.register_forward_pre_hook(
-        make_pre_hook("attn0", activations)
-    ))
+    # Muse attention receives (x, y) where x=y for self-attention
+    def attn0_pre_hook(module, input):
+        if isinstance(input, tuple) and len(input) >= 1:
+            # For self-attention, x=y, so we only need to save x
+            activations["attn0_input"] = input[0].detach().clone()
+        else:
+            activations["attn0_input"] = input.detach().clone() if isinstance(input, torch.Tensor) else input
+    
+    hooks.append(attn_0.register_forward_pre_hook(attn0_pre_hook))
     
     # Hook q_proj
     hooks.append(attn_0.q_proj.register_forward_hook(

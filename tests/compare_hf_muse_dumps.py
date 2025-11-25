@@ -39,6 +39,11 @@ def compare_tensors(name, hf_tensor, muse_tensor, atol=1e-3, rtol=1e-3):
             return False
         elif len(hf_tensor) == 1 and isinstance(hf_tensor[0], torch.Tensor):
             hf_tensor = hf_tensor[0]
+        elif len(hf_tensor) >= 2 and all(isinstance(item, torch.Tensor) for item in hf_tensor[:2]):
+            # For attention input, HF might have (hidden_states, ...), take first
+            # For Muse, it's (x, y) where x=y for self-attention, take first
+            print(f"  ℹ️  HF value is a tuple with {len(hf_tensor)} items, using first tensor")
+            hf_tensor = hf_tensor[0]
         else:
             print(f"  ⚠️  HF value is a list/tuple with {len(hf_tensor)} items:")
             for i, item in enumerate(hf_tensor):
@@ -54,6 +59,10 @@ def compare_tensors(name, hf_tensor, muse_tensor, atol=1e-3, rtol=1e-3):
             print(f"  ⚠️  Muse value is an empty list/tuple")
             return False
         elif len(muse_tensor) == 1 and isinstance(muse_tensor[0], torch.Tensor):
+            muse_tensor = muse_tensor[0]
+        elif len(muse_tensor) >= 2 and all(isinstance(item, torch.Tensor) for item in muse_tensor[:2]):
+            # For attention input, Muse has (x, y) where x=y for self-attention, take first
+            print(f"  ℹ️  Muse value is a tuple with {len(muse_tensor)} items, using first tensor (x=y for self-attention)")
             muse_tensor = muse_tensor[0]
         else:
             print(f"  ⚠️  Muse value is a list/tuple with {len(muse_tensor)} items:")
