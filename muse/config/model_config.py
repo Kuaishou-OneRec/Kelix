@@ -7,7 +7,7 @@
 """Model configuration classes."""
 
 from typing import Optional, Literal
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from muse.config.base import BaseConfig
 
@@ -140,4 +140,22 @@ class Qwen3Config(ModelConfig):
                     f"num_heads ({num_heads}) * head_dim ({v}) = {expected_embed_dim}"
                 )
         return v
+
+    @model_validator(mode="after")
+    def validate_head_relationships(cls, values: "Qwen3Config") -> "Qwen3Config":
+        """Ensure head-related fields stay consistent after initialization."""
+        if values.num_heads % values.num_kv_heads != 0:
+            raise ValueError(
+                f"num_heads ({values.num_heads}) must be divisible by "
+                f"num_kv_heads ({values.num_kv_heads})"
+            )
+
+        expected_embed_dim = values.num_heads * values.head_dim
+        if values.embed_dim != expected_embed_dim:
+            raise ValueError(
+                f"embed_dim ({values.embed_dim}) must equal "
+                f"num_heads ({values.num_heads}) * head_dim ({values.head_dim}) "
+                f"= {expected_embed_dim}"
+            )
+        return values
 
