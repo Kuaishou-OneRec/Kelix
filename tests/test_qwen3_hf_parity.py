@@ -1002,9 +1002,10 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                         # Hook HF attention module's forward to capture intermediates
                                         def hf_attn_forward_hook(module, input, output):
                                             # HF returns (hidden_states, attn_weights) tuple
+                                            # attn_weights may be None if not requested
                                             if isinstance(output, tuple):
                                                 hf_intermediates['attn_output'] = output[0].detach().clone()
-                                                if len(output) > 1:
+                                                if len(output) > 1 and output[1] is not None:
                                                     hf_intermediates['attn_weights'] = output[1].detach().clone()
                                             else:
                                                 hf_intermediates['attn_output'] = output.detach().clone()
