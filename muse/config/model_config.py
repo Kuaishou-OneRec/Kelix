@@ -113,31 +113,31 @@ class Qwen3Config(ModelConfig):
         description="Whether to use normalization in the k_proj layer"
     )
 
-    @field_validator("num_attention_heads")
+    @field_validator("num_heads")
     @classmethod
     def validate_num_heads(cls, v, info):
-        """Validate that num_attention_heads is divisible by num_key_value_heads."""
-        if "num_key_value_heads" in info.data:
-            num_kv_heads = info.data["num_key_value_heads"]
+        """Validate that num_heads is divisible by num_kv_heads."""
+        if "num_kv_heads" in info.data:
+            num_kv_heads = info.data["num_kv_heads"]
             if v % num_kv_heads != 0:
                 raise ValueError(
-                    f"num_attention_heads ({v}) must be divisible by "
-                    f"num_key_value_heads ({num_kv_heads})"
+                    f"num_heads ({v}) must be divisible by "
+                    f"num_kv_heads ({num_kv_heads})"
                 )
         return v
     
     @field_validator("head_dim")
     @classmethod
     def validate_head_dim(cls, v, info):
-        """Validate that hidden_size equals num_attention_heads * head_dim."""
-        if "hidden_size" in info.data and "num_attention_heads" in info.data:
-            hidden_size = info.data["hidden_size"]
-            num_heads = info.data["num_attention_heads"]
-            expected_hidden_size = num_heads * v
-            if hidden_size != expected_hidden_size:
+        """Validate that embed_dim equals num_heads * head_dim."""
+        if "embed_dim" in info.data and "num_heads" in info.data:
+            embed_dim = info.data["embed_dim"]
+            num_heads = info.data["num_heads"]
+            expected_embed_dim = num_heads * v
+            if embed_dim != expected_embed_dim:
                 raise ValueError(
-                    f"hidden_size ({hidden_size}) must equal "
-                    f"num_attention_heads ({num_heads}) * head_dim ({v}) = {expected_hidden_size}"
+                    f"embed_dim ({embed_dim}) must equal "
+                    f"num_heads ({num_heads}) * head_dim ({v}) = {expected_embed_dim}"
                 )
         return v
 
