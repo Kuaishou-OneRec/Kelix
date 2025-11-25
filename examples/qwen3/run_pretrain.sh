@@ -114,37 +114,27 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        bash -c "python3 recipes/pretrain.py --model_dir $MODEL_DIR \
-                --output_dir $OUTPUT_DIR \
-                --dataset_config examples/qwen3/pretrain.json \
-                --model_class Qwen3Model \
-                --learning_rate 2e-4 \
-                --vision_learning_rate 2e-5 \
-                --alpha 1.0 \
-                --beta 0.25 \
-                --min_lr 1e-7 \
-                --freeze_navit \
-                --freeze_llm \
-                --freeze_navit_mlp_ar \
-                --weight_decay 0.1 \
-                --lr_scheduler_type cosine \
-                --num_warmup_steps 1000 \
-                --num_training_steps 2500000 \
-                --save_checkpoint_per_step 500 \
-                --sequence_parallel_size 1 \
-                --use_flash_attention_2 \
-                --logging_per_step 20 \
-                --fp32_weight \
+        bash -c "python3 recipes/pretrain.py --model-dir $MODEL_DIR \
+                --output-dir $OUTPUT_DIR \
+                --dataset-config examples/qwen3/pretrain.json \
+                --model-class Qwen3Model \
+                --learning-rate 2e-4 \
+                --min-lr 1e-7 \
+                --weight-decay 0.1 \
+                --beta1 0.9 \
+                --beta2 0.95 \
+                --lr-scheduler-type cosine_with_min_lr \
+                --num-warmup-steps 1000 \
+                --num-training-steps 2500000 \
+                --save-checkpoint-per-step 500 \
+                --context-parallel-size 1 \
+                --use-flash-attention-2 \
+                --logging-per-step 20 \
+                --fp32-weight \
                 --seed 19260817 \
-                --enable_gradient_checkpointing \
-                --merge_checkpoint \
-                --merge_checkpoint_dtype bf16 \
-                --merge_checkpoint_output_file pytorch_model.bin \
+                --enable-gradient-checkpointing \
                 --comment '$comment' \
-                --commit_id $git_hash \
-                --kml_id 67887 \
-                --kml_task_id 89899 \
-                --heartbeat_monitor" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
+                --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
 
 

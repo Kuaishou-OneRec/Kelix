@@ -290,6 +290,10 @@ def train():
   dataset_config["model_class"] = args.model_class
   if args.max_length:
     dataset_config["max_length"] = args.max_length
+  
+  # Set tokenizer_path from model_dir if not specified
+  if not dataset_config.get("tokenizer_path") and args.model_dir:
+    dataset_config["tokenizer_path"] = args.model_dir
 
   # torch init
   torch.cuda.set_device(local_rank)
