@@ -50,15 +50,35 @@ class Model(nn.Module):
         raise NotImplementedError(
             "Subclass must implement get_initializer method")
     
-    def train(self):
-        """Set the model to training mode"""
-        raise NotImplementedError(
-            "Subclass must implement train method")
+    def train(self, mode: bool = True):
+        """Set the model to training mode.
+        
+        This recursively sets all submodules to training mode.
+        PyTorch's nn.Module.train() automatically handles recursion.
+        
+        Args:
+            mode (bool): Whether to set training mode (True) or evaluation mode (False).
+                Default: True.
+        
+        Returns:
+            self: Returns self for method chaining.
+        """
+        # Call nn.Module.train() directly to recursively set all submodules
+        nn.Module.train(self, mode)
+        return self
     
     def eval(self):
-        """Set the model to evaluation mode"""
-        raise NotImplementedError(
-            "Subclass must implement eval method")
+        """Set the model to evaluation mode.
+        
+        This recursively sets all submodules to evaluation mode.
+        PyTorch's nn.Module.eval() automatically handles recursion.
+        
+        Returns:
+            self: Returns self for method chaining.
+        """
+        # Call nn.Module.eval() directly to recursively set all submodules
+        nn.Module.eval(self)
+        return self
     
     def get_checkpointable_module_classes(self):
         """Return a list of module classes that should be checkpointed"""
