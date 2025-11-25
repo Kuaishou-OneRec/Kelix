@@ -209,21 +209,144 @@ def test_qwen3_logits_align_with_hf_checkpoint():
             if embed_diff.max().item() > 1e-5:
                 print(f"  ⚠️  Large difference detected!")
     
-    # Check first layer attention weights
-    for layer_idx in [0]:
-        for weight_name in ["q_proj.weight", "k_proj.weight", "v_proj.weight"]:
-            hf_key = f"model.layers.{layer_idx}.self_attn.{weight_name}"
-            muse_key = f"model.layers.{layer_idx}.attn.{weight_name}"
+    # Check all transformer layers
+    print(f"\nChecking all {muse_config.num_layers} transformer layers...")
+    layer_issues = []
+    total_checked = 0
+    total_matched = 0
+    
+    for layer_idx in range(muse_config.num_layers):
+        layer_has_issue = False
+        
+        # Check attention weights
+        attn_weights = [
+            ("q_proj.weight", "q_proj.weight"),
+            ("k_proj.weight", "k_proj.weight"),
+            ("v_proj.weight", "v_proj.weight"),
+            ("o_proj.weight", "output_proj.weight"),
+        ]
+        
+        # Check attention biases (if exist)
+        if muse_config.q_proj_bias:
+            attn_weights.append(("q_proj.bias", "q_proj.bias"))
+        if muse_config.k_proj_bias:
+            attn_weights.append(("k_proj.bias", "k_proj.bias"))
+        if muse_config.v_proj_bias:
+            attn_weights.append(("v_proj.bias", "v_proj.bias"))
+        
+        for hf_weight_name, muse_weight_name in attn_weights:
+            hf_key = f"model.layers.{layer_idx}.self_attn.{hf_weight_name}"
+            muse_key = f"model.layers.{layer_idx}.attn.{muse_weight_name}"
             if hf_key in hf_state_dict and muse_key in state_dict:
+                total_checked += 1
                 hf_weight = hf_state_dict[hf_key].to(device=device, dtype=dtype)
                 muse_weight = state_dict[muse_key]
                 weight_diff = (hf_weight - muse_weight).abs()
-                print(f"Layer {layer_idx} {weight_name}:")
-                print(f"  Shape: HF={hf_weight.shape}, Muse={muse_weight.shape}")
-                print(f"  Max diff: {weight_diff.max().item():.6e}")
-                print(f"  Mean diff: {weight_diff.mean().item():.6e}")
-                if weight_diff.max().item() > 1e-5:
-                    print(f"  ⚠️  Large difference detected!")
+                max_diff = weight_diff.max().item()
+                if max_diff > 1e-5:
+                    layer_has_issue = True
+                    layer_issues.append(
+                        f"Layer {layer_idx} {hf_weight_name}: "
+                        f"max_diff={max_diff:.6e}"
+                    )
+                else:
+                    total_matched += 1
+        
+        # Check q_norm and k_norm (if exist)
+        if muse_config.q_norm:
+            for norm_name in ["q_norm.weight", "k_norm.weight"]:
+                hf_key = f"model.layers.{layer_idx}.self_attn.{norm_name}"
+                muse_key = f"model.layers.{layer_idx}.attn.{norm_name.replace('.weight', '.scale')}"
+                if hf_key in hf_state_dict and muse_key in state_dict:
+                    total_checked += 1
+                    hf_weight = hf_state_dict[hf_key].to(device=device, dtype=dtype)
+                    muse_weight = state_dict[muse_key]
+                    weight_diff = (hf_weight - muse_weight).abs()
+                    max_diff = weight_diff.max().item()
+                    if max_diff > 1e-5:
+                        layer_has_issue = True
+                        layer_issues.append(
+                            f"Layer {layer_idx} {norm_name}: "
+                            f"max_diff={max_diff:.6e}"
+                        )
+                    else:
+                        total_matched += 1
+        
+        # Check MLP weights
+        mlp_mapping = [
+            ("gate_proj.weight", "w1.weight"),
+            ("up_proj.weight", "w3.weight"),
+            ("down_proj.weight", "w2.weight"),
+        ]
+        for hf_weight_name, muse_weight_name in mlp_mapping:
+            hf_key = f"model.layers.{layer_idx}.mlp.{hf_weight_name}"
+            muse_key = f"model.layers.{layer_idx}.mlp.{muse_weight_name}"
+            if hf_key in hf_state_dict and muse_key in state_dict:
+                total_checked += 1
+                hf_weight = hf_state_dict[hf_key].to(device=device, dtype=dtype)
+                muse_weight = state_dict[muse_key]
+                weight_diff = (hf_weight - muse_weight).abs()
+                max_diff = weight_diff.max().item()
+                if max_diff > 1e-5:
+                    layer_has_issue = True
+                    layer_issues.append(
+                        f"Layer {layer_idx} MLP {hf_weight_name}: "
+                        f"max_diff={max_diff:.6e}"
+                    )
+                else:
+                    total_matched += 1
+        
+        # Check layer norms
+        layer_norms = [
+            ("input_layernorm.weight", "sa_norm.scale"),
+            ("post_attention_layernorm.weight", "mlp_norm.scale"),
+        ]
+        for hf_weight_name, muse_weight_name in layer_norms:
+            hf_key = f"model.layers.{layer_idx}.{hf_weight_name}"
+            muse_key = f"model.layers.{layer_idx}.{muse_weight_name}"
+            if hf_key in hf_state_dict and muse_key in state_dict:
+                total_checked += 1
+                hf_weight = hf_state_dict[hf_key].to(device=device, dtype=dtype)
+                muse_weight = state_dict[muse_key]
+                weight_diff = (hf_weight - muse_weight).abs()
+                max_diff = weight_diff.max().item()
+                if max_diff > 1e-5:
+                    layer_has_issue = True
+                    layer_issues.append(
+                        f"Layer {layer_idx} {hf_weight_name}: "
+                        f"max_diff={max_diff:.6e}"
+                    )
+                else:
+                    total_matched += 1
+    
+    # Report layer issues
+    print(f"\nWeight comparison summary:")
+    print(f"  Total weights checked: {total_checked}")
+    print(f"  Weights matched (diff < 1e-5): {total_matched}")
+    print(f"  Weights with issues: {len(layer_issues)}")
+    
+    if layer_issues:
+        print(f"\n⚠️  Found {len(layer_issues)} weight mismatches:")
+        for issue in layer_issues[:50]:  # Limit to first 50 issues
+            print(f"  - {issue}")
+        if len(layer_issues) > 50:
+            print(f"  ... and {len(layer_issues) - 50} more issues")
+    else:
+        print(f"✓ All transformer layer weights match!")
+    
+    # Check final norm
+    hf_norm_key = "model.norm.weight"
+    muse_norm_key = "model.norm.scale"
+    if hf_norm_key in hf_state_dict and muse_norm_key in state_dict:
+        hf_norm = hf_state_dict[hf_norm_key].to(device=device, dtype=dtype)
+        muse_norm = state_dict[muse_norm_key]
+        norm_diff = (hf_norm - muse_norm).abs()
+        print(f"\nFinal norm:")
+        print(f"  Shape: HF={hf_norm.shape}, Muse={muse_norm.shape}")
+        print(f"  Max diff: {norm_diff.max().item():.6e}")
+        print(f"  Mean diff: {norm_diff.mean().item():.6e}")
+        if norm_diff.max().item() > 1e-5:
+            print(f"  ⚠️  Large difference detected!")
     
     # Check output layer
     # Note: If tie_word_embeddings=True, lm_head.weight is skipped in conversion
