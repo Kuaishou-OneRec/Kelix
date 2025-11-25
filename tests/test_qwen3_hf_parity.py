@@ -537,8 +537,8 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     
     # Compare embedding
     if "embedding" in hf_activations and "embedding" in muse_activations:
-        hf_emb = hf_activations["embedding"].to(dtype=dtype)
-        muse_emb = muse_activations["embedding"].to(dtype=dtype)
+        hf_emb = hf_activations["embedding"].to(device=device, dtype=dtype)
+        muse_emb = muse_activations["embedding"].to(device=device, dtype=dtype)
         emb_diff = (hf_emb - muse_emb).abs()
         max_diff = emb_diff.max().item()
         mean_diff = emb_diff.mean().item()
@@ -557,8 +557,8 @@ def test_qwen3_logits_align_with_hf_checkpoint():
         hf_key = f"layer_{i}"
         muse_key = f"layer_{i}"
         if hf_key in hf_activations and muse_key in muse_activations:
-            hf_act = hf_activations[hf_key].to(dtype=dtype)
-            muse_act = muse_activations[muse_key].to(dtype=dtype)
+            hf_act = hf_activations[hf_key].to(device=device, dtype=dtype)
+            muse_act = muse_activations[muse_key].to(device=device, dtype=dtype)
             act_diff = (hf_act - muse_act).abs()
             max_diff = act_diff.max().item()
             mean_diff = act_diff.mean().item()
@@ -578,8 +578,8 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     
     # Compare final norm
     if "final_norm" in hf_activations and "final_norm" in muse_activations:
-        hf_norm = hf_activations["final_norm"].to(dtype=dtype)
-        muse_norm = muse_activations["final_norm"].to(dtype=dtype)
+        hf_norm = hf_activations["final_norm"].to(device=device, dtype=dtype)
+        muse_norm = muse_activations["final_norm"].to(device=device, dtype=dtype)
         norm_diff = (hf_norm - muse_norm).abs()
         max_diff = norm_diff.max().item()
         mean_diff = norm_diff.mean().item()
@@ -596,11 +596,10 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     # Note: Muse's output goes through unembed which applies norm and then output
     # HF's lm_head takes norm output and produces logits
     if "output" in hf_activations:
-        hf_out = hf_activations["output"].to(dtype=dtype)
         # For Muse, we need to compare with the final norm output before unembed
         # since HF's lm_head takes norm output as input
         if "final_norm" in muse_activations:
-            muse_norm_out = muse_activations["final_norm"].to(dtype=dtype)
+            muse_norm_out = muse_activations["final_norm"].to(device=device, dtype=dtype)
             # Compare the input to output layer (norm output)
             print(f"\nOutput layer input (norm output):")
             print(f"  Shape: HF (to lm_head)={hf_model.model.norm.weight.shape if hasattr(hf_model.model, 'norm') else 'N/A'}, Muse={muse_norm_out.shape}")
@@ -609,7 +608,8 @@ def test_qwen3_logits_align_with_hf_checkpoint():
         
         # Compare output layer outputs if available
         if "output_before_float" in muse_activations:
-            muse_out = muse_activations["output_before_float"].to(dtype=dtype)
+            hf_out = hf_activations["output"].to(device=device, dtype=dtype)
+            muse_out = muse_activations["output_before_float"].to(device=device, dtype=dtype)
             # Note: Muse's output is before .float() conversion in unembed
             # HF's output is the final logits
             out_diff = (hf_out - muse_out).abs()
