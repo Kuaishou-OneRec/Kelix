@@ -988,7 +988,8 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                         muse_attn_0._attention_function = muse_attn_fn_wrapper
                                         
                                         # 8. Hook output before output_proj
-                                        def muse_before_output_proj_hook(module, input, output):
+                                        def muse_before_output_proj_hook(module, input):
+                                            # forward_pre_hook only receives (module, input), not output
                                             if isinstance(input, tuple):
                                                 muse_intermediates['before_output_proj'] = input[0].detach().clone()
                                             else:
@@ -1046,7 +1047,8 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                             hf_output_proj_module = hf_attn_0.output_proj
                                         
                                         if hf_output_proj_module is not None:
-                                            def hf_before_output_proj_hook(module, input, output):
+                                            def hf_before_output_proj_hook(module, input):
+                                                # forward_pre_hook only receives (module, input), not output
                                                 if isinstance(input, tuple):
                                                     hf_intermediates['before_output_proj'] = input[0].detach().clone()
                                                 else:
