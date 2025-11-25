@@ -16,8 +16,8 @@ def test_qwen3_config_defaults():
     assert cfg.model_class == "Qwen3Model"
     assert cfg.vocab_size == 151936
     assert cfg.embed_dim == 4096
-    assert cfg.num_heads == 32
-    assert cfg.num_kv_heads == 32
+    assert cfg.num_heads == 36
+    assert cfg.num_kv_heads == 8
     assert cfg.head_dim == 128
     assert cfg.embed_dim == cfg.num_heads * cfg.head_dim
     assert cfg.num_heads % cfg.num_kv_heads == 0
