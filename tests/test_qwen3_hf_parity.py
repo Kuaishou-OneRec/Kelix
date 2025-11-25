@@ -728,21 +728,22 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     # 4.3 Compare qkv after RoPE (input to attention function)
     print("\n4.3 QKV After RoPE (Input to Attention Function):")
     
-    # Note: Direct RoPE comparison requires hooking HF's internal apply_rotary_pos_emb
-    # which is not easily accessible. Instead, we'll verify RoPE correctness indirectly
-    # by comparing attention scores and weights, which depend on RoPE outputs.
-    
-    # Show Muse qkv shapes after RoPE (captured from attention function inputs)
+    # Show Muse qkv shapes and sample values after RoPE
     if 'q' in muse_attn_fn_inputs:
-        muse_q_after_rope = muse_attn_fn_inputs['q']
-        muse_k_after_rope = muse_attn_fn_inputs['k']
-        muse_v_after_rope = muse_attn_fn_inputs['v']
+        muse_q_after_rope = muse_attn_fn_inputs['q'].to(device=device, dtype=dtype)
+        muse_k_after_rope = muse_attn_fn_inputs['k'].to(device=device, dtype=dtype)
+        muse_v_after_rope = muse_attn_fn_inputs['v'].to(device=device, dtype=dtype)
         
-        print("  Muse qkv after RoPE shapes:")
-        print(f"    q: {muse_q_after_rope.shape}")
-        print(f"    k: {muse_k_after_rope.shape}")
-        print(f"    v: {muse_v_after_rope.shape}")
-        print("  Note: HF qkv after RoPE will be verified indirectly via attention scores/weights comparison")
+        print("  Muse qkv after RoPE:")
+        print(f"    q shape: {muse_q_after_rope.shape}, range: [{muse_q_after_rope.min().item():.6f}, {muse_q_after_rope.max().item():.6f}]")
+        print(f"    k shape: {muse_k_after_rope.shape}, range: [{muse_k_after_rope.min().item():.6f}, {muse_k_after_rope.max().item():.6f}]")
+        print(f"    v shape: {muse_v_after_rope.shape}, range: [{muse_v_after_rope.min().item():.6f}, {muse_v_after_rope.max().item():.6f}]")
+        
+        # Sample values for debugging
+        print(f"    Sample q[0, 0, 0, :5]: {muse_q_after_rope[0, 0, 0, :5].cpu().numpy()}")
+        print(f"    Sample k[0, 0, 0, :5]: {muse_k_after_rope[0, 0, 0, :5].cpu().numpy()}")
+        
+        print("  Note: HF qkv after RoPE cannot be directly captured, but we'll verify via attention computation")
     else:
         print("  ⚠️  Could not capture Muse qkv after RoPE")
     
@@ -788,33 +789,88 @@ def test_qwen3_logits_align_with_hf_checkpoint():
             ).reshape(batch, muse_num_heads, seq_len, head_dim)
         
         # Compute attention scores: q @ k^T * scaling
-        muse_scores = torch.matmul(muse_q, muse_k_expanded.transpose(-2, -1)) * muse_scaling
+        # Compare with HF's way: HF uses scaling = head_dim ** -0.5
+        # Muse's EagerAttention uses: scores = q @ k^T / (head_dim ** 0.5)
+        # These should be equivalent: * (head_dim ** -0.5) == / (head_dim ** 0.5)
+        
+        print(f"  Computing attention scores:")
+        print(f"    Scaling factor: {muse_scaling:.6e} (should be {muse_head_dim ** -0.5:.6e})")
+        
+        # Method 1: Muse's way (as in EagerAttention)
+        muse_scores_method1 = torch.matmul(muse_q, muse_k_expanded.transpose(-2, -1)) / (muse_head_dim ** 0.5)
+        
+        # Method 2: HF's way (multiply by scaling)
+        muse_scores_method2 = torch.matmul(muse_q, muse_k_expanded.transpose(-2, -1)) * muse_scaling
+        
+        # Check if they're the same
+        scores_diff = (muse_scores_method1 - muse_scores_method2).abs()
+        print(f"    Method 1 (Muse way) vs Method 2 (HF way) diff: max={scores_diff.max().item():.6e}")
+        
+        # Use HF's way for consistency
+        muse_scores = muse_scores_method2
         
         # Check scores before mask
+        print(f"    Scores before mask: min={muse_scores.min().item():.6f}, max={muse_scores.max().item():.6f}, mean={muse_scores.mean().item():.6f}")
         if torch.isnan(muse_scores).any() or torch.isinf(muse_scores).any():
             print("  ⚠️  NaN/Inf detected in scores before mask!")
-            print(f"    Scores stats: min={muse_scores.min().item():.6f}, max={muse_scores.max().item():.6f}, mean={muse_scores.mean().item():.6f}")
         
-        # Apply causal mask (upper triangular mask)
+        # Apply causal mask
+        # HF uses attention_mask parameter, Muse uses is_causal flag
+        # Let's check what HF actually uses
         seq_len = muse_q.shape[2]
-        causal_mask = torch.triu(
+        
+        # Method 1: Muse's way (as in EagerAttention) - create causal mask manually
+        causal_mask_muse = torch.triu(
+            torch.ones(seq_len, seq_len, device=device, dtype=torch.bool),
+            diagonal=1
+        )
+        causal_mask_muse = causal_mask_muse.unsqueeze(0).unsqueeze(0)  # [1, 1, seq_len, seq_len]
+        muse_scores_muse_way = muse_scores.clone()
+        muse_scores_muse_way = muse_scores_muse_way.masked_fill(causal_mask_muse, -float('inf'))
+        
+        # Method 2: HF's way - add mask (assuming mask is already in the right format)
+        # HF's attention_mask is [batch, num_heads, seq_len, seq_len] with -inf for masked positions
+        # For now, let's create it the same way HF does
+        causal_mask_hf = torch.triu(
             torch.ones(seq_len, seq_len, device=device, dtype=dtype),
             diagonal=1
         )
-        causal_mask = causal_mask.unsqueeze(0).unsqueeze(0)  # [1, 1, seq_len, seq_len]
-        causal_mask = causal_mask.masked_fill(causal_mask == 1, float('-inf'))
-        muse_scores = muse_scores + causal_mask
+        causal_mask_hf = causal_mask_hf.unsqueeze(0).unsqueeze(0)  # [1, 1, seq_len, seq_len]
+        causal_mask_hf = causal_mask_hf.masked_fill(causal_mask_hf == 1, float('-inf'))
+        muse_scores_hf_way = muse_scores + causal_mask_hf
+        
+        # Compare the two methods
+        mask_diff = (muse_scores_muse_way - muse_scores_hf_way).abs()
+        print(f"    Mask application diff (Muse way vs HF way): max={mask_diff.max().item():.6e}")
+        
+        # Use HF's way for consistency
+        muse_scores = muse_scores_hf_way
         
         # Check scores after mask
+        print(f"    Scores after mask: min={muse_scores.min().item():.6f}, max={muse_scores.max().item():.6f}")
         if torch.isnan(muse_scores).any() or torch.isinf(muse_scores).any():
             print("  ⚠️  NaN/Inf detected in scores after mask!")
             # Replace inf with a large negative value for softmax
             muse_scores = torch.where(torch.isinf(muse_scores), torch.tensor(-1e9, device=device, dtype=dtype), muse_scores)
         
         # Compute attention weights
-        muse_weights = torch.nn.functional.softmax(
-            muse_scores.float(), dim=-1
-        ).to(dtype)
+        # HF uses: softmax(scores, dim=-1, dtype=torch.float32).to(query.dtype)
+        # Muse uses: softmax(scores, dim=-1) directly
+        print(f"  Computing attention weights:")
+        print(f"    Scores dtype: {muse_scores.dtype}")
+        
+        # Method 1: Muse's way (direct softmax)
+        muse_weights_method1 = torch.nn.functional.softmax(muse_scores, dim=-1)
+        
+        # Method 2: HF's way (softmax in float32, then convert back)
+        muse_weights_method2 = torch.nn.functional.softmax(muse_scores.float(), dim=-1).to(dtype)
+        
+        # Compare the two methods
+        weights_diff = (muse_weights_method1 - muse_weights_method2).abs()
+        print(f"    Method 1 (Muse way) vs Method 2 (HF way) diff: max={weights_diff.max().item():.6e}, mean={weights_diff.mean().item():.6e}")
+        
+        # Use HF's way for consistency
+        muse_weights = muse_weights_method2
         
         # Check weights
         if torch.isnan(muse_weights).any():
@@ -830,11 +886,50 @@ def test_qwen3_logits_align_with_hf_checkpoint():
         print(f"    Weights range: [{muse_weights.min().item():.6f}, {muse_weights.max().item():.6f}]")
         print(f"    Weights sum per row (should be ~1.0): min={muse_weights.sum(dim=-1).min().item():.6f}, max={muse_weights.sum(dim=-1).max().item():.6f}")
         
+        # Now manually compute HF's scores and weights using the same qkv
+        # We need to get HF's qkv after RoPE to compare
+        # For now, let's try to reconstruct HF's scores from HF's attention weights
+        # If we have HF's attention weights, we can reverse-engineer the scores
+        
         # Compare with HF attention weights if available
         if 'attn_weights' in hf_intermediates:
             hf_weights = hf_intermediates['attn_weights'].to(device=device, dtype=dtype)
             print(f"\n  Comparing with HF attention weights:")
+            print(f"    HF weights shape: {hf_weights.shape}")
+            print(f"    HF weights range: [{hf_weights.min().item():.6f}, {hf_weights.max().item():.6f}]")
+            print(f"    HF weights sum per row: min={hf_weights.sum(dim=-1).min().item():.6f}, max={hf_weights.sum(dim=-1).max().item():.6f}")
+            
+            # Compare weights
             compare_tensors(hf_weights, muse_weights, "attention weights")
+            
+            # Try to reverse-engineer HF's scores from weights
+            # weights = softmax(scores), so scores = log(weights) + C (where C is normalization constant)
+            # But we can't uniquely determine scores from weights
+            # Instead, let's compare the actual qkv values that go into attention
+            
+            print(f"\n  Detailed comparison of attention computation:")
+            print(f"    Checking if qkv inputs are the same...")
+            
+            # We need to compare HF's qkv after RoPE with Muse's
+            # Since we can't easily hook HF's RoPE, let's at least verify the computation steps
+            
+            # Sample a few positions to see the difference
+            print(f"\n    Sample comparison (head 0, query pos 0):")
+            print(f"      Muse weights[0, 0, 0, :5]: {muse_weights[0, 0, 0, :5].cpu().numpy()}")
+            print(f"      HF weights[0, 0, 0, :5]:   {hf_weights[0, 0, 0, :5].cpu().numpy()}")
+            print(f"      Diff: {(muse_weights[0, 0, 0, :5] - hf_weights[0, 0, 0, :5]).abs().cpu().numpy()}")
+            
+            # Find the position with max difference
+            max_diff_pos = (muse_weights - hf_weights).abs().argmax()
+            max_diff_pos_4d = torch.unravel_index(max_diff_pos, muse_weights.shape)
+            print(f"\n    Max diff position: {max_diff_pos_4d}")
+            print(f"      Muse weight: {muse_weights[max_diff_pos_4d].item():.6f}")
+            print(f"      HF weight:   {hf_weights[max_diff_pos_4d].item():.6f}")
+            print(f"      Diff:        {(muse_weights[max_diff_pos_4d] - hf_weights[max_diff_pos_4d]).abs().item():.6f}")
+            
+            # Check corresponding scores
+            print(f"      Muse score:  {muse_scores[max_diff_pos_4d].item():.6f}")
+            # We can't get HF's exact score, but we can check if the issue is in scores or softmax
         
         # Compare attention output
         # HF attention output is [batch, seq_len, embed_dim] after reshape and output_proj
