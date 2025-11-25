@@ -1017,6 +1017,49 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                         # hf_attn_0 is already the attention module, not a layer containing it
                                         hf_hooks.append(hf_attn_0.register_forward_hook(hf_attn_forward_hook))
                                         
+                                        # Try to hook HF's scaled_dot_product_attention to capture attention weights
+                                        # HF uses torch.nn.functional.scaled_dot_product_attention internally
+                                        import torch.nn.functional as F
+                                        original_sdpa = F.scaled_dot_product_attention
+                                        hf_attn_scores = {}
+                                        
+                                        def hf_sdpa_wrapper(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None):
+                                            # Compute attention scores manually to capture them
+                                            if scale is None:
+                                                scale = 1.0 / (query.size(-1) ** 0.5)
+                                            
+                                            # Compute scores: q @ k^T * scale
+                                            scores = torch.matmul(query, key.transpose(-2, -1)) * scale
+                                            
+                                            # Apply causal mask if needed
+                                            if is_causal:
+                                                seq_len = scores.shape[-1]
+                                                causal_mask = torch.triu(torch.ones(seq_len, seq_len, device=scores.device, dtype=torch.bool), diagonal=1)
+                                                scores = scores.masked_fill(causal_mask, float('-inf'))
+                                            
+                                            # Apply attn_mask if provided
+                                            if attn_mask is not None:
+                                                scores = scores + attn_mask
+                                            
+                                            # Store scores before softmax
+                                            hf_attn_scores['scores'] = scores.detach().clone()
+                                            
+                                            # Compute weights
+                                            attn_weights = torch.nn.functional.softmax(scores, dim=-1)
+                                            hf_intermediates['attn_weights'] = attn_weights.detach().clone()
+                                            
+                                            # Apply dropout
+                                            if dropout_p > 0.0:
+                                                attn_weights = torch.nn.functional.dropout(attn_weights, p=dropout_p, training=module.training if hasattr(module, 'training') else False)
+                                            
+                                            # Compute output
+                                            output = torch.matmul(attn_weights, value)
+                                            return output
+                                        
+                                        # Note: HF attention weights are typically only returned when output_attentions=True
+                                        # is set at the model level, not at the attention module level
+                                        # We'll try to get them from the model outputs instead
+                                        
                                         # Hook HF q_proj, k_proj, v_proj
                                         # Check if attributes exist (HF uses different naming)
                                         if hasattr(hf_attn_0, 'q_proj'):
@@ -1071,10 +1114,30 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                 del muse_intermediates['q_after_rope']
                                             if 'k_after_rope' in muse_intermediates:
                                                 del muse_intermediates['k_after_rope']
-                                            _ = hf_model(**model_inputs)
+                                            
+                                            # For HF, try to get attention weights by setting output_attentions=True
+                                            # This needs to be set at the model level
+                                            hf_model_inputs_with_attn = model_inputs.copy()
+                                            hf_model_inputs_with_attn['output_attentions'] = True
+                                            
+                                            # Run HF model with output_attentions to get attention weights
+                                            hf_outputs = hf_model(**hf_model_inputs_with_attn)
+                                            
+                                            # Extract attention weights from HF outputs if available
+                                            # HF returns attentions as a tuple, one per layer
+                                            if hasattr(hf_outputs, 'attentions') and hf_outputs.attentions is not None:
+                                                if len(hf_outputs.attentions) > 0:
+                                                    # Get attention weights for layer 0 (first layer)
+                                                    hf_layer_0_attn_weights = hf_outputs.attentions[0]
+                                                    if hf_layer_0_attn_weights is not None:
+                                                        # HF attention weights shape: [batch, num_heads, seq_len, seq_len]
+                                                        # or [batch, seq_len, seq_len] if num_heads=1
+                                                        hf_intermediates['attn_weights'] = hf_layer_0_attn_weights.detach().clone()
+                                            
+                                            # Run Muse model
                                             _ = muse_model(tokens=muse_tokens)
                                         
-                                        # Remove hooks
+                                        # Remove hooks and restore original functions
                                         for hook in muse_hooks + hf_hooks:
                                             hook.remove()
                                         muse_attn_0._attention_function = original_muse_attn_fn
