@@ -1,3 +1,4 @@
+from typing import Dict
 from muse.models.base import Model
 from muse.config import Qwen3Config
 from muse.layers.position_embeddings import RotaryPositionalEmbeddings

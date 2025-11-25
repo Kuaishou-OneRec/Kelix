@@ -116,6 +116,7 @@ def test_qwen3_logits_align_with_hf_checkpoint():
 
 
     hf_state_dict = hf_model.state_dict()
+    hf_config_dict = hf_model.config.to_dict()
 
     muse_config = _build_qwen3_config(hf_config_dict)
     muse_model = Qwen3Model(muse_config)
