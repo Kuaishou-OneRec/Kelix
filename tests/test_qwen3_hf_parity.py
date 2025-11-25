@@ -1056,11 +1056,16 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                                                     hf_intermediates['before_output_proj'] = input.detach().clone()
                                             hf_hooks.append(hf_output_proj_module.register_forward_pre_hook(hf_before_output_proj_hook))
                                         
-                                        # Re-run forward pass
+                                        # Re-run forward pass to capture all intermediates
                                         with torch.no_grad():
                                             hf_intermediates.clear()
                                             muse_intermediates.clear()
                                             muse_attn_fn_inputs.clear()
+                                            # Clear q_after_rope and k_after_rope to capture fresh values
+                                            if 'q_after_rope' in muse_intermediates:
+                                                del muse_intermediates['q_after_rope']
+                                            if 'k_after_rope' in muse_intermediates:
+                                                del muse_intermediates['k_after_rope']
                                             _ = hf_model(**model_inputs)
                                             _ = muse_model(tokens=muse_tokens)
                                         
