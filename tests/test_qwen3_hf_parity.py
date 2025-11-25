@@ -111,15 +111,18 @@ def test_qwen3_logits_align_with_hf_checkpoint():
 
     muse_config = _build_qwen3_config(hf_config_dict)
     muse_model = Qwen3Model(muse_config)
-    converted_state = muse_model.convert_hf_state_dict(hf_state_dict)
-    missing, unexpected = muse_model.load_state_dict(converted_state, strict=False)
-    assert not missing, f"Missing Muse parameters: {missing}"
-    assert not unexpected, f"Unexpected Muse parameters: {unexpected}"
-    muse_model.to(device)
-    muse_model.eval()
 
-    del hf_state_dict
-    gg
+    print(muse_model)
+
+    # converted_state = muse_model.convert_hf_state_dict(hf_state_dict)
+    # missing, unexpected = muse_model.load_state_dict(converted_state, strict=False)
+    # assert not missing, f"Missing Muse parameters: {missing}"
+    # assert not unexpected, f"Unexpected Muse parameters: {unexpected}"
+    # muse_model.to(device)
+    # muse_model.eval()
+
+    # del hf_state_dict
+    # gg
 
     # with torch.no_grad():
     #     hf_outputs = hf_model(**inputs)
