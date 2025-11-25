@@ -34,17 +34,35 @@ def compare_tensors(name, hf_tensor, muse_tensor, atol=1e-3, rtol=1e-3):
     
     # Handle list/tuple inputs
     if isinstance(hf_tensor, (list, tuple)):
-        if len(hf_tensor) == 1 and isinstance(hf_tensor[0], torch.Tensor):
+        if len(hf_tensor) == 0:
+            print(f"  ⚠️  HF value is an empty list/tuple")
+            return False
+        elif len(hf_tensor) == 1 and isinstance(hf_tensor[0], torch.Tensor):
             hf_tensor = hf_tensor[0]
         else:
-            print(f"  ⚠️  HF value is a list/tuple with {len(hf_tensor)} items, cannot compare directly")
+            print(f"  ⚠️  HF value is a list/tuple with {len(hf_tensor)} items:")
+            for i, item in enumerate(hf_tensor):
+                if isinstance(item, torch.Tensor):
+                    print(f"    [{i}]: tensor with shape {item.shape}")
+                else:
+                    print(f"    [{i}]: {type(item)}")
+            print(f"  Cannot compare directly - skipping")
             return False
     
     if isinstance(muse_tensor, (list, tuple)):
-        if len(muse_tensor) == 1 and isinstance(muse_tensor[0], torch.Tensor):
+        if len(muse_tensor) == 0:
+            print(f"  ⚠️  Muse value is an empty list/tuple")
+            return False
+        elif len(muse_tensor) == 1 and isinstance(muse_tensor[0], torch.Tensor):
             muse_tensor = muse_tensor[0]
         else:
-            print(f"  ⚠️  Muse value is a list/tuple with {len(muse_tensor)} items, cannot compare directly")
+            print(f"  ⚠️  Muse value is a list/tuple with {len(muse_tensor)} items:")
+            for i, item in enumerate(muse_tensor):
+                if isinstance(item, torch.Tensor):
+                    print(f"    [{i}]: tensor with shape {item.shape}")
+                else:
+                    print(f"    [{i}]: {type(item)}")
+            print(f"  Cannot compare directly - skipping")
             return False
     
     # Check if both are tensors
@@ -163,15 +181,19 @@ def compare_dumps(dump_dir):
     
     matches = 0
     mismatches = 0
+    skipped = 0
     
     for hf_name, muse_name, description in comparisons:
         hf_tensor = load_activation(hf_dir, hf_name)
         muse_tensor = load_activation(muse_dir, muse_name)
         
-        if compare_tensors(description, hf_tensor, muse_tensor):
+        result = compare_tensors(description, hf_tensor, muse_tensor)
+        if result is True:
             matches += 1
-        else:
+        elif result is False:
             mismatches += 1
+        else:
+            skipped += 1
     
     # Special comparison for attention weights
     print("\n" + "=" * 80)
@@ -203,7 +225,7 @@ def compare_dumps(dump_dir):
         # For now, just show the shapes
     
     print("\n" + "=" * 80)
-    print(f"Summary: {matches} matches, {mismatches} mismatches")
+    print(f"Summary: {matches} matches, {mismatches} mismatches, {skipped} skipped")
     print("=" * 80)
     
     return matches, mismatches

@@ -75,12 +75,18 @@ def dump_hf_layer0_activations(hf_model, model_inputs, output_dir):
     def make_hf_hook(name, storage):
         def hook(module, input, output):
             if isinstance(input, tuple):
-                storage[f"{name}_input"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in input]
+                if len(input) > 0:
+                    storage[f"{name}_input"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in input]
+                else:
+                    storage[f"{name}_input"] = []
             else:
                 storage[f"{name}_input"] = input.detach().clone() if isinstance(input, torch.Tensor) else input
             
             if isinstance(output, tuple):
-                storage[f"{name}_output"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in output]
+                if len(output) > 0:
+                    storage[f"{name}_output"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in output]
+                else:
+                    storage[f"{name}_output"] = []
             else:
                 storage[f"{name}_output"] = output.detach().clone() if isinstance(output, torch.Tensor) else output
         return hook
@@ -88,7 +94,10 @@ def dump_hf_layer0_activations(hf_model, model_inputs, output_dir):
     def make_hf_pre_hook(name, storage):
         def hook(module, input):
             if isinstance(input, tuple):
-                storage[f"{name}_input"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in input]
+                if len(input) > 0:
+                    storage[f"{name}_input"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in input]
+                else:
+                    storage[f"{name}_input"] = []
             else:
                 storage[f"{name}_input"] = input.detach().clone() if isinstance(input, torch.Tensor) else input
         return hook
@@ -311,12 +320,18 @@ def dump_layer0_activations(checkpoint_dir, output_dir="layer0_dumps", prompt=No
     def make_hook(name, storage):
         def hook(module, input, output):
             if isinstance(input, tuple):
-                storage[f"{name}_input"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in input]
+                if len(input) > 0:
+                    storage[f"{name}_input"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in input]
+                else:
+                    storage[f"{name}_input"] = []
             else:
                 storage[f"{name}_input"] = input.detach().clone() if isinstance(input, torch.Tensor) else input
             
             if isinstance(output, tuple):
-                storage[f"{name}_output"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in output]
+                if len(output) > 0:
+                    storage[f"{name}_output"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in output]
+                else:
+                    storage[f"{name}_output"] = []
             else:
                 storage[f"{name}_output"] = output.detach().clone() if isinstance(output, torch.Tensor) else output
         return hook
@@ -324,7 +339,10 @@ def dump_layer0_activations(checkpoint_dir, output_dir="layer0_dumps", prompt=No
     def make_pre_hook(name, storage):
         def hook(module, input):
             if isinstance(input, tuple):
-                storage[f"{name}_input"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in input]
+                if len(input) > 0:
+                    storage[f"{name}_input"] = [x.detach().clone() if isinstance(x, torch.Tensor) else x for x in input]
+                else:
+                    storage[f"{name}_input"] = []
             else:
                 storage[f"{name}_input"] = input.detach().clone() if isinstance(input, torch.Tensor) else input
         return hook
