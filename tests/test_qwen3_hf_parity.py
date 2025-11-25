@@ -740,8 +740,8 @@ def test_qwen3_logits_align_with_hf_checkpoint():
         print(f"    v shape: {muse_v_after_rope.shape}, range: [{muse_v_after_rope.min().item():.6f}, {muse_v_after_rope.max().item():.6f}]")
         
         # Sample values for debugging
-        print(f"    Sample q[0, 0, 0, :5]: {muse_q_after_rope[0, 0, 0, :5].cpu().numpy()}")
-        print(f"    Sample k[0, 0, 0, :5]: {muse_k_after_rope[0, 0, 0, :5].cpu().numpy()}")
+        print(f"    Sample q[0, 0, 0, :5]: {muse_q_after_rope[0, 0, 0, :5].float().cpu().numpy()}")
+        print(f"    Sample k[0, 0, 0, :5]: {muse_k_after_rope[0, 0, 0, :5].float().cpu().numpy()}")
         
         print("  Note: HF qkv after RoPE cannot be directly captured, but we'll verify via attention computation")
     else:
@@ -915,9 +915,9 @@ def test_qwen3_logits_align_with_hf_checkpoint():
             
             # Sample a few positions to see the difference
             print(f"\n    Sample comparison (head 0, query pos 0):")
-            print(f"      Muse weights[0, 0, 0, :5]: {muse_weights[0, 0, 0, :5].cpu().numpy()}")
-            print(f"      HF weights[0, 0, 0, :5]:   {hf_weights[0, 0, 0, :5].cpu().numpy()}")
-            print(f"      Diff: {(muse_weights[0, 0, 0, :5] - hf_weights[0, 0, 0, :5]).abs().cpu().numpy()}")
+            print(f"      Muse weights[0, 0, 0, :5]: {muse_weights[0, 0, 0, :5].float().cpu().numpy()}")
+            print(f"      HF weights[0, 0, 0, :5]:   {hf_weights[0, 0, 0, :5].float().cpu().numpy()}")
+            print(f"      Diff: {(muse_weights[0, 0, 0, :5] - hf_weights[0, 0, 0, :5]).abs().float().cpu().numpy()}")
             
             # Find the position with max difference
             max_diff_pos = (muse_weights - hf_weights).abs().argmax()
