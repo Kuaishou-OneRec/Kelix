@@ -705,6 +705,150 @@ def test_qwen3_logits_align_with_hf_checkpoint():
                             print(f"    Mean diff: {mean_submod_diff:.6e}")
                             if max_submod_diff > 1e-4:
                                 print(f"    ⚠️  Mismatch!")
+                                
+                                # If attention module mismatches, debug its internal steps
+                                if submod_name == "attention":
+                                    print(f"\n    {'-'*50}")
+                                    print(f"    Debugging Attention Module Internals")
+                                    print(f"    {'-'*50}")
+                                    
+                                    # Hook attention submodules
+                                    hf_attn_0 = hf_layer_0.self_attn
+                                    muse_attn_0 = muse_layer_0.attn
+                                    
+                                    hf_attn_internals = {}
+                                    muse_attn_internals = {}
+                                    
+                                    def make_attn_hf_hook(name):
+                                        def hook(module, input, output):
+                                            if isinstance(output, tuple):
+                                                hf_attn_internals[name] = output[0].detach().clone()
+                                            else:
+                                                hf_attn_internals[name] = output.detach().clone()
+                                        return hook
+                                    
+                                    def make_attn_muse_hook(name):
+                                        def hook(module, input, output):
+                                            if isinstance(output, tuple):
+                                                muse_attn_internals[name] = output[0].detach().clone()
+                                            else:
+                                                muse_attn_internals[name] = output.detach().clone()
+                                        return hook
+                                    
+                                    attn_hf_hooks = []
+                                    attn_muse_hooks = []
+                                    
+                                    # Hook attention projections
+                                    if hasattr(hf_attn_0, 'q_proj'):
+                                        attn_hf_hooks.append(
+                                            hf_attn_0.q_proj.register_forward_hook(
+                                                make_attn_hf_hook("q_proj")
+                                            )
+                                        )
+                                    if hasattr(hf_attn_0, 'k_proj'):
+                                        attn_hf_hooks.append(
+                                            hf_attn_0.k_proj.register_forward_hook(
+                                                make_attn_hf_hook("k_proj")
+                                            )
+                                        )
+                                    if hasattr(hf_attn_0, 'v_proj'):
+                                        attn_hf_hooks.append(
+                                            hf_attn_0.v_proj.register_forward_hook(
+                                                make_attn_hf_hook("v_proj")
+                                            )
+                                        )
+                                    if hasattr(hf_attn_0, 'o_proj'):
+                                        attn_hf_hooks.append(
+                                            hf_attn_0.o_proj.register_forward_hook(
+                                                make_attn_hf_hook("output_proj")
+                                            )
+                                        )
+                                    
+                                    # Hook Muse attention projections
+                                    if hasattr(muse_attn_0, 'q_proj'):
+                                        attn_muse_hooks.append(
+                                            muse_attn_0.q_proj.register_forward_hook(
+                                                make_attn_muse_hook("q_proj")
+                                            )
+                                        )
+                                    if hasattr(muse_attn_0, 'k_proj'):
+                                        attn_muse_hooks.append(
+                                            muse_attn_0.k_proj.register_forward_hook(
+                                                make_attn_muse_hook("k_proj")
+                                            )
+                                        )
+                                    if hasattr(muse_attn_0, 'v_proj'):
+                                        attn_muse_hooks.append(
+                                            muse_attn_0.v_proj.register_forward_hook(
+                                                make_attn_muse_hook("v_proj")
+                                            )
+                                        )
+                                    if hasattr(muse_attn_0, 'output_proj'):
+                                        attn_muse_hooks.append(
+                                            muse_attn_0.output_proj.register_forward_hook(
+                                                make_attn_muse_hook("output_proj")
+                                            )
+                                        )
+                                    
+                                    # Hook q_norm and k_norm if they exist
+                                    if hasattr(hf_attn_0, 'q_norm') and hf_attn_0.q_norm is not None:
+                                        attn_hf_hooks.append(
+                                            hf_attn_0.q_norm.register_forward_hook(
+                                                make_attn_hf_hook("q_norm")
+                                            )
+                                        )
+                                    if hasattr(hf_attn_0, 'k_norm') and hf_attn_0.k_norm is not None:
+                                        attn_hf_hooks.append(
+                                            hf_attn_0.k_norm.register_forward_hook(
+                                                make_attn_hf_hook("k_norm")
+                                            )
+                                        )
+                                    
+                                    if hasattr(muse_attn_0, 'q_norm') and muse_attn_0.q_norm is not None:
+                                        attn_muse_hooks.append(
+                                            muse_attn_0.q_norm.register_forward_hook(
+                                                make_attn_muse_hook("q_norm")
+                                            )
+                                        )
+                                    if hasattr(muse_attn_0, 'k_norm') and muse_attn_0.k_norm is not None:
+                                        attn_muse_hooks.append(
+                                            muse_attn_0.k_norm.register_forward_hook(
+                                                make_attn_muse_hook("k_norm")
+                                            )
+                                        )
+                                    
+                                    # Re-run forward pass to capture attention internals
+                                    with torch.no_grad():
+                                        hf_attn_internals.clear()
+                                        muse_attn_internals.clear()
+                                        _ = hf_model(**model_inputs)
+                                        _ = muse_model(tokens=muse_tokens)
+                                    
+                                    # Remove hooks
+                                    for hook in attn_hf_hooks:
+                                        hook.remove()
+                                    for hook in attn_muse_hooks:
+                                        hook.remove()
+                                    
+                                    # Compare attention internals
+                                    attn_steps = ["q_proj", "k_proj", "v_proj", "q_norm", "k_norm", "output_proj"]
+                                    for step_name in attn_steps:
+                                        if step_name in hf_attn_internals and step_name in muse_attn_internals:
+                                            hf_step = hf_attn_internals[step_name].to(device=device, dtype=dtype)
+                                            muse_step = muse_attn_internals[step_name].to(device=device, dtype=dtype)
+                                            step_diff = (hf_step - muse_step).abs()
+                                            max_step_diff = step_diff.max().item()
+                                            mean_step_diff = step_diff.mean().item()
+                                            print(f"\n      Attention {step_name}:")
+                                            print(f"        Shape: HF={hf_step.shape}, Muse={muse_step.shape}")
+                                            print(f"        Max diff: {max_step_diff:.6e}")
+                                            print(f"        Mean diff: {mean_step_diff:.6e}")
+                                            if max_step_diff > 1e-4:
+                                                print(f"        ⚠️  Mismatch!")
+                                            else:
+                                                print(f"        ✓ Match!")
+                                    
+                                    print(f"    {'-'*50}\n")
                             else:
                                 print(f"    ✓ Match!")
                     
