@@ -604,6 +604,38 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     def muse_k_norm_hook(module, input, output):
         muse_intermediates['k_after_norm'] = output.detach().clone()
     
+    # Hook Muse RoPE to verify it's working correctly
+    muse_rope_inputs = {}
+    muse_rope_outputs = {}
+    
+    def muse_rope_hook(module, input, output):
+        # input is (x,), output is the rotated tensor
+        if isinstance(input, tuple):
+            muse_rope_inputs['q_before_rope'] = input[0].detach().clone()
+        else:
+            muse_rope_inputs['q_before_rope'] = input.detach().clone()
+        muse_rope_outputs['q_after_rope'] = output.detach().clone()
+    
+    # We need to hook RoPE twice (once for q, once for k)
+    rope_call_count = {'q': 0, 'k': 0}
+    
+    def muse_rope_hook_wrapper(module, input, output):
+        # Track which call this is (q or k)
+        if rope_call_count['q'] == 0:
+            rope_call_count['q'] += 1
+            if isinstance(input, tuple):
+                muse_rope_inputs['q_before_rope'] = input[0].detach().clone()
+            else:
+                muse_rope_inputs['q_before_rope'] = input.detach().clone()
+            muse_rope_outputs['q_after_rope'] = output.detach().clone()
+        elif rope_call_count['k'] == 0:
+            rope_call_count['k'] += 1
+            if isinstance(input, tuple):
+                muse_rope_inputs['k_before_rope'] = input[0].detach().clone()
+            else:
+                muse_rope_inputs['k_before_rope'] = input.detach().clone()
+            muse_rope_outputs['k_after_rope'] = output.detach().clone()
+    
     def muse_before_output_proj_hook(module, input):
         if isinstance(input, tuple):
             muse_intermediates['before_output_proj'] = input[0].detach().clone()
@@ -668,6 +700,9 @@ def test_qwen3_logits_align_with_hf_checkpoint():
         muse_hooks.append(muse_attn_0.q_norm.register_forward_hook(muse_q_norm_hook))
     if hasattr(muse_attn_0, 'k_norm') and muse_attn_0.k_norm is not None:
         muse_hooks.append(muse_attn_0.k_norm.register_forward_hook(muse_k_norm_hook))
+    # Hook RoPE to verify it's working
+    if hasattr(muse_attn_0, 'pos_embeddings') and muse_attn_0.pos_embeddings is not None:
+        muse_hooks.append(muse_attn_0.pos_embeddings.register_forward_hook(muse_rope_hook_wrapper))
     muse_hooks.append(muse_attn_0.output_proj.register_forward_pre_hook(muse_before_output_proj_hook))
     
     # Forward pass with output_attentions=True for HF
@@ -728,13 +763,72 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     # 4.3 Compare qkv after RoPE (input to attention function)
     print("\n4.3 QKV After RoPE (Input to Attention Function):")
     
-    # Show Muse qkv shapes and sample values after RoPE
+    # Verify Muse RoPE is working correctly
+    if 'q_before_rope' in muse_rope_inputs and 'q_after_rope' in muse_rope_outputs:
+        print("  Verifying Muse RoPE:")
+        muse_q_before_rope = muse_rope_inputs['q_before_rope'].to(device=device, dtype=dtype)
+        muse_q_after_rope_hooked = muse_rope_outputs['q_after_rope'].to(device=device, dtype=dtype)
+        
+        print(f"    q before RoPE shape: {muse_q_before_rope.shape}")
+        print(f"    q after RoPE shape: {muse_q_after_rope_hooked.shape}")
+        
+        # Muse RoPE expects input shape [b, s, n_h, h_d]
+        # Check if shape matches expected format
+        if len(muse_q_before_rope.shape) == 4:
+            b, s, n_h, h_d = muse_q_before_rope.shape
+        else:
+            print(f"    ⚠️  Unexpected shape: {muse_q_before_rope.shape}")
+            b, s, n_h, h_d = muse_q_before_rope.shape[0], muse_q_before_rope.shape[1], muse_q_before_rope.shape[2], muse_q_before_rope.shape[3]
+        
+        # Manually compute RoPE to verify
+        # Muse's RoPE implementation: x_out = [x[0]*cos - x[1]*sin, x[1]*cos + x[0]*sin]
+        # where x is reshaped to [b, s, n_h, h_d//2, 2]
+        seq_len = s
+        head_dim = h_d
+        
+        # Get RoPE cache
+        rope_module = muse_attn_0.pos_embeddings
+        rope_cache = rope_module.cache[:seq_len]  # [seq_len, head_dim//2, 2]
+        
+        # Reshape input - Muse RoPE expects [b, s, n_h, h_d]
+        x_shaped = muse_q_before_rope.float().reshape(b, s, n_h, -1, 2)  # [b, s, n_h, h_d//2, 2]
+        rope_cache_shaped = rope_cache.view(1, seq_len, 1, -1, 2)  # [1, s, 1, h_d//2, 2]
+        
+        # Apply RoPE manually (same as Muse's implementation)
+        x_out_manual = torch.stack([
+            x_shaped[..., 0] * rope_cache_shaped[..., 0] - x_shaped[..., 1] * rope_cache_shaped[..., 1],
+            x_shaped[..., 1] * rope_cache_shaped[..., 0] + x_shaped[..., 0] * rope_cache_shaped[..., 1],
+        ], -1)
+        x_out_manual = x_out_manual.flatten(3).type_as(muse_q_before_rope)  # [b, s, n_h, h_d]
+        
+        # Compare manual computation with hooked output
+        rope_diff = (muse_q_after_rope_hooked - x_out_manual).abs()
+        max_rope_diff = rope_diff.max().item()
+        mean_rope_diff = rope_diff.mean().item()
+        
+        print(f"    Manual RoPE vs Hooked RoPE:")
+        print(f"      Max diff: {max_rope_diff:.6e}, Mean diff: {mean_rope_diff:.6e}")
+        if max_rope_diff < 1e-5:
+            print(f"      ✓ Muse RoPE implementation is correct!")
+        else:
+            print(f"      ⚠️  Muse RoPE implementation may have issues!")
+            print(f"      Sample values:")
+            print(f"        Hooked q[0, 0, 0, :5]: {muse_q_after_rope_hooked[0, 0, 0, :5].float().cpu().numpy()}")
+            print(f"        Manual q[0, 0, 0, :5]: {x_out_manual[0, 0, 0, :5].float().cpu().numpy()}")
+            
+            # Check RoPE cache values
+            print(f"      RoPE cache info:")
+            print(f"        Cache shape: {rope_cache.shape}")
+            print(f"        Cache range: [{rope_cache.min().item():.6f}, {rope_cache.max().item():.6f}]")
+            print(f"        Sample cache[0, :3, :]: {rope_cache[0, :3, :].float().cpu().numpy()}")
+    
+    # Show Muse qkv shapes and sample values after RoPE (from attention function inputs)
     if 'q' in muse_attn_fn_inputs:
         muse_q_after_rope = muse_attn_fn_inputs['q'].to(device=device, dtype=dtype)
         muse_k_after_rope = muse_attn_fn_inputs['k'].to(device=device, dtype=dtype)
         muse_v_after_rope = muse_attn_fn_inputs['v'].to(device=device, dtype=dtype)
         
-        print("  Muse qkv after RoPE:")
+        print(f"\n  Muse qkv after RoPE (from attention function inputs):")
         print(f"    q shape: {muse_q_after_rope.shape}, range: [{muse_q_after_rope.min().item():.6f}, {muse_q_after_rope.max().item():.6f}]")
         print(f"    k shape: {muse_k_after_rope.shape}, range: [{muse_k_after_rope.min().item():.6f}, {muse_k_after_rope.max().item():.6f}]")
         print(f"    v shape: {muse_v_after_rope.shape}, range: [{muse_v_after_rope.min().item():.6f}, {muse_v_after_rope.max().item():.6f}]")
@@ -742,6 +836,29 @@ def test_qwen3_logits_align_with_hf_checkpoint():
         # Sample values for debugging
         print(f"    Sample q[0, 0, 0, :5]: {muse_q_after_rope[0, 0, 0, :5].float().cpu().numpy()}")
         print(f"    Sample k[0, 0, 0, :5]: {muse_k_after_rope[0, 0, 0, :5].float().cpu().numpy()}")
+        
+        # Compare with hooked RoPE output if available
+        if 'q_after_rope' in muse_rope_outputs:
+            muse_q_after_rope_hooked = muse_rope_outputs['q_after_rope'].to(device=device, dtype=dtype)
+            # Note: hooked output is [b, s, n_h, h_d] (from RoPE forward)
+            # attention function input is [b, n_h, s, h_d] (after transpose in Qwen3Attention)
+            # Need to transpose for comparison
+            muse_q_after_rope_hooked_transposed = muse_q_after_rope_hooked.transpose(1, 2)  # [b, n_h, s, h_d]
+            
+            qkv_diff = (muse_q_after_rope - muse_q_after_rope_hooked_transposed).abs()
+            max_qkv_diff = qkv_diff.max().item()
+            mean_qkv_diff = qkv_diff.mean().item()
+            
+            print(f"\n    Comparing attention function input q with hooked RoPE output (transposed):")
+            print(f"      Attention function q shape: {muse_q_after_rope.shape}")
+            print(f"      Hooked RoPE output (transposed) shape: {muse_q_after_rope_hooked_transposed.shape}")
+            print(f"      Max diff: {max_qkv_diff:.6e}, Mean diff: {mean_qkv_diff:.6e}")
+            if max_qkv_diff < 1e-4:
+                print(f"      ✓ q values match between RoPE output and attention function input!")
+            else:
+                print(f"      ⚠️  q values don't match - checking if this is expected...")
+                print(f"      Sample attention function q[0, 0, 0, :5]: {muse_q_after_rope[0, 0, 0, :5].float().cpu().numpy()}")
+                print(f"      Sample hooked RoPE q (transposed)[0, 0, 0, :5]: {muse_q_after_rope_hooked_transposed[0, 0, 0, :5].float().cpu().numpy()}")
         
         print("  Note: HF qkv after RoPE cannot be directly captured, but we'll verify via attention computation")
     else:
