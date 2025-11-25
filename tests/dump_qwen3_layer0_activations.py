@@ -69,7 +69,6 @@ def _build_qwen3_config(hf_cfg):
 
 def dump_hf_layer0_activations(hf_model, model_inputs, output_dir):
     """Dump HF model Layer 0 activations."""
-    import os
     
     hf_activations = {}
     
@@ -294,7 +293,6 @@ def dump_layer0_activations(checkpoint_dir, output_dir="layer0_dumps", prompt=No
     muse_model.eval()
     
     # Ensure eager attention
-    import os
     os.environ["TRANSFORMERS_ATTENTION_IMPLEMENTATION"] = "eager"
     hf_model.config._attn_implementation = "eager"
     hf_model.eval()
