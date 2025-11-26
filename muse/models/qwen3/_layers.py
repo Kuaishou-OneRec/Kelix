@@ -215,9 +215,7 @@ class Qwen3Attention(nn.Module):
 
         # Normalize q
         if self.q_norm is not None:
-            q = q.transpose(1, 2)
             q = self.q_norm(q)
-            q = q.transpose(1, 2)
 
         # Apply positional embeddings after q-norm
         if self.pos_embeddings is not None:
@@ -245,9 +243,7 @@ class Qwen3Attention(nn.Module):
 
             # Normalize k
             if self.k_norm is not None:
-                k = k.transpose(1, 2)
                 k = self.k_norm(k)
-                k = k.transpose(1, 2)
 
             # Apply positional embeddings after k-norm
             if self.pos_embeddings is not None:
@@ -270,12 +266,6 @@ class Qwen3Attention(nn.Module):
             v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
 
         # Print q, k, v shapes and contents
-        print(f"q shape: {q.shape}")
-        print(f"q content:\n{q}")
-        print(f"k shape: {k.shape}")
-        print(f"k content:\n{k}")
-        print(f"v shape: {v.shape}")
-        print(f"v content:\n{v}")
 
         output = self._attention_function(
             q,
