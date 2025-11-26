@@ -98,6 +98,10 @@ class Qwen3Config(ModelConfig):
         default=10000.0,
         description="RoPE theta parameter"
     )
+    rope_impl: Literal["llama", "hf"] = Field(
+        default="llama",
+        description="RoPE implementation style: 'llama' (interleaved cos/sin) or 'hf' (separated cos/sin)"
+    )
     
     # Normalization
     norm_eps: float = Field(

@@ -63,7 +63,7 @@ class MultiHeadAttention(nn.Module):
         k_proj (nn.Module): projection layer for key.
         v_proj (nn.Module): projection layer for value.
         output_proj (nn.Module): projection layer for output.
-        pos_embeddings (Optional[nn.Module]): positional embeddings layer, e.g. RotaryPositionalEmbeddings.
+        pos_embeddings (Optional[nn.Module]): positional embeddings layer, e.g. RotaryPositionalEmbeddings or LlamaRotaryPositionalEmbeddings.
         q_norm (Optional[nn.Module]): normalization layer for query, e.g. RMSNorm. For decoding, this is applied
             before updating from kv_cache. This means it will only support token wide normalization and not
             batch or sequence wide normalization.

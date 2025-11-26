@@ -10,8 +10,10 @@ import torch
 from torch import nn
 
 
-class RotaryPositionalEmbeddings(nn.Module):
+class LlamaRotaryPositionalEmbeddings(nn.Module):
     """
+    Llama-style Rotary Positional Embeddings (RoPE).
+
     This class implements Rotary Positional Embeddings (RoPE)
     proposed in https://arxiv.org/abs/2104.09864.
 
@@ -21,6 +23,9 @@ class RotaryPositionalEmbeddings(nn.Module):
 
     In this implementation we cache the embeddings for each position upto
     ``max_seq_len`` by computing this during init.
+
+    This is the Llama-style implementation where cos and sin are interleaved
+    in the dimension.
 
     Args:
         dim (int): Embedding dimension. This is usually set to the dim of each
@@ -122,6 +127,138 @@ class RotaryPositionalEmbeddings(nn.Module):
         return x_out.type_as(x)
 
 
+class RotaryPositionalEmbeddings(nn.Module):
+    """
+    Rotary Positional Embeddings (RoPE).
+
+    This class implements Rotary Positional Embeddings (RoPE)
+    proposed in https://arxiv.org/abs/2104.09864.
+
+    This implementation uses separated cos and sin (upper half for cos, lower half for sin),
+    which is different from the Llama-style interleaved implementation.
+
+    Reference implementation can be found in HuggingFace transformers:
+    https://github.com/huggingface/transformers/blob/main/src/transformers/models/qwen3/modeling_qwen3.py
+
+    Args:
+        dim (int): Embedding dimension. This is usually set to the dim of each
+            head in the attention module computed as ``embed_dim // num_heads``
+        max_seq_len (int): Maximum expected sequence length for the
+            model, if exceeded the cached freqs will be recomputed
+        base (int): The base for the geometric progression used to compute
+            the rotation angles
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        max_seq_len: int = 4096,
+        base: int = 10_000,
+    ) -> None:
+        super().__init__()
+        self.dim = dim
+        self.base = base
+        self.max_seq_len = max_seq_len
+        self.rope_init()
+
+    def rope_init(self):
+        theta = 1.0 / (
+            self.base
+            ** (torch.arange(0, self.dim, 2)[: (self.dim // 2)].float() / self.dim)
+        )
+        self.register_buffer("theta", theta, persistent=False)
+        self.build_rope_cache(self.max_seq_len)
+
+    def build_rope_cache(self, max_seq_len: int = 4096) -> None:
+        """Build RoPE cache for HuggingFace-style (separated) implementation."""
+        # Create position indexes `[0, 1, ..., max_seq_len - 1]`
+        seq_idx = torch.arange(
+            max_seq_len, dtype=self.theta.dtype, device=self.theta.device
+        )
+
+        # Outer product of theta and position index; output tensor has
+        # a shape of [max_seq_len, dim // 2]
+        idx_theta = torch.einsum("i, j -> ij", seq_idx, self.theta).float()
+
+        # For HF style: concatenate freqs to get [max_seq_len, dim]
+        # This matches HF's implementation: emb = torch.cat((freqs, freqs), dim=-1)
+        freqs = torch.cat([idx_theta, idx_theta], dim=-1)  # [max_seq_len, dim]
+
+        # cache includes both the cos and sin components
+        # output shape is [max_seq_len, dim, 2] where [..., 0] is cos and [..., 1] is sin
+        cos = torch.cos(freqs)
+        sin = torch.sin(freqs)
+        cache = torch.stack([cos, sin], dim=-1)  # [max_seq_len, dim, 2]
+        self.register_buffer("cache", cache, persistent=False)
+
+    @staticmethod
+    def rotate_half(x: torch.Tensor) -> torch.Tensor:
+        """Rotates half the hidden dims of the input.
+        
+        Args:
+            x: Input tensor with shape [..., h_d]
+            
+        Returns:
+            Rotated tensor with shape [..., h_d]
+        """
+        x1 = x[..., : x.shape[-1] // 2]
+        x2 = x[..., x.shape[-1] // 2 :]
+        return torch.cat((-x2, x1), dim=-1)
+
+    def forward(
+        self, x: torch.Tensor, *, input_pos: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): input tensor with shape
+                ``[b, s, n_h, h_d]``
+            input_pos (Optional[torch.Tensor]): Optional tensor which contains the position ids
+                of each token. During training, this is used to indicate the positions
+                of each token relative to its sample when packed, shape [b, s].
+                During inference, this indicates the position of the current token.
+                If none, assume the index of the token is its position id. Default is None.
+
+        Returns:
+            torch.Tensor: output tensor with shape ``[b, s, n_h, h_d]``
+
+        Notation used for tensor shapes:
+            - b: batch size
+            - s: sequence length
+            - n_h: num heads
+            - h_d: head dim
+        """
+        # input tensor has shape [b, s, n_h, h_d]
+        b, seq_len, n_h, h_d = x.shape
+
+        # extract the values based on whether input_pos is set or not
+        # cache shape: [max_seq_len, h_d, 2]
+        if input_pos is None:
+            # Use sequential positions [0, 1, ..., seq_len-1]
+            rope_cache = self.cache[:seq_len]  # [s, h_d, 2]
+            # Expand to [1, s, 1, h_d, 2] for broadcasting
+            rope_cache = rope_cache.unsqueeze(0).unsqueeze(2)  # [1, s, 1, h_d, 2]
+        else:
+            # input_pos shape: [b, s] - each element is a position index
+            # Index cache for each position: [b, s, h_d, 2]
+            rope_cache = self.cache[input_pos]  # [b, s, h_d, 2]
+            # Expand to [b, s, 1, h_d, 2] for broadcasting
+            rope_cache = rope_cache.unsqueeze(2)  # [b, s, 1, h_d, 2]
+
+        # Separate cos and sin
+        # rope_cache shape: [b, s, 1, h_d, 2] or [1, s, 1, h_d, 2]
+        cos = rope_cache[..., 0]  # [b, s, 1, h_d] or [1, s, 1, h_d]
+        sin = rope_cache[..., 1]  # [b, s, 1, h_d] or [1, s, 1, h_d]
+
+        # Cast to float for computation
+        x_float = x.float()
+
+        # Apply RoPE: x_embed = (x * cos) + (rotate_half(x) * sin)
+        x_rotated = self.rotate_half(x_float)
+        x_out = (x_float * cos) + (x_rotated * sin)
+
+        return x_out.type_as(x)
+
+
 class VisionRotaryPositionalEmbeddings(nn.Module):
     """
     This class implements two-dimensional Rotary Positional Embeddings (RoPE) for images
@@ -138,7 +275,7 @@ class VisionRotaryPositionalEmbeddings(nn.Module):
             E.g. for ``patch_size=40``, a tile of shape (400, 400) will have 10x10 grid of patches.
         tile_size (int): The size of your image tiles, if the image was tile-cropped in advance. Otherwise,
             the size of the full input image. In this case, the function will consider your image as a single tile.
-        dim (int): Embedding dimension. Unlike :class:`~torchtune.modules.RotaryPositionalEmbeddings`, this is
+        dim (int): Embedding dimension. Unlike :class:`~muse.layers.position_embeddings.RotaryPositionalEmbeddings`, this is
             usually set to the dim of each head in the attention module divided by 2, computed as
             ``embed_dim // num_heads // 2``. The divide by 2 accounts for x and y positions.
         base (int): The base for the geometric progression used to compute
@@ -220,7 +357,7 @@ class VisionRotaryPositionalEmbeddings(nn.Module):
         Args:
             x (torch.Tensor): input tensor with shape ``[b, s, n_h, h_d]``
             **kwargs (Any): additional keyword arguments. This is kept to match the forward signature of
-                :class:`~torchtune.modules.RotaryPositionalEmbeddings`.
+                :class:`~muse.layers.position_embeddings.RotaryPositionalEmbeddings`.
 
         Returns:
             torch.Tensor: output tensor with shape ``[b, s, n_h, h_d]``
