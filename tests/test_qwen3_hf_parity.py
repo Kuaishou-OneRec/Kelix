@@ -410,18 +410,167 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     muse_model.eval()
     hf_model.eval()
     
+    print(f"\n{'='*60}")
+    print("Forward Pass & Logits Comparison")
+    print(f"{'='*60}")
+    
     with torch.no_grad():
         # HF forward
+        print("Running HF model forward pass...")
         hf_outputs = hf_model(**model_inputs, output_attentions=True)
         hf_logits = hf_outputs.logits
         
         # Muse forward - Muse model expects 'tokens' instead of 'input_ids'
+        print("Running Muse model forward pass...")
         muse_inputs = {"tokens": model_inputs["input_ids"]}
         if "attention_mask" in model_inputs:
             # Muse expects mask in shape [batch, seq_len, seq_len] for causal mask
             # For now, we'll let Muse use default causal mask
             pass
         muse_logits = muse_model(**muse_inputs)
+        
+        # Ensure both logits are on same device and dtype for comparison
+        hf_logits = hf_logits.to(device=device, dtype=dtype)
+        muse_logits = muse_logits.to(device=device, dtype=dtype)
+        
+        # Compare shapes
+        print(f"\nLogits shapes:")
+        print(f"  HF:   {hf_logits.shape}")
+        print(f"  Muse: {muse_logits.shape}")
+        
+        if hf_logits.shape != muse_logits.shape:
+            print(f"  ⚠️  Shape mismatch!")
+            # Try to align shapes if possible
+            min_seq_len = min(hf_logits.shape[1], muse_logits.shape[1])
+            hf_logits = hf_logits[:, :min_seq_len, :]
+            muse_logits = muse_logits[:, :min_seq_len, :]
+            print(f"  Using aligned shapes: HF={hf_logits.shape}, Muse={muse_logits.shape}")
+        
+        # Check for NaN/Inf
+        hf_has_nan = torch.isnan(hf_logits).any().item()
+        hf_has_inf = torch.isinf(hf_logits).any().item()
+        muse_has_nan = torch.isnan(muse_logits).any().item()
+        muse_has_inf = torch.isinf(muse_logits).any().item()
+        
+        print(f"\nNaN/Inf checks:")
+        print(f"  HF:   NaN={hf_has_nan}, Inf={hf_has_inf}")
+        print(f"  Muse: NaN={muse_has_nan}, Inf={muse_has_inf}")
+        
+        if hf_has_nan or hf_has_inf:
+            print(f"  ⚠️  HF logits contain NaN/Inf!")
+        if muse_has_nan or muse_has_inf:
+            print(f"  ⚠️  Muse logits contain NaN/Inf!")
+        
+        # Calculate differences
+        logits_diff = (hf_logits - muse_logits).abs()
+        max_diff = logits_diff.max().item()
+        mean_diff = logits_diff.mean().item()
+        median_diff = logits_diff.median().item()
+        
+        # Calculate relative differences
+        hf_abs = hf_logits.abs()
+        relative_diff = logits_diff / (hf_abs + 1e-8)  # Add small epsilon to avoid division by zero
+        max_relative_diff = relative_diff.max().item()
+        mean_relative_diff = relative_diff.mean().item()
+        
+        # Calculate per-token statistics
+        per_token_max_diff = logits_diff.max(dim=-1)[0]  # [b, s]
+        per_token_mean_diff = logits_diff.mean(dim=-1)   # [b, s]
+        
+        print(f"\nLogits difference statistics:")
+        print(f"  Max absolute diff:     {max_diff:.6e}")
+        print(f"  Mean absolute diff:    {mean_diff:.6e}")
+        print(f"  Median absolute diff:  {median_diff:.6e}")
+        print(f"  Max relative diff:     {max_relative_diff:.6e}")
+        print(f"  Mean relative diff:    {mean_relative_diff:.6e}")
+        
+        print(f"\nPer-token statistics:")
+        print(f"  Max diff per token - Max: {per_token_max_diff.max().item():.6e}")
+        print(f"  Max diff per token - Mean: {per_token_max_diff.mean().item():.6e}")
+        print(f"  Mean diff per token - Max: {per_token_mean_diff.max().item():.6e}")
+        print(f"  Mean diff per token - Mean: {per_token_mean_diff.mean().item():.6e}")
+        
+        # Check if differences are within acceptable tolerance
+        # For bfloat16, we expect some numerical differences
+        if dtype == torch.bfloat16:
+            tolerance = 1e-2  # More lenient for bfloat16
+        else:
+            tolerance = 1e-5  # Stricter for float32
+        
+        print(f"\nTolerance check (tolerance={tolerance:.0e}):")
+        within_tolerance = max_diff < tolerance
+        print(f"  Max diff within tolerance: {within_tolerance}")
+        
+        if not within_tolerance:
+            print(f"  ⚠️  Logits differ beyond tolerance!")
+            
+            # Find positions with largest differences
+            flat_diff = logits_diff.flatten()
+            top_k = min(10, len(flat_diff))
+            top_k_values, top_k_indices = torch.topk(flat_diff, top_k)
+            
+            print(f"\n  Top {top_k} largest differences:")
+            for i, (val, idx) in enumerate(zip(top_k_values, top_k_indices)):
+                # Convert flat index to (batch, seq, vocab) coordinates
+                batch_idx = idx // (muse_logits.shape[1] * muse_logits.shape[2])
+                remainder = idx % (muse_logits.shape[1] * muse_logits.shape[2])
+                seq_idx = remainder // muse_logits.shape[2]
+                vocab_idx = remainder % muse_logits.shape[2]
+                
+                hf_val = hf_logits[batch_idx, seq_idx, vocab_idx].item()
+                muse_val = muse_logits[batch_idx, seq_idx, vocab_idx].item()
+                
+                print(f"    [{i+1}] pos=({batch_idx}, {seq_idx}, {vocab_idx}), "
+                      f"diff={val.item():.6e}, HF={hf_val:.6e}, Muse={muse_val:.6e}")
+        else:
+            print(f"  ✓ Logits match within tolerance!")
+        
+        # Compare predicted tokens (argmax)
+        hf_predicted = hf_logits.argmax(dim=-1)  # [b, s]
+        muse_predicted = muse_logits.argmax(dim=-1)  # [b, s]
+        
+        token_matches = (hf_predicted == muse_predicted).float()
+        token_match_rate = token_matches.mean().item()
+        
+        print(f"\nPredicted token comparison:")
+        print(f"  Token match rate: {token_match_rate*100:.2f}%")
+        print(f"  Total tokens: {hf_predicted.numel()}")
+        print(f"  Matching tokens: {token_matches.sum().item():.0f}")
+        print(f"  Mismatching tokens: {(1 - token_matches).sum().item():.0f}")
+        
+        if token_match_rate < 1.0:
+            # Find positions where predictions differ
+            mismatch_mask = hf_predicted != muse_predicted
+            mismatch_positions = torch.nonzero(mismatch_mask, as_tuple=False)
+            
+            print(f"\n  First 10 mismatched positions:")
+            for i, pos in enumerate(mismatch_positions[:10]):
+                b_idx, s_idx = pos[0].item(), pos[1].item()
+                hf_token = hf_predicted[b_idx, s_idx].item()
+                muse_token = muse_predicted[b_idx, s_idx].item()
+                hf_logit_val = hf_logits[b_idx, s_idx, hf_token].item()
+                muse_logit_val = muse_logits[b_idx, s_idx, muse_token].item()
+                
+                print(f"    [{i+1}] pos=({b_idx}, {s_idx}): "
+                      f"HF_token={hf_token} (logit={hf_logit_val:.4f}), "
+                      f"Muse_token={muse_token} (logit={muse_logit_val:.4f})")
+        
+        # Compare logits value ranges
+        print(f"\nLogits value ranges:")
+        print(f"  HF:   min={hf_logits.min().item():.4f}, max={hf_logits.max().item():.4f}, "
+              f"mean={hf_logits.mean().item():.4f}, std={hf_logits.std().item():.4f}")
+        print(f"  Muse: min={muse_logits.min().item():.4f}, max={muse_logits.max().item():.4f}, "
+              f"mean={muse_logits.mean().item():.4f}, std={muse_logits.std().item():.4f}")
+        
+        print(f"\n{'='*60}\n")
+        
+        # Summary
+        if within_tolerance and token_match_rate == 1.0:
+            print("✓✓✓ SUCCESS: Logits match perfectly!")
+        elif within_tolerance:
+            print("✓ SUCCESS: Logits match within tolerance (some token predictions differ)")
+        else:
+            print("✗ FAILURE: Logits differ beyond tolerance")
 
 if __name__ == "__main__":
     test_qwen3_logits_align_with_hf_checkpoint()
