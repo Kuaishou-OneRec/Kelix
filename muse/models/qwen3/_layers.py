@@ -269,6 +269,14 @@ class Qwen3Attention(nn.Module):
             k = k.unsqueeze(2).expand(expand_shape).flatten(1, 2)
             v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
 
+        # Print q, k, v shapes and contents
+        print(f"q shape: {q.shape}")
+        print(f"q content:\n{q}")
+        print(f"k shape: {k.shape}")
+        print(f"k content:\n{k}")
+        print(f"v shape: {v.shape}")
+        print(f"v content:\n{v}")
+
         output = self._attention_function(
             q,
             k,
