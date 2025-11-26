@@ -249,12 +249,9 @@ class RotaryPositionalEmbeddings(nn.Module):
         cos = rope_cache[..., 0]  # [b, s, 1, h_d] or [1, s, 1, h_d]
         sin = rope_cache[..., 1]  # [b, s, 1, h_d] or [1, s, 1, h_d]
 
-        # Cast to float for computation
-        x_float = x.float()
-
         # Apply RoPE: x_embed = (x * cos) + (rotate_half(x) * sin)
-        x_rotated = self.rotate_half(x_float)
-        x_out = (x_float * cos) + (x_rotated * sin)
+        x_rotated = self.rotate_half(x)
+        x_out = (x * cos) + (x_rotated * sin)
 
         return x_out.type_as(x)
 
