@@ -554,7 +554,7 @@ def test_checkpint():
         model = Qwen3Model.from_pretrained(checkpoint_dir)
     
         # load the tokenizer and the model
-    tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir)
+    tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_dir)
     hf_model = AutoModelForCausalLM.from_pretrained(
         hf_checkpoint_dir,
         torch_dtype=torch.bfloat16,
