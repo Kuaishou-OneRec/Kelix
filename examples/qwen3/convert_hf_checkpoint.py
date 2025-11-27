@@ -75,6 +75,21 @@ def convert_hf_checkpoint(hf_checkpoint_path: str,
     state_dict = model.convert_hf_state_dict(hf_model.state_dict())
 
     model.load_state_dict(state_dict)
+    device = next(hf_model.parameters()).device
+    dtype = next(hf_model.parameters()).dtype
+
+    model = model.to(device=device, dtype=dtype)
+    
+    # Double-check that all parameters are in the correct dtype
+    for name, param in model.named_parameters():
+        if param.dtype != dtype:
+            print(f"Warning: Parameter {name} has dtype {param.dtype}, expected {dtype}")
+            param.data = param.data.to(dtype=dtype)
+    
+    for name, buffer in model.named_buffers():
+        if buffer.dtype != dtype:
+            print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
+            buffer.data = buffer.data.to(dtype=dtype)
 
     tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_path)
     # prepare the model input
