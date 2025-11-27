@@ -594,19 +594,29 @@ def test_checkpint():
             print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
             # buffer.data = buffer.data.to(dtype=dtype)
 
-    model = model.to(device=device, dtype=dtype)
+    model = model.to(device=device)
     
+    # # Double-check that all parameters are in the correct dtype
+    # for name, param in model.named_parameters():
+    #     if param.dtype != dtype:
+    #         print(f"Warning: Parameter {name} has dtype {param.dtype}, expected {dtype}")
+    #         param.data = param.data.to(dtype=dtype)
+    
+    # for name, buffer in model.named_buffers():
+    #     if buffer.dtype != dtype:
+    #         print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
+    #         buffer.data = buffer.data.to(dtype=dtype)
+
     # Double-check that all parameters are in the correct dtype
     for name, param in model.named_parameters():
         if param.dtype != dtype:
             print(f"Warning: Parameter {name} has dtype {param.dtype}, expected {dtype}")
-            param.data = param.data.to(dtype=dtype)
+            # param.data = param.data.to(dtype=dtype)
     
     for name, buffer in model.named_buffers():
         if buffer.dtype != dtype:
             print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
-            buffer.data = buffer.data.to(dtype=dtype)
-
+            # buffer.data = buffer.data.to(dtype=dtype)
 
     # Ensure eager attention is used
     hf_model.config._attn_implementation = "eager"
