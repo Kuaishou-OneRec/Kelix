@@ -36,6 +36,7 @@ process_group_timeout = datetime.timedelta(minutes=60*24)
 
 # Muse imports
 from muse.models import get_model_class, list_models
+from muse.config.model_config import ModelConfig
 from muse.training.distributed import (
     shard_model, 
     load_from_full_model_state_dict,
@@ -79,11 +80,8 @@ def get_argument_parser():
   parser = argparse.ArgumentParser()
 
   ############ Model args ############
-  parser.add_argument("--model-class", type=str, default="Qwen3Model",
-                      help="The model class name registered in muse.models.",)
-
   parser.add_argument("--model-config", type=str, default=None,
-                      help="The config file path of the model to train, e.g. model_dir/config.json")
+                      help="The config file path of the model to train (required for train from scratch), e.g. model_dir/config.json")
 
   ############ Dataset args ############
   parser.add_argument("--dataset-class", type=str, default=None,
@@ -109,7 +107,7 @@ def get_argument_parser():
 
   ############ Checkpoint args ############
   parser.add_argument("--model-dir", type=str, default=None,
-                      help="The directory of the pretrained model.")
+                      help="The directory of the pretrained model (required for continue pretrain).")
 
   parser.add_argument("--checkpoint-dir", type=str, default=None,
                       help="Specify the checkpoint directory to resume from.")
@@ -287,7 +285,29 @@ def train():
     dataset_config = json.loads(f.read())
 
   dataset = dataset_config.pop("name")
-  dataset_config["model_class"] = args.model_class
+  
+  # Determine training mode and get model_class
+  if args.model_dir:
+    # Continue pretrain mode: get model_class from model_dir/config.json
+    model_config_path = Path(args.model_dir) / "config.json"
+    if not model_config_path.exists():
+      raise FileNotFoundError(
+        f"Config file not found: {model_config_path}. "
+        f"Cannot continue pretrain without config.json in {args.model_dir}"
+      )
+    model_config = ModelConfig.load(str(model_config_path))
+  elif args.model_config:
+    # Train from scratch mode: get model_class from model_config
+    model_config = ModelConfig.load(args.model_config)
+  else:
+    raise ValueError(
+      "Either --model-dir (for continue pretrain) or --model-config "
+      "(for train from scratch) must be provided."
+    )
+
+  model_class_name = model_config.model_class
+  dataset_config["model_class"] = model_class_name
+  
   if args.max_length:
     dataset_config["max_length"] = args.max_length
   
@@ -322,28 +342,31 @@ def train():
 
   # Get model class from registry
   print_rank_0(f"Available models: {list_models()}")
-  print_rank_0(f"Loading model class: {args.model_class}")
+  print_rank_0(f"Loading model class: {model_class_name}")
   
   try:
-    model_cls = get_model_class(args.model_class)
+    model_cls = get_model_class(model_class_name)
     print_rank_0(f"Get model class: {model_cls.__name__}")
   except KeyError:
     print_rank_0(
-      f"Unavailable model: {args.model_class}, " \
+      f"Unavailable model: {model_class_name}, " \
       f"please choose from available models: {list_models()}")
     return
 
-  # Load state dict and convert using model's converter
+  # Load state dict and convert using model's converter (only for continue pretrain)
   state_dict = None
   
-  if args.model_dir and dist.get_rank() == 0:
-    with set_default_dtype(args.model_dtype):
-      print_rank_0(f"Loading checkpoint from: {args.model_dir}")
-      hf_state_dict = load_hf_checkpoint(args.model_dir)
-      # convert hf_state_dict to model_cls state_dict
-      state_dict = model_cls.convert_hf_state_dict(hf_state_dict)
-
-  dist.barrier()
+  if args.model_dir:
+    # Continue pretrain: load weights from checkpoint
+    if dist.get_rank() == 0:
+      with set_default_dtype(args.model_dtype):
+        print_rank_0(f"Loading checkpoint from: {args.model_dir}")
+        state_dict = load_hf_checkpoint(args.model_dir)
+    dist.barrier()
+  else:
+    # Train from scratch: no weights to load
+    state_dict = None
+    dist.barrier()
 
   # TODO: support wandb
   tb_writer = None
@@ -355,9 +378,10 @@ def train():
 
   # Instantiate model on meta device
   with set_default_dtype(args.model_dtype), torch.device("meta"):
-    # don't load weights, only instantiate model from model_dir/config.json
-    model = model_cls.from_pretrained(args.model_dir, load_weights=False)
-    print_rank_0(f"Model instantiated: {type(model).__name__}")
+    # Train from scratch: create model with random initialization
+    print_rank_0(f"Creating model from config: {args.model_config}")
+    model = model_cls(model_config)
+    print_rank_0(f"Model instantiated from config: {type(model).__name__}")
   
   if args.enable_gradient_checkpointing:
     print_rank_0("Enable gradient checkpointing")
@@ -382,12 +406,13 @@ def train():
   )
   dist.barrier()
 
-  with Timer("Load state dict"):
-    # Convert meta tensors to CUDA tensors
-    load_from_full_model_state_dict(
-      model=model, full_sd=state_dict,
-      allow_random_init_params=args.allow_random_init_params
-    )
+  if state_dict is not None:
+    with Timer("Load state dict"):
+      # Convert meta tensors to CUDA tensors
+      load_from_full_model_state_dict(
+        model=model, full_sd=state_dict,
+        allow_random_init_params=args.allow_random_init_params
+      )
 
   with torch.device(torch.cuda.current_device()):
     for m in model.modules():

@@ -68,9 +68,6 @@ def _build_qwen3_config(hf_cfg: Dict[str, Any]) -> Qwen3Config:
 
 def test_qwen3_logits_align_with_hf_checkpoint():
     """Ensure Muse Qwen3 logits match the Hugging Face reference model."""
-    # checkpoint_dir = os.environ.get(CHECKPOINT_ENV)
-    # if not checkpoint_dir:
-    #     pytest.skip(f"{CHECKPOINT_ENV} environment variable is not set.")
     torch.manual_seed(0)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(0)
@@ -99,14 +96,6 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     )
     model_inputs = tokenizer([text], return_tensors="pt").to(hf_model.device)
 
-    # conduct text completion
-    # generated_ids = hf_model.generate(
-    #     **model_inputs,
-    #     max_new_tokens=32768
-    # )
-    # output_ids = generated_ids[0][len(model_inputs.input_ids[0]):].tolist() 
-
-
     hf_state_dict = hf_model.state_dict()
     hf_config_dict = hf_model.config.to_dict()
 
@@ -117,10 +106,9 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     dtype = next(hf_model.parameters()).dtype
     
     # Create Muse model with correct dtype
-    with set_default_dtype("bfloat16" if dtype == torch.bfloat16 else "float32"):
+    model_dtype = torch.bfloat16 if dtype == torch.bfloat16 else torch.float32
+    with set_default_dtype(model_dtype):
         muse_model = Qwen3Model(muse_config)
-    
-    print(muse_config, hf_config_dict)
 
     # Convert and load state dict
     state_dict = muse_model.convert_hf_state_dict(hf_state_dict)
@@ -141,9 +129,6 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     # Find missing and extra keys
     missing_in_converted = muse_expected_keys - converted_keys
     extra_in_converted = converted_keys - muse_expected_keys
-    skipped_keys = set(hf_state_dict.keys()) - set(
-        muse_model.convert_hf_state_dict(hf_state_dict).keys()
-    )
     
     if missing_in_converted:
         print(f"\n⚠️  Missing keys in converted state dict ({len(missing_in_converted)}):")
@@ -158,13 +143,6 @@ def test_qwen3_logits_align_with_hf_checkpoint():
             print(f"  - {key}")
         if len(extra_in_converted) > 20:
             print(f"  ... and {len(extra_in_converted) - 20} more")
-    
-    if skipped_keys:
-        print(f"\nℹ️  Skipped keys during conversion ({len(skipped_keys)}):")
-        for key in sorted(list(skipped_keys))[:20]:
-            print(f"  - {key}")
-        if len(skipped_keys) > 20:
-            print(f"  ... and {len(skipped_keys) - 20} more")
     
     # Convert state dict tensors to target dtype and device
     for key, tensor in state_dict.items():
@@ -417,16 +395,12 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     with torch.no_grad():
         # HF forward
         print("Running HF model forward pass...")
-        hf_outputs = hf_model(**model_inputs, output_attentions=True)
+        hf_outputs = hf_model(**model_inputs)
         hf_logits = hf_outputs.logits
         
         # Muse forward - Muse model expects 'tokens' instead of 'input_ids'
         print("Running Muse model forward pass...")
         muse_inputs = {"tokens": model_inputs["input_ids"]}
-        if "attention_mask" in model_inputs:
-            # Muse expects mask in shape [batch, seq_len, seq_len] for causal mask
-            # For now, we'll let Muse use default causal mask
-            pass
         muse_logits = muse_model(**muse_inputs)
         
         # Ensure both logits are on same device and dtype for comparison

@@ -18,12 +18,13 @@ from torch.utils._foreach_utils import (
 )
 
 @contextlib.contextmanager
-def set_default_dtype(dtype: str) -> Generator[None, None, None]:
+def set_default_dtype(dtype: Union[str, torch.dtype]) -> Generator[None, None, None]:
     """
     Context manager to set torch's default dtype.
 
     Args:
-        dtype (torch.dtype): The desired default dtype inside the context manager.
+        dtype (Union[str, torch.dtype]): The desired default dtype inside the context manager.
+            Can be either a string ("bfloat16", "float16", "float32") or a torch.dtype.
 
     Returns:
         ContextManager: context manager for setting default dtype.
@@ -33,17 +34,27 @@ def set_default_dtype(dtype: str) -> Generator[None, None, None]:
         >>>     x = torch.tensor([1, 2, 3])
         >>>     x.dtype
         torch.bfloat16
+        
+        >>> with set_default_dtype("bfloat16"):
+        >>>     x = torch.tensor([1, 2, 3])
+        >>>     x.dtype
+        torch.bfloat16
 
     """
-    if dtype == "bfloat16":
-        dtype = torch.bfloat16
-    elif dtype == "float16":
-        dtype = torch.float16
-    elif dtype == "float32":
-        dtype = torch.float32
-    else:
-        raise ValueError(f"Invalid dtype: {dtype}")
-
+    # Convert string to torch.dtype if needed
+    if isinstance(dtype, str):
+        dtype_map = {
+            "bfloat16": torch.bfloat16,
+            "float16": torch.float16,
+            "float32": torch.float32,
+        }
+        if dtype not in dtype_map:
+            raise ValueError(
+                f"Invalid dtype string: {dtype}. "
+                f"Supported values: {list(dtype_map.keys())}"
+            )
+        dtype = dtype_map[dtype]
+    
     old_dtype = torch.get_default_dtype()
     torch.set_default_dtype(dtype)
     try:
