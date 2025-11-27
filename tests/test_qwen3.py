@@ -551,7 +551,6 @@ def test_checkpint():
     checkpoint_dir = "/llm_reco_ssd/zhouyang12/models/muse/Qwen3-8B-Base"
     with set_default_dtype(torch.bfloat16):
         model = Qwen3Model.from_pretrained(checkpoint_dir)
-    model.to(device="cuda")
     
     # load the tokenizer and the model
     tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_dir)
@@ -574,6 +573,22 @@ def test_checkpint():
         enable_thinking=True # Switches between thinking and non-thinking modes. Default is True.
     )
     model_inputs = tokenizer([text], return_tensors="pt").to(hf_model.device)
+
+    device = next(hf_model.parameters()).device
+    dtype = next(hf_model.parameters()).dtype
+
+    model = model.to(device=device, dtype=dtype)
+    
+    # Double-check that all parameters are in the correct dtype
+    for name, param in model.named_parameters():
+        if param.dtype != dtype:
+            print(f"Warning: Parameter {name} has dtype {param.dtype}, expected {dtype}")
+            param.data = param.data.to(dtype=dtype)
+    
+    for name, buffer in model.named_buffers():
+        if buffer.dtype != dtype:
+            print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
+            buffer.data = buffer.data.to(dtype=dtype)
 
 
     # Ensure eager attention is used
