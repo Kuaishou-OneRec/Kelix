@@ -10,7 +10,6 @@ import contextlib
 from pathlib import Path
 from safetensors import torch as safetensors_torch
 from muse.config.model_config import ModelConfig
-from muse.models import get_model_class
 from muse.training.checkpoint import load_hf_checkpoint
 from muse.training.common import set_default_dtype
 
@@ -59,6 +58,8 @@ class Model(nn.Module):
             )
         
         # Get model class from registry - the model class should know its config type
+        # Import here to avoid circular import
+        from muse.models import get_model_class
         model_cls = get_model_class(model_class_name)
         
         # Try to load config using ModelConfig first
