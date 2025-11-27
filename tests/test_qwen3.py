@@ -588,6 +588,12 @@ def test_checkpint():
             print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
             # buffer.data = buffer.data.to(dtype=dtype)
 
+    for name, buffer in hf_model.named_buffers():
+        print(f"HF Buffer {name} has dtype {buffer.dtype}")
+        if buffer.dtype != dtype:
+            print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
+            # buffer.data = buffer.data.to(dtype=dtype)
+
     model = model.to(device=device, dtype=dtype)
     
     # Double-check that all parameters are in the correct dtype
