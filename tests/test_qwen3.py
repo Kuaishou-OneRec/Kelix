@@ -546,5 +546,80 @@ def test_qwen3_logits_align_with_hf_checkpoint():
         else:
             print("✗ FAILURE: Logits differ beyond tolerance")
 
+def test_checkpint():
+    hf_checkpoint_dir = "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base"
+    checkpoint_dir = "/llm_reco_ssd/zhouyang12/models/muse/Qwen3-8B-Base"
+    hf_model = AutoModelForCausalLM.from_pretrained(hf_checkpoint_dir)
+    with set_default_dtype(torch.bfloat16):
+        model = Qwen3Model.from_pretrained(checkpoint_dir)
+    
+        # load the tokenizer and the model
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint_dir)
+    hf_model = AutoModelForCausalLM.from_pretrained(
+        hf_checkpoint_dir,
+        torch_dtype=torch.bfloat16,
+        device_map="auto"
+    )
+
+    # prepare the model input
+    prompt = "Give me a short introduction to large language model."
+    messages = [
+        {"role": "user", "content": prompt}
+    ]
+
+    text = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
+        enable_thinking=True # Switches between thinking and non-thinking modes. Default is True.
+    )
+    model_inputs = tokenizer([text], return_tensors="pt").to(hf_model.device)
+
+
+    # Ensure eager attention is used
+    hf_model.config._attn_implementation = "eager"
+    
+    # Ensure Muse model uses eager attention
+    model.config.attention_function = "eager"
+
+
+    with torch.no_grad():
+        # HF forward
+        print("Running HF model forward pass...")
+        hf_outputs = hf_model(**model_inputs)
+        hf_logits = hf_outputs.logits
+        
+        # Muse forward - Muse model expects 'tokens' instead of 'input_ids'
+        print("Running Muse model forward pass...")
+        inputs = {"tokens": model_inputs["input_ids"]}
+        logits = model(**inputs)
+
+        # Calculate differences
+        logits_diff = (hf_logits - logits).abs()
+        max_diff = logits_diff.max().item()
+        mean_diff = logits_diff.mean().item()
+        median_diff = logits_diff.median().item()
+        
+        # Calculate relative differences
+        hf_abs = hf_logits.abs()
+        relative_diff = logits_diff / (hf_abs + 1e-8)  # Add small epsilon to avoid division by zero
+        max_relative_diff = relative_diff.max().item()
+        mean_relative_diff = relative_diff.mean().item()
+
+        print(f"Max diff: {max_diff:.6e}")
+        print(f"Mean diff: {mean_diff:.6e}")
+        print(f"Median diff: {median_diff:.6e}")
+        print(f"Max relative diff: {max_relative_diff:.6e}")
+        print(f"Mean relative diff: {mean_relative_diff:.6e}")
+
+        print(f"{'='*60}\n")
+
+        # Summary
+        if max_diff < 1e-5:
+            print("✓✓✓ SUCCESS: Logits match perfectly!")
+        else:
+            print("✗ FAILURE: Logits differ beyond tolerance")
+
 if __name__ == "__main__":
     test_qwen3_logits_align_with_hf_checkpoint()
+    test_checkpint()
