@@ -574,49 +574,9 @@ def test_checkpint():
     )
     model_inputs = tokenizer([text], return_tensors="pt").to(hf_model.device)
 
-    device = next(hf_model.parameters()).device
-    dtype = next(hf_model.parameters()).dtype
-
-    # Double-check that all parameters are in the correct dtype
-    for name, param in model.named_parameters():
-        if param.dtype != dtype:
-            print(f"Warning: Parameter {name} has dtype {param.dtype}, expected {dtype}")
-            # param.data = param.data.to(dtype=dtype)
-    
-    for name, buffer in model.named_buffers():
-        if buffer.dtype != dtype:
-            print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
-            # buffer.data = buffer.data.to(dtype=dtype)
-
-    for name, buffer in hf_model.named_buffers():
-        print(f"HF Buffer {name} has dtype {buffer.dtype}")
-        if buffer.dtype != dtype:
-            print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
-            # buffer.data = buffer.data.to(dtype=dtype)
+    device = "cuda"
 
     model = model.to(device=device)
-    
-    # # Double-check that all parameters are in the correct dtype
-    # for name, param in model.named_parameters():
-    #     if param.dtype != dtype:
-    #         print(f"Warning: Parameter {name} has dtype {param.dtype}, expected {dtype}")
-    #         param.data = param.data.to(dtype=dtype)
-    
-    # for name, buffer in model.named_buffers():
-    #     if buffer.dtype != dtype:
-    #         print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
-    #         buffer.data = buffer.data.to(dtype=dtype)
-
-    # Double-check that all parameters are in the correct dtype
-    for name, param in model.named_parameters():
-        if param.dtype != dtype:
-            print(f"Warning: Parameter {name} has dtype {param.dtype}, expected {dtype}")
-            # param.data = param.data.to(dtype=dtype)
-    
-    for name, buffer in model.named_buffers():
-        if buffer.dtype != dtype:
-            print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
-            # buffer.data = buffer.data.to(dtype=dtype)
 
     # Ensure eager attention is used
     hf_model.config._attn_implementation = "eager"
@@ -664,5 +624,5 @@ def test_checkpint():
 
 
 if __name__ == "__main__":
-    test_qwen3_logits_align_with_hf_checkpoint()
+    #test_qwen3_logits_align_with_hf_checkpoint()
     test_checkpint()
