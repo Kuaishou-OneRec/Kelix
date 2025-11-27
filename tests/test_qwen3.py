@@ -553,7 +553,7 @@ def test_checkpint():
         model = Qwen3Model.from_pretrained(checkpoint_dir)
     model.to(device="cuda")
     
-        # load the tokenizer and the model
+    # load the tokenizer and the model
     tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_dir)
     hf_model = AutoModelForCausalLM.from_pretrained(
         hf_checkpoint_dir,
@@ -619,6 +619,7 @@ def test_checkpint():
             print("✓✓✓ SUCCESS: Logits match perfectly!")
         else:
             print("✗ FAILURE: Logits differ beyond tolerance")
+
 
 if __name__ == "__main__":
     test_qwen3_logits_align_with_hf_checkpoint()
