@@ -63,7 +63,10 @@ def convert_hf_checkpoint(hf_checkpoint_path: str,
                           new_model_dir: str):
     """Convert a Hugging Face checkpoint to a Muse checkpoint"""
 
-    hf_model = AutoModelForCausalLM.from_pretrained(hf_checkpoint_path)
+    hf_model = AutoModelForCausalLM.from_pretrained(
+        hf_checkpoint_path,
+        torch_dtype=torch.bfloat16,
+        device_map="auto")
     hf_config_dict = hf_model.config.to_dict()
     config = _build_qwen3_config(hf_config_dict)
     with set_default_dtype(torch.bfloat16):
