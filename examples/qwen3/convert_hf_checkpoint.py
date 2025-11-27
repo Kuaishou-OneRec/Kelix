@@ -2,6 +2,7 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 from typing import Dict, Any
 import torch
 from muse.config import Qwen3Config
+from muse.models.qwen3 import Qwen3Model
 from muse.training.common import set_default_dtype
 
 
