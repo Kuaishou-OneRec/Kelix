@@ -10,6 +10,7 @@ import contextlib
 from pathlib import Path
 from safetensors import torch as safetensors_torch
 from muse.config.model_config import ModelConfig
+from muse.config import get_config
 from muse.training.checkpoint import load_hf_checkpoint
 from muse.training.common import set_default_dtype
 
@@ -46,34 +47,24 @@ class Model(nn.Module):
                 f"Expected Muse format config.json in {model_dir}"
             )
         
-        # Load config (Muse format)
-        # First read JSON to get model_class
+        # Load config (Muse format) using get_config which handles __class__ field
         with open(config_path, 'r', encoding='utf-8') as f:
             config_dict = json.load(f)
         
-        model_class_name = config_dict.get("model_class")
+        # Load config using get_config (handles __class__ field)
+        config = get_config(config_dict)
+        
+        # Get model_class from config
+        model_class_name = config.model_class
         if not model_class_name:
             raise ValueError(
                 f"Config file {config_path} must contain 'model_class' field"
             )
         
-        # Get model class from registry - the model class should know its config type
+        # Get model class from registry
         # Import here to avoid circular import
         from muse.models import get_model_class
         model_cls = get_model_class(model_class_name)
-        
-        # Try to load config using ModelConfig first
-        # If the model needs a specific config class, it should handle that in its __init__
-        try:
-            config = ModelConfig.from_dict(config_dict)
-        except Exception as e:
-            # If ModelConfig fails, try to let the model class handle config loading
-            # This allows subclasses to override config loading if needed
-            raise ValueError(
-                f"Failed to load config from {config_path}. "
-                f"Model class {model_class_name} may need a specific config class. "
-                f"Original error: {e}"
-            )
 
         model = model_cls(config, **kwargs)
         

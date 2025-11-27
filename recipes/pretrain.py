@@ -36,7 +36,7 @@ process_group_timeout = datetime.timedelta(minutes=60*24)
 
 # Muse imports
 from muse.models import get_model_class, list_models
-from muse.config.model_config import ModelConfig
+from muse.config import get_config
 from muse.training.distributed import (
     shard_model, 
     load_from_full_model_state_dict,
@@ -295,10 +295,14 @@ def train():
         f"Config file not found: {model_config_path}. "
         f"Cannot continue pretrain without config.json in {args.model_dir}"
       )
-    model_config = ModelConfig.load(str(model_config_path))
+    with open(model_config_path, 'r', encoding='utf-8') as f:
+      config_dict = json.load(f)
+    model_config = get_config(config_dict)
   elif args.model_config:
     # Train from scratch mode: get model_class from model_config
-    model_config = ModelConfig.load(args.model_config)
+    with open(args.model_config, 'r', encoding='utf-8') as f:
+      config_dict = json.load(f)
+    model_config = get_config(config_dict)
   else:
     raise ValueError(
       "Either --model-dir (for continue pretrain) or --model-config "

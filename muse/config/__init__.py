@@ -40,6 +40,7 @@ from muse.config.utils import (
     save_all_configs_to_checkpoint,
     load_configs_from_checkpoint,
 )
+from muse.config.base import get_config
 
 __all__ = [
     # Base config
@@ -67,5 +68,6 @@ __all__ = [
     "save_config_to_checkpoint",
     "save_all_configs_to_checkpoint",
     "load_configs_from_checkpoint",
+    "get_config",
 ]
 

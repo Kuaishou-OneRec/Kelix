@@ -33,7 +33,10 @@ class BaseConfig(BaseModel):
         Returns:
             Dictionary representation of the config
         """
-        return self.model_dump()
+        result = self.model_dump()
+        # Add __class__ field to indicate the config class name
+        result["__class__"] = self.__class__.__name__
+        return result
     
     def to_json(self, indent: int = 2) -> str:
         """Serialize config to JSON string.
@@ -79,10 +82,13 @@ class BaseConfig(BaseModel):
         
         Args:
             config_dict: Dictionary containing config values
+            Note: __class__ field will be ignored if present
             
         Returns:
             Config instance
         """
+        # Remove __class__ field if present (it's metadata, not a config field)
+        config_dict = {k: v for k, v in config_dict.items() if k != "__class__"}
         return cls(**config_dict)
     
     @classmethod
@@ -110,4 +116,88 @@ class BaseConfig(BaseModel):
         """
         with open(path, 'r', encoding='utf-8') as f:
             return cls.from_json(f.read())
+
+
+def get_config(config_dict: Dict[str, Any]) -> BaseConfig:
+    """Load config from dictionary based on __class__ field.
+    
+    This function dynamically loads the appropriate config class based on the
+    __class__ field in the config dictionary.
+    
+    Args:
+        config_dict: Dictionary containing config values, must include __class__ field
+        
+    Returns:
+        Config instance of the appropriate type
+        
+    Raises:
+        ValueError: If __class__ field is missing or config class not found
+        KeyError: If config class cannot be imported
+        
+    Example:
+        >>> config_dict = {"__class__": "Qwen3Config", "model_class": "Qwen3Model", ...}
+        >>> config = get_config(config_dict)
+        >>> isinstance(config, Qwen3Config)
+        True
+    """
+    config_class_name = config_dict.get("__class__")
+    if not config_class_name:
+        raise ValueError(
+            "Config dictionary must contain '__class__' field to specify the config class"
+        )
+    
+    # Remove __class__ from dict before creating config instance
+    config_dict = {k: v for k, v in config_dict.items() if k != "__class__"}
+    
+    # Try to import config class from muse.config module
+    try:
+        import muse.config as config_module
+        
+        # Try direct import from config module first (configs are exported in __init__.py)
+        if hasattr(config_module, config_class_name):
+            config_class = getattr(config_module, config_class_name)
+            return config_class.from_dict(config_dict)
+        
+        # Try model_config submodule
+        if hasattr(config_module, 'model_config'):
+            model_config_module = getattr(config_module, 'model_config')
+            if hasattr(model_config_module, config_class_name):
+                config_class = getattr(model_config_module, config_class_name)
+                return config_class.from_dict(config_dict)
+        
+        # Try other config submodules
+        for attr_name in ['dataset_config', 'training_config']:
+            if hasattr(config_module, attr_name):
+                submodule = getattr(config_module, attr_name)
+                if hasattr(submodule, config_class_name):
+                    config_class = getattr(submodule, config_class_name)
+                    return config_class.from_dict(config_dict)
+        
+        # List available config classes for better error message
+        available_classes = []
+        if hasattr(config_module, 'model_config'):
+            available_classes.extend([
+                name for name in dir(config_module.model_config) 
+                if name.endswith('Config') and not name.startswith('_')
+            ])
+        
+        raise ValueError(
+            f"Config class '{config_class_name}' not found in muse.config module. "
+            f"Available config classes: {available_classes}"
+        )
+    except ImportError as e:
+        raise ValueError(
+            f"Failed to import config class '{config_class_name}': {e}"
+        ) from e
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert config to dictionary.
+        
+        Returns:
+            Dictionary representation of the config
+        """
+        result = self.model_dump()
+        # Add __class__ field to indicate the config class name
+        result["__class__"] = self.__class__.__name__
+        return result
 
