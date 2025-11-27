@@ -73,7 +73,7 @@ def convert_hf_checkpoint(hf_checkpoint_path: str,
 
     model.load_state_dict(state_dict)
 
-    tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_dir)
+    tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_path)
     # prepare the model input
     prompt = "Give me a short introduction to large language model."
     messages = [
