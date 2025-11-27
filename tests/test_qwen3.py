@@ -549,9 +549,9 @@ def test_qwen3_logits_align_with_hf_checkpoint():
 def test_checkpint():
     hf_checkpoint_dir = "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base"
     checkpoint_dir = "/llm_reco_ssd/zhouyang12/models/muse/Qwen3-8B-Base"
-    hf_model = AutoModelForCausalLM.from_pretrained(hf_checkpoint_dir)
     with set_default_dtype(torch.bfloat16):
         model = Qwen3Model.from_pretrained(checkpoint_dir)
+    model.to(device="cuda")
     
         # load the tokenizer and the model
     tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_dir)
