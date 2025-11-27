@@ -185,10 +185,12 @@ class RotaryPositionalEmbeddings(nn.Module):
         freqs = torch.cat([idx_theta, idx_theta], dim=-1)  # [max_seq_len, dim]
 
         # cache includes both the cos and sin components
+        # Compute cos and sin in float32, then store as float32
         # output shape is [max_seq_len, dim, 2] where [..., 0] is cos and [..., 1] is sin
         cos = torch.cos(freqs)
         sin = torch.sin(freqs)
         cache = torch.stack([cos, sin], dim=-1)  # [max_seq_len, dim, 2]
+        # Store cache as float32 for precision, will convert to target dtype in forward
         self.register_buffer("cache", cache, persistent=False)
 
     @staticmethod
@@ -246,14 +248,14 @@ class RotaryPositionalEmbeddings(nn.Module):
 
         # Separate cos and sin
         # rope_cache shape: [b, s, 1, h_d, 2] or [1, s, 1, h_d, 2]
-        cos = rope_cache[..., 0]  # [b, s, 1, h_d] or [1, s, 1, h_d]
-        sin = rope_cache[..., 1]  # [b, s, 1, h_d] or [1, s, 1, h_d]
+        cos = rope_cache[..., 0].to(dtype=x.dtype)  # [b, s, 1, h_d] or [1, s, 1, h_d]
+        sin = rope_cache[..., 1].to(dtype=x.dtype)  # [b, s, 1, h_d] or [1, s, 1, h_d]
 
         # Apply RoPE: x_embed = (x * cos) + (rotate_half(x) * sin)
         x_rotated = self.rotate_half(x)
         x_out = (x * cos) + (x_rotated * sin)
 
-        return x_out.type_as(x)
+        return x_out
 
 
 class VisionRotaryPositionalEmbeddings(nn.Module):
