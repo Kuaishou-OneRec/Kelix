@@ -74,4 +74,4 @@ def convert_hf_checkpoint(hf_checkpoint_path: str,
     model.save_pretrained(new_model_dir)
 
 if __name__ == "__main__":
-    convert_hf_checkpoint("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base", "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base-Muse")
+    convert_hf_checkpoint("/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base", "/llm_reco_ssd/zhouyang12/models/muse/Qwen3-8B-Base")
