@@ -552,18 +552,6 @@ def test_checkpint():
     with set_default_dtype(torch.bfloat16):
         model = Qwen3Model.from_pretrained(checkpoint_dir)
     
-        
-    # Double-check that all parameters are in the correct dtype
-    for name, param in model.named_parameters():
-        if param.dtype != dtype:
-            print(f"Warning: Parameter {name} has dtype {param.dtype}, expected {dtype}")
-            # param.data = param.data.to(dtype=dtype)
-    
-    for name, buffer in model.named_buffers():
-        if buffer.dtype != dtype:
-            print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
-            # buffer.data = buffer.data.to(dtype=dtype)
-    
     # load the tokenizer and the model
     tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_dir)
     hf_model = AutoModelForCausalLM.from_pretrained(
@@ -588,6 +576,17 @@ def test_checkpint():
 
     device = next(hf_model.parameters()).device
     dtype = next(hf_model.parameters()).dtype
+
+    # Double-check that all parameters are in the correct dtype
+    for name, param in model.named_parameters():
+        if param.dtype != dtype:
+            print(f"Warning: Parameter {name} has dtype {param.dtype}, expected {dtype}")
+            # param.data = param.data.to(dtype=dtype)
+    
+    for name, buffer in model.named_buffers():
+        if buffer.dtype != dtype:
+            print(f"Warning: Buffer {name} has dtype {buffer.dtype}, expected {dtype}")
+            # buffer.data = buffer.data.to(dtype=dtype)
 
     model = model.to(device=device, dtype=dtype)
     
