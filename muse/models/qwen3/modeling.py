@@ -25,7 +25,7 @@ class Qwen3Model(Model):
         num_heads = config.num_heads
         num_kv_heads = config.num_kv_heads if config.num_kv_heads else num_heads
 
-        rope = RotaryPositionalEmbeddings(
+        self.rope = RotaryPositionalEmbeddings(
             dim=head_dim, max_seq_len=config.max_seq_len, base=config.rope_base)
 
         layers = nn.ModuleList()
@@ -39,7 +39,7 @@ class Qwen3Model(Model):
                 k_proj=nn.Linear(config.embed_dim, num_kv_heads * head_dim, bias=config.k_proj_bias),
                 v_proj=nn.Linear(config.embed_dim, num_kv_heads * head_dim, bias=config.v_proj_bias),
                 output_proj=nn.Linear(num_heads * head_dim, config.embed_dim, bias=False),
-                pos_embeddings=rope,
+                pos_embeddings=self.rope,
                 q_norm=RMSNorm(dim=head_dim, eps=config.norm_eps) if config.q_norm else None, # norm on head_dim
                 k_norm=RMSNorm(dim=head_dim, eps=config.norm_eps) if config.k_norm else None,
                 kv_cache=None,

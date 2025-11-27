@@ -164,7 +164,7 @@ class RotaryPositionalEmbeddings(nn.Module):
     def rope_init(self):
         theta = 1.0 / (
             self.base
-            ** (torch.arange(0, self.dim, 2)[: (self.dim // 2)].float() / self.dim)
+            ** (torch.arange(0, self.dim, 2, dtype=torch.int64)[: (self.dim // 2)].float() / self.dim)
         )
         self.register_buffer("theta", theta, persistent=False)
         self.build_rope_cache(self.max_seq_len)
