@@ -251,13 +251,13 @@ def load_from_full_model_state_dict(model: "FSDPModule",
             k: (v.shape, v.device, v.dtype)
             for k, v in full_sd.items()
         }
-        print_rank_n(f"full_sd={format_dict_or_list(full_sd_info)}")
+        print_rank_0(f"full_sd={format_dict_or_list(full_sd_info)}")
         
         meta_sharded_sd_info = {
             k: (v.shape, v.device, v.dtype)
             for k, v in meta_sharded_sd.items()
         }
-        print_rank_n(f"meta_sharded_sd={format_dict_or_list(meta_sharded_sd_info)}")
+        print_rank_0(f"meta_sharded_sd={format_dict_or_list(meta_sharded_sd_info)}")
 
         device0 = full_sd[list(full_sd)[0]]
         for k in extra_meta_sharded_sd:
@@ -265,7 +265,7 @@ def load_from_full_model_state_dict(model: "FSDPModule",
                 full_sd[k] = torch.rand(extra_meta_sharded_sd[k][0]) * 0.1
                 model.get_initializer(k)(full_sd[k])
                 full_sd[k] = full_sd[k].to(device0)
-                print_rank_n(
+                print_rank_0(
                     f"random init k={k}, {extra_meta_sharded_sd[k]}\n, "
                     f"meta_sharded_sd={meta_sharded_sd[k]} \nfull={full_sd[k]}")
 
@@ -279,13 +279,14 @@ def load_from_full_model_state_dict(model: "FSDPModule",
             "Keys of Sharded State Dict doesn't equal to Full State Dict"
 
     for param_name, sharded_meta_param in meta_sharded_sd.items():
+        print_rank_0(f"param_name={param_name}\nsharded_meta_param={sharded_meta_param.shape}\nfull_sd[param_name]={full_sd[param_name].shape}")
         if dist.get_rank() == 0:
             try:
                 full_tensor = full_sd[param_name].detach().cuda().type(sharded_meta_param.dtype)
             except Exception as e:
                 import traceback
                 traceback.print_exc()
-                print(f"bad param_name={param_name}\nsharded_meta_param={sharded_meta_param}")
+                print_rank_0(f"bad param_name={param_name}\nsharded_meta_param={sharded_meta_param}")
                 raise e
         else:
             full_tensor = torch.empty(
