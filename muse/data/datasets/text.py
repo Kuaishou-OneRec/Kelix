@@ -160,8 +160,8 @@ class TextDataset(DistributedDataset):
     try:
       content = json.loads(content)
     except (json.JSONDecodeError, TypeError) as e:
-      print(f"Error loading json: {e}")
-      print(f"content: {content}")
+      # print(f"Error loading json: {e}")
+      # print(f"content: {content}")
       return []
     return content
 
