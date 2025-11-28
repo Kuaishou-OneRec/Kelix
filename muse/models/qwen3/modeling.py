@@ -242,7 +242,9 @@ class Qwen3Model(Model):
         return lecun_normal_
 
     def get_layers_to_shard(self):
-        return [self.model.layers]
+        # Return the ModuleList directly - it's iterable and supports reversed()
+        # fully_shard will be applied to each individual layer, not the ModuleList itself
+        return self.model.layers
 
     def get_checkpointable_module_classes(self):
         return {TransformerSelfAttentionLayer}
