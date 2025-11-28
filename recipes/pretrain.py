@@ -595,7 +595,7 @@ def train():
 
       # Forward pass
       with Timer("Forward"):
-        output = model(input_ids=input_ids)
+        output = model(tokens=input_ids)
         
         # Compute loss for language modeling
         logits = output.logits if hasattr(output, 'logits') else output
