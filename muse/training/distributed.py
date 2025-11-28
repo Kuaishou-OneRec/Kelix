@@ -212,7 +212,7 @@ def shard_model(
     # lowest-level modules first
     num_layers_sharded = 0
 
-    layers = model.get_shard_layers()
+    layers = model.get_layers_to_shard()
     for m in layers:
         fully_shard(m, **fsdp_kwargs)
         num_layers_sharded += 1

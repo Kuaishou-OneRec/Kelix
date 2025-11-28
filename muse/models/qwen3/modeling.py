@@ -1,5 +1,9 @@
-from typing import Dict
+from typing import Dict, Callable
+from functools import partial
+import math
 import torch
+import torch.nn as nn
+import torch.nn.init as init
 import logging
 
 from muse.models.base import Model
@@ -8,13 +12,48 @@ from muse.layers.position_embeddings import RotaryPositionalEmbeddings
 from muse.layers.transformer import TransformerDecoder, TransformerSelfAttentionLayer
 from muse.layers.rms_norm import RMSNorm
 from muse.layers.linear import TiedLinear
-import torch.nn as nn
 from muse.models.qwen3._layers import qwen3_mlp, Qwen3Attention
+from muse.layers.feed_forward import FeedForward
 
 # Import will be done when muse.models is imported, avoiding circular import
 # The actual registration happens in __init__.py after import
 
 logger = logging.getLogger(__name__)
+
+
+def lecun_normal_(tensor: torch.Tensor) -> None:
+    """LeCun normal initialization.
+    
+    LeCun normal initialization: std = sqrt(1 / fan_in)
+    This is similar to Kaiming normal but uses fan_in instead of fan_out.
+    
+    For Linear layers: fan_in = in_features
+    For Conv2d layers: fan_in = in_channels * kernel_size[0] * kernel_size[1]
+    """
+    if tensor.dim() < 2:
+        # For 1D tensors (bias, etc.), use a small std
+        std = 0.01
+    elif tensor.dim() == 2:
+        # Linear layer: (out_features, in_features)
+        fan_in = tensor.size(1)
+        std = math.sqrt(1.0 / fan_in)
+    else:
+        # Convolutional layer: (out_channels, in_channels, kernel_h, kernel_w, ...)
+        # fan_in = in_channels * product of kernel sizes
+        fan_in = tensor.size(1)
+        for s in tensor.size()[2:]:
+            fan_in *= s
+        std = math.sqrt(1.0 / fan_in)
+    init.normal_(tensor, mean=0.0, std=std)
+
+
+def default_flax_embed_init(tensor: torch.Tensor) -> None:
+    """Default Flax embedding initialization.
+    
+    Uses normal distribution with std = 1.0
+    """
+    init.normal_(tensor, mean=0.0, std=1.0)
+
 
 class Qwen3Model(Model):
     def __init__(self, config: Qwen3Config):
@@ -75,6 +114,133 @@ class Qwen3Model(Model):
     def forward(self, *args, **kwargs):
         return self.model(*args, **kwargs)
     
+    def get_initializer(self, name: str) -> Callable[[torch.Tensor], None]:
+        """Return an initializer function for the given parameter name.
+        
+        This function implements Keye-VL-1_5 style initialization:
+        - Attention modules (Qwen3Attention): xavier_uniform_ for weights, zeros_ for bias
+        - MLP modules (FeedForward): xavier_uniform_ for weights, normal_(std=1e-6) for bias
+        - Linear/Conv2d layers: lecun_normal_ for weights, zeros_ for bias
+        - Embedding layers: default_flax_embed_init (normal with std=1.0)
+        - LayerNorm/RMSNorm: weight=1, bias=0
+        
+        Reference: https://huggingface.co/Kwai-Keye/Keye-VL-1_5-8B/blob/main/modeling_keye_vl_1_5.py
+        
+        Args:
+            name: Parameter name (e.g., "model.layers.0.attn.q_proj.weight")
+            
+        Returns:
+            A callable function that takes a tensor and initializes it
+        """
+        # Find the module corresponding to this parameter name
+        # Remove the parameter suffix (e.g., ".weight", ".bias", ".scale")
+        module_name = name.rsplit(".", 1)[0]
+        param_suffix = name.rsplit(".", 1)[1] if "." in name else ""
+        
+        # Get the module and its parent
+        module = None
+        parent_module = None
+        for mod_name, mod in self.named_modules():
+            if mod_name == module_name:
+                module = mod
+                # Get parent module name
+                if "." in mod_name:
+                    parent_name = ".".join(mod_name.rsplit(".", 1)[:-1])
+                    for p_name, p_mod in self.named_modules():
+                        if p_name == parent_name:
+                            parent_module = p_mod
+                            break
+                break
+        
+        # Handle TiedLinear: its weight is actually the tied_module's weight
+        # TiedLinear is not an nn.Module, so it won't appear in named_modules()
+        if module is None:
+            # Try to get the module by attribute access
+            parts = module_name.split(".")
+            try:
+                current = self
+                for part in parts:
+                    current = getattr(current, part)
+                # Check if it's a TiedLinear
+                if isinstance(current, TiedLinear):
+                    # TiedLinear's weight is the tied_module's weight
+                    module = current.tied_module
+                else:
+                    module = current if isinstance(current, nn.Module) else None
+            except AttributeError:
+                module = None
+        
+        if module is None:
+            # If module not found, return a default lecun_normal initializer
+            return lecun_normal_
+        
+        # Check if this is part of an Attention module
+        is_attention = isinstance(parent_module, Qwen3Attention)
+        
+        # Check if this is part of an MLP/FeedForward module
+        is_mlp = isinstance(parent_module, FeedForward)
+        
+        # Define initializer based on module type
+        if isinstance(module, nn.Linear):
+            def linear_init(tensor: torch.Tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    if is_attention:
+                        # Attention layers use xavier_uniform_
+                        init.xavier_uniform_(tensor)
+                    elif is_mlp:
+                        # MLP layers use xavier_uniform_ for weights
+                        init.xavier_uniform_(tensor)
+                    else:
+                        # Other Linear layers use lecun_normal_
+                        lecun_normal_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    if is_mlp:
+                        # MLP bias uses normal with std=1e-6
+                        init.normal_(tensor, mean=0.0, std=1e-6)
+                    else:
+                        # Other biases use zeros
+                        init.zeros_(tensor)
+            return linear_init
+            
+        elif isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d, 
+                                  nn.ConvTranspose1d, nn.ConvTranspose2d)):
+            def conv_init(tensor: torch.Tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    lecun_normal_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    init.zeros_(tensor)
+            return conv_init
+            
+        elif isinstance(module, nn.Embedding):
+            # TODO: use better embedding initialization
+            def embedding_init(tensor: torch.Tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    # Use default_flax_embed_init (normal with std=1.0)
+                    default_flax_embed_init(tensor)
+            return embedding_init
+            
+        elif isinstance(module, nn.MultiheadAttention):
+            def mha_init(tensor: torch.Tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    init.xavier_uniform_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    init.zeros_(tensor)
+            return mha_init
+            
+        elif (isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
+              or "LayerNorm" in module.__class__.__name__
+              or "RMSNorm" in module.__class__.__name__
+              or isinstance(module, RMSNorm)):
+            def norm_init(tensor: torch.Tensor):
+                if param_suffix in ["weight", "scale"] and tensor is not None:
+                    init.ones_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    init.zeros_(tensor)
+            return norm_init
+        
+        # Default: lecun_normal initialization
+        return lecun_normal_
+
     def get_layers_to_shard(self):
         return [self.model.layers]
 
