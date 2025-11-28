@@ -19,6 +19,7 @@ import numpy as np
 from pathlib import Path
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
 from transformers import AutoTokenizer
 
 from collections import defaultdict
@@ -39,8 +40,7 @@ from muse.models import get_model_class, list_models
 from muse.config import get_config
 from muse.training.distributed import (
     shard_model, 
-    load_from_full_model_state_dict,
-    init_device_mesh
+    load_from_full_model_state_dict
 )
 from muse.training.checkpoint import (
     AppState, 
