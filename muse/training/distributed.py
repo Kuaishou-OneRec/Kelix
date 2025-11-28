@@ -30,7 +30,7 @@ from torch.distributed.fsdp import ShardingStrategy
 from torch.nn.modules.module import _IncompatibleKeys
 from torch.optim import Optimizer
 
-from muse.utils.common import format_dict_or_list, print_rank_n
+from muse.utils.common import format_dict_or_list, print_rank_n, print_rank_0
 
 
 torch_version = torch.__version__
