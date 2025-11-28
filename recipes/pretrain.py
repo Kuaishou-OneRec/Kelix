@@ -595,7 +595,7 @@ def train():
       with Timer("Forward"):
         output = model(tokens=input_ids)
 
-        print_rank_0(f"output={output}")
+        print_rank_0(f"output={output.shape}")
         
         # Compute loss for language modeling
         logits = output.logits if hasattr(output, 'logits') else output
