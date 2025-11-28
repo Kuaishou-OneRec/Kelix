@@ -380,6 +380,7 @@ class Model(nn.Module):
             "lr": learning_rate,
           },
         ]
+        return optimizer_grouped_parameters
     
     @classmethod
     def convert_hf_state_dict(cls,
