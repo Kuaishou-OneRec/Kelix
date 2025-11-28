@@ -546,7 +546,7 @@ def train():
 
   grad_norm = 0.0
   micro_step = 0
-  acc_avg_loss = 0.0
+  acc_loss = 0.0
 
   # Setup data iterator
   if dataloader is not None:
@@ -614,7 +614,7 @@ def train():
           micro_step = 0
 
       # Accumulate loss
-      cum_loss += loss.detach().item()
+      acc_loss += loss.detach().item()
 
       # Logging
       if global_step % args.logging_per_step == 0 and \
@@ -622,7 +622,7 @@ def train():
         if dist.get_rank() == 0:
           learning_rate = lr_scheduler.get_last_lr()[0]
           end_time = time.time()      
-          avg_loss = cum_loss / args.logging_per_step
+          avg_loss = acc_loss / args.logging_per_step
           log_dict = {
             "training/loss": avg_loss,
             "training/grad_norm": grad_norm,
@@ -637,7 +637,7 @@ def train():
             f"Step: {global_step}, Loss: {avg_loss:.4f}, "
             f"Learning Rate: {learning_rate:.2e}, GradNorm: {grad_norm:.2f}"
           )
-          cum_loss = 0.0
+          acc_loss = 0.0
     
       if (global_step % args.save_checkpoint_per_step == 0 or global_step in [100, 200]) and \
           global_step > 0 and micro_step % args.gradient_accumulation_steps == 0:
