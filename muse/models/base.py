@@ -361,10 +361,6 @@ class Model(nn.Module):
         raise NotImplementedError(
             "Subclass must implement get_layers_to_shard method")
 
-    def rope_init(self):
-        """Initialize the RoPE for the model if needed"""
-        pass
-
     def get_optimizer_grouped_parameters(
             self,
             learning_rate: float,

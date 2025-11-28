@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import yaml
 from pydantic import BaseModel, ConfigDict
 
 
@@ -189,15 +190,53 @@ def get_config(config_dict: Dict[str, Any]) -> BaseConfig:
         raise ValueError(
             f"Failed to import config class '{config_class_name}': {e}"
         ) from e
+
+
+def load_config(config_path: str) -> BaseConfig:
+    """Load config directly from a configuration file path.
     
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert config to dictionary.
+    This function reads a JSON or YAML configuration file and automatically
+    determines the config class type based on the __class__ field in the file.
+    
+    Args:
+        config_path: Path to configuration file (.json, .yaml, or .yml)
         
-        Returns:
-            Dictionary representation of the config
-        """
-        result = self.model_dump()
-        # Add __class__ field to indicate the config class name
-        result["__class__"] = self.__class__.__name__
-        return result
+    Returns:
+        Config instance of the appropriate type
+        
+    Raises:
+        FileNotFoundError: If the configuration file does not exist
+        ValueError: If file format is not supported, __class__ field is missing,
+                    or config class not found
+        
+    Example:
+        >>> # Load a Qwen3Config from file
+        >>> config = load_config("configs/qwen3.json")
+        >>> isinstance(config, Qwen3Config)
+        True
+        
+        >>> # Load a TrainingConfig from file
+        >>> config = load_config("configs/training.yaml")
+        >>> isinstance(config, TrainingConfig)
+        True
+    """
+    file_path = Path(config_path)
+    
+    if not file_path.exists():
+        raise FileNotFoundError(f"Configuration file not found: {config_path}")
+    
+    # Load config dictionary from file
+    with open(file_path, 'r', encoding='utf-8') as f:
+        if file_path.suffix == '.json':
+            config_dict = json.load(f)
+        elif file_path.suffix in ['.yaml', '.yml']:
+            config_dict = yaml.safe_load(f)
+        else:
+            raise ValueError(
+                f"Unsupported file format: {file_path.suffix}. "
+                "Supported formats: .json, .yaml, .yml"
+            )
+    
+    # Use get_config to create the appropriate config instance
+    return get_config(config_dict)
 

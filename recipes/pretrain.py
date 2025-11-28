@@ -295,14 +295,10 @@ def train():
         f"Config file not found: {model_config_path}. "
         f"Cannot continue pretrain without config.json in {args.model_dir}"
       )
-    with open(model_config_path, 'r', encoding='utf-8') as f:
-      config_dict = json.load(f)
-    model_config = get_config(config_dict)
+    model_config = load_config(model_config_path)
   elif args.model_config:
     # Train from scratch mode: get model_class from model_config
-    with open(args.model_config, 'r', encoding='utf-8') as f:
-      config_dict = json.load(f)
-    model_config = get_config(config_dict)
+    model_config = load_config(args.model_config)
   else:
     raise ValueError(
       "Either --model-dir (for continue pretrain) or --model-config "
@@ -360,6 +356,7 @@ def train():
   # Load state dict and convert using model's converter (only for continue pretrain)
   state_dict = None
   
+  # Load state_dict to CPU only on rank 0 to avoid CPU OOM
   if args.model_dir:
     # Continue pretrain: load weights from checkpoint
     if dist.get_rank() == 0:
@@ -380,7 +377,7 @@ def train():
     tb_writer.add_text("comment", args.comment, 0)
     tb_writer.add_text("comment_id", args.commit_id, 0)
 
-  # Instantiate model on meta device
+  # Instantiate model on meta device, this is to avoid OOM
   with set_default_dtype(args.model_dtype), torch.device("meta"):
     # Train from scratch: create model with random initialization
     print_rank_0(f"Creating model from config: {args.model_config}")
@@ -394,7 +391,8 @@ def train():
     )
 
   # upcast fp32 to maintain master weight.
-  # 需要保存一个fp32的模型权重，否则优化器更新权重的精度会降低，影响收敛
+  # We need to save a fp32 model weight, otherwise the precision of the optimizer 
+  # updating the weight will be reduced, affecting convergence
   if args.fp32_weight:
     model = model.float()
 
@@ -413,28 +411,33 @@ def train():
   if state_dict is not None:
     with Timer("Load state dict"):
       # Convert meta tensors to CUDA tensors
+      # distribute the state_dict from rank 0 to all ranks
       load_from_full_model_state_dict(
         model=model, full_sd=state_dict,
         allow_random_init_params=args.allow_random_init_params
       )
 
   with torch.device(torch.cuda.current_device()):
+    # Initialize RoPE, if the buffer is not in the state_dict,
+    # it still on meta device, so we need to initialize it here
     for m in model.modules():
       # RoPE is not covered in state dict
       if hasattr(m, "rope_init"):
         print_rank_0("Initialize RoPE")
         m.rope_init()
 
-  # Check if all tensors are initialized
+  # Check if all parameters & buffers are initialized
   for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
     assert tensor.device != torch.device("meta"), \
       f"{name} not initialized, device={tensor.device}"
 
   if args.compile:
+    # Compile model for better performance
     model = torch.compile(model)
     print_rank_0("Model compiled")
 
   if state_dict is not None:
+    # Free the state_dict to save memory
     del state_dict
 
   # Print trainable parameters
@@ -448,7 +451,7 @@ def train():
   print_rank_0("=" * 50)
 
   # TODO: support other optimizers
-  # prepare optimizer
+  # Prepare optimizer
   optimizer = torch.optim.AdamW(
     model.get_optimizer_grouped_parameters(
       learning_rate=args.learning_rate,

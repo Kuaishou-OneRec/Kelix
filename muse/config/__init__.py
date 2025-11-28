@@ -21,7 +21,7 @@ Example usage:
     ... )
 """
 
-from muse.config.base import BaseConfig
+from muse.config.base import BaseConfig, get_config, load_config
 from muse.config.model_config import ModelConfig, Qwen3Config
 from muse.config.dataset_config import DatasetConfig
 from muse.config.training_config import (
@@ -40,7 +40,6 @@ from muse.config.utils import (
     save_all_configs_to_checkpoint,
     load_configs_from_checkpoint,
 )
-from muse.config.base import get_config
 
 __all__ = [
     # Base config
@@ -69,5 +68,6 @@ __all__ = [
     "save_all_configs_to_checkpoint",
     "load_configs_from_checkpoint",
     "get_config",
+    "load_config",
 ]
 
