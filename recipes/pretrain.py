@@ -168,7 +168,7 @@ def get_argument_parser():
                       help="compile model.")
 
   ############ Optimizer & Learning Rate Args ############
-  parser.add_argument("--lr-scheduler-type", type=str, default="cosine_with_min_lr",
+  parser.add_argument("--lr-scheduler-type", type=str, default="cosine",
                       help="The type of learning rate scheduler.")
 
   parser.add_argument("--num-warmup-steps", type=int, default=0,
