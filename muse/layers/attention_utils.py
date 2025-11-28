@@ -137,20 +137,28 @@ class FlashAttention2:
             cu_seqlens_k = cu_seqlens_k.to(torch.int32)
 
         window_size = kwargs.get("window_size", -1)
+        
+        # Flash attention expects [batch, seq_len, num_heads, head_dim]
+        # Input tensors have shape [batch, num_heads, seq_len, head_dim]
+        # So we need to transpose from [b, n_h, s, h_d] to [b, s, n_h, h_d]
+        q = q.transpose(1, 2)  # [b, n_h, s, h_d] -> [b, s, n_h, h_d]
+        k = k.transpose(1, 2)  # [b, n_h, s, h_d] -> [b, s, n_h, h_d]
+        v = v.transpose(1, 2)  # [b, n_h, s, h_d] -> [b, s, n_h, h_d]
+        
         if cu_seqlens_q is None or cu_seqlens_k is None:
             attn_output = flash_attn_func(
-                q=q.squeeze(0),
-                k=k.squeeze(0),
-                v=v.squeeze(0),
+                q=q,
+                k=k,
+                v=v,
                 dropout_p=attn_dropout,
                 window_size=(window_size, window_size),
                 causal=is_causal
             )
         else:
             attn_output = flash_attn_varlen_func(
-                q=q.squeeze(0),
-                k=k.squeeze(0),
-                v=v.squeeze(0),
+                q=q,
+                k=k,
+                v=v,
                 cu_seqlens_q=cu_seqlens_q,
                 cu_seqlens_k=cu_seqlens_k,
                 max_seqlen_q=max_seqlen_q,
@@ -161,7 +169,9 @@ class FlashAttention2:
             )
         # TODO: support return_attn_weights
         if attn_output is not None:
-            return attn_output.unsqueeze(0)
+            # Flash attention returns [b, s, n_h, h_d], convert back to [b, n_h, s, h_d]
+            attn_output = attn_output.transpose(1, 2)  # [b, s, n_h, h_d] -> [b, n_h, s, h_d]
+            return attn_output
         return None
 
 
