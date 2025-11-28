@@ -78,6 +78,8 @@ from muse.utils.common import (
 from muse.data.datasets import TextDataset
 from muse.losses.ce import CrossEntropyLoss
 
+from muse.config import load_config
+
 def get_argument_parser():
   parser = argparse.ArgumentParser()
 
