@@ -21,9 +21,9 @@ def print_rank_n(*msg, rank=0):
   """
   if not dist.is_initialized():
     # If dist is not initialized, treat as rank 0 and always print
-    print(*msg)
+    print("[Rank " + str(rank) + "] " + " ".join(map(str, msg)))
   elif dist.get_rank() == rank:
-    print(*msg)
+    print("[Rank " + str(rank) + "] " + " ".join(map(str, msg)))
 
 def print_rank_0(*msg):
   print_rank_n(*msg, rank=0)
