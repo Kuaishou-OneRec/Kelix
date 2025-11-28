@@ -33,8 +33,8 @@ cat "${ENV_FILE}"
 nohup rm -rf hs_err_pid*.log &
 
 # registry.corp.kuaishou.com/kml-supercomputing-project/v1.6_vllm0.7.3_ray_torch2.5.1_cuda11.8.0_python3.10.12_hadoop_xray:v1
-mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile -x http_proxy=http://oversea-squid1.jp.txyun:11080 -x https_proxy=http://oversea-squid1.jp.txyun:11080 --pernode bash -c  "apt-get install numactl"
-mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install easydict"
+#mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile -x http_proxy=http://oversea-squid1.jp.txyun:11080 -x https_proxy=http://oversea-squid1.jp.txyun:11080 --pernode bash -c  "apt-get install numactl"
+#mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install easydict"
 # mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install transformers==4.49"
 # mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install --upgrade torchao"
 # mpirun --allow-run-as-root --hostfile /etc/mpi/hostfile --pernode bash -c "pip3 install timm==1.0.15"
