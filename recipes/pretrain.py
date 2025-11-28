@@ -420,13 +420,14 @@ def train():
   )
   dist.barrier()
   # 需要保证每个rank都执行了load_from_full_model_state_dict
-  with Timer("Load state dict"):
-    # Convert meta tensors to CUDA tensors
-    # distribute the state_dict from rank 0 to all ranks
-    load_from_full_model_state_dict(
-      model=model, full_sd=state_dict,
-      allow_random_init_params=args.allow_random_init_params
-    )
+  if args.model_dir:
+    with Timer("Load state dict"):
+      # Convert meta tensors to CUDA tensors
+      # distribute the state_dict from rank 0 to all ranks
+      load_from_full_model_state_dict(
+        model=model, full_sd=state_dict,
+        allow_random_init_params=args.allow_random_init_params
+      )
 
   with torch.device(torch.cuda.current_device()):
     # Initialize RoPE, if the buffer is not in the state_dict,

@@ -280,7 +280,7 @@ def load_from_full_model_state_dict(model: "FSDPModule",
 
     print("rank=", dist.get_rank(), "meta_sharded_sd=", meta_sharded_sd.keys())
     for param_name, sharded_meta_param in meta_sharded_sd.items():
-        print_rank_0(f"param_name={param_name}\nsharded_meta_param={sharded_meta_param.shape}\nfull_sd[param_name]={full_sd[param_name].shape}")
+        print_rank_0(f"param_name={param_name}\nsharded_meta_param={sharded_meta_param.shape}")
         if dist.get_rank() == 0:
             try:
                 full_tensor = full_sd[param_name].detach().cuda().type(sharded_meta_param.dtype)
@@ -300,7 +300,6 @@ def load_from_full_model_state_dict(model: "FSDPModule",
 
         dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
         dist.barrier()
-        print("rank=", dist.get_rank(), "dist.barrier()")
         sharded_tensor = distribute_tensor(
             full_tensor, mesh, sharded_meta_param.placements
         )
