@@ -71,6 +71,7 @@ from muse.training.parallel import (
 from muse.utils.common import (
     set_random_seed, 
     print_rank_0,
+    print_rank_n,
     to_cuda,
     to_device,
     dist_reduce_dict
@@ -326,6 +327,7 @@ def train():
     dataset_config["tokenizer_path"] = args.model_dir
 
   # torch init
+  print_rank_n(f"torch init rank={rank}, local_rank={local_rank}")
   torch.cuda.set_device(local_rank)
   torch.distributed.init_process_group(
     rank=rank, world_size=world_size,
