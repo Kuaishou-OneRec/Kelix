@@ -1,9 +1,5 @@
-from recovlm.losses.ce import CrossEntropyLoss, CrossEntropyLossReweight
-from recovlm.losses.reward_loss import PairWiseLoss, LogExpLoss
+from muse.losses.ce import CrossEntropyLoss
 
 __all__ = [
-  "CrossEntropyLoss",
-  "CrossEntropyLossReweight",
-  "PairWiseLoss",
-  "LogExpLoss"
+  "CrossEntropyLoss"
 ]
