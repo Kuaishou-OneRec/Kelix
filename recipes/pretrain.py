@@ -52,9 +52,11 @@ from muse.training.checkpoint import (
 from muse.training.common import (
     set_default_dtype, 
     clip_grad_by_value, 
-    compute_fsdp_zero2_grad_norm,
-    Timer
+    compute_fsdp_zero2_grad_norm
 )
+
+from muse.utils.common import Timer
+
 from muse.training.lr_schedulers import get_scheduler
 from muse.training.activations import set_activation_checkpointing
 from muse.training.parallel import (
