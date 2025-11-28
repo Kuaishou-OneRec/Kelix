@@ -305,6 +305,12 @@ def train():
       "(for train from scratch) must be provided."
     )
 
+  if args.use_flash_attention_2:
+    model_config.attention_function = "flash_attention_2"
+    print_rank_0("Use flash attention 2")
+  else:
+    print_rank_0("Warning: Use eager attention, performance may be degraded.")
+
   model_class_name = model_config.model_class
   dataset_config["model_class"] = model_class_name
   

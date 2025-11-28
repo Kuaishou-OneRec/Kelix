@@ -15,8 +15,7 @@ fi
 sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 script_name=$(basename "$0" .sh)
 
-# MODEL_DIR=/llm_reco_ssd/zhouyang12/models/KeyeImageTokenizer_exp_121_old/
-# MODEL_DIR=/llm_reco_ssd/zhouyang12/models/KeyeImageTokenizer_exp_121_old_8b
+MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Qwen3-8B-Base
 
 OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/qwen3/test
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
@@ -117,7 +116,6 @@ nohup mpirun --allow-run-as-root \
         bash -c "python3 recipes/pretrain.py --model-dir $MODEL_DIR \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/qwen3/pretrain.json \
-                --model-class Qwen3Model \
                 --learning-rate 2e-4 \
                 --min-lr 1e-7 \
                 --weight-decay 0.1 \
