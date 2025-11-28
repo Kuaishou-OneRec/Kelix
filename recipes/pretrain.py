@@ -594,8 +594,6 @@ def train():
       # Forward pass
       with Timer("Forward"):
         output = model(tokens=input_ids)
-
-        print_rank_0(f"output={output.shape}")
         
         # Compute loss for language modeling
         logits = output.logits if hasattr(output, 'logits') else output
@@ -616,22 +614,17 @@ def train():
           micro_step = 0
 
       # Accumulate loss
-      avg_loss = loss.detach().item()
-      acc_avg_loss += avg_loss
+      cum_loss += loss.detach().item()
 
       # Logging
-
       if global_step % args.logging_per_step == 0 and \
           micro_step % args.gradient_accumulation_steps == 0:
-
         if dist.get_rank() == 0:
           learning_rate = lr_scheduler.get_last_lr()[0]
-          end_time = time.time()
-
-          avg_loss_value = acc_avg_loss / args.logging_per_step
-          
+          end_time = time.time()      
+          avg_loss = cum_loss / args.logging_per_step
           log_dict = {
-            "training/loss": avg_loss_value,
+            "training/loss": avg_loss,
             "training/grad_norm": grad_norm,
             "training/learning_rate": learning_rate
           }
@@ -641,9 +634,10 @@ def train():
           tb_metrics_q.put(metrics_info)
           
           print_rank_0(
-            f"Step: {global_step}, Loss: {avg_loss_value:.4f}, "
+            f"Step: {global_step}, Loss: {avg_loss:.4f}, "
             f"Learning Rate: {learning_rate:.2e}, GradNorm: {grad_norm:.2f}"
           )
+          cum_loss = 0.0
     
       if (global_step % args.save_checkpoint_per_step == 0 or global_step in [100, 200]) and \
           global_step > 0 and micro_step % args.gradient_accumulation_steps == 0:
