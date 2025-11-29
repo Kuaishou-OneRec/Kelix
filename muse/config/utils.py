@@ -1,3 +1,35 @@
+"""
+Configuration Utility Functions.
+
+This module provides utilities for loading, parsing, and managing configurations
+from various sources including JSON files, YAML files, and command-line arguments.
+
+The utilities help bridge between different configuration sources and the structured
+Pydantic configuration classes, enabling flexible configuration management in
+training scripts.
+
+Functions:
+    load_config_from_file: Load configuration from JSON/YAML file
+    load_config_from_args: Convert argparse Namespace to config dict
+    get_config: Instantiate appropriate config class from dict
+    parse_args_and_config: Parse command-line args and load configs
+
+Example:
+    >>> from muse.config.utils import load_config_from_file, get_config
+    >>> 
+    >>> # Load from file
+    >>> config_dict = load_config_from_file("config.json")
+    >>> 
+    >>> # Get typed config object
+    >>> model_config = get_config(config_dict["model"])
+    >>> # Returns appropriate ModelConfig subclass (e.g., Qwen3Config)
+    >>> 
+    >>> # From command line
+    >>> import argparse
+    >>> parser = argparse.ArgumentParser()
+    >>> # ... add arguments ...
+    >>> args, config = parse_args_and_config(parser)
+"""
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

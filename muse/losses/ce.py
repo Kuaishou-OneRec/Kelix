@@ -1,3 +1,26 @@
+"""
+Cross-Entropy Loss Implementation.
+
+This module provides an optimized CrossEntropyLoss implementation that avoids
+redundant calculations and offers flexible reduction modes.
+
+The implementation computes per-token losses first, then applies reduction,
+which is more efficient than computing the full loss matrix and allows for
+token-level loss inspection when needed.
+
+Classes:
+    CrossEntropyLoss: Efficient cross-entropy loss with flexible options
+
+Example:
+    >>> criterion = CrossEntropyLoss(ignore_index=-100, reduction="mean")
+    >>> logits = model(input_ids)  # Shape: (batch_size, seq_len, vocab_size)
+    >>> labels = target_ids        # Shape: (batch_size, seq_len)
+    >>> loss = criterion(logits, labels)
+    >>> 
+    >>> # With token-level loss
+    >>> criterion = CrossEntropyLoss(return_token_loss=True)
+    >>> loss, token_losses = criterion(logits, labels)
+"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -8,15 +31,52 @@ import torch.nn.functional as F
 
 class CrossEntropyLoss(nn.Module):
     """
-    An efficient CrossEntropyLoss module that avoids redundant calculations.
-    It first computes per-token losses and then manually applies the reduction.
-    (Based on the user-provided, superior implementation).
+    Efficient CrossEntropyLoss with per-token loss support.
+    
+    This implementation computes per-token losses first, then applies reduction,
+    avoiding redundant calculations. It supports:
+    - Label shifting for autoregressive models
+    - Ignore index for padding tokens
+    - Optional per-token loss return
+    - Mean or sum reduction
+    
+    The loss handles batched inputs and properly accounts for ignored tokens
+    in mean reduction.
+    
+    Args:
+        ignore_index (int): Label value to ignore in loss calculation. Defaults to -100.
+        return_token_loss (bool): If True, returns both reduced loss and per-token
+            losses. Defaults to False.
+        shift_labels (bool): If True, shifts labels left by 1 position (for autoregressive
+            language modeling). Defaults to True.
+        reduction (str): Reduction mode, "mean" or "sum". Defaults to "mean".
+        
+    Example:
+        >>> # Standard usage for language modeling
+        >>> criterion = CrossEntropyLoss(ignore_index=-100, shift_labels=True)
+        >>> logits = model(input_ids)  # (batch, seq_len, vocab_size)
+        >>> loss = criterion(logits, labels)
+        >>> 
+        >>> # Get per-token losses for analysis
+        >>> criterion = CrossEntropyLoss(return_token_loss=True)
+        >>> loss, token_losses = criterion(logits, labels)
+        >>> # token_losses shape: (batch_size * seq_len,)
     """
+    
     def __init__(self,
                  ignore_index: int = -100,
                  return_token_loss: bool = False,
                  shift_labels: bool = True,
                  reduction: str = "mean"):
+        """
+        Initialize CrossEntropyLoss.
+        
+        Args:
+            ignore_index (int): Label value to ignore. Defaults to -100.
+            return_token_loss (bool): Return per-token losses. Defaults to False.
+            shift_labels (bool): Shift labels for autoregressive models. Defaults to True.
+            reduction (str): "mean" or "sum". Defaults to "mean".
+        """
         super().__init__()
         self.ignore_index = ignore_index
         self.return_token_loss = return_token_loss
@@ -25,9 +85,24 @@ class CrossEntropyLoss(nn.Module):
 
     def forward(self, logits: torch.Tensor, labels: torch.Tensor):
         """
+        Compute cross-entropy loss.
+        
         Args:
-            logits (torch.Tensor): A single tensor of shape (..., vocab_size).
-            labels (torch.Tensor): Ground truth labels.
+            logits (torch.Tensor): Model predictions with shape (..., vocab_size).
+                Typically (batch_size, seq_len, vocab_size) for language models.
+            labels (torch.Tensor): Ground truth labels with same shape as logits[:-1].
+                Typically (batch_size, seq_len) for language models.
+                
+        Returns:
+            torch.Tensor: Reduced loss (scalar)
+            or
+            Tuple[torch.Tensor, torch.Tensor]: (reduced_loss, per_token_losses) if
+                return_token_loss=True. per_token_losses has shape (num_tokens,).
+                
+        Note:
+            - If shift_labels=True, predicts token i+1 from position i
+            - Ignored tokens (matching ignore_index) are excluded from loss
+            - Mean reduction divides by number of non-ignored tokens
         """
         vocab_size = logits.shape[-1]
         

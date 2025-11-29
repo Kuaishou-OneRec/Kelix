@@ -1,3 +1,33 @@
+"""
+Linear Layer Utilities for Weight Tying.
+
+This module provides utilities for implementing weight tying in neural networks,
+particularly useful for language models that tie input embeddings with output
+projection weights.
+
+Weight tying reduces model parameters and can improve training by ensuring
+consistent representations. The module handles FSDP compatibility by passing
+nn.Modules instead of raw weight tensors.
+
+Classes:
+    Linear: Functional linear layer wrapper for activation offloading hooks
+    TiedLinear: Linear layer that shares weights with another module
+
+Example:
+    >>> import torch
+    >>> from torch import nn
+    >>> from muse.layers.linear import TiedLinear
+    >>> 
+    >>> # Create embedding layer
+    >>> embedding = nn.Embedding(vocab_size=50000, embedding_dim=768)
+    >>> 
+    >>> # Create tied output layer that shares embedding weights
+    >>> output_proj = TiedLinear(tied_module=embedding)
+    >>> 
+    >>> # Use in model
+    >>> hidden_states = model.transformer(input_ids)  # (..., 768)
+    >>> logits = output_proj(hidden_states)  # (..., 50000)
+"""
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

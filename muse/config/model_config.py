@@ -1,3 +1,39 @@
+"""
+Model Configuration Classes.
+
+This module defines configuration classes for model architectures, using Pydantic
+for validation and type checking. All model configurations inherit from BaseConfig
+and follow a structured, type-safe approach to defining model hyperparameters.
+
+The module provides:
+- Base ModelConfig class for common model properties
+- Qwen3Config for Qwen3 architecture
+- Automatic validation of configuration values
+- Serialization to/from JSON
+
+Classes:
+    ModelConfig: Base configuration for all models
+    Qwen3Config: Configuration for Qwen3 transformer models
+
+Example:
+    >>> from muse.config.model_config import Qwen3Config
+    >>> 
+    >>> # Create configuration
+    >>> config = Qwen3Config(
+    ...     vocab_size=151936,
+    ...     embed_dim=4096,
+    ...     num_layers=32,
+    ...     num_heads=32,
+    ...     num_kv_heads=32,
+    ...     intermediate_dim=11008
+    ... )
+    >>> 
+    >>> # Save to file
+    >>> config.save("model_config.json")
+    >>> 
+    >>> # Load from file
+    >>> loaded_config = Qwen3Config.from_json_file("model_config.json")
+"""
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

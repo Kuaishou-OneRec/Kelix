@@ -1,3 +1,58 @@
+"""
+Context Parallelism and Sequence Parallel Utilities.
+
+This module implements context parallelism for handling long sequences in transformer
+models. Context parallelism splits sequences across multiple devices, enabling training
+on sequences longer than a single device's memory can hold.
+
+Key features:
+- Context parallel process group management
+- Sequence sharding and gathering operations
+- All-to-all communication for QKV tensors
+- Automatic gradient handling for distributed operations
+- Data parallel group support
+
+The module provides both low-level communication primitives (all_to_all_4D, all_gather)
+and high-level utilities (get_local_sequence, gather_by_group) for implementing
+sequence parallel transformers.
+
+Process Groups:
+    - Context Parallel Group: GPUs working on different sequence chunks
+    - Data Parallel Group: GPUs with identical model replicas
+
+Functions:
+    initialize_model_parallel: Set up context and data parallel groups
+    get_context_parallel_group: Get context parallel process group
+    get_context_parallel_world_size: Get CP world size
+    get_context_parallel_rank: Get CP rank
+    get_local_sequence_boundary: Compute sequence slice for current rank
+    get_local_sequence: Extract local sequence chunk
+    get_data_parallel_group: Get data parallel process group
+    all_to_all_4D: All-to-all for 4D tensors (QKV)
+    all_gather: All-gather for sequence dimensions
+    gather_by_group: Gather data across process group
+
+Classes:
+    SeqAllToAll4D: Autograd function for sequence all-to-all
+    AllGather: Autograd function for all-gather
+
+Example:
+    >>> import torch.distributed as dist
+    >>> from muse.training.parallel import initialize_model_parallel
+    >>> 
+    >>> # Initialize with context parallelism
+    >>> dist.init_process_group(backend="nccl")
+    >>> initialize_model_parallel(context_parallel_size=4)
+    >>> 
+    >>> # Split sequence across 4 GPUs
+    >>> full_seq = torch.randn(batch, 8192, hidden)
+    >>> local_seq = get_local_sequence(full_seq, seq_idx=1)
+    >>> # local_seq shape: (batch, 2048, hidden) on each GPU
+    >>> 
+    >>> # Gather back to full sequence
+    >>> gathered = all_gather(local_seq, gather_idx=1)
+    >>> # gathered shape: (batch, 8192, hidden)
+"""
 from typing import Any, Tuple, List, Iterable
 import os
 import time

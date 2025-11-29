@@ -1,3 +1,33 @@
+"""
+Feed-Forward Network (FFN) Layer Implementation.
+
+This module provides the feed-forward network layer used in transformer architectures,
+specifically the Gated Linear Unit (GLU) variant from LLaMA.
+
+The implementation follows the SwiGLU architecture:
+    FFN(x) = (Activation(W1 * x) ⊙ W3 * x) * W2
+
+Where ⊙ denotes element-wise multiplication, and the activation is typically SiLU.
+
+Classes:
+    FeedForward: Gated feed-forward network with optional up-projection
+
+Example:
+    >>> import torch
+    >>> from torch import nn
+    >>> from muse.layers.feed_forward import FeedForward
+    >>> 
+    >>> # Create FFN layer
+    >>> ffn = FeedForward(
+    ...     gate_proj=nn.Linear(512, 2048),
+    ...     up_proj=nn.Linear(512, 2048),
+    ...     down_proj=nn.Linear(2048, 512),
+    ...     activation=nn.SiLU()
+    ... )
+    >>> 
+    >>> x = torch.randn(16, 128, 512)  # (batch, seq_len, dim)
+    >>> output = ffn(x)  # (16, 128, 512)
+"""
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

@@ -1,3 +1,50 @@
+"""
+Training Configuration Classes.
+
+This module defines configuration classes for training hyperparameters, including
+optimizer settings, learning rate scheduling, checkpointing, and logging. All
+configurations use Pydantic for validation and type safety.
+
+The module provides hierarchical configuration:
+- OptimizerConfig: AdamW optimizer parameters
+- SchedulerConfig: Learning rate scheduling
+- CheckpointConfig: Checkpoint saving and loading
+- LoggingConfig: Logging and monitoring
+- TrainingConfig: Complete training configuration
+
+Classes:
+    OptimizerConfig: Optimizer hyperparameters
+    SchedulerConfig: Learning rate scheduler settings
+    CheckpointConfig: Checkpoint management configuration
+    LoggingConfig: Logging and monitoring configuration
+    TrainingConfig: Complete training configuration
+
+Example:
+    >>> from muse.config.training_config import TrainingConfig
+    >>> 
+    >>> # Create training configuration
+    >>> config = TrainingConfig(
+    ...     optimizer=OptimizerConfig(
+    ...         learning_rate=2e-4,
+    ...         weight_decay=0.1,
+    ...         beta1=0.9,
+    ...         beta2=0.95
+    ...     ),
+    ...     scheduler=SchedulerConfig(
+    ...         lr_scheduler_type="cosine_with_min_lr",
+    ...         num_warmup_steps=1000,
+    ...         num_training_steps=10000,
+    ...         min_lr=1e-6
+    ...     ),
+    ...     checkpoint=CheckpointConfig(
+    ...         output_dir="./checkpoints",
+    ...         save_checkpoint_per_step=1000
+    ...     )
+    ... )
+    >>> 
+    >>> # Save configuration
+    >>> config.save("training_config.json")
+"""
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

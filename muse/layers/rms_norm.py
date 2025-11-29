@@ -1,3 +1,42 @@
+"""
+Root Mean Square Layer Normalization (RMSNorm).
+
+This module implements RMSNorm, a simpler and more efficient alternative to
+LayerNorm that normalizes using only the root mean square (without mean centering).
+
+RMSNorm was introduced in "Root Mean Square Layer Normalization" (Zhang & Sennrich, 2019)
+and is used in modern architectures like LLaMA, GPT-NeoX, and T5.
+
+Formula:
+    RMSNorm(x) = x / RMS(x) * scale
+    where RMS(x) = sqrt(mean(x^2) + eps)
+
+Advantages over LayerNorm:
+- Simpler computation (no mean subtraction)
+- Slightly faster
+- Often achieves similar or better performance
+- Computation is done in FP32 for numerical stability
+
+Classes:
+    RMSNorm: RMSNorm layer with learnable scale parameter
+
+Functions:
+    rms_norm: Functional version without learnable parameters
+
+Example:
+    >>> import torch
+    >>> from muse.layers.rms_norm import RMSNorm
+    >>> 
+    >>> # Create RMSNorm layer
+    >>> norm = RMSNorm(dim=768, eps=1e-6)
+    >>> 
+    >>> x = torch.randn(16, 128, 768)  # (batch, seq_len, dim)
+    >>> normalized = norm(x)  # (16, 128, 768)
+    >>> 
+    >>> # Functional version
+    >>> from muse.layers.rms_norm import rms_norm
+    >>> normalized = rms_norm(x, eps=1e-6)
+"""
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

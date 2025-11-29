@@ -1,3 +1,41 @@
+"""
+Key-Value Cache for Efficient Inference.
+
+This module provides a KVCache class for storing and managing key-value pairs
+in attention layers during autoregressive generation. KV caching significantly
+speeds up inference by avoiding recomputation of keys and values for previous tokens.
+
+Without KV caching, each new token requires recomputing attention for all previous
+tokens (O(n²)). With caching, only the new token's KV pairs need computation (O(n)).
+
+Key features:
+- Stores keys and values for efficient reuse
+- Automatic device movement
+- Position tracking for incremental updates
+- Support for batch inference
+
+Classes:
+    KVCache: Key-value pair cache for attention layers
+
+Example:
+    >>> import torch
+    >>> from muse.layers.kv_cache import KVCache
+    >>> 
+    >>> # Create cache
+    >>> cache = KVCache(
+    ...     batch_size=4,
+    ...     max_seq_len=2048,
+    ...     num_kv_heads=32,
+    ...     head_dim=128,
+    ...     dtype=torch.bfloat16
+    ... )
+    >>> 
+    >>> # During generation
+    >>> k = torch.randn(4, 1, 32, 128)  # New token's key
+    >>> v = torch.randn(4, 1, 32, 128)  # New token's value
+    >>> k_full, v_full = cache.update(k, v)  # Get full cached KV
+    >>> # Use k_full and v_full for attention with all previous tokens
+"""
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

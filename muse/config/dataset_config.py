@@ -1,3 +1,39 @@
+"""
+Dataset Configuration Classes.
+
+This module defines configuration classes for dataset loading, preprocessing,
+and batching. It uses Pydantic for validation and provides a flexible way to
+configure data pipelines for training and evaluation.
+
+The configuration handles:
+- Dataset source specification
+- Data format (chatml, completion, etc.)
+- Sequence length limits
+- Visual token handling for multimodal models
+- DataLoader settings (batch size, workers)
+- Dataset-specific extra configuration via JSON
+
+Classes:
+    DatasetConfig: Complete dataset configuration
+
+Example:
+    >>> from muse.config.dataset_config import DatasetConfig
+    >>> 
+    >>> # Create dataset configuration
+    >>> config = DatasetConfig(
+    ...     dataset="path/to/dataset",
+    ...     data_format="chatml",
+    ...     max_length=2048,
+    ...     batch_size=32,
+    ...     num_workers=4
+    ... )
+    >>> 
+    >>> # Load additional config from JSON
+    >>> config.load_extra_from_file("dataset_specific.json")
+    >>> 
+    >>> # Save configuration
+    >>> config.save("dataset_config.json")
+"""
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

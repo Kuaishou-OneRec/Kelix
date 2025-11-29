@@ -1,3 +1,29 @@
+"""
+Layer Normalization with FP32 Precision.
+
+This module provides a LayerNorm wrapper that performs normalization in FP32
+for numerical stability during mixed-precision training.
+
+When training with bfloat16 or float16, normalization operations can suffer
+from numerical instability. This implementation temporarily upcasts to FP32,
+performs the normalization, then casts back to the original dtype.
+
+Classes:
+    Fp32LayerNorm: LayerNorm with FP32 computation
+
+Example:
+    >>> import torch
+    >>> from muse.layers.layer_norm import Fp32LayerNorm
+    >>> 
+    >>> # Create FP32 LayerNorm
+    >>> norm = Fp32LayerNorm(normalized_shape=768, eps=1e-5)
+    >>> 
+    >>> # Input in bfloat16
+    >>> x = torch.randn(16, 128, 768, dtype=torch.bfloat16)
+    >>> 
+    >>> # Normalization computed in FP32, output in bfloat16
+    >>> normalized = norm(x)  # (16, 128, 768) in bfloat16
+"""
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

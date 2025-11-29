@@ -132,6 +132,7 @@ nohup mpirun --allow-run-as-root \
                 --fp32-weight \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
+                --prefetch-params-in-forward \
                 --comment '$comment' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 

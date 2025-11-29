@@ -1,3 +1,41 @@
+"""
+Attention Function Utilities and Implementations.
+
+This module provides a unified interface and multiple implementations for attention
+mechanisms, including standard eager attention and Flash Attention 2.
+
+The module defines an AttentionFunction protocol that all attention implementations
+must follow, ensuring consistent APIs across different attention variants. This
+allows easy swapping between implementations without changing model code.
+
+Key features:
+- Protocol-based design for pluggable attention functions
+- EagerAttention: Standard PyTorch attention implementation
+- FlashAttention2: Memory-efficient attention using Flash Attention
+- Support for causal masking, custom masks, and dropout
+- Variable-length sequence support (with cu_seqlens)
+
+Classes:
+    AttentionFunction: Protocol defining attention interface
+    EagerAttention: Standard attention implementation
+    FlashAttention2: Flash Attention 2 implementation
+    FlashAttentionVarlen: Variable-length Flash Attention
+
+Functions:
+    get_attention_function: Factory for creating attention functions by name
+
+Example:
+    >>> from muse.layers.attention_utils import get_attention_function
+    >>> 
+    >>> # Get Flash Attention 2
+    >>> attn_fn = get_attention_function("flash_attention_2")
+    >>> 
+    >>> # Use in forward pass
+    >>> q = torch.randn(batch, seq_len, num_heads, head_dim)
+    >>> k = torch.randn(batch, seq_len, num_heads, head_dim)
+    >>> v = torch.randn(batch, seq_len, num_heads, head_dim)
+    >>> output = attn_fn(q, k, v, is_causal=True)
+"""
 
 from typing import Protocol, Optional, Any
 import torch

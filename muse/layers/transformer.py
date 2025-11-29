@@ -1,3 +1,52 @@
+"""
+Transformer Layer Implementations.
+
+This module provides transformer layer implementations for decoder-only and
+encoder-decoder architectures, following the LLaMA design with pre-normalization.
+
+The module includes:
+- Self-attention transformer layers
+- Cross-attention transformer layers  
+- Complete transformer decoder blocks
+- KV cache support for efficient inference
+
+Key features:
+- Pre-normalization (applied before attention and FFN)
+- Residual connections with optional scaling
+- KV cache management for generation
+- Flexible mask handling (causal, custom, block masks)
+- Support for packed sequences
+
+Classes:
+    TransformerSelfAttentionLayer: Single self-attention transformer layer
+    TransformerCrossAttentionLayer: Single cross-attention transformer layer
+    TransformerDecoder: Complete stack of transformer layers
+
+Example:
+    >>> import torch
+    >>> from torch import nn
+    >>> from muse.layers.transformer import TransformerSelfAttentionLayer
+    >>> from muse.layers.attention import MultiHeadAttention
+    >>> from muse.layers.feed_forward import FeedForward
+    >>> 
+    >>> # Create layer components
+    >>> attn = MultiHeadAttention(...)
+    >>> mlp = FeedForward(...)
+    >>> sa_norm = nn.LayerNorm(embed_dim)
+    >>> mlp_norm = nn.LayerNorm(embed_dim)
+    >>> 
+    >>> # Create transformer layer
+    >>> layer = TransformerSelfAttentionLayer(
+    ...     attn=attn,
+    ...     mlp=mlp,
+    ...     sa_norm=sa_norm,
+    ...     mlp_norm=mlp_norm
+    ... )
+    >>> 
+    >>> # Forward pass
+    >>> x = torch.randn(batch, seq_len, embed_dim)
+    >>> output = layer(x)  # (batch, seq_len, embed_dim)
+"""
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

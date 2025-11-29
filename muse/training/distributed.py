@@ -1,3 +1,56 @@
+"""
+Distributed Training Utilities and FSDP Support.
+
+This module provides comprehensive utilities for distributed training with PyTorch,
+with a focus on Fully Sharded Data Parallel (FSDP) training. Key features:
+
+- Process group management and initialization
+- FSDP model sharding with configurable strategies
+- Distributed state dict loading and saving
+- Mixed precision training support
+- CPU offloading capabilities
+- Checkpoint loading from full model state dicts
+
+The module supports both single-machine and multi-node distributed training,
+with automatic detection of distributed environments. It provides helpers for
+FSDP-specific operations like sharding conditions, parameter prefetching, and
+distributed checkpoint management.
+
+Functions:
+    get_world_size_and_rank: Get distributed world size and rank
+    is_distributed: Check if running in distributed mode
+    get_distributed_backend: Get appropriate backend for device type
+    validate_no_params_on_meta_device: Validate no meta device parameters
+    get_shard_conditions: Determine which modules to shard
+    shard_model: Apply FSDP sharding to a model
+    load_from_full_model_state_dict: Load full state dict into FSDP model
+    load_from_full_model_state_dict_local: Single-machine version of above
+
+Constants:
+    _DISTRIBUTED_STATE_DICT_API_IS_AVAILABLE: Flag for DSD API availability
+    process_group_timeout: Timeout for process group operations
+
+Example:
+    >>> import torch.distributed as dist
+    >>> from muse.training.distributed import shard_model, is_distributed
+    >>> 
+    >>> # Initialize distributed training
+    >>> if is_distributed():
+    ...     dist.init_process_group(backend="nccl")
+    >>> 
+    >>> # Shard model with FSDP
+    >>> model = MyLargeModel()
+    >>> shard_model(
+    ...     model,
+    ...     cpu_offload=False,
+    ...     reshard_after_forward=True,
+    ...     param_dtype=torch.bfloat16
+    ... )
+    >>> 
+    >>> # Load from checkpoint
+    >>> full_state_dict = load_hf_checkpoint("./checkpoint")
+    >>> load_from_full_model_state_dict(model, full_state_dict)
+"""
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

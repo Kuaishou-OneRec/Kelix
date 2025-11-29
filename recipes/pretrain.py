@@ -81,6 +81,8 @@ from muse.losses.ce import CrossEntropyLoss
 
 from muse.config import load_config
 
+from muse.training.common import define_metrics, StepScheduler
+
 def get_argument_parser():
   parser = argparse.ArgumentParser()
 
@@ -482,7 +484,6 @@ def train():
     min_lr=args.min_lr
   )
 
-  global_step = 0
   app_state = AppState(model=model, optimizer=optimizer)
   dist_checkpointer = DistributedCheckpointer()
   if args.checkpoint_dir:
@@ -503,9 +504,6 @@ def train():
     print_rank_0(f"Successfully loaded model using distributed checkpoint")
 
   dist.barrier()
-
-  # Load tokenizer for decoding/debugging purposes
-  tokenizer = AutoTokenizer.from_pretrained(args.model_dir, trust_remote_code=True)
 
   if dist.get_rank() == 0:
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
@@ -537,40 +535,26 @@ def train():
     output_dir=os.path.join(args.output_dir, "torch_profile")) \
       if args.enable_profile else None
 
-  # TODO: move to muse.losses
   # Simple cross-entropy loss for language modeling
 
   loss_fn = CrossEntropyLoss(ignore_index=-100, shift_labels=True)
 
-  start_time = time.time()
-
-  grad_norm = 0.0
-  micro_step = 0
-  acc_loss = 0.0
-
+  # Initialize metrics and step scheduler
+  metrics = define_metrics(
+    acc_steps=args.gradient_accumulation_steps,
+    logging_per_step=args.logging_per_step
+  )
+  
+  # Initialize step scheduler for training loop management
+  scheduler = StepScheduler(args)
+  
   # Setup data iterator
   if dataloader is not None:
     data_iter = iter(gather_by_group(dataloader, get_context_parallel_group()))
   else:
     print_rank_0("Warning: No dataloader available. Training loop will not run.")
     data_iter = iter([])
-
-  tb_metrics_q = queue.Queue(maxsize=8)
-  def write_tb_async(tb_writer, metrics_queue):
-    while True:
-      global_step, log_dict = metrics_queue.get()
-      for name, data in log_dict.items():
-        if data is not None and tb_writer:
-          tb_writer.add_scalar(
-            name, data, global_step=global_step, new_style=True)
-
-  if dist.get_rank() == 0:
-    tb_writer_t = threading.Thread(
-      target=write_tb_async, args=(
-        tb_writer, tb_metrics_q))
-    tb_writer_t.daemon = True
-    tb_writer_t.start()
-
+  
   while True:
     with contextlib.ExitStack() as ctx:
       if torch_profiler:
@@ -582,14 +566,29 @@ def train():
         break
 
       to_cuda(batch)
+      
+      # Advance metrics index for this step
+      metrics.step()
+      
+      # Advance scheduler (manages micro_step and global_step)
+      scheduler.step()
 
       # Extract batch data
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
+      cu_seqlens = batch.get("cu_seqlens", None)
+      sample_idx = batch.get("sample_idx", None)
 
       # Prepare labels for loss computation
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
       labels = input_ids * loss_mask + (-100) * (1 - loss_mask)
+
+      tokens = input_ids.shape[1]
+      metrics.tokens.append(tokens)
+
+      if sample_idx is not None:
+        samples = (sample_idx > 0).sum().item()
+        metrics.samples.append(samples)
 
       # Forward pass
       with Timer("Forward"):
@@ -598,49 +597,35 @@ def train():
         # Compute loss for language modeling
         logits = output.logits if hasattr(output, 'logits') else output
         loss = loss_fn(logits, labels)
-        micro_step += 1
+        metrics.loss.append(loss.detach().item())
 
       # Backward pass
       with Timer("Backward"):
         loss.backward()
         clip_grad_by_value(model, args.clip_range)
 
-        if micro_step % args.gradient_accumulation_steps == 0:
+        # Update optimizer at gradient accumulation boundaries
+        if scheduler.is_gradient_accumulation_boundary():
           grad_norm = compute_fsdp_zero2_grad_norm(model)
+          metrics.grad_norm.append(grad_norm)
+          
+          learning_rate = lr_scheduler.get_last_lr()[0]
+          metrics.learning_rate.append(learning_rate)
+          
           optimizer.step()
           lr_scheduler.step()
           optimizer.zero_grad()
-          global_step += 1
-          micro_step = 0
-
-      # Accumulate loss
-      acc_loss += loss.detach().item()
-
-      # Logging
-      if global_step % args.logging_per_step == 0 and \
-          micro_step % args.gradient_accumulation_steps == 0:
-        if dist.get_rank() == 0:
-          learning_rate = lr_scheduler.get_last_lr()[0]
-          end_time = time.time()      
-          avg_loss = acc_loss / args.logging_per_step
-          log_dict = {
-            "training/loss": avg_loss,
-            "training/grad_norm": grad_norm,
-            "training/learning_rate": learning_rate
-          }
-          start_time = end_time
-
-          metrics_info = (global_step, log_dict)
-          tb_metrics_q.put(metrics_info)
           
-          print_rank_0(
-            f"Step: {global_step}, Loss: {avg_loss:.4f}, "
-            f"Learning Rate: {learning_rate:.2e}, GradNorm: {grad_norm:.2f}"
-          )
-          acc_loss = 0.0
-    
-      if (global_step % args.save_checkpoint_per_step == 0 or global_step in [100, 200]) and \
-          global_step > 0 and micro_step % args.gradient_accumulation_steps == 0:
+        # Record step time
+        metrics.step_time.tick()
+
+
+      # Logging at specified intervals
+      if scheduler.should_logging():
+        metrics.logger.log()
+
+      # Save checkpoint at specified intervals
+      if scheduler.should_save_checkpoint():
         
         torch.cuda.empty_cache()
         gc.collect()
@@ -650,17 +635,18 @@ def train():
             app_state=app_state,
             dist_checkpointer=dist_checkpointer,
             checkpoint_dir=args.output_dir,
-            global_step=global_step
+            global_step=scheduler.global_step
           )
 
       if torch_profiler:
         torch_profiler.step()
 
+  # Save final checkpoint
   save_checkpoint(
     app_state=app_state,
     dist_checkpointer=dist_checkpointer,
     checkpoint_dir=args.output_dir,
-    global_step=global_step)
+    global_step=scheduler.global_step)
 
 if __name__ == "__main__":
   train()

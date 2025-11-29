@@ -1,3 +1,39 @@
+"""
+Rotary Positional Embeddings (RoPE) Implementation.
+
+This module provides implementations of Rotary Positional Embeddings (RoPE),
+a relative positional encoding method that applies rotations to query and key
+vectors in attention mechanisms.
+
+RoPE was introduced in "RoFormer: Enhanced Transformer with Rotary Position Embedding"
+(Su et al., 2021) and is used in modern LLMs like LLaMA, GPT-NeoX, and PaLM.
+
+Key advantages of RoPE:
+- Encodes relative positions rather than absolute positions
+- Naturally extends to sequences longer than those seen during training
+- Works well with modern attention mechanisms like Flash Attention
+- No need for learned positional embeddings
+
+Classes:
+    LlamaRotaryPositionalEmbeddings: LLaMA-style RoPE with cached frequencies
+    RotaryPositionalEmbeddings: Generic RoPE implementation  
+    Qwen2RotaryEmbedding: Qwen2-style RoPE with NTK-aware interpolation
+
+Example:
+    >>> import torch
+    >>> from muse.layers.position_embeddings import LlamaRotaryPositionalEmbeddings
+    >>> 
+    >>> # Create RoPE layer
+    >>> rope = LlamaRotaryPositionalEmbeddings(
+    ...     dim=128,  # head_dim
+    ...     max_seq_len=4096,
+    ...     base=10000
+    ... )
+    >>> 
+    >>> # Apply to queries/keys
+    >>> q = torch.randn(batch, seq_len, num_heads, head_dim)
+    >>> q_rotated = rope(q)  # Same shape, with positional info encoded
+"""
 # Copyright (c) Meta Platforms, Inc. and affiliates.
 # All rights reserved.
 #

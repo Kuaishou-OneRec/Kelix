@@ -1,0 +1,2182 @@
+"""
+Metrics Management System for Training Monitoring.
+
+This module provides a flexible and efficient metrics tracking system designed for
+deep learning training workflows with computation graph support. It supports:
+
+- Scalar values with distributed reduction operations
+- Time series data with computation graph for derived metrics
+- Lazy evaluation with automatic cache invalidation
+- Sliding window operations (avg, sum) with O(n) cumsum optimization
+- Cumulative sum operations
+- Multi-level dependency support (nested computations)
+- Distributed training support with cross-rank aggregation
+- Timestamp tracking with automatic timestamping
+
+Classes:
+    Scalar: Scalar value wrapper with distributed reduce operations
+    BaseSeries: Abstract base class for all series types
+    Series: Primary time series container storing actual data
+    DerivedSeries: Computed series that lazily evaluates from source
+    Metrics: Main class for managing metrics with shared index
+
+Example:
+    >>> metrics = Metrics()
+    >>> metrics.new("loss", dtype="float")
+    >>> 
+    >>> # Append values
+    >>> for step in range(100):
+    ...     metrics.step()
+    ...     metrics.loss.append(compute_loss())
+    >>> 
+    >>> # Create derived series with sliding window
+    >>> loss_avg = metrics.loss.avg(window=20)  # DerivedSeries
+    >>> print(f"Step 50: {loss_avg[50]}")  # Lazy evaluation
+    >>> 
+    >>> # Nested computation
+    >>> loss_sum = loss_avg.sum(window=10)
+    >>> print(f"Sum of avg: {loss_sum[50]}")
+"""
+import time
+from abc import ABC, abstractmethod
+from typing import Optional, Union, Literal, List, Dict, Any
+import torch
+import torch.distributed as dist
+
+
+class LoggerBackend(ABC):
+    """
+    Abstract base class for logger backends.
+    
+    Logger backends handle writing metrics to different outputs (TensorBoard,
+    Wandb, CSV files, or stdout). Each backend implements the write() method
+    to persist metrics in their specific format.
+    """
+    
+    @abstractmethod
+    def write(self, step: int, values: Dict[str, Dict[str, Any]]):
+        """
+        Write metrics to the backend.
+        
+        Args:
+            step: Current step/index value
+            values: Nested dict of {group: {metric_name: value}}
+        """
+        pass
+    
+    @abstractmethod
+    def close(self):
+        """Close and cleanup backend resources."""
+        pass
+
+
+class TensorBoardBackend(LoggerBackend):
+    """TensorBoard logging backend using torch.utils.tensorboard."""
+    
+    def __init__(self, log_dir: str):
+        """
+        Initialize TensorBoard backend.
+        
+        Args:
+            log_dir: Directory to write TensorBoard logs
+        """
+        from torch.utils.tensorboard import SummaryWriter
+        self.writer = SummaryWriter(log_dir=log_dir)
+        self.log_dir = log_dir
+    
+    def write(self, step: int, values: Dict[str, Dict[str, Any]]):
+        """Write metrics to TensorBoard."""
+        for group, metrics in values.items():
+            for name, value in metrics.items():
+                tag = f"{group}/{name}" if group else name
+                # Extract scalar value if it's a Scalar object
+                if hasattr(value, 'value'):
+                    value = value.value
+                self.writer.add_scalar(tag, value, step)
+    
+    def close(self):
+        """Close TensorBoard writer."""
+        self.writer.close()
+
+
+class WandbBackend(LoggerBackend):
+    """Weights & Biases logging backend."""
+    
+    def __init__(self, project: str, run_name: Optional[str] = None, **kwargs):
+        """
+        Initialize Wandb backend.
+        
+        Args:
+            project: Wandb project name
+            run_name: Optional run name
+            **kwargs: Additional arguments passed to wandb.init()
+        """
+        try:
+            import wandb
+            self.wandb = wandb
+            self.run = wandb.init(project=project, name=run_name, **kwargs)
+        except ImportError:
+            raise ImportError("wandb is not installed. Install it with: pip install wandb")
+    
+    def write(self, step: int, values: Dict[str, Dict[str, Any]]):
+        """Write metrics to Wandb."""
+        flat_dict = {}
+        for group, metrics in values.items():
+            for name, value in metrics.items():
+                key = f"{group}/{name}" if group else name
+                # Extract scalar value if it's a Scalar object
+                if hasattr(value, 'value'):
+                    value = value.value
+                flat_dict[key] = value
+        
+        self.wandb.log(flat_dict, step=step)
+    
+    def close(self):
+        """Finish Wandb run."""
+        if self.run:
+            self.run.finish()
+
+
+class CSVBackend(LoggerBackend):
+    """CSV file logging backend."""
+    
+    def __init__(self, csv_path: str):
+        """
+        Initialize CSV backend.
+        
+        Args:
+            csv_path: Path to CSV file
+        """
+        self.csv_path = csv_path
+        self.file = open(csv_path, 'w')
+        self.headers_written = False
+        self.headers = []
+    
+    def write(self, step: int, values: Dict[str, Dict[str, Any]]):
+        """Write metrics to CSV."""
+        import csv
+        
+        # Flatten values
+        flat_dict = {'step': step}
+        for group, metrics in values.items():
+            for name, value in metrics.items():
+                key = f"{group}/{name}" if group else name
+                # Extract scalar value if it's a Scalar object
+                if hasattr(value, 'value'):
+                    value = value.value
+                flat_dict[key] = value
+        
+        # Write headers if first time
+        if not self.headers_written:
+            self.headers = list(flat_dict.keys())
+            writer = csv.DictWriter(self.file, fieldnames=self.headers)
+            writer.writeheader()
+            self.headers_written = True
+        
+        # Write row
+        writer = csv.DictWriter(self.file, fieldnames=self.headers)
+        writer.writerow(flat_dict)
+        self.file.flush()
+    
+    def close(self):
+        """Close CSV file."""
+        self.file.close()
+
+
+class StdoutBackend(LoggerBackend):
+    """Standard output logging backend."""
+    
+    def __init__(self, prefix: str = "[Metrics]"):
+        """
+        Initialize Stdout backend.
+        
+        Args:
+            prefix: Prefix string for log lines
+        """
+        self.prefix = prefix
+    
+    def write(self, step: int, values: Dict[str, Dict[str, Any]]):
+        """Write metrics to stdout."""
+        metrics_str = []
+        for group, metrics in values.items():
+            for name, value in metrics.items():
+                key = f"{group}/{name}" if group else name
+                # Extract scalar value if it's a Scalar object
+                if hasattr(value, 'value'):
+                    value = value.value
+                metrics_str.append(f"{key}={value:.6f}" if isinstance(value, float) else f"{key}={value}")
+        
+        print(f"{self.prefix} Step {step}: {', '.join(metrics_str)}")
+    
+    def close(self):
+        """No-op for stdout."""
+        pass
+
+
+class Logger:
+    """
+    Logger for tracking and writing metrics to multiple backends.
+    
+    Logger manages a set of tracked series and writes their latest values to
+    configured backends (TensorBoard, Wandb, CSV, or stdout) when write() is called.
+    
+    Example:
+        >>> logger = Logger("training", [
+        ...     TensorBoardBackend("runs/exp1"),
+        ...     StdoutBackend()
+        ... ])
+        >>> logger.track(metrics.loss, name="loss", group="training")
+        >>> logger.write()  # Writes to all backends
+    """
+    
+    def __init__(self, name: str, backends: List[LoggerBackend]):
+        """
+        Initialize Logger with name and backends.
+        
+        Args:
+            name: Logger name (for identification)
+            backends: List of backend instances
+        """
+        self.name = name
+        self.backends = backends
+        self._tracked_series: Dict[str, tuple] = {}  # name -> (series, group)
+    
+    def track(self, series: "BaseSeries", name: str, group: str = ""):
+        """
+        Track a series for logging.
+        
+        Args:
+            series: Series or DerivedSeries to track
+            name: Metric name for logging
+            group: Optional group name for organizing metrics
+        """
+        self._tracked_series[name] = (series, group)
+    
+    def write(self, step: int):
+        """
+        Write latest values of all tracked series to backends.
+        
+        Args:
+            step: Current step value
+        """
+        # Collect values from tracked series
+        values: Dict[str, Dict[str, Any]] = {}
+        
+        for name, (series, group) in self._tracked_series.items():
+            if len(series) > 0:
+                # Get latest value
+                latest_value = series[-1]
+                
+                # Organize by group
+                if group not in values:
+                    values[group] = {}
+                values[group][name] = latest_value
+        
+        # Write to all backends
+        for backend in self.backends:
+            backend.write(step, values)
+    
+    def close(self):
+        """Close all backends."""
+        for backend in self.backends:
+            backend.close()
+
+
+class LoggerProxy:
+    """
+    Proxy for broadcasting operations to multiple loggers.
+    
+    LoggerProxy allows metrics.logger.track() and metrics.logger.write()
+    to broadcast to all registered loggers in the Metrics instance.
+    """
+    
+    def __init__(self, loggers: List[Logger]):
+        """
+        Initialize LoggerProxy.
+        
+        Args:
+            loggers: List of Logger instances to broadcast to
+        """
+        self._loggers = loggers
+    
+    def track(self, series: "BaseSeries", name: str, group: str = ""):
+        """
+        Track a series in all loggers.
+        
+        Args:
+            series: Series or DerivedSeries to track
+            name: Metric name for logging
+            group: Optional group name for organizing metrics
+        """
+        for logger in self._loggers:
+            logger.track(series, name, group)
+    
+    def write(self):
+        """Write to all loggers using their parent Metrics' current index."""
+        # Get the step from the first logger's tracked series' metrics
+        # This assumes all loggers share the same Metrics instance
+        if self._loggers and len(self._loggers) > 0:
+            # Need to get step from somewhere - we'll pass it as parameter
+            # For now, raise error if called without step
+            raise RuntimeError("LoggerProxy.write() needs access to Metrics step. Use metrics.write_logs() instead.")
+    
+    def close(self):
+        """Close all loggers."""
+        for logger in self._loggers:
+            logger.close()
+
+
+class Scalar:
+    """
+    Scalar value wrapper with distributed reduction support.
+    
+    Scalar wraps a single numeric value (int, float, or timestamp) and provides
+    distributed reduce operations for aggregating values across multiple ranks
+    in a distributed training environment.
+    
+    Args:
+        value (int or float): The numeric value to wrap
+        dtype (Literal["int", "float", "timestamp"]): Data type specification.
+            "int" values are converted to int, "float" and "timestamp" to float.
+    
+    Attributes:
+        dtype (str): The data type of the scalar
+        
+    Example:
+        >>> scalar = Scalar(3.14, dtype="float")
+        >>> print(scalar.value)
+        3.14
+        >>> reduced = scalar.reduce(reduction="mean")
+        >>> print(reduced.value)
+        3.14
+    """
+    
+    def __init__(self, value: Union[int, float], dtype: Literal["int", "float", "timestamp"]):
+        """
+        Initialize a Scalar with automatic type conversion.
+        
+        Args:
+            value (int or float): The numeric value to wrap
+            dtype (Literal["int", "float", "timestamp"]): Data type specification
+        """
+        self._value = value
+        self.dtype = dtype
+        # Convert value based on dtype
+        if dtype == "int":
+            self._value = int(value)
+        elif dtype == "float" or dtype == "timestamp":
+            self._value = float(value)
+    
+    @property
+    def value(self) -> Union[int, float]:
+        """
+        Get the raw numeric value.
+        
+        Returns:
+            int or float: The underlying value, guaranteed to be int for dtype="int",
+                float for dtype="float" or dtype="timestamp"
+        """
+        if self.dtype == "int":
+            return int(self._value)
+        else:
+            return float(self._value)
+    
+    def reduce(self, reduction: Literal["mean", "sum"] = "mean", group: Optional[dist.ProcessGroup] = None) -> "Scalar":
+        """
+        Perform distributed aggregation across ranks.
+        
+        Aggregates the scalar value across all processes in a distributed environment
+        using torch.distributed. In single-machine mode (when torch.distributed is not
+        available or not initialized), returns a copy of the original scalar.
+        
+        Args:
+            reduction (Literal["mean", "sum"], optional): Aggregation method.
+                "mean" computes the average across ranks, "sum" computes the total.
+                Defaults to "mean".
+            group (optional): Process group for aggregation. If None, uses the default
+                process group. Defaults to None.
+                
+        Returns:
+            Scalar: A new Scalar containing the aggregated value with the same dtype
+            
+        Raises:
+            ValueError: If reduction is not "mean" or "sum"
+            
+        Example:
+            >>> # In a distributed environment with 4 ranks, each having scalar=Scalar(10, "int")
+            >>> result = scalar.reduce(reduction="sum")
+            >>> print(result.value)  # 40 (10 * 4 ranks)
+            >>> result = scalar.reduce(reduction="mean")
+            >>> print(result.value)  # 10 (average)
+        """
+        # Validate reduction parameter
+        if reduction not in ["mean", "sum"]:
+            raise ValueError(f"Unsupported reduction: {reduction}, must be 'mean' or 'sum'")
+        
+        # Check if running in distributed environment
+        if not dist.is_available() or not dist.is_initialized():
+            # Single-machine mode, return a copy of the original value
+            return Scalar(self._value, self.dtype)
+        
+        # Convert to tensor for distributed operations
+        if self.dtype == "int":
+            tensor_value = torch.tensor(self._value, dtype=torch.int64, device="cpu")
+        else:
+            tensor_value = torch.tensor(self._value, dtype=torch.float32, device="cpu")
+        
+        # Perform reduce operation
+        if reduction == "mean":
+            dist.all_reduce(tensor_value, op=dist.ReduceOp.SUM, group=group)
+            world_size, _ = self._get_world_size_and_rank()
+            tensor_value = tensor_value / world_size
+        elif reduction == "sum":
+            dist.all_reduce(tensor_value, op=dist.ReduceOp.SUM, group=group)
+        else:
+            raise ValueError(f"Unsupported reduction: {reduction}, must be 'mean' or 'sum'")
+        
+        # Convert back to Python type
+        if self.dtype == "int":
+            reduced_value = int(tensor_value.item())
+        else:
+            reduced_value = float(tensor_value.item())
+        
+        return Scalar(reduced_value, self.dtype)
+    
+    def _get_world_size_and_rank(self):
+        """
+        Get the world size and rank in distributed environment.
+        
+        Returns:
+            tuple: (world_size, rank). Returns (1, 0) if not in distributed mode.
+        """
+        if dist.is_available() and dist.is_initialized():
+            return dist.get_world_size(), dist.get_rank()
+        else:
+            return 1, 0
+    
+    def __float__(self) -> float:
+        """Convert scalar to float."""
+        return float(self._value)
+    
+    def __int__(self) -> int:
+        """Convert scalar to int."""
+        return int(self._value)
+    
+    def __repr__(self) -> str:
+        """Return string representation of the Scalar."""
+        return f"Scalar(value={self._value}, dtype={self.dtype})"
+
+
+class BaseSeries(ABC):
+    """
+    Abstract base class defining the interface for all Series types.
+    
+    BaseSeries provides a common interface for both Series (which stores actual data)
+    and DerivedSeries (which computes data from sources). All series types support:
+    
+    - Indexing and slicing via __getitem__
+    - Length queries via __len__
+    - Iteration via __iter__
+    - dtype attribute for type information
+    - Statistical operations (avg, sum, cumsum) that return DerivedSeries
+    
+    This abstraction enables treating both stored and computed series uniformly,
+    supporting multi-level computation graphs.
+    
+    Attributes:
+        dtype (str): Data type of values in the series ("int", "float", or "timestamp")
+    """
+    
+    @property
+    @abstractmethod
+    def dtype(self) -> str:
+        """Return the data type of values in this series."""
+        pass
+    
+    @abstractmethod
+    def __len__(self) -> int:
+        """Return the length of the series."""
+        pass
+    
+    @abstractmethod
+    def __getitem__(self, key: Union[int, slice]):
+        """Get item(s) from the series by index or slice."""
+        pass
+    
+    @abstractmethod
+    def __iter__(self):
+        """Return an iterator over the series values."""
+        pass
+    
+    @abstractmethod
+    def avg(self, window: Optional[int] = None) -> "DerivedSeries":
+        """
+        Create a derived series computing sliding window average.
+        
+        Args:
+            window (int, optional): Window size. If None, uses all available data
+                at each position (expanding window).
+        
+        Returns:
+            DerivedSeries: A new series computing averages
+        """
+        pass
+    
+    @abstractmethod
+    def sum(self, window: Optional[int] = None) -> "DerivedSeries":
+        """
+        Create a derived series computing sliding window sum.
+        
+        Args:
+            window (int, optional): Window size. If None, uses all available data
+                at each position (expanding window).
+        
+        Returns:
+            DerivedSeries: A new series computing sums
+        """
+        pass
+    
+    @abstractmethod
+    def cumsum(self) -> "DerivedSeries":
+        """
+        Create a derived series computing cumulative sum.
+        
+        Returns:
+            DerivedSeries: A new series computing cumulative sums
+        """
+        pass
+    
+    @abstractmethod
+    def __add__(self, other: Union["BaseSeries", int, float]) -> "DerivedSeries":
+        """Add operation: self + other (element-wise or scalar)."""
+        pass
+    
+    @abstractmethod
+    def __radd__(self, other: Union[int, float]) -> "DerivedSeries":
+        """Reverse add operation: other + self."""
+        pass
+    
+    @abstractmethod
+    def __sub__(self, other: Union["BaseSeries", int, float]) -> "DerivedSeries":
+        """Subtract operation: self - other (element-wise or scalar)."""
+        pass
+    
+    @abstractmethod
+    def __rsub__(self, other: Union[int, float]) -> "DerivedSeries":
+        """Reverse subtract operation: other - self."""
+        pass
+    
+    @abstractmethod
+    def __mul__(self, other: Union["BaseSeries", int, float]) -> "DerivedSeries":
+        """Multiply operation: self * other (element-wise or scalar)."""
+        pass
+    
+    @abstractmethod
+    def __rmul__(self, other: Union[int, float]) -> "DerivedSeries":
+        """Reverse multiply operation: other * self."""
+        pass
+    
+    @abstractmethod
+    def __truediv__(self, other: Union["BaseSeries", int, float]) -> "DerivedSeries":
+        """Divide operation: self / other (element-wise or scalar)."""
+        pass
+    
+    @abstractmethod
+    def __rtruediv__(self, other: Union[int, float]) -> "DerivedSeries":
+        """Reverse divide operation: other / self."""
+        pass
+    
+    @abstractmethod
+    def shift(self, periods: int = 1, fill_value: Optional[Union[int, float]] = None) -> "DerivedSeries":
+        """
+        Shift series by specified number of periods.
+        
+        Args:
+            periods: Number of periods to shift. Positive shifts forward (down),
+                negative shifts backward (up).
+            fill_value: Value to use for filling. If None, uses NaN for float/timestamp,
+                0 for int types.
+        
+        Returns:
+            DerivedSeries: New series with shifted values
+        """
+        pass
+    
+    @abstractmethod
+    def diff(self, periods: int = 1) -> "DerivedSeries":
+        """
+        Calculate the difference between current value and shifted value.
+        
+        Equivalent to: self - self.shift(periods)
+        
+        Args:
+            periods: Periods to shift for calculating difference. Default is 1.
+                Positive values compute forward differences.
+        
+        Returns:
+            DerivedSeries: Difference series
+        """
+        pass
+    
+    @abstractmethod
+    def reduce(self, reduction: Literal["mean", "sum"] = "mean", group: Optional[dist.ProcessGroup] = None) -> "DerivedSeries":
+        """
+        Create a derived series with distributed reduction operation.
+        
+        The reduction is applied lazily when values are accessed (via indexing).
+        When accessing a specific index, the reduction is performed on that
+        single value across all distributed ranks.
+        
+        Args:
+            reduction: Reduction operation ("mean" or "sum")
+            group: Process group for distributed reduction
+        
+        Returns:
+            DerivedSeries: Series that performs reduction on access
+        """
+        pass
+
+
+class DerivedSeries(BaseSeries):
+    """
+    Computed series that lazily evaluates from source series.
+    
+    DerivedSeries implements the computation graph mechanism, where derived metrics
+    automatically update when their source data changes. Features include:
+    
+    - Lazy evaluation: computation happens only when values are accessed
+    - Automatic cache invalidation when source data changes
+    - Sliding window operations with cumsum optimization for O(n) performance
+    - Arithmetic operations (+, -, *, /) with element-wise or scalar operations
+    - Support for nested dependencies (derived from derived series)
+    - Memory efficient: caches results but doesn't duplicate source data
+    
+    The class uses cumsum caching to optimize sliding window avg/sum operations:
+    - First access: O(n) to compute cumsum cache
+    - Subsequent window calculations: O(n) using cached cumsum
+    
+    Args:
+        source (BaseSeries): Source series (can be Series or DerivedSeries)
+        operation (Literal["avg", "sum", "cumsum", "add", "sub", "mul", "div"]): Operation type
+        window (int, optional): Window size for avg/sum operations. None means
+            expanding window (use all data up to current position).
+        dtype (str, optional): Override dtype. If None, inherits from source.
+        source2 (BaseSeries or float, optional): Second operand for binary operations
+    
+    Attributes:
+        source (BaseSeries): The source series
+        operation (str): Operation type
+        window (Optional[int]): Window size
+        source2: Second operand for arithmetic operations
+        
+    Example:
+        >>> series = Series("float")
+        >>> for i in range(10):
+        ...     series.append(float(i))
+        >>> 
+        >>> # Create derived series
+        >>> avg_series = series.avg(window=3)  # DerivedSeries
+        >>> print(avg_series[4])  # (2+3+4)/3 = 3.0
+        >>> 
+        >>> # Arithmetic operations
+        >>> series2 = series + 10  # Add scalar
+        >>> series3 = series * series2  # Element-wise multiplication
+    """
+    
+    def __init__(
+        self,
+        source: BaseSeries,
+        operation: Literal["avg", "sum", "cumsum", "add", "sub", "mul", "div", "shift", "identity"],
+        window: Optional[int] = None,
+        dtype: Optional[str] = None,
+        source2: Union[BaseSeries, int, float, None] = None,
+        shift_periods: Optional[int] = None,
+        shift_fill_value: Optional[Union[int, float]] = None,
+        reduce_op: Optional[Literal["mean", "sum"]] = None,
+        reduce_group: Optional[dist.ProcessGroup] = None
+    ):
+        """
+        Initialize a DerivedSeries.
+        
+        Args:
+            source: Source series to compute from
+            operation: Operation type ("avg", "sum", "cumsum", "add", "sub", "mul", "div", "shift", "identity")
+            window: Window size for avg/sum operations
+            dtype: Override dtype (defaults to source.dtype)
+            source2: Second operand for arithmetic operations
+            shift_periods: Number of periods to shift (for shift operation)
+            shift_fill_value: Fill value for shift operation
+            reduce_op: Reduction operation for identity operation ("mean" or "sum")
+            reduce_group: Process group for distributed reduction
+        
+        Raises:
+            ValueError: If operation is invalid or if cumsum is called with window
+        """
+        valid_ops = ["avg", "sum", "cumsum", "add", "sub", "mul", "div", "shift", "identity"]
+        if operation not in valid_ops:
+            raise ValueError(f"Unsupported operation: {operation}")
+        
+        if operation == "cumsum" and window is not None:
+            raise ValueError("cumsum does not support window parameter")
+        
+        self.source = source
+        self.operation = operation
+        self.window = window
+        self.source2 = source2
+        self.shift_periods = shift_periods
+        self.shift_fill_value = shift_fill_value
+        self.reduce_op = reduce_op
+        self.reduce_group = reduce_group
+        self._dtype = dtype if dtype is not None else source.dtype
+        
+        # Cache for computed results
+        self._cache: Optional[List] = None
+        self._cache_valid = False
+        
+        # Cache for cumsum (used to optimize avg/sum operations)
+        self._cumsum_cache: Optional[List] = None
+        self._cumsum_cache_valid = False
+        
+        # Track dependents for cache invalidation propagation
+        self._dependents: List["DerivedSeries"] = []
+        
+        # Register this derived series as a dependent of the source(s)
+        if isinstance(source, (Series, DerivedSeries)):
+            source._dependents.append(self)
+        
+        # For binary operations, also register with source2 if it's a series
+        if source2 is not None and isinstance(source2, (Series, DerivedSeries)):
+            source2._dependents.append(self)
+    
+    @property
+    def dtype(self) -> str:
+        """Return the data type of values in this series."""
+        return self._dtype
+    
+    def _invalidate_cache(self):
+        """
+        Recursively invalidate cache for this and all dependent series.
+        
+        Called when source data changes, propagating invalidation through
+        the computation graph.
+        """
+        self._cache_valid = False
+        self._cumsum_cache_valid = False
+        
+        # Recursively invalidate dependents
+        for dependent in getattr(self, "_dependents", []):
+            dependent._invalidate_cache()
+    
+    def _compute(self) -> List:
+        """
+        Perform lazy computation and return results.
+        
+        Computes the derived values from source data using the specified operation
+        and window. Results are cached until source data changes.
+        
+        Returns:
+            List: Computed values
+        
+        Time Complexity:
+            - avg/sum with window: O(n) with cumsum optimization
+            - cumsum: O(n)
+            - arithmetic operations: O(n)
+        """
+        if self._cache_valid and self._cache is not None:
+            return self._cache
+        
+        # Get source data (triggers recursive computation if source is derived)
+        source_data = list(self.source)
+        
+        # Compute based on operation
+        if self.operation == "avg":
+            result = self._compute_rolling_avg(source_data, self.window)
+        elif self.operation == "sum":
+            result = self._compute_rolling_sum(source_data, self.window)
+        elif self.operation == "cumsum":
+            result = self._compute_cumsum(source_data)
+        elif self.operation in ["add", "sub", "mul", "div"]:
+            result = self._compute_arithmetic(source_data, self.operation, self.source2)
+        elif self.operation == "shift":
+            result = self._compute_shift(source_data, self.shift_periods, self.shift_fill_value)
+        elif self.operation == "identity":
+            # Identity: pass through source data as-is (reduction happens on indexing)
+            result = source_data
+        else:
+            raise ValueError(f"Unknown operation: {self.operation}")
+        
+        # Cache the result
+        self._cache = result
+        self._cache_valid = True
+        
+        return result
+    
+    def _compute_cumsum(self, data: List) -> List:
+        """
+        Compute cumulative sum.
+        
+        Args:
+            data: Input data list
+            
+        Returns:
+            List of cumulative sums
+            
+        Time Complexity: O(n)
+        """
+        result = []
+        cumsum = 0
+        for val in data:
+            cumsum += val
+            result.append(cumsum)
+        return result
+    
+    def _compute_arithmetic(self, data: List, operation: str, operand: Union[BaseSeries, int, float]) -> List:
+        """
+        Compute arithmetic operations (add, sub, mul, div).
+        
+        Supports both element-wise operations (when operand is a Series) and
+        scalar operations (when operand is a number).
+        
+        Args:
+            data: Input data list from source
+            operation: Operation type ("add", "sub", "mul", "div")
+            operand: Second operand (can be Series/DerivedSeries or scalar)
+            
+        Returns:
+            List of results
+            
+        Raises:
+            ValueError: If operand lengths don't match for element-wise operations
+            ZeroDivisionError: If division by zero occurs
+            
+        Time Complexity: O(n)
+        """
+        # Get operand data if it's a series
+        if isinstance(operand, (Series, DerivedSeries)):
+            operand_data = list(operand)
+            # Check length compatibility
+            if len(data) != len(operand_data):
+                raise ValueError(
+                    f"Length mismatch: source has {len(data)} elements, "
+                    f"operand has {len(operand_data)} elements"
+                )
+            is_scalar = False
+        else:
+            # Scalar operand
+            operand_data = operand
+            is_scalar = True
+        
+        result = []
+        for i, val in enumerate(data):
+            operand_val = operand_data if is_scalar else operand_data[i]
+            
+            if operation == "add":
+                result.append(val + operand_val)
+            elif operation == "sub":
+                result.append(val - operand_val)
+            elif operation == "mul":
+                result.append(val * operand_val)
+            elif operation == "div":
+                if operand_val == 0:
+                    raise ZeroDivisionError(f"Division by zero at index {i}")
+                result.append(val / operand_val)
+        
+        return result
+    
+    def _compute_shift(
+        self, 
+        data: List, 
+        periods: Optional[int], 
+        fill_value: Optional[Union[int, float]]
+    ) -> List:
+        """
+        Shift data by specified number of periods.
+        
+        Positive periods shift forward (down), negative shift backward (up).
+        Similar to pandas shift() behavior.
+        
+        Args:
+            data: Input data list
+            periods: Number of periods to shift (default 1)
+            fill_value: Value to use for filling. If None, uses appropriate default
+                based on dtype.
+            
+        Returns:
+            List of shifted values
+            
+        Time Complexity: O(n)
+        
+        Example:
+            data = [1, 2, 3, 4, 5]
+            shift(1) -> [NaN, 1, 2, 3, 4]
+            shift(-1) -> [2, 3, 4, 5, NaN]
+            shift(2) -> [NaN, NaN, 1, 2, 3]
+        """
+        if periods is None:
+            periods = 1
+        
+        if len(data) == 0:
+            return []
+        
+        # Determine fill value if not provided
+        if fill_value is None:
+            if self.dtype == "int":
+                # For int, we can't use NaN, so use 0 as default
+                fill_value = 0
+            else:
+                # For float and timestamp, use NaN
+                fill_value = float('nan')
+        
+        result = []
+        
+        if periods > 0:
+            # Shift forward (down): prepend fill values
+            for _ in range(min(periods, len(data))):
+                result.append(fill_value)
+            for i in range(len(data) - periods):
+                result.append(data[i])
+        elif periods < 0:
+            # Shift backward (up): append fill values
+            abs_periods = abs(periods)
+            for i in range(abs_periods, len(data)):
+                result.append(data[i])
+            for _ in range(min(abs_periods, len(data))):
+                result.append(fill_value)
+        else:
+            # periods == 0: no shift
+            result = data.copy()
+        
+        return result
+    
+    def _ensure_cumsum_cache(self, data: List) -> List:
+        """
+        Ensure cumsum cache exists for the given data.
+        
+        Used internally to optimize sliding window calculations.
+        
+        Args:
+            data: Source data to compute cumsum from
+            
+        Returns:
+            List: Cumulative sums
+        """
+        if not self._cumsum_cache_valid or self._cumsum_cache is None:
+            self._cumsum_cache = self._compute_cumsum(data)
+            self._cumsum_cache_valid = True
+        return self._cumsum_cache
+    
+    def _compute_rolling_sum(self, data: List, window: Optional[int]) -> List:
+        """
+        Compute sliding window sum using cumsum optimization.
+        
+        For each position i, computes the sum of data[max(0, i-window+1):i+1].
+        Uses cumsum caching to achieve O(n) complexity instead of O(n*window).
+        
+        Args:
+            data: Input data list
+            window: Window size. If None, uses expanding window (all data up to i).
+            
+        Returns:
+            List of rolling sums
+            
+        Time Complexity: O(n) with cumsum cache
+        """
+        if len(data) == 0:
+            return []
+        
+        # Build cumsum cache for optimization
+        cumsum_cache = self._ensure_cumsum_cache(data)
+        
+        result = []
+        for i in range(len(data)):
+            if window is None:
+                # Expanding window: sum from beginning to current position
+                result.append(cumsum_cache[i])
+            else:
+                # Sliding window
+                start = max(0, i - window + 1)
+                if start == 0:
+                    # Window starts at beginning
+                    result.append(cumsum_cache[i])
+                else:
+                    # Use cumsum difference: cumsum[i] - cumsum[start-1]
+                    result.append(cumsum_cache[i] - cumsum_cache[start - 1])
+        
+        return result
+    
+    def _compute_rolling_avg(self, data: List, window: Optional[int]) -> List:
+        """
+        Compute sliding window average using cumsum optimization.
+        
+        For each position i, computes the average of data[max(0, i-window+1):i+1].
+        Uses _compute_rolling_sum and divides by actual window size.
+        
+        Args:
+            data: Input data list
+            window: Window size. If None, uses expanding window.
+            
+        Returns:
+            List of rolling averages
+            
+        Time Complexity: O(n) with cumsum cache
+        """
+        if len(data) == 0:
+            return []
+        
+        # Get rolling sum using optimized method
+        rolling_sums = self._compute_rolling_sum(data, window)
+        
+        result = []
+        for i in range(len(data)):
+            if window is None:
+                # Expanding window: count is i+1
+                count = i + 1
+            else:
+                # Sliding window: count is min(window, i+1)
+                count = min(window, i + 1)
+            
+            result.append(rolling_sums[i] / count)
+        
+        return result
+    
+    def __len__(self) -> int:
+        """Return the length of the derived series (same as source)."""
+        return len(self.source)
+    
+    def __getitem__(self, key: Union[int, slice]):
+        """
+        Get item(s) from the derived series.
+        
+        Triggers lazy computation if cache is invalid. For slices, returns
+        a new DerivedSeries with a sliced source. For identity operations
+        with reduce, applies distributed reduction to the accessed value.
+        
+        Args:
+            key: Index or slice object
+            
+        Returns:
+            Union[float, int, Scalar, DerivedSeries]: Single value (or Scalar 
+                for reduced values) for index, DerivedSeries for slice
+        """
+        if isinstance(key, slice):
+            # Return a new DerivedSeries with sliced source
+            # Create a wrapper series for the sliced data
+            sliced_source = self.source[key]
+            return DerivedSeries(
+                source=sliced_source,
+                operation=self.operation,
+                window=self.window,
+                dtype=self._dtype,
+                reduce_op=self.reduce_op,
+                reduce_group=self.reduce_group
+            )
+        else:
+            # Single index: compute and return value
+            computed = self._compute()
+            value = computed[key]
+            
+            # Apply reduction if this is an identity operation with reduce_op
+            if self.operation == "identity" and self.reduce_op is not None:
+                # Wrap in Scalar and apply reduction
+                scalar = Scalar(value, dtype=self.dtype)
+                return scalar.reduce(reduction=self.reduce_op, group=self.reduce_group)
+            
+            return value
+    
+    def __iter__(self):
+        """Iterate over computed values."""
+        computed = self._compute()
+        return iter(computed)
+    
+    def avg(self, window: Optional[int] = None) -> "DerivedSeries":
+        """
+        Create a derived series computing average from this series.
+        
+        Supports nested derivation (computing average of a derived series).
+        
+        Args:
+            window: Window size for sliding window
+            
+        Returns:
+            DerivedSeries: New derived series
+        """
+        return DerivedSeries(source=self, operation="avg", window=window)
+    
+    def sum(self, window: Optional[int] = None) -> "DerivedSeries":
+        """
+        Create a derived series computing sum from this series.
+        
+        Supports nested derivation (computing sum of a derived series).
+        
+        Args:
+            window: Window size for sliding window
+            
+        Returns:
+            DerivedSeries: New derived series
+        """
+        return DerivedSeries(source=self, operation="sum", window=window)
+    
+    def cumsum(self) -> "DerivedSeries":
+        """
+        Create a derived series computing cumulative sum from this series.
+        
+        Supports nested derivation.
+        
+        Returns:
+            DerivedSeries: New derived series
+        """
+        return DerivedSeries(source=self, operation="cumsum", window=None)
+    
+    def __add__(self, other: Union[BaseSeries, int, float]) -> "DerivedSeries":
+        """
+        Add operation: self + other.
+        
+        Supports both element-wise addition (when other is a Series) and
+        scalar addition (when other is a number).
+        
+        Args:
+            other: Series or scalar to add
+            
+        Returns:
+            DerivedSeries: New derived series with addition results
+            
+        Example:
+            >>> s1 = Series("float")
+            >>> for i in [1, 2, 3]:
+            ...     s1.append(float(i))
+            >>> s2 = s1 + 10  # Scalar addition
+            >>> print(list(s2))  # [11.0, 12.0, 13.0]
+        """
+        return DerivedSeries(source=self, operation="add", source2=other)
+    
+    def __radd__(self, other: Union[int, float]) -> "DerivedSeries":
+        """Reverse add: other + self (same as __add__ for addition)."""
+        return self.__add__(other)
+    
+    def __sub__(self, other: Union[BaseSeries, int, float]) -> "DerivedSeries":
+        """
+        Subtract operation: self - other.
+        
+        Supports both element-wise subtraction (when other is a Series) and
+        scalar subtraction (when other is a number).
+        
+        Args:
+            other: Series or scalar to subtract
+            
+        Returns:
+            DerivedSeries: New derived series with subtraction results
+        """
+        return DerivedSeries(source=self, operation="sub", source2=other)
+    
+    def __rsub__(self, other: Union[int, float]) -> "DerivedSeries":
+        """
+        Reverse subtract: other - self.
+        
+        Implemented as: DerivedSeries with scalar - self at each position.
+        """
+        # Create a temporary series with the scalar value repeated
+        # Then subtract self from it
+        return DerivedSeries(source=self, operation="sub", source2=other, dtype=self.dtype)._reverse_sub(other)
+    
+    def _reverse_sub(self, scalar: Union[int, float]) -> "DerivedSeries":
+        """Helper for reverse subtraction."""
+        # We need to create a derived series that computes: scalar - self[i]
+        # This is implemented by negating and adding
+        neg_self = DerivedSeries(source=self, operation="mul", source2=-1)
+        return DerivedSeries(source=neg_self, operation="add", source2=scalar)
+    
+    def __mul__(self, other: Union[BaseSeries, int, float]) -> "DerivedSeries":
+        """
+        Multiply operation: self * other.
+        
+        Supports both element-wise multiplication (when other is a Series) and
+        scalar multiplication (when other is a number).
+        
+        Args:
+            other: Series or scalar to multiply
+            
+        Returns:
+            DerivedSeries: New derived series with multiplication results
+        """
+        return DerivedSeries(source=self, operation="mul", source2=other)
+    
+    def __rmul__(self, other: Union[int, float]) -> "DerivedSeries":
+        """Reverse multiply: other * self (same as __mul__ for multiplication)."""
+        return self.__mul__(other)
+    
+    def __truediv__(self, other: Union[BaseSeries, int, float]) -> "DerivedSeries":
+        """
+        Divide operation: self / other.
+        
+        Supports both element-wise division (when other is a Series) and
+        scalar division (when other is a number).
+        
+        Args:
+            other: Series or scalar to divide by
+            
+        Returns:
+            DerivedSeries: New derived series with division results
+            
+        Raises:
+            ZeroDivisionError: If division by zero occurs
+        """
+        return DerivedSeries(source=self, operation="div", source2=other)
+    
+    def __rtruediv__(self, other: Union[int, float]) -> "DerivedSeries":
+        """
+        Reverse divide: other / self.
+        
+        Implemented as: scalar / self[i] at each position.
+        """
+        return DerivedSeries(source=self, operation="div", source2=other, dtype=self.dtype)._reverse_div(other)
+    
+    def _reverse_div(self, scalar: Union[int, float]) -> "DerivedSeries":
+        """Helper for reverse division: scalar / self."""
+        # We need to create a derived series that computes: scalar / self[i]
+        # This requires a special handling - we'll create an intermediate operation
+        # For now, use reciprocal then multiply: scalar * (1 / self[i])
+        reciprocal = DerivedSeries(source=self, operation="div", source2=1.0)  # 1 / self
+        # Then multiply by scalar - but we need to swap the order
+        # Actually, we can just create a custom computation
+        # Let's add a helper that does scalar / source directly
+        class ReverseDivSeries(DerivedSeries):
+            def __init__(self, source, scalar):
+                super().__init__(source=source, operation="div", source2=scalar)
+                self._reverse_scalar = scalar
+            
+            def _compute_arithmetic(self, data, operation, operand):
+                # Override to do scalar / data[i] instead of data[i] / scalar
+                result = []
+                for val in data:
+                    if val == 0:
+                        raise ZeroDivisionError(f"Division by zero")
+                    result.append(self._reverse_scalar / val)
+                return result
+        
+        return ReverseDivSeries(source=self, scalar=scalar)
+    
+    def shift(self, periods: int = 1, fill_value: Optional[Union[int, float]] = None) -> "DerivedSeries":
+        """
+        Shift series by specified number of periods.
+        
+        Positive periods shift forward (down), negative shift backward (up).
+        Follows pandas shift() semantics.
+        
+        Args:
+            periods: Number of periods to shift. Default is 1.
+                - Positive: shift forward (later values move down)
+                - Negative: shift backward (earlier values move up)
+                - Zero: no shift
+            fill_value: Value to fill for missing positions. If None, uses
+                NaN for float/timestamp types, 0 for int type.
+        
+        Returns:
+            DerivedSeries: New derived series with shifted values
+        
+        Example:
+            >>> series = Series("float")
+            >>> for i in [1.0, 2.0, 3.0, 4.0, 5.0]:
+            ...     series.append(i)
+            >>> 
+            >>> # Shift forward by 1
+            >>> shifted = series.shift(1)
+            >>> print(list(shifted))  # [NaN, 1.0, 2.0, 3.0, 4.0]
+            >>> 
+            >>> # Shift backward by 1
+            >>> shifted_back = series.shift(-1)
+            >>> print(list(shifted_back))  # [2.0, 3.0, 4.0, 5.0, NaN]
+            >>> 
+            >>> # Custom fill value
+            >>> shifted_zero = series.shift(2, fill_value=0)
+            >>> print(list(shifted_zero))  # [0, 0, 1.0, 2.0, 3.0]
+        """
+        return DerivedSeries(
+            source=self,
+            operation="shift",
+            shift_periods=periods,
+            shift_fill_value=fill_value
+        )
+    
+    def diff(self, periods: int = 1) -> "DerivedSeries":
+        """
+        Calculate first discrete difference.
+        
+        Computes the difference between the current element and an element
+        `periods` positions earlier. Equivalent to: self - self.shift(periods)
+        
+        Args:
+            periods: Periods to shift for calculating difference. Default is 1.
+        
+        Returns:
+            DerivedSeries: New series with differences
+        
+        Example:
+            >>> series = Series("float")
+            >>> for i in [1.0, 3.0, 6.0, 10.0]:
+            ...     series.append(i)
+            >>> avg = series.avg(window=2)
+            >>> diff = avg.diff()  # Difference of averaged values
+        """
+        return self - self.shift(periods)
+    
+    def reduce(self, reduction: Literal["mean", "sum"] = "mean", group: Optional[dist.ProcessGroup] = None) -> "DerivedSeries":
+        """
+        Create a derived series with distributed reduction operation.
+        
+        Returns a DerivedSeries with identity operation that performs distributed
+        reduction when values are accessed via indexing. The reduction aggregates
+        values across all distributed ranks.
+        
+        Args:
+            reduction: Reduction operation to apply ("mean" or "sum")
+            group: Process group for distributed reduction. If None, uses default group.
+        
+        Returns:
+            DerivedSeries: Series that performs reduction on each accessed value
+        
+        Example:
+            >>> metrics = Metrics()
+            >>> metrics.new("loss", dtype="float")
+            >>> 
+            >>> # In distributed training across 4 ranks
+            >>> metrics.step()
+            >>> metrics.loss.append(rank_specific_loss)
+            >>> 
+            >>> # Create reduced series
+            >>> reduced_loss = metrics.loss.reduce("mean")
+            >>> 
+            >>> # Access triggers reduction across ranks
+            >>> avg_loss_scalar = reduced_loss[0]  # Returns Scalar with averaged value
+        """
+        return DerivedSeries(
+            source=self,
+            operation="identity",
+            reduce_op=reduction,
+            reduce_group=group
+        )
+
+
+class Series(list, BaseSeries):
+    """
+    Primary time series container storing actual data.
+    
+    Series extends Python's built-in list to provide a specialized container for
+    tracking sequences of metrics with computation graph support. It inherits all 
+    list operations (indexing, slicing, iteration) while adding:
+    
+    - Storage of actual numeric data (int, float, or timestamp)
+    - Dependency tracking for derived series
+    - Automatic cache invalidation on data changes
+    - Creation of derived series via avg(), sum(), cumsum() methods
+    - Automatic timestamp tracking via tick() method
+    - Slice operations return Series objects (not lists) to preserve type
+    
+    When data is appended to a Series, all dependent DerivedSeries are notified
+    to invalidate their caches, enabling automatic updates through the computation
+    graph.
+    
+    Args:
+        dtype (Literal["int", "float", "timestamp"]): Data type for the series.
+            "int" stores integer values, "float" stores floating-point values,
+            "timestamp" stores Unix timestamps as floats.
+    
+    Attributes:
+        dtype (str): The data type of the series
+        
+    Example:
+        >>> series = Series("float")
+        >>> for i in range(5):
+        ...     series.append(float(i))
+        >>> 
+        >>> # Create derived series
+        >>> avg_series = series.avg(window=3)  # Returns DerivedSeries
+        >>> print(avg_series[3])  # (1+2+3)/3 = 2.0
+        >>> 
+        >>> # Automatic update on append
+        >>> series.append(5.0)
+        >>> print(avg_series[4])  # (2+3+5)/3 = 3.33...
+        >>> 
+        >>> # Slicing returns a Series object
+        >>> sliced = series[0:3]
+        >>> print(type(sliced))  # <class 'Series'>
+    """
+    
+    def __init__(self, dtype: Literal["int", "float", "timestamp"], metrics: Optional["Metrics"] = None):
+        """
+        Initialize an empty Series with specified data type.
+        
+        Args:
+            dtype (Literal["int", "float", "timestamp"]): Data type for all values
+                in this series. Determines type conversion behavior in append().
+            metrics (Metrics, optional): Parent Metrics instance for index alignment.
+                If None, series operates independently without index alignment.
+        """
+        super().__init__()
+        self._dtype = dtype
+        self._dependents: List[DerivedSeries] = []  # Track dependent DerivedSeries
+        self._metrics = metrics  # Reference to parent Metrics for index alignment
+        self._index_positions = {}  # Maps global index to list position
+    
+    @property
+    def dtype(self) -> str:
+        """Return the data type of values in this series."""
+        return self._dtype
+    
+    def _invalidate_cache(self):
+        """
+        Recursively invalidate caches of all dependent DerivedSeries.
+        
+        Called internally when data is appended to propagate cache invalidation
+        through the computation graph.
+        """
+        for dependent in self._dependents:
+            dependent._invalidate_cache()
+    
+    def __getitem__(self, key):
+        """
+        Get item(s) from the series.
+        
+        Supports both integer indexing and slicing. When slicing, returns a new
+        Series object with the same dtype, preserving the Series interface.
+        
+        Args:
+            key (int or slice): Index or slice object
+            
+        Returns:
+            Union[int, float, Series]: Single value for integer index, or new
+                Series object for slice
+                
+        Example:
+            >>> series = Series("float")
+            >>> for i in [1.0, 2.0, 3.0, 4.0, 5.0]:
+            ...     series.append(i)
+            >>> print(series[0])  # 1.0
+            >>> sliced = series[1:4]  # Returns Series
+            >>> print(type(sliced))  # <class 'Series'>
+            >>> print(list(sliced))  # [2.0, 3.0, 4.0]
+        """
+        result = super().__getitem__(key)
+        
+        # If result is a list (from slicing), convert to Series
+        if isinstance(key, slice):
+            # Create new series without metrics association for sliced result
+            new_series = Series(self.dtype, metrics=None)
+            # Directly extend the new series with sliced values
+            for value in result:
+                super(Series, new_series).append(value)
+            return new_series
+        
+        # Otherwise return the single value
+        return result
+    
+    def append(self, x: Union[int, float, None, Scalar]):
+        """
+        Append a value to the series with index alignment.
+        
+        When a Metrics instance is associated, this method ensures that the appended
+        value aligns with the current global index. Missing values (when no data is
+        appended for certain index steps) are automatically filled based on dtype.
+        
+        After appending, automatically notifies all dependent DerivedSeries to
+        invalidate their caches, enabling automatic updates in the computation graph.
+        
+        Args:
+            x (int, float, None, or Scalar): Value to append to the series.
+                - For dtype="timestamp" with x=None, uses current time (time.time())
+                - If x is a Scalar, extracts its value (must match series dtype)
+                - If x is None for non-timestamp types, nothing is appended
+                
+        Raises:
+            ValueError: If Scalar dtype doesn't match Series dtype, or if dtype is unsupported
+            RuntimeError: If no index step is available (need to call metrics.step() first),
+                or if trying to append more values than available index steps,
+                or if current index already has a value
+            
+        Example:
+            >>> metrics = Metrics()
+            >>> metrics.new("loss", dtype="float")
+            >>> 
+            >>> metrics.step()
+            >>> metrics.loss.append(0.5)  # Aligns with current index
+            >>> 
+            >>> # This will raise RuntimeError - already appended for current index
+            >>> # metrics.loss.append(0.3)  # Error!
+            >>> 
+            >>> metrics.step()  # Must advance index first
+            >>> metrics.loss.append(0.3)  # Now OK
+            >>> 
+            >>> # Skipping a step creates missing value
+            >>> metrics.step()
+            >>> metrics.step()
+            >>> metrics.loss.append(0.2)  # Missing value auto-filled for step 2
+        """
+        # Handle timestamp dtype with None value first
+        if x is None and self.dtype == "timestamp":
+            x = time.time()
+        
+        # If x is provided, append to the series
+        if x is not None:
+            # Extract value from Scalar if needed
+            if isinstance(x, Scalar):
+                # Validate dtype match
+                if x.dtype != self.dtype:
+                    raise ValueError(f"Scalar dtype {x.dtype} does not match Series dtype {self.dtype}")
+                x = x.value
+            
+            # Type conversion and validation
+            if self.dtype == "int":
+                value = int(x)
+            elif self.dtype == "float":
+                value = float(x)
+            elif self.dtype == "timestamp":
+                value = float(x)
+            else:
+                raise ValueError(f"Unsupported dtype: {self.dtype}")
+            
+            # Handle index alignment if associated with Metrics
+            if self._metrics is not None:
+                if len(self._metrics._index) == 0:
+                    raise RuntimeError(
+                        "Cannot append to series: no index step available. "
+                        "Call metrics.step() first to advance the index."
+                    )
+                
+                # Check if we've already appended for all available indices
+                if len(self) >= len(self._metrics._index):
+                    raise RuntimeError(
+                        f"Cannot append to series: already appended {len(self)} values "
+                        f"but only {len(self._metrics._index)} index steps available. "
+                        f"Call metrics.step() first to advance the index."
+                    )
+                
+                # Get current index position (last index)
+                current_index = self._metrics._index[-1]
+                
+                # Check if current index already has a value
+                if current_index in self._index_positions:
+                    raise RuntimeError(
+                        f"Cannot append to series: index {current_index} already has a value. "
+                        f"Call metrics.step() first to advance to the next index."
+                    )
+                
+                # Fill missing values for skipped indices
+                for idx in self._metrics._index:
+                    if idx not in self._index_positions and idx != current_index:
+                        # This is a missing value for a previous index
+                        missing_value = self._get_missing_value()
+                        super().append(missing_value)
+                        self._index_positions[idx] = len(self) - 1
+                
+                # Append the actual value
+                super().append(value)
+                self._index_positions[current_index] = len(self) - 1
+            else:
+                # No metrics association: simple append
+                super().append(value)
+            
+            # Invalidate caches of all dependent DerivedSeries
+            self._invalidate_cache()
+    
+    def _get_missing_value(self) -> Union[int, float]:
+        """
+        Get the appropriate missing value for this series dtype.
+        
+        Returns:
+            Union[int, float]: Missing value (NaN for float/timestamp, 0 for int)
+        """
+        if self.dtype == "int":
+            return 0
+        else:
+            # float or timestamp
+            return float('nan')
+    
+    def tick(self) -> float:
+        """
+        Record the current timestamp to the series (timestamp dtype only).
+        
+        Convenience method for timestamp Series that appends time.time() without
+        requiring an explicit argument. Equivalent to append(time.time()).
+        Automatically invalidates dependent caches.
+        
+        Returns:
+            float: The recorded timestamp value
+            
+        Raises:
+            TypeError: If Series dtype is not "timestamp"
+            
+        Example:
+            >>> import time
+            >>> series = Series("timestamp")
+            >>> t1 = series.tick()
+            >>> time.sleep(0.1)
+            >>> t2 = series.tick()
+            >>> print(t2 > t1)  # True
+        """
+        if self.dtype != "timestamp":
+            raise TypeError(f"tick() is only available for timestamp Series, got dtype={self.dtype}")
+        
+        timestamp = time.time()
+        super().append(timestamp)
+        
+        # Invalidate caches of all dependent DerivedSeries
+        self._invalidate_cache()
+        
+        return timestamp
+    
+    def avg(self, window: Optional[int] = None) -> DerivedSeries:
+        """
+        Create a derived series computing sliding window average.
+        
+        Returns a DerivedSeries that lazily computes averages with the specified
+        window size. The derived series automatically updates when new values are
+        appended to this series.
+        
+        Args:
+            window (int, optional): Window size for sliding window. If None, uses
+                expanding window (all data from start up to each position).
+                
+        Returns:
+            DerivedSeries: A new derived series computing averages
+            
+        Example:
+            >>> series = Series("float")
+            >>> for i in range(5):
+            ...     series.append(float(i))
+            >>> 
+            >>> # Create sliding average with window=3
+            >>> avg_series = series.avg(window=3)
+            >>> print(avg_series[3])  # (1+2+3)/3 = 2.0
+            >>> print(avg_series[4])  # (2+3+4)/3 = 3.0
+            >>> 
+            >>> # Automatic update
+            >>> series.append(5.0)
+            >>> print(avg_series[5])  # (3+4+5)/3 = 4.0
+        """
+        return DerivedSeries(source=self, operation="avg", window=window)
+    
+    def sum(self, window: Optional[int] = None) -> DerivedSeries:
+        """
+        Create a derived series computing sliding window sum.
+        
+        Returns a DerivedSeries that lazily computes sums with the specified
+        window size. The derived series automatically updates when new values are
+        appended to this series.
+        
+        Args:
+            window (int, optional): Window size for sliding window. If None, uses
+                expanding window (all data from start up to each position).
+                
+        Returns:
+            DerivedSeries: A new derived series computing sums
+            
+        Example:
+            >>> series = Series("int")
+            >>> for i in range(5):
+            ...     series.append(i)
+            >>> 
+            >>> # Create sliding sum with window=3
+            >>> sum_series = series.sum(window=3)
+            >>> print(sum_series[3])  # 1+2+3 = 6
+            >>> print(sum_series[4])  # 2+3+4 = 9
+            >>> 
+            >>> # Automatic update
+            >>> series.append(5)
+            >>> print(sum_series[5])  # 3+4+5 = 12
+        """
+        return DerivedSeries(source=self, operation="sum", window=window)
+    
+    def cumsum(self) -> DerivedSeries:
+        """
+        Create a derived series computing cumulative sum.
+        
+        Returns a DerivedSeries that lazily computes cumulative sums from the
+        start of the series. The derived series automatically updates when new 
+        values are appended to this series.
+        
+        Returns:
+            DerivedSeries: A new derived series computing cumulative sums
+            
+        Example:
+            >>> series = Series("int")
+            >>> for i in [1, 2, 3, 4, 5]:
+            ...     series.append(i)
+            >>> 
+            >>> cumsum_series = series.cumsum()
+            >>> print(list(cumsum_series))  # [1, 3, 6, 10, 15]
+            >>> 
+            >>> # Automatic update
+            >>> series.append(6)
+            >>> print(cumsum_series[5])  # 21
+        """
+        return DerivedSeries(source=self, operation="cumsum", window=None)
+    
+    def __add__(self, other: Union[BaseSeries, int, float]) -> DerivedSeries:
+        """
+        Add operation: self + other.
+        
+        Supports both element-wise addition (when other is a Series/DerivedSeries)
+        and scalar addition (when other is a number).
+        
+        Args:
+            other: Series or scalar to add
+            
+        Returns:
+            DerivedSeries: New derived series with addition results
+            
+        Example:
+            >>> s1 = Series("float")
+            >>> for i in [1.0, 2.0, 3.0]:
+            ...     s1.append(i)
+            >>> 
+            >>> # Scalar addition
+            >>> s2 = s1 + 10
+            >>> print(list(s2))  # [11.0, 12.0, 13.0]
+            >>> 
+            >>> # Element-wise addition
+            >>> s3 = Series("float")
+            >>> for i in [0.5, 0.5, 0.5]:
+            ...     s3.append(i)
+            >>> s4 = s1 + s3
+            >>> print(list(s4))  # [1.5, 2.5, 3.5]
+        """
+        return DerivedSeries(source=self, operation="add", source2=other)
+    
+    def __radd__(self, other: Union[int, float]) -> DerivedSeries:
+        """Reverse add: other + self (same as __add__ for addition)."""
+        return self.__add__(other)
+    
+    def __sub__(self, other: Union[BaseSeries, int, float]) -> DerivedSeries:
+        """
+        Subtract operation: self - other.
+        
+        Supports both element-wise subtraction and scalar subtraction.
+        
+        Args:
+            other: Series or scalar to subtract
+            
+        Returns:
+            DerivedSeries: New derived series with subtraction results
+        """
+        return DerivedSeries(source=self, operation="sub", source2=other)
+    
+    def __rsub__(self, other: Union[int, float]) -> DerivedSeries:
+        """
+        Reverse subtract: other - self.
+        
+        Args:
+            other: Scalar value
+            
+        Returns:
+            DerivedSeries: New derived series computing other - self[i]
+        """
+        # Implement as: -1 * self + other
+        neg_self = DerivedSeries(source=self, operation="mul", source2=-1)
+        return DerivedSeries(source=neg_self, operation="add", source2=other)
+    
+    def __mul__(self, other: Union[BaseSeries, int, float]) -> DerivedSeries:
+        """
+        Multiply operation: self * other.
+        
+        Supports both element-wise multiplication and scalar multiplication.
+        
+        Args:
+            other: Series or scalar to multiply
+            
+        Returns:
+            DerivedSeries: New derived series with multiplication results
+            
+        Example:
+            >>> series = Series("float")
+            >>> for i in [2.0, 3.0, 4.0]:
+            ...     series.append(i)
+            >>> doubled = series * 2
+            >>> print(list(doubled))  # [4.0, 6.0, 8.0]
+        """
+        return DerivedSeries(source=self, operation="mul", source2=other)
+    
+    def __rmul__(self, other: Union[int, float]) -> DerivedSeries:
+        """Reverse multiply: other * self (same as __mul__ for multiplication)."""
+        return self.__mul__(other)
+    
+    def __truediv__(self, other: Union[BaseSeries, int, float]) -> DerivedSeries:
+        """
+        Divide operation: self / other.
+        
+        Supports both element-wise division and scalar division.
+        
+        Args:
+            other: Series or scalar to divide by
+            
+        Returns:
+            DerivedSeries: New derived series with division results
+            
+        Raises:
+            ZeroDivisionError: If division by zero occurs
+            
+        Example:
+            >>> series = Series("float")
+            >>> for i in [10.0, 20.0, 30.0]:
+            ...     series.append(i)
+            >>> halved = series / 2
+            >>> print(list(halved))  # [5.0, 10.0, 15.0]
+        """
+        return DerivedSeries(source=self, operation="div", source2=other)
+    
+    def __rtruediv__(self, other: Union[int, float]) -> DerivedSeries:
+        """
+        Reverse divide: other / self.
+        
+        Args:
+            other: Scalar value
+            
+        Returns:
+            DerivedSeries: New derived series computing other / self[i]
+            
+        Raises:
+            ZeroDivisionError: If any element in self is zero
+        """
+        # Create a special derived series for reverse division
+        class ReverseDivSeries(DerivedSeries):
+            def __init__(self, source, scalar):
+                super().__init__(source=source, operation="div", source2=scalar)
+                self._reverse_scalar = scalar
+            
+            def _compute_arithmetic(self, data, operation, operand):
+                # Override to do scalar / data[i] instead of data[i] / scalar
+                result = []
+                for i, val in enumerate(data):
+                    if val == 0:
+                        raise ZeroDivisionError(f"Division by zero at index {i}")
+                    result.append(self._reverse_scalar / val)
+                return result
+        
+        return ReverseDivSeries(source=self, scalar=other)
+    
+    def shift(self, periods: int = 1, fill_value: Optional[Union[int, float]] = None) -> DerivedSeries:
+        """
+        Shift series by specified number of periods.
+        
+        Positive periods shift forward (down), negative shift backward (up).
+        Follows pandas shift() semantics. Returns a DerivedSeries that automatically
+        updates when the source series changes.
+        
+        Args:
+            periods: Number of periods to shift. Default is 1.
+                - Positive: shift forward (later values move down, prepend fill)
+                - Negative: shift backward (earlier values move up, append fill)
+                - Zero: no shift (returns copy)
+            fill_value: Value to fill for missing positions. If None:
+                - float/timestamp types: uses float('nan')
+                - int type: uses 0
+        
+        Returns:
+            DerivedSeries: New derived series with shifted values
+        
+        Example:
+            >>> series = Series("float")
+            >>> for i in [1.0, 2.0, 3.0, 4.0, 5.0]:
+            ...     series.append(i)
+            >>> 
+            >>> # Shift forward by 1 (pandas-like behavior)
+            >>> shifted = series.shift(1)
+            >>> print(list(shifted))  # [NaN, 1.0, 2.0, 3.0, 4.0]
+            >>> 
+            >>> # Shift backward by 1
+            >>> shifted_back = series.shift(-1)
+            >>> print(list(shifted_back))  # [2.0, 3.0, 4.0, 5.0, NaN]
+            >>> 
+            >>> # Shift forward by 2
+            >>> shifted_2 = series.shift(2)
+            >>> print(list(shifted_2))  # [NaN, NaN, 1.0, 2.0, 3.0]
+            >>> 
+            >>> # Custom fill value
+            >>> series_int = Series("int")
+            >>> for i in [1, 2, 3, 4, 5]:
+            ...     series_int.append(i)
+            >>> shifted_fill = series_int.shift(1, fill_value=-1)
+            >>> print(list(shifted_fill))  # [-1, 1, 2, 3, 4]
+            >>> 
+            >>> # Auto-update when source changes
+            >>> series.append(6.0)
+            >>> print(list(shifted))  # [NaN, 1.0, 2.0, 3.0, 4.0, 5.0]
+        """
+        return DerivedSeries(
+            source=self,
+            operation="shift",
+            shift_periods=periods,
+            shift_fill_value=fill_value
+        )
+    
+    def diff(self, periods: int = 1) -> DerivedSeries:
+        """
+        Calculate first discrete difference.
+        
+        Computes the difference between the current element and an element
+        `periods` positions earlier. This is a convenience method equivalent
+        to: self - self.shift(periods)
+        
+        Commonly used for:
+        - Computing rate of change
+        - Calculating deltas between consecutive values
+        - Time series analysis
+        
+        Args:
+            periods: Periods to shift for calculating difference. Default is 1.
+                - Positive: backward difference (current - previous)
+                - Must be >= 1
+        
+        Returns:
+            DerivedSeries: Series with differences. First `periods` elements
+                will be NaN (for float/timestamp) or result of subtraction with
+                fill value (for int with custom fill_value).
+        
+        Example:
+            >>> series = Series("float")
+            >>> for i in [2.0, 5.0, 9.0, 14.0, 20.0]:
+            ...     series.append(i)
+            >>> 
+            >>> # Calculate differences
+            >>> diff = series.diff()
+            >>> # Result: [NaN, 3.0, 4.0, 5.0, 6.0]
+            >>> print(list(diff)[1:])  # [3.0, 4.0, 5.0, 6.0]
+            >>> 
+            >>> # Larger shift
+            >>> diff2 = series.diff(periods=2)
+            >>> # Result: [NaN, NaN, 7.0, 9.0, 11.0]
+            >>> 
+            >>> # Use case: calculate rate of change
+            >>> loss_change = metrics.loss.diff()
+        """
+        return self - self.shift(periods)
+    
+    def reduce(self, reduction: Literal["mean", "sum"] = "mean", group: Optional[dist.ProcessGroup] = None) -> DerivedSeries:
+        """
+        Create a derived series with distributed reduction operation.
+        
+        Returns a DerivedSeries with identity operation that performs distributed
+        reduction when values are accessed via indexing. The reduction aggregates
+        values across all distributed ranks.
+        
+        This method is typically used in distributed training to aggregate metrics
+        across multiple processes. The reduction is lazy - it only happens when
+        you actually access a value from the series (e.g., via indexing).
+        
+        Args:
+            reduction: Reduction operation to apply ("mean" or "sum")
+                - "mean": Average values across all ranks
+                - "sum": Sum values across all ranks
+            group: Process group for distributed reduction. If None, uses the
+                default process group. This allows reduction within specific
+                subsets of processes.
+        
+        Returns:
+            DerivedSeries: Series that performs reduction on each accessed value.
+                When indexed, returns a Scalar with the reduced value.
+        
+        Example:
+            >>> # In a distributed training setup with 4 GPUs
+            >>> metrics = Metrics()
+            >>> metrics.new("loss", dtype="float")
+            >>> 
+            >>> # Each rank appends its local loss
+            >>> metrics.step()
+            >>> metrics.loss.append(local_loss)  # Different on each rank
+            >>> 
+            >>> # Create reduced series
+            >>> global_loss = metrics.loss.reduce("mean")
+            >>> 
+            >>> # Access triggers distributed reduction
+            >>> loss_scalar = global_loss[0]  # Scalar with mean across all ranks
+            >>> print(loss_scalar.value)  # Same value on all ranks
+            >>> 
+            >>> # Can be used with other operations
+            >>> avg_reduced = metrics.loss.avg(window=10).reduce("mean")
+            >>> print(avg_reduced[-1].value)  # Latest averaged and reduced loss
+        """
+        return DerivedSeries(
+            source=self,
+            operation="identity",
+            reduce_op=reduction,
+            reduce_group=group
+        )
+
+
+class Metrics:
+    """
+    Main metrics management system for training workflows with shared index.
+    
+    Metrics manages Series with a global shared index, similar to pandas DataFrame.
+    All series within a Metrics instance share the same index, enabling aligned
+    time-series operations. Features include:
+    
+    - Flattened storage: direct access via metrics.loss (no groups)
+    - Shared global index for all series (default name: "step")
+    - Index progression via step() method
+    - Automatic alignment: series must sync with current index
+    - Missing values handling when series don't have data for a step
+    - Multiple data types (int, float, timestamp)
+    - Integration with distributed training through Scalar.reduce()
+    
+    Example:
+        >>> metrics = Metrics()
+        >>> # Create metrics
+        >>> metrics.new("loss", dtype="float")
+        >>> metrics.new("tokens", dtype="int")
+        >>> 
+        >>> # Record values with index progression
+        >>> for i in range(100):
+        ...     metrics.step()  # Increment index
+        ...     metrics.loss.append(compute_loss())
+        ...     metrics.tokens.append(batch_tokens)
+        >>> 
+        >>> # All series share the same index
+        >>> total_tokens = metrics.tokens.cumsum()
+        >>> tokens_per_step = total_tokens.diff()
+    """
+    
+    def __init__(self, index_name: str = "step"):
+        """
+        Initialize an empty Metrics manager with shared index.
+        
+        Args:
+            index_name: Name for the shared index. Defaults to "step".
+        """
+        self._series = {}  # metric name -> Series instance mapping
+        self._index = []  # Global index values
+        self._index_name = index_name
+        self._current_index = 0
+        self._loggers: List[Logger] = []  # List of logger instances
+        self._logger_proxy = LoggerProxy(self._loggers)
+    
+    @property
+    def logger(self) -> LoggerProxy:
+        """
+        Get the logger proxy for broadcasting operations to all loggers.
+        
+        Returns:
+            LoggerProxy: Proxy object that broadcasts to all loggers
+        """
+        return self._logger_proxy
+    
+    def add_logger(self, logger: Logger):
+        """
+        Add a logger to this Metrics instance.
+        
+        Args:
+            logger: Logger instance to add
+            
+        Example:
+            >>> metrics = Metrics()
+            >>> logger1 = Logger("main", [TensorBoardBackend("runs/exp1")])
+            >>> logger2 = Logger("csv", [CSVBackend("metrics.csv")])
+            >>> metrics.add_logger(logger1)
+            >>> metrics.add_logger(logger2)
+        """
+        self._loggers.append(logger)
+    
+    def write_logs(self, global_step: int):
+        """
+        Write all tracked metrics to all loggers.
+        
+        Args:
+            global_step: User-provided step, generally the global step.
+        
+        Example:
+            >>> metrics.step()
+            >>> metrics.loss.append(0.5)
+            >>> metrics.write_logs(global_step=100)  # Writes to all backends
+        """
+        if len(self._index) == 0:
+            return
+        
+        for logger in self._loggers:
+            logger.write(global_step)
+    
+    def new(self, name: str, dtype: Literal["int", "float", "timestamp"]):
+        """
+        Create a new metric Series.
+        
+        Creates a Series with the specified dtype. The series will share the
+        global index with all other series in this Metrics instance.
+        
+        Args:
+            name: Name of the metric (e.g., "loss", "accuracy", "learning_rate")
+            dtype: Data type for the Series
+                - "int": For integer values (e.g., step counts, batch sizes)
+                - "float": For floating-point values (e.g., losses, metrics)
+                - "timestamp": For Unix timestamps (e.g., timing measurements)
+                
+        Example:
+            >>> metrics = Metrics()
+            >>> metrics.new("loss", dtype="float")
+            >>> metrics.new("tokens", dtype="int")
+            >>> metrics.new("step_time", dtype="timestamp")
+            >>> 
+            >>> # Access and use
+            >>> metrics.step()
+            >>> metrics.loss.append(0.5)
+            >>> metrics.tokens.append(1024)
+            >>> metrics.step_time.tick()
+        """
+        # Create Series with reference to this Metrics instance
+        series = Series(dtype, metrics=self)
+        self._series[name] = series
+    
+    def step(self, value: Optional[int] = None):
+        """
+        Advance the global index by one step.
+        
+        All series share this index. When step() is called, the index advances
+        and series can append values for this new step.
+        
+        Args:
+            value: Custom index value. If None, uses auto-incremented counter.
+                Defaults to None.
+        
+        Example:
+            >>> metrics = Metrics()
+            >>> metrics.new("loss", dtype="float")
+            >>> 
+            >>> metrics.step()  # Index: 0
+            >>> metrics.loss.append(0.5)
+            >>> 
+            >>> metrics.step()  # Index: 1
+            >>> metrics.loss.append(0.4)
+        """
+        if value is None:
+            value = self._current_index
+        self._index.append(value)
+        self._current_index = value + 1
+    
+    def __getattr__(self, name: str) -> Series:
+        """
+        Enable dynamic access to Series metrics.
+        
+        Allows accessing Series via dot notation (e.g., metrics.loss).
+        
+        Args:
+            name: The name of the Series to access
+            
+        Returns:
+            Series: The requested Series instance
+            
+        Raises:
+            AttributeError: If the Series name is not found
+            
+        Example:
+            >>> metrics = Metrics()
+            >>> metrics.new("loss", dtype="float")
+            >>> metrics.new("lr", dtype="float")
+            >>> 
+            >>> # Direct access
+            >>> metrics.loss.append(0.5)
+            >>> metrics.lr.append(0.001)
+        """
+        if name.startswith("_"):
+            # Avoid conflicts with private attributes
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
+        
+        if name not in self._series:
+            raise AttributeError(f"Series '{name}' not found in Metrics")
+        
+        return self._series[name]
