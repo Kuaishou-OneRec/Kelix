@@ -1,5 +1,17 @@
 from .common import print_rank_0, to_device
-from .metrics import Scalar, Series, Group, Metrics
+from .metrics import (
+    Scalar, 
+    Series, 
+    DerivedSeries,
+    Metrics,
+    Logger,
+    LoggerProxy,
+    LoggerBackend,
+    TensorBoardBackend,
+    WandbBackend,
+    CSVBackend,
+    StdoutBackend
+)
 
 
 __all__ = [
@@ -7,6 +19,13 @@ __all__ = [
     "to_device",
     "Scalar",
     "Series",
-    "Group",
-    "Metrics"
+    "DerivedSeries",
+    "Metrics",
+    "Logger",
+    "LoggerProxy",
+    "LoggerBackend",
+    "TensorBoardBackend",
+    "WandbBackend",
+    "CSVBackend",
+    "StdoutBackend"
 ]
