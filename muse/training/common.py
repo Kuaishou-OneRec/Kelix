@@ -48,6 +48,7 @@ import torch
 from torch import Tensor
 import math
 import os
+import time
 import shutil
 from pathlib import Path
 import torch.distributed as dist
@@ -403,61 +404,61 @@ def define_metrics(acc_steps: int, logging_per_step: int):
     metrics = Metrics()
 
     # Micro-step metrics
-    metrics.new("loss", dtype="float")
-    metrics.new("grad_norm", dtype="float")
+    metrics.new("loss", dtype="float", reduce="mean")
+    metrics.new("grad_norm", dtype="float", reduce="mean")
     metrics.new("learning_rate", dtype="float")
-    metrics.new("step_time", dtype="timestamp")
-    metrics.new("tokens", dtype="int")
-    metrics.new("samples", dtype="int")
+    metrics.new("step_time", dtype="timestamp", initial_value=lambda: time.time())
+    metrics.new("tokens", dtype="int", reduce="sum", initial_value=0)
+    metrics.new("samples", dtype="int", reduce="sum", initial_value=0)
+
+    # 增加哨兵节点，初始化部分序列
+    metrics.initialize()
 
     total_tokens = metrics.tokens.cumsum()
     total_samples = metrics.samples.cumsum()
 
-    tokens_per_second_per_gpu = total_tokens.diff() / metrics.step_time.diff()
-    samples_per_second_per_gpu = total_samples.diff() / metrics.step_time.diff()
+    # Global-step metrics, skip the first step
+    avg_loss = metrics.loss.avg(window=acc_steps)[::acc_steps][1:]
 
-    # Global-step metrics
-    avg_loss = metrics.loss.avg(window=acc_steps)[::acc_steps]
-
-    avg_grad_norm = metrics.grad_norm.avg(window=acc_steps)[::acc_steps]
+    avg_grad_norm = metrics.grad_norm.avg(window=acc_steps)[::acc_steps][1:]
     
-    learning_rate = metrics.learning_rate[::acc_steps]
+    learning_rate = metrics.learning_rate[::acc_steps][1:]
 
-    seconds_per_global_step = metrics.step_time[::acc_steps].diff()
+    seconds_per_step = metrics.step_time[::acc_steps].diff()[1:]
 
-    seconds_per_step = metrics.step_time.diff()
+    tokens_per_sec_per_gpu = (total_tokens.diff() / metrics.step_time.diff())[::acc_steps][1:] / metrics.get_world_size()
+    samples_per_sec_per_gpu = (total_samples.diff() / metrics.step_time.diff())[::acc_steps][1:] / metrics.get_world_size()
 
-    tokens_per_second_per_gpu = tokens_per_second_per_gpu[::acc_steps]
-    samples_per_second_per_gpu = samples_per_second_per_gpu[::acc_steps]
+    tokens_per_day = tokens_per_sec_per_gpu * 86400 * metrics.get_world_size()
 
-    # Logging metrics
+    # Logging metrics, avg over the last logging_per_step steps
     metrics.logger.track(
-        avg_loss.avg(window=logging_per_step)[::logging_per_step].reduce("mean"), 
+        avg_loss.avg(window=logging_per_step)[::logging_per_step], 
         name="loss", group="training")
     metrics.logger.track(
-        avg_grad_norm.avg(window=logging_per_step)[::logging_per_step].reduce("mean"), 
+        avg_grad_norm.avg(window=logging_per_step)[::logging_per_step], 
         name="grad_norm", group="training")
     metrics.logger.track(
         learning_rate.avg(window=logging_per_step)[::logging_per_step], 
         name="learning_rate", group="training")
     metrics.logger.track(
-        total_tokens[::acc_steps][::logging_per_step].reduce("sum"), 
-        name="total_tokens", group="perf")
-    metrics.logger.track(
-        total_samples[::acc_steps][::logging_per_step].reduce("sum"), 
-        name="total_samples", group="perf")
-    metrics.logger.track(
-        seconds_per_global_step.avg(window=logging_per_step)[::logging_per_step], 
-        name="seconds_per_global_step", group="perf")
-    metrics.logger.track(
         seconds_per_step.avg(window=logging_per_step)[::logging_per_step], 
         name="seconds_per_step", group="perf")
     metrics.logger.track(
-        tokens_per_second_per_gpu.avg(window=logging_per_step)[::logging_per_step].reduce("mean"), 
-        name="tokens_per_second_per_gpu", group="perf")
+        total_tokens[::acc_steps][::logging_per_step], 
+        name="total_tokens", group="perf")
     metrics.logger.track(
-        samples_per_second_per_gpu.avg(window=logging_per_step)[::logging_per_step].reduce("mean"), 
-        name="samples_per_second_per_gpu", group="perf")
+        total_samples[::acc_steps][::logging_per_step], 
+        name="total_samples", group="perf")
+    metrics.logger.track(
+        tokens_per_sec_per_gpu.avg(window=logging_per_step)[::logging_per_step], 
+        name="tokens_per_sec_per_gpu", group="perf")
+    metrics.logger.track(
+        samples_per_sec_per_gpu.avg(window=logging_per_step)[::logging_per_step], 
+        name="samples_per_sec_per_gpu", group="perf")
+    metrics.logger.track(
+        tokens_per_day.avg(window=logging_per_step)[::logging_per_step], 
+        name="tokens_per_day", group="perf")
 
     return metrics
 

@@ -1,41 +1,54 @@
 """
-Metrics Management System for Training Monitoring.
+Metrics Management System for Training Monitoring with Distributed Support.
 
-This module provides a flexible and efficient metrics tracking system designed for
-deep learning training workflows with computation graph support. It supports:
+This module provides a flexible metrics tracking system for distributed deep 
+learning training workflows with computation graph support. Key features:
 
-- Scalar values with distributed reduction operations
-- Time series data with computation graph for derived metrics
+- Series with configurable fill values and initial values
+- Distributed reduction across ranks (mean/sum)
+- Custom process_group support for flexible distributed topologies
+- **Unified None handling: all missing values use None**
+- **Automatic None exclusion in all computations (avg, sum, cumsum, etc.)**
+- Step-based synchronization similar to TensorFlow's session.run()
 - Lazy evaluation with automatic cache invalidation
-- Sliding window operations (avg, sum) with O(n) cumsum optimization
-- Cumulative sum operations
+- Sliding window operations
 - Multi-level dependency support (nested computations)
-- Distributed training support with cross-rank aggregation
-- Timestamp tracking with automatic timestamping
+
+Missing Value Handling:
+    All missing values are None. Computations automatically exclude None:
+    - avg() and sum() skip None values
+    - Distributed reduction excludes None values from aggregation
+    - Arithmetic operations propagate None (None + x = None)
+    - cumsum() skips None values and continues accumulation
+
+Process Group Support:
+    - Metrics can have a default process_group
+    - Each Series can override with its own process_group
+    - Useful for mixed data-parallel / model-parallel setups
 
 Classes:
-    Scalar: Scalar value wrapper with distributed reduce operations
+    Scalar: Scalar value wrapper for numeric values
     BaseSeries: Abstract base class for all series types
-    Series: Primary time series container storing actual data
+    Series: Primary time series container with distributed reduction support
     DerivedSeries: Computed series that lazily evaluates from source
-    Metrics: Main class for managing metrics with shared index
+    Metrics: Main class for managing metrics with shared index and distributed sync
 
 Example:
+    >>> # Create metrics with distributed reduction
     >>> metrics = Metrics()
-    >>> metrics.new("loss", dtype="float")
+    >>> metrics.new("loss", dtype="float", reduce="mean", initial_value=0.0)
+    >>> metrics.initialize()
     >>> 
-    >>> # Append values
-    >>> for step in range(100):
-    ...     metrics.step()
-    ...     metrics.loss.append(compute_loss())
+    >>> # Each rank appends local loss
+    >>> metrics.loss.append(local_loss_value)
+    >>> 
+    >>> # step() performs reduction across ranks
+    >>> metrics.step()
+    >>> print(metrics.loss[-1])  # Mean across all ranks
     >>> 
     >>> # Create derived series with sliding window
-    >>> loss_avg = metrics.loss.avg(window=20)  # DerivedSeries
-    >>> print(f"Step 50: {loss_avg[50]}")  # Lazy evaluation
-    >>> 
-    >>> # Nested computation
-    >>> loss_sum = loss_avg.sum(window=10)
-    >>> print(f"Sum of avg: {loss_sum[50]}")
+    >>> loss_avg = metrics.loss.avg(window=20)
+    >>> print(f"Step 50: {loss_avg[50]}")
 """
 import time
 from abc import ABC, abstractmethod
@@ -328,11 +341,10 @@ class LoggerProxy:
 
 class Scalar:
     """
-    Scalar value wrapper with distributed reduction support.
+    Scalar value wrapper for numeric values.
     
     Scalar wraps a single numeric value (int, float, or timestamp) and provides
-    distributed reduce operations for aggregating values across multiple ranks
-    in a distributed training environment.
+    type conversion and access methods.
     
     Args:
         value (int or float): The numeric value to wrap
@@ -346,8 +358,7 @@ class Scalar:
         >>> scalar = Scalar(3.14, dtype="float")
         >>> print(scalar.value)
         3.14
-        >>> reduced = scalar.reduce(reduction="mean")
-        >>> print(reduced.value)
+        >>> print(float(scalar))
         3.14
     """
     
@@ -380,79 +391,6 @@ class Scalar:
             return int(self._value)
         else:
             return float(self._value)
-    
-    def reduce(self, reduction: Literal["mean", "sum"] = "mean", group: Optional[dist.ProcessGroup] = None) -> "Scalar":
-        """
-        Perform distributed aggregation across ranks.
-        
-        Aggregates the scalar value across all processes in a distributed environment
-        using torch.distributed. In single-machine mode (when torch.distributed is not
-        available or not initialized), returns a copy of the original scalar.
-        
-        Args:
-            reduction (Literal["mean", "sum"], optional): Aggregation method.
-                "mean" computes the average across ranks, "sum" computes the total.
-                Defaults to "mean".
-            group (optional): Process group for aggregation. If None, uses the default
-                process group. Defaults to None.
-                
-        Returns:
-            Scalar: A new Scalar containing the aggregated value with the same dtype
-            
-        Raises:
-            ValueError: If reduction is not "mean" or "sum"
-            
-        Example:
-            >>> # In a distributed environment with 4 ranks, each having scalar=Scalar(10, "int")
-            >>> result = scalar.reduce(reduction="sum")
-            >>> print(result.value)  # 40 (10 * 4 ranks)
-            >>> result = scalar.reduce(reduction="mean")
-            >>> print(result.value)  # 10 (average)
-        """
-        # Validate reduction parameter
-        if reduction not in ["mean", "sum"]:
-            raise ValueError(f"Unsupported reduction: {reduction}, must be 'mean' or 'sum'")
-        
-        # Check if running in distributed environment
-        if not dist.is_available() or not dist.is_initialized():
-            # Single-machine mode, return a copy of the original value
-            return Scalar(self._value, self.dtype)
-        
-        # Convert to tensor for distributed operations
-        if self.dtype == "int":
-            tensor_value = torch.tensor(self._value, dtype=torch.int64, device="cpu")
-        else:
-            tensor_value = torch.tensor(self._value, dtype=torch.float32, device="cpu")
-        
-        # Perform reduce operation
-        if reduction == "mean":
-            dist.all_reduce(tensor_value, op=dist.ReduceOp.SUM, group=group)
-            world_size, _ = self._get_world_size_and_rank()
-            tensor_value = tensor_value / world_size
-        elif reduction == "sum":
-            dist.all_reduce(tensor_value, op=dist.ReduceOp.SUM, group=group)
-        else:
-            raise ValueError(f"Unsupported reduction: {reduction}, must be 'mean' or 'sum'")
-        
-        # Convert back to Python type
-        if self.dtype == "int":
-            reduced_value = int(tensor_value.item())
-        else:
-            reduced_value = float(tensor_value.item())
-        
-        return Scalar(reduced_value, self.dtype)
-    
-    def _get_world_size_and_rank(self):
-        """
-        Get the world size and rank in distributed environment.
-        
-        Returns:
-            tuple: (world_size, rank). Returns (1, 0) if not in distributed mode.
-        """
-        if dist.is_available() and dist.is_initialized():
-            return dist.get_world_size(), dist.get_rank()
-        else:
-            return 1, 0
     
     def __float__(self) -> float:
         """Convert scalar to float."""
@@ -618,24 +556,6 @@ class BaseSeries(ABC):
         """
         pass
     
-    @abstractmethod
-    def reduce(self, reduction: Literal["mean", "sum"] = "mean", group: Optional[dist.ProcessGroup] = None) -> "DerivedSeries":
-        """
-        Create a derived series with distributed reduction operation.
-        
-        The reduction is applied lazily when values are accessed (via indexing).
-        When accessing a specific index, the reduction is performed on that
-        single value across all distributed ranks.
-        
-        Args:
-            reduction: Reduction operation ("mean" or "sum")
-            group: Process group for distributed reduction
-        
-        Returns:
-            DerivedSeries: Series that performs reduction on access
-        """
-        pass
-
 
 class DerivedSeries(BaseSeries):
     """
@@ -691,9 +611,7 @@ class DerivedSeries(BaseSeries):
         dtype: Optional[str] = None,
         source2: Union[BaseSeries, int, float, None] = None,
         shift_periods: Optional[int] = None,
-        shift_fill_value: Optional[Union[int, float]] = None,
-        reduce_op: Optional[Literal["mean", "sum"]] = None,
-        reduce_group: Optional[dist.ProcessGroup] = None
+        shift_fill_value: Optional[Union[int, float]] = None
     ):
         """
         Initialize a DerivedSeries.
@@ -706,8 +624,6 @@ class DerivedSeries(BaseSeries):
             source2: Second operand for arithmetic operations
             shift_periods: Number of periods to shift (for shift operation)
             shift_fill_value: Fill value for shift operation
-            reduce_op: Reduction operation for identity operation ("mean" or "sum")
-            reduce_group: Process group for distributed reduction
         
         Raises:
             ValueError: If operation is invalid or if cumsum is called with window
@@ -725,8 +641,6 @@ class DerivedSeries(BaseSeries):
         self.source2 = source2
         self.shift_periods = shift_periods
         self.shift_fill_value = shift_fill_value
-        self.reduce_op = reduce_op
-        self.reduce_group = reduce_group
         self._dtype = dtype if dtype is not None else source.dtype
         
         # Cache for computed results
@@ -813,7 +727,7 @@ class DerivedSeries(BaseSeries):
     
     def _compute_cumsum(self, data: List) -> List:
         """
-        Compute cumulative sum.
+        Compute cumulative sum, skipping None values.
         
         Args:
             data: Input data list
@@ -826,13 +740,19 @@ class DerivedSeries(BaseSeries):
         result = []
         cumsum = 0
         for val in data:
-            cumsum += val
-            result.append(cumsum)
+            if val is not None:
+                cumsum += val
+                result.append(cumsum)
+            else:
+                # Keep last cumsum or None if no cumsum yet
+                result.append(cumsum if len(result) > 0 or cumsum != 0 else None)
         return result
     
     def _compute_arithmetic(self, data: List, operation: str, operand: Union[BaseSeries, int, float]) -> List:
         """
         Compute arithmetic operations (add, sub, mul, div).
+        
+        None values propagate: None op x = None
         
         Supports both element-wise operations (when operand is a Series) and
         scalar operations (when operand is a number).
@@ -870,6 +790,11 @@ class DerivedSeries(BaseSeries):
         for i, val in enumerate(data):
             operand_val = operand_data if is_scalar else operand_data[i]
             
+            # None propagation: if either value is None, result is None
+            if val is None or operand_val is None:
+                result.append(None)
+                continue
+            
             if operation == "add":
                 result.append(val + operand_val)
             elif operation == "sub":
@@ -893,13 +818,12 @@ class DerivedSeries(BaseSeries):
         Shift data by specified number of periods.
         
         Positive periods shift forward (down), negative shift backward (up).
-        Similar to pandas shift() behavior.
+        Similar to pandas shift() behavior. Uses None as default fill value.
         
         Args:
             data: Input data list
             periods: Number of periods to shift (default 1)
-            fill_value: Value to use for filling. If None, uses appropriate default
-                based on dtype.
+            fill_value: Value to use for filling. If None, uses None as default.
             
         Returns:
             List of shifted values
@@ -908,9 +832,9 @@ class DerivedSeries(BaseSeries):
         
         Example:
             data = [1, 2, 3, 4, 5]
-            shift(1) -> [NaN, 1, 2, 3, 4]
-            shift(-1) -> [2, 3, 4, 5, NaN]
-            shift(2) -> [NaN, NaN, 1, 2, 3]
+            shift(1) -> [None, 1, 2, 3, 4]
+            shift(-1) -> [2, 3, 4, 5, None]
+            shift(2) -> [None, None, 1, 2, 3]
         """
         if periods is None:
             periods = 1
@@ -918,14 +842,9 @@ class DerivedSeries(BaseSeries):
         if len(data) == 0:
             return []
         
-        # Determine fill value if not provided
+        # Use None as default fill value
         if fill_value is None:
-            if self.dtype == "int":
-                # For int, we can't use NaN, so use 0 as default
-                fill_value = 0
-            else:
-                # For float and timestamp, use NaN
-                fill_value = float('nan')
+            fill_value = None
         
         result = []
         
@@ -967,10 +886,9 @@ class DerivedSeries(BaseSeries):
     
     def _compute_rolling_sum(self, data: List, window: Optional[int]) -> List:
         """
-        Compute sliding window sum using cumsum optimization.
+        Compute sliding window sum, excluding None values.
         
-        For each position i, computes the sum of data[max(0, i-window+1):i+1].
-        Uses cumsum caching to achieve O(n) complexity instead of O(n*window).
+        For each position i, computes the sum of non-None values in the window.
         
         Args:
             data: Input data list
@@ -979,37 +897,33 @@ class DerivedSeries(BaseSeries):
         Returns:
             List of rolling sums
             
-        Time Complexity: O(n) with cumsum cache
+        Time Complexity: O(n * window) - cannot use cumsum optimization with None values
         """
         if len(data) == 0:
             return []
-        
-        # Build cumsum cache for optimization
-        cumsum_cache = self._ensure_cumsum_cache(data)
         
         result = []
         for i in range(len(data)):
             if window is None:
                 # Expanding window: sum from beginning to current position
-                result.append(cumsum_cache[i])
+                values = [data[j] for j in range(i + 1) if data[j] is not None]
             else:
                 # Sliding window
                 start = max(0, i - window + 1)
-                if start == 0:
-                    # Window starts at beginning
-                    result.append(cumsum_cache[i])
-                else:
-                    # Use cumsum difference: cumsum[i] - cumsum[start-1]
-                    result.append(cumsum_cache[i] - cumsum_cache[start - 1])
+                values = [data[j] for j in range(start, i + 1) if data[j] is not None]
+            
+            if len(values) > 0:
+                result.append(sum(values))
+            else:
+                result.append(None)
         
         return result
     
     def _compute_rolling_avg(self, data: List, window: Optional[int]) -> List:
         """
-        Compute sliding window average using cumsum optimization.
+        Compute sliding window average, excluding None values.
         
-        For each position i, computes the average of data[max(0, i-window+1):i+1].
-        Uses _compute_rolling_sum and divides by actual window size.
+        For each position i, computes the average of non-None values in the window.
         
         Args:
             data: Input data list
@@ -1018,24 +932,25 @@ class DerivedSeries(BaseSeries):
         Returns:
             List of rolling averages
             
-        Time Complexity: O(n) with cumsum cache
+        Time Complexity: O(n * window)
         """
         if len(data) == 0:
             return []
         
-        # Get rolling sum using optimized method
-        rolling_sums = self._compute_rolling_sum(data, window)
-        
         result = []
         for i in range(len(data)):
             if window is None:
-                # Expanding window: count is i+1
-                count = i + 1
+                # Expanding window
+                values = [data[j] for j in range(i + 1) if data[j] is not None]
             else:
-                # Sliding window: count is min(window, i+1)
-                count = min(window, i + 1)
+                # Sliding window
+                start = max(0, i - window + 1)
+                values = [data[j] for j in range(start, i + 1) if data[j] is not None]
             
-            result.append(rolling_sums[i] / count)
+            if len(values) > 0:
+                result.append(sum(values) / len(values))
+            else:
+                result.append(None)
         
         return result
     
@@ -1066,20 +981,12 @@ class DerivedSeries(BaseSeries):
                 source=sliced_source,
                 operation=self.operation,
                 window=self.window,
-                dtype=self._dtype,
-                reduce_op=self.reduce_op,
-                reduce_group=self.reduce_group
+                dtype=self._dtype
             )
         else:
             # Single index: compute and return value
             computed = self._compute()
             value = computed[key]
-            
-            # Apply reduction if this is an identity operation with reduce_op
-            if self.operation == "identity" and self.reduce_op is not None:
-                # Wrap in Scalar and apply reduction
-                scalar = Scalar(value, dtype=self.dtype)
-                return scalar.reduce(reduction=self.reduce_op, group=self.reduce_group)
             
             return value
     
@@ -1246,11 +1153,15 @@ class DerivedSeries(BaseSeries):
             
             def _compute_arithmetic(self, data, operation, operand):
                 # Override to do scalar / data[i] instead of data[i] / scalar
+                # Handle None propagation
                 result = []
                 for val in data:
-                    if val == 0:
+                    if val is None:
+                        result.append(None)
+                    elif val == 0:
                         raise ZeroDivisionError(f"Division by zero")
-                    result.append(self._reverse_scalar / val)
+                    else:
+                        result.append(self._reverse_scalar / val)
                 return result
         
         return ReverseDivSeries(source=self, scalar=scalar)
@@ -1318,42 +1229,6 @@ class DerivedSeries(BaseSeries):
             >>> diff = avg.diff()  # Difference of averaged values
         """
         return self - self.shift(periods)
-    
-    def reduce(self, reduction: Literal["mean", "sum"] = "mean", group: Optional[dist.ProcessGroup] = None) -> "DerivedSeries":
-        """
-        Create a derived series with distributed reduction operation.
-        
-        Returns a DerivedSeries with identity operation that performs distributed
-        reduction when values are accessed via indexing. The reduction aggregates
-        values across all distributed ranks.
-        
-        Args:
-            reduction: Reduction operation to apply ("mean" or "sum")
-            group: Process group for distributed reduction. If None, uses default group.
-        
-        Returns:
-            DerivedSeries: Series that performs reduction on each accessed value
-        
-        Example:
-            >>> metrics = Metrics()
-            >>> metrics.new("loss", dtype="float")
-            >>> 
-            >>> # In distributed training across 4 ranks
-            >>> metrics.step()
-            >>> metrics.loss.append(rank_specific_loss)
-            >>> 
-            >>> # Create reduced series
-            >>> reduced_loss = metrics.loss.reduce("mean")
-            >>> 
-            >>> # Access triggers reduction across ranks
-            >>> avg_loss_scalar = reduced_loss[0]  # Returns Scalar with averaged value
-        """
-        return DerivedSeries(
-            source=self,
-            operation="identity",
-            reduce_op=reduction,
-            reduce_group=group
-        )
 
 
 class Series(list, BaseSeries):
@@ -1401,21 +1276,41 @@ class Series(list, BaseSeries):
         >>> print(type(sliced))  # <class 'Series'>
     """
     
-    def __init__(self, dtype: Literal["int", "float", "timestamp"], metrics: Optional["Metrics"] = None):
+    def __init__(
+        self, 
+        dtype: Literal["int", "float", "timestamp"], 
+        metrics: Optional["Metrics"] = None,
+        fill_value: Union[float, int, callable, None] = None,
+        initial_value: Union[float, int, callable, None] = None,
+        reduce: Optional[Literal["mean", "sum"]] = None,
+        process_group: Optional[dist.ProcessGroup] = None
+    ):
         """
         Initialize an empty Series with specified data type.
         
         Args:
-            dtype (Literal["int", "float", "timestamp"]): Data type for all values
-                in this series. Determines type conversion behavior in append().
-            metrics (Metrics, optional): Parent Metrics instance for index alignment.
+            dtype: Data type for all values in this series
+            metrics: Parent Metrics instance for index alignment.
                 If None, series operates independently without index alignment.
+            fill_value: Value to use when series has no value for a step.
+                Can be a callable. Defaults to None (missing value).
+            initial_value: Initial sentinel value added by initialize().
+                Can be a callable. Defaults to None.
+            reduce: Reduction strategy across ranks ("mean", "sum", or None)
+            process_group: Process group for distributed reduction.
+                If None, uses the default group or Metrics' default group.
         """
         super().__init__()
         self._dtype = dtype
         self._dependents: List[DerivedSeries] = []  # Track dependent DerivedSeries
         self._metrics = metrics  # Reference to parent Metrics for index alignment
         self._index_positions = {}  # Maps global index to list position
+        
+        # Store new parameters
+        self._fill_value = fill_value
+        self._initial_value = initial_value
+        self._reduce = reduce
+        self._process_group = process_group
     
     @property
     def dtype(self) -> str:
@@ -1431,6 +1326,34 @@ class Series(list, BaseSeries):
         """
         for dependent in self._dependents:
             dependent._invalidate_cache()
+    
+    def _get_fill_value(self):
+        """Get the fill value (call if callable). Returns None by default."""
+        if self._fill_value is None:
+            return None
+        if callable(self._fill_value):
+            return self._fill_value()
+        return self._fill_value
+    
+    def _get_initial_value(self):
+        """Get the initial value (call if callable). Returns None by default."""
+        if self._initial_value is None:
+            return None
+        if callable(self._initial_value):
+            return self._initial_value()
+        return self._initial_value
+    
+    def _get_process_group(self):
+        """
+        Get the process group for this series.
+        
+        Priority: series._process_group > metrics._process_group > None (default group)
+        """
+        if self._process_group is not None:
+            return self._process_group
+        if self._metrics is not None and hasattr(self._metrics, '_process_group'):
+            return self._metrics._process_group
+        return None
     
     def __getitem__(self, key):
         """
@@ -1471,114 +1394,61 @@ class Series(list, BaseSeries):
     
     def append(self, x: Union[int, float, None, Scalar]):
         """
-        Append a value to the series with index alignment.
+        Append a value to the series.
         
-        When a Metrics instance is associated, this method ensures that the appended
-        value aligns with the current global index. Missing values (when no data is
-        appended for certain index steps) are automatically filled based on dtype.
-        
-        After appending, automatically notifies all dependent DerivedSeries to
-        invalidate their caches, enabling automatic updates in the computation graph.
+        Constraint: len(series) <= len(index) + 1
+        None is allowed as missing value.
         
         Args:
-            x (int, float, None, or Scalar): Value to append to the series.
-                - For dtype="timestamp" with x=None, uses current time (time.time())
-                - If x is a Scalar, extracts its value (must match series dtype)
-                - If x is None for non-timestamp types, nothing is appended
-                
-        Raises:
-            ValueError: If Scalar dtype doesn't match Series dtype, or if dtype is unsupported
-            RuntimeError: If no index step is available (need to call metrics.step() first),
-                or if trying to append more values than available index steps,
-                or if current index already has a value
-            
+            x: Value to append. None means missing value.
+               For timestamp dtype, None means current time.
+        
         Example:
             >>> metrics = Metrics()
             >>> metrics.new("loss", dtype="float")
+            >>> metrics.initialize()
             >>> 
+            >>> # Can append once (will be for next step)
+            >>> metrics.loss.append(1.0)
+            >>> 
+            >>> # Call step() to finalize the step
             >>> metrics.step()
-            >>> metrics.loss.append(0.5)  # Aligns with current index
-            >>> 
-            >>> # This will raise RuntimeError - already appended for current index
-            >>> # metrics.loss.append(0.3)  # Error!
-            >>> 
-            >>> metrics.step()  # Must advance index first
-            >>> metrics.loss.append(0.3)  # Now OK
-            >>> 
-            >>> # Skipping a step creates missing value
-            >>> metrics.step()
-            >>> metrics.step()
-            >>> metrics.loss.append(0.2)  # Missing value auto-filled for step 2
         """
-        # Handle timestamp dtype with None value first
+        # Handle timestamp special case
         if x is None and self.dtype == "timestamp":
             x = time.time()
         
-        # If x is provided, append to the series
+        # Extract value from Scalar if needed
+        if isinstance(x, Scalar):
+            x = x.value
+        
+        # Type conversion (None stays as None)
         if x is not None:
-            # Extract value from Scalar if needed
-            if isinstance(x, Scalar):
-                # Validate dtype match
-                if x.dtype != self.dtype:
-                    raise ValueError(f"Scalar dtype {x.dtype} does not match Series dtype {self.dtype}")
-                x = x.value
-            
-            # Type conversion and validation
             if self.dtype == "int":
-                value = int(x)
-            elif self.dtype == "float":
-                value = float(x)
-            elif self.dtype == "timestamp":
-                value = float(x)
-            else:
-                raise ValueError(f"Unsupported dtype: {self.dtype}")
+                x = int(x)
+            elif self.dtype == "float" or self.dtype == "timestamp":
+                x = float(x)
+        
+        if self._metrics is not None:
+            # Check constraint: len(series) <= len(index) + 1
+            if len(self) > len(self._metrics._index):
+                raise RuntimeError(
+                    f"Cannot append to series: already appended {len(self)} values "
+                    f"but only {len(self._metrics._index)} index steps exist. "
+                    f"Constraint violated: len(series) > len(index). "
+                    f"Call metrics.step() to advance the index."
+                )
             
-            # Handle index alignment if associated with Metrics
-            if self._metrics is not None:
-                if len(self._metrics._index) == 0:
-                    raise RuntimeError(
-                        "Cannot append to series: no index step available. "
-                        "Call metrics.step() first to advance the index."
-                    )
-                
-                # Check if we've already appended for all available indices
-                if len(self) >= len(self._metrics._index):
-                    raise RuntimeError(
-                        f"Cannot append to series: already appended {len(self)} values "
-                        f"but only {len(self._metrics._index)} index steps available. "
-                        f"Call metrics.step() first to advance the index."
-                    )
-                
-                # Get current index position (last index)
-                current_index = self._metrics._index[-1]
-                
-                # Check if current index already has a value
-                if current_index in self._index_positions:
-                    raise RuntimeError(
-                        f"Cannot append to series: index {current_index} already has a value. "
-                        f"Call metrics.step() first to advance to the next index."
-                    )
-                
-                # Fill missing values for skipped indices
-                for idx in self._metrics._index:
-                    if idx not in self._index_positions and idx != current_index:
-                        # This is a missing value for a previous index
-                        missing_value = self._get_missing_value()
-                        super().append(missing_value)
-                        self._index_positions[idx] = len(self) - 1
-                
-                # Append the actual value
-                super().append(value)
-                self._index_positions[current_index] = len(self) - 1
-            else:
-                # No metrics association: simple append
-                super().append(value)
-            
-            # Invalidate caches of all dependent DerivedSeries
-            self._invalidate_cache()
+            # Fill skipped indices with None
+            while len(self) < len(self._metrics._index):
+                super().append(None)
+        
+        super().append(x)
+        self._invalidate_cache()
     
     def _get_missing_value(self) -> Union[int, float]:
         """
+        DEPRECATED: Use None instead.
         Get the appropriate missing value for this series dtype.
         
         Returns:
@@ -1843,11 +1713,15 @@ class Series(list, BaseSeries):
             
             def _compute_arithmetic(self, data, operation, operand):
                 # Override to do scalar / data[i] instead of data[i] / scalar
+                # Handle None propagation
                 result = []
                 for i, val in enumerate(data):
-                    if val == 0:
+                    if val is None:
+                        result.append(None)
+                    elif val == 0:
                         raise ZeroDivisionError(f"Division by zero at index {i}")
-                    result.append(self._reverse_scalar / val)
+                    else:
+                        result.append(self._reverse_scalar / val)
                 return result
         
         return ReverseDivSeries(source=self, scalar=other)
@@ -1948,57 +1822,6 @@ class Series(list, BaseSeries):
             >>> loss_change = metrics.loss.diff()
         """
         return self - self.shift(periods)
-    
-    def reduce(self, reduction: Literal["mean", "sum"] = "mean", group: Optional[dist.ProcessGroup] = None) -> DerivedSeries:
-        """
-        Create a derived series with distributed reduction operation.
-        
-        Returns a DerivedSeries with identity operation that performs distributed
-        reduction when values are accessed via indexing. The reduction aggregates
-        values across all distributed ranks.
-        
-        This method is typically used in distributed training to aggregate metrics
-        across multiple processes. The reduction is lazy - it only happens when
-        you actually access a value from the series (e.g., via indexing).
-        
-        Args:
-            reduction: Reduction operation to apply ("mean" or "sum")
-                - "mean": Average values across all ranks
-                - "sum": Sum values across all ranks
-            group: Process group for distributed reduction. If None, uses the
-                default process group. This allows reduction within specific
-                subsets of processes.
-        
-        Returns:
-            DerivedSeries: Series that performs reduction on each accessed value.
-                When indexed, returns a Scalar with the reduced value.
-        
-        Example:
-            >>> # In a distributed training setup with 4 GPUs
-            >>> metrics = Metrics()
-            >>> metrics.new("loss", dtype="float")
-            >>> 
-            >>> # Each rank appends its local loss
-            >>> metrics.step()
-            >>> metrics.loss.append(local_loss)  # Different on each rank
-            >>> 
-            >>> # Create reduced series
-            >>> global_loss = metrics.loss.reduce("mean")
-            >>> 
-            >>> # Access triggers distributed reduction
-            >>> loss_scalar = global_loss[0]  # Scalar with mean across all ranks
-            >>> print(loss_scalar.value)  # Same value on all ranks
-            >>> 
-            >>> # Can be used with other operations
-            >>> avg_reduced = metrics.loss.avg(window=10).reduce("mean")
-            >>> print(avg_reduced[-1].value)  # Latest averaged and reduced loss
-        """
-        return DerivedSeries(
-            source=self,
-            operation="identity",
-            reduce_op=reduction,
-            reduce_group=group
-        )
 
 
 class Metrics:
@@ -2015,7 +1838,6 @@ class Metrics:
     - Automatic alignment: series must sync with current index
     - Missing values handling when series don't have data for a step
     - Multiple data types (int, float, timestamp)
-    - Integration with distributed training through Scalar.reduce()
     
     Example:
         >>> metrics = Metrics()
@@ -2034,12 +1856,14 @@ class Metrics:
         >>> tokens_per_step = total_tokens.diff()
     """
     
-    def __init__(self, index_name: str = "step"):
+    def __init__(self, index_name: str = "step", process_group: Optional[dist.ProcessGroup] = None):
         """
         Initialize an empty Metrics manager with shared index.
         
         Args:
             index_name: Name for the shared index. Defaults to "step".
+            process_group: Default process group for all series.
+                Individual series can override this. Defaults to None (uses default group).
         """
         self._series = {}  # metric name -> Series instance mapping
         self._index = []  # Global index values
@@ -2047,6 +1871,7 @@ class Metrics:
         self._current_index = 0
         self._loggers: List[Logger] = []  # List of logger instances
         self._logger_proxy = LoggerProxy(self._loggers)
+        self._process_group = process_group
     
     @property
     def logger(self) -> LoggerProxy:
@@ -2092,61 +1917,227 @@ class Metrics:
         for logger in self._loggers:
             logger.write(global_step)
     
-    def new(self, name: str, dtype: Literal["int", "float", "timestamp"]):
+    def new(
+        self, 
+        name: str, 
+        dtype: Literal["int", "float", "timestamp"],
+        fill_value: Union[float, int, callable, None] = None,
+        initial_value: Union[float, int, callable, None] = None,
+        reduce: Optional[Literal["mean", "sum"]] = None,
+        process_group: Optional[dist.ProcessGroup] = None
+    ):
         """
-        Create a new metric Series.
-        
-        Creates a Series with the specified dtype. The series will share the
-        global index with all other series in this Metrics instance.
+        Create a new metric Series with distributed reduction support.
         
         Args:
-            name: Name of the metric (e.g., "loss", "accuracy", "learning_rate")
-            dtype: Data type for the Series
-                - "int": For integer values (e.g., step counts, batch sizes)
-                - "float": For floating-point values (e.g., losses, metrics)
-                - "timestamp": For Unix timestamps (e.g., timing measurements)
-                
+            name: Name of the metric
+            dtype: Data type ("int", "float", "timestamp")
+            fill_value: Value for missing steps. None means missing value.
+                Can be a callable. Example: fill_value=0
+            initial_value: Initial sentinel value for initialize().
+                Can be a callable. Example: initial_value=lambda: time.time()
+            reduce: Reduction strategy ("mean", "sum", or None).
+                - "mean": Average across ranks (None values excluded)
+                - "sum": Sum across ranks (None values excluded)
+                - None: No reduction (use local value)
+            process_group: Process group for this series' reduction.
+                If None, uses Metrics' default process_group.
+        
+        Example:
+            >>> # Use default process group
+            >>> metrics = Metrics()
+            >>> metrics.new("loss", dtype="float", reduce="mean")
+            >>> 
+            >>> # Use custom process group
+            >>> dp_group = dist.new_group([0, 1, 2, 3])
+            >>> metrics.new("dp_loss", dtype="float", reduce="mean", process_group=dp_group)
+        """
+        series = Series(dtype, metrics=self, fill_value=fill_value, 
+                       initial_value=initial_value, reduce=reduce, 
+                       process_group=process_group)
+        self._series[name] = series
+    
+    def get_world_size(self, process_group: Optional[dist.ProcessGroup] = None) -> int:
+        """
+        Get the world size for a process group.
+        
+        Args:
+            process_group: Process group to query. If None, uses default group.
+        
+        Returns:
+            int: Number of processes in the group. Returns 1 if not distributed.
+        """
+        if dist.is_available() and dist.is_initialized():
+            if process_group is not None:
+                return dist.get_world_size(process_group)
+            return dist.get_world_size()
+        return 1
+    
+    def get_rank(self, process_group: Optional[dist.ProcessGroup] = None) -> int:
+        """
+        Get the current rank in a process group.
+        
+        Args:
+            process_group: Process group to query. If None, uses default group.
+        
+        Returns:
+            int: Process rank. Returns 0 if not distributed.
+        """
+        if dist.is_available() and dist.is_initialized():
+            if process_group is not None:
+                return dist.get_rank(process_group)
+            return dist.get_rank()
+        return 0
+    
+    def initialize(self):
+        """
+        Initialize all series with sentinel values.
+        
+        Adds an initial value to all series and increments the index.
+        Should be called once after all series are created with new().
+        
         Example:
             >>> metrics = Metrics()
-            >>> metrics.new("loss", dtype="float")
-            >>> metrics.new("tokens", dtype="int")
-            >>> metrics.new("step_time", dtype="timestamp")
-            >>> 
-            >>> # Access and use
-            >>> metrics.step()
-            >>> metrics.loss.append(0.5)
-            >>> metrics.tokens.append(1024)
-            >>> metrics.step_time.tick()
+            >>> metrics.new("loss", dtype="float", initial_value=0.0)
+            >>> metrics.new("tokens", dtype="int", initial_value=0)
+            >>> metrics.initialize()
+            >>> assert len(metrics._index) == 1
+            >>> assert len(metrics.loss) == 1
         """
-        # Create Series with reference to this Metrics instance
-        series = Series(dtype, metrics=self)
-        self._series[name] = series
+        # Increment index first
+        self._index.append(self._current_index)
+        self._current_index += 1
+        
+        # Add initial value to all series
+        for name, series in self._series.items():
+            value = series._get_initial_value()
+            
+            # Directly append to bypass index checks
+            super(Series, series).append(value)
+            series._index_positions[self._index[-1]] = len(series) - 1
     
     def step(self, value: Optional[int] = None):
         """
-        Advance the global index by one step.
+        Execute computation for current step - like TensorFlow's session.run().
         
-        All series share this index. When step() is called, the index advances
-        and series can append values for this new step.
+        Process:
+        1. Collects current step values from all series
+        2. For series with reduce, gathers from all ranks in its process_group
+        3. Reduces (excluding None) and replaces local value
+        4. Fills missing values with fill_value
+        5. Increments the global index
+        
+        Each series can use its own process_group for reduction.
         
         Args:
-            value: Custom index value. If None, uses auto-incremented counter.
-                Defaults to None.
+            value: Optional custom index value. If None, uses auto-increment.
         
         Example:
-            >>> metrics = Metrics()
-            >>> metrics.new("loss", dtype="float")
+            >>> # Each rank appends local loss
+            >>> metrics.loss.append(local_loss)
             >>> 
-            >>> metrics.step()  # Index: 0
-            >>> metrics.loss.append(0.5)
-            >>> 
-            >>> metrics.step()  # Index: 1
-            >>> metrics.loss.append(0.4)
+            >>> # step() performs distributed reduction
+            >>> metrics.step()
+            >>> # metrics.loss[-1] now contains mean across all ranks
         """
+        # Prepare next index value
         if value is None:
-            value = self._current_index
-        self._index.append(value)
-        self._current_index = value + 1
+            next_index = self._current_index
+            self._current_index += 1
+        else:
+            next_index = value
+            self._current_index = value + 1
+        
+        current_index_pos = len(self._index)
+        
+        if dist.is_available() and dist.is_initialized():
+            # === Distributed mode ===
+            
+            # Group series by their process_group for efficient communication
+            series_by_group = {}
+            for name, series in self._series.items():
+                pg = series._get_process_group()
+                pg_key = id(pg) if pg is not None else None
+                if pg_key not in series_by_group:
+                    series_by_group[pg_key] = {'pg': pg, 'series': []}
+                series_by_group[pg_key]['series'].append((name, series))
+            
+            # Process each group
+            for pg_key, group_data in series_by_group.items():
+                pg = group_data['pg']
+                group_series = group_data['series']
+                
+                # 1. Collect local values for series in this group
+                local_values = {}
+                for name, series in group_series:
+                    if len(series) > current_index_pos:
+                        local_values[name] = series[current_index_pos]
+                    else:
+                        local_values[name] = None
+                
+                # 2. Gather all values from all ranks in this process group
+                if pg is not None:
+                    world_size = dist.get_world_size(pg)
+                else:
+                    world_size = dist.get_world_size()
+                
+                all_values = [None] * world_size
+                dist.all_gather_object(all_values, local_values, group=pg)
+                
+                # 3. Process each series in this group
+                for name, series in group_series:
+                    if series._reduce is not None:
+                        # Collect non-None values from all ranks
+                        rank_values = []
+                        for rank_data in all_values:
+                            val = rank_data[name]
+                            if val is not None:
+                                rank_values.append(val)
+                        
+                        # Reduce (excluding None)
+                        if len(rank_values) > 0:
+                            if series._reduce == "mean":
+                                reduced_value = sum(rank_values) / len(rank_values)
+                            elif series._reduce == "sum":
+                                reduced_value = sum(rank_values)
+                            else:
+                                reduced_value = rank_values[0]
+                        else:
+                            # All ranks have None
+                            reduced_value = None
+                        
+                        # Replace or append the reduced value
+                        if len(series) > current_index_pos:
+                            series[current_index_pos] = reduced_value
+                        else:
+                            super(Series, series).append(reduced_value)
+                            
+                    else:
+                        # No reduction needed
+                        if len(series) <= current_index_pos:
+                            # Missing value, fill with fill_value
+                            fill_val = series._get_fill_value()
+                            super(Series, series).append(fill_val)
+                        # else: keep existing local value
+                    
+                    # Update index position mapping
+                    series._index_positions[next_index] = current_index_pos
+                    
+                    # Invalidate caches
+                    series._invalidate_cache()
+        
+        else:
+            # === Single process mode ===
+            for name, series in self._series.items():
+                if len(series) <= current_index_pos:
+                    fill_val = series._get_fill_value()
+                    super(Series, series).append(fill_val)
+                
+                series._index_positions[next_index] = current_index_pos
+                series._invalidate_cache()
+        
+        # Increment the global index
+        self._index.append(next_index)
     
     def __getattr__(self, name: str) -> Series:
         """

@@ -68,26 +68,6 @@ class TestScalar:
         assert "3.14" in repr_str
         assert "float" in repr_str
 
-    def test_scalar_reduce_single_machine_mean(self):
-        """Test mean reduce in single machine mode."""
-        scalar = Scalar(10.0, "float")
-        reduced = scalar.reduce(reduction="mean")
-        assert reduced.value == pytest.approx(10.0)
-        assert reduced.dtype == "float"
-
-    def test_scalar_reduce_single_machine_sum(self):
-        """Test sum reduce in single machine mode."""
-        scalar = Scalar(10.0, "float")
-        reduced = scalar.reduce(reduction="sum")
-        assert reduced.value == pytest.approx(10.0)
-        assert reduced.dtype == "float"
-
-    def test_scalar_reduce_invalid_reduction(self):
-        """Test invalid reduction parameter."""
-        scalar = Scalar(10.0, "float")
-        with pytest.raises(ValueError, match="Unsupported reduction"):
-            scalar.reduce(reduction="invalid")
-
     def test_scalar_with_zero(self):
         """Test zero value."""
         scalar = Scalar(0, "int")
@@ -690,41 +670,6 @@ class TestLogger:
             assert rows[1]['training/loss'] == '0.4'
 
 
-class TestReduce:
-    """Test suite for reduce() operation."""
-
-    def test_reduce_returns_derived_series(self):
-        """Test that reduce() returns DerivedSeries."""
-        series = Series("float", metrics=None)
-        for i in [1.0, 2.0, 3.0]:
-            series.append(i)
-        
-        reduced = series.reduce("mean")
-        assert isinstance(reduced, DerivedSeries)
-
-    def test_reduce_identity_operation(self):
-        """Test that reduce uses identity operation."""
-        series = Series("float", metrics=None)
-        for i in [1.0, 2.0, 3.0]:
-            series.append(i)
-        
-        reduced = series.reduce("mean")
-        assert reduced.operation == "identity"
-        assert reduced.reduce_op == "mean"
-
-    def test_reduce_on_derived_series(self):
-        """Test reduce on DerivedSeries."""
-        series = Series("float", metrics=None)
-        for i in range(10):
-            series.append(float(i))
-        
-        avg = series.avg(window=3)
-        reduced_avg = avg.reduce("mean")
-        
-        assert isinstance(reduced_avg, DerivedSeries)
-        assert reduced_avg.operation == "identity"
-
-
 class TestIntegration:
     """Integration tests."""
 
@@ -786,13 +731,6 @@ class TestIntegration:
         
         # This should work without errors
         assert len(total_tokens) == 10
-        
-        # Test reduce
-        reduced_loss = metrics.loss.reduce("mean")
-        # Indexing should return Scalar
-        scalar_result = reduced_loss[0]
-        assert isinstance(scalar_result, Scalar)
-
 
         # Simulate training epochs
         for epoch in range(5):
@@ -1988,3 +1926,233 @@ class TestDiffOperation:
         # Should work
         result = list(avg_diff)
         assert len(result) == 10
+
+
+class TestNoneHandling:
+    """Test suite for None value handling."""
+    
+    def test_series_default_fill_value_is_none(self):
+        """Test that default fill_value is None."""
+        series = Series("float")
+        assert series._get_fill_value() is None
+    
+    def test_series_custom_fill_value(self):
+        """Test custom fill_value."""
+        series = Series("float", fill_value=0.0)
+        assert series._get_fill_value() == 0.0
+    
+    def test_series_callable_fill_value(self):
+        """Test callable fill_value."""
+        series = Series("float", fill_value=lambda: 99.0)
+        assert series._get_fill_value() == 99.0
+    
+    def test_series_default_initial_value_is_none(self):
+        """Test that default initial_value is None."""
+        series = Series("float")
+        assert series._get_initial_value() is None
+    
+    def test_series_custom_initial_value(self):
+        """Test custom initial_value."""
+        series = Series("float", initial_value=1.0)
+        assert series._get_initial_value() == 1.0
+    
+    def test_series_callable_initial_value(self):
+        """Test callable initial_value."""
+        series = Series("timestamp", initial_value=lambda: time.time())
+        val = series._get_initial_value()
+        assert isinstance(val, float)
+    
+    def test_avg_excludes_none(self):
+        """Test that avg() excludes None values."""
+        series = Series("float")
+        series.append(1.0)
+        series.append(None)
+        series.append(3.0)
+        
+        avg_series = series.avg()
+        # Should be (1.0 + 3.0) / 2 = 2.0, excluding None
+        assert avg_series[2] == pytest.approx(2.0)
+    
+    def test_sum_excludes_none(self):
+        """Test that sum() excludes None values."""
+        series = Series("float")
+        series.append(1.0)
+        series.append(None)
+        series.append(3.0)
+        
+        sum_series = series.sum()
+        # Should be 1.0 + 3.0 = 4.0, excluding None
+        assert sum_series[2] == pytest.approx(4.0)
+    
+    def test_cumsum_with_none(self):
+        """Test that cumsum handles None."""
+        series = Series("float")
+        series.append(1.0)
+        series.append(2.0)
+        series.append(None)
+        series.append(3.0)
+        
+        cumsum_series = series.cumsum()
+        assert cumsum_series[0] == pytest.approx(1.0)
+        assert cumsum_series[1] == pytest.approx(3.0)
+        # cumsum[2] should keep previous cumsum (3.0)
+        assert cumsum_series[2] == pytest.approx(3.0)
+        assert cumsum_series[3] == pytest.approx(6.0)
+    
+    def test_arithmetic_propagates_none(self):
+        """Test that arithmetic operations propagate None."""
+        series1 = Series("float")
+        series1.append(1.0)
+        series1.append(None)
+        series1.append(3.0)
+        
+        series2 = series1 + 10
+        assert series2[0] == pytest.approx(11.0)
+        assert series2[1] is None
+        assert series2[2] == pytest.approx(13.0)
+    
+    def test_all_none_returns_none(self):
+        """Test that operations on all-None values return None."""
+        series = Series("float")
+        series.append(None)
+        series.append(None)
+        
+        avg_series = series.avg()
+        assert avg_series[0] is None
+        assert avg_series[1] is None
+        
+        sum_series = series.sum()
+        assert sum_series[0] is None
+        assert sum_series[1] is None
+
+
+class TestDistributedFeatures:
+    """Test suite for distributed training features."""
+    
+    def test_series_with_reduce_parameter(self):
+        """Test Series with reduce parameter."""
+        series = Series("float", reduce="mean")
+        assert series._reduce == "mean"
+        
+        series2 = Series("int", reduce="sum")
+        assert series2._reduce == "sum"
+        
+        series3 = Series("float", reduce=None)
+        assert series3._reduce is None
+    
+    def test_series_with_process_group(self):
+        """Test Series with custom process_group parameter."""
+        # Mock process group (placeholder object)
+        mock_pg = object()
+        
+        series = Series("float", reduce="mean", process_group=mock_pg)
+        assert series._process_group is mock_pg
+    
+    def test_series_get_process_group_priority(self):
+        """Test _get_process_group priority logic."""
+        # Series has its own process_group
+        series_pg = object()
+        series = Series("float", process_group=series_pg)
+        assert series._get_process_group() is series_pg
+        
+        # Series uses Metrics' default process_group
+        metrics_pg = object()
+        metrics = Metrics(process_group=metrics_pg)
+        metrics.new("loss", dtype="float", reduce="mean")
+        assert metrics.loss._get_process_group() is metrics_pg
+        
+        # Series overrides Metrics' process_group
+        series_override_pg = object()
+        metrics.new("other", dtype="float", reduce="mean", process_group=series_override_pg)
+        assert metrics.other._get_process_group() is series_override_pg
+    
+    def test_metrics_initialize(self):
+        """Test initialize() adds sentinel values."""
+        metrics = Metrics()
+        metrics.new("loss", dtype="float", initial_value=0.0)
+        metrics.new("tokens", dtype="int", initial_value=0)
+        
+        metrics.initialize()
+        
+        assert len(metrics._index) == 1
+        assert len(metrics.loss) == 1
+        assert len(metrics.tokens) == 1
+        assert metrics.loss[0] == 0.0
+        assert metrics.tokens[0] == 0
+    
+    def test_metrics_initialize_with_callable(self):
+        """Test initialize() with callable initial_value."""
+        metrics = Metrics()
+        call_count = [0]
+        
+        def get_value():
+            call_count[0] += 1
+            return float(call_count[0])
+        
+        metrics.new("counter", dtype="float", initial_value=get_value)
+        metrics.initialize()
+        
+        assert metrics.counter[0] == 1.0
+        assert call_count[0] == 1
+    
+    def test_metrics_step_fills_with_none(self):
+        """Test that step() fills missing values with None by default."""
+        metrics = Metrics()
+        metrics.new("loss", dtype="float")
+        metrics.new("tokens", dtype="int")
+        
+        metrics.initialize()
+        
+        # Only append to loss
+        metrics.loss.append(1.5)
+        metrics.step()
+        
+        # tokens should be filled with None
+        assert metrics.tokens[1] is None
+        assert metrics.loss[1] == 1.5
+    
+    def test_metrics_step_fills_with_custom_fill_value(self):
+        """Test that step() uses custom fill_value."""
+        metrics = Metrics()
+        metrics.new("loss", dtype="float", fill_value=0.0)
+        metrics.new("tokens", dtype="int", fill_value=-1)
+        
+        metrics.initialize()
+        
+        # Don't append anything
+        metrics.step()
+        
+        # Should be filled with custom values
+        assert metrics.loss[1] == 0.0
+        assert metrics.tokens[1] == -1
+    
+    def test_append_constraint_with_new_semantics(self):
+        """Test append constraint: len(series) <= len(index) + 1."""
+        metrics = Metrics()
+        metrics.new("loss", dtype="float")
+        metrics.initialize()  # index has 1 element
+        
+        # Can append once (len == 2, index.len == 1, so 2 <= 1+1 ✓)
+        metrics.loss.append(1.0)
+        
+        # Cannot append again without step()
+        with pytest.raises(RuntimeError, match="already appended"):
+            metrics.loss.append(2.0)
+        
+        # After step(), can append again
+        metrics.step()
+        metrics.loss.append(3.0)  # Should work now
+        assert len(metrics.loss) == 3
+    
+    def test_metrics_get_world_size(self):
+        """Test get_world_size() returns 1 in non-distributed mode."""
+        metrics = Metrics()
+        assert metrics.get_world_size() == 1
+        assert metrics.get_world_size(None) == 1
+    
+    def test_metrics_get_rank(self):
+        """Test get_rank() returns 0 in non-distributed mode."""
+        metrics = Metrics()
+        assert metrics.get_rank() == 0
+        assert metrics.get_rank(None) == 0
+
