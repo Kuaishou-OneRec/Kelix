@@ -412,7 +412,6 @@ def run_training(args, rank, world_size) -> bool:
         raw_data['loss'].append(batch['loss'])
         raw_data['tokens'].append(batch['tokens'])
         raw_data['samples'].append(batch['samples'])
-        raw_data['step_time'].append(time.time())
         
         if step < 3 and rank == 0:
             print(f"[Rank {rank}, Step {step}] Generated batch: loss={batch['loss']:.4f}, tokens={batch['tokens']}")
@@ -437,6 +436,9 @@ def run_training(args, rank, world_size) -> bool:
         
         # 5. Record step time (tick marks current time)
         metrics.step_time.tick()
+        
+        # Record the EXACT timestamp that metrics captured
+        raw_data['step_time'].append(metrics.step_time[-1])
         
         # 6. Call metrics.step() to perform distributed reduction and sync
         #    This is where the magic happens - reduces loss/tokens across ranks
