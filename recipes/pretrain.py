@@ -40,7 +40,8 @@ from muse.models import get_model_class, list_models
 from muse.config import get_config
 from muse.training.distributed import (
     shard_model, 
-    load_from_full_model_state_dict
+    load_from_full_model_state_dict,
+    initialize_model_params
 )
 from muse.training.checkpoint import (
     AppState, 
@@ -427,7 +428,7 @@ def train():
     fp32_reduce=args.fp32_reduce
   )
   dist.barrier()
-  # 需要保证每个rank都执行了load_from_full_model_state_dict
+  # 需要保证每个rank都执行了参数初始化或加载
   if args.model_dir:
     with Timer("Load state dict"):
       # Convert meta tensors to CUDA tensors
@@ -436,6 +437,10 @@ def train():
         model=model, full_sd=state_dict,
         allow_random_init_params=args.allow_random_init_params
       )
+  else:
+    # Train from scratch: initialize model parameters randomly
+    with Timer("Initialize model parameters"):
+      initialize_model_params(model)
 
   with torch.device(torch.cuda.current_device()):
     # Initialize RoPE, if the buffer is not in the state_dict,

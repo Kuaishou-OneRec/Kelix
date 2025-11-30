@@ -24,6 +24,7 @@ Functions:
     get_shard_conditions: Determine which modules to shard
     shard_model: Apply FSDP sharding to a model
     load_from_full_model_state_dict: Load full state dict into FSDP model
+    initialize_model_params: Initialize model parameters for training from scratch
     load_from_full_model_state_dict_local: Single-machine version of above
 
 Constants:
@@ -359,6 +360,88 @@ def load_from_full_model_state_dict(model: "FSDPModule",
         sharded_sd[param_name] = nn.Parameter(sharded_tensor) # default: requires_grad=True
 
     model.load_state_dict(sharded_sd, assign=True)
+
+
+def initialize_model_params(model: "FSDPModule"):
+    """
+    Initialize model parameters randomly for training from scratch.
+    
+    This function initializes all parameters in a FSDP-sharded model from meta device
+    to CUDA device with proper random initialization. It ensures consistent initialization
+    across all ranks by broadcasting from rank 0.
+    
+    Args:
+        model: FSDP-wrapped model with parameters on meta device
+        
+    Example:
+        >>> model = ModelClass(config)  # Model on meta device
+        >>> shard_model(model, ...)
+        >>> initialize_model_params(model)
+        >>> # Now all parameters are initialized on CUDA
+    """
+    from torch.distributed._tensor import distribute_tensor
+    
+    print_rank_0("Initializing model parameters from scratch...")
+    
+    # Get the model's state dict (currently on meta device)
+    meta_sd = model.state_dict()
+    initialized_sd = {}
+    
+    # Initialize each parameter
+    for param_name, meta_param in meta_sd.items():
+        if dist.get_rank() == 0:
+            # Initialize on rank 0
+            if hasattr(model, 'get_initializer'):
+                # Use model-specific initializer if available
+                init_fn = model.get_initializer(param_name)
+                param_tensor = torch.empty(
+                    meta_param.size(), 
+                    dtype=meta_param.dtype, 
+                    device='cuda'
+                )
+                with torch.no_grad():
+                    init_fn(param_tensor)
+            else:
+                # Use default initialization
+                param_tensor = torch.empty(
+                    meta_param.size(), 
+                    dtype=meta_param.dtype, 
+                    device='cuda'
+                )
+                with torch.no_grad():
+                    if param_tensor.ndim >= 2:
+                        # Kaiming initialization for weight matrices
+                        nn.init.kaiming_normal_(
+                            param_tensor, 
+                            a=0, 
+                            mode='fan_in', 
+                            nonlinearity='relu'
+                        )
+                    else:
+                        # Zero initialization for biases
+                        nn.init.zeros_(param_tensor)
+        else:
+            # Other ranks create empty tensors for broadcast
+            param_tensor = torch.empty(
+                meta_param.size(), 
+                dtype=meta_param.dtype, 
+                device='cuda'
+            )
+        
+        # Broadcast from rank 0 to all ranks
+        mesh = meta_param.device_mesh
+        dist.broadcast(param_tensor, src=0, group=mesh.get_group(0))
+        dist.barrier()
+        
+        # Distribute tensor according to FSDP sharding
+        sharded_tensor = distribute_tensor(
+            param_tensor, mesh, meta_param.placements
+        )
+        initialized_sd[param_name] = nn.Parameter(sharded_tensor)
+    
+    # Load initialized parameters into model
+    model.load_state_dict(initialized_sd, assign=True)
+    print_rank_0(f"Model parameters initialized successfully ({len(initialized_sd)} parameters)")
 
 
 # 这个是单机版本的load_from_full_model_state_dict
