@@ -274,10 +274,11 @@ class Logger:
         values: Dict[str, Dict[str, Any]] = {}
         
         for name, (series, group) in self._tracked_series.items():
-            print(name, series, group, len(series))
+            print("write", name, series, group, len(series))
             if len(series) > 0:
                 # Get latest value
                 latest_value = series[-1]
+                print("latest_value", latest_value)
                 
                 # Skip None values (missing data points from slicing operations)
                 if latest_value is None:
@@ -287,9 +288,11 @@ class Logger:
                 if group not in values:
                     values[group] = {}
                 values[group][name] = latest_value
+                print("values", values)
         
         # Write to all backends (only if there are values to write)
         if values:
+            print("write to backends", values)
             for backend in self.backends:
                 backend.write(step, values)
     
@@ -1910,7 +1913,6 @@ class Metrics:
             return
         
         for logger in self._loggers:
-            print("xxxx", logger.name, logger._tracked_series)
             logger.write(global_step)
     
     def new(
