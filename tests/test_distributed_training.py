@@ -92,12 +92,8 @@ def run_training(args, rank, world_size):
         rank: Process rank
         world_size: Total number of processes
     """
-    # Initialize metrics (using define_metrics from common.py)
-    metrics = define_metrics(
-        acc_steps=args.gradient_accumulation_steps,
-        logging_per_step=args.logging_per_step
-    )
     
+    loggers = []
     # Setup logger (only on rank 0 to avoid duplicate output)
     if rank == 0:
         # Add stdout logger for immediate feedback
@@ -105,13 +101,16 @@ def run_training(args, rank, world_size):
         
         # Add CSV logger to save metrics to file
         csv_logger = Logger("csv", [CSVBackend("/tmp/metrics_test.csv")])
+        loggers.append(stdout_logger)
+        loggers.append(csv_logger)
+
+    # Initialize metrics (using define_metrics from common.py)
+    metrics = define_metrics(
+        acc_steps=args.gradient_accumulation_steps,
+        logging_per_step=args.logging_per_step,
+        loggers=loggers
+    )
         
-        metrics.add_logger(stdout_logger)
-        metrics.add_logger(csv_logger)
-        
-        print("[Logger] Configured stdout and CSV backends")
-        print("[Logger] CSV output will be saved to: /tmp/metrics_test.csv")
-        print()
     
     # Initialize step scheduler
     scheduler = StepScheduler(args)

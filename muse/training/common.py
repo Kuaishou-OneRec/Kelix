@@ -61,7 +61,7 @@ from torch.utils._foreach_utils import (
     _has_foreach_support,
 )
 
-from muse.utils.metrics import Metrics
+from muse.utils.metrics import Metrics, Logger
 
 @contextlib.contextmanager
 def set_default_dtype(dtype: Union[str, torch.dtype]) -> Generator[None, None, None]:
@@ -400,7 +400,7 @@ class GradNormLogger:
                     f.write(f"{step},{name},NaN,None,None\n")
 
 
-def define_metrics(acc_steps: int, logging_per_step: int):
+def define_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logger]):
     metrics = Metrics()
 
     # Micro-step metrics
@@ -430,6 +430,10 @@ def define_metrics(acc_steps: int, logging_per_step: int):
     samples_per_sec_per_gpu = (total_samples.diff() / metrics.step_time.diff())[::acc_steps][1:] / metrics.get_world_size()
 
     tokens_per_day = tokens_per_sec_per_gpu * 86400 * metrics.get_world_size()
+
+    for logger in loggers:
+        print("add logger", logger.name)
+        metrics.add_logger(logger)
 
     # Logging metrics, avg over the last logging_per_step steps
     metrics.logger.track(
