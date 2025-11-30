@@ -596,9 +596,9 @@ def train():
       if sample_idx is not None:
         num_samples = (sample_idx > 0).sum().item()
         metrics.samples.append(num_samples)
-
+      print_rank_0(f"cu_seqlens: {cu_seqlens}")
       # ================================================ Forward pass ================================================
-      output = model(tokens=input_ids)
+      output = model(tokens=input_ids, cu_seqlens=cu_seqlens)
       
       # Compute loss for language modeling
       logits = output.logits if hasattr(output, 'logits') else output

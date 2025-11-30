@@ -358,7 +358,7 @@ def gather_batches(buffer: List[Any], group: dist.ProcessGroup):
       gathered_batches = sum(gathered_batches, [])
     else:
       gathered_batches = buffer
-    print_rank_0(f"Num batches: {len(gathered_batches)}")
+    #print_rank_0(f"Num batches: {len(gathered_batches)}")
     return gathered_batches
 
 def gather_by_group(dataloader: Iterable[Any],
