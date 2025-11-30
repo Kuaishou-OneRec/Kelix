@@ -239,6 +239,11 @@ def get_argument_parser():
   parser.add_argument("--enable-profile", action="store_true",
                       help="Enable torch profile")
 
+  ############ Debug Args ############
+
+  parser.add_argument("--overfit-batches", type=int, default=None,
+                      help="Number of batches to cache for overfitting (debug mode)")
+
   return parser
 
 # TODO: move to muse.utils
@@ -560,7 +565,26 @@ def train():
   
   # Setup data iterator
   if dataloader is not None:
-    data_iter = iter(gather_by_group(dataloader, get_context_parallel_group()))
+    if args.overfit_batches:
+      # Overfit debug mode: cache n batches and cycle through them
+      print_rank_0(f"=== OVERFIT DEBUG MODE: Caching {args.overfit_batches} batches ===")
+      print_rank_0(f"Checkpoint saving will be disabled in overfit mode")
+      cached_batches = []
+      temp_iter = iter(gather_by_group(dataloader, get_context_parallel_group()))
+      for i in range(args.overfit_batches):
+        try:
+          batch = next(temp_iter)
+          cached_batches.append(batch)
+        except StopIteration:
+          print_rank_0(f"Warning: Only {i} batches available, less than requested {args.overfit_batches}")
+          break
+      print_rank_0(f"Successfully cached {len(cached_batches)} batches for overfitting")
+      print_rank_0(f"Model will cycle through these batches indefinitely")
+      # Create infinite iterator that cycles through cached batches
+      data_iter = iter(itertools.cycle(cached_batches))
+    else:
+      # Normal mode: use dataloader as-is
+      data_iter = iter(gather_by_group(dataloader, get_context_parallel_group()))
   else:
     print_rank_0("Warning: No dataloader available. Training loop will not run.")
     data_iter = iter([])
@@ -583,6 +607,7 @@ def train():
       # Extract batch data
       input_ids = batch["input_ids"]
       loss_mask = batch["loss_mask"]
+      position_ids = batch.get("position_ids", None)
       cu_seqlens = batch.get("cu_seqlens", None)
       sample_idx = batch.get("sample_idx", None)
 
@@ -596,9 +621,8 @@ def train():
       if sample_idx is not None:
         num_samples = (sample_idx > 0).sum().item()
         metrics.samples.append(num_samples)
-      print_rank_0(f"cu_seqlens: {cu_seqlens}")
       # ================================================ Forward pass ================================================
-      output = model(tokens=input_ids, cu_seqlens=cu_seqlens)
+      output = model(tokens=input_ids, cu_seqlens=cu_seqlens, input_pos=position_ids)
       
       # Compute loss for language modeling
       logits = output.logits if hasattr(output, 'logits') else output
@@ -631,27 +655,32 @@ def train():
 
       # Save checkpoint at specified intervals
       if scheduler.should_save_checkpoint():
-        
-        torch.cuda.empty_cache()
-        gc.collect()
+        if args.overfit_batches:
+          print_rank_0(f"Skipping checkpoint save at step {scheduler.global_step} (overfit debug mode)")
+        else:
+          torch.cuda.empty_cache()
+          gc.collect()
 
-        with Timer("save checkpoint"):
-          save_checkpoint(
-            app_state=app_state,
-            dist_checkpointer=dist_checkpointer,
-            checkpoint_dir=args.output_dir,
-            global_step=scheduler.global_step
-          )
+          with Timer("save checkpoint"):
+            save_checkpoint(
+              app_state=app_state,
+              dist_checkpointer=dist_checkpointer,
+              checkpoint_dir=args.output_dir,
+              global_step=scheduler.global_step
+            )
 
       if torch_profiler:
         torch_profiler.step()
 
   # Save final checkpoint
-  save_checkpoint(
-    app_state=app_state,
-    dist_checkpointer=dist_checkpointer,
-    checkpoint_dir=args.output_dir,
-    global_step=scheduler.global_step)
+  if not args.overfit_batches:
+    save_checkpoint(
+      app_state=app_state,
+      dist_checkpointer=dist_checkpointer,
+      checkpoint_dir=args.output_dir,
+      global_step=scheduler.global_step)
+  else:
+    print_rank_0(f"Skipping final checkpoint save (overfit debug mode)")
 
 if __name__ == "__main__":
   train()

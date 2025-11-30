@@ -144,12 +144,15 @@ class TextDataset(DistributedDataset):
       return None
 
     # batchify
+    position_ids = torch.arange(len(input_ids), dtype=torch.int32).unsqueeze(0)
     input_ids = torch.tensor(input_ids).unsqueeze(0)
     loss_mask = torch.tensor(loss_mask).unsqueeze(0)
+    
 
     return {
       "input_ids": input_ids,
-      "loss_mask": loss_mask
+      "loss_mask": loss_mask,
+      "position_ids": position_ids
     }
   
   def get_content(self,
@@ -186,8 +189,9 @@ class TextDataset(DistributedDataset):
     """Pack new_sample into buffer"""
     inputs = {}
 
-    for key in ["input_ids", "loss_mask"]:
+    for key in ["input_ids", "loss_mask", "position_ids"]:
       inputs[key] = torch.cat([sample[key] for sample in buffer], dim=-1)
+    # process position ids
 
     cu_seqlens = [0]
     for sample in buffer:
