@@ -609,7 +609,6 @@ def train():
       loss_mask = batch["loss_mask"]
       position_ids = batch.get("position_ids", None)
       cu_seqlens = batch.get("cu_seqlens", None)
-      sample_idx = batch.get("sample_idx", None)
 
       # Prepare labels for loss computation
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
@@ -618,9 +617,8 @@ def train():
       num_tokens = input_ids.shape[1]
       metrics.tokens.append(num_tokens)
 
-      if sample_idx is not None:
-        num_samples = (sample_idx > 0).sum().item()
-        metrics.samples.append(num_samples)
+      num_samples = cu_seqlens.shape[0]
+      metrics.samples.append(num_samples)
       # ================================================ Forward pass ================================================
       output = model(tokens=input_ids, cu_seqlens=cu_seqlens, input_pos=position_ids)
       
