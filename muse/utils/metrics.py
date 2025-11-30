@@ -278,14 +278,19 @@ class Logger:
                 # Get latest value
                 latest_value = series[-1]
                 
+                # Skip None values (missing data points from slicing operations)
+                if latest_value is None:
+                    continue
+                
                 # Organize by group
                 if group not in values:
                     values[group] = {}
                 values[group][name] = latest_value
         
-        # Write to all backends
-        for backend in self.backends:
-            backend.write(step, values)
+        # Write to all backends (only if there are values to write)
+        if values:
+            for backend in self.backends:
+                backend.write(step, values)
     
     def close(self):
         """Close all backends."""
