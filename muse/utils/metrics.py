@@ -274,11 +274,9 @@ class Logger:
         values: Dict[str, Dict[str, Any]] = {}
         
         for name, (series, group) in self._tracked_series.items():
-            print("write", name, series, group, len(series))
             if len(series) > 0:
                 # Get latest value
                 latest_value = series[-1]
-                print("latest_value", latest_value)
                 
                 # Skip None values (missing data points from slicing operations)
                 if latest_value is None:
@@ -288,11 +286,9 @@ class Logger:
                 if group not in values:
                     values[group] = {}
                 values[group][name] = latest_value
-                print("values", values)
         
         # Write to all backends (only if there are values to write)
         if values:
-            print("write to backends", values)
             for backend in self.backends:
                 backend.write(step, values)
     
@@ -618,7 +614,8 @@ class DerivedSeries(BaseSeries):
         dtype: Optional[str] = None,
         source2: Union[BaseSeries, int, float, None] = None,
         shift_periods: Optional[int] = None,
-        shift_fill_value: Optional[Union[int, float]] = None
+        shift_fill_value: Optional[Union[int, float]] = None,
+        slice_obj: Optional[slice] = None
     ):
         """
         Initialize a DerivedSeries.
@@ -649,6 +646,7 @@ class DerivedSeries(BaseSeries):
         self.shift_periods = shift_periods
         self.shift_fill_value = shift_fill_value
         self._dtype = dtype if dtype is not None else source.dtype
+        self.slice_obj = slice_obj
         
         # Cache for computed results
         self._cache: Optional[List] = None
@@ -729,6 +727,10 @@ class DerivedSeries(BaseSeries):
         # Cache the result
         self._cache = result
         self._cache_valid = True
+        
+        # Apply slice if specified
+        if self.slice_obj is not None:
+            result = result[self.slice_obj]
         
         return result
     
@@ -962,7 +964,11 @@ class DerivedSeries(BaseSeries):
         return result
     
     def __len__(self) -> int:
-        """Return the length of the derived series (same as source)."""
+        """Return the length of the derived series."""
+        if self.slice_obj is not None:
+            # Need to compute to know the sliced length
+            computed = self._compute()
+            return len(computed)
         return len(self.source)
     
     def __getitem__(self, key: Union[int, slice]):
@@ -981,14 +987,17 @@ class DerivedSeries(BaseSeries):
                 for reduced values) for index, DerivedSeries for slice
         """
         if isinstance(key, slice):
-            # Return a new DerivedSeries with sliced source
-            # Create a wrapper series for the sliced data
-            sliced_source = self.source[key]
+            # Return a new DerivedSeries that references original source
+            # but applies slice during computation (avoids creating detached copy)
             return DerivedSeries(
-                source=sliced_source,
+                source=self.source,
                 operation=self.operation,
                 window=self.window,
-                dtype=self._dtype
+                dtype=self._dtype,
+                source2=self.source2,
+                shift_periods=self.shift_periods,
+                shift_fill_value=self.shift_fill_value,
+                slice_obj=key
             )
         else:
             # Single index: compute and return value

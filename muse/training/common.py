@@ -432,7 +432,6 @@ def define_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logger])
     tokens_per_day = tokens_per_sec_per_gpu * 86400 * metrics.get_world_size()
 
     for logger in loggers:
-        print("add logger", logger.name)
         metrics.add_logger(logger)
 
     # Logging metrics, avg over the last logging_per_step steps
