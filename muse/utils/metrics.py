@@ -702,6 +702,9 @@ class DerivedSeries(BaseSeries):
             - arithmetic operations: O(n)
         """
         if self._cache_valid and self._cache is not None:
+            # Apply slice to cached result if specified
+            if self.slice_obj is not None:
+                return self._cache[self.slice_obj]
             return self._cache
         
         # Get source data (triggers recursive computation if source is derived)
@@ -724,7 +727,7 @@ class DerivedSeries(BaseSeries):
         else:
             raise ValueError(f"Unknown operation: {self.operation}")
         
-        # Cache the result
+        # Cache the result (before slicing, so we cache the full computation)
         self._cache = result
         self._cache_valid = True
         
@@ -987,16 +990,16 @@ class DerivedSeries(BaseSeries):
                 for reduced values) for index, DerivedSeries for slice
         """
         if isinstance(key, slice):
-            # Return a new DerivedSeries that references original source
-            # but applies slice during computation (avoids creating detached copy)
+            # Return a new DerivedSeries that references this DerivedSeries
+            # to maintain the dependency chain for proper cache invalidation
             return DerivedSeries(
-                source=self.source,
-                operation=self.operation,
-                window=self.window,
+                source=self,
+                operation="identity",
+                window=None,
                 dtype=self._dtype,
-                source2=self.source2,
-                shift_periods=self.shift_periods,
-                shift_fill_value=self.shift_fill_value,
+                source2=None,
+                shift_periods=None,
+                shift_fill_value=None,
                 slice_obj=key
             )
         else:
@@ -1381,21 +1384,24 @@ class Series(list, BaseSeries):
             ...     series.append(i)
             >>> print(series[0])  # 1.0
             >>> sliced = series[1:4]  # Returns Series
-            >>> print(type(sliced))  # <class 'Series'>
+            >>> print(type(sliced))  # <class 'DerivedSeries'>
             >>> print(list(sliced))  # [2.0, 3.0, 4.0]
         """
-        result = super().__getitem__(key)
-        
-        # If result is a list (from slicing), convert to Series
+        # If result is a slice, return a DerivedSeries to maintain dependency chain
         if isinstance(key, slice):
-            # Create new series without metrics association for sliced result
-            new_series = Series(self.dtype, metrics=None)
-            # Directly extend the new series with sliced values
-            for value in result:
-                super(Series, new_series).append(value)
-            return new_series
+            return DerivedSeries(
+                source=self,
+                operation="identity",
+                window=None,
+                dtype=self.dtype,
+                source2=None,
+                shift_periods=None,
+                shift_fill_value=None,
+                slice_obj=key
+            )
         
-        # Otherwise return the single value
+        # Otherwise, get the single value and return it
+        result = super().__getitem__(key)
         return result
     
     def append(self, x: Union[int, float, None, Scalar]):
