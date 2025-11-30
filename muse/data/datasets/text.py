@@ -193,7 +193,7 @@ class TextDataset(DistributedDataset):
     for sample in buffer:
       cu_seqlens.append(cu_seqlens[-1] + self.get_sample_length(sample))    
     
-    inputs["cu_seqlens"] = cu_seqlens
+    inputs["cu_seqlens"] = torch.tensor(cu_seqlens, dtype=torch.int32)
   
     return inputs
   
