@@ -622,6 +622,7 @@ def train():
       # ================================================ End of Backward pass ================================================
 
       # Advance metrics index for this step
+      metrics.step_time.tick()
       metrics.step()
 
       # Logging at specified intervals
