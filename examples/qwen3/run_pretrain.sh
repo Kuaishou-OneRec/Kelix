@@ -121,11 +121,11 @@ nohup mpirun --allow-run-as-root \
                 --weight-decay 0.1 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --max-length 1024 \
+                --max-length 32768 \
                 --lr-scheduler-type cosine \
                 --num-warmup-steps 1000 \
                 --num-training-steps 2500000 \
-                --save-checkpoint-per-step 500 \
+                --save-checkpoint-per-step 1000 \
                 --context-parallel-size 1 \
                 --use-flash-attention-2 \
                 --logging-per-step 1 \
@@ -133,7 +133,6 @@ nohup mpirun --allow-run-as-root \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
-                --overfit-batches 1 \
                 --comment '$comment' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
 
