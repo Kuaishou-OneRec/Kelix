@@ -433,7 +433,7 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
     learning_rate = metrics.learning_rate[::acc_steps][1:]
 
     # Fixed: Skip the first None from diff(), same pattern as other metrics
-    seconds_per_step = metrics.step_time[1:][::acc_steps].diff()
+    seconds_per_step = metrics.step_time[::acc_steps].diff()[1:]
 
     tokens_per_sec_per_gpu = (total_tokens.diff() / metrics.step_time.diff())[::acc_steps][1:] / metrics.get_world_size()
     samples_per_sec_per_gpu = (total_samples.diff() / metrics.step_time.diff())[::acc_steps][1:] / metrics.get_world_size()
