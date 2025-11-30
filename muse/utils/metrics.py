@@ -1910,7 +1910,7 @@ class Metrics:
             return
         
         for logger in self._loggers:
-            print(logger._tracked_series)
+            print("xxxx", logger.name, logger._tracked_series)
             logger.write(global_step)
     
     def new(
