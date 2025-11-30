@@ -55,6 +55,7 @@ TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
 
+# --model-dir $MODEL_DIR
 
 nohup mpirun --allow-run-as-root \
         -hostfile $hostfile \
@@ -113,7 +114,7 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        bash -c "python3 recipes/pretrain.py --model-dir $MODEL_DIR \
+        bash -c "python3 recipes/pretrain.py \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/qwen3/pretrain.json \
                 --learning-rate 2e-4 \
