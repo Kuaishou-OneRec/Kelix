@@ -455,7 +455,7 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
         name="learning_rate", group="training")
     # Skip first None value from seconds_per_step before final logging slice
     metrics.logger.track(
-        seconds_per_step.avg(window=logging_per_step)[1:][::logging_per_step], 
+        seconds_per_step.avg(window=logging_per_step)[::logging_per_step], 
         name="seconds_per_step", group="perf")
     metrics.logger.track(
         total_tokens[::acc_steps][::logging_per_step], 
