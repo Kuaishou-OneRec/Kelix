@@ -81,7 +81,8 @@ from muse.losses.ce import CrossEntropyLoss
 
 from muse.config import load_config
 
-from muse.training.common import define_metrics, StepScheduler
+from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
+from muse.training.common import initialize_metrics, StepScheduler
 
 def get_argument_parser():
   parser = argparse.ArgumentParser()
@@ -539,10 +540,19 @@ def train():
 
   loss_fn = CrossEntropyLoss(ignore_index=-100, shift_labels=True)
 
+  if dist.get_rank() == 0:
+    stdout_logger = Logger("stdout", [StdoutBackend()])
+    csv_logger = Logger("csv", [CSVBackend(os.path.join(args.output_dir, "metrics.csv"))])
+    tb_logger = Logger("tb", [TensorBoardBackend(args.output_dir)])
+    loggers = [stdout_logger, csv_logger, tb_logger]
+  else:
+    loggers = []
+
   # Initialize metrics and step scheduler
-  metrics = define_metrics(
+  metrics = initialize_metrics(
     acc_steps=args.gradient_accumulation_steps,
-    logging_per_step=args.logging_per_step
+    logging_per_step=args.logging_per_step,
+    loggers=loggers
   )
   
   # Initialize step scheduler for training loop management
@@ -567,9 +577,6 @@ def train():
 
       to_cuda(batch)
       
-      # Advance metrics index for this step
-      metrics.step()
-      
       # Advance scheduler (manages micro_step and global_step)
       scheduler.step()
 
@@ -583,12 +590,12 @@ def train():
       input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
       labels = input_ids * loss_mask + (-100) * (1 - loss_mask)
 
-      tokens = input_ids.shape[1]
-      metrics.tokens.append(tokens)
+      num_tokens = input_ids.shape[1]
+      metrics.tokens.append(num_tokens)
 
       if sample_idx is not None:
-        samples = (sample_idx > 0).sum().item()
-        metrics.samples.append(samples)
+        num_samples = (sample_idx > 0).sum().item()
+        metrics.samples.append(num_samples)
 
       # Forward pass
       with Timer("Forward"):
@@ -618,11 +625,13 @@ def train():
           
         # Record step time
         metrics.step_time.tick()
-
+      
+      # Advance metrics index for this step
+      metrics.step()
 
       # Logging at specified intervals
       if scheduler.should_logging():
-        metrics.logger.log()
+        metrics.write_logs(scheduler.global_step)
 
       # Save checkpoint at specified intervals
       if scheduler.should_save_checkpoint():

@@ -400,7 +400,15 @@ class GradNormLogger:
                     f.write(f"{step},{name},NaN,None,None\n")
 
 
-def define_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logger]):
+def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logger]):
+    """
+    Initialize metrics for training, define some basic metrics, you can add more metrics later.
+    
+    Args:
+        acc_steps: Number of gradient accumulation steps
+        logging_per_step: Frequency of logging (every N global steps)
+        loggers: List of loggers to use
+    """
     metrics = Metrics()
 
     # Micro-step metrics
