@@ -6,7 +6,6 @@ learning training workflows with computation graph support. Key features:
 
 - Series with configurable fill values and initial values
 - Distributed reduction across ranks (mean/sum)
-- Custom process_group support for flexible distributed topologies
 - **Unified None handling: all missing values use None**
 - **Automatic None exclusion in all computations (avg, sum, cumsum, etc.)**
 - Step-based synchronization similar to TensorFlow's session.run()
@@ -22,9 +21,8 @@ Missing Value Handling:
     - cumsum() skips None values and continues accumulation
 
 Process Group Support:
-    - Metrics can have a default process_group
-    - Each Series can override with its own process_group
-    - Useful for mixed data-parallel / model-parallel setups
+    - Metrics maintains a single process_group
+    - All series share this process_group for distributed reduction
 
 Classes:
     Scalar: Scalar value wrapper for numeric values
@@ -1282,8 +1280,7 @@ class Series(list, BaseSeries):
         metrics: Optional["Metrics"] = None,
         fill_value: Union[float, int, callable, None] = None,
         initial_value: Union[float, int, callable, None] = None,
-        reduce: Optional[Literal["mean", "sum"]] = None,
-        process_group: Optional[dist.ProcessGroup] = None
+        reduce: Optional[Literal["mean", "sum"]] = None
     ):
         """
         Initialize an empty Series with specified data type.
@@ -1297,8 +1294,6 @@ class Series(list, BaseSeries):
             initial_value: Initial sentinel value added by initialize().
                 Can be a callable. Defaults to None.
             reduce: Reduction strategy across ranks ("mean", "sum", or None)
-            process_group: Process group for distributed reduction.
-                If None, uses the default group or Metrics' default group.
         """
         super().__init__()
         self._dtype = dtype
@@ -1310,7 +1305,6 @@ class Series(list, BaseSeries):
         self._fill_value = fill_value
         self._initial_value = initial_value
         self._reduce = reduce
-        self._process_group = process_group
     
     @property
     def dtype(self) -> str:
@@ -1344,14 +1338,8 @@ class Series(list, BaseSeries):
         return self._initial_value
     
     def _get_process_group(self):
-        """
-        Get the process group for this series.
-        
-        Priority: series._process_group > metrics._process_group > None (default group)
-        """
-        if self._process_group is not None:
-            return self._process_group
-        if self._metrics is not None and hasattr(self._metrics, '_process_group'):
+        """Get the process group from parent Metrics."""
+        if self._metrics is not None:
             return self._metrics._process_group
         return None
     
@@ -1923,8 +1911,7 @@ class Metrics:
         dtype: Literal["int", "float", "timestamp"],
         fill_value: Union[float, int, callable, None] = None,
         initial_value: Union[float, int, callable, None] = None,
-        reduce: Optional[Literal["mean", "sum"]] = None,
-        process_group: Optional[dist.ProcessGroup] = None
+        reduce: Optional[Literal["mean", "sum"]] = None
     ):
         """
         Create a new metric Series with distributed reduction support.
@@ -1940,21 +1927,14 @@ class Metrics:
                 - "mean": Average across ranks (None values excluded)
                 - "sum": Sum across ranks (None values excluded)
                 - None: No reduction (use local value)
-            process_group: Process group for this series' reduction.
-                If None, uses Metrics' default process_group.
         
         Example:
-            >>> # Use default process group
             >>> metrics = Metrics()
             >>> metrics.new("loss", dtype="float", reduce="mean")
-            >>> 
-            >>> # Use custom process group
-            >>> dp_group = dist.new_group([0, 1, 2, 3])
-            >>> metrics.new("dp_loss", dtype="float", reduce="mean", process_group=dp_group)
+            >>> metrics.new("tokens", dtype="int", reduce="sum")
         """
         series = Series(dtype, metrics=self, fill_value=fill_value, 
-                       initial_value=initial_value, reduce=reduce, 
-                       process_group=process_group)
+                       initial_value=initial_value, reduce=reduce)
         self._series[name] = series
     
     def get_world_size(self, process_group: Optional[dist.ProcessGroup] = None) -> int:
@@ -2022,12 +2002,12 @@ class Metrics:
         
         Process:
         1. Collects current step values from all series
-        2. For series with reduce, gathers from all ranks in its process_group
+        2. For series with reduce, gathers from all ranks using Metrics process_group
         3. Reduces (excluding None) and replaces local value
         4. Fills missing values with fill_value
         5. Increments the global index
         
-        Each series can use its own process_group for reduction.
+        All series share the same process_group from Metrics.
         
         Args:
             value: Optional custom index value. If None, uses auto-increment.
@@ -2053,78 +2033,63 @@ class Metrics:
         if dist.is_available() and dist.is_initialized():
             # === Distributed mode ===
             
-            # Group series by their process_group for efficient communication
-            series_by_group = {}
-            for name, series in self._series.items():
-                pg = series._get_process_group()
-                pg_key = id(pg) if pg is not None else None
-                if pg_key not in series_by_group:
-                    series_by_group[pg_key] = {'pg': pg, 'series': []}
-                series_by_group[pg_key]['series'].append((name, series))
+            # All series use the same process_group from Metrics
+            pg = self._process_group
             
-            # Process each group
-            for pg_key, group_data in series_by_group.items():
-                pg = group_data['pg']
-                group_series = group_data['series']
-                
-                # 1. Collect local values for series in this group
-                local_values = {}
-                for name, series in group_series:
-                    if len(series) > current_index_pos:
-                        local_values[name] = series[current_index_pos]
-                    else:
-                        local_values[name] = None
-                
-                # 2. Gather all values from all ranks in this process group
-                if pg is not None:
-                    world_size = dist.get_world_size(pg)
+            # 1. Collect local values from all series
+            local_values = {}
+            for name, series in self._series.items():
+                if len(series) > current_index_pos:
+                    local_values[name] = series[current_index_pos]
                 else:
-                    world_size = dist.get_world_size()
-                
-                all_values = [None] * world_size
-                dist.all_gather_object(all_values, local_values, group=pg)
-                
-                # 3. Process each series in this group
-                for name, series in group_series:
-                    if series._reduce is not None:
-                        # Collect non-None values from all ranks
-                        rank_values = []
-                        for rank_data in all_values:
-                            val = rank_data[name]
-                            if val is not None:
-                                rank_values.append(val)
-                        
-                        # Reduce (excluding None)
-                        if len(rank_values) > 0:
-                            if series._reduce == "mean":
-                                reduced_value = sum(rank_values) / len(rank_values)
-                            elif series._reduce == "sum":
-                                reduced_value = sum(rank_values)
-                            else:
-                                reduced_value = rank_values[0]
+                    local_values[name] = None
+            
+            # 2. Gather all values from all ranks
+            world_size = self.get_world_size(pg)
+            all_values = [None] * world_size
+            dist.all_gather_object(all_values, local_values, group=pg)
+            
+            # 3. Process each series
+            for name, series in self._series.items():
+                if series._reduce is not None:
+                    # Collect non-None values from all ranks
+                    rank_values = []
+                    for rank_data in all_values:
+                        val = rank_data[name]
+                        if val is not None:
+                            rank_values.append(val)
+                    
+                    # Reduce (excluding None)
+                    if len(rank_values) > 0:
+                        if series._reduce == "mean":
+                            reduced_value = sum(rank_values) / len(rank_values)
+                        elif series._reduce == "sum":
+                            reduced_value = sum(rank_values)
                         else:
-                            # All ranks have None
-                            reduced_value = None
-                        
-                        # Replace or append the reduced value
-                        if len(series) > current_index_pos:
-                            series[current_index_pos] = reduced_value
-                        else:
-                            super(Series, series).append(reduced_value)
-                            
+                            reduced_value = rank_values[0]
                     else:
-                        # No reduction needed
-                        if len(series) <= current_index_pos:
-                            # Missing value, fill with fill_value
-                            fill_val = series._get_fill_value()
-                            super(Series, series).append(fill_val)
-                        # else: keep existing local value
+                        # All ranks have None
+                        reduced_value = None
                     
-                    # Update index position mapping
-                    series._index_positions[next_index] = current_index_pos
-                    
-                    # Invalidate caches
-                    series._invalidate_cache()
+                    # Replace or append the reduced value
+                    if len(series) > current_index_pos:
+                        series[current_index_pos] = reduced_value
+                    else:
+                        super(Series, series).append(reduced_value)
+                        
+                else:
+                    # No reduction needed
+                    if len(series) <= current_index_pos:
+                        # Missing value, fill with fill_value
+                        fill_val = series._get_fill_value()
+                        super(Series, series).append(fill_val)
+                    # else: keep existing local value
+                
+                # Update index position mapping
+                series._index_positions[next_index] = current_index_pos
+                
+                # Invalidate caches
+                series._invalidate_cache()
         
         else:
             # === Single process mode ===

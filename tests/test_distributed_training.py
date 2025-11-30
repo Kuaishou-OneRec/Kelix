@@ -153,7 +153,7 @@ def run_training(args, rank, world_size):
                 print(f"\n{'=' * 60}")
                 print(f"[Global Step {scheduler.global_step}] LOGGING METRICS")
                 print(f"{'=' * 60}")
-            metrics.logger.log()
+            metrics.logger.write()
         
         # 8. Checkpoint saving (just print, no actual save)
         if scheduler.should_save_checkpoint():
