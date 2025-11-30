@@ -416,11 +416,11 @@ def define_metrics(acc_steps: int, logging_per_step: int):
 
     total_tokens = metrics.tokens.cumsum()
     total_samples = metrics.samples.cumsum()
-
+ 
     # Global-step metrics, skip the first step
     avg_loss = metrics.loss.avg(window=acc_steps)[::acc_steps][1:]
 
-    avg_grad_norm = metrics.grad_norm.avg(window=acc_steps)[::acc_steps][1:]
+    avg_grad_norm = metrics.grad_norm[::acc_steps][1:]
     
     learning_rate = metrics.learning_rate[::acc_steps][1:]
 
