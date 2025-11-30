@@ -194,9 +194,9 @@ class FlashAttention2:
             )
         else:
             attn_output = flash_attn_varlen_func(
-                q=q,
-                k=k,
-                v=v,
+                q=q.squeeze(0),
+                k=k.squeeze(0),
+                v=v.squeeze(0),
                 cu_seqlens_q=cu_seqlens_q,
                 cu_seqlens_k=cu_seqlens_k,
                 max_seqlen_q=max_seqlen_q,
