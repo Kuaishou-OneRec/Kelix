@@ -274,6 +274,7 @@ class Logger:
         values: Dict[str, Dict[str, Any]] = {}
         
         for name, (series, group) in self._tracked_series.items():
+            print(name, series, group, len(series))
             if len(series) > 0:
                 # Get latest value
                 latest_value = series[-1]
