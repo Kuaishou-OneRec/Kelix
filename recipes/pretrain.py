@@ -597,35 +597,30 @@ def train():
         num_samples = (sample_idx > 0).sum().item()
         metrics.samples.append(num_samples)
 
-      # Forward pass
-      with Timer("Forward"):
-        output = model(tokens=input_ids)
-        
-        # Compute loss for language modeling
-        logits = output.logits if hasattr(output, 'logits') else output
-        loss = loss_fn(logits, labels)
-        metrics.loss.append(loss.detach().item())
-
-      # Backward pass
-      with Timer("Backward"):
-        loss.backward()
-        clip_grad_by_value(model, args.clip_range)
-
-        # Update optimizer at gradient accumulation boundaries
-        if scheduler.is_gradient_accumulation_boundary():
-          grad_norm = compute_fsdp_zero2_grad_norm(model)
-          metrics.grad_norm.append(grad_norm)
-          
-          learning_rate = lr_scheduler.get_last_lr()[0]
-          metrics.learning_rate.append(learning_rate)
-          
-          optimizer.step()
-          lr_scheduler.step()
-          optimizer.zero_grad()
-          
-        # Record step time
-        metrics.step_time.tick()
+      # ================================================ Forward pass ================================================
+      output = model(tokens=input_ids)
       
+      # Compute loss for language modeling
+      logits = output.logits if hasattr(output, 'logits') else output
+      loss = loss_fn(logits, labels)
+      metrics.loss.append(loss.detach().item()) # record loss for each step
+      # ================================================ End of Forward pass ================================================
+
+      # ================================================ Backward pass ================================================
+      loss.backward()
+      clip_grad_by_value(model, args.clip_range)
+
+      # Update optimizer at gradient accumulation boundaries
+      if scheduler.is_gradient_accumulation_boundary():
+        grad_norm = compute_fsdp_zero2_grad_norm(model)
+        metrics.grad_norm.append(grad_norm) # record grad norm for each step
+        learning_rate = lr_scheduler.get_last_lr()[0]
+        metrics.learning_rate.append(learning_rate) # record learning rate for each step
+        optimizer.step()
+        lr_scheduler.step()
+        optimizer.zero_grad()
+      # ================================================ End of Backward pass ================================================
+
       # Advance metrics index for this step
       metrics.step()
 
