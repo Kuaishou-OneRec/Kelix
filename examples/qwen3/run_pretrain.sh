@@ -115,6 +115,7 @@ nohup mpirun --allow-run-as-root \
         -x https_proxy=\
         with_nccl_local_env \
         bash -c "python3 recipes/pretrain.py \
+                --model-config $MODEL_DIR/config.json \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/qwen3/pretrain.json \
                 --learning-rate 2e-4 \
