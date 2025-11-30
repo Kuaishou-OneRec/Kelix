@@ -432,6 +432,7 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
     
     learning_rate = metrics.learning_rate[::acc_steps][1:]
 
+    # Fixed: Skip the first None from diff(), same pattern as other metrics
     seconds_per_step = metrics.step_time[1:][::acc_steps].diff()
 
     tokens_per_sec_per_gpu = (total_tokens.diff() / metrics.step_time.diff())[::acc_steps][1:] / metrics.get_world_size()
@@ -452,8 +453,9 @@ def initialize_metrics(acc_steps: int, logging_per_step: int, loggers: List[Logg
     metrics.logger.track(
         learning_rate.avg(window=logging_per_step)[::logging_per_step], 
         name="learning_rate", group="training")
+    # Skip first None value from seconds_per_step before final logging slice
     metrics.logger.track(
-        seconds_per_step.avg(window=logging_per_step)[::logging_per_step], 
+        seconds_per_step.avg(window=logging_per_step)[1:][::logging_per_step], 
         name="seconds_per_step", group="perf")
     metrics.logger.track(
         total_tokens[::acc_steps][::logging_per_step], 

@@ -1,6 +1,6 @@
 # TODO: clean utils
 from typing import Tuple
-from rich import print
+#from rich import print
 import time
 import torch
 import random
