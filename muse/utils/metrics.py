@@ -215,7 +215,7 @@ class StdoutBackend(LoggerBackend):
                 # Extract scalar value if it's a Scalar object
                 if hasattr(value, 'value'):
                     value = value.value
-                metrics_str.append(f"{key}={value:.6f}" if isinstance(value, float) else f"{key}={value}")
+                metrics_str.append(f"{key}={value:.3f}" if isinstance(value, float) else f"{key}={value}")
         
         print(f"{self.prefix} Step {step}: {', '.join(metrics_str)}")
     
