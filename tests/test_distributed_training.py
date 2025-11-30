@@ -174,7 +174,7 @@ def run_training(args, rank, world_size):
                 metrics.print_summary(last_n=3, rank=rank, show_derived=False)
             
             # Write to logger backends
-            metrics.logger.write()
+            metrics.write_logs(scheduler.global_step)
         
         # 8. Checkpoint saving (just print, no actual save)
         if scheduler.should_save_checkpoint():
