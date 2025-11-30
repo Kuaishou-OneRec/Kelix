@@ -189,11 +189,11 @@ class TextDataset(DistributedDataset):
     for key in ["input_ids", "loss_mask"]:
       inputs[key] = torch.cat([sample[key] for sample in buffer], dim=-1)
 
-    cu_seqlen = [0]
+    cu_seqlens = [0]
     for sample in buffer:
-      cu_seqlen.append(cu_seqlen[-1] + self.get_sample_length(sample))    
+      cu_seqlens.append(cu_seqlens[-1] + self.get_sample_length(sample))    
     
-    inputs["cu_seqlen"] = cu_seqlen
+    inputs["cu_seqlens"] = cu_seqlens
   
     return inputs
   
