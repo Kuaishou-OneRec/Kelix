@@ -1860,6 +1860,7 @@ class Metrics:
         self._loggers: List[Logger] = []  # List of logger instances
         self._logger_proxy = LoggerProxy(self._loggers)
         self._process_group = process_group
+        self._derived_series = {}  # Track derived series for debugging
     
     @property
     def logger(self) -> LoggerProxy:
@@ -1936,6 +1937,20 @@ class Metrics:
         series = Series(dtype, metrics=self, fill_value=fill_value, 
                        initial_value=initial_value, reduce=reduce)
         self._series[name] = series
+    
+    def register_derived(self, name: str, derived_series: "DerivedSeries"):
+        """
+        Register a derived series for debugging visibility.
+        
+        Args:
+            name: Name for this derived series
+            derived_series: The DerivedSeries instance
+            
+        Example:
+            >>> loss_avg = metrics.loss.avg(window=20)
+            >>> metrics.register_derived("loss_avg_20", loss_avg)
+        """
+        self._derived_series[name] = derived_series
     
     def get_world_size(self, process_group: Optional[dist.ProcessGroup] = None) -> int:
         """
@@ -2136,3 +2151,82 @@ class Metrics:
             raise AttributeError(f"Series '{name}' not found in Metrics")
         
         return self._series[name]
+    
+    def print_summary(self, last_n: int = 5, rank: Optional[int] = None, 
+                      show_derived: bool = True):
+        """
+        Print a summary table of all metrics for debugging.
+        
+        Displays the latest values of all series in a formatted table.
+        
+        Args:
+            last_n: Number of latest values to show for each series (default: 5)
+            rank: Current rank for display. If None, doesn't show rank info.
+            show_derived: Whether to show derived series (default: True)
+        
+        Example:
+            >>> metrics.print_summary(last_n=3)
+            >>> metrics.print_summary(last_n=5, rank=0, show_derived=True)
+        """
+        # Header
+        if rank is not None:
+            print(f"\n{'=' * 80}")
+            print(f"METRICS SUMMARY (Rank {rank})")
+        else:
+            print(f"\n{'=' * 80}")
+            print(f"METRICS SUMMARY")
+        print(f"{'=' * 80}")
+        
+        # Index info
+        print(f"Index: {self._index_name}, Current: {self._current_index - 1}, Total steps: {len(self._index)}")
+        print(f"Base series: {len(self._series)}, Derived series: {len(self._derived_series)}")
+        print()
+        
+        # Base series table
+        if len(self._series) > 0:
+            print("BASE SERIES:")
+            print(f"{'Name':<20} {'Type':<10} {'Reduce':<10} {'Len':<6} {'Latest Values'}")
+            print("-" * 80)
+            
+            for name, series in sorted(self._series.items()):
+                dtype = series.dtype
+                reduce_op = series._reduce if series._reduce else "None"
+                length = len(series)
+                latest_str = self._format_values(series, length, last_n)
+                print(f"{name:<20} {dtype:<10} {reduce_op:<10} {length:<6} {latest_str}")
+        
+        # Derived series table
+        if show_derived and len(self._derived_series) > 0:
+            print()
+            print("DERIVED SERIES:")
+            print(f"{'Name':<20} {'Operation':<20} {'Len':<6} {'Latest Values'}")
+            print("-" * 80)
+            
+            for name, derived in sorted(self._derived_series.items()):
+                operation = derived.operation
+                if derived.window is not None:
+                    op_str = f"{operation}(w={derived.window})"
+                else:
+                    op_str = operation
+                length = len(derived)
+                latest_str = self._format_values(derived, length, last_n)
+                print(f"{name:<20} {op_str:<20} {length:<6} {latest_str}")
+        
+        print(f"{'=' * 80}\n")
+    
+    def _format_values(self, series, length: int, last_n: int) -> str:
+        """Helper to format latest values."""
+        if length == 0:
+            return "[]"
+        
+        start_idx = max(0, length - last_n)
+        values = []
+        for i in range(start_idx, length):
+            val = series[i]
+            if val is None:
+                values.append("None")
+            elif isinstance(val, float):
+                values.append(f"{val:.3f}")
+            else:
+                values.append(str(val))
+        return f"[{', '.join(values)}]"

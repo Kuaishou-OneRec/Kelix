@@ -22,6 +22,7 @@ import torch.distributed as dist
 
 # Import Muse modules
 from muse.training.common import define_metrics, StepScheduler
+from muse.utils.metrics import Logger, StdoutBackend, CSVBackend
 
 
 def init_distributed():
@@ -97,6 +98,21 @@ def run_training(args, rank, world_size):
         logging_per_step=args.logging_per_step
     )
     
+    # Setup logger (only on rank 0 to avoid duplicate output)
+    if rank == 0:
+        # Add stdout logger for immediate feedback
+        stdout_logger = Logger("stdout", [StdoutBackend()])
+        
+        # Add CSV logger to save metrics to file
+        csv_logger = Logger("csv", [CSVBackend("/tmp/metrics_test.csv")])
+        
+        metrics.add_logger(stdout_logger)
+        metrics.add_logger(csv_logger)
+        
+        print("[Logger] Configured stdout and CSV backends")
+        print("[Logger] CSV output will be saved to: /tmp/metrics_test.csv")
+        print()
+    
     # Initialize step scheduler
     scheduler = StepScheduler(args)
     
@@ -153,6 +169,11 @@ def run_training(args, rank, world_size):
                 print(f"\n{'=' * 60}")
                 print(f"[Global Step {scheduler.global_step}] LOGGING METRICS")
                 print(f"{'=' * 60}")
+                
+                # Debug: print metrics summary
+                metrics.print_summary(last_n=3, rank=rank, show_derived=False)
+            
+            # Write to logger backends
             metrics.logger.write()
         
         # 8. Checkpoint saving (just print, no actual save)
@@ -169,6 +190,13 @@ def run_training(args, rank, world_size):
         print(f"Metrics index length: {len(metrics._index)}")
         print(f"Series tracked: {list(metrics._series.keys())}")
         print("=" * 60)
+        
+        # Final summary with more values
+        metrics.print_summary(last_n=5, rank=rank, show_derived=False)
+        
+        # Show output locations
+        print("CSV output saved to: /tmp/metrics_test.csv")
+        print()
 
 
 def main():
