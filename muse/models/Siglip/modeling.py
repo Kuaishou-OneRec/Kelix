@@ -204,7 +204,7 @@ class SiglipVisionEmbeddings(nn.Module):
         spatial_shapes = []
         for thw_tuple in image_grid_thw:
             spatial_shapes.append((thw_tuple[1],thw_tuple[2]))
-        spatial_shapes = spatial_shapes.concat(dim=0)
+        spatial_shapes = torch.tensor(spatial_shapes, dtype=torch.long, device=pixel_values.device)
 
         # Get positional resized and padded positional embeddings
         positional_embeddings = self.position_embedding.weight.reshape(
