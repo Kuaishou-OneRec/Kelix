@@ -221,7 +221,8 @@ class SiglipEncoder(nn.Module):
         intermediate_dim = getattr(config, "intermediate_size", embed_dim * 4)
         use_qk_norm = getattr(config, "use_qk_norm", False)
         qk_norm_eps = getattr(config, "qk_norm_eps", 1e-6)
-        norm_eps = getattr(config, "layer_norm_eps", 1e-5)
+        norm_eps = getattr(config, "layer_norm_eps", 1e-6)
+        max_seq_len = getattr(config, "max_seq_len", 4096)
 
         layers = nn.ModuleList()
         for _ in range(config.num_hidden_layers):
@@ -240,7 +241,7 @@ class SiglipEncoder(nn.Module):
                 q_norm=q_norm,
                 k_norm=k_norm,
                 kv_cache=None,
-                max_seq_len=self.max_seq_len,
+                max_seq_len=max_seq_len,
                 is_causal=False,
                 attn_dropout=attn_dropout,
                 attention_function=config.attention_function,

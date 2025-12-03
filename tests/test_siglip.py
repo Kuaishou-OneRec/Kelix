@@ -18,24 +18,28 @@ from muse.training.common import set_default_dtype
 
 def _build_siglip_config(hf_cfg: Dict[str, Any]) -> SiglipVisionConfig:
     """Map Hugging Face config to Muse SiglipVisionConfig."""
+    image_size = hf_cfg.get("image_size", 384)
+    patch_size = hf_cfg.get("patch_size", 14)
+    # Calculate default max_seq_len from image_size and patch_size
+    default_max_seq_len = (image_size // patch_size) ** 2
+    
     return SiglipVisionConfig(
-        model_class="SiglipVisionModel",
-        image_size=hf_cfg.get("image_size", 224),
-        patch_size=hf_cfg.get("patch_size", 16),
+        model_class="SiglipVisionTransformer",
+        image_size=image_size,
+        patch_size=patch_size,
         num_channels=hf_cfg.get("num_channels", 3),
         hidden_size=hf_cfg.get("hidden_size", 1152),
-        num_hidden_layers=hf_cfg.get("num_hidden_layers", 24),
+        num_hidden_layers=hf_cfg.get("num_hidden_layers", 27),
         num_attention_heads=hf_cfg.get("num_attention_heads", 16),
         intermediate_size=hf_cfg.get("intermediate_size", 4304),
-        layer_norm_eps=hf_cfg.get("layer_norm_eps", 1e-5),
+        max_seq_len=hf_cfg.get("max_seq_len", default_max_seq_len),
+        layer_norm_eps=hf_cfg.get("layer_norm_eps", 1e-6),
         attention_dropout=hf_cfg.get("attention_dropout", 0.0),
         has_learnable_position_embedding=hf_cfg.get("has_learnable_position_embedding", False),
         use_qk_norm=hf_cfg.get("use_qk_norm", False),
         qk_norm_eps=hf_cfg.get("qk_norm_eps", 1e-6),
         rope_theta=hf_cfg.get("rope_theta", 10000.0),
         attention_function="eager",  # Use eager for comparison
-        vision_use_head=hf_cfg.get("vision_use_head", True),
-        spatial_merge_size=hf_cfg.get("spatial_merge_size", 2),
         output_attentions=False,
         output_hidden_states=False,
     )
@@ -517,13 +521,14 @@ def test_siglip_weight_conversion():
     
     # Create a minimal config
     config = SiglipVisionConfig(
-        model_class="SiglipVisionModel",
+        model_class="SiglipVisionTransformer",
         image_size=224,
         patch_size=16,
         hidden_size=768,
         num_hidden_layers=2,
         num_attention_heads=12,
         intermediate_size=3072,
+        max_seq_len=196,  # (224/16)^2 = 196
     )
     
     # Create model

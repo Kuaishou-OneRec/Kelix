@@ -204,17 +204,21 @@ class SiglipVisionConfig(ModelConfig):
     """Configuration for the SigLIP vision transformer encoder."""
 
     model_class: str = Field(
-        default="SiglipVisionModel",
+        default="SiglipVisionTransformer",
         description="Model class name used for registry lookup.",
     )
-    image_size: int = Field(default=224, description="Input image resolution.")
-    patch_size: int = Field(default=16, description="Patch size of the stem conv.")
+    image_size: int = Field(default=384, description="Input image resolution.")
+    patch_size: int = Field(default=14, description="Patch size of the stem conv.")
     num_channels: int = Field(default=3, description="Number of input channels.")
     hidden_size: int = Field(default=1152, description="Transformer hidden dimension.")
-    num_hidden_layers: int = Field(default=24, description="Number of encoder blocks.")
+    num_hidden_layers: int = Field(default=27, description="Number of encoder blocks.")
     num_attention_heads: int = Field(default=16, description="Attention heads.")
     intermediate_size: int = Field(default=4304, description="MLP hidden dimension.")
-    layer_norm_eps: float = Field(default=1e-5, description="Layer norm epsilon.")
+    max_seq_len: int = Field(
+        default=4096,
+        description="Maximum sequence length for attention. Typically (image_size/patch_size)^2.",
+    )
+    layer_norm_eps: float = Field(default=1e-6, description="Layer norm epsilon.")
     attention_dropout: float = Field(
         default=0.0, ge=0.0, le=1.0, description="Attention dropout probability."
     )
@@ -228,13 +232,6 @@ class SiglipVisionConfig(ModelConfig):
     attention_function: Literal["eager", "flash_attention_2"] = Field(
         default="flash_attention_2",
         description="Attention backend implementation.",
-    )
-    vision_use_head: bool = Field(
-        default=True, description="Include the multi-head attention pooling head."
-    )
-    spatial_merge_size: int = Field(
-        default=2,
-        description="Kernel size used by the projector when merging spatial tokens.",
     )
     output_attentions: bool = Field(
         default=False,
