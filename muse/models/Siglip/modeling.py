@@ -8,13 +8,15 @@ import torch.nn as nn
 import torch.nn.init as init
 
 from muse.config.model_config import SiglipVisionConfig
-from muse.models.Siglip._layers import (
+from muse.models.siglip._layers import (
     SiglipAttention,
     SiglipMLP,
     SiglipAxialRotaryEmbedding,
 )
+from muse.layers.attention import MultiHeadAttention
 from muse.layers.transformer import TransformerSelfAttentionLayer
 from muse.layers.rms_norm import RMSNorm
+from muse.models.base import Model
 
 # Import will be done when muse.models is imported, avoiding circular import
 # The actual registration happens in __init__.py after import
@@ -225,7 +227,7 @@ class SiglipEncoder(nn.Module):
         for _ in range(config.num_hidden_layers):
             q_norm = RMSNorm(dim=head_dim, eps=qk_norm_eps) if use_qk_norm else None
             k_norm = RMSNorm(dim=head_dim, eps=qk_norm_eps) if use_qk_norm else None
-            self_attn = SiglipAttention(
+            self_attn = MultiHeadAttention(
                 embed_dim=embed_dim,
                 num_heads=num_heads,
                 num_kv_heads=num_kv_heads,
@@ -253,6 +255,17 @@ class SiglipEncoder(nn.Module):
             layers.append(layer)
         self.layers = layers
 
+
+
+    @staticmethod
+    def flatten_list(image_grid_thw):
+        tmp_image_grid_thw = list()
+        for image_grid in image_grid_thw:
+            if isinstance(image_grid, list):
+                tmp_image_grid_thw.extend(image_grid)
+            else:
+                tmp_image_grid_thw.append(image_grid)
+        return tmp_image_grid_thw
 
     # Ignore copy
     # @can_return_tuple
@@ -351,7 +364,7 @@ class SiglipEncoder(nn.Module):
 
 
 
-class SiglipVisionTransformer(nn.Module):
+class SiglipVisionTransformer(Model):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__()
         self.config = config
@@ -360,6 +373,256 @@ class SiglipVisionTransformer(nn.Module):
         self.ln_post = nn.LayerNorm(
             normalized_shape=config.hidden_size, eps=config.layer_norm_eps
         )
+
+
+    def get_initializer(self, name: str) -> Callable[[torch.Tensor], None]:
+        """Return an initializer function for the given parameter name.
+        
+        This function implements Keye-VL-1_5 style initialization:
+        - Attention modules (Qwen3Attention): xavier_uniform_ for weights, zeros_ for bias
+        - MLP modules (FeedForward): xavier_uniform_ for weights, normal_(std=1e-6) for bias
+        - Linear/Conv2d layers: lecun_normal_ for weights, zeros_ for bias
+        - Embedding layers: default_flax_embed_init (normal with std=1.0)
+        - LayerNorm/RMSNorm: weight=1, bias=0
+        
+        Reference: https://huggingface.co/Kwai-Keye/Keye-VL-1_5-8B/blob/main/modeling_keye_vl_1_5.py
+        
+        Args:
+            name: Parameter name (e.g., "model.layers.0.attn.q_proj.weight")
+            
+        Returns:
+            A callable function that takes a tensor and initializes it
+        """
+        # Find the module corresponding to this parameter name
+        # Remove the parameter suffix (e.g., ".weight", ".bias", ".scale")
+        module_name = name.rsplit(".", 1)[0]
+        param_suffix = name.rsplit(".", 1)[1] if "." in name else ""
+        
+        # Get the module and its parent
+        module = None
+        parent_module = None
+        for mod_name, mod in self.named_modules():
+            if mod_name == module_name:
+                module = mod
+                # Get parent module name
+                if "." in mod_name:
+                    parent_name = ".".join(mod_name.rsplit(".", 1)[:-1])
+                    for p_name, p_mod in self.named_modules():
+                        if p_name == parent_name:
+                            parent_module = p_mod
+                            break
+                break
+        
+        # Handle TiedLinear: its weight is actually the tied_module's weight
+        # TiedLinear is not an nn.Module, so it won't appear in named_modules()
+        if module is None:
+            # Try to get the module by attribute access
+            parts = module_name.split(".")
+            try:
+                current = self
+                for part in parts:
+                    current = getattr(current, part)
+                # Check if it's a TiedLinear
+                if isinstance(current, TiedLinear):
+                    # TiedLinear's weight is the tied_module's weight
+                    module = current.tied_module
+                else:
+                    module = current if isinstance(current, nn.Module) else None
+            except AttributeError:
+                module = None
+        
+        if module is None:
+            # If module not found, return a default lecun_normal initializer
+            return lecun_normal_
+        
+        # Check if this is part of an Attention module
+        is_attention = isinstance(parent_module, MultiHeadAttention)
+        
+        # Check if this is part of an MLP/FeedForward module
+        is_mlp = isinstance(parent_module, FeedForward)
+        
+        # Define initializer based on module type
+        if isinstance(module, nn.Linear):
+            def linear_init(tensor: torch.Tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    if is_attention:
+                        # Attention layers use xavier_uniform_
+                        init.xavier_uniform_(tensor)
+                    elif is_mlp:
+                        # MLP layers use xavier_uniform_ for weights
+                        init.xavier_uniform_(tensor)
+                    else:
+                        # Other Linear layers use lecun_normal_
+                        lecun_normal_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    if is_mlp:
+                        # MLP bias uses normal with std=1e-6
+                        init.normal_(tensor, mean=0.0, std=1e-6)
+                    else:
+                        # Other biases use zeros
+                        init.zeros_(tensor)
+            return linear_init
+            
+        elif isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d, 
+                                  nn.ConvTranspose1d, nn.ConvTranspose2d)):
+            def conv_init(tensor: torch.Tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    lecun_normal_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    init.zeros_(tensor)
+            return conv_init
+            
+        elif isinstance(module, nn.Embedding):
+            # TODO: use better embedding initialization
+            def embedding_init(tensor: torch.Tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    # Use default_flax_embed_init (normal with std=1.0)
+                    default_flax_embed_init(tensor)
+            return embedding_init
+            
+        elif isinstance(module, nn.MultiheadAttention):
+            def mha_init(tensor: torch.Tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    init.xavier_uniform_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    init.zeros_(tensor)
+            return mha_init
+            
+        elif (isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
+              or "LayerNorm" in module.__class__.__name__
+              or "RMSNorm" in module.__class__.__name__
+              or isinstance(module, RMSNorm)):
+            def norm_init(tensor: torch.Tensor):
+                if param_suffix in ["weight", "scale"] and tensor is not None:
+                    init.ones_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    init.zeros_(tensor)
+            return norm_init
+        
+        # Default: lecun_normal initialization
+        return lecun_normal_
+
+    def convert_hf_state_dict(self,
+                              hf_state_dict: Dict[str, torch.Tensor],
+                              **kwargs) -> Dict[str, torch.Tensor]:
+        """Convert a Hugging Face state dictionary to a model state dictionary.
+        
+        Only converts vision_model weights. Skips text_model, logit_scale, logit_bias,
+        and vision_model.head (pooling head) since they are not part of this model.
+        
+        Args:
+            hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
+            **kwargs: Additional keyword arguments.
+        
+        Returns:
+            A dictionary of model state with converted key names.
+        """
+        converted_state_dict = {}
+        skipped_keys = []
+        
+        # Prefix to look for in HF state dict
+        vision_prefix = "siglip.vision_model."
+        
+        for hf_key, tensor in hf_state_dict.items():
+            # Skip non-vision_model keys (text_model, logit_scale, logit_bias, etc.)
+            if not hf_key.startswith(vision_prefix):
+                skipped_keys.append(hf_key)
+                continue
+            
+            # Remove the prefix to get the relative key
+            rel_key = hf_key[len(vision_prefix):]
+            
+            # Skip pooling head (vision_model.head.*)
+            if rel_key.startswith("head."):
+                skipped_keys.append(hf_key)
+                continue
+            
+            # Handle embeddings
+            if rel_key.startswith("embeddings."):
+                # Embeddings map directly: patch_embedding, position_embedding, packing_position_embedding
+                converted_key = rel_key
+                converted_state_dict[converted_key] = tensor
+                continue
+            
+            # Handle post_layernorm -> ln_post
+            if rel_key.startswith("post_layernorm."):
+                # post_layernorm.weight -> ln_post.weight
+                # post_layernorm.bias -> ln_post.bias
+                suffix = rel_key.replace("post_layernorm.", "")
+                converted_key = f"ln_post.{suffix}"
+                converted_state_dict[converted_key] = tensor
+                continue
+            
+            # Handle encoder layers
+            if rel_key.startswith("encoder.layers."):
+                # Extract layer index and remaining key
+                # encoder.layers.{i}.{rest}
+                parts = rel_key.split(".", 3)  # ["encoder", "layers", "{i}", "rest"]
+                if len(parts) < 4:
+                    skipped_keys.append(hf_key)
+                    continue
+                
+                layer_idx = parts[2]
+                rest_key = parts[3]
+                
+                # Handle layer_norm1 -> sa_norm
+                if rest_key.startswith("layer_norm1."):
+                    suffix = rest_key.replace("layer_norm1.", "")
+                    converted_key = f"encoder.layers.{layer_idx}.sa_norm.{suffix}"
+                    converted_state_dict[converted_key] = tensor
+                    continue
+                
+                # Handle layer_norm2 -> mlp_norm
+                if rest_key.startswith("layer_norm2."):
+                    suffix = rest_key.replace("layer_norm2.", "")
+                    converted_key = f"encoder.layers.{layer_idx}.mlp_norm.{suffix}"
+                    converted_state_dict[converted_key] = tensor
+                    continue
+                
+                # Handle self_attn -> attn
+                if rest_key.startswith("self_attn."):
+                    attn_key = rest_key.replace("self_attn.", "attn.")
+                    # Map out_proj -> output_proj
+                    attn_key = attn_key.replace("out_proj.", "output_proj.")
+                    converted_key = f"encoder.layers.{layer_idx}.{attn_key}"
+                    converted_state_dict[converted_key] = tensor
+                    continue
+                
+                # Handle MLP (fc1, fc2 map directly)
+                if rest_key.startswith("mlp."):
+                    # mlp.fc1.weight -> mlp.fc1.weight (direct mapping)
+                    converted_key = f"encoder.layers.{layer_idx}.{rest_key}"
+                    converted_state_dict[converted_key] = tensor
+                    continue
+                
+                # Unknown layer key
+                skipped_keys.append(hf_key)
+                continue
+            
+            # If key doesn't match any pattern, skip it
+            skipped_keys.append(hf_key)
+        
+        if skipped_keys:
+            logger.warning(
+                f"Skipped {len(skipped_keys)} keys during conversion. "
+                f"First few: {skipped_keys[:10]}"
+            )
+        
+        logger.info(
+            f"Converted {len(converted_state_dict)} keys from "
+            f"{len(hf_state_dict)} Hugging Face keys"
+        )
+        
+        return converted_state_dict
+
+    def get_layers_to_shard(self):
+        # Return the ModuleList directly - it's iterable and supports reversed()
+        # fully_shard will be applied to each individual layer, not the ModuleList itself
+        return self.encoder.layers
+
+    def get_checkpointable_module_classes(self):
+        return {TransformerSelfAttentionLayer}
+
 
     def forward(self, pixel_values: torch.FloatTensor,
         position_ids: Optional[torch.Tensor] = None, 
@@ -385,3 +648,8 @@ class SiglipVisionTransformer(nn.Module):
         hidden_states = self.ln_post(hidden_states) 
         encoder_outputs["last_hidden_state"] = hidden_states
         return encoder_outputs
+
+
+# Alias for backward compatibility and registry
+SiglipVisionModel = SiglipVisionTransformer
+
