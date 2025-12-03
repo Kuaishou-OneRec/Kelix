@@ -223,7 +223,7 @@ class SiglipVisionConfig(ModelConfig):
         default=0.0, ge=0.0, le=1.0, description="Attention dropout probability."
     )
     has_learnable_position_embedding: bool = Field(
-        default=False,
+        default=True,
         description="Use learnable packing position embeddings for vision tokens.",
     )
     use_qk_norm: bool = Field(default=False, description="Apply RMSNorm to Q/K projections.")

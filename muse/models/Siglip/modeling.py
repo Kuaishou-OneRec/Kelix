@@ -151,7 +151,7 @@ class SiglipVisionEmbeddings(nn.Module):
         position_ids: Optional[torch.Tensor] = None,
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
         interpolate_pos_encoding=False,
-        has_learnable_position_embedding=False
+        has_learnable_position_embedding=True
     ) -> torch.Tensor:
         has_learnable_position_embedding = self.has_learnable_position_embedding if hasattr(
             self.config, "has_learnable_position_embedding"
