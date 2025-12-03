@@ -10,7 +10,10 @@ import numpy as np
 from PIL import Image
 from transformers import AutoProcessor, SiglipVisionModel as HFSiglipVisionModel
 from muse.config import SiglipVisionConfig
-from muse.models.siglip import SiglipVisionModel
+try:
+    from muse.models.siglip import SiglipVisionModel
+except ModuleNotFoundError:
+    from muse.models.Siglip import SiglipVisionModel
 from muse.training.common import set_default_dtype
 
 
