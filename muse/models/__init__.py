@@ -78,7 +78,7 @@ def list_models() -> List[str]:
 
 # Import model modules to trigger registration
 from muse.models import qwen3  # noqa: E402, F401
-from muse.models import siglip  # noqa: E402, F401
+# Note: Siglip is imported directly via muse.models.Siglip to avoid circular imports
 
 # Export public API
 __all__ = [

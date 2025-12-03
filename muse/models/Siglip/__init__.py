@@ -2,7 +2,7 @@
 Qwen3 model implementation.
 """
 
-from muse.models.siglip.modeling import SiglipVisionTransformer
+from muse.models.Siglip.modeling import SiglipVisionTransformer
 
 # Register the model (import here to avoid circular imports)
 # The registration decorator is applied when this module is imported by muse.models
