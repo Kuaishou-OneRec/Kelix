@@ -80,6 +80,7 @@ class SiglipVisionEmbeddings(nn.Module):
         self.cache_position_embedding = dict()
         self.cache_position_count = dict()
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.packing_position_embedding = nn.Embedding(32768, self.embed_dim)
 
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
@@ -118,67 +119,6 @@ class SiglipVisionEmbeddings(nn.Module):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
-
-    @staticmethod
-    def resize_positional_embeddings(
-        positional_embeddings: torch.Tensor,
-        spatial_shapes: torch.LongTensor,
-        max_length: int,
-    ) -> torch.Tensor:
-        """
-        Resize positional embeddings to image-specific size and pad to a fixed size.
-
-        Args:
-            positional_embeddings (`torch.Tensor`):
-                Position embeddings of shape (height, width, embed_dim)
-            spatial_shapes (`torch.LongTensor`):
-                Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
-            max_length (`int`):
-                Maximum length of the positional embeddings to pad resized positional embeddings to
-
-        Returns:
-            `torch.Tensor`: Embeddings of shape (batch_size, max_length, embed_dim)
-        """
-        batch_size = spatial_shapes.shape[0]
-        embed_dim = positional_embeddings.shape[-1]
-        source_dtype = positional_embeddings.dtype
-
-        resulted_positional_embeddings = torch.empty(
-            (batch_size, max_length, embed_dim),
-            device=positional_embeddings.device,
-            dtype=source_dtype,
-        )
-
-        # (height, width, embed_dim) -> (1, embed_dim, height, width) for interpolation
-        positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
-
-        # Upcast to float32 on CPU because antialias is not supported for bfloat16/float16 on CPU
-        if positional_embeddings.device.type == "cpu":
-            positional_embeddings = positional_embeddings.to(torch.float32)
-
-        for i in range(batch_size):
-            # (1, dim, height, width) -> (1, dim, target_height, target_width)
-            height, width = spatial_shapes[i]
-            resized_embeddings = F.interpolate(
-                positional_embeddings,
-                size=(height, width),
-                mode="bilinear",
-                align_corners=False,
-                antialias=True,
-            )
-
-            # (1, dim, target_height, target_width) -> (target_height * target_width, dim)
-            resized_embeddings = resized_embeddings.reshape(embed_dim, height * width).transpose(0, 1)
-
-            # Cast to original dtype
-            resized_embeddings = resized_embeddings.to(source_dtype)
-
-            resulted_positional_embeddings[i, : height * width] = resized_embeddings
-            resulted_positional_embeddings[i, height * width :] = resized_embeddings[0]
-
-        return resulted_positional_embeddings
-
-
     @staticmethod
     def flatten_list(image_grid_thw):
         tmp_image_grid_thw = list()
@@ -197,76 +137,56 @@ class SiglipVisionEmbeddings(nn.Module):
         interpolate_pos_encoding=False,
         has_learnable_position_embedding=True
     ) -> torch.Tensor:
-        # Apply patch embeddings to already patchified pixel values
+        has_learnable_position_embedding = self.has_learnable_position_embedding if hasattr(
+            self.config, "has_learnable_position_embedding"
+        ) else has_learnable_position_embedding
         target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
-        spatial_shapes = []
-        for thw_tuple in image_grid_thw:
-            spatial_shapes.append((thw_tuple[1],thw_tuple[2]))
-
-        # Get positional resized and padded positional embeddings
-        positional_embeddings = self.position_embedding.weight.reshape(
-            self.position_embedding_size, self.position_embedding_size, -1
-        )
-        resized_positional_embeddings = self.resize_positional_embeddings(
-            positional_embeddings, spatial_shapes, max_length=pixel_values.shape[1]
-        )
-
-        # Add positional embeddings to patch embeddings
-        embeddings = patch_embeds + resized_positional_embeddings
-        return embeddings
-
-
-        # has_learnable_position_embedding = self.has_learnable_position_embedding if hasattr(
-        #     self.config, "has_learnable_position_embedding"
-        # ) else has_learnable_position_embedding
-        # target_dtype = self.patch_embedding.weight.dtype
-        # print('maosiyang:::pixel',pixel_values.shape)
+        print('maosiyang:::pixel',pixel_values.shape)
         # if pixel_values.dim() == 4:
         #     pixel_values = pixel_values.unsqueeze(0)#expand to 5 dimension
-        # if pixel_values.dim() == 5:
-        #     if position_ids is None:
-        #         for thw_tuple in image_grid_thw:
-        #             numel = np.prod(thw_tuple)
-        #             position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
-        #         # raise ValueError(
-        #         #     "position_ids must be provided when pixel_values has 5 dimensions."
-        #         # )
-        #     from einops import rearrange
+        if pixel_values.dim() == 5:
+            if position_ids is None:
+                for thw_tuple in image_grid_thw:
+                    numel = np.prod(thw_tuple)
+                    position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+                raise ValueError(
+                    "position_ids must be provided when pixel_values has 5 dimensions."
+                )
+            from einops import rearrange
 
-        #     batch_size, sequence_len, channel, height, width = pixel_values.shape
-        #     pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
-        #     patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-        #     print('maosiyang::::',patch_embeds.shape)
-        #     embeddings = patch_embeds.flatten(-2).squeeze(-1)
-        #     print('maosiyang2222::::',embeddings.shape)
-        #     embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=sequence_len)
+            batch_size, sequence_len, channel, height, width = pixel_values.shape
+            pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
+            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+            # print('maosiyang::::',patch_embeds.shape)
+            embeddings = patch_embeds.flatten(-2).squeeze(-1)
+            # print('maosiyang2222::::',embeddings.shape)
+            embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=sequence_len)
 
-        #     # todo: not dubug
-        #     if has_learnable_position_embedding:
-        #         if interpolate_pos_encoding and image_grid_thw is not None:
-        #             flatten_image_grid_thw = self.flatten_list(image_grid_thw)
-        #             assert batch_size == 1
-        #             start = 0
-        #             image_embedding_list = list()
-        #             assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (flatten_image_grid_thw, embeddings.shape)
-        #             embeddings = embeddings.squeeze(0)
-        #             tmp_embeddings = list()
-        #             for image_grid in image_grid_thw:
-        #                 t, h, w = image_grid
-        #                 end = start + t * h * w
-        #                 image_embeddings = embeddings[start: end, :]
-        #                 position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0).repeat(
-        #                     t, 1)
-        #                 image_embeddings = image_embeddings + position_embedding
-        #                 tmp_embeddings.append(image_embeddings)
-        #                 start = end
-        #             embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
-        #         else:
-        #             embeddings = embeddings + self.packing_position_embedding(position_ids)
-        #     return embeddings
+            # todo: not dubug
+            if has_learnable_position_embedding:
+                if interpolate_pos_encoding and image_grid_thw is not None:
+                    flatten_image_grid_thw = self.flatten_list(image_grid_thw)
+                    assert batch_size == 1
+                    start = 0
+                    image_embedding_list = list()
+                    assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (flatten_image_grid_thw, embeddings.shape)
+                    embeddings = embeddings.squeeze(0)
+                    tmp_embeddings = list()
+                    for image_grid in image_grid_thw:
+                        t, h, w = image_grid
+                        end = start + t * h * w
+                        image_embeddings = embeddings[start: end, :]
+                        position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0).repeat(
+                            t, 1)
+                        image_embeddings = image_embeddings + position_embedding
+                        tmp_embeddings.append(image_embeddings)
+                        start = end
+                    embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
+                else:
+                    embeddings = embeddings + self.packing_position_embedding(position_ids)
+            return embeddings
 
-        # raise NotImplementedError(str(pixel_values.shape))
+        raise NotImplementedError(str(pixel_values.shape))
 
 
 class SiglipEncoder(nn.Module):
