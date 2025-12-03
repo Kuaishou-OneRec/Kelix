@@ -161,6 +161,7 @@ class SiglipVisionEmbeddings(nn.Module):
         for i in range(batch_size):
             # (1, dim, height, width) -> (1, dim, target_height, target_width)
             height, width = spatial_shapes[i]
+            print('maosiyang_resize_positional_embeddings:::',height, width)
             resized_embeddings = F.interpolate(
                 positional_embeddings,
                 size=(height, width),
@@ -200,6 +201,7 @@ class SiglipVisionEmbeddings(nn.Module):
         has_learnable_position_embedding=True
     ) -> torch.Tensor:
         # Apply patch embeddings to already patchified pixel values
+        print('pixel_values:::::',pixel_values.shape)
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
         spatial_shapes = []
