@@ -157,7 +157,9 @@ class SiglipVisionEmbeddings(nn.Module):
             batch_size, sequence_len, channel, height, width = pixel_values.shape
             pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
             patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+            print('maosiyang::::',patch_embeds.shape)
             embeddings = patch_embeds.flatten(-2).squeeze(-1)
+            print('maosiyang2222::::',embeddings.shape)
             embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=sequence_len)
 
             # todo: not dubug
