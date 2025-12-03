@@ -141,7 +141,7 @@ class SiglipVisionEmbeddings(nn.Module):
             self.config, "has_learnable_position_embedding"
         ) else has_learnable_position_embedding
         target_dtype = self.patch_embedding.weight.dtype
-        print('maosiyang:::pixel',pixel_values)
+        print('maosiyang:::pixel',pixel_values.shape)
         if pixel_values.dim() == 4:
             pixel_values = pixel_values.unsqueeze(0)#expand to 5 dimension
         if pixel_values.dim() == 5:
