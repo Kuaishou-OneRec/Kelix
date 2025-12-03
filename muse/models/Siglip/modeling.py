@@ -17,6 +17,7 @@ from muse.layers.attention import MultiHeadAttention
 from muse.layers.transformer import TransformerSelfAttentionLayer
 from muse.layers.rms_norm import RMSNorm
 from muse.models.base import Model
+import torch.nn.functional as F
 
 # Import will be done when muse.models is imported, avoiding circular import
 # The actual registration happens in __init__.py after import
