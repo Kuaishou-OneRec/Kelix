@@ -7,7 +7,7 @@ import torch.nn.init as init
 import logging
 
 from muse.models.base import Model
-from muse.layers.position_embeddings import RotaryPositionalEmbeddings
+from muse.models.Siglip._layers import SiglipAttention, SiglipMLP, SiglipAxialRotaryEmbedding
 from muse.layers.transformer import TransformerDecoder, TransformerSelfAttentionLayer
 from muse.layers.rms_norm import RMSNorm
 from muse.layers.linear import TiedLinear
@@ -202,6 +202,7 @@ class SiglipEncoder(nn.Module):
         num_heads = config.num_attention_heads
         head_dim = embed_dim // num_heads
         num_kv_heads = num_heads
+        self.rope = SiglipAxialRotaryEmbedding(head_dim, max_grid_size=4096, base=config.rope_theta)
 
         layers = nn.ModuleList()
         for _ in range(config.num_hidden_layers):
@@ -231,49 +232,73 @@ class SiglipEncoder(nn.Module):
             )
             layers.append(layer)
         self.layers = layers
-        self.layers = nn.ModuleList([SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         # self.rotary_pos_emb = SigLIPRotaryEmbedding(head_dim // 2, 
         #     config.rope_theta if hasattr(config, "rope_theta") else 10000
         # )
-        self.rope = RotaryPositionalEmbeddings(
-            dim=head_dim,base=config.rope_theta
-        )
-        self.gradient_checkpointing = False
+        # self.rope = RotaryPositionalEmbeddings(
+        #     dim=head_dim,base=config.rope_theta
+        # )
 
-    @staticmethod
-    def flatten_list(image_grid_thw):
-        tmp_image_grid_thw = list()
-        for image_grid in image_grid_thw:
-            if isinstance(image_grid, list):
-                tmp_image_grid_thw.extend(image_grid)
-            else:
-                tmp_image_grid_thw.append(image_grid)
-        return tmp_image_grid_thw
 
-    def build_window_index(self, image_grid, window_size, device):
-        from einops import rearrange
-        window_indices = list()
-        pad_values = -100
-        start_window_index = 0
-        cu_seqlens_within_windows = list()
+    def _validate_inputs(
+        self,
+        tokens: Optional[torch.Tensor],
+        mask: Optional[torch.Tensor] = None,
+        encoder_input: Optional[torch.Tensor] = None,
+        encoder_mask: Optional[torch.Tensor] = None,
+        input_pos: Optional[torch.Tensor] = None,
+        input_embeds: Optional[torch.Tensor] = None,
+    ):
+        """
+        Validates inputs for ``forward``.
+        Args:
+            tokens (Optional[torch.Tensor]): input tensor with shape ``[b x s]``
+            mask (Optional[torch.Tensor]): Attention mask used for inference and for sequence packing.
+            encoder_input (Optional[torch.Tensor]): Encoder input for cross-attention.
+            encoder_mask (Optional[torch.Tensor]): Encoder attention mask for cross-embedding attention.
+            input_pos (Optional[torch.Tensor]): Input tensor position IDs.
+            input_embeds (Optional[torch.Tensor]): Input tensor embeddings (if short-circuiting token embeddings).
 
-        for t, h, w in image_grid:
-            window_index = torch.arange(t * h * w, device=device).reshape(t, h, w)
-            pad_h = (-h) % window_size
-            pad_w = (-w) % window_size
-            assert pad_h >= 0 and pad_w >= 0, (pad_h, pad_w)
-            window_index = F.pad(window_index, (0, pad_w, 0, pad_h), value=pad_values)
-            window_index = rearrange(window_index, "t (h p1) (w p2) -> t (h w) (p1 p2)", p1=window_size, p2=window_size)
-            window_seqlens = (window_index != pad_values).long().sum(-1).reshape(-1)
-            window_index = window_index.reshape(-1)
-            window_index = window_index[window_index != pad_values]
-            window_indices.append(window_index + start_window_index)
-            cu_seqlens_within_windows.append(window_seqlens.cumsum(0) + start_window_index)
-            start_window_index += t * h * w
-        window_indices = torch.concat(window_indices, dim=0)
-        cu_seqlens_within_windows = torch.concat(cu_seqlens_within_windows, dim=0)
-        cu_seqlens_within_windows = F.pad(cu_seqlens_within_windows, (1, 0), value=0).to(torch.int32)
-        return window_indices, cu_seqlens_within_windows
+        Raises:
+            ValueError:
+                If neither tokens nor input_embeds are passed **or**
+                If seq_len of x is bigger than max_seq_len, **or**
+                if the model has caches which have been setup with self-attention layers and ``mask`` is not provided, **or**
+                if the model has caches which have been setup with encoder layers and ``encoder_mask`` is not provided, **or**
+                if the model has caches which have been setup ``input_pos`` is not provided.
+        """
+
+        if tokens is None and input_embeds is None:
+            raise ValueError(
+                "Either tokens or input_embeds must be provided to the decoder."
+            )
+
+        # input tensor of shape [b, s]
+        seq_len = tokens.shape[1] if tokens is not None else input_embeds.shape[1]
+
+        if seq_len > self.max_seq_len:
+            raise ValueError(
+                f"seq_len ({seq_len}) of input tensor should be smaller "
+                f"than max_seq_len ({self.max_seq_len})"
+            )
+
+        if self.caches_are_enabled():
+            if mask is None:
+                raise ValueError(
+                    "KV-caches for self-attention layers are setup for inference mode, causal masks must be provided!"
+                    " Use the `mask` arg to provide a causal mask."
+                )
+
+            if encoder_input is not None and encoder_mask is None:
+                raise ValueError(
+                    "KV-caches for cross-attention/fusion layers are setup for inference mode and you seem to be using"
+                    " encoder_input, causal masks must be provided! Use the `encoder_mask` arg to provide a causal mask."
+                )
+
+            if input_pos is None:
+                raise ValueError(
+                    "KV-caches are setup for inference mode, input positions must be provided!"
+                )
 
     # Ignore copy
     # @can_return_tuple
@@ -285,12 +310,6 @@ class SiglipEncoder(nn.Module):
         output_hidden_states: Optional[bool] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
-        height_position_ids: Optional[torch.Tensor] = None,
-        width_position_ids: Optional[torch.Tensor] = None,
-        use_rope: Optional[bool] = False,
-        window_size: Optional[bool] = -1,
-        vision_or_text: str = "vision",
-        # cu_seqlens: Optional[List[torch.Tensor]] = None,
     ) -> BaseModelOutput:
         r"""
         Args:
@@ -317,7 +336,7 @@ class SiglipEncoder(nn.Module):
         
         vision_or_text = "vision"
 
-        use_rope = (use_rope is True) and (vision_or_text == "vision")
+        # use_rope = (use_rope is True) and (vision_or_text == "vision")
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -329,47 +348,49 @@ class SiglipEncoder(nn.Module):
         device = inputs_embeds.device
         hidden_states = inputs_embeds
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
-        if use_rope is True:
-            flatten_image_grid_thw = self.flatten_list(image_grid_thw)
-            # assert sum([np.prod(x) for x in flatten_image_grid_thw]) == hidden_states.shape[1], (flatten_image_grid_thw, hidden_states.shape)
+        # if use_rope is True:
+        #     flatten_image_grid_thw = self.flatten_list(image_grid_thw)
+        #     # assert sum([np.prod(x) for x in flatten_image_grid_thw]) == hidden_states.shape[1], (flatten_image_grid_thw, hidden_states.shape)
 
-            if width_position_ids is None or height_position_ids is None:
-                split_hids = list()
-                split_wids = list()
-                for t, h, w in flatten_image_grid_thw:
-                    image_pids = torch.arange(t * h * w, device=device) % (h * w)
-                    sample_hids = image_pids // w
-                    sample_wids = image_pids % w
-                    split_hids.append(sample_hids)
-                    split_wids.append(sample_wids)
-                width_position_ids = torch.concat(split_wids, dim=0)
-                height_position_ids = torch.concat(split_hids, dim=0)
+        #     if width_position_ids is None or height_position_ids is None:
+        #         split_hids = list()
+        #         split_wids = list()
+        #         for t, h, w in flatten_image_grid_thw:
+        #             image_pids = torch.arange(t * h * w, device=device) % (h * w)
+        #             sample_hids = image_pids // w
+        #             sample_wids = image_pids % w
+        #             split_hids.append(sample_hids)
+        #             split_wids.append(sample_wids)
+        #         width_position_ids = torch.concat(split_wids, dim=0)
+        #         height_position_ids = torch.concat(split_hids, dim=0)
             
-            window_indices, cu_seqlens_within_windows = None, None
 
-            pids = torch.stack([height_position_ids, width_position_ids], dim=-1)
-            max_grid_size = pids.max() + 1
-            rope_emb_max_grid = self.rotary_pos_emb(max_grid_size)
-            rope_emb = rope_emb_max_grid[pids].flatten(1)
-            rope_emb = rope_emb.repeat(1, 2)
-            rope_emb = (rope_emb.cos(), rope_emb.sin())
+        #     pids = torch.stack([height_position_ids, width_position_ids], dim=-1)
+        #     max_grid_size = pids.max() + 1
+        #     rope_emb_max_grid = self.rotary_pos_emb(max_grid_size)
+        #     rope_emb = rope_emb_max_grid[pids].flatten(1)
+        #     rope_emb = rope_emb.repeat(1, 2)
+        #     rope_emb = (rope_emb.cos(), rope_emb.sin())
 
-        rope_emb = None
-        window_indices, cu_seqlens_within_windows = None, None
+
+        # else:
+        #     rope_emb = None
+
+
+        
             
         attn_cu_seqlens = cu_seqlens
 
 
         attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
 
-        for i, encoder_layer in enumerate( self.layers):
+        for i, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states, )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    output_attentions=output_attentions,
                     cu_seqlens=attn_cu_seqlens,
                     rope_emb=rope_emb,
                 )
@@ -382,8 +403,32 @@ class SiglipEncoder(nn.Module):
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=encoder_states,
-            attentions=all_attentions,
-        )
+        return {
+            "last_hidden_state": hidden_states,
+            "hidden_states": encoder_states,
+            "attentions": all_attentions,
+        }
+
+
+
+class SiglipVisionTransformer(nn.Module):
+    def __init__(self, config: KeyeConfig):
+        super().__init__()
+        self.config = config
+        self.embeddings = SiglipVisionEmbeddings(config)
+        self.encoder = SiglipEncoder(config)
+        self.ln_post = nn.LayerNorm(config.hidden_size) 
+
+    def forward(self, pixel_values: torch.FloatTensor,
+        position_ids: Optional[torch.Tensor] = None, 
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None, 
+        interpolate_pos_encoding: bool = False, 
+        attention_mask: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        has_learnable_position_embedding: bool = False) -> Dict[str, torch.Tensor]:
+        embeddings = self.embeddings(pixel_values, position_ids, image_grid_thw, interpolate_pos_encoding, has_learnable_position_embedding)
+        encoder_outputs = self.encoder(embeddings, attention_mask, cu_seqlens)
+        hidden_states = encoder_outputs["last_hidden_state"]
+        hidden_states = self.ln_post(hidden_states) 
+        encoder_outputs["last_hidden_state"] = hidden_states
+        return encoder_outputs
