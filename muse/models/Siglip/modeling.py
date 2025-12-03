@@ -158,7 +158,7 @@ class SiglipVisionEmbeddings(nn.Module):
             pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
             patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
             embeddings = patch_embeds.flatten(-2).squeeze(-1)
-            embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=squence_len)
+            embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=sequence_len)
 
             # todo: not dubug
             if has_learnable_position_embedding:
