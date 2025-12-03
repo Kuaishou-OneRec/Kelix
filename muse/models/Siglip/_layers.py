@@ -45,7 +45,7 @@ class SiglipAttention(nn.Module):
         attn_dropout: float = 0.0,
         attention_function: Literal["eager", "flash_attention_2"] = "eager",
         
-    )
+    ):
         super().__init__()
         if num_heads % num_kv_heads != 0:
             raise ValueError(
