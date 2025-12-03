@@ -158,7 +158,8 @@ class SiglipVisionEmbeddings(nn.Module):
         ) else has_learnable_position_embedding
         target_dtype = self.patch_embedding.weight.dtype
 
-
+        if pixel_values.dim() == 4:
+            pixel_values = pixel_values.unsqueeze(0)#expand to 5 dimension
         if pixel_values.dim() == 5:
             if position_ids is None:
                 raise ValueError(
