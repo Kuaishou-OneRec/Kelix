@@ -77,6 +77,7 @@ class SiglipVisionEmbeddings(nn.Module):
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
         self.num_positions = self.num_patches
+        self.position_embedding_size = int(self.num_patches**0.5)
         self.cache_position_embedding = dict()
         self.cache_position_count = dict()
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
