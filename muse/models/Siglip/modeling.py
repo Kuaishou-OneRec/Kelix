@@ -366,7 +366,7 @@ class SiglipEncoder(nn.Module):
 
 class SiglipVisionTransformer(Model):
     def __init__(self, config: SiglipVisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.embeddings = SiglipVisionEmbeddings(config)
         self.encoder = SiglipEncoder(config)
