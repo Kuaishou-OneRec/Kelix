@@ -129,22 +129,6 @@ class SiglipVisionEmbeddings(nn.Module):
                 tmp_image_grid_thw.append(image_grid)
         return tmp_image_grid_thw
 
-    def fetch_position_embedding_lfu_cache(self, embeddings, h, w, max_cache=20):
-        grid = (h, w)
-        if grid in self.cache_position_embedding:
-            self.cache_position_count[grid] += 1
-            return self.cache_position_embedding[grid]
-        
-        if len(self.cache_position_embedding) >= max_cache:
-            min_hit_grid = min(self.cache_position_count, key=self.cache_position_count.get)
-            self.cache_position_count.pop(min_hit_grid)
-            self.cache_position_embedding.pop(min_hit_grid)
-        
-        position_embedding = self.interpolate_pos_encoding(embeddings, h, w, True)
-        self.cache_position_count[grid] = 1
-        self.cache_position_embedding[grid] = position_embedding
-        return position_embedding
-
     def forward(
         self, 
         pixel_values: torch.FloatTensor, 
@@ -162,9 +146,12 @@ class SiglipVisionEmbeddings(nn.Module):
             pixel_values = pixel_values.unsqueeze(0)#expand to 5 dimension
         if pixel_values.dim() == 5:
             if position_ids is None:
-                raise ValueError(
-                    "position_ids must be provided when pixel_values has 5 dimensions."
-                )
+                for thw_tuple in image_grid_thw:
+                    numel = np.prod(thw_tuple)
+                    position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+                # raise ValueError(
+                #     "position_ids must be provided when pixel_values has 5 dimensions."
+                # )
             from einops import rearrange
 
             batch_size, sequence_len, channel, height, width = pixel_values.shape
@@ -629,7 +616,7 @@ class SiglipVisionTransformer(Model):
     def forward(self, pixel_values: torch.FloatTensor,
         position_ids: Optional[torch.Tensor] = None, 
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None, 
-        interpolate_pos_encoding: bool = False, 
+        interpolate_pos_encoding: bool = True, 
         attention_mask: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
         has_learnable_position_embedding: bool = False) -> Dict[str, torch.Tensor]:
