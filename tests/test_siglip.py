@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Tuple, Union
 import torch
 import numpy as np
 from PIL import Image
-from transformers import AutoProcessor, SiglipVisionModel as HFSiglipVisionModel
+from transformers import AutoImageProcessor, SiglipVisionModel as HFSiglipVisionModel
 from muse.config import SiglipVisionConfig
 
 from muse.models.Siglip import SiglipVisionTransformer as SiglipVisionModel
@@ -62,7 +62,7 @@ def test_siglip_logits_align_with_hf_checkpoint():
     checkpoint_dir = "/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch14-384"  # e.g., "google/siglip-base-patch16-224"
 
     # Load the processor and the model
-    processor = AutoProcessor.from_pretrained(checkpoint_dir)
+    processor = AutoImageProcessor.from_pretrained(checkpoint_dir)
     hf_model = HFSiglipVisionModel.from_pretrained(
         checkpoint_dir,
         torch_dtype="auto",
@@ -450,7 +450,7 @@ def test_siglip_from_checkpoint():
         model = SiglipVisionModel.from_pretrained(checkpoint_dir)
     
     # Load the processor and the HF model
-    processor = AutoProcessor.from_pretrained(hf_checkpoint_dir)
+    processor = AutoImageProcessor.from_pretrained(hf_checkpoint_dir)
     hf_model = HFSiglipVisionModel.from_pretrained(
         hf_checkpoint_dir,
         torch_dtype=torch.bfloat16,

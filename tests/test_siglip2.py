@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Tuple, Union
 import torch
 import numpy as np
 from PIL import Image
-from transformers import AutoProcessor, SiglipVisionModel as HFSiglipVisionModel
+from transformers import AutoImageProcessor, SiglipVisionModel as HFSiglipVisionModel
 from muse.config import SiglipVisionConfig
 
 from muse.models.Siglip import SiglipVisionTransformer as SiglipVisionModel
@@ -122,7 +122,7 @@ def test_siglip_logits_align_with_hf_checkpoint():
     # 2. 加载 HF 模型
     # =========================================================================
     logger.info("Loading HF model...")
-    processor = AutoProcessor.from_pretrained(checkpoint_dir)
+    processor = AutoImageProcessor.from_pretrained(checkpoint_dir)
     hf_model = HFSiglipVisionModel.from_pretrained(
         checkpoint_dir,
         torch_dtype="auto",
