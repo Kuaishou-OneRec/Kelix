@@ -191,60 +191,43 @@ class SiglipAttention(nn.Module):
         output = output.transpose(1, 2).contiguous().view(b, s_x, -1)
         return self.output_proj(output)
 
-
 class SiglipAxialRotaryEmbedding(nn.Module):
     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10_000) -> None:
         super().__init__()
         self.axis_dim = head_dim // 2
         self.base = base
         
-        # 计算频率 (axis_dim = head_dim / 2)
-        # inv_freq shape: [axis_dim / 2]
+        # 计算频率
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.axis_dim, 2).float() / self.axis_dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         
         self.max_seq_len_cached = 0
         self.cos_cached = None
         self.sin_cached = None
+        
+        #用于控制打印次数
+        self.debug_counter = 0
 
     def _update_cos_sin_cache(self, seq_len: int, device: torch.device, dtype: torch.dtype):
-        """同时生成 cos/sin 缓存"""
         if seq_len > self.max_seq_len_cached or self.cos_cached is None or self.cos_cached.device != device or self.cos_cached.dtype != dtype:
             self.max_seq_len_cached = seq_len
-            
-            # 1. 生成 t
             t = torch.arange(self.max_seq_len_cached, device=device, dtype=torch.float32)
-            
-            # 2. 生成频率 [Seq, AxisDim/2]
             freqs = torch.outer(t, self.inv_freq.to(device=device, dtype=torch.float32))
-            
-            # 3. 拼接得到完整的 AxisDim: [cos(theta), cos(theta)] 
-            # 这里的 emb 对应的是 [theta_0, theta_1, ..., theta_0, theta_1] 这种配对格式
             emb = torch.cat((freqs, freqs), dim=-1)
-            
-            # 转回目标 dtype
             self.cos_cached = emb.cos().to(dtype)
             self.sin_cached = emb.sin().to(dtype)
 
     def _rotate_half(self, x: torch.Tensor) -> torch.Tensor:
-        """标准 RoPE 旋转：[-x2, x1]"""
-        # 这里的 split 是把整个 head_dim 切成两半
-        # 在 Axial RoPE 语境下，x1 是 H部分，x2 是 W部分
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat((-x2, x1), dim=-1)
 
     def _apply_rope(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
-        """标准应用公式"""
         return (x * cos) + (self._rotate_half(x) * sin)
 
     def _lookup_freqs(self, pos_ids: torch.Tensor, batch_size: int, seq_len: int) -> tuple[torch.Tensor, torch.Tensor]:
-        """根据 pos_ids 获取频率并 reshape"""
         max_pos = pos_ids.max().item() + 1
-        
-        # 确保缓存存在
         self._update_cos_sin_cache(max_pos, pos_ids.device, torch.float32 if pos_ids.device.type == "cpu" else torch.bfloat16)
         
-        # 取出 [Batch*Seq, AxisDim]
         cos = self.cos_cached[pos_ids]
         sin = self.sin_cached[pos_ids]
         
@@ -259,7 +242,7 @@ class SiglipAxialRotaryEmbedding(nn.Module):
         if input_pos is None:
             return x
         
-        batch_size, seq_len, _, _ = x.shape
+        batch_size, seq_len, _, head_dim = x.shape
         
         if isinstance(input_pos, dict):
             height_ids = input_pos["height"]
@@ -267,21 +250,40 @@ class SiglipAxialRotaryEmbedding(nn.Module):
         else:
             height_ids, width_ids = input_pos
 
-        # =========================================================
-        # 关键修正：不再切分 x，而是拼接 cos/sin，然后整体旋转
-        # =========================================================
-
         # 1. 获取 H 和 W 的频率
-        # cos_h: [B, S, 1, AxisDim]
         cos_h, sin_h = self._lookup_freqs(height_ids, batch_size, seq_len)
         cos_w, sin_w = self._lookup_freqs(width_ids, batch_size, seq_len)
         
-        # 2. 拼接频率以匹配 HeadDim
-        # cos: [B, S, 1, HeadDim] (因为 AxisDim = HeadDim / 2)
-        # 注意：HF 是先 concat 再应用。
+        # 2. 拼接频率 (Global RoPE logic)
         cos = torch.cat([cos_h, cos_w], dim=-1).to(x.dtype)
         sin = torch.cat([sin_h, sin_w], dim=-1).to(x.dtype)
 
-        # 3. 对整个 x 应用标准 RoPE
-        # 这会引起 rotate_half(x)，即 [-x_width, x_height]
-        return self._apply_rope(x, cos, sin)
+        # ================= [MUSE DEBUG START] =================
+        if self.debug_counter < 3:
+            print(f"\n[MUSE DEBUG] SiglipAxialRotaryEmbedding inputs:")
+            print(f"  x (q) shape: {x.shape}")
+            print(f"  cos shape (concat): {cos.shape}")
+            
+            # 打印 Cos 样本 (取出第一个 Batch, 第一个 Seq 的向量)
+            # cos shape is [B, S, 1, HeadDim] -> flatten to compare with HF
+            cos_sample = cos[0, 0, 0, :].flatten() 
+            mid = head_dim // 2
+            
+            print(f"  cos sample (Head Start): {cos_sample[:5].detach().cpu().numpy()}")
+            print(f"  cos sample (Head Mid - Boundary): {cos_sample[mid-2:mid+3].detach().cpu().numpy()}")
+            
+            # 打印 RoPE 前的 Q
+            print(f"  x (pre-rope) sample: {x[0, 0, 0, :5].detach().cpu().numpy()}")
+        # ======================================================
+
+        # 3. Apply
+        out = self._apply_rope(x, cos, sin)
+
+        # ================= [MUSE DEBUG RESULT] =================
+        if self.debug_counter < 3:
+            print(f"  x output sample: {out[0, 0, 0, :5].detach().cpu().numpy()}")
+            print("-" * 50)
+            self.debug_counter += 1
+        # =======================================================
+
+        return out

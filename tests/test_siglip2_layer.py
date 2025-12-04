@@ -9,6 +9,52 @@ import logging
 import torch
 import numpy as np
 from transformers import AutoImageProcessor, SiglipVisionModel as HFSiglipVisionModel
+
+
+import transformers.models.siglip.modeling_siglip as hf_siglip_code
+
+# 1. 保存原始函数（以防万一）
+original_apply_rope = hf_siglip_code.apply_rotary_pos_emb
+
+# 2. 定义带打印的新函数
+def debug_apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    # 打印形状
+    print(f"\n[HOOK DEBUG] apply_rotary_pos_emb inputs:")
+    print(f"  q shape: {q.shape}")     # 预期: [Batch, Seq, Heads, HeadDim]
+    print(f"  cos shape: {cos.shape}") # 预期: [Seq, HeadDim] (注意这里是否包含 batch 维)
+    
+    # 打印数值样本
+    # 检查 HeadDim 维度上的 cos 值
+    # 如果是 Axial RoPE，前一半应该对应 Height 频率，后一半对应 Width 频率
+    # 我们可以打印前几个数和中间几个数
+    head_dim = q.shape[-1]
+    mid = head_dim // 2
+    
+    cos_flat = cos.flatten()
+    print(f"  cos sample (Head Start): {cos_flat[:5].detach().cpu().numpy()}")
+    print(f"  cos sample (Head Mid - Boundary): {cos_flat[mid-2:mid+3].detach().cpu().numpy()}")
+    
+    # 执行原始逻辑
+    cos_unsqueezed = cos.unsqueeze(unsqueeze_dim)
+    sin_unsqueezed = sin.unsqueeze(unsqueeze_dim)
+    
+    # 手动计算一遍 q_embed 的第一个值，看看公式到底长啥样
+    # q[0] * cos[0] + rotate_half(q)[0] * sin[0]
+    
+    q_embed = (q * cos_unsqueezed) + (hf_siglip_code.rotate_half(q) * sin_unsqueezed)
+    k_embed = (k * cos_unsqueezed) + (hf_siglip_code.rotate_half(k) * sin_unsqueezed)
+    
+    print(f"  q output sample: {q_embed[0, 0, 0, :5].detach().cpu().numpy()}")
+    print("-" * 50)
+    
+    return q_embed, k_embed
+
+# 3. 替换掉 HF 的函数
+hf_siglip_code.apply_rotary_pos_emb = debug_apply_rotary_pos_emb
+
+logger.info("✅ Successfully monkey-patched HF apply_rotary_pos_emb for debugging!")
+
+
 from muse.config import SiglipVisionConfig
 from muse.models.Siglip import SiglipVisionTransformer as SiglipVisionModel
 from muse.training.common import set_default_dtype
