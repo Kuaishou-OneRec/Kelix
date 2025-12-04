@@ -731,7 +731,7 @@ class SiglipAttention(nn.Module):
         else:
             self.q_norm = None
             self.k_norm = None
-
+        self.config._attn_implementation = 'flash_attention_2'
         if self.config._attn_implementation != 'flash_attention_2':
             print(f"SiglipAttention flash_attention_2 is not set!!!!!! Get {self.config._attn_implementation}")
 
