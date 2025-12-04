@@ -8,10 +8,10 @@ import torch.nn as nn
 import torch.nn.init as init
 
 from muse.config.model_config import KeyeVisionConfig
-from muse.models.Siglip._layers import (
-    SiglipAttention,
-    SiglipMLP,
-    SiglipAxialRotaryEmbedding,
+from muse.models.keye_vit._layers import (
+    MultiHeadAttention,
+    KeyeMLP,
+    KeyeAxialRotaryEmbedding,
 )
 from muse.layers.attention import MultiHeadAttention
 from muse.layers.transformer import TransformerSelfAttentionLayer
@@ -195,17 +195,17 @@ class KeyeVisionEncoder(nn.Module):
     [`SiglipEncoderLayer`].
 
     Args:
-        config: SiglipVisionConfig
+        config: KeyeVisionConfig
     """
 
-    def __init__(self, config: SiglipVisionConfig):
+    def __init__(self, config: KeyeVisionConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
         num_heads = config.num_attention_heads
         head_dim = embed_dim // num_heads
         num_kv_heads = num_heads
-        self.rope = SiglipAxialRotaryEmbedding(head_dim, max_grid_size=4096, base=config.rope_theta)
+        self.rope = KeyeAxialRotaryEmbedding(head_dim, max_grid_size=4096, base=config.rope_theta)
 
         attn_dropout = getattr(config, "attention_dropout", 0.0)
         intermediate_dim = getattr(config, "intermediate_size", embed_dim * 4)
@@ -236,7 +236,7 @@ class KeyeVisionEncoder(nn.Module):
                 attn_dropout=attn_dropout,
                 attention_function=config.attention_function,
             )
-            mlp = SiglipMLP(dim=embed_dim, hidden_dim=intermediate_dim)
+            mlp = KeyeMLP(dim=embed_dim, hidden_dim=intermediate_dim)
             layer = TransformerSelfAttentionLayer(
                 attn=self_attn,
                 mlp=mlp,

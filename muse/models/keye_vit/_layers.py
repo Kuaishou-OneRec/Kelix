@@ -17,7 +17,7 @@ from muse.layers.kv_cache import KVCache
 
 logger = logging.getLogger(__name__)
 
-def SiglipMLP(dim: int, hidden_dim: int, activation_fn: Optional[nn.Module] = None) -> FeedForward:
+def KeyeMLP(dim: int, hidden_dim: int, activation_fn: Optional[nn.Module] = None) -> FeedForward:
     fc1 = nn.Linear(dim, hidden_dim, bias=False)
     fc2 = nn.Linear(hidden_dim, dim, bias=False)
     return FeedForward(gate_proj=fc1, down_proj=fc2, up_proj=None, activation=activation_fn) if activation_fn is not None else FeedForward(gate_proj=fc1, down_proj=fc2, up_proj=None)
@@ -333,7 +333,7 @@ class MultiHeadAttention(nn.Module):
         return self.output_proj(output)
 
 
-class SiglipAxialRotaryEmbedding(nn.Module):
+class KeyeAxialRotaryEmbedding(nn.Module):
     """把二维 (h, w) RoPE 封装成 attention 可直接调用的模块。"""
 
     def __init__(self, head_dim: int, *, max_grid_size: int, base: int = 10_000) -> None:
