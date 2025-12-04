@@ -18,10 +18,20 @@ from muse.layers.kv_cache import KVCache
 logger = logging.getLogger(__name__)
 
 def SiglipMLP(dim: int, hidden_dim: int, activation_fn: Optional[nn.Module] = None) -> FeedForward:
+    # 显式 bias=True，虽然默认就是 True，但写出来更保险
     fc1 = nn.Linear(dim, hidden_dim, bias=True)
     fc2 = nn.Linear(hidden_dim, dim, bias=True)
-    return FeedForward(gate_proj=fc1, down_proj=fc2, up_proj=None, activation=activation_fn) if activation_fn is not None else FeedForward(gate_proj=fc1, down_proj=fc2, up_proj=None)
-
+    
+    # SigLIP 默认使用 GELU(approximate='tanh')
+    if activation_fn is None:
+        activation_fn = nn.GELU(approximate="tanh")
+        
+    return FeedForward(
+        gate_proj=fc1, 
+        down_proj=fc2, 
+        up_proj=None, 
+        activation=activation_fn
+    )
 
 class SiglipAttention(nn.Module):
     """Siglip multi-head attention with optional Flash Attention 2 support."""
@@ -186,18 +196,38 @@ class SiglipAttention(nn.Module):
 class SiglipAxialRotaryEmbedding(nn.Module):
     """把二维 (h, w) RoPE 封装成 attention 可直接调用的模块。"""
 
-    def __init__(self, head_dim: int, *, max_grid_size: int, base: int = 10_000) -> None:
+    def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10_000) -> None:
         super().__init__()
         if head_dim % 2 != 0:
-            raise ValueError("head_dim 必须能被 2 整除，才能按 h/w 分半。")
+            raise ValueError("head_dim must be divisible by 2 for Axial RoPE.")
+        
         self.axis_dim = head_dim // 2
-        self.height_rope = RotaryPositionalEmbeddings(
-            dim=self.axis_dim, max_seq_len=max_grid_size, base=base
-        )
-        self.width_rope = RotaryPositionalEmbeddings(
-            dim=self.axis_dim, max_seq_len=max_grid_size, base=base
-        )
+        self.base = base
+        self.max_grid_size = max_grid_size
+        
+        # Precompute inverse frequencies (Standard RoPE logic)
+        # theta_i = 1.0 / (base ** (2i / dim))
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.axis_dim, 2).float() / self.axis_dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        
+        # Caches
+        self.max_seq_len_cached = 0
+        self.cos_cached = None
+        self.sin_cached = None
 
+    def _update_cos_sin_cache(self, seq_len: int, device: torch.device, dtype: torch.dtype):
+        """Dynamically update cache if sequence length exceeds current cache."""
+        if seq_len > self.max_seq_len_cached or self.cos_cached is None or self.cos_cached.device != device or self.cos_cached.dtype != dtype:
+            self.max_seq_len_cached = seq_len
+            
+            t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+            freqs = torch.outer(t, self.inv_freq.to(device))
+            
+            # Concatenate to match rotate_half logic: [cos(theta_0), cos(theta_1)..., cos(theta_0)...]
+            emb = torch.cat((freqs, freqs), dim=-1)
+            
+            self.cos_cached = emb.cos().to(dtype)
+            self.sin_cached = emb.sin().to(dtype)
     @staticmethod
     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
         """Standard rotary position embedding rotation."""
@@ -208,25 +238,23 @@ class SiglipAxialRotaryEmbedding(nn.Module):
         """标准 RoPE 计算公式: x * cos + rotate_half(x) * sin"""
         return (x * cos) + (self._rotate_half(x) * sin)
 
-    def _lookup(self, rope: RotaryPositionalEmbeddings, pos_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        if pos_ids.dtype != torch.long:
-            pos_ids = pos_ids.long()
+    def _lookup(self, pos_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        # pos_ids: [batch, seq] or [seq]
+        seq_len = pos_ids.max().item() + 1
+        self._update_cos_sin_cache(seq_len, pos_ids.device, pos_ids.dtype if pos_ids.is_floating_point() else torch.float32)
         
-        cache = rope.cache  # [max_seq_len, dim, 2]
-        gathered = cache[pos_ids]  # [..., dim, 2]
+        # Select from cache
+        # Note: We cast to input dtype (handled outside or here)
+        cos = self.cos_cached[:seq_len].to(pos_ids.device)[pos_ids]
+        sin = self.sin_cached[:seq_len].to(pos_ids.device)[pos_ids]
         
-        # 提取 cos/sin
-        cos = gathered[..., 0] # [..., dim]
-        sin = gathered[..., 1] # [..., dim]
-        
-        # 调整维度以匹配 Attention 输入 x: [batch, seq, heads, dim]
-        # 我们需要在 heads 维度 (dim -2) 插入 1 以便广播
-        # 此时 cos/sin 通常是 [batch, seq, dim] 或 [seq, dim]
-        
-        if cos.ndim == 2: # [seq, dim] -> [1, seq, 1, dim]
+        # Reshape for broadcasting: [..., 1, axis_dim]
+        # Input x is [batch, seq, heads, dim] -> split -> [batch, seq, heads, axis_dim]
+        # We need cos/sin to be [batch, seq, 1, axis_dim]
+        if cos.ndim == 2: # [seq, dim]
              cos = cos.unsqueeze(0).unsqueeze(2)
              sin = sin.unsqueeze(0).unsqueeze(2)
-        elif cos.ndim == 3: # [batch, seq, dim] -> [batch, seq, 1, dim]
+        elif cos.ndim == 3: # [batch, seq, dim]
              cos = cos.unsqueeze(2)
              sin = sin.unsqueeze(2)
              
@@ -243,23 +271,20 @@ class SiglipAxialRotaryEmbedding(nn.Module):
         else:
             height_ids, width_ids = input_pos
 
-        # 1. [核心修改] 拆分 Head Dim 为 Height部分 和 Width部分
-        # x: [..., head_dim] -> x_h: [..., axis_dim], x_w: [..., axis_dim]
+        # 1. Split (Axial Split)
         x_h, x_w = x.chunk(2, dim=-1)
 
-        # 2. 查找 Cos/Sin
-        cos_h, sin_h = self._lookup(self.height_rope, height_ids)
-        cos_w, sin_w = self._lookup(self.width_rope, width_ids)
-
-        # 确保 dtype 一致 (例如 bfloat16)
+        # 2. Lookup
+        cos_h, sin_h = self._lookup(height_ids)
+        cos_w, sin_w = self._lookup(width_ids)
+        
+        # Ensure dtype match
         cos_h, sin_h = cos_h.to(x.dtype), sin_h.to(x.dtype)
         cos_w, sin_w = cos_w.to(x.dtype), sin_w.to(x.dtype)
 
-        # 3. [核心修改] 独立应用 RoPE
-        # 之前错误地把整个 x 放进去旋转，导致 x_w 混入了 x_h 的信息
-        # 现在分别旋转，互不干扰
+        # 3. Apply Independently
         out_h = self._apply_rope(x_h, cos_h, sin_h)
         out_w = self._apply_rope(x_w, cos_w, sin_w)
 
-        # 4. 拼接回原始形状
+        # 4. Concat
         return torch.cat([out_h, out_w], dim=-1)
