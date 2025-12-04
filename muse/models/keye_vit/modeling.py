@@ -13,7 +13,6 @@ from muse.models.keye_vit._layers import (
     KeyeMLP,
     KeyeAxialRotaryEmbedding,
 )
-from muse.layers.attention import MultiHeadAttention
 from muse.layers.transformer import TransformerSelfAttentionLayer
 from muse.layers.rms_norm import RMSNorm
 from muse.models.base import Model
