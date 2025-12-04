@@ -35,7 +35,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
-
 class ReferenceAxialRoPE:
     """
     A minimal, functional implementation of Axial RoPE to serve as Ground Truth.
@@ -43,50 +42,57 @@ class ReferenceAxialRoPE:
     def __init__(self, dim, base=10000):
         self.dim = dim
         self.base = base
-        # Precompute inv_freq
+        # Precompute inv_freq (Defaults to CPU)
         self.inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
 
     def get_freqs(self, seq_len, device):
-        # [seq_len]
-        t = torch.arange(seq_len, device=device).type_as(self.inv_freq)
-        # [seq_len, dim//2]
-        freqs = torch.outer(t, self.inv_freq.to(device))
-        # [seq_len, dim]
+        # 1. Ensure inv_freq is on the target device
+        inv_freq = self.inv_freq.to(device)
+        
+        # 2. Create t on the target device with matching dtype
+        t = torch.arange(seq_len, device=device, dtype=inv_freq.dtype)
+        
+        # 3. Outer Product (Both are now on device)
+        freqs = torch.outer(t, inv_freq)
+        
+        # 4. Concat to get [cos, sin] structure equivalent
         emb = torch.cat((freqs, freqs), dim=-1)
         return emb.cos(), emb.sin()
 
     def forward(self, q, height, width):
         # q shape: [batch, seq, heads, head_dim]
         head_dim = q.shape[-1]
-        assert head_dim % 2 == 0
         
         # 1. Split Q into Height part and Width part (Axial Split)
-        # This is the CRITICAL step: chunk(2, dim=-1)
         q_h, q_w = q.chunk(2, dim=-1)
         
         axis_dim = head_dim // 2 # 32 for dim 64
         
         # 2. Get Cos/Sin for H and W
-        # Note: We use self.dim = axis_dim // 2 because frequencies are pairs
-        # But here let's just generate on the fly
-        
-        # Re-init helper for the sub-dimension
         sub_rope = ReferenceAxialRoPE(axis_dim, self.base)
         
         cos_h, sin_h = sub_rope.get_freqs(height, q.device) # [H, 32]
         cos_w, sin_w = sub_rope.get_freqs(width, q.device)  # [W, 32]
         
         # 3. Broadcast to Sequence (Meshgrid equivalent)
-        # We need [H*W, 32]
-        # height index: 0,0,0... 1,1,1...
-        # width index:  0,1,2... 0,1,2...
+        # We need to map linear sequence index to (y, x) grid coordinates
+        # Row-major: (0,0), (0,1), ..., (1,0), ...
         
-        h_idx = torch.arange(height, device=q.device).unsqueeze(1).repeat(1, width).flatten() # [0,0,0, 1,1,1]
-        w_idx = torch.arange(width, device=q.device).repeat(height)                           # [0,1,2, 0,1,2]
+        # h_idx: [0, 0, ..., 1, 1, ...] -> Repeats each row index 'width' times
+        h_idx = torch.arange(height, device=q.device).unsqueeze(1).repeat(1, width).flatten()
+        
+        # w_idx: [0, 1, ..., 0, 1, ...] -> Repeats the column sequence 'height' times
+        w_idx = torch.arange(width, device=q.device).repeat(height)
+        
+        # Handle cases where actual seq_len might be shorter/longer (e.g. padding or cls token issues, though SigLIP usually strictly grid)
+        seq_len = q.shape[1]
+        valid_len = min(seq_len, len(h_idx))
+        
+        h_idx = h_idx[:valid_len]
+        w_idx = w_idx[:valid_len]
         
         cos_h_flat = cos_h[h_idx] # [seq, 32]
         sin_h_flat = sin_h[h_idx]
-        
         cos_w_flat = cos_w[w_idx] # [seq, 32]
         sin_w_flat = sin_w[w_idx]
         
