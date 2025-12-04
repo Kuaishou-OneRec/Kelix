@@ -9,7 +9,6 @@ import torch.nn.init as init
 
 from muse.config.model_config import SiglipVisionConfig
 from muse.models.Siglip._layers import (
-    SiglipAttention,
     SiglipMLP,
     SiglipAxialRotaryEmbedding,
 )
