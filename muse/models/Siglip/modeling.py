@@ -609,53 +609,43 @@ class SiglipVisionTransformer(Model):
         
         # Default: lecun_normal initialization
         return lecun_normal_
-
     def convert_hf_state_dict(self,
                               hf_state_dict: Dict[str, torch.Tensor],
                               **kwargs) -> Dict[str, torch.Tensor]:
-        """Convert a Hugging Face state dictionary to a model state dictionary.
-        
-        Only converts vision_model weights. Skips text_model, logit_scale, logit_bias,
-        and vision_model.head (pooling head) since they are not part of this model.
-        
-        Args:
-            hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
-            **kwargs: Additional keyword arguments.
-        
-        Returns:
-            A dictionary of model state with converted key names.
-        """
+        """Convert a Hugging Face state dictionary to a model state dictionary."""
         converted_state_dict = {}
         skipped_keys = []
         
-        # Prefix to look for in HF state dict
-        vision_prefix = "siglip.vision_model."
+        # [关键修复] 使用循环剥离前缀，解决 double prefix (siglip.vision_model.vision_model...) 问题
+        prefixes_to_strip = ["siglip.", "vision_model."]
         
         for hf_key, tensor in hf_state_dict.items():
-            # Skip non-vision_model keys (text_model, logit_scale, logit_bias, etc.)
-            if not hf_key.startswith(vision_prefix):
-                skipped_keys.append(hf_key)
-                continue
+            rel_key = hf_key
             
-            # Remove the prefix to get the relative key
-            rel_key = hf_key[len(vision_prefix):]
+            # 只要以指定前缀开头，就一直剥离，直到干净为止
+            modified = True
+            while modified:
+                modified = False
+                for prefix in prefixes_to_strip:
+                    if rel_key.startswith(prefix):
+                        rel_key = rel_key[len(prefix):]
+                        modified = True
+                        break 
             
-            # Skip pooling head (vision_model.head.*)
+            # 下面的映射逻辑保持不变
+            
+            # Skip pooling head
             if rel_key.startswith("head."):
                 skipped_keys.append(hf_key)
                 continue
             
             # Handle embeddings
             if rel_key.startswith("embeddings."):
-                # Embeddings map directly: patch_embedding, position_embedding, packing_position_embedding
-                converted_key = rel_key
-                converted_state_dict[converted_key] = tensor
+                converted_state_dict[rel_key] = tensor
                 continue
             
             # Handle post_layernorm -> ln_post
             if rel_key.startswith("post_layernorm."):
-                # post_layernorm.weight -> ln_post.weight
-                # post_layernorm.bias -> ln_post.bias
                 suffix = rel_key.replace("post_layernorm.", "")
                 converted_key = f"ln_post.{suffix}"
                 converted_state_dict[converted_key] = tensor
@@ -663,9 +653,7 @@ class SiglipVisionTransformer(Model):
             
             # Handle encoder layers
             if rel_key.startswith("encoder.layers."):
-                # Extract layer index and remaining key
-                # encoder.layers.{i}.{rest}
-                parts = rel_key.split(".", 3)  # ["encoder", "layers", "{i}", "rest"]
+                parts = rel_key.split(".", 3)
                 if len(parts) < 4:
                     skipped_keys.append(hf_key)
                     continue
@@ -673,53 +661,36 @@ class SiglipVisionTransformer(Model):
                 layer_idx = parts[2]
                 rest_key = parts[3]
                 
-                # Handle layer_norm1 -> sa_norm
                 if rest_key.startswith("layer_norm1."):
                     suffix = rest_key.replace("layer_norm1.", "")
                     converted_key = f"encoder.layers.{layer_idx}.sa_norm.{suffix}"
                     converted_state_dict[converted_key] = tensor
                     continue
                 
-                # Handle layer_norm2 -> mlp_norm
                 if rest_key.startswith("layer_norm2."):
                     suffix = rest_key.replace("layer_norm2.", "")
                     converted_key = f"encoder.layers.{layer_idx}.mlp_norm.{suffix}"
                     converted_state_dict[converted_key] = tensor
                     continue
                 
-                # Handle self_attn -> attn
                 if rest_key.startswith("self_attn."):
                     attn_key = rest_key.replace("self_attn.", "attn.")
-                    # Map out_proj -> output_proj
                     attn_key = attn_key.replace("out_proj.", "output_proj.")
                     converted_key = f"encoder.layers.{layer_idx}.{attn_key}"
                     converted_state_dict[converted_key] = tensor
                     continue
                 
-                # Handle MLP (fc1, fc2 map directly)
                 if rest_key.startswith("mlp."):
-                    # mlp.fc1.weight -> mlp.fc1.weight (direct mapping)
                     converted_key = f"encoder.layers.{layer_idx}.{rest_key}"
                     converted_state_dict[converted_key] = tensor
                     continue
-                
-                # Unknown layer key
-                skipped_keys.append(hf_key)
-                continue
             
-            # If key doesn't match any pattern, skip it
             skipped_keys.append(hf_key)
         
         if skipped_keys:
-            logger.warning(
-                f"Skipped {len(skipped_keys)} keys during conversion. "
-                f"First few: {skipped_keys[:10]}"
-            )
+            logger.warning(f"Skipped {len(skipped_keys)} keys. First few: {skipped_keys[:5]}")
         
-        logger.info(
-            f"Converted {len(converted_state_dict)} keys from "
-            f"{len(hf_state_dict)} Hugging Face keys"
-        )
+        logger.info(f"Converted {len(converted_state_dict)} keys from {len(hf_state_dict)} Hugging Face keys")
         
         return converted_state_dict
 
