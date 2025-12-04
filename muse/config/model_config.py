@@ -241,3 +241,49 @@ class SiglipVisionConfig(ModelConfig):
         default=False,
         description="Whether the encoder returns hidden states from all layers.",
     )
+
+
+class KeyeVisionConfig(ModelConfig):
+    """Configuration for the SigLIP vision transformer encoder."""
+
+    model_class: str = Field(
+        default="SiglipVisionTransformer",
+        description="Model class name used for registry lookup.",
+    )
+    image_size: int = Field(default=384, description="Input image resolution.")
+    patch_size: int = Field(default=14, description="Patch size of the stem conv.")
+    num_channels: int = Field(default=3, description="Number of input channels.")
+    hidden_size: int = Field(default=1152, description="Transformer hidden dimension.")
+    num_hidden_layers: int = Field(default=27, description="Number of encoder blocks.")
+    num_attention_heads: int = Field(default=16, description="Attention heads.")
+    intermediate_size: int = Field(default=4304, description="MLP hidden dimension.")
+    max_seq_len: int = Field(
+        default=4096,
+        description="Maximum sequence length for attention. Typically (image_size/patch_size)^2.",
+    )
+    layer_norm_eps: float = Field(default=1e-6, description="Layer norm epsilon.")
+    attention_dropout: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="Attention dropout probability."
+    )
+    has_learnable_position_embedding: bool = Field(
+        default=True,
+        description="Use learnable packing position embeddings for vision tokens.",
+    )
+    use_qk_norm: bool = Field(default=False, description="Apply RMSNorm to Q/K projections.")
+    qk_norm_eps: float = Field(default=1e-6, description="Epsilon for Q/K RMSNorm layers.")
+    rope_theta: float = Field(default=10000.0, description="RoPE base frequency.")
+    attention_function: Literal["eager", "flash_attention_2"] = Field(
+        default="flash_attention_2",
+        description="Attention backend implementation.",
+    )
+    output_attentions: bool = Field(
+        default=False,
+        description="Whether the encoder returns attention probabilities.",
+    )
+    output_hidden_states: bool = Field(
+        default=False,
+        description="Whether the encoder returns hidden states from all layers.",
+    )
+
+
+    

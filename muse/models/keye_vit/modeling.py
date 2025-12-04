@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 
-from muse.config.model_config import SiglipVisionConfig
+from muse.config.model_config import KeyeVisionConfig
 from muse.models.Siglip._layers import (
     SiglipAttention,
     SiglipMLP,
@@ -59,8 +59,8 @@ def default_flax_embed_init(tensor: torch.Tensor) -> None:
 
 
 
-class SiglipVisionEmbeddings(nn.Module):
-    def __init__(self, config: SiglipVisionConfig):
+class KeyeVisionEmbeddings(nn.Module):
+    def __init__(self, config: KeyeVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -183,13 +183,13 @@ class SiglipVisionEmbeddings(nn.Module):
                         start = end
                     embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
                 else:
-                    embeddings = embeddings + self.packing_position_embedding(position_ids)
+                    raise NotImplementedError(str(pixel_values.shape))
             return embeddings
 
         raise NotImplementedError(str(pixel_values.shape))
 
 
-class SiglipEncoder(nn.Module):
+class KeyeVisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
     [`SiglipEncoderLayer`].
@@ -355,12 +355,12 @@ class SiglipEncoder(nn.Module):
 
 
 
-class SiglipVisionTransformer(Model):
-    def __init__(self, config: SiglipVisionConfig):
+class KeyeVisionTransformer(Model):
+    def __init__(self, config: KeyeVisionConfig):
         super().__init__(config)
         self.config = config
-        self.embeddings = SiglipVisionEmbeddings(config)
-        self.encoder = SiglipEncoder(config)
+        self.embeddings = KeyeVisionEmbeddings(config)
+        self.encoder = KeyeVisionEncoder(config)
         self.ln_post = nn.LayerNorm(
             normalized_shape=config.hidden_size, eps=config.layer_norm_eps
         )
@@ -642,5 +642,5 @@ class SiglipVisionTransformer(Model):
 
 
 # Alias for backward compatibility and registry
-SiglipVisionModel = SiglipVisionTransformer
+KeyeVisionModel = KeyeVisionTransformer
 
