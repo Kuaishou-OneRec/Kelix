@@ -205,48 +205,125 @@ class MultiHeadAttention(nn.Module):
         input_pos: Optional[torch.Tensor] = None,
         **kwargs
     ) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): input tensor with shape [b x s_x x d] for the query
+            y (Optional[torch.Tensor]): second input tensor with shape [b x s_y x d], is the input
+                for k and v. For self attention, x=y. Optional only with kv_cache enabled.
+            mask (Optional[torch.Tensor]): Used to mask the scores after the query-key multiplication
+                and before the softmax. Either:
+
+                A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_seq_len]``,
+                or ``[b x s x self.decoder_max_cache_seq_len]`` if using KV-cacheing with encoder/decoder layers.
+                A value of True in row ``i`` and column ``j`` means token ``i`` attends to token ``j``. A value of False means
+                token ``i`` does not attend to token ``j``. If no mask is specified, a causal mask
+                is used by default.
+
+                A :class:`~torch.nn.attention.flex_attention.BlockMask` for document masking in a packed sequence
+                created via `create_block_mask <https://pytorch.org/blog/flexattention/#mask-mods>`_. We  use
+                :func:`~torch.nn.attention.flex_attention.flex_attention` when computing attention with block masks.
+                Default is None.
+            input_pos (Optional[torch.Tensor]): Optional tensor which contains the position ids
+                of each token. During training, this is used to indicate the positions
+                of each token relative to its sample when packed, shape [b x s].
+                During inference, this indicates the position of the current token.
+                If none, assume the index of the token is its position id. Default is None.
+            **kwargs: Additional keyword arguments to pass to the attention function. Common kwargs include:
+                - cu_seqlens (torch.Tensor): cu_seqlens for the query and key, required if sample packing is used.
+                  A int tensor with shape (N+1,) where N is the number of samples in a sequence.
+                  e.g., [0, 10, 15, 40] means 3 samples with length 10, 5, 25 respectively.
+                - window_size (int): sliding window size for local attention, default is -1 (no window).
+                - cu_seqlens_q (torch.Tensor): cu_seqlens for the query specifically.
+                - cu_seqlens_k (torch.Tensor): cu_seqlens for the key specifically.
+                Note: Available kwargs depend on the attention_function being used.
+
+        Raises:
+            ValueError: If no ``y`` input and ``kv_cache`` is not enabled.
+
+        Returns:
+            torch.Tensor: output tensor with attention applied
+
+        Notation used for tensor shapes:
+            - b: batch size
+            - s_x: sequence length for x
+            - s_y: sequence length for y
+            - n_h: num heads
+            - n_kv: num kv heads
+            - d: embed dim
+            - h_d: head dim
+        """
+        # x has shape [b, s_x, d]
+        # y has shape [b, s_y, d]
         b, s_x, _ = x.shape
         s_y = y.shape[1] if y is not None else 0
 
-        # 1. Projection & Reshape -> [B, S, H, D]
+        # q has shape [b, s_x, num_heads * head_dim]
         q = self.q_proj(x)
+
+        # number of queries per key/value
         q_per_kv = self.num_heads // self.num_kv_heads
         q = q.view(b, s_x, self.num_kv_heads * q_per_kv, self.head_dim)
 
-        # 2. Q Norm & RoPE (通常在 S, H 维度操作比较方便，保持现状)
+        # Apply positional embeddings
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
+
+        # Normalize q
         if self.q_norm is not None:
             q = self.q_norm(q)
 
-        # Handle K/V
         if y is None:
-            # Self Attention Path (No Cache for test)
-            if self.kv_cache is None:
-                k = self.k_proj(x).view(b, s_x, -1, self.head_dim)
-                v = self.v_proj(x).view(b, s_x, -1, self.head_dim)
-                if self.pos_embeddings is not None:
-                    k = self.pos_embeddings(k, input_pos=input_pos)
-                if self.k_norm is not None:
-                    k = self.k_norm(k)
-            else:
-                # ... Cache logic ...
-                pass
+            if self.kv_cache is None or not self.cache_enabled:
+                raise ValueError(
+                    "Must provide y input or use kv_cache to enable streaming decoding"
+                )
+            k = self.kv_cache.k_cache
+            v = self.kv_cache.v_cache
         else:
-            # Cross Attention ...
-            pass
+            # Update k and v shape, positional embeddings, and normalization
 
-        # ---------------------------------------------------------------------
-        # [关键修复] Transpose: [B, S, H, D] -> [B, H, S, D]
-        # 这是为了匹配 SDPA (scaled_dot_product_attention) 的标准输入要求
-        # HF 源码对应逻辑: query_states.view(batch, q_len, heads, dim).transpose(1, 2)
-        # ---------------------------------------------------------------------
+            # k,v shape [b, s_y, num_kv_heads * head_dim]
+            k = self.k_proj(y)
+            v = self.v_proj(y)
+
+            # Apply positional embeddings
+            # k,v shape: [b, s_y, n_kv, h_d]
+            k = k.view(b, s_y, -1, self.head_dim)
+            v = v.view(b, s_y, -1, self.head_dim)
+            if self.pos_embeddings is not None:
+                k = self.pos_embeddings(k, input_pos=input_pos)
+
+            # Normalize k
+            if self.k_norm is not None:
+                k = self.k_norm(k)
+
+            # Update key-value cache
+            if self.kv_cache is not None and self.cache_enabled:
+                k, v = self.kv_cache.update(k, v)
+
+        # If needed, expand the key and value tensors to have the same shape
+        # as the query tensor by copying values across the relevant dim
+        # k,v shape: [b, n_kv, s, h_d] -> [b, n_h, s, h_d]
+        if self.num_heads != self.num_kv_heads:
+            # For cross attention, we need to handle different sequence lengths
+            # k,v have shape [b, n_kv, s_y, h_d], q has shape [b, n_h, s_x, h_d]
+            # We need to expand k,v to [b, n_h, s_y, h_d]
+            expand_shape = (b, self.num_kv_heads, q_per_kv, k.size(2), self.head_dim)
+            k = k.unsqueeze(2).expand(expand_shape).flatten(1, 2)
+            v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
+
+        # if get_context_parallel_world_size() > 1:
+        #     cpg = get_context_parallel_group()
+        #     # If context parallel is enabled, the input is sharded along
+        #     # the sequence length dimension. We need to recover the original 
+        #     # sequence length before the attention function.
+        #     # q, k, v: [b, s_x, n_h, h_d] -> [b, s_x * P, n_h // P, h_d]
+        #     q = SeqAllToAll4D.apply(cpg, q, 2, 1)
+        #     k = SeqAllToAll4D.apply(cpg, k, 2, 1)
+        #     v = SeqAllToAll4D.apply(cpg, v, 2, 1)
         q = q.transpose(1, 2) 
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
-
-        # 3. Attention Calculation
-        # 输入形状现在是 [B, H, S, D]，计算的是 Sequence 维度的 Attention
         output = self._attention_function(
             q=q,
             k=k,
@@ -256,12 +333,12 @@ class MultiHeadAttention(nn.Module):
             **kwargs
         )
 
-        # 4. Transpose Back: [B, H, S, D] -> [B, S, H, D]
-        output = output.transpose(1, 2).contiguous()
-        
-        # 5. Flatten: [B, S, H*D]
-        output = output.view(b, s_x, -1)
-        
+        # if get_context_parallel_world_size() > 1:
+        #     cpg = get_context_parallel_group()
+        #     # output: [b, s_x * P, n_h // P, h_d] -> [b, s_x, n_h, h_d]
+        #     output = SeqAllToAll4D.apply(cpg, output, 1, 2)
+        # # reshape the output to be the same shape as the input
+        output = output.transpose(1, 2).contiguous().view(b, s_x, -1)
         return self.output_proj(output)
 
 class SiglipAxialRotaryEmbedding(nn.Module):
