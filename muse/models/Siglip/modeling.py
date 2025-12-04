@@ -10,7 +10,6 @@ import torch.nn.init as init
 from muse.config.model_config import SiglipVisionConfig
 from muse.models.Siglip._layers import (
     SiglipMLP,
-    SiglipAxialRotaryEmbedding,
 )
 from muse.layers.attention import MultiHeadAttention
 from muse.layers.transformer import TransformerSelfAttentionLayer
@@ -321,7 +320,6 @@ class SiglipEncoder(nn.Module):
         num_heads = config.num_attention_heads
         head_dim = embed_dim // num_heads
         num_kv_heads = num_heads
-        self.rope = SiglipAxialRotaryEmbedding(head_dim, max_grid_size=4096, base=config.rope_theta)
 
         attn_dropout = getattr(config, "attention_dropout", 0.0)
         intermediate_dim = getattr(config, "intermediate_size", embed_dim * 4)
