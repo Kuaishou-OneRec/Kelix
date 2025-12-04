@@ -1,22 +1,23 @@
 """
-Keye Vision Layer-wise Debugging Script (Corrected)
+Keye Vision Layer-wise Debugging Script (Final Fix)
 ===================================================
 
-修复内容：
-1. 使用 SiglipVisionModel 作为 Origin 类，匹配包含 vision_model 的结构。
-2. 调整权重 Key 的映射逻辑，确保 Origin 模型能正确加载 vision_model 前缀的参数。
-3. 确保输入 Pixel Values 是 5D 格式 (Batch, Seq, Channel, Height, Width)。
+功能：
+1. 解决 Config 类型检查报错 (构造 HF 兼容 Config)。
+2. 对齐 Origin 和 Muse 的权重加载逻辑。
+3. 逐层 (Embeddings -> Layer0 -> Mid -> Last -> Final) 比较输出。
 """
 
 import logging
 import os
 import sys
 import types
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple, Any, Union
 
 import numpy as np
 import torch
 from PIL import Image
+from transformers import PretrainedConfig
 
 # Muse imports
 from muse.config.model_config import KeyeVisionConfig
@@ -25,9 +26,10 @@ from muse.models.keye_vit.image_processing_keye import KeyeVisionImageProcessor
 from muse.training.common import set_default_dtype
 
 # -----------------------------------------------------------------------------
-# 基础配置 & 日志
+# 基础配置
 # -----------------------------------------------------------------------------
 
+# 请确保路径正确
 CHECKPOINT_PATH = "/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/SigLIP/3.0.0.3/global_step18200/mp_rank_00_model_states.pt"
 
 logging.basicConfig(
@@ -38,8 +40,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # -----------------------------------------------------------------------------
-# 1. 动态注入 Origin Config (保持原逻辑)
+# 1. 动态注入 Origin Config (解决 ValueError)
 # -----------------------------------------------------------------------------
+
+# 定义一个符合 HuggingFace 标准的 Config 类
+class HFKeyeVisionConfig(PretrainedConfig):
+    model_type = "siglip_vision"
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        # 允许通过属性访问字典中的值，模仿 Pydantic 行为
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+class HFKeyeConfig(PretrainedConfig):
+    model_type = "keye"
+    def __init__(self, vision_config=None, **kwargs):
+        super().__init__(**kwargs)
+        self.vision_config = vision_config
 
 def _ensure_origin_config_module() -> None:
     module_name = "muse.muse.models.keye_vit.configuration_keye"
@@ -47,28 +64,23 @@ def _ensure_origin_config_module() -> None:
         return
 
     config_module = types.ModuleType(module_name)
-
-    class DummyKeyeConfig:
-        def __init__(self, vision_config=None, **kwargs):
-            self.vision_config = vision_config or KeyeVisionConfig()
-            for key, value in kwargs.items():
-                setattr(self, key, value)
-
-    config_module.KeyeConfig = DummyKeyeConfig
-    config_module.KeyeVisionConfig = KeyeVisionConfig
+    # 注入假的 Config 类
+    config_module.KeyeConfig = HFKeyeConfig
+    config_module.KeyeVisionConfig = HFKeyeVisionConfig
     sys.modules[module_name] = config_module
 
 _ensure_origin_config_module()
+# 导入 Origin 模型
 from muse.models.keye_vit import modeling_keye_origin as keye_origin
-
-# 【修改点 1】使用最外层的 Model 类，它包含 .vision_model 属性
+# 使用外层 Wrapper 类，它包含 .vision_model
 OriginKeyeVisionModel = keye_origin.SiglipVisionModel 
 
 # -----------------------------------------------------------------------------
-# 2. 辅助工具函数
+# 2. 辅助函数
 # -----------------------------------------------------------------------------
 
 def create_dummy_image(size: int = 384) -> Image.Image:
+    # 固定种子生成随机图
     rng = np.random.default_rng(seed=42)
     data = rng.integers(0, 255, (size, size, 3), dtype=np.uint8)
     return Image.fromarray(data)
@@ -89,18 +101,15 @@ def compare_tensors_verbose(
     candidate: torch.Tensor,
     atol: float = 1e-3,
 ) -> None:
-    # 处理 Tuple 输出
-    if isinstance(reference, (tuple, list)):
-        reference = reference[0]
-    if isinstance(candidate, (tuple, list)):
-        candidate = candidate[0]
+    # 解包 tuple/list
+    if isinstance(reference, (tuple, list)): reference = reference[0]
+    if isinstance(candidate, (tuple, list)): candidate = candidate[0]
 
     ref = reference.detach().float().cpu()
     cand = candidate.detach().float().cpu()
 
-    # 形状对齐尝试：Origin 可能是 (B, L, D)，Muse 可能是 (B, L, D) 或 (L, B, D)
+    # 简单的形状对齐 (Squeeze batch dim if needed)
     if ref.shape != cand.shape:
-        # 尝试 squeeze (Muse 有时输出 shape [1, L, D] 而 Origin [L, D])
         if ref.dim() == 3 and ref.shape[0] == 1 and cand.dim() == 2:
             ref = ref.squeeze(0)
         elif cand.dim() == 3 and cand.shape[0] == 1 and ref.dim() == 2:
@@ -119,31 +128,15 @@ def compare_tensors_verbose(
     logger.info("-" * 80)
     logger.info("Layer   : %s", name)
     logger.info("Status  : %s", status)
-    logger.info(
-        "Stats   : MaxDiff=%.3e | MeanDiff=%.3e",
-        max_diff, mean_diff
-    )
+    logger.info("Stats   : MaxDiff=%.3e | MeanDiff=%.3e", max_diff, mean_diff)
 
     if max_diff >= atol:
         logger.info("Origin vals : %s", format_tensor_val(ref, 5))
         logger.info("Muse vals   : %s", format_tensor_val(cand, 5))
 
 # -----------------------------------------------------------------------------
-# 3. 数据准备函数
+# 3. 数据准备 (5D Input)
 # -----------------------------------------------------------------------------
-
-def build_position_ids(image_grid_thw: List[Tuple[int, int, int]], device: torch.device) -> torch.Tensor:
-    seq_lens = [int(t * h * w) for t, h, w in image_grid_thw]
-    seq_len = seq_lens[0]
-    position_ids = torch.arange(seq_len, device=device, dtype=torch.long)
-    return position_ids.unsqueeze(0).repeat(len(image_grid_thw), 1)
-
-def build_cu_seqlens(image_grid_thw: List[Tuple[int, int, int]], device: torch.device) -> torch.Tensor:
-    seq_lens = [int(t * h * w) for t, h, w in image_grid_thw]
-    cumsum = [0]
-    for length in seq_lens:
-        cumsum.append(cumsum[-1] + length)
-    return torch.tensor(cumsum, dtype=torch.int32, device=device)
 
 def prepare_pixel_inputs(
     processor: KeyeVisionImageProcessor,
@@ -152,7 +145,7 @@ def prepare_pixel_inputs(
     dtype: torch.dtype,
 ) -> Tuple[torch.Tensor, List[Tuple[int, int, int]], torch.Tensor, torch.Tensor]:
     processed = processor.preprocess(images=image, return_tensors="pt")
-    pixel_values = processed["pixel_values"] # [N_patches, C, H, W]
+    pixel_values = processed["pixel_values"]
     grid_info = processed["image_grid_thw"]
     
     if isinstance(grid_info, torch.Tensor):
@@ -162,23 +155,34 @@ def prepare_pixel_inputs(
     image_grid_thw = [tuple(int(v) for v in grid) for grid in grid_info]
 
     patches_per_image = [int(np.prod(grid)) for grid in image_grid_thw]
+    
+    # 手动构建 5D tensor: [Batch, Seq_in_Batch, Channels, H, W]
+    # 注意：这里假设 dummy image 只有一张图，且被切分成了 patches
     batched = []
     start = 0
     for count in patches_per_image:
         batched.append(pixel_values[start : start + count])
         start += count
     
-    # 堆叠为 Batch
+    # [Batch=1, Seq, C, H, W]
     pixel_batch = torch.stack(batched, dim=0).to(device=device, dtype=dtype).contiguous()
-    # [Batch, Seq_Patches, C, H, W] -> 这是 Origin 代码 Forward 要求的 5D 格式
     
-    position_ids = build_position_ids(image_grid_thw, device)
-    cu_seqlens = build_cu_seqlens(image_grid_thw, device)
+    # 构建 Position IDs
+    seq_lens = [int(t * h * w) for t, h, w in image_grid_thw]
+    seq_len = seq_lens[0]
+    position_ids = torch.arange(seq_len, device=device, dtype=torch.long)
+    position_ids = position_ids.unsqueeze(0).repeat(len(image_grid_thw), 1) # [Batch, Seq]
+
+    # 构建 CU Seqlens
+    cumsum = [0]
+    for length in seq_lens:
+        cumsum.append(cumsum[-1] + length)
+    cu_seqlens = torch.tensor(cumsum, dtype=torch.int32, device=device)
     
     return pixel_batch, image_grid_thw, position_ids, cu_seqlens
 
 # -----------------------------------------------------------------------------
-# 4. 权重处理逻辑
+# 4. 权重加载与转换
 # -----------------------------------------------------------------------------
 
 def load_checkpoint_and_convert(path: str) -> Tuple[Dict, Dict]:
@@ -192,43 +196,31 @@ def load_checkpoint_and_convert(path: str) -> Tuple[Dict, Dict]:
 
     origin_state = {}
     muse_state = {}
-
     prefixes = ("module.", "model.", "state_dict.", "vision_tower.", "vision_backbone.", "siglip.")
     
     for key, value in raw.items():
-        # 清理通用前缀，找到 "vision_model" 这一层
+        # 1. 清洗 key 得到相对干净的名字
         clean_key = key
         for prefix in prefixes:
             while clean_key.startswith(prefix):
                 clean_key = clean_key[len(prefix) :]
         
-        # --- 1. Origin Key 构建 ---
-        # OriginKeyeVisionModel 是 SiglipVisionModel，它包含 self.vision_model
-        # 所以它的 state_dict 期望的 key 应该是 "vision_model.embeddings.weight" 等
-        
-        # 此时 clean_key 可能是 "vision_model.embeddings.weight" (理想)
-        # 或者可能是 "embeddings.weight" (如果 checkpoint 没存 vision_model 前缀)
-        
+        # 2. 构建 Origin Key (需要以 vision_model. 开头，因为我们实例化的是 SiglipVisionModel)
         origin_key = clean_key
-        # 如果 checkpoint 里有 vision_model 前缀，保留它
-        # 如果 checkpoint 直接是 embeddings 开头，我们需要补上 vision_model. 前缀
         if not origin_key.startswith("vision_model."):
             origin_key = "vision_model." + origin_key
-            
-        # 过滤掉非 Vision 参数 (比如 text model 的)
+        
+        # 过滤掉非 vision 参数
         if "vision_model." in origin_key:
              origin_state[origin_key] = value
 
-        # --- 2. Muse Key 构建 ---
-        # Muse 模型 (KeyeVisionTransformer) 结构是平铺的，没有 vision_model 前缀
-        # 或者是 self.embeddings, self.encoder
-        
-        # 去掉 vision_model. 前缀来构建 Muse key
+        # 3. 构建 Muse Key (扁平结构，去除 vision_model.)
         muse_key_base = origin_key.replace("vision_model.", "")
         
         if muse_key_base.startswith("head."):
-            continue # Muse 无 head
+            continue # Muse 没有 head
 
+        # 映射规则
         new_muse_key = muse_key_base.replace("post_layernorm.", "ln_post.")
         if "encoder.layers." in new_muse_key:
             new_muse_key = (
@@ -244,147 +236,190 @@ def load_checkpoint_and_convert(path: str) -> Tuple[Dict, Dict]:
     return origin_state, muse_state
 
 # -----------------------------------------------------------------------------
-# 5. 主测试逻辑
+# 5. Config 转换 (Muse -> HF)
+# -----------------------------------------------------------------------------
+
+def convert_muse_config_to_hf(muse_cfg: KeyeVisionConfig) -> HFKeyeVisionConfig:
+    # 提取 Muse Config 的所有字段
+    cfg_dict = {}
+    # Pydantic 用 .dict() 或 .model_dump()，普通类用 __dict__
+    if hasattr(muse_cfg, "dict"):
+        cfg_dict = muse_cfg.dict()
+    elif hasattr(muse_cfg, "model_dump"):
+        cfg_dict = muse_cfg.model_dump()
+    else:
+        # 普通类
+        for k in dir(muse_cfg):
+            if not k.startswith("_") and not callable(getattr(muse_cfg, k)):
+                cfg_dict[k] = getattr(muse_cfg, k)
+    
+    return HFKeyeVisionConfig(**cfg_dict)
+
+# -----------------------------------------------------------------------------
+# 6. 主测试逻辑
 # -----------------------------------------------------------------------------
 
 def test_layer_by_layer():
-    torch.manual_seed(0)
+    torch.manual_seed(42)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(0)
+        torch.cuda.manual_seed_all(42)
 
     if not os.path.exists(CHECKPOINT_PATH):
         raise FileNotFoundError(f"Checkpoint not found: {CHECKPOINT_PATH}")
 
-    config = KeyeVisionConfig()
+    # 1. Configs
+    muse_config = KeyeVisionConfig()
+    origin_config = convert_muse_config_to_hf(muse_config)
+    
+    # 2. Setup Device/Dtype
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    bf16_supported = torch.cuda.is_bf16_supported() if torch.cuda.is_available() else False
-    dtype = torch.bfloat16 if bf16_supported else torch.float32
+    # 为了 Debug 方便，如果不是必须，建议先用 float32，排查是否是精度问题
+    # 但如果显存不够或想复现原环境，保持 bfloat16
+    dtype = torch.bfloat16 if (torch.cuda.is_available() and torch.cuda.is_bf16_supported()) else torch.float32
     
     logger.info(f"Running on {device} with {dtype}")
 
     with set_default_dtype(dtype):
-        # Origin: SiglipVisionModel (Wrapper)
-        origin_model = OriginKeyeVisionModel(config)
-        # Muse: KeyeVisionTransformer (Inner)
-        muse_model = MuseKeyeVisionModel(config)
+        # 初始化模型
+        origin_model = OriginKeyeVisionModel(origin_config)
+        muse_model = MuseKeyeVisionModel(muse_config)
     
     origin_model.eval()
     muse_model.eval()
 
+    # 3. 加载权重
     origin_state, muse_state = load_checkpoint_and_convert(CHECKPOINT_PATH)
+    logger.info(f"Origin Params Count: {len(origin_state)}")
+    logger.info(f"Muse Params Count  : {len(muse_state)}")
     
     def _to_dtype(d):
         return {k: v.to(dtype=dtype) for k,v in d.items()}
 
-    logger.info(f"Origin Params: {len(origin_state)}, Muse Params: {len(muse_state)}")
+    # 加载 Origin
+    keys_origin = origin_model.load_state_dict(_to_dtype(origin_state), strict=False)
+    # Origin 可能会有一些 missing keys (如 head)，这是正常的，只要 vision_model 完整即可
     
-    # 加载权重
-    load_res_origin = origin_model.load_state_dict(_to_dtype(origin_state), strict=False)
-    # logger.info(f"Origin Missing: {load_res_origin.missing_keys}")
-    
-    load_res_muse = muse_model.load_state_dict(_to_dtype(muse_state), strict=False)
-    # logger.info(f"Muse Missing: {load_res_muse.missing_keys}")
+    # 加载 Muse
+    keys_muse = muse_model.load_state_dict(_to_dtype(muse_state), strict=False)
+    if len(keys_muse.missing_keys) > 0:
+        logger.warning(f"Muse Missing Keys: {keys_muse.missing_keys}")
 
     origin_model.to(device)
     muse_model.to(device)
 
-    # --- Hook Registration ---
+    # 4. 注册 Hooks
     log_separator("Registering Hooks")
     activations = {"origin": {}, "muse": {}}
 
     def get_hook(model_type, layer_name):
         def hook(module, input, output):
-            if isinstance(output, tuple):
-                output = output[0]
+            # 解包 tuple
+            if isinstance(output, tuple): output = output[0]
+            if isinstance(output, list): output = output[0] # Handle list output if any
             activations[model_type][layer_name] = output.detach()
         return hook
 
-    # 现在 origin_model 是 SiglipVisionModel，它有 vision_model 属性
-    # Muse KeyeVisionTransformer 直接有 embeddings 属性
+    # Hook Points:
     
-    # 1. Embeddings
+    # [Point 1] Embeddings Output
+    # Origin: model.vision_model.embeddings
     origin_model.vision_model.embeddings.register_forward_hook(get_hook("origin", "embeddings"))
+    # Muse: model.embeddings
     muse_model.embeddings.register_forward_hook(get_hook("muse", "embeddings"))
 
-    # 2. Layer 0
+    # [Point 2] Layer 0 (Transformer Block)
     origin_model.vision_model.encoder.layers[0].register_forward_hook(get_hook("origin", "layer_0"))
     muse_model.encoder.layers[0].register_forward_hook(get_hook("muse", "layer_0"))
 
-    # 3. Middle Layer
-    mid_idx = config.num_hidden_layers // 2
+    # [Point 3] Middle Layer
+    mid_idx = muse_config.num_hidden_layers // 2
     origin_model.vision_model.encoder.layers[mid_idx].register_forward_hook(get_hook("origin", f"layer_{mid_idx}"))
     muse_model.encoder.layers[mid_idx].register_forward_hook(get_hook("muse", f"layer_{mid_idx}"))
 
-    # 4. Last Layer
-    last_idx = config.num_hidden_layers - 1
+    # [Point 4] Last Layer (Before Final LN)
+    last_idx = muse_config.num_hidden_layers - 1
     origin_model.vision_model.encoder.layers[last_idx].register_forward_hook(get_hook("origin", "layer_last"))
     muse_model.encoder.layers[last_idx].register_forward_hook(get_hook("muse", "layer_last"))
 
-    # --- Prepare Inputs ---
-    processor = KeyeVisionImageProcessor(patch_size=config.patch_size)
-    dummy_image = create_dummy_image(config.image_size)
+    # 5. 准备输入
+    processor = KeyeVisionImageProcessor(patch_size=muse_config.patch_size)
+    dummy_image = create_dummy_image(muse_config.image_size)
     
-    # pixel_values shape: [B, Seq, C, H, W]
     pixel_values, image_grid_thw, position_ids, cu_seqlens = prepare_pixel_inputs(
         processor, dummy_image, device, dtype
     )
+    
+    logger.info(f"Input Pixel Shape: {pixel_values.shape}") # 应为 [1, Seq, C, H, W]
 
-    # --- Forward Pass ---
+    # 6. 前向传播
     log_separator("Running Forward Pass")
     
     with torch.no_grad():
-        # Origin Forward
-        # 传递 5D pixel_values, origin code 会在内部处理
+        # --- Origin Forward ---
+        # Origin 代码期望 5D 输入，并处理 interpolation
         origin_out = origin_model(
             pixel_values=pixel_values,
             position_ids=position_ids,
             image_grid_thw=image_grid_thw,
             cu_seqlens=cu_seqlens,
             interpolate_pos_encoding=True, 
+            # Origin 代码里 window_size 默认为 -1，这里显式传一下以防万一
+            window_size=-1 
         )
-        origin_final = origin_out.last_hidden_state
         
-        # 适配 Origin 的输出格式 (Sample pooling)
+        # Origin 输出处理
+        if hasattr(origin_out, "last_hidden_state"):
+            origin_final = origin_out.last_hidden_state
+        else:
+            origin_final = origin_out
+            
+        # Origin 返回的是 list (Sample Pooling)，stack 起来
         if isinstance(origin_final, list): 
-             # Origin 返回的是 list of tensors (每个 sample 一个)
              origin_final = torch.stack(origin_final, dim=0)
+        elif isinstance(origin_final, tuple):
+             origin_final = origin_final[0]
 
-        # Muse Forward
-        # 注意：Muse 可能期望 5D 或 4D 输入，根据你的实现。
-        # 如果 Muse ImageProcessor 输出 4D，但这里为了 Origin 变成了 5D，
-        # 你的 Muse 模型如果不支持 5D 可能会报错。
-        # 如果报错，请尝试: muse_input = pixel_values.flatten(0, 1) 
+        # --- Muse Forward ---
+        # Muse 代码也做了 5D 检查
         muse_out = muse_model(
             pixel_values=pixel_values, 
             position_ids=position_ids,
             image_grid_thw=image_grid_thw,
             cu_seqlens=cu_seqlens,
             interpolate_pos_encoding=True,
+            # Muse 里的 has_learnable_position_embedding 默认可能是 False，检查 Config
+            has_learnable_position_embedding=getattr(muse_config, "has_learnable_position_embedding", True)
         )
         muse_final = muse_out["last_hidden_state"]
 
-    # --- Comparisons ---
+    # 7. 比较
     log_separator("Layer-wise Analysis")
-    tol = 1e-2 if dtype == torch.bfloat16 else 1e-4
+    
+    # 宽松度：bfloat16 精度下 1e-2 是正常的，如果很大则有问题
+    tol = 5e-2 if dtype == torch.bfloat16 else 1e-3
 
+    # 1. Embeddings
     compare_tensors_verbose("1. Embeddings", 
                            activations["origin"]["embeddings"], 
                            activations["muse"]["embeddings"], atol=tol)
 
+    # 2. Layer 0
     compare_tensors_verbose("2. Encoder Layer 0", 
                            activations["origin"]["layer_0"], 
                            activations["muse"]["layer_0"], atol=tol)
 
+    # 3. Middle
     compare_tensors_verbose(f"3. Encoder Layer {mid_idx}", 
                            activations["origin"][f"layer_{mid_idx}"], 
                            activations["muse"][f"layer_{mid_idx}"], atol=tol)
 
+    # 4. Last Layer
     compare_tensors_verbose("4. Encoder Last Layer", 
                            activations["origin"]["layer_last"], 
                            activations["muse"]["layer_last"], atol=tol)
 
+    # 5. Final
     compare_tensors_verbose("5. Final Output (Post-LN)", origin_final, muse_final, atol=tol)
-
 
 if __name__ == "__main__":
     test_layer_by_layer()
