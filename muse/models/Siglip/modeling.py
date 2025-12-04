@@ -732,29 +732,46 @@ class SiglipVisionTransformer(Model):
         return {TransformerSelfAttentionLayer}
 
 
-    def forward(self, pixel_values: torch.FloatTensor,
+    def forward(self, 
+        pixel_values: torch.FloatTensor,
         position_ids: Optional[torch.Tensor] = None, 
         image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None, 
         interpolate_pos_encoding: bool = True, 
         attention_mask: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
-        has_learnable_position_embedding: bool = False) -> Dict[str, torch.Tensor]:
+        has_learnable_position_embedding: bool = False
+    ) -> Dict[str, torch.Tensor]:
+        
+
+        if image_grid_thw is None and pixel_values.dim() == 4:
+            batch_size, _, height, width = pixel_values.shape
+            patch_size = self.config.patch_size
+            h_grid = height // patch_size
+            w_grid = width // patch_size
+            # 构造标准的 (t, h, w)，对于单图输入 t=1
+            image_grid_thw = [(1, h_grid, w_grid)] * batch_size
+
+        # 1. 计算 Embeddings (传入统一的 grid)
         embeddings = self.embeddings(
-            pixel_values,
-            position_ids,
-            image_grid_thw,
-            interpolate_pos_encoding,
-            has_learnable_position_embedding,
+            pixel_values=pixel_values,
+            position_ids=position_ids,
+            image_grid_thw=image_grid_thw,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            has_learnable_position_embedding=has_learnable_position_embedding,
         )
+
+        # 2. Encoder 前向 (传入统一的 grid，这对 RoPE 至关重要)
         encoder_outputs = self.encoder(
             embeddings,
             attention_mask=attention_mask,
             cu_seqlens=cu_seqlens,
-            image_grid_thw=image_grid_thw,
+            image_grid_thw=image_grid_thw, # <--- 必须传，不能为 None
         )
+
         hidden_states = encoder_outputs["last_hidden_state"]
         hidden_states = self.ln_post(hidden_states) 
         encoder_outputs["last_hidden_state"] = hidden_states
+        
         return encoder_outputs
 
 
