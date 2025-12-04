@@ -21,9 +21,9 @@ import numpy as np
 import torch
 from PIL import Image
 
-from muse.muse.config.model_config import KeyeVisionConfig
-from muse.muse.models.keye_vit import KeyeVisionTransformer as MuseKeyeVisionModel
-from muse.muse.models.keye_vit.image_processing_keye import KeyeVisionImageProcessor
+from muse.config.model_config import KeyeVisionConfig
+from muse.models.keye_vit import KeyeVisionTransformer as MuseKeyeVisionModel
+from muse.models.keye_vit.image_processing_keye import KeyeVisionImageProcessor
 from muse.training.common import set_default_dtype
 
 # -----------------------------------------------------------------------------
