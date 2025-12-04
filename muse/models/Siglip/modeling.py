@@ -681,7 +681,9 @@ class SiglipVisionTransformer(Model):
                     continue
                 
                 if rest_key.startswith("mlp."):
-                    converted_key = f"encoder.layers.{layer_idx}.{rest_key}"
+                    # 替换 fc1 为 w1, fc2 为 w2
+                    new_key_suffix = rest_key.replace("fc1", "w1").replace("fc2", "w2")
+                    converted_key = f"encoder.layers.{layer_idx}.{new_key_suffix}"
                     converted_state_dict[converted_key] = tensor
                     continue
             
