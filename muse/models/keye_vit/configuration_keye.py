@@ -35,12 +35,12 @@ class KeyeVisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,
-        intermediate_size=3072,
-        num_hidden_layers=12,
-        num_attention_heads=12,
+        hidden_size=1152,
+        intermediate_size=4304,
+        num_hidden_layers=27,
+        num_attention_heads=16,
         num_channels=3,
-        image_size=224,
+        image_size=384,
         patch_size=14,
         hidden_act="gelu_pytorch_tanh",
         layer_norm_eps=1e-6,
