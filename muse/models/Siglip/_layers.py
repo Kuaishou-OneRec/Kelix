@@ -183,6 +183,7 @@ class SiglipAttention(nn.Module):
 
 
 
+
 class SiglipAxialRotaryEmbedding(nn.Module):
     """把二维 (h, w) RoPE 封装成 attention 可直接调用的模块。"""
 
@@ -190,72 +191,43 @@ class SiglipAxialRotaryEmbedding(nn.Module):
         super().__init__()
         if head_dim % 2 != 0:
             raise ValueError("head_dim 必须能被 2 整除，才能按 h/w 分半。")
-        self.axis_dim = head_dim // 2
+        axis_dim = head_dim // 2
         self.height_rope = RotaryPositionalEmbeddings(
-            dim=self.axis_dim, max_seq_len=max_grid_size, base=base
+            dim=axis_dim, max_seq_len=max_grid_size, base=base
         )
         self.width_rope = RotaryPositionalEmbeddings(
-            dim=self.axis_dim, max_seq_len=max_grid_size, base=base
+            dim=axis_dim, max_seq_len=max_grid_size, base=base
         )
 
     @staticmethod
     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-        """Standard rotary position embedding rotation."""
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat([-x2, x1], dim=-1)
-
-    def _apply_rope(self, x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
-        """标准 RoPE 计算公式: x * cos + rotate_half(x) * sin"""
-        # 确保 cos/sin 和 x 在同一个 device 和 dtype
-        # 注意：这里 _rotate_half 是在 axis_dim 内部进行的，不会混合 H 和 W
-        return (x * cos) + (self._rotate_half(x) * sin)
 
     def _lookup(self, rope: RotaryPositionalEmbeddings, pos_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if pos_ids.dtype != torch.long:
             pos_ids = pos_ids.long()
         cache = rope.cache  # [max_seq_len, dim, 2]
-        
-        # 增加边界保护，防止索引越界 (Muse 的 NaViT 模式下 seq_len 可能会变)
-        # 如果 pos_ids 超出 cache 范围，需要报错或者动态计算（视 RotaryPositionalEmbeddings 实现而定）
-        
         gathered = cache[pos_ids]  # [..., dim, 2]
-        cos = gathered[..., 0]     # [..., dim]
-        sin = gathered[..., 1]     # [..., dim]
-        
-        # 调整维度以匹配 x: [batch, seq, 1, axis_dim]
-        # 假设 x 是 [batch, seq, num_heads, head_dim]
-        # pos_ids 是 [batch, seq] -> gathered 是 [batch, seq, dim, 2]
-        # 我们需要 unsqueeze 让它能在 num_heads 维度广播
-        return cos.unsqueeze(-2), sin.unsqueeze(-2)
+        cos = gathered[..., 0].unsqueeze(-2)  # [..., 1, dim]
+        sin = gathered[..., 1].unsqueeze(-2)
+        if cos.dim() == 3:  # 处理 [seq, 1, dim] 的情况
+            cos = cos.unsqueeze(0)
+            sin = sin.unsqueeze(0)
+        return cos, sin
 
     def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
-        # x shape: [batch, seq, num_heads, head_dim]
         if input_pos is None:
             return x
-        
         if isinstance(input_pos, dict):
             height_ids = input_pos["height"]
             width_ids = input_pos["width"]
         else:
-            height_ids, width_ids = input_pos
+            height_ids, width_ids = input_pos  # 形状可为 [seq] 或 [batch, seq]
 
-        # 1. 把输入拆成两半
-        # x_h: [..., axis_dim], x_w: [..., axis_dim]
-        x_h, x_w = x.chunk(2, dim=-1)
-
-        # 2. 分别查找 Embedding
-        # cos_h, sin_h shape: [batch, seq, 1, axis_dim]
         cos_h, sin_h = self._lookup(self.height_rope, height_ids)
         cos_w, sin_w = self._lookup(self.width_rope, width_ids)
-
-        # 3. 确保类型匹配 (bfloat16/float32)
-        cos_h, sin_h = cos_h.to(x.dtype), sin_h.to(x.dtype)
-        cos_w, sin_w = cos_w.to(x.dtype), sin_w.to(x.dtype)
-
-        # 4. 分别应用 RoPE (关键修改！)
-        # 在各自的子空间内旋转，互不干扰
-        out_h = self._apply_rope(x_h, cos_h, sin_h)
-        out_w = self._apply_rope(x_w, cos_w, sin_w)
-
-        # 5. 拼回原状
-        return torch.cat([out_h, out_w], dim=-1)
+        cos = torch.cat([cos_h, cos_w], dim=-1).to(dtype=x.dtype)
+        sin = torch.cat([sin_h, sin_w], dim=-1).to(dtype=x.dtype)
+        # x 需 reshape 为 [batch, seq, num_heads, head_dim] 再传进来
+        return (x * cos) + (self._rotate_half(x) * sin)
