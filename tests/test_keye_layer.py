@@ -95,7 +95,7 @@ def run_diagnosis():
     # Generate common input (Embeddings output)
     bs, h, w = 1, 14, 14
     seq = h * w
-    pixel_values = torch.randn(bs, 3, h*14, w*14, device=device, dtype=dtype).unsqueeze(1) # 5D
+    pixel_values = torch.randn(bs*14*14, 3, h, w, device=device, dtype=dtype).unsqueeze(1) # 5D
     # Mocking standard inputs
     grid_thw = [(1, h, w)]
     pos_ids = torch.arange(seq, device=device).unsqueeze(0)
