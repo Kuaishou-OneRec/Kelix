@@ -1,299 +1,403 @@
 """
-Test Script for Muse SigLIP (v2/RoPE/NaViT)
-Target: Load raw training checkpoint (.pt) and verify forward pass.
+Keye Vision 对比测试脚本
+========================
+
+参考 `tests/test_siglip2.py` 的结构，加载同一路径下的权重，
+同时实例化：
+
+1) `modeling_keye_origin.py` 中的原始 Keye Vision Transformer（视为 ground truth）
+2) `modeling.py` / `image_processing_keye.py` / `model_config.py` 中实现的 Keye Vision Transformer
+
+对两者进行权重转换、加载，并在同一张随机图像上比较前向输出。
 """
 
+import logging
 import os
 import sys
-import logging
-import torch
+import types
+from typing import Dict, List, Tuple
+
 import numpy as np
-from typing import Dict, Any, List, Tuple, Union
-
-# 假设你的模型代码在 muse.models.Siglip
-# 请根据实际情况调整 import
-try:
-    from muse.config import SiglipVisionConfig
-    from muse.models.Siglip import SiglipVisionTransformer as SiglipVisionModel
-    from muse.training.common import set_default_dtype
-except ImportError:
-    # 如果路径不对，尝试直接引用当前目录（假设你把模型代码放在同级目录）
-    sys.path.append(os.getcwd())
-    # 这里需要你确保能 import 到你刚才贴出的 SiglipVisionTransformer
-    pass
-
+import torch
+from PIL import Image
 
 from muse.muse.config.model_config import KeyeVisionConfig
-from muse.models.keye_vit import KeyeVisionTransformer as KeyeVisionModel
-# Logging Setup
+from muse.muse.models.keye_vit import KeyeVisionTransformer as MuseKeyeVisionModel
+from muse.muse.models.keye_vit.image_processing_keye import KeyeVisionImageProcessor
+from muse.training.common import set_default_dtype
+
+# -----------------------------------------------------------------------------
+# 基础配置
+# -----------------------------------------------------------------------------
+
+CHECKPOINT_PATH = "/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/SigLIP/3.0.0.3/global_step18200/mp_rank_00_model_states.pt"
+
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%H:%M:%S",
+    format="%(message)s",
     level=logging.INFO,
-    stream=sys.stdout
+    stream=sys.stdout,
 )
 logger = logging.getLogger(__name__)
 
-# =============================================================================
-# 1. Configuration (Manual Setup)
-# =============================================================================
 
-def get_so400m_config():
-    """
-    手动定义 SigLIP-SO400M (SigLIP 2) 的配置。
-    根据 checkpoint 的实际情况，可能需要微调 (例如 image_size, patch_size)。
-    """
-    return SiglipVisionConfig(
-        model_class="SiglipVisionTransformer",
-        # 标准 SO400M 参数
-        image_size=384,
-        patch_size=14,
-        num_channels=3,
-        hidden_size=1152,
-        num_hidden_layers=27,
-        num_attention_heads=16,
-        intermediate_size=4304,
-        # 自动计算 max_seq_len
-        max_seq_len=(384 // 14) ** 2, 
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        # SigLIP 2 特性
-        has_learnable_position_embedding=False, # 通常 v2 是 False, 靠 RoPE
-        use_qk_norm=False, # 视具体训练配置而定，Paligemma 是 True，纯 Siglip2 可能是 False
-        qk_norm_eps=1e-6,
-        rope_theta=10000.0, # RoPE Base
-        attention_function="eager",
-        output_attentions=False,
-        output_hidden_states=False,
+# -----------------------------------------------------------------------------
+# 解决 modeling_keye_origin.py 对缺失 configuration_keye 的依赖
+# -----------------------------------------------------------------------------
+
+def _ensure_origin_config_module() -> None:
+    """在运行时注入最精简的 configuration_keye 模块以便导入原始模型。"""
+    module_name = "muse.muse.models.keye_vit.configuration_keye"
+    if module_name in sys.modules:
+        return
+
+    config_module = types.ModuleType(module_name)
+
+    class DummyKeyeConfig:
+        """占位符，使得 origin 代码可以顺利 import。"""
+
+        def __init__(self, vision_config=None, **kwargs):
+            self.vision_config = vision_config or KeyeVisionConfig()
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+
+    config_module.KeyeConfig = DummyKeyeConfig
+    config_module.KeyeVisionConfig = KeyeVisionConfig
+    sys.modules[module_name] = config_module
+
+
+_ensure_origin_config_module()
+from muse.muse.models.keye_vit import modeling_keye_origin as keye_origin
+
+OriginKeyeVisionModel = keye_origin.SiglipVisionTransformer
+
+
+# -----------------------------------------------------------------------------
+# 辅助函数
+# -----------------------------------------------------------------------------
+
+def create_dummy_image(size: int = 384) -> Image.Image:
+    rng = np.random.default_rng(seed=42)
+    data = rng.integers(0, 255, (size, size, 3), dtype=np.uint8)
+    return Image.fromarray(data)
+
+
+def format_tensor_val(tensor: torch.Tensor, n: int = 5) -> str:
+    vals = tensor.detach().float().cpu().flatten()[:n].numpy()
+    return "[" + ", ".join(f"{x:.6f}" for x in vals) + "]"
+
+
+def log_separator(title: str) -> None:
+    line = "=" * 80
+    logger.info("\n%s", line)
+    logger.info(" %s ", title.center(78))
+    logger.info("%s", line)
+
+
+def compare_tensors_verbose(
+    name: str,
+    reference: torch.Tensor,
+    candidate: torch.Tensor,
+    atol: float = 1e-5,
+) -> None:
+    ref = reference.detach().float().cpu()
+    cand = candidate.detach().float().cpu()
+
+    if ref.shape != cand.shape:
+        logger.error("❌ %s shape mismatch: %s vs %s", name, ref.shape, cand.shape)
+        return
+
+    diff = (ref - cand).abs()
+    max_diff = diff.max().item()
+    mean_diff = diff.mean().item()
+    status = "✅ MATCH" if max_diff < atol else f"❌ MISMATCH (Max Diff: {max_diff:.2e})"
+
+    logger.info("%s", "-" * 80)
+    logger.info("Tensor  : %s", name)
+    logger.info("Status  : %s", status)
+    logger.info(
+        "Stats   : MaxDiff=%.3e | MeanDiff=%.3e | RefMean=%.4f | CandMean=%.4f",
+        max_diff,
+        mean_diff,
+        ref.mean().item(),
+        cand.mean().item(),
     )
 
-# =============================================================================
-# 2. Weight Loading Logic (Smart Converter)
-# =============================================================================
+    if max_diff >= atol:
+        logger.info("Ref vals : %s", format_tensor_val(ref, 10))
+        logger.info("Cand vals: %s", format_tensor_val(cand, 10))
 
-def load_checkpoint_to_muse(model, checkpoint_path, device):
-    logger.info(f"Loading checkpoint from: {checkpoint_path}")
-    
-    # 1. Load Raw State Dict
-    try:
-        # map_location='cpu' 防止显存爆炸
-        state_dict = torch.load(checkpoint_path, map_location="cpu")
-    except Exception as e:
-        logger.error(f"Failed to load file: {e}")
-        return False
 
-    # 处理可能的嵌套 (DeepSpeed/Megatron 常见结构)
-    if "module" in state_dict:
-        logger.info("Found 'module' key, unpacking...")
-        state_dict = state_dict["module"]
-    elif "state_dict" in state_dict:
-        logger.info("Found 'state_dict' key, unpacking...")
-        state_dict = state_dict["state_dict"]
-    elif "model_state_dict" in state_dict:
-        state_dict = state_dict["model_state_dict"]
+def _flatten_grid_entry(entry) -> List[Tuple[int, int, int]]:
+    if isinstance(entry, tuple) and len(entry) == 3:
+        return [tuple(int(x) for x in entry)]
 
-    # 2. Key Conversion
-    # 目标是去除不需要的前缀，匹配 Muse 的 keys
-    # Muse keys 示例: 
-    #   embeddings.patch_embedding.weight
-    #   encoder.layers.0.attn.q_proj.weight
-    #   encoder.rope.inv_freq (buffer, 不用加载)
-    
-    converted_dict = {}
-    skipped_keys = []
-    
-    # 常见的前缀垃圾
-    prefixes_to_strip = [
-        "module.", 
-        "vision_tower.", 
-        "vision_model.", 
-        "siglip.vision_model.",
-        "model.vision_model."
-    ]
-    
-    logger.info("Converting keys...")
-    for k, v in state_dict.items():
-        new_k = k
-        
-        # 1. 剥离前缀
-        clean = False
-        while not clean:
-            clean = True
-            for p in prefixes_to_strip:
-                if new_k.startswith(p):
-                    new_k = new_k[len(p):]
-                    clean = False # 继续检查是否有双重前缀
-        
-        # 2. 映射特定层名称 (如果原始权重名称和 Muse 不一样)
-        # 你的 Muse 模型使用的是:
-        #   self_attn -> attn
-        #   layer_norm1 -> sa_norm
-        #   layer_norm2 -> mlp_norm
-        #   out_proj -> output_proj
-        #   mlp.fc1 -> mlp.w1 (或者保持 fc1, 看你的代码)
-        
-        # 根据你贴出的代码:
-        # SiglipEncoderLayer 有 self_attn, layer_norm1, mlp, layer_norm2
-        # 但是 Muse convert_hf_state_dict 里映射成了 sa_norm, mlp_norm, attn 等
-        # **你的模型定义中使用的是**：
-        #   self.sa_norm = nn.LayerNorm...
-        #   self.mlp_norm = nn.LayerNorm...
-        #   self.attn = MultiHeadAttention...
-        
-        # 处理 Encoder Layer 内部命名
-        if "encoder.layers." in new_k:
-            parts = new_k.split(".")
-            # 假设结构 encoder.layers.{i}.{submodule}
-            # 我们需要重命名 submodule 部分
-            
-            # self_attn -> attn
-            new_k = new_k.replace("self_attn", "attn")
-            # out_proj -> output_proj (Muse MultiHeadAttention 常用名)
-            new_k = new_k.replace("out_proj", "output_proj")
-            
-            # layer_norm1 -> sa_norm
-            new_k = new_k.replace("layer_norm1", "sa_norm")
-            # layer_norm2 -> mlp_norm
-            new_k = new_k.replace("layer_norm2", "mlp_norm")
-            
-            # mlp.fc1 -> mlp.gate_proj (视你的 SiglipMLP 实现而定)
-            # 你的 SiglipMLP 代码: gate_proj=fc1, down_proj=fc2
-            # 你的 convert 代码: mlp.fc1 -> w1 ?? 
-            # 让我们看你的 SiglipMLP 类:
-            #   self.fc1 = nn.Linear...
-            #   self.fc2 = nn.Linear...
-            #   return FeedForward(gate_proj=fc1, down_proj=fc2...)
-            # 所以 Muse 模型里实际的 Parameter 名字是:
-            #   encoder.layers.0.mlp.gate_proj.weight (如果 FeedForward 把 fc1 赋给了 gate_proj)
-            #   **但是**，你的 SiglipMLP 返回的是 FeedForward 对象。
-            #   如果 FeedForward 是简单的赋值，名字可能是 mlp.gate_proj.weight
-            
-            # 假设 state_dict 里是 mlp.fc1，我们需要根据 FeedForward 的内部结构去改。
-            # 简单起见，我们假设你的 FeedForward 只是包装，内部名字取决于 SiglipMLP.__init__
-            # 在 SiglipMLP.__init__ 中: self.fc1 = ...
-            # 如果 SiglipMLP 是 nn.Module 且作为 FeedForward 的一部分...
-            # **修正**: 你的代码 SiglipMLP 返回的是一个 FeedForward **对象**。
-            # 这意味着 SiglipMLP 这个函数是工厂函数。
-            # FeedForward 类通常有 `w1`, `w2`, `w3` 或者 `gate_proj`, `up_proj`, `down_proj`。
-            # 假设 FeedForward 的定义标准（如 Llama）：
-            #   fc1 (gate) -> w1/gate_proj
-            #   fc2 (down) -> w2/down_proj
-            
-            # 这里做一个通用尝试，你可能需要根据报错微调
-            if "mlp.fc1" in new_k:
-                new_k = new_k.replace("mlp.fc1", "mlp.gate_proj") 
-            if "mlp.fc2" in new_k:
-                new_k = new_k.replace("mlp.fc2", "mlp.down_proj")
+    flattened: List[Tuple[int, int, int]] = []
+    if isinstance(entry, (list, tuple)):
+        for item in entry:
+            flattened.extend(_flatten_grid_entry(item))
+        return flattened
 
-        converted_dict[new_k] = v
+    raise ValueError(f"Unsupported grid format: {entry}")
 
-    # 3. Load
-    logger.info(f"Loading {len(converted_dict)} keys into Muse model...")
-    missing, unexpected = model.load_state_dict(converted_dict, strict=False)
-    
-    if len(missing) > 0:
-        logger.warning(f"⚠️ Missing Keys ({len(missing)}): {missing[:5]} ...")
-    if len(unexpected) > 0:
-        logger.warning(f"⚠️ Unexpected Keys ({len(unexpected)}): {unexpected[:5]} ...")
-        
-    return True
 
-# =============================================================================
-# 3. Data Preparation (Mocking the Image Processor)
-# =============================================================================
+def build_position_ids(image_grid_thw: List[Tuple[int, int, int]], device: torch.device) -> torch.Tensor:
+    seq_lens = [int(t * h * w) for t, h, w in image_grid_thw]
+    if len(set(seq_lens)) != 1:
+        raise ValueError("当前测试假设 batch 内每个样本的 patch 数量一致。")
+    seq_len = seq_lens[0]
+    position_ids = torch.arange(seq_len, device=device, dtype=torch.long)
+    return position_ids.unsqueeze(0).repeat(len(image_grid_thw), 1)
 
-def get_dummy_input(config, device, batch_size=1):
-    """
-    模拟 SiglipImageProcessor 的输出。
-    Muse 的 SiglipVisionEmbeddings 要求 5D 输入: [Batch, Seq(T), Channel, Height, Width]
-    """
-    H, W = config.image_size, config.image_size # 384
-    C = config.num_channels
-    P = config.patch_size
-    
-    # 构造 dummy image tensor
-    # 假设单帧图片 (T=1)
-    # Shape: [B, T, C, H, W] -> [1, 1, 3, 384, 384]
-    pixel_values = torch.randn(batch_size, 1, C, H, W, device=device, dtype=torch.float32)
-    
-    # 构造 Grid
-    # grid_h = 384 // 14 = 27
-    # grid_w = 384 // 14 = 27
-    grid_h = H // P
-    grid_w = W // P
-    
-    # SiglipVisionEmbeddings 中: for t, h, w in flatten_image_grid_thw:
-    # 格式通常是 (T_grid, H_grid, W_grid)
-    # 对于单图，T_grid=1
-    image_grid_thw = [(1, grid_h, grid_w)] * batch_size
-    
-    return pixel_values, image_grid_thw
 
-# =============================================================================
-# 4. Main Test Function
-# =============================================================================
+def build_cu_seqlens(image_grid_thw: List[Tuple[int, int, int]], device: torch.device) -> torch.Tensor:
+    seq_lens = [int(t * h * w) for t, h, w in image_grid_thw]
+    cumsum = [0]
+    for length in seq_lens:
+        cumsum.append(cumsum[-1] + length)
+    return torch.tensor(cumsum, dtype=torch.int32, device=device)
 
-def test_new_model_checkpoint():
-    # 1. Setup
-    checkpoint_path = "/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/SigLIP/3.0.0.3/global_step18200/mp_rank_00_model_states.pt"
-    
-    if not os.path.exists(checkpoint_path):
-        logger.error(f"Checkpoint not found at: {checkpoint_path}")
-        # return # 注释掉以便在没有文件时也能测试代码逻辑(用随机权重)
-        logger.warning("Continuing with Random Weights for Logic Testing...")
-    
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float32
-    
-    # 2. Config & Model
-    config = get_so400m_config()
-    logger.info(f"Model Config: {config}")
-    
-    with set_default_dtype(dtype):
-        model = SiglipVisionModel(config)
-        
-    model = model.to(device)
-    model.eval()
-    
-    # 3. Load Weights
-    if os.path.exists(checkpoint_path):
-        success = load_checkpoint_to_muse(model, checkpoint_path, device)
-        if success:
-            logger.info("✅ Checkpoint loaded successfully (with potential strict=False warnings).")
-    
-    # 4. Prepare Input
-    logger.info("Preparing inputs...")
-    pixel_values, image_grid_thw = get_dummy_input(config, device)
-    
-    # Cast to model dtype
-    pixel_values = pixel_values.to(dtype=dtype)
-    
-    logger.info(f"Input Shape: {pixel_values.shape}")
-    logger.info(f"Grid Info: {image_grid_thw}")
-    
-    # 5. Forward Pass
-    logger.info("Running forward pass...")
-    try:
-        with torch.no_grad():
-            outputs = model(
-                pixel_values=pixel_values,
-                image_grid_thw=image_grid_thw
+
+def prepare_pixel_inputs(
+    processor: KeyeVisionImageProcessor,
+    image: Image.Image,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> Tuple[torch.Tensor, List[Tuple[int, int, int]], torch.Tensor, torch.Tensor]:
+    processed = processor.preprocess(images=image, return_tensors="pt")
+    pixel_values: torch.Tensor = processed["pixel_values"]  # [total_patches, C, patch, patch]
+    grid_info = processed["image_grid_thw"]
+    if isinstance(grid_info, torch.Tensor):
+        grid_info = grid_info.cpu().tolist()
+    elif isinstance(grid_info, np.ndarray):
+        grid_info = grid_info.tolist()
+
+    image_grid_thw = [tuple(int(v) for v in grid) for grid in grid_info]
+    patches_per_image = [int(np.prod(grid)) for grid in image_grid_thw]
+    total_patches = sum(patches_per_image)
+    if total_patches != pixel_values.shape[0]:
+        raise ValueError(
+            f"Patch 数量不匹配: expected {total_patches}, got {pixel_values.shape[0]}"
+        )
+
+    batched = []
+    start = 0
+    for count in patches_per_image:
+        batched.append(pixel_values[start : start + count])
+        start += count
+
+    pixel_batch = torch.stack(batched, dim=0)  # [B, Seq, C, patch, patch]
+    pixel_batch = pixel_batch.to(device=device, dtype=dtype).contiguous()
+
+    position_ids = build_position_ids(image_grid_thw, device)
+    cu_seqlens = build_cu_seqlens(image_grid_thw, device)
+    return pixel_batch, image_grid_thw, position_ids, cu_seqlens
+
+
+def load_checkpoint(path: str) -> Dict[str, torch.Tensor]:
+    logger.info("Loading checkpoint from: %s", path)
+    raw = torch.load(path, map_location="cpu")
+    if isinstance(raw, dict):
+        for key in ("module", "state_dict", "model_state_dict"):
+            if key in raw and isinstance(raw[key], dict):
+                logger.info("Unpacking nested '%s' key", key)
+                raw = raw[key]
+                break
+    if not isinstance(raw, dict):
+        raise ValueError("Checkpoint 格式不正确，未找到 state_dict。")
+    return raw
+
+
+def extract_vision_state_dict(state_dict: Dict[str, torch.Tensor], keep_head: bool) -> Dict[str, torch.Tensor]:
+    prefixes = (
+        "module.",
+        "model.",
+        "state_dict.",
+        "vision_tower.",
+        "vision_backbone.",
+        "siglip.",
+    )
+    filtered: Dict[str, torch.Tensor] = {}
+    for key, value in state_dict.items():
+        new_key = key
+        for prefix in prefixes:
+            while new_key.startswith(prefix):
+                new_key = new_key[len(prefix) :]
+
+        if "vision_model." in new_key:
+            new_key = new_key.split("vision_model.", 1)[1]
+        elif new_key.startswith("vision_model."):
+            new_key = new_key[len("vision_model.") :]
+
+        if not new_key.startswith(("embeddings.", "encoder.", "post_layernorm.", "ln_post.", "head.")):
+            continue
+        if not keep_head and new_key.startswith("head."):
+            continue
+        filtered[new_key] = value
+    return filtered
+
+
+def convert_to_muse_keys(origin_state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    converted: Dict[str, torch.Tensor] = {}
+    for key, value in origin_state_dict.items():
+        if key.startswith("head."):
+            # Muse 模型不包含 head
+            continue
+        new_key = key.replace("post_layernorm.", "ln_post.")
+        if "encoder.layers." in new_key:
+            new_key = (
+                new_key.replace("self_attn", "attn")
+                .replace("layer_norm1", "sa_norm")
+                .replace("layer_norm2", "mlp_norm")
+                .replace("out_proj", "output_proj")
+                .replace("mlp.fc1", "mlp.gate_proj")
+                .replace("mlp.fc2", "mlp.down_proj")
             )
-            
-        last_hidden = outputs["last_hidden_state"]
-        
-        logger.info("\n" + "="*40)
-        logger.info("FORWARD PASS SUCCESS")
-        logger.info("="*40)
-        logger.info(f"Output Shape: {last_hidden.shape}")
-        logger.info(f"Output Dtype: {last_hidden.dtype}")
-        logger.info(f"Output Stats: Mean={last_hidden.mean().item():.4f}, Std={last_hidden.std().item():.4f}")
-        logger.info(f"First 10 values: {last_hidden[0, 0, :10].float().cpu().numpy()}")
-        
-    except Exception as e:
-        logger.error(f"❌ Forward pass failed: {e}")
-        import traceback
-        traceback.print_exc()
+        converted[new_key] = value
+    return converted
+
+
+def check_loaded_weights(model: torch.nn.Module, reference_state: Dict[str, torch.Tensor], name: str) -> None:
+    issues = 0
+    model_state = model.state_dict()
+    for key, ref_tensor in reference_state.items():
+        if key not in model_state:
+            continue
+        diff = (model_state[key].detach().cpu() - ref_tensor.detach().cpu()).abs().max().item()
+        if diff >= 1e-5:
+            issues += 1
+            logger.warning("⚠️ %s weight mismatch on %s (max diff %.3e)", name, key, diff)
+    if issues == 0:
+        logger.info("✅ %s 权重与参考张量完全一致。", name)
+    else:
+        logger.error("❌ %s 有 %d 个参数存在差异。", name, issues)
+
+
+# -----------------------------------------------------------------------------
+# 主测试逻辑
+# -----------------------------------------------------------------------------
+
+def test_keye_logits_align_with_origin_checkpoint():
+    torch.manual_seed(0)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(0)
+
+    if not os.path.exists(CHECKPOINT_PATH):
+        raise FileNotFoundError(f"Checkpoint 不存在: {CHECKPOINT_PATH}")
+
+    log_separator("Config Summary")
+    config = KeyeVisionConfig()
+    config_fields = ["image_size", "patch_size", "hidden_size", "num_hidden_layers", "num_attention_heads", "intermediate_size"]
+    for field in config_fields:
+        logger.info("%-30s : %s", field, getattr(config, field))
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    bf16_supported = bool(getattr(torch.cuda, "is_bf16_supported", lambda: False)()) if torch.cuda.is_available() else False
+    run_dtype = torch.bfloat16 if bf16_supported else torch.float32
+    model_dtype = torch.bfloat16 if run_dtype == torch.bfloat16 else torch.float32
+
+    with set_default_dtype(model_dtype):
+        muse_model = MuseKeyeVisionModel(config)
+        origin_model = OriginKeyeVisionModel(config)
+
+    muse_model.eval()
+    origin_model.eval()
+
+    raw_state = load_checkpoint(CHECKPOINT_PATH)
+    origin_state = extract_vision_state_dict(raw_state, keep_head=True)
+    muse_ready_state = convert_to_muse_keys(origin_state)
+
+    logger.info("原始 Keye 参数数量: %d", len(origin_state))
+    logger.info("Muse Keye 参数数量 : %d", len(muse_ready_state))
+
+    def _to_dtype(tensors: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        ready = {}
+        for key, tensor in tensors.items():
+            if isinstance(tensor, torch.Tensor):
+                ready[key] = tensor.to(dtype=model_dtype)
+            else:
+                ready[key] = tensor
+        return ready
+
+    origin_loaded = origin_model.load_state_dict(_to_dtype(origin_state), strict=False)
+    logger.info("Origin missing keys   : %s", origin_loaded.missing_keys)
+    logger.info("Origin unexpected keys: %s", origin_loaded.unexpected_keys)
+
+    muse_loaded = muse_model.load_state_dict(_to_dtype(muse_ready_state), strict=False)
+    logger.info("Muse missing keys     : %s", muse_loaded.missing_keys)
+    logger.info("Muse unexpected keys  : %s", muse_loaded.unexpected_keys)
+
+    check_loaded_weights(origin_model, _to_dtype(origin_state), "Origin")
+    check_loaded_weights(muse_model, _to_dtype(muse_ready_state), "Muse")
+
+    muse_model = muse_model.to(device=device, dtype=run_dtype)
+    origin_model = origin_model.to(device=device, dtype=run_dtype)
+
+    processor = KeyeVisionImageProcessor(patch_size=config.patch_size)
+    dummy_image = create_dummy_image(config.image_size)
+    pixel_values, image_grid_thw, position_ids, cu_seqlens = prepare_pixel_inputs(
+        processor, dummy_image, device, run_dtype
+    )
+
+    log_separator("Forward Pass Comparison")
+    with torch.no_grad():
+        origin_outputs = origin_model(
+            pixel_values=pixel_values,
+            position_ids=position_ids,
+            image_grid_thw=image_grid_thw,
+            cu_seqlens=cu_seqlens,
+            interpolate_pos_encoding=True,
+        )
+        muse_outputs = muse_model(
+            pixel_values=pixel_values,
+            position_ids=position_ids,
+            image_grid_thw=image_grid_thw,
+            cu_seqlens=cu_seqlens,
+            interpolate_pos_encoding=True,
+        )
+
+    origin_hidden = origin_outputs.last_hidden_state
+    if isinstance(origin_hidden, list):
+        origin_hidden = torch.stack(origin_hidden, dim=0)
+    muse_hidden = muse_outputs["last_hidden_state"]
+
+    compare_tensors_verbose(
+        "Last Hidden State",
+        origin_hidden,
+        muse_hidden,
+        atol=1e-2 if run_dtype == torch.bfloat16 else 1e-4,
+    )
+
+    batch_idx = 0
+    seq_len = origin_hidden.shape[1]
+    positions = [
+        (0, "First Token"),
+        (min(10, seq_len - 1), "Token 10"),
+        (seq_len // 2, "Middle Token"),
+        (seq_len - 1, "Last Token"),
+    ]
+    logger.info("\n详细 Token 采样（前 5 维特征）")
+    for pos, label in positions:
+        if pos < 0 or pos >= seq_len:
+            continue
+        ref_vals = origin_hidden[batch_idx, pos, :5].float().cpu().numpy()
+        muse_vals = muse_hidden[batch_idx, pos, :5].float().cpu().numpy()
+        diff_val = np.max(np.abs(ref_vals - muse_vals))
+        logger.info(
+            "%-15s | Ref: [%s] | Muse: [%s] | MaxDiff %.2e",
+            label,
+            ", ".join(f"{x:.4f}" for x in ref_vals),
+            ", ".join(f"{x:.4f}" for x in muse_vals),
+            diff_val,
+        )
+
+    final_diff = (origin_hidden - muse_hidden).abs().max().item()
+    threshold = 1e-2 if run_dtype == torch.bfloat16 else 1e-4
+    log_separator("FINAL RESULT")
+    if final_diff < threshold:
+        logger.info("SUCCESS: Max diff %.3e < threshold %.3e", final_diff, threshold)
+    else:
+        logger.error("FAILURE: Max diff %.3e >= threshold %.3e", final_diff, threshold)
+
 
 if __name__ == "__main__":
-    test_new_model_checkpoint()
+    test_keye_logits_align_with_origin_checkpoint()
