@@ -1,20 +1,108 @@
 """
-SigLIP Layer 0 Internal Debugging
-Focus: Q/K/V Projections, Attention Output, and MLP
+SigLIP Layer 0 Internal Debugging (Deep Dive into RoPE)
+Focus: Verifying Axial RoPE Logic against a Reference Implementation
 """
 
 import os
 import sys
 import logging
 import torch
+import numpy as np
 from transformers import AutoImageProcessor, SiglipVisionModel as HFSiglipVisionModel
 from muse.config import SiglipVisionConfig
 from muse.models.Siglip import SiglipVisionTransformer as SiglipVisionModel
 from muse.training.common import set_default_dtype
-import numpy as np
+
 # Logging Setup
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
+
+# =============================================================================
+# 1. Reference Implementation (Ground Truth)
+#    Copied standard logic to verify against Muse's Module
+# =============================================================================
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Standard RoPE Application"""
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+class ReferenceAxialRoPE:
+    """
+    A minimal, functional implementation of Axial RoPE to serve as Ground Truth.
+    """
+    def __init__(self, dim, base=10000):
+        self.dim = dim
+        self.base = base
+        # Precompute inv_freq
+        self.inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
+
+    def get_freqs(self, seq_len, device):
+        # [seq_len]
+        t = torch.arange(seq_len, device=device).type_as(self.inv_freq)
+        # [seq_len, dim//2]
+        freqs = torch.outer(t, self.inv_freq.to(device))
+        # [seq_len, dim]
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos(), emb.sin()
+
+    def forward(self, q, height, width):
+        # q shape: [batch, seq, heads, head_dim]
+        head_dim = q.shape[-1]
+        assert head_dim % 2 == 0
+        
+        # 1. Split Q into Height part and Width part (Axial Split)
+        # This is the CRITICAL step: chunk(2, dim=-1)
+        q_h, q_w = q.chunk(2, dim=-1)
+        
+        axis_dim = head_dim // 2 # 32 for dim 64
+        
+        # 2. Get Cos/Sin for H and W
+        # Note: We use self.dim = axis_dim // 2 because frequencies are pairs
+        # But here let's just generate on the fly
+        
+        # Re-init helper for the sub-dimension
+        sub_rope = ReferenceAxialRoPE(axis_dim, self.base)
+        
+        cos_h, sin_h = sub_rope.get_freqs(height, q.device) # [H, 32]
+        cos_w, sin_w = sub_rope.get_freqs(width, q.device)  # [W, 32]
+        
+        # 3. Broadcast to Sequence (Meshgrid equivalent)
+        # We need [H*W, 32]
+        # height index: 0,0,0... 1,1,1...
+        # width index:  0,1,2... 0,1,2...
+        
+        h_idx = torch.arange(height, device=q.device).unsqueeze(1).repeat(1, width).flatten() # [0,0,0, 1,1,1]
+        w_idx = torch.arange(width, device=q.device).repeat(height)                           # [0,1,2, 0,1,2]
+        
+        cos_h_flat = cos_h[h_idx] # [seq, 32]
+        sin_h_flat = sin_h[h_idx]
+        
+        cos_w_flat = cos_w[w_idx] # [seq, 32]
+        sin_w_flat = sin_w[w_idx]
+        
+        # 4. Apply RoPE Independently
+        # q_h: [B, Seq, Heads, 32]
+        # cos: [Seq, 32] -> unsqueeze to [1, Seq, 1, 32]
+        
+        # Apply to Height Part
+        q_h_embed, _ = apply_rotary_pos_emb(q_h, q_h, cos_h_flat.unsqueeze(0), sin_h_flat.unsqueeze(0), unsqueeze_dim=2)
+        
+        # Apply to Width Part
+        q_w_embed, _ = apply_rotary_pos_emb(q_w, q_w, cos_w_flat.unsqueeze(0), sin_w_flat.unsqueeze(0), unsqueeze_dim=2)
+        
+        # 5. Concat
+        q_out = torch.cat([q_h_embed, q_w_embed], dim=-1)
+        return q_out
 
 # =============================================================================
 # Helper Functions
@@ -24,27 +112,20 @@ def compare_tensors(name, t1, t2, atol=1e-3):
     t1 = t1.detach().float().cpu()
     t2 = t2.detach().float().cpu()
     
-    # Handle Shape Mismatch (Conv vs Flattened)
-    if t1.ndim == 4 and t2.ndim == 3:
-        t1 = t1.flatten(2).transpose(1, 2)
-    if t2.ndim == 4 and t1.ndim == 3:
-        t2 = t2.flatten(2).transpose(1, 2)
-
     if t1.shape != t2.shape:
-        logger.error(f"❌ {name} SHAPE MISMATCH: HF={t1.shape}, Muse={t2.shape}")
+        logger.error(f"❌ {name} SHAPE MISMATCH: Ref={t1.shape}, Muse={t2.shape}")
         return
 
     diff = (t1 - t2).abs()
     max_diff = diff.max().item()
     mean_diff = diff.mean().item()
     
-    # Thresholds: Strict for Linear layers, looser for Attention output (due to accumulation)
     status = "✅ MATCH" if max_diff < atol else f"❌ MISMATCH (Max: {max_diff:.2e})"
     
     logger.info(f"{name:<35} | {status} | MeanDiff: {mean_diff:.2e}")
     if max_diff >= atol:
-        logger.info(f"   HF Sample  : {t1.flatten()[:5].numpy()}")
-        logger.info(f"   Muse Sample: {t2.flatten()[:5].numpy()}")
+        logger.info(f"   Ref Sample  : {t1.flatten()[:5].numpy()}")
+        logger.info(f"   Muse Sample : {t2.flatten()[:5].numpy()}")
 
 def _build_siglip_config(hf_cfg):
     """Build Muse config from HF config."""
@@ -76,7 +157,7 @@ def _build_siglip_config(hf_cfg):
 # Main Test
 # =============================================================================
 
-def test_layer0_internals():
+def test_rope_implementation():
     torch.manual_seed(0)
     checkpoint_dir = "/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch14-384"
     
@@ -94,7 +175,7 @@ def test_layer0_internals():
     with set_default_dtype(dtype):
         muse_model = SiglipVisionModel(muse_config)
 
-    # Weight Loading (Using your corrected logic implicitly via convert_hf_state_dict)
+    # Weight Loading
     logger.info("2. Loading Weights...")
     hf_state_dict = hf_model.state_dict()
     prefixed_dict = {}
@@ -110,7 +191,7 @@ def test_layer0_internals():
     muse_model.eval()
 
     # =========================================================================
-    # 3. Hook Internals of Layer 0
+    # 3. Hook Setup
     # =========================================================================
     activations = {"hf": {}, "muse": {}}
 
@@ -120,62 +201,61 @@ def test_layer0_internals():
             activations[model_name][layer_name] = output.detach()
         return hook
 
-    # --- Hooking Specific Sub-Modules of Layer 0 ---
-    
-    # 1. Norm 1 (Input to Attention)
-    hf_model.vision_model.encoder.layers[0].layer_norm1.register_forward_hook(get_hook("hf", "norm1"))
-    muse_model.encoder.layers[0].sa_norm.register_forward_hook(get_hook("muse", "norm1"))
-
-    # 2. Q Projection (Before RoPE)
+    # Hook Q Projection (Pre-RoPE) - We use HF's as the source of truth for input
     hf_model.vision_model.encoder.layers[0].self_attn.q_proj.register_forward_hook(get_hook("hf", "q_proj"))
-    muse_model.encoder.layers[0].attn.q_proj.register_forward_hook(get_hook("muse", "q_proj"))
-
-    # 3. K Projection (Before RoPE)
-    hf_model.vision_model.encoder.layers[0].self_attn.k_proj.register_forward_hook(get_hook("hf", "k_proj"))
-    muse_model.encoder.layers[0].attn.k_proj.register_forward_hook(get_hook("muse", "k_proj"))
-
-    # 4. Attention Output (After RoPE + Softmax + V + OutProj)
-    hf_model.vision_model.encoder.layers[0].self_attn.out_proj.register_forward_hook(get_hook("hf", "attn_out"))
-    muse_model.encoder.layers[0].attn.output_proj.register_forward_hook(get_hook("muse", "attn_out"))
-
-    # 5. MLP Output (Final layer check)
-    hf_model.vision_model.encoder.layers[0].mlp.register_forward_hook(get_hook("hf", "mlp_out"))
-    muse_model.encoder.layers[0].mlp.register_forward_hook(get_hook("muse", "mlp_out"))
+    
+    # Hook Muse RoPE Output (Post-RoPE)
+    # The Muse Encoder passes RoPE as a module to Attn. 
+    # Usually Attn calls: self.pos_embeddings(q, input_pos)
+    # So we want to hook `muse_model.encoder.rope`
+    muse_model.encoder.rope.register_forward_hook(get_hook("muse", "rope_out"))
 
     # =========================================================================
-    # 4. Forward & Compare
+    # 4. Forward
     # =========================================================================
     logger.info("3. Running Forward...")
-    # Using random image to avoid Processor path issues, purely testing logic
+    # Use standard 384x384 image -> 27x27 grid
     image = np.random.randint(0, 255, (384, 384, 3), dtype=np.uint8)
     inputs = processor(images=image, return_tensors="pt").to(device)
     
     with torch.no_grad():
         hf_model(**inputs)
-        # Manually construct grid
-        h, w = 384//14, 384//14
-        image_grid = [(1, h, w)] * inputs["pixel_values"].shape[0]
+        
+        # Manual grid for Muse
+        h_grid, w_grid = 384//14, 384//14
+        image_grid = [(1, h_grid, w_grid)] * inputs["pixel_values"].shape[0]
         muse_model(pixel_values=inputs["pixel_values"], image_grid_thw=image_grid)
 
     logger.info("\n" + "="*60)
-    logger.info("LAYER 0 INTERNAL DIAGNOSIS")
+    logger.info("RoPE DIAGNOSIS")
     logger.info("="*60)
 
-    # Tols
+    # 1. Get the Raw Q from HF (which we know matches Muse's Q Linear output)
+    # Shape: [Batch, Seq, Hidden] -> Needs Reshape to [Batch, Seq, Heads, HeadDim]
+    q_raw = activations["hf"]["q_proj"]
+    batch_size, seq_len, _ = q_raw.shape
+    num_heads = muse_config.num_attention_heads
+    head_dim = muse_config.hidden_size // num_heads
+    
+    # Reshape Q to match what RoPE expects: [B, S, H, D]
+    q_reshaped = q_raw.view(batch_size, seq_len, num_heads, head_dim)
+    
+    # 2. Run Reference Axial RoPE Logic locally
+    logger.info("Calculating Reference RoPE...")
+    ref_rope = ReferenceAxialRoPE(head_dim // 2, base=10000) # dim passed is axis_dim
+    # q_reshaped should be passed. 
+    # Note: Our ref_rope.forward expects q, height, width
+    q_ref_rotated = ref_rope.forward(q_reshaped, h_grid, w_grid)
+
+    # 3. Get Muse RoPE Output
+    q_muse_rotated = activations["muse"]["rope_out"]
+    
+    # Muse RoPE forward takes x, then splits x.chunk(2, dim=-1) -> x_h, x_w -> concat
+    # Muse forward also returns concatenated result [B, S, H, D] (same shape as input)
+    
+    # 4. Compare
     tol = 1e-2 if dtype == torch.bfloat16 else 1e-4
-
-    # Check 1: Norm 1 (Should match perfectly as Embeddings matched)
-    compare_tensors("1. Norm1 Output", activations["hf"]["norm1"], activations["muse"]["norm1"], atol=tol)
-
-    # Check 2: Linear Projections (Should match perfectly if weights loaded)
-    compare_tensors("2. Q_Proj Output (Pre-RoPE)", activations["hf"]["q_proj"], activations["muse"]["q_proj"], atol=tol)
-    compare_tensors("3. K_Proj Output (Pre-RoPE)", activations["hf"]["k_proj"], activations["muse"]["k_proj"], atol=tol)
-
-    # Check 3: Attention Output (Will FAIL if RoPE is wrong)
-    compare_tensors("4. Attn Output (Post-RoPE)", activations["hf"]["attn_out"], activations["muse"]["attn_out"], atol=tol)
-
-    # Check 4: MLP Output
-    compare_tensors("5. MLP Output", activations["hf"]["mlp_out"], activations["muse"]["mlp_out"], atol=tol)
+    compare_tensors("RoPE Calculation Check", q_ref_rotated, q_muse_rotated, atol=tol)
 
 if __name__ == "__main__":
-    test_layer0_internals()
+    test_rope_implementation()
