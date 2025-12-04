@@ -191,7 +191,6 @@ class SiglipVisionEmbeddings(nn.Module):
             else:
                 tmp_image_grid_thw.append(image_grid)
         return tmp_image_grid_thw
-
     def forward(
         self, 
         pixel_values: torch.FloatTensor, 
@@ -200,27 +199,60 @@ class SiglipVisionEmbeddings(nn.Module):
         interpolate_pos_encoding=False,
         has_learnable_position_embedding=True
     ) -> torch.Tensor:
-        # Apply patch embeddings to already patchified pixel values
-        print('pixel_values:::::',pixel_values.shape)
+        
+        # 1. 卷积切块 (Patchify)
+        # 输入: [Batch, 3, H, W]
+        # 输出: [Batch, EmbedDim, GridH, GridW]
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
-        spatial_shapes = []
-        for thw_tuple in image_grid_thw:
-            spatial_shapes.append((thw_tuple[1],thw_tuple[2]))
-        spatial_shapes = torch.tensor(spatial_shapes, dtype=torch.long, device=pixel_values.device)
+        
+        batch_size, embed_dim, grid_h, grid_w = patch_embeds.shape
+        
+        # 2. 拉平维度 (Flatten) - 修复 4D vs 3D 报错的关键
+        # [Batch, EmbedDim, GridH, GridW] -> [Batch, EmbedDim, NumPatches] -> [Batch, NumPatches, EmbedDim]
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+        
+        # 3. 准备 spatial_shapes
+        # 如果没有传入 grid 信息，根据当前的卷积输出自动推断 (标准 ViT 模式)
+        if image_grid_thw is None:
+            # 自动生成: [(H_grid, W_grid), (H_grid, W_grid), ...]
+            spatial_shapes = torch.tensor(
+                [[grid_h, grid_w]] * batch_size, 
+                dtype=torch.long, 
+                device=pixel_values.device
+            )
+        else:
+            # 从参数解析 (Muse/NaViT 模式)
+            shapes_list = []
+            for thw_tuple in image_grid_thw:
+                # thw_tuple 是 (t, h, w)，我们只需要 (h, w)
+                if isinstance(thw_tuple, list):
+                    # 处理可能的嵌套 list
+                    shapes_list.append((thw_tuple[0][1], thw_tuple[0][2]))
+                else:
+                    shapes_list.append((thw_tuple[1], thw_tuple[2]))
+            spatial_shapes = torch.tensor(shapes_list, dtype=torch.long, device=pixel_values.device)
 
-        # Get positional resized and padded positional embeddings
+        # 4. 调整位置编码大小
+        # 注意：这里需要先把 Embedding 权重变成方形 [H_base, W_base, Dim] 以便插值
+        # 假设 self.num_patches 是正方形 (384/14)**2
+        sqrt_pos = int(self.num_positions**0.5) 
         positional_embeddings = self.position_embedding.weight.reshape(
-            self.position_embedding_size, self.position_embedding_size, -1
+            sqrt_pos, sqrt_pos, embed_dim
         )
+        
+        # 修复关键点：max_length 应该是 patch_embeds 的长度 (729)，而不是通道数 (3)
         resized_positional_embeddings = self.resize_positional_embeddings(
-            positional_embeddings, spatial_shapes, max_length=pixel_values.shape[1]
+            positional_embeddings, 
+            spatial_shapes, 
+            max_length=patch_embeds.shape[1]  # <--- 修正这里
         )
 
-        # Add positional embeddings to patch embeddings
+        # 5. 相加
+        # [B, N, D] + [B, N, D]
         embeddings = patch_embeds + resized_positional_embeddings
+        
         return embeddings
-
 
         # has_learnable_position_embedding = self.has_learnable_position_embedding if hasattr(
         #     self.config, "has_learnable_position_embedding"
