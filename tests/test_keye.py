@@ -66,7 +66,7 @@ def _ensure_origin_config_module() -> None:
 
 
 _ensure_origin_config_module()
-from muse.muse.models.keye_vit import modeling_keye_origin as keye_origin
+from muse.models.keye_vit import modeling_keye_origin as keye_origin
 
 OriginKeyeVisionModel = keye_origin.SiglipVisionTransformer
 
