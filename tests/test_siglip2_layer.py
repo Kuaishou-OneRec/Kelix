@@ -11,6 +11,7 @@ from transformers import AutoImageProcessor, SiglipVisionModel as HFSiglipVision
 from muse.config import SiglipVisionConfig
 from muse.models.Siglip import SiglipVisionTransformer as SiglipVisionModel
 from muse.training.common import set_default_dtype
+import numpy as np
 import numpy
 # Logging Setup
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
