@@ -11,7 +11,7 @@ from muse.config.model_config import SiglipVisionConfig
 from muse.models.Siglip._layers import (
     SiglipMLP,
 )
-from muse.layers.attention import MultiHeadAttention
+from muse.models.Siglip._layers import MultiHeadAttention
 from muse.layers.transformer import TransformerSelfAttentionLayer
 from muse.layers.rms_norm import RMSNorm
 from muse.models.base import Model
