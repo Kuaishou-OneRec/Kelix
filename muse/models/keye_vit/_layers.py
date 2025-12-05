@@ -418,6 +418,7 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         return cos, sin
 
     def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
+        print("DEBUG: Running KeyeAxialRotaryEmbedding Forward...")  # <--- 加入这行
         if input_pos is None:
             return x
         if isinstance(input_pos, dict):
