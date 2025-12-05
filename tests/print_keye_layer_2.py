@@ -132,15 +132,27 @@ def test_full_check():
     proc = KeyeVisionImageProcessor(patch_size=muse_config.patch_size)
     img = create_dummy_image(muse_config.image_size)
     pix = proc(img, return_tensors="pt")["pixel_values"].to(device, dtype)
-    # 5D Fix
-    pix = pix.unsqueeze(1) # [1, 1, C, H, W] -> wait, need patch seq
-    # Re-using standard input prep logic from previous script
-    h = muse_config.image_size // muse_config.patch_size
-    seq_len = h*h
-    # Manually reshaping for simplicity
-    pix_patches = pix.view(1, 3, h, 14, h, 14).permute(0, 2, 4, 1, 3, 5).reshape(1, seq_len, 3, 14, 14)
+    
+    # [FIX] 动态计算维度，防止 Resize 导致的 Shape 不匹配
+    # pix shape: [Batch, Channel, Height, Width]
+    b, c, height, width = pix.shape
+    p = muse_config.patch_size
+    
+    h_patches = height // p
+    w_patches = width // p
+    seq_len = h_patches * w_patches
+    
+    logger.info(f"Actual Input Shape: {pix.shape} -> Patches: {h_patches}x{w_patches} = {seq_len}")
+
+    # Manually reshaping: [B, C, H, W] -> [B, Seq, C, P, P]
+    # 1. View as grid: [B, C, h_grid, p, w_grid, p]
+    pix_view = pix.view(b, c, h_patches, p, w_patches, p)
+    # 2. Permute to:   [B, h_grid, w_grid, C, p, p]
+    # 3. Flatten:      [B, seq_len, C, p, p]
+    pix_patches = pix_view.permute(0, 2, 4, 1, 3, 5).reshape(b, seq_len, c, p, p)
+    
     pids = torch.arange(seq_len, device=device).unsqueeze(0)
-    grid = [(1, h, h)]
+    grid = [(1, h_patches, w_patches)]
     cu = torch.tensor([0, seq_len], dtype=torch.int32, device=device)
 
     log_separator("Running Forward")
