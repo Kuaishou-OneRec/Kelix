@@ -235,7 +235,7 @@ class KeyeVisionEncoder(nn.Module):
                 attn_dropout=attn_dropout,
                 attention_function=config.attention_function,
             )
-            mlp = KeyeMLP(dim=embed_dim, hidden_dim=intermediate_dim)
+            mlp = KeyeMLP(dim=embed_dim, hidden_dim=intermediate_dim, activation_fn=nn.SiLU())
             layer = TransformerSelfAttentionLayer(
                 attn=self_attn,
                 mlp=mlp,
