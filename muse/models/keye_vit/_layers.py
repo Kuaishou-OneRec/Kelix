@@ -437,11 +437,10 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         w_part1, w_part2 = cos_w.chunk(2, dim=-1)
         
         # 只打印第一个 token 的前 3 维
-        if torch.rand(1) < 0.01: # 偶尔打印防止刷屏，或者在单测里必定打印
-            print(f"\n[RoPE Debug Internal]")
-            print(f"H_Part1 (first 3): {h_part1.flatten()[:3].detach().cpu().tolist()}")
-            print(f"H_Part2 (first 3): {h_part2.flatten()[:3].detach().cpu().tolist()}")
-            print(f"Equal? {(h_part1 - h_part2).abs().max().item() < 1e-5}")
+        print(f"\n[RoPE Debug Internal]")
+        print(f"H_Part1 (first 3): {h_part1.flatten()[:3].detach().cpu().tolist()}")
+        print(f"H_Part2 (first 3): {h_part2.flatten()[:3].detach().cpu().tolist()}")
+        print(f"Equal? {(h_part1 - h_part2).abs().max().item() < 1e-5}")
         # ================
 
         # 你的修正逻辑
