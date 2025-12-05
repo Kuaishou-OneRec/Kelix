@@ -426,31 +426,67 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         else:
             height_ids, width_ids = input_pos
 
-        # [B, S, 36]
         cos_h, sin_h = self._lookup(self.height_rope, height_ids)
         cos_w, sin_w = self._lookup(self.width_rope, width_ids)
 
-        # === 调试打印 ===
-        # 我们假设 dim=36 是由 [18个H, 18个H] 组成的
-        # 检查 cos_h 的前半段和后半段是否相等
-        h_part1, h_part2 = cos_h.chunk(2, dim=-1)
-        w_part1, w_part2 = cos_w.chunk(2, dim=-1)
+        # 1. Split parts (Origin Alignment Logic)
+        h1, h2 = cos_h.chunk(2, dim=-1)
+        w1, w2 = cos_w.chunk(2, dim=-1)
         
-        # 只打印第一个 token 的前 3 维
-        print(f"\n[RoPE Debug Internal]")
-        print(f"H_Part1 (first 3): {h_part1.flatten().detach().cpu().tolist()}")
-        print(f"H_Part2 (first 3): {h_part2.flatten().detach().cpu().tolist()}")
-        print(f"Equal? {(h_part1 - h_part2).abs().max().item() < 1e-5}")
-        # ================
+        sh1, sh2 = sin_h.chunk(2, dim=-1)
+        sw1, sw2 = sin_w.chunk(2, dim=-1)
+        
+        # 2. Interleave: [H1, W1, H2, W2]
+        cos = torch.cat([h1, w1, h2, w2], dim=-1)
+        sin = torch.cat([sh1, sw1, sh2, sw2], dim=-1)
+        
+        # [FIX] Precision Alignment with Origin
+        # Origin calculates RoPE in FP32. We must do the same to match outputs.
+        x_float = x.float()
+        cos_float = cos.float()
+        sin_float = sin.float()
+        
+        # Perform rotation in FP32
+        x_out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
+        
+        # Cast back to original dtype (e.g. bfloat16)
+        return x_out.to(dtype=x.dtype)
 
-        # 你的修正逻辑
-        cos = torch.cat([h_part1, w_part1, h_part2, w_part2], dim=-1).to(dtype=x.dtype)
-        sin = torch.cat([sin_h.chunk(2, dim=-1)[0], 
-                         sin_w.chunk(2, dim=-1)[0], 
-                         sin_h.chunk(2, dim=-1)[1], 
-                         sin_w.chunk(2, dim=-1)[1]], dim=-1).to(dtype=x.dtype)
+
+    # def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
+    #     if input_pos is None:
+    #         return x
+    #     if isinstance(input_pos, dict):
+    #         height_ids = input_pos["height"]
+    #         width_ids = input_pos["width"]
+    #     else:
+    #         height_ids, width_ids = input_pos
+
+    #     # [B, S, 36]
+    #     cos_h, sin_h = self._lookup(self.height_rope, height_ids)
+    #     cos_w, sin_w = self._lookup(self.width_rope, width_ids)
+
+    #     # === 调试打印 ===
+    #     # 我们假设 dim=36 是由 [18个H, 18个H] 组成的
+    #     # 检查 cos_h 的前半段和后半段是否相等
+    #     h_part1, h_part2 = cos_h.chunk(2, dim=-1)
+    #     w_part1, w_part2 = cos_w.chunk(2, dim=-1)
         
-        return (x * cos) + (self._rotate_half(x) * sin)
+    #     # 只打印第一个 token 的前 3 维
+    #     print(f"\n[RoPE Debug Internal]")
+    #     print(f"H_Part1 (first 3): {h_part1.flatten().detach().cpu().tolist()}")
+    #     print(f"H_Part2 (first 3): {h_part2.flatten().detach().cpu().tolist()}")
+    #     print(f"Equal? {(h_part1 - h_part2).abs().max().item() < 1e-5}")
+    #     # ================
+
+    #     # 你的修正逻辑
+    #     cos = torch.cat([h_part1, w_part1, h_part2, w_part2], dim=-1).to(dtype=x.dtype)
+    #     sin = torch.cat([sin_h.chunk(2, dim=-1)[0], 
+    #                      sin_w.chunk(2, dim=-1)[0], 
+    #                      sin_h.chunk(2, dim=-1)[1], 
+    #                      sin_w.chunk(2, dim=-1)[1]], dim=-1).to(dtype=x.dtype)
+        
+    #     return (x * cos) + (self._rotate_half(x) * sin)
 
 
 
