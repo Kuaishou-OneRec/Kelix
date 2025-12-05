@@ -186,7 +186,7 @@ def run_diagnosis():
         rope_full = origin_model.vision_model.encoder.rotary_pos_emb(max(h,w)+1)
         print(f"\n[Origin RoPE Debug]")
         # 取 h_ids[0] (假设是0) 对应的频率
-        origin_freq_sample = rope_full[0].flatten()[:3].cpu().tolist()
+        origin_freq_sample = rope_full[0].flatten().cpu().tolist()
         print(f"Origin Freq (pos=0, first 3): {origin_freq_sample}")
         # Muse RoPE
         rope_mod = muse_model.encoder.rope

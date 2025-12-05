@@ -438,8 +438,8 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         
         # 只打印第一个 token 的前 3 维
         print(f"\n[RoPE Debug Internal]")
-        print(f"H_Part1 (first 3): {h_part1.flatten()[:3].detach().cpu().tolist()}")
-        print(f"H_Part2 (first 3): {h_part2.flatten()[:3].detach().cpu().tolist()}")
+        print(f"H_Part1 (first 3): {h_part1.flatten().detach().cpu().tolist()}")
+        print(f"H_Part2 (first 3): {h_part2.flatten().detach().cpu().tolist()}")
         print(f"Equal? {(h_part1 - h_part2).abs().max().item() < 1e-5}")
         # ================
 
