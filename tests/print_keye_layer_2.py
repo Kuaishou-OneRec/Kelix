@@ -158,7 +158,7 @@ def test_full_check():
 
     log_separator("Running Forward")
     with torch.no_grad():
-        origin_out = origin_model(pix_patches, position_ids=pids, image_grid_thw=grid, cu_seqlens=cu, interpolate_pos_encoding=True, window_size=-1)
+        origin_out = origin_model(pix_patches, position_ids=pids, image_grid_thw=grid, cu_seqlens=cu, interpolate_pos_encoding=True, window_size=-1,use_rope=True)
         muse_out = muse_model(pix_patches, position_ids=pids, image_grid_thw=grid, cu_seqlens=cu, interpolate_pos_encoding=True, has_learnable_position_embedding=True)
 
     log_separator("Deep Dive Analysis")
