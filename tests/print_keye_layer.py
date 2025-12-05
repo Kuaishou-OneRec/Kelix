@@ -201,7 +201,7 @@ def test_full_check():
     log_separator("Running Forward")
     with torch.no_grad():
         # Origin
-        origin_out = origin_model(pix, position_ids=pids, image_grid_thw=grid, cu_seqlens=cu, interpolate_pos_encoding=True, window_size=-1)
+        origin_out = origin_model(pix, position_ids=pids, image_grid_thw=grid, cu_seqlens=cu, interpolate_pos_encoding=True, window_size=-1,use_rope=True)
         if hasattr(origin_out, "last_hidden_state"): origin_final = origin_out.last_hidden_state
         else: origin_final = origin_out
         if isinstance(origin_final, list): origin_final = torch.stack(origin_final, dim=0)
