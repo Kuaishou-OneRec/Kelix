@@ -175,6 +175,7 @@ def run_diagnosis():
         
         rope_indexed = rope_full[pids] # [Seq, 2, 36]
         rope_val = rope_indexed.flatten(1) # [Seq, 72]
+        rope_val = rope_val.repeat(1, 2)
         
         # Origin Logic: 它其实是把 [h_freq, w_freq] 变成了 [h_freq, w_freq, h_freq, w_freq]
         # 然后取前半部分，所以 cos 还是 [h_freq, w_freq]
