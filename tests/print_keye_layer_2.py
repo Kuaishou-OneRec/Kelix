@@ -1,7 +1,12 @@
 """
-Keye Vision Full Check (With MLP & OutputProj Debug)
-====================================================
+Keye Vision Full Check (With MLP & OutputProj Debug) - Final Fixed Input
+========================================================================
+
+修复：
+1. Input Preparation: 适配 Muse Processor 返回的 [Seq, C, H, W] 格式，
+   不再尝试对已经是 Patch 的数据进行二次切片，解决维度错误。
 """
+
 import logging
 import os
 import sys
@@ -53,13 +58,16 @@ def compare_tensors_verbose(name: str, reference: torch.Tensor, candidate: torch
     if isinstance(candidate, (tuple, list)): candidate = candidate[0]
     ref = reference.detach().float().cpu()
     cand = candidate.detach().float().cpu()
+    # Shape Alignment
     if ref.shape != cand.shape:
         if ref.dim() == 3 and ref.shape[0] == 1 and cand.dim() == 2: ref = ref.squeeze(0)
         elif cand.dim() == 3 and cand.shape[0] == 1 and ref.dim() == 2: cand = cand.squeeze(0)
         if ref.shape != cand.shape and ref.dim() == 3 and ref.transpose(1, 2).shape == cand.shape: ref = ref.transpose(1, 2)
+    
     if ref.shape != cand.shape:
         logger.error(f"{name:<40} | ❌ SHAPE ERR | Origin{ref.shape} vs Muse{cand.shape}")
         return
+    
     diff = (ref - cand).abs()
     status = "✅ MATCH" if diff.max().item() < atol else f"❌ MISMATCH (Max: {diff.max().item():.2e})"
     logger.info(f"{name:<40} | {status:<25} | MeanDiff: {diff.mean().item():.2e}")
@@ -106,7 +114,7 @@ def test_full_check():
     origin_l0 = origin_model.vision_model.encoder.layers[0]
     muse_l0 = muse_model.encoder.layers[0]
     
-    # 1. Norm 1 & QKV (Already passed)
+    # 1. Norm 1 & QKV
     origin_l0.layer_norm1.register_forward_hook(get_hook("origin", "L0.1 LayerNorm1"))
     muse_l0.sa_norm.register_forward_hook(get_hook("muse", "L0.1 LayerNorm1"))
     origin_l0.self_attn.q_proj.register_forward_hook(get_hook("origin", "L0.2 Q Proj"))
@@ -128,31 +136,24 @@ def test_full_check():
     origin_l0.register_forward_hook(get_hook("origin", "1. Encoder Layer 0 Block"))
     muse_l0.register_forward_hook(get_hook("muse", "1. Encoder Layer 0 Block"))
 
-    # Input
+    # --- [FIXED] Input Preparation ---
     proc = KeyeVisionImageProcessor(patch_size=muse_config.patch_size)
     img = create_dummy_image(muse_config.image_size)
-    pix = proc(img, return_tensors="pt")["pixel_values"].to(device, dtype)
     
-    # [FIX] 动态计算维度，防止 Resize 导致的 Shape 不匹配
-    # pix shape: [Batch, Channel, Height, Width]
-    b, c, height, width = pix.shape
-    p = muse_config.patch_size
+    # Muse Processor 直接输出 [Seq_Patches, 3, 14, 14]
+    inputs = proc(img, return_tensors="pt")
+    pix = inputs["pixel_values"].to(device, dtype)
     
-    h_patches = height // p
-    w_patches = width // p
-    seq_len = h_patches * w_patches
+    # Origin 需要 [Batch, Seq_Patches, 3, 14, 14]
+    # 我们只需加一个 Batch 维度
+    pix_patches = pix.unsqueeze(0) 
     
-    logger.info(f"Actual Input Shape: {pix.shape} -> Patches: {h_patches}x{w_patches} = {seq_len}")
+    seq_len = pix.shape[0]
+    side = int(seq_len ** 0.5)
+    logger.info(f"Input Shape: {pix_patches.shape} (Grid {side}x{side})")
 
-    # Manually reshaping: [B, C, H, W] -> [B, Seq, C, P, P]
-    # 1. View as grid: [B, C, h_grid, p, w_grid, p]
-    pix_view = pix.view(b, c, h_patches, p, w_patches, p)
-    # 2. Permute to:   [B, h_grid, w_grid, C, p, p]
-    # 3. Flatten:      [B, seq_len, C, p, p]
-    pix_patches = pix_view.permute(0, 2, 4, 1, 3, 5).reshape(b, seq_len, c, p, p)
-    
     pids = torch.arange(seq_len, device=device).unsqueeze(0)
-    grid = [(1, h_patches, w_patches)]
+    grid = [(1, side, side)]
     cu = torch.tensor([0, seq_len], dtype=torch.int32, device=device)
 
     log_separator("Running Forward")
@@ -162,7 +163,8 @@ def test_full_check():
 
     log_separator("Deep Dive Analysis")
     keys = ["L0.1 LayerNorm1", "L0.2 Q Proj", "L0.3 Output Proj", "L0.4 LayerNorm2", "L0.5 MLP Output", "1. Encoder Layer 0 Block"]
-    tol = 5e-2 # BF16
+    tol = 5e-2 # BF16 tolerance
+    
     for k in keys:
         if k in activations["origin"]:
             compare_tensors_verbose(k, activations["origin"][k], activations["muse"][k], atol=tol)
