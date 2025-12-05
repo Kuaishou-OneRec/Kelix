@@ -18,8 +18,8 @@ from muse.layers.kv_cache import KVCache
 logger = logging.getLogger(__name__)
 
 def KeyeMLP(dim: int, hidden_dim: int, activation_fn: Optional[nn.Module] = None) -> FeedForward:
-    fc1 = nn.Linear(dim, hidden_dim, bias=False)
-    fc2 = nn.Linear(hidden_dim, dim, bias=False)
+    fc1 = nn.Linear(dim, hidden_dim, bias=True)
+    fc2 = nn.Linear(hidden_dim, dim, bias=True)
     if activation_fn is None:
         activation_fn = nn.GELU(approximate="tanh")
     return FeedForward(gate_proj=fc1, down_proj=fc2, up_proj=None, activation=activation_fn) if activation_fn is not None else FeedForward(gate_proj=fc1, down_proj=fc2, up_proj=None)
