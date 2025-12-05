@@ -418,35 +418,73 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         return cos, sin
 
     def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
-        print("DEBUG: Running KeyeAxialRotaryEmbedding Forward...")  # <--- 加入这行
         if input_pos is None:
             return x
         if isinstance(input_pos, dict):
             height_ids = input_pos["height"]
             width_ids = input_pos["width"]
         else:
-            height_ids, width_ids = input_pos  # 形状可为 [seq] 或 [batch, seq]
+            height_ids, width_ids = input_pos
 
-        # cos_h, sin_h 维度为 [..., axis_dim] (即 36)
-        # 内部结构为 [Part1(18), Part2(18)]
+        # [B, S, 36]
         cos_h, sin_h = self._lookup(self.height_rope, height_ids)
         cos_w, sin_w = self._lookup(self.width_rope, width_ids)
+
+        # === 调试打印 ===
+        # 我们假设 dim=36 是由 [18个H, 18个H] 组成的
+        # 检查 cos_h 的前半段和后半段是否相等
+        h_part1, h_part2 = cos_h.chunk(2, dim=-1)
+        w_part1, w_part2 = cos_w.chunk(2, dim=-1)
         
-        # [FIX] 对齐 Origin 模型的 RoPE 排列逻辑
-        # Origin 逻辑: repeat(1, 2) -> [H, W, H, W]
-        # Muse 原逻辑: cat([H, W]) -> [H, H, W, W] (H包含part1/2)
-        # 修正：将 H 和 W 分别切开，然后交错拼接
+        # 只打印第一个 token 的前 3 维
+        if torch.rand(1) < 0.01: # 偶尔打印防止刷屏，或者在单测里必定打印
+            print(f"\n[RoPE Debug Internal]")
+            print(f"H_Part1 (first 3): {h_part1.flatten()[:3].detach().cpu().tolist()}")
+            print(f"H_Part2 (first 3): {h_part2.flatten()[:3].detach().cpu().tolist()}")
+            print(f"Equal? {(h_part1 - h_part2).abs().max().item() < 1e-5}")
+        # ================
+
+        # 你的修正逻辑
+        cos = torch.cat([h_part1, w_part1, h_part2, w_part2], dim=-1).to(dtype=x.dtype)
+        sin = torch.cat([sin_h.chunk(2, dim=-1)[0], 
+                         sin_w.chunk(2, dim=-1)[0], 
+                         sin_h.chunk(2, dim=-1)[1], 
+                         sin_w.chunk(2, dim=-1)[1]], dim=-1).to(dtype=x.dtype)
         
-        # 1. Split parts
-        ch1, ch2 = cos_h.chunk(2, dim=-1)
-        cw1, cw2 = cos_w.chunk(2, dim=-1)
-        
-        sh1, sh2 = sin_h.chunk(2, dim=-1)
-        sw1, sw2 = sin_w.chunk(2, dim=-1)
-        
-        # 2. Interleave: [H1, W1, H2, W2]
-        cos = torch.cat([ch1, cw1, ch2, cw2], dim=-1).to(dtype=x.dtype)
-        sin = torch.cat([sh1, sw1, sh2, sw2], dim=-1).to(dtype=x.dtype)
-        
-        # x 需 reshape 为 [batch, seq, num_heads, head_dim] 再传进来
         return (x * cos) + (self._rotate_half(x) * sin)
+
+
+
+    # def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
+    #     print("DEBUG: Running KeyeAxialRotaryEmbedding Forward...")  # <--- 加入这行
+    #     if input_pos is None:
+    #         return x
+    #     if isinstance(input_pos, dict):
+    #         height_ids = input_pos["height"]
+    #         width_ids = input_pos["width"]
+    #     else:
+    #         height_ids, width_ids = input_pos  # 形状可为 [seq] 或 [batch, seq]
+
+    #     # cos_h, sin_h 维度为 [..., axis_dim] (即 36)
+    #     # 内部结构为 [Part1(18), Part2(18)]
+    #     cos_h, sin_h = self._lookup(self.height_rope, height_ids)
+    #     cos_w, sin_w = self._lookup(self.width_rope, width_ids)
+        
+    #     # [FIX] 对齐 Origin 模型的 RoPE 排列逻辑
+    #     # Origin 逻辑: repeat(1, 2) -> [H, W, H, W]
+    #     # Muse 原逻辑: cat([H, W]) -> [H, H, W, W] (H包含part1/2)
+    #     # 修正：将 H 和 W 分别切开，然后交错拼接
+        
+    #     # 1. Split parts
+    #     ch1, ch2 = cos_h.chunk(2, dim=-1)
+    #     cw1, cw2 = cos_w.chunk(2, dim=-1)
+        
+    #     sh1, sh2 = sin_h.chunk(2, dim=-1)
+    #     sw1, sw2 = sin_w.chunk(2, dim=-1)
+        
+    #     # 2. Interleave: [H1, W1, H2, W2]
+    #     cos = torch.cat([ch1, cw1, ch2, cw2], dim=-1).to(dtype=x.dtype)
+    #     sin = torch.cat([sh1, sw1, sh2, sw2], dim=-1).to(dtype=x.dtype)
+        
+    #     # x 需 reshape 为 [batch, seq, num_heads, head_dim] 再传进来
+    #     return (x * cos) + (self._rotate_half(x) * sin)
