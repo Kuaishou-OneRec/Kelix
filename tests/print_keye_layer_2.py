@@ -158,8 +158,8 @@ def test_full_check():
 
     log_separator("Running Forward")
     with torch.no_grad():
-        origin_out = origin_model(pix_patches, position_ids=pids, image_grid_thw=grid, cu_seqlens=cu, interpolate_pos_encoding=True, window_size=-1,use_rope=True)
-        muse_out = muse_model(pix_patches, position_ids=pids, image_grid_thw=grid, cu_seqlens=cu, interpolate_pos_encoding=True, has_learnable_position_embedding=True)
+        origin_out = origin_model(pix_patches, position_ids=pids, image_grid_thw=grid, cu_seqlens=None, interpolate_pos_encoding=True, window_size=-1,use_rope=True)
+        muse_out = muse_model(pix_patches, position_ids=pids, image_grid_thw=grid, cu_seqlens=None, interpolate_pos_encoding=True, has_learnable_position_embedding=True)
 
     log_separator("Deep Dive Analysis")
     keys = ["L0.1 LayerNorm1", "L0.2 Q Proj", "L0.3 Output Proj", "L0.4 LayerNorm2", "L0.5 MLP Output", "1. Encoder Layer 0 Block"]
