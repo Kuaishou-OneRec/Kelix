@@ -578,10 +578,10 @@ class KeyeVisionTransformer(Model):
                     converted_state_dict[converted_key] = tensor
                     continue
                 
-                # Handle MLP (fc1, fc2 map directly)
                 if rest_key.startswith("mlp."):
-                    # mlp.fc1.weight -> mlp.fc1.weight (direct mapping)
-                    converted_key = f"encoder.layers.{layer_idx}.{rest_key}"
+                    # Muse FeedForward uses w1/w2, HF uses fc1/fc2
+                    new_rest_key = rest_key.replace("fc1", "w1").replace("fc2", "w2")
+                    converted_key = f"encoder.layers.{layer_idx}.{new_rest_key}"
                     converted_state_dict[converted_key] = tensor
                     continue
                 
@@ -593,10 +593,13 @@ class KeyeVisionTransformer(Model):
             skipped_keys.append(hf_key)
         
         if skipped_keys:
-            logger.warning(
-                f"Skipped {len(skipped_keys)} keys during conversion. "
-                f"First few: {skipped_keys[:10]}"
-            )
+            # Optionally filter out known skipped keys (like text model) to reduce log noise
+            interesting_skips = [k for k in skipped_keys if "text_model" not in k]
+            if interesting_skips:
+                logger.warning(
+                    f"Skipped {len(interesting_skips)} keys during conversion (excluding text_model). "
+                    f"First few: {interesting_skips[:5]}"
+                )
         
         logger.info(
             f"Converted {len(converted_state_dict)} keys from "
