@@ -750,7 +750,7 @@ class SiglipAttention(nn.Module):
         else:
             self.q_norm = None
             self.k_norm = None
-        self.config._attn_implementation = 'eager'
+        self.config._attn_implementation = 'flash_attention_2'
         if self.config._attn_implementation != 'flash_attention_2':
             print(f"SiglipAttention flash_attention_2 is not set!!!!!! Get {self.config._attn_implementation}")
 
@@ -1391,19 +1391,19 @@ class SiglipVisionTransformer(nn.Module):
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
         sample_hidden_state = list()
-        # assert cu_seqlens is not None
-        # for i in range(cu_seqlens.shape[0] - 1):
-        #     start = cu_seqlens[i]
-        #     end = cu_seqlens[i + 1]
-        #     tensor = last_hidden_state[:, start: end, :].squeeze(0)
-        #     sample_hidden_state.append(tensor)
+        assert cu_seqlens is not None
+        for i in range(cu_seqlens.shape[0] - 1):
+            start = cu_seqlens[i]
+            end = cu_seqlens[i + 1]
+            tensor = last_hidden_state[:, start: end, :].squeeze(0)
+            sample_hidden_state.append(tensor)
 
-        # return BaseModelOutputWithPooling(
-        #     last_hidden_state=sample_hidden_state,
-        #     pooler_output=None,
-        #     hidden_states=encoder_outputs.hidden_states,
-        #     attentions=encoder_outputs.attentions,
-        # )
+        return BaseModelOutputWithPooling(
+            last_hidden_state=sample_hidden_state,
+            pooler_output=None,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 class SiglipMultiheadAttentionPoolingHead(nn.Module):
