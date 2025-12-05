@@ -76,7 +76,7 @@ def compare_tensors_verbose(name: str, reference: torch.Tensor, candidate: torch
 def test_full_check():
     torch.manual_seed(42)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    dtype = torch.bfloat16
+    dtype = torch.float32
     
     muse_config = KeyeVisionConfig()
     origin_config = HFKeyeVisionConfig(**muse_config.dict())
