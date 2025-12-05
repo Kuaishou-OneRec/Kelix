@@ -309,4 +309,79 @@ def test_full_check():
     muse_model.embeddings.register_forward_hook(get_hook("muse", "1. Embeddings"))
     
     origin_model.vision_model.encoder.layers[0].register_forward_hook(get_hook("origin", "2. Encoder Layer 0"))
-    muse_model.encoder.layers[0].register_forward_hook(get_
+    muse_model.encoder.layers[0].register_forward_hook(get_hook("muse", "2. Encoder Layer 0"))
+    
+    mid = muse_config.num_hidden_layers // 2
+    origin_model.vision_model.encoder.layers[mid].register_forward_hook(get_hook("origin", f"3. Encoder Layer {mid}"))
+    muse_model.encoder.layers[mid].register_forward_hook(get_hook("muse", f"3. Encoder Layer {mid}"))
+    
+    # 4. Prepare Input
+    processor = KeyeVisionImageProcessor(patch_size=muse_config.patch_size)
+    dummy_image = create_dummy_image(muse_config.image_size)
+    pixel_values, image_grid_thw, position_ids, cu_seqlens = prepare_pixel_inputs(
+        processor, dummy_image, device, dtype
+    )
+    
+    logger.info(f"Input Shape: {pixel_values.shape}")
+
+    # 5. Forward Pass
+    log_separator("Phase 2: Forward Pass")
+    with torch.no_grad():
+        origin_out = origin_model(
+            pixel_values=pixel_values,
+            position_ids=position_ids,
+            image_grid_thw=image_grid_thw,
+            cu_seqlens=cu_seqlens,
+            interpolate_pos_encoding=True,
+            window_size=-1
+        )
+        origin_final = origin_out.last_hidden_state
+        if isinstance(origin_final, list): origin_final = torch.stack(origin_final, dim=0)
+        
+        muse_out = muse_model(
+            pixel_values=pixel_values,
+            position_ids=position_ids,
+            image_grid_thw=image_grid_thw,
+            cu_seqlens=cu_seqlens,
+            interpolate_pos_encoding=True,
+            has_learnable_position_embedding=getattr(muse_config, "has_learnable_position_embedding", True)
+        )
+        muse_final = muse_out["last_hidden_state"]
+
+    # 6. Comparison
+    log_separator("Phase 3: Layer-wise Comparison")
+    tol = 5e-2 if dtype == torch.bfloat16 else 1e-4
+    
+    sorted_keys = sorted(activations["origin"].keys())
+    for key in sorted_keys:
+        compare_tensors_verbose(key, activations["origin"][key], activations["muse"][key], atol=tol)
+        
+    compare_tensors_verbose("4. Final Output (Post-LN)", origin_final, muse_final, atol=tol)
+    
+    # 7. Token Details
+    log_separator("Token Sample Check")
+    batch_idx = 0
+    seq_len = origin_final.shape[1]
+    positions = [
+        (0, "First Token"),
+        (min(10, seq_len - 1), "Token 10"),
+        (seq_len // 2, "Middle Token"),
+        (seq_len - 1, "Last Token"),
+    ]
+    logger.info(f"{'Position':<20} | {'Origin (First 5)':<40} | {'Muse (First 5)':<40} | {'MaxDiff'}")
+    logger.info("-" * 120)
+    for pos, label in positions:
+        r_v = origin_final[batch_idx, pos, :5].float().cpu().numpy()
+        m_v = muse_final[batch_idx, pos, :5].float().cpu().numpy()
+        d_v = np.abs(r_v - m_v).max()
+        logger.info(f"{label:<20} | {str(r_v):<40} | {str(m_v):<40} | {d_v:.2e}")
+
+    final_diff = (origin_final - muse_final).abs().max().item()
+    log_separator("FINAL VERDICT")
+    if final_diff < tol:
+        logger.info(f"SUCCESS: Models match! (Max Diff: {final_diff:.2e})")
+    else:
+        logger.error(f"FAILURE: Models mismatch! (Max Diff: {final_diff:.2e})")
+
+if __name__ == "__main__":
+    test_full_check()
