@@ -189,8 +189,14 @@ def run_diagnosis():
         cos_h, sin_h = rope_mod._lookup(rope_mod.height_rope, h_ids)
         cos_w, sin_w = rope_mod._lookup(rope_mod.width_rope, w_ids)
         
-        cos_m = torch.cat([cos_h, cos_w], dim=-1).squeeze()
-        sin_m = torch.cat([sin_h, sin_w], dim=-1).squeeze()
+        ch1, ch2 = cos_h.chunk(2, dim=-1)
+        cw1, cw2 = cos_w.chunk(2, dim=-1)
+        cos_m = torch.cat([ch1, cw1, ch2, cw2], dim=-1).squeeze()
+
+        sh1, sh2 = sin_h.chunk(2, dim=-1)
+        sw1, sw2 = sin_w.chunk(2, dim=-1)
+        sin_m = torch.cat([sh1, sw1, sh2, sw2], dim=-1).squeeze()
+
         
     compare("Values: RoPE Cos", cos_o, cos_m, atol=1e-4)
     compare("Values: RoPE Sin", sin_o, sin_m, atol=1e-4)
