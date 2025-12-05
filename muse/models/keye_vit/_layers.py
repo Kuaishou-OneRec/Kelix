@@ -18,12 +18,20 @@ from muse.layers.kv_cache import KVCache
 logger = logging.getLogger(__name__)
 
 def KeyeMLP(dim: int, hidden_dim: int, activation_fn: Optional[nn.Module] = None) -> FeedForward:
+    # 显式 bias=True，虽然默认就是 True，但写出来更保险
     fc1 = nn.Linear(dim, hidden_dim, bias=True)
     fc2 = nn.Linear(hidden_dim, dim, bias=True)
+    
+    # SigLIP 默认使用 GELU(approximate='tanh')
     if activation_fn is None:
         activation_fn = nn.GELU(approximate="tanh")
-    return FeedForward(gate_proj=fc1, down_proj=fc2, up_proj=None, activation=activation_fn) if activation_fn is not None else FeedForward(gate_proj=fc1, down_proj=fc2, up_proj=None)
-
+        
+    return FeedForward(
+        gate_proj=fc1, 
+        down_proj=fc2, 
+        up_proj=None, 
+        activation=activation_fn
+    )
 
 
 class MultiHeadAttention(nn.Module):

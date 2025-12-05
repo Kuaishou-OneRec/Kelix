@@ -184,7 +184,7 @@ def run_diagnosis():
         cos_o = rope_val.cos() 
         sin_o = rope_val.sin()
         rope_full = origin_model.vision_model.encoder.rotary_pos_emb(max(h,w)+1)
-        print(f"\n[Origin RoPE Debug]")
+        # print(f"\n[Origin RoPE Debug]")
         # 取 h_ids[0] (假设是0) 对应的频率
         # origin_freq_sample = rope_full[0].flatten().cpu().tolist()
         # print(f"Origin Freq (pos=0, first 3): {origin_freq_sample}")
