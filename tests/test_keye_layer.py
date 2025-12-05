@@ -1,10 +1,10 @@
 """
-Keye Vision Layer 0 Diagnosis: Final (Weight Check + RoPE Fix)
-==============================================================
+Keye Vision Layer 0 Diagnosis: Final Fix V3 (Correct Weight Loading)
+====================================================================
 
-修复内容：
-1. [关键] 在 Forward 前显式检查权重是否对齐。
-2. 修正 RoPE 模拟代码，正确拼接 H/W 维度 (36+36=72)。
+修复点：
+1. 精心构造带有 `siglip.vision_model.` 前缀的 state_dict，确保 Muse 的转换器能工作。
+2. 修复 RoPE 模拟的 Shape 问题。
 """
 
 import torch
@@ -47,8 +47,8 @@ OriginKeyeVisionModel = keye_origin.SiglipVisionModel
 def compare(name, a, b, atol=1e-3):
     a = a.float().cpu().detach()
     b = b.float().cpu().detach()
+    # Auto squeeze batch dim if needed
     if a.shape != b.shape:
-        # Auto squeeze batch dim if needed
         if a.shape[0] == 1 and a.dim() == b.dim() + 1: a = a.squeeze(0)
         if b.shape[0] == 1 and b.dim() == a.dim() + 1: b = b.squeeze(0)
     
@@ -67,6 +67,7 @@ def run_diagnosis():
     
     print("Loading models...")
     with set_default_dtype(dtype):
+        # 强制 Muse 配置 QK Norm 为 False
         muse_cfg = KeyeVisionConfig(use_qk_norm=False)
         muse_model = MuseKeyeVisionModel(muse_cfg).to(device).eval()
         
@@ -77,20 +78,34 @@ def run_diagnosis():
     raw = torch.load(CHECKPOINT_PATH, map_location="cpu")
     if "module" in raw: raw = raw["module"]
     
-    # 手动构建 Origin State Dict
+    # --- 关键修正：构造 State Dict Key ---
     origin_state = {}
     for k, v in raw.items():
+        # 1. 去掉乱七八糟的前缀，保留干净的 vision_model...
         clean = k
         for p in ["module.", "vision_tower.", "siglip."]:
             if clean.startswith(p): clean = clean[len(p):]
+        
         if "vision_model" not in clean: clean = "vision_model." + clean
-        origin_state[clean] = v
+        
+        # 2. [FIX] 加上 'siglip.' 前缀，满足 Muse Converter 的正则要求
+        siglip_key = "siglip." + clean
+        
+        origin_state[siglip_key] = v
+        # 同时为了 origin_model 加载，也存一份无 siglip 的 (OriginModel 类比较傻，不需要 siglip 前缀，因为它就是 SiglipVisionModel)
+        # 但是 load_state_dict 不支持重复引用，我们做两份 dict
     
-    # 转换 Muse
+    # 转换 Muse (输入必须带 siglip.vision_model)
+    print("Converting weights for Muse...")
+    # 这里调用的是 Muse 模型实例自带的方法，也就是你改过 fc->w 逻辑的那个方法
     muse_state = muse_model.convert_hf_state_dict(origin_state)
     
+    # 准备给 Origin 加载的 dict (去掉 siglip. 前缀)
+    origin_load_dict = {k.replace("siglip.", ""): v for k, v in origin_state.items()}
+    
     # 加载
-    origin_model.load_state_dict(origin_state, strict=False)
+    print("Loading state dicts...")
+    origin_model.load_state_dict(origin_load_dict, strict=False)
     muse_model.load_state_dict(muse_state, strict=False)
     
     print("\n" + "="*50)
@@ -107,8 +122,8 @@ def run_diagnosis():
     q_m = muse_model.encoder.layers[0].attn.q_proj
     compare("Weight: Q Proj", q_o.weight, q_m.weight, atol=1e-5)
     
-    # 如果上面这步是 ❌，说明权重加载逻辑（convert_hf_state_dict）有问题
-    # 如果是 ✅，说明是计算逻辑有问题
+    if (ln_o.weight - ln_m.weight).abs().max() > 1e-2:
+        print("⚠️ 权重依然不匹配！后续计算必然错误，请检查 convert_hf_state_dict 日志。")
     
     print("\n" + "="*50)
     print("Step 1: Component Calculation")
@@ -117,11 +132,12 @@ def run_diagnosis():
     # Input
     bs, h, w = 1, 14, 14
     seq = h * w
+    # 修正维度：[1, 196, 3, 14, 14]
     pixel_values = torch.randn(bs, seq, 3, h, w, device=device, dtype=dtype)
     grid_thw = [(1, h, w)]
     pos_ids = torch.arange(seq, device=device).unsqueeze(0)
     
-    # Get Embeddings Output (Verified Match)
+    # Get Embeddings Output
     with torch.no_grad():
         x = origin_model.vision_model.embeddings(
             pixel_values, position_ids=pos_ids, image_grid_thw=grid_thw, interpolate_pos_encoding=True
@@ -144,27 +160,30 @@ def run_diagnosis():
         q_m = attn_m.q_proj(x_in).view(bs, seq, 16, 72).transpose(1, 2)
     compare("Output: Q Proj", q_o, q_m, atol=1e-3)
     
-    # 3. RoPE Calculation (Corrected)
+    # 3. RoPE Calculation (Debug)
     h_ids = torch.arange(h, device=device).repeat_interleave(w)
     w_ids = torch.arange(w, device=device).repeat(h)
     
     with torch.no_grad():
-        # --- Origin RoPE ---
-        # Origin logic: cat(height_freq, width_freq)
+        # Origin RoPE
         pids = torch.stack([h_ids, w_ids], dim=-1) # [Seq, 2]
-        rope_full = origin_model.vision_model.encoder.rotary_pos_emb(max(h,w)+1) # [Max, 36]
+        rope_full = origin_model.vision_model.encoder.rotary_pos_emb(max(h,w)+1) 
         
-        # Select: [Seq, 2, 36] -> Flatten: [Seq, 72]
-        rope_val = rope_full[pids].flatten(1)
+        # --- DEBUG FIX: Correct Origin Logic ---
+        # Origin: rope_emb = rope_full[pids].flatten(1).repeat(1, 2)
+        # cos = rope_emb.cos().chunk(2, dim=-1)[0]
         
-        # Origin applies repeat(1,2) later for cos/sin construction
-        # rope_emb = rope_val.repeat(1, 2) # [Seq, 144]
-        # cos_o = rope_emb.cos().chunk(2, dim=-1)[0] # [Seq, 72]
-        # 简化逻辑：
-        cos_o = rope_val.cos() # [Seq, 72]
+        rope_indexed = rope_full[pids] # [Seq, 2, 36]
+        rope_val = rope_indexed.flatten(1) # [Seq, 72]
+        
+        # Origin Logic: 它其实是把 [h_freq, w_freq] 变成了 [h_freq, w_freq, h_freq, w_freq]
+        # 然后取前半部分，所以 cos 还是 [h_freq, w_freq]
+        # 简单来说，cos_o 就是 rope_val.cos()
+        
+        cos_o = rope_val.cos() 
         sin_o = rope_val.sin()
         
-        # --- Muse RoPE ---
+        # Muse RoPE
         rope_mod = muse_model.encoder.rope
         cos_h, sin_h = rope_mod._lookup(rope_mod.height_rope, h_ids)
         cos_w, sin_w = rope_mod._lookup(rope_mod.width_rope, w_ids)
@@ -175,23 +194,26 @@ def run_diagnosis():
     compare("Values: RoPE Cos", cos_o, cos_m, atol=1e-4)
     compare("Values: RoPE Sin", sin_o, sin_m, atol=1e-4)
     
-    # 4. Apply RoPE
+    # 4. Apply RoPE (With Safe Reshape)
     with torch.no_grad():
-        # 手动执行标准 LLaMA 风格 RoPE (flash_attn 默认非 interleaved)
-        # rotate_half: [-x2, x1]
         def apply_rotary(x, cos, sin):
             # x: [B, H, S, D]
             # cos, sin: [S, D]
-            cos = cos.view(1, 1, seq, 72)
-            sin = sin.view(1, 1, seq, 72)
+            B, H, S, D = x.shape
+            
+            # Ensure shape alignment [1, 1, S, D]
+            cos = cos.view(1, 1, S, D)
+            sin = sin.view(1, 1, S, D)
+            
             x1, x2 = x.chunk(2, dim=-1)
+            # Origin (interleaved=False): [-x2, x1]
             return (x * cos) + (torch.cat((-x2, x1), dim=-1) * sin)
             
         q_o_roped = apply_rotary(q_o, cos_o, sin_o)
         
         # Muse Apply
         input_pos = {"height": h_ids.unsqueeze(0), "width": w_ids.unsqueeze(0)}
-        q_m_in = q_m.transpose(1, 2) # Muse RoPE expects [B, S, H, D]
+        q_m_in = q_m.transpose(1, 2) 
         q_m_roped = rope_mod(q_m_in, input_pos=input_pos).transpose(1, 2)
         
     compare("Output: Q after RoPE", q_o_roped, q_m_roped, atol=1e-2)
