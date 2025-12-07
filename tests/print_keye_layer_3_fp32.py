@@ -1,99 +1,209 @@
-class KeyeAxialRotaryEmbedding(nn.Module):
-    """把二维 (h, w) RoPE 封装成 attention 可直接调用的模块。"""
+"""
+Keye Vision Precision Microscope (Fixed: theta vs inv_freq)
+===========================================================
 
-    def __init__(self, head_dim: int, *, max_grid_size: int, base: int = 10_000) -> None:
-        super().__init__()
-        if head_dim % 2 != 0:
-            raise ValueError("head_dim 必须能被 2 整除，才能按 h/w 分半。")
-        axis_dim = head_dim // 2
-        self.height_rope = RotaryPositionalEmbeddings(
-            dim=axis_dim, max_seq_len=max_grid_size, base=base
-        )
-        self.width_rope = RotaryPositionalEmbeddings(
-            dim=axis_dim, max_seq_len=max_grid_size, base=base
-        )
+修复：
+1. 适配 Muse RoPE 的属性名 `theta` (Origin 叫 `inv_freq`)。
+2. 完整追踪 1e-8 误差的来源。
+"""
 
-    @staticmethod
-    def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-        x1, x2 = x.chunk(2, dim=-1)
-        return torch.cat([-x2, x1], dim=-1)
+import torch
+import numpy as np
+import sys
+import types
+from transformers import PretrainedConfig
+from muse.config.model_config import KeyeVisionConfig
+from muse.models.keye_vit import KeyeVisionTransformer as MuseKeyeVisionModel
+from muse.training.common import set_default_dtype
 
-    def _lookup(self, rope: RotaryPositionalEmbeddings, pos_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        if pos_ids.dtype != torch.long:
-            pos_ids = pos_ids.long()
-        # cache shape: [max_seq_len, dim, 2]
-        # gathered shape: [..., dim, 2]
-        cache = rope.cache
-        gathered = cache[pos_ids]
-        
-        # Split into cos/sin
-        cos = gathered[..., 0] # [..., dim]
-        sin = gathered[..., 1] # [..., dim]
-        
-        # Handle broadcasting if needed (e.g. if dim=3 results in [seq, dim])
-        # Based on your provided code, you want to ensure the last dim is preserved
-        # and potentially unsqueeze for broadcasting if necessary.
-        # But standard Attention expects [B, S, H, D] or [B, S, D].
-        # Here we just return the values, unsqueezing logic usually happens inside lookup if needed 
-        # or we let broadcasting handle it. Your original code unsqueezed -2.
-        
-        if cos.dim() == 2: # [Batch*Seq, Dim] or [Seq, Dim]
-             pass # Dimensions are likely fine for broadcasting against [B, S, H, D] 
-                  # as long as we reshape later or rely on broadcasting rules.
-                  # But looking at your original code:
-                  # cos = gathered[..., 0].unsqueeze(-2) -> [..., 1, dim]
-                  # This suggests preparing for [B, S, NumHeads, HeadDim]
-        
-        # Replicating your original _lookup logic for safety:
-        cos = gathered[..., 0].unsqueeze(-2)
-        sin = gathered[..., 1].unsqueeze(-2)
-        
-        if cos.dim() == 3:  # [seq, 1, dim] -> [1, seq, 1, dim] for batch broadcasting?
-            cos = cos.unsqueeze(0)
-            sin = sin.unsqueeze(0)
-            
-        return cos, sin
+CHECKPOINT_PATH = "/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/SigLIP/3.0.0.3/global_step18200/mp_rank_00_model_states.pt"
 
-    def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
-        if input_pos is None:
-            return x
-        if isinstance(input_pos, dict):
-            height_ids = input_pos["height"]
-            width_ids = input_pos["width"]
+# --- Config Hack ---
+class HFKeyeVisionConfig(PretrainedConfig):
+    model_type = "siglip_vision"
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        for k, v in kwargs.items(): setattr(self, k, v)
+class HFKeyeConfig(PretrainedConfig):
+    model_type = "keye"
+    def __init__(self, vision_config=None, **kwargs):
+        super().__init__(**kwargs)
+        self.vision_config = vision_config
+def _ensure_origin_ready():
+    mod = "muse.muse.models.keye_vit.configuration_keye"
+    if mod in sys.modules: return
+    c = types.ModuleType(mod)
+    c.KeyeConfig = HFKeyeConfig
+    c.KeyeVisionConfig = HFKeyeVisionConfig
+    sys.modules[mod] = c
+_ensure_origin_ready()
+from muse.models.keye_vit import modeling_keye_origin as keye_origin
+OriginKeyeVisionModel = keye_origin.SiglipVisionModel 
+
+def compare(name, a, b):
+    a = a.float().cpu().detach()
+    b = b.float().cpu().detach()
+    
+    # 自动对齐 Shape
+    if a.shape != b.shape:
+        if a.numel() == b.numel(): b = b.view_as(a)
         else:
-            height_ids, width_ids = input_pos
+            print(f"{name:<30} | ❌ SHAPE: {a.shape} vs {b.shape}")
+            return
+    
+    diff = (a - b).abs()
+    max_diff = diff.max().item()
+    mean_diff = diff.mean().item()
+    
+    # 评级 (FP32下)
+    if max_diff == 0: status = "✅ PERFECT (0.0)"
+    elif max_diff < 1e-7: status = "⚠️ TINY (<1e-7)" # 这里的差异通常是 float 精度极限
+    else: status = "❌ DIFF (>1e-7)"
+    
+    print(f"{name:<30} | {status:<18} | Max: {max_diff:.2e} | Mean: {mean_diff:.2e}")
+    
+    if max_diff > 1e-7:
+        mask = diff > 0
+        indices = torch.nonzero(mask)
+        if len(indices) > 0:
+            idx = indices[0]
+            val_a = a[tuple(idx)].item()
+            val_b = b[tuple(idx)].item()
+            print(f"   -> First Diff at {idx.tolist()}: Origin={val_a:.20f}, Muse={val_b:.20f}")
+            print(f"      Delta={val_a-val_b:.2e}")
 
-        # Lookup returns: [..., axis_dim] where axis_dim = head_dim // 2 (e.g., 36)
-        # RotaryPositionalEmbeddings creates [freqs, freqs] -> [H, H]
-        cos_h, sin_h = self._lookup(self.height_rope, height_ids)
-        cos_w, sin_w = self._lookup(self.width_rope, width_ids)
+def run_microscope():
+    torch.manual_seed(42)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    dtype = torch.float32 # FP32 !!!
+    
+    print(f"Running Microscope in {dtype}...")
+    
+    muse_cfg = KeyeVisionConfig(use_qk_norm=False, attention_function="eager")
+    origin_cfg = HFKeyeVisionConfig(**muse_cfg.dict())
+    
+    with set_default_dtype(dtype):
+        origin_model = OriginKeyeVisionModel(origin_cfg).to(device).eval()
+        muse_model = MuseKeyeVisionModel(muse_cfg).to(device).eval()
+    
+    # 2. Weights
+    raw = torch.load(CHECKPOINT_PATH, map_location="cpu")
+    if "module" in raw: raw = raw["module"]
+    origin_state = {}
+    for k, v in raw.items():
+        clean = k
+        for p in ["module.", "vision_tower.", "siglip."]:
+            if clean.startswith(p): clean = clean[len(p):]
+        if "vision_model" not in clean: clean = "vision_model." + clean
+        origin_state["siglip." + clean] = v.to(dtype)
+    
+    muse_state = muse_model.convert_hf_state_dict(origin_state)
+    origin_load = {k.replace("siglip.", ""): v for k, v in origin_state.items()}
+    origin_model.load_state_dict(origin_load, strict=False)
+    muse_model.load_state_dict(muse_state, strict=False)
+    
+    # 3. Extract Modules
+    rope_origin = origin_model.vision_model.encoder.rotary_pos_emb
+    rope_muse_h = muse_model.encoder.rope.height_rope
+    
+    print("\n" + "="*60)
+    print("Microscope Phase 1: Inv Freq (Base Frequencies)")
+    print("="*60)
+    
+    # Origin: inv_freq
+    inv_o = rope_origin.inv_freq
+    
+    # Muse: theta (Fix: use .theta instead of .inv_freq)
+    if hasattr(rope_muse_h, "theta"):
+        inv_m = rope_muse_h.theta
+    elif hasattr(rope_muse_h, "inv_freq"):
+        inv_m = rope_muse_h.inv_freq
+    else:
+        print("❌ Cannot find 'theta' or 'inv_freq' in Muse RoPE.")
+        return
+    
+    compare("Inv Freq", inv_o, inv_m)
+    
+    print("\n" + "="*60)
+    print("Microscope Phase 2: Cache (Cos/Sin Table)")
+    print("="*60)
+    
+    bs, h, w = 1, 14, 14
+    seq_len = h * w
+    
+    # Origin (On-the-fly)
+    t = torch.arange(seq_len, device=device, dtype=dtype)
+    freqs_o = torch.outer(t, inv_o)
+    emb_o = torch.cat((freqs_o, freqs_o), dim=-1)
+    cos_o_raw = emb_o.cos()
+    sin_o_raw = emb_o.sin()
+    
+    # Muse (Cached)
+    # Trigger lazy init if needed
+    _ = muse_model.encoder.rope(torch.zeros(1, seq_len, 16, 72, device=device), input_pos={"height": torch.zeros(1, device=device), "width": torch.zeros(1, device=device)})
 
-        # [FIX 1] Alignment Logic: Interleave H and W
-        # Origin SigLIP Logic: [H_freqs, W_freqs] -> repeat(1, 2) -> [H, W, H, W]
-        # Muse Current Logic: cos_h is [H, H], cos_w is [W, W]
+    # Muse Cache: [max_len, dim, 2] -> [..., 0] is cos
+    cache_val = rope_muse_h.cache
+    cache_slice = cache_val[:seq_len] # [196, 36, 2]
+    
+    cos_m_raw = cache_slice[..., 0] # [196, 36]
+    sin_m_raw = cache_slice[..., 1] # [196, 36]
+    
+    compare("Cos Table (Raw)", cos_o_raw, cos_m_raw)
+    
+    print("\n" + "="*60)
+    print("Microscope Phase 3: Rotated Query")
+    print("="*60)
+    
+    # Grid
+    h_ids = torch.arange(h, device=device).repeat_interleave(w)
+    w_ids = torch.arange(w, device=device).repeat(h)
+    
+    # Input Q
+    x_in = torch.randn(1, seq_len, 1152, device=device, dtype=dtype)
+    
+    # Projections
+    q_proj_o = origin_model.vision_model.encoder.layers[0].self_attn.q_proj
+    q_proj_m = muse_model.encoder.layers[0].attn.q_proj
+    
+    with torch.no_grad():
+        q_raw_o = q_proj_o(x_in).view(1, seq_len, 16, 72).transpose(1, 2)
+        q_raw_m = q_proj_m(x_in).view(1, seq_len, 16, 72).transpose(1, 2)
+    
+    compare("Q Raw (Pre-RoPE)", q_raw_o, q_raw_m)
+    
+    # Origin Apply (Manual to guarantee logic)
+    pids = torch.stack([h_ids, w_ids], dim=-1)
+    rope_full_o = origin_model.vision_model.encoder.rotary_pos_emb(max(h,w)+1)
+    rope_val_o = rope_full_o[pids].flatten(1).repeat(1, 2) # [196, 72]
+    
+    cos_o_final = rope_val_o.cos().view(1, 1, seq_len, 72)
+    sin_o_final = rope_val_o.sin().view(1, 1, seq_len, 72)
+    
+    def apply_rotary_o(q, cos, sin):
+        q1, q2 = q.chunk(2, dim=-1)
+        return torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
         
-        # Step 1: Split the duplicated halves
-        h1, h2 = cos_h.chunk(2, dim=-1)
-        w1, w2 = cos_w.chunk(2, dim=-1)
-        
-        sh1, sh2 = sin_h.chunk(2, dim=-1)
-        sw1, sw2 = sin_w.chunk(2, dim=-1)
-        
-        # Step 2: Re-assemble to match Origin [H, W, H, W]
-        # Note: We do NOT cast to x.dtype here yet, we want to keep FP32 if possible
-        cos = torch.cat([h1, w1, h2, w2], dim=-1)
-        sin = torch.cat([sh1, sw1, sh2, sw2], dim=-1)
-        
-        # [FIX 2] Precision Alignment: Force FP32 calculation
-        # Origin calculates: apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
-        # This eliminates the 5e-2 error caused by BF16 accumulation
-        
-        x_float = x.float()
-        cos_float = cos.to(device=x.device, dtype=torch.float32)
-        sin_float = sin.to(device=x.device, dtype=torch.float32)
-        
-        # Apply rotation in FP32
-        x_out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
-        
-        # Cast back to original dtype (e.g. bfloat16)
-        return x_out.to(dtype=x.dtype)
+    q_rot_o = apply_rotary_o(q_raw_o, cos_o_final, sin_o_final)
+    
+    # Muse Apply
+    input_pos = {"height": h_ids.unsqueeze(0), "width": w_ids.unsqueeze(0)}
+    q_m_in = q_raw_m.transpose(1, 2) 
+    # Calling the FIXED KeyeAxialRotaryEmbedding.forward
+    q_rot_m = muse_model.encoder.rope(q_m_in, input_pos=input_pos).transpose(1, 2)
+    
+    compare("Q Rotated", q_rot_o, q_rot_m)
+    
+    print("\n" + "="*60)
+    print("Microscope Phase 4: Attn Score")
+    print("="*60)
+    
+    scale = 72 ** -0.5
+    # Self-attention score (using Q as K for simplicity to test accumulation)
+    attn_o = torch.matmul(q_rot_o, q_rot_o.transpose(-2, -1)) * scale
+    attn_m = torch.matmul(q_rot_m, q_rot_m.transpose(-2, -1)) * scale
+    
+    compare("Attn Score (Simulated)", attn_o, attn_m)
+
+if __name__ == "__main__":
+    run_microscope()
