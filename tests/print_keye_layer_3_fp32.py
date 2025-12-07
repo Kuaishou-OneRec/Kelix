@@ -193,17 +193,55 @@ def run_microscope():
     q_rot_m = muse_model.encoder.rope(q_m_in, input_pos=input_pos).transpose(1, 2)
     
     compare("Q Rotated", q_rot_o, q_rot_m)
+    compare("Q Rotated (Post-RoPE)", q_rot_o, q_rot_m)
     
-    print("\n" + "="*60)
-    print("Microscope Phase 4: Attn Score")
-    print("="*60)
+    print("\n=== 4. Attention Score (Q * K^T) ===")
     
+    # [FIX] 修复手动 RoPE 应用逻辑
+    def apply_rotary_fixed(q, cos, sin):
+        # q: [1, Seq, 16, 72] -> Transposed to [1, 16, Seq, 72] in usage
+        # But here input q is [1, 16, Seq, 72]
+        
+        # Split Q into two halves (36 dim each)
+        q1, q2 = q.chunk(2, dim=-1)
+        
+        # Split Cos/Sin into two halves (36 dim each)
+        # cos was [1, 1, Seq, 72]
+        c1, c2 = cos.chunk(2, dim=-1)
+        s1, s2 = sin.chunk(2, dim=-1)
+        
+        # Apply rotation logic:
+        # Part 1: q1 * c1 - q2 * s1
+        # Part 2: q2 * c2 + q1 * s2
+        return torch.cat([q1 * c1 - q2 * s1, q2 * c2 + q1 * s2], dim=-1)
+
+    # 构造 K (为了验证 Attention)
+    k_proj_o = origin_model.vision_model.encoder.layers[0].self_attn.k_proj
+    # K 需要和 Q 一样经历转置
+    k_raw_o = k_proj_o(x_in).view(1, seq, 16, 72).transpose(1, 2)
+    k_rot_o = apply_rotary_fixed(k_raw_o, cos_o_final, sin_o_final)
+    
+    # Muse K
+    k_proj_m = muse_model.encoder.layers[0].attn.k_proj
+    k_raw_m = k_proj_m(x_in).view(1, seq, 16, 72).transpose(1, 2)
+    
+    # Muse Apply
+    input_pos = {"height": h_ids.unsqueeze(0), "width": w_ids.unsqueeze(0)}
+    k_m_in = k_raw_m.transpose(1, 2)
+    k_rot_m = muse_model.encoder.rope(k_m_in, input_pos=input_pos).transpose(1, 2)
+    
+    # Dot Product
     scale = 72 ** -0.5
-    # Self-attention score (using Q as K for simplicity to test accumulation)
-    attn_o = torch.matmul(q_rot_o, q_rot_o.transpose(-2, -1)) * scale
-    attn_m = torch.matmul(q_rot_m, q_rot_m.transpose(-2, -1)) * scale
+    attn_score_o = torch.matmul(q_rot_o, k_rot_o.transpose(-2, -1)) * scale
+    attn_score_m = torch.matmul(q_rot_m, k_rot_m.transpose(-2, -1)) * scale
     
-    compare("Attn Score (Simulated)", attn_o, attn_m)
+    compare("Attn Score (QK^T)", attn_score_o, attn_score_m)
+    
+    print("\n=== 5. Softmax Output ===")
+    attn_probs_o = torch.nn.functional.softmax(attn_score_o, dim=-1)
+    attn_probs_m = torch.nn.functional.softmax(attn_score_m, dim=-1)
+    
+    compare("Attn Probs (Softmax)", attn_probs_o, attn_probs_m)
 
 if __name__ == "__main__":
     run_microscope()
