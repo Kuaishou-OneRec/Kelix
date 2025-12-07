@@ -3,6 +3,7 @@ Keye Vision Precision Microscope (Find the 1e-8 source)
 =======================================================
 
 目标：定位 Layer 0 中 10^-8 误差的精确来源。
+重点：Inv_Freq (频率基), Freqs (角度), Cos/Sin (三角函数值), Rotated Query.
 """
 
 import torch
@@ -16,7 +17,7 @@ from muse.training.common import set_default_dtype
 
 CHECKPOINT_PATH = "/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/SigLIP/3.0.0.3/global_step18200/mp_rank_00_model_states.pt"
 
-# --- Setup Wrappers ---
+# --- Config Hack ---
 class HFKeyeVisionConfig(PretrainedConfig):
     model_type = "siglip_vision"
     def __init__(self, **kwargs):
@@ -41,149 +42,161 @@ OriginKeyeVisionModel = keye_origin.SiglipVisionModel
 def compare(name, a, b):
     a = a.float().cpu().detach()
     b = b.float().cpu().detach()
+    
+    # 自动对齐 Shape
     if a.shape != b.shape:
-        if a.numel() == b.numel(): b = b.view_as(a) # 尝试 reshape 对齐
+        if a.numel() == b.numel(): b = b.view_as(a)
         else:
-            print(f"{name:<25} | ❌ SHAPE: {a.shape} vs {b.shape}")
+            print(f"{name:<30} | ❌ SHAPE: {a.shape} vs {b.shape}")
             return
     
     diff = (a - b).abs()
     max_diff = diff.max().item()
     mean_diff = diff.mean().item()
     
-    # 定义“完美”为 0 或 极小
-    status = "✅ PERFECT" if max_diff == 0 else ( "⚠️ TINY" if max_diff < 1e-6 else "❌ DIFF")
+    # 评级
+    if max_diff == 0: status = "✅ PERFECT (0.0)"
+    elif max_diff < 1e-7: status = "⚠️ TINY (<1e-7)"
+    else: status = "❌ DIFF (>1e-7)"
     
-    print(f"{name:<25} | {status} | Max: {max_diff:.2e} | Mean: {mean_diff:.2e}")
+    print(f"{name:<30} | {status:<18} | Max: {max_diff:.2e} | Mean: {mean_diff:.2e}")
+    
+    if max_diff > 0 and max_diff < 1e-5:
+        # 打印前 3 个有差异的值
+        mask = diff > 0
+        indices = torch.nonzero(mask)
+        if len(indices) > 0:
+            idx = indices[0] # 第一个差异点
+            val_a = a[tuple(idx)].item()
+            val_b = b[tuple(idx)].item()
+            print(f"   -> First Diff at {idx.tolist()}: Origin={val_a:.12f}, Muse={val_b:.12f}, Delta={val_a-val_b:.2e}")
 
 def run_microscope():
     torch.manual_seed(42)
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    dtype = torch.float32 # 必须用 FP32
+    dtype = torch.float32 # FP32 !!!
     
     print(f"Running Microscope in {dtype}...")
     
-    # 1. Init
+    # 1. Init Models
     muse_cfg = KeyeVisionConfig(use_qk_norm=False, attention_function="eager")
     origin_cfg = HFKeyeVisionConfig(**muse_cfg.dict())
     
     with set_default_dtype(dtype):
         origin_model = OriginKeyeVisionModel(origin_cfg).to(device).eval()
         muse_model = MuseKeyeVisionModel(muse_cfg).to(device).eval()
+
+    # (Skip Weight Loading if we just check math logic, but loading ensures dims are correct)
+    # 这里我们只关注 RoPE 的算术逻辑，权重其实不影响 RoPE 的生成
     
-    # 2. Weights
-    raw = torch.load(CHECKPOINT_PATH, map_location="cpu")
-    if "module" in raw: raw = raw["module"]
-    origin_state = {}
-    for k, v in raw.items():
-        clean = k
-        for p in ["module.", "vision_tower.", "siglip."]:
-            if clean.startswith(p): clean = clean[len(p):]
-        if "vision_model" not in clean: clean = "vision_model." + clean
-        origin_state["siglip." + clean] = v.to(dtype)
+    # 2. Extract RoPE Modules
+    rope_origin = origin_model.vision_model.encoder.rotary_pos_emb
     
-    muse_state = muse_model.convert_hf_state_dict(origin_state)
-    origin_load = {k.replace("siglip.", ""): v for k, v in origin_state.items()}
-    origin_model.load_state_dict(origin_load, strict=False)
-    muse_model.load_state_dict(muse_state, strict=False)
+    # Muse 的 RoPE 在 encoder.rope (KeyeAxialRotaryEmbedding) -> height_rope / width_rope
+    rope_muse_h = muse_model.encoder.rope.height_rope
     
-    print("\n=== 1. RoPE 基础频率 (inv_freq) ===")
-    # Origin 的 inv_freq
-    # 路径: vision_model.encoder.rotary_pos_emb.inv_freq
-    inv_o = origin_model.vision_model.encoder.rotary_pos_emb.inv_freq
+    print("\n" + "="*60)
+    print("Microscope Phase 1: Inv Freq (Base Frequencies)")
+    print("="*60)
     
-    # Muse 的 inv_freq (Height 和 Width 应该是同一套参数)
-    # 路径: encoder.rope.height_rope.inv_freq
-    inv_m = muse_model.encoder.rope.height_rope.inv_freq
+    # 获取 Inv Freq
+    # Origin
+    inv_o = rope_origin.inv_freq # [18]
+    # Muse (H和W是一样的配置，取H即可)
+    inv_m = rope_muse_h.inv_freq # [18]
     
     compare("Inv Freq", inv_o, inv_m)
     
-    print("\n=== 2. RoPE 三角函数表 (Cos/Sin) ===")
-    bs, h, w = 1, 14, 14
-    seq = h * w
-    h_ids = torch.arange(h, device=device).repeat_interleave(w)
-    w_ids = torch.arange(w, device=device).repeat(h)
+    print("\n" + "="*60)
+    print("Microscope Phase 2: Freqs (Angle = Pos * InvFreq)")
+    print("="*60)
     
-    # --- Origin Cos/Sin ---
-    pids = torch.stack([h_ids, w_ids], dim=-1)
-    rope_full_o = origin_model.vision_model.encoder.rotary_pos_emb(max(h,w)+1)
-    rope_val_o = rope_full_o[pids].flatten(1)
-    # Origin Logic: Repeat to [H, W, H, W]
-    rope_emb_o = rope_val_o.repeat(1, 2)
-    cos_o = rope_emb_o.cos()
+    # 模拟计算 Freqs
+    seq_len = 196
+    t = torch.arange(seq_len, device=device, dtype=dtype)
     
-    # --- Muse Cos/Sin ---
-    rope_mod = muse_model.encoder.rope
-    cos_h, _ = rope_mod._lookup(rope_mod.height_rope, h_ids)
-    cos_w, _ = rope_mod._lookup(rope_mod.width_rope, w_ids)
-    # Muse Logic: Chunk & Interleave -> [H, W, H, W]
-    ch1, ch2 = cos_h.chunk(2, dim=-1)
-    cw1, cw2 = cos_w.chunk(2, dim=-1)
-    cos_m = torch.cat([ch1, cw1, ch2, cw2], dim=-1).squeeze()
+    # Origin Logic
+    # freqs = outer(t, inv_freq)
+    freqs_o = torch.outer(t, inv_o)
     
-    compare("Cos Values", cos_o, cos_m)
+    # Muse Logic (Inside rotary_embedding.py -> forward or _update_cos_sin_tables)
+    # Muse 通常会预计算 cache，我们看看 cache 里的值
+    # cache: [max_len, dim] -> 我们取前 seq_len 行
+    # 注意：Muse cache 可能是 [cos, sin] 或者 [freqs]，通常是已计算好的 cos/sin
+    # 我们手动模拟 Muse 的 freqs 计算逻辑来对比
+    freqs_m = torch.outer(t, inv_m) 
+    
+    compare("Calculated Freqs (Manual)", freqs_o, freqs_m)
+    
+    print("\n" + "="*60)
+    print("Microscope Phase 3: Cos/Sin Values")
+    print("="*60)
+    
+    # Origin Cos
+    # emb = cat(freqs, freqs) -> cos = emb.cos()
+    emb_o = torch.cat((freqs_o, freqs_o), dim=-1)
+    cos_o = emb_o.cos()
+    sin_o = emb_o.sin()
+    
+    # Muse Cos (From Cache)
+    # Muse cache shape [max_seq, dim]
+    # 我们直接取 cache 里的值（它是预计算好的）
+    # Muse 可能是 lazy init，先跑一次 forward 确保 cache 更新
+    _ = rope_muse_h(torch.zeros(1, seq_len, 36, device=device)) 
+    
+    # Muse 的 cache 通常包含 cos 和 sin。具体实现因库而异。
+    # 假设 muse.layers.position_embeddings.RotaryPositionalEmbeddings 的 cache 是 [max_len, dim] 的 cos 和 sin
+    # 查看源码或属性
+    if hasattr(rope_muse_h, 'cos_cached'): # 旧版常见
+        cache_cos = rope_muse_h.cos_cached[:seq_len]
+        cache_sin = rope_muse_h.sin_cached[:seq_len]
+    elif hasattr(rope_muse_h, 'cache'): # 新版常见，可能是 [max_len, dim, 2] (cos, sin)
+        # 根据你之前贴的代码: gathered = cache[pos_ids] -> [..., 2]
+        # cache 是 [max_len, dim, 2]
+        cache_val = rope_muse_h.cache[:seq_len]
+        cache_cos = cache_val[..., 0]
+        cache_sin = cache_val[..., 1]
+    else:
+        print("Could not find cache in Muse RoPE module.")
+        return
 
-    print("\n=== 3. 旋转后的 Q (Rotated Query) ===")
-    # 构造相同的 Q 输入
-    # 使用随机数，因为我们已经验证过 Q_Proj 是匹配的
-    x_in = torch.randn(1, seq, 1152, device=device, dtype=dtype)
+    # Muse cache layout: [H, H] (if dim=36)
+    # Origin layout before repeat: [H, H] (emb = cat(freqs, freqs))
     
-    # 获取 Q (通过已加载的权重)
-    q_proj_o = origin_model.vision_model.encoder.layers[0].self_attn.q_proj
-    q_proj_m = muse_model.encoder.layers[0].attn.q_proj
+    compare("Cos Table", cos_o, cache_cos)
+    compare("Sin Table", sin_o, cache_sin)
     
-    with torch.no_grad():
-        q_raw_o = q_proj_o(x_in).view(1, seq, 16, 72).transpose(1, 2)
-        q_raw_m = q_proj_m(x_in).view(1, seq, 16, 72).transpose(1, 2)
+    print("\n" + "="*60)
+    print("Microscope Phase 4: Full RoPE Construct")
+    print("="*60)
     
-    # 验证投影是否完美
-    compare("Q Raw (Pre-RoPE)", q_raw_o, q_raw_m)
+    # 构造 Origin 完整的 [H, W, H, W]
+    # 假设 Grid 为 [14, 14]
+    h_ids = torch.arange(14, device=device).repeat_interleave(14)
+    w_ids = torch.arange(14, device=device).repeat(14)
+    pids = torch.stack([h_ids, w_ids], dim=-1)
     
-    # 应用 RoPE
-    # Origin Apply (Manual FP32 Sim)
-    sin_o = rope_emb_o.sin()
-    def apply_origin_style(q, cos, sin):
-        cos = cos.view(1, 1, seq, 72)
-        sin = sin.view(1, 1, seq, 72)
-        q1, q2 = q.chunk(2, dim=-1)
-        return torch.cat([q1 * cos - q2 * sin, q2 * cos + q1 * sin], dim=-1)
+    # Origin
+    rope_full_o = origin_model.vision_model.encoder.rotary_pos_emb(30) # 足够大
+    rope_idx_o = rope_full_o[pids].flatten(1) # [196, 36] (H+W Freqs)
+    # Origin Repeat: [H, W, H, W]
+    rope_final_o = rope_idx_o.repeat(1, 2) 
+    cos_final_o = rope_final_o.cos()
     
-    q_rot_o = apply_origin_style(q_raw_o, cos_o, sin_o)
+    # Muse
+    # Muse Cache Lookup
+    cache_h = rope_muse_h.cache
+    cache_w = muse_model.encoder.rope.width_rope.cache
     
-    # Muse Apply (Using Actual Module)
-    input_pos = {"height": h_ids.unsqueeze(0), "width": w_ids.unsqueeze(0)}
-    q_m_in = q_raw_m.transpose(1, 2) # Muse Module expects [B, S, H, D]
-    q_rot_m = rope_mod(q_m_in, input_pos=input_pos).transpose(1, 2)
+    cos_h = cache_h[h_ids, ..., 0] # [196, 36] ([H, H])
+    cos_w = cache_w[w_ids, ..., 0] # [196, 36] ([W, W])
     
-    compare("Q Rotated (Post-RoPE)", q_rot_o, q_rot_m)
+    # Muse Interleave Logic
+    h1, h2 = cos_h.chunk(2, dim=-1)
+    w1, w2 = cos_w.chunk(2, dim=-1)
+    cos_final_m = torch.cat([h1, w1, h2, w2], dim=-1)
     
-    print("\n=== 4. Attention Score (Q * K^T) ===")
-    # 构造 K
-    k_proj_o = origin_model.vision_model.encoder.layers[0].self_attn.k_proj
-    k_raw_o = k_proj_o(x_in).view(1, seq, 16, 72).transpose(1, 2)
-    k_rot_o = apply_origin_style(k_raw_o, cos_o, sin_o)
-    
-    # 计算 Dot Product (这是误差最容易放大的地方)
-    scale = 72 ** -0.5
-    attn_score_o = torch.matmul(q_rot_o, k_rot_o.transpose(-2, -1)) * scale
-    
-    # 假设 Muse 使用完全相同的输入 (为了隔离 RoPE 误差)
-    attn_score_m = torch.matmul(q_rot_m, q_rot_m.transpose(-2, -1)) * scale # 这里的 K 暂用 Q 代替测试自相关，或者用 k_rot_m
-    # 为了严谨，计算 Muse 的 K
-    k_proj_m = muse_model.encoder.layers[0].attn.k_proj
-    k_raw_m = k_proj_m(x_in).view(1, seq, 16, 72).transpose(1, 2)
-    k_m_in = k_raw_m.transpose(1, 2)
-    k_rot_m = rope_mod(k_m_in, input_pos=input_pos).transpose(1, 2)
-    
-    attn_score_m = torch.matmul(q_rot_m, k_rot_m.transpose(-2, -1)) * scale
-    
-    compare("Attn Score (QK^T)", attn_score_o, attn_score_m)
-    
-    print("\n=== 5. Softmax Output ===")
-    attn_probs_o = torch.nn.functional.softmax(attn_score_o, dim=-1)
-    attn_probs_m = torch.nn.functional.softmax(attn_score_m, dim=-1)
-    
-    compare("Attn Probs (Softmax)", attn_probs_o, attn_probs_m)
+    compare("Final RoPE Cos Map", cos_final_o, cos_final_m)
 
 if __name__ == "__main__":
     run_microscope()
