@@ -226,7 +226,7 @@ class KeyeVisionEncoder(nn.Module):
                 k_proj=nn.Linear(embed_dim, num_kv_heads * head_dim, bias=True),
                 v_proj=nn.Linear(embed_dim, num_kv_heads * head_dim, bias=True),
                 output_proj=nn.Linear(num_heads * head_dim, embed_dim, bias=True),
-                pos_embeddings=self.rope,
+                # pos_embeddings=self.rope,
                 q_norm=q_norm,
                 k_norm=k_norm,
                 kv_cache=None,
