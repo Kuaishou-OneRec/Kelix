@@ -1391,13 +1391,15 @@ class SiglipVisionTransformer(nn.Module):
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
         sample_hidden_state = list()
-        assert cu_seqlens is not None
-        for i in range(cu_seqlens.shape[0] - 1):
-            start = cu_seqlens[i]
-            end = cu_seqlens[i + 1]
-            tensor = last_hidden_state[:, start: end, :].squeeze(0)
-            sample_hidden_state.append(tensor)
-
+        # assert cu_seqlens is not None
+        if cu_seqlens is not None:
+            for i in range(cu_seqlens.shape[0] - 1):
+                start = cu_seqlens[i]
+                end = cu_seqlens[i + 1]
+                tensor = last_hidden_state[:, start: end, :].squeeze(0)
+                sample_hidden_state.append(tensor)
+        else:
+            sample_hidden_state = [last_hidden_state]
         return BaseModelOutputWithPooling(
             last_hidden_state=sample_hidden_state,
             pooler_output=None,
