@@ -6,8 +6,10 @@ import os
 import sys
 import types
 import logging
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -59,6 +61,25 @@ logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 DEFAULT_CHECKPOINT_PATH = "/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/SigLIP/3.0.0.3/global_step18200/mp_rank_00_model_states.pt"
+
+
+@contextmanager
+def _mock_context_parallel():
+    """Mock context parallel helpers so tests can run without torch.distributed init."""
+    patches = [
+        patch("muse.training.parallel.get_context_parallel_world_size", new=lambda: 1),
+        patch("muse.training.parallel.get_context_parallel_group", new=lambda backend="nccl": None),
+        patch("muse.training.parallel.get_context_parallel_rank", new=lambda: 0),
+        patch("muse.layers.attention.get_context_parallel_world_size", new=lambda: 1),
+        patch("muse.layers.attention.get_context_parallel_group", new=lambda backend="nccl": None),
+    ]
+    for p in patches:
+        p.start()
+    try:
+        yield
+    finally:
+        for p in patches:
+            p.stop()
 
 
 def _build_muse_config(hf_cfg: Dict[str, Any]) -> KeyeVisionConfig:
@@ -267,7 +288,11 @@ def check_weights(hf_state_dict: Dict[str, torch.Tensor],
 
 def test_keye_vision_align_with_hf_checkpoint():
     """Ensure Muse KeyeVisionTransformer aligns with the Origin implementation."""
-    
+    with _mock_context_parallel():
+        _run_keye_vision_align_with_hf_checkpoint()
+
+
+def _run_keye_vision_align_with_hf_checkpoint():
     # === 1. Configuration ===
     checkpoint_path = os.environ.get("KEYE_VIT_CHECKPOINT", DEFAULT_CHECKPOINT_PATH)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -436,6 +461,11 @@ def test_keye_vision_align_with_hf_checkpoint():
 
 def test_keye_vision_layer0_step_by_step():
     """Layer-by-layer debugger mirroring test_keye_vit_layer_step_by_step."""
+    with _mock_context_parallel():
+        _run_keye_vision_layer0_step_by_step()
+
+
+def _run_keye_vision_layer0_step_by_step():
     checkpoint_path = os.environ.get("KEYE_VIT_CHECKPOINT", DEFAULT_CHECKPOINT_PATH)
     logger.info(f"Layer debugger checkpoint: {checkpoint_path}")
 

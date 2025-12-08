@@ -6,7 +6,9 @@ Refined for Verbose Logging, Mapping Verification, and Coverage Checking.
 import os
 import sys
 import logging
+from contextlib import contextmanager
 from typing import Any, Dict, List, Tuple, Union
+from unittest.mock import patch
 
 import torch
 import numpy as np
@@ -24,6 +26,26 @@ logging.basicConfig(
     stream=sys.stdout
 )
 logger = logging.getLogger(__name__)
+
+
+@contextmanager
+def _mock_context_parallel():
+    """Stub context parallel helpers so tests can run without torch.distributed init."""
+    patches = [
+        patch("muse.training.parallel.get_context_parallel_world_size", new=lambda: 1),
+        patch("muse.training.parallel.get_context_parallel_group", new=lambda backend="nccl": None),
+        patch("muse.training.parallel.get_context_parallel_rank", new=lambda: 0),
+        patch("muse.layers.attention.get_context_parallel_world_size", new=lambda: 1),
+        patch("muse.layers.attention.get_context_parallel_group", new=lambda backend="nccl": None),
+    ]
+    for p in patches:
+        p.start()
+    try:
+        yield
+    finally:
+        for p in patches:
+            p.stop()
+
 
 def _build_siglip_config(hf_cfg: Dict[str, Any]) -> SiglipVisionConfig:
     """Map Hugging Face config to Muse SiglipVisionConfig."""
@@ -91,6 +113,11 @@ def compare_tensors_verbose(name: str, tensor_hf: torch.Tensor, tensor_muse: tor
         logger.info(f"  Muse: {format_tensor_val(t2, 10)}")
 
 def test_siglip_logits_align_with_hf_checkpoint():
+    with _mock_context_parallel():
+        _run_siglip_logits_align_with_hf_checkpoint()
+
+
+def _run_siglip_logits_align_with_hf_checkpoint():
     torch.manual_seed(0)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(0)
