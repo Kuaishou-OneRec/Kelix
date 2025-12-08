@@ -509,24 +509,17 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         # So we can calculate on half dim to save memory, then expand.
         cos_half = rope_emb_half.cos() 
         sin_half = rope_emb_half.sin()
-
         if FLASH_ATTN_AVAILABLE:
-            # === PATH A: Flash Attention Kernel (Matches HF exact numeric behavior) ===
-            # HF passes the "half" cos/sin to the kernel.
-            # kernel input requirement: cos shape last dim should be rot_dim / 2.
-            # Our x is [..., 72], rot_dim is 72. Kernel expects cos [..., 36].
-            # This matches 'cos_half' perfectly.
-            # HF Code: cos.chunk(2)[0] -> takes the first half.
+            # === PATH A: Flash Attention Kernel ===
+            # Kernel expects:
+            # x: [Batch, Seq, Heads, Dim] or [TotalSeq, Heads, Dim]
+            # cos/sin: [TotalSeq, RotDim] -> 2D Tensor!
+            # Our cos_half is [Seq, 36]. This is exactly what it wants.
             
-            # Ensure correct shape for broadcasting: [Seq, 1, 36]
-            cos_kernel = cos_half.unsqueeze(1) 
-            sin_kernel = sin_half.unsqueeze(1)
-            
-            # The kernel handles the .float() conversion internally/efficiently
-            # We explicitly cast inputs to float to match HF's python wrapper usage:
-            # apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
+            # Note: We must cast to float to match HF's apply_rotary_emb(q.float()...) behavior
+            # The kernel itself handles the precision, but passing float ensures we don't truncate early.
             return flash_apply_rotary_emb(
-                x.float(), cos_kernel.float(), sin_kernel.float()
+                x.float(), cos_half.float(), sin_half.float()
             ).to(dtype=x.dtype)
             
         else:
