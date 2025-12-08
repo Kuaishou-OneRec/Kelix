@@ -6,12 +6,18 @@ import os
 import sys
 import types
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 import torch
 import torch.nn as nn
 import numpy as np
 from PIL import Image
+
+# Ensure repository root (containing the `muse` package) is on sys.path
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 # Muse imports
 from muse.config.model_config import KeyeVisionConfig
@@ -36,7 +42,7 @@ class HFKeyeConfig(PretrainedConfig):
 
 def _ensure_origin_ready():
     # Helper to inject config classes so Origin model can import them
-    mod = "muse.muse.tests.model_for_compare.keye_vit.configuration_keye"
+    mod = "muse.tests.model_for_compare.keye_vit.configuration_keye"
     if mod not in sys.modules:
         c = types.ModuleType(mod)
         c.KeyeConfig = HFKeyeConfig
@@ -46,7 +52,7 @@ def _ensure_origin_ready():
 _ensure_origin_ready()
 # Import the Reference Implementation (Origin)
 # Assuming this file exists in your path as per previous debug sessions
-from muse.muse.tests.model_for_compare.keye_vit import modeling_keye_origin as keye_origin
+from muse.tests.model_for_compare.keye_vit import modeling_keye_origin as keye_origin
 OriginKeyeVisionModel = keye_origin.SiglipVisionModel 
 
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
