@@ -252,57 +252,6 @@ class SiglipVisionEmbeddings(nn.Module):
         
         return embeddings
 
-        # has_learnable_position_embedding = self.has_learnable_position_embedding if hasattr(
-        #     self.config, "has_learnable_position_embedding"
-        # ) else has_learnable_position_embedding
-        # target_dtype = self.patch_embedding.weight.dtype
-        # print('maosiyang:::pixel',pixel_values.shape)
-        # if pixel_values.dim() == 4:
-        #     pixel_values = pixel_values.unsqueeze(0)#expand to 5 dimension
-        # if pixel_values.dim() == 5:
-        #     if position_ids is None:
-        #         for thw_tuple in image_grid_thw:
-        #             numel = np.prod(thw_tuple)
-        #             position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
-        #         # raise ValueError(
-        #         #     "position_ids must be provided when pixel_values has 5 dimensions."
-        #         # )
-        #     from einops import rearrange
-
-        #     batch_size, sequence_len, channel, height, width = pixel_values.shape
-        #     pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
-        #     patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-        #     print('maosiyang::::',patch_embeds.shape)
-        #     embeddings = patch_embeds.flatten(-2).squeeze(-1)
-        #     print('maosiyang2222::::',embeddings.shape)
-        #     embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=sequence_len)
-
-        #     # todo: not dubug
-        #     if has_learnable_position_embedding:
-        #         if interpolate_pos_encoding and image_grid_thw is not None:
-        #             flatten_image_grid_thw = self.flatten_list(image_grid_thw)
-        #             assert batch_size == 1
-        #             start = 0
-        #             image_embedding_list = list()
-        #             assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (flatten_image_grid_thw, embeddings.shape)
-        #             embeddings = embeddings.squeeze(0)
-        #             tmp_embeddings = list()
-        #             for image_grid in image_grid_thw:
-        #                 t, h, w = image_grid
-        #                 end = start + t * h * w
-        #                 image_embeddings = embeddings[start: end, :]
-        #                 position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0).repeat(
-        #                     t, 1)
-        #                 image_embeddings = image_embeddings + position_embedding
-        #                 tmp_embeddings.append(image_embeddings)
-        #                 start = end
-        #             embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
-        #         else:
-        #             embeddings = embeddings + self.packing_position_embedding(position_ids)
-        #     return embeddings
-
-        # raise NotImplementedError(str(pixel_values.shape))
-
 
 class SiglipEncoder(nn.Module):
     """
@@ -518,18 +467,13 @@ class SiglipVisionTransformer(Model):
                             break
                 break
         
-        # Handle TiedLinear: its weight is actually the tied_module's weight
-        # TiedLinear is not an nn.Module, so it won't appear in named_modules()
         if module is None:
-            # Try to get the module by attribute access
             parts = module_name.split(".")
             try:
                 current = self
                 for part in parts:
                     current = getattr(current, part)
-                # Check if it's a TiedLinear
                 if isinstance(current, TiedLinear):
-                    # TiedLinear's weight is the tied_module's weight
                     module = current.tied_module
                 else:
                     module = current if isinstance(current, nn.Module) else None
@@ -537,34 +481,25 @@ class SiglipVisionTransformer(Model):
                 module = None
         
         if module is None:
-            # If module not found, return a default lecun_normal initializer
             return lecun_normal_
         
-        # Check if this is part of an Attention module
         is_attention = isinstance(parent_module, MultiHeadAttention)
         
-        # Check if this is part of an MLP/FeedForward module
         is_mlp = isinstance(parent_module, FeedForward)
-        
-        # Define initializer based on module type
+
         if isinstance(module, nn.Linear):
             def linear_init(tensor: torch.Tensor):
                 if param_suffix == "weight" and tensor is not None:
                     if is_attention:
-                        # Attention layers use xavier_uniform_
                         init.xavier_uniform_(tensor)
                     elif is_mlp:
-                        # MLP layers use xavier_uniform_ for weights
                         init.xavier_uniform_(tensor)
                     else:
-                        # Other Linear layers use lecun_normal_
                         lecun_normal_(tensor)
                 elif param_suffix == "bias" and tensor is not None:
                     if is_mlp:
-                        # MLP bias uses normal with std=1e-6
                         init.normal_(tensor, mean=0.0, std=1e-6)
                     else:
-                        # Other biases use zeros
                         init.zeros_(tensor)
             return linear_init
             

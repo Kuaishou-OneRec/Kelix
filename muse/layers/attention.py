@@ -293,7 +293,15 @@ class MultiHeadAttention(nn.Module):
             expand_shape = (b, self.num_kv_heads, q_per_kv, k.size(2), self.head_dim)
             k = k.unsqueeze(2).expand(expand_shape).flatten(1, 2)
             v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
-
+        if get_context_parallel_world_size() > 1:
+            cpg = get_context_parallel_group()
+            # If context parallel is enabled, the input is sharded along
+            # the sequence length dimension. We need to recover the original 
+            # sequence length before the attention function.
+            # q, k, v: [b, s_x, n_h, h_d] -> [b, s_x * P, n_h // P, h_d]
+            q = SeqAllToAll4D.apply(cpg, q, 2, 1)
+            k = SeqAllToAll4D.apply(cpg, k, 2, 1)
+            v = SeqAllToAll4D.apply(cpg, v, 2, 1)
         q = q.transpose(1, 2) 
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
@@ -305,5 +313,9 @@ class MultiHeadAttention(nn.Module):
             attn_dropout=self.attn_dropout,
             **kwargs
         )
+        if get_context_parallel_world_size() > 1:
+            cpg = get_context_parallel_group()
+            # output: [b, s_x * P, n_h // P, h_d] -> [b, s_x, n_h, h_d]
+            output = SeqAllToAll4D.apply(cpg, output, 1, 2)
         output = output.transpose(1, 2).contiguous().view(b, s_x, -1)
         return self.output_proj(output)

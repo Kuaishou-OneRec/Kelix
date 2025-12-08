@@ -15,7 +15,6 @@ from muse.layers.rms_norm import RMSNorm
 from muse.layers.position_embeddings import RotaryPositionalEmbeddings
 from muse.layers.kv_cache import KVCache
 
-from flash_attn.layers.rotary import apply_rotary_emb as flash_apply_rotary_emb
 
 
 logger = logging.getLogger(__name__)
