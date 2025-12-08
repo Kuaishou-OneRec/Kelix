@@ -1247,7 +1247,7 @@ class SiglipEncoder(nn.Module):
 
                 window_indices, cu_seqlens_within_windows = self.build_window_index(flatten_image_grid_thw, window_size, device)
                 reversed_window_indices = window_indices.argsort()
-        rope_emb = None
+
         if use_window_attn:
             assert cu_seqlens_within_windows is not None
             attn_cu_seqlens = cu_seqlens_within_windows
