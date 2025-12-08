@@ -175,13 +175,13 @@ def debug_layer0():
     origin_l0.layer_norm2.register_forward_hook(make_hook("origin", "5. Residual1 (LN2 In)", capture_input=True))
     muse_l0.mlp_norm.register_forward_hook(make_hook("muse", "5. Residual1 (LN2 In)", capture_input=True))
 
-    # [6] MLP Hidden (fc1 / gate_proj)
+    # [6] MLP Hidden (fc1 / gate_proj -> w1)
     origin_l0.mlp.fc1.register_forward_hook(make_hook("origin", "6. MLP Hidden (fc1)"))
-    muse_l0.mlp.gate_proj.register_forward_hook(make_hook("muse", "6. MLP Hidden (fc1)"))
+    muse_l0.mlp.w1.register_forward_hook(make_hook("muse", "6. MLP Hidden (fc1)"))  # 改为 w1
 
-    # [7] MLP Output (fc2 / down_proj)
+    # [7] MLP Output (fc2 / down_proj -> w2)
     origin_l0.mlp.fc2.register_forward_hook(make_hook("origin", "7. MLP Out (fc2)"))
-    muse_l0.mlp.down_proj.register_forward_hook(make_hook("muse", "7. MLP Out (fc2)"))
+    muse_l0.mlp.w2.register_forward_hook(make_hook("muse", "7. MLP Out (fc2)"))    # 改为 w2
     
     # --- Prepare Input ---
     proc = KeyeVisionImageProcessor(patch_size=muse_config.patch_size)
