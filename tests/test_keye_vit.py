@@ -52,6 +52,8 @@ OriginKeyeVisionModel = keye_origin.SiglipVisionModel
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
+DEFAULT_CHECKPOINT_PATH = "/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/SigLIP/3.0.0.3/global_step18200/mp_rank_00_model_states.pt"
+
 
 def _build_muse_config(hf_cfg: Dict[str, Any]) -> KeyeVisionConfig:
     """Map Hugging Face/Origin config dict to Muse KeyeVisionConfig."""
@@ -78,6 +80,71 @@ def create_dummy_image(size: int = 384) -> Image.Image:
     rng = np.random.default_rng(seed=42)
     data = rng.integers(0, 255, (size, size, 3), dtype=np.uint8)
     return Image.fromarray(data)
+
+
+def log_header(title: str):
+    logger.info(f"\n{'='*100}\n {title.center(98)} \n{'='*100}")
+
+
+def compare_tensors(name: str, ref: torch.Tensor, cand: torch.Tensor, atol: float = 5e-2):
+    """Compare tensors with automatic shape alignment to aid debugging."""
+    if isinstance(ref, (tuple, list)):
+        ref = ref[0]
+    if isinstance(cand, (tuple, list)):
+        cand = cand[0]
+
+    ref = ref.detach().float().cpu()
+    cand = cand.detach().float().cpu()
+
+    if ref.shape != cand.shape:
+        if ref.dim() == 3 and ref.shape[0] == 1 and cand.dim() == 2:
+            ref = ref.squeeze(0)
+        elif cand.dim() == 3 and cand.shape[0] == 1 and ref.dim() == 2:
+            cand = cand.squeeze(0)
+
+    if ref.shape != cand.shape and ref.numel() == cand.numel():
+        if ref.dim() == 3 and ref.transpose(1, 2).shape == cand.shape:
+            ref = ref.transpose(1, 2)
+
+    if ref.shape != cand.shape:
+        logger.error(f"{name:<35} | ❌ SHAPE MISMATCH: Origin {ref.shape} vs Muse {cand.shape}")
+        return
+
+    diff = (ref - cand).abs()
+    max_diff = diff.max().item()
+    mean_diff = diff.mean().item()
+    is_match = max_diff < atol
+    tag = "✅ MATCH" if is_match else "❌ DIFF"
+
+    logger.info(f"{name:<35} | {tag:<10} | Max: {max_diff:.2e} | Mean: {mean_diff:.2e}")
+    if not is_match:
+        idx = torch.argmax(diff)
+        logger.info(
+            f"{' ':<35} | -> Max Diff Index: {idx.item()} "
+            f"(Val: {ref.flatten()[idx]:.4f} vs {cand.flatten()[idx]:.4f})"
+        )
+
+
+def _load_checkpoint_state_dict(
+    checkpoint_path: str, dtype: torch.dtype
+) -> Tuple[Dict[str, torch.Tensor], Dict[str, torch.Tensor]]:
+    """Load checkpoint and return origin-formatted plus HF-prefixed weights."""
+    raw_state_dict = torch.load(checkpoint_path, map_location="cpu")
+    if "module" in raw_state_dict:
+        raw_state_dict = raw_state_dict["module"]
+
+    origin_load_dict: Dict[str, torch.Tensor] = {}
+    for k, v in raw_state_dict.items():
+        clean_k = k
+        for prefix in ["module.", "vision_tower.", "siglip."]:
+            if clean_k.startswith(prefix):
+                clean_k = clean_k[len(prefix) :]
+        if "vision_model" not in clean_k:
+            clean_k = "vision_model." + clean_k
+        origin_load_dict[clean_k] = v.to(dtype)
+
+    hf_full_state_dict = {"siglip." + k: v for k, v in origin_load_dict.items()}
+    return origin_load_dict, hf_full_state_dict
 
 def check_weights(hf_state_dict: Dict[str, torch.Tensor], 
                   muse_model: nn.Module, 
@@ -196,7 +263,7 @@ def test_keye_vision_align_with_hf_checkpoint():
     """Ensure Muse KeyeVisionTransformer aligns with the Origin implementation."""
     
     # === 1. Configuration ===
-    checkpoint_path = "/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/SigLIP/3.0.0.3/global_step18200/mp_rank_00_model_states.pt"
+    checkpoint_path = os.environ.get("KEYE_VIT_CHECKPOINT", DEFAULT_CHECKPOINT_PATH)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     dtype = torch.bfloat16  # Using BF16 as per your debugging requirement
     
@@ -216,31 +283,7 @@ def test_keye_vision_align_with_hf_checkpoint():
         origin_model = OriginKeyeVisionModel(origin_config)
     
     # Load Weights manually from .pt
-    raw_state_dict = torch.load(checkpoint_path, map_location="cpu")
-    if "module" in raw_state_dict: raw_state_dict = raw_state_dict["module"]
-    
-    # Filter for vision model keys and format for Origin
-    origin_load_dict = {}
-    for k, v in raw_state_dict.items():
-        # Key format in checkpoint: "vision_tower.siglip.vision_model.xxx" or similar
-        # We need relative keys for Origin model which starts at "vision_model" or internal
-        clean_k = k
-        for prefix in ["module.", "vision_tower.", "siglip."]:
-            if clean_k.startswith(prefix): clean_k = clean_k[len(prefix):]
-        
-        # Origin model's state_dict keys usually start after "siglip." if it's the full model,
-        # but here we initialized `SiglipVisionModel`. Its keys start with `vision_model.`?
-        # Let's inspect Origin model keys
-        # Actually, SiglipVisionModel keys: "vision_model.embeddings...", "vision_model.encoder..."
-        
-        if "vision_model" not in clean_k: 
-            clean_k = "vision_model." + clean_k
-        
-        # Map to what origin_model expects (remove "vision_model." prefix because OriginModel wraps it?
-        # No, SiglipVisionModel usually has `self.vision_model`. 
-        # Let's clean it to match `origin_model.state_dict()` keys.
-        # Assuming origin_model.state_dict() has keys like "vision_model.embeddings..."
-        origin_load_dict[clean_k] = v.to(dtype)
+    origin_load_dict, hf_full_state_dict = _load_checkpoint_state_dict(checkpoint_path, dtype)
 
     # Load into Origin
     missing, unexpected = origin_model.load_state_dict(origin_load_dict, strict=False)
@@ -261,8 +304,6 @@ def test_keye_vision_align_with_hf_checkpoint():
 
     # === 4. Weight Conversion & Loading ===
     # We construct a "full" HF state dict to pass to converter
-    hf_full_state_dict = {"siglip." + k: v for k, v in origin_load_dict.items()}
-    
     print("Converting weights...")
     converted_state_dict = muse_model.convert_hf_state_dict(hf_full_state_dict)
     
@@ -386,5 +427,134 @@ def test_keye_vision_align_with_hf_checkpoint():
             print(f"  HF Value:   {flat_hf[idx].item()}")
             print(f"  Muse Value: {flat_muse[idx].item()}")
 
+
+def test_keye_vision_layer0_step_by_step():
+    """Layer-by-layer debugger mirroring test_keye_vit_layer_step_by_step."""
+    checkpoint_path = os.environ.get("KEYE_VIT_CHECKPOINT", DEFAULT_CHECKPOINT_PATH)
+    logger.info(f"Layer debugger checkpoint: {checkpoint_path}")
+
+    torch.manual_seed(42)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    dtype = torch.bfloat16
+
+    muse_config = KeyeVisionConfig()
+    origin_config = HFKeyeVisionConfig(**muse_config.dict())
+
+    with set_default_dtype(dtype):
+        origin_model = OriginKeyeVisionModel(origin_config).eval()
+        muse_model = MuseKeyeVisionModel(muse_config).eval()
+
+    origin_load_dict, hf_full_state_dict = _load_checkpoint_state_dict(checkpoint_path, dtype)
+    logger.info("Loading weights into Origin and Muse models...")
+
+    muse_state = muse_model.convert_hf_state_dict(hf_full_state_dict)
+    muse_model.load_state_dict(muse_state, strict=False)
+    origin_model.load_state_dict(origin_load_dict, strict=False)
+
+    origin_model.to(device)
+    muse_model.to(device)
+
+    activations = {"origin": {}, "muse": {}}
+
+    def make_hook(model_name, layer_name, capture_input=False):
+        def hook(module, inp, out):
+            target = inp if capture_input else out
+            if isinstance(target, (tuple, list)):
+                target = target[0]
+            activations[model_name][layer_name] = target.detach()
+        return hook
+
+    origin_l0 = origin_model.vision_model.encoder.layers[0]
+    muse_l0 = muse_model.encoder.layers[0]
+
+    origin_l0.layer_norm1.register_forward_hook(make_hook("origin", "1. LN1 Output"))
+    muse_l0.sa_norm.register_forward_hook(make_hook("muse", "1. LN1 Output"))
+
+    origin_l0.self_attn.q_proj.register_forward_hook(make_hook("origin", "2. Q_Proj Out"))
+    origin_l0.self_attn.k_proj.register_forward_hook(make_hook("origin", "2. K_Proj Out"))
+    origin_l0.self_attn.v_proj.register_forward_hook(make_hook("origin", "2. V_Proj Out"))
+    muse_l0.attn.q_proj.register_forward_hook(make_hook("muse", "2. Q_Proj Out"))
+    muse_l0.attn.k_proj.register_forward_hook(make_hook("muse", "2. K_Proj Out"))
+    muse_l0.attn.v_proj.register_forward_hook(make_hook("muse", "2. V_Proj Out"))
+
+    origin_l0.self_attn.out_proj.register_forward_hook(
+        make_hook("origin", "3. Attn Raw (Pre-Proj)", capture_input=True)
+    )
+    muse_l0.attn.output_proj.register_forward_hook(
+        make_hook("muse", "3. Attn Raw (Pre-Proj)", capture_input=True)
+    )
+
+    origin_l0.self_attn.out_proj.register_forward_hook(make_hook("origin", "4. Attn Out (Post-Proj)"))
+    muse_l0.attn.output_proj.register_forward_hook(make_hook("muse", "4. Attn Out (Post-Proj)"))
+
+    origin_l0.layer_norm2.register_forward_hook(
+        make_hook("origin", "5. Residual1 (LN2 In)", capture_input=True)
+    )
+    muse_l0.mlp_norm.register_forward_hook(
+        make_hook("muse", "5. Residual1 (LN2 In)", capture_input=True)
+    )
+
+    origin_l0.mlp.fc1.register_forward_hook(make_hook("origin", "6. MLP Hidden (fc1)"))
+    muse_l0.mlp.w1.register_forward_hook(make_hook("muse", "6. MLP Hidden (fc1)"))
+
+    origin_l0.mlp.fc2.register_forward_hook(make_hook("origin", "7. MLP Out (fc2)"))
+    muse_l0.mlp.w2.register_forward_hook(make_hook("muse", "7. MLP Out (fc2)"))
+
+    processor = KeyeVisionImageProcessor(patch_size=muse_config.patch_size)
+    image = create_dummy_image(muse_config.image_size)
+
+    processed = processor.preprocess(images=image, return_tensors="pt")
+    pixel_values = processed["pixel_values"]
+    image_grid_thw = processed["image_grid_thw"]
+    if isinstance(image_grid_thw, torch.Tensor):
+        image_grid_thw = image_grid_thw.tolist()
+    image_grid_thw = [tuple(int(x) for x in grid) for grid in image_grid_thw]
+
+    seq_len = int(np.prod(image_grid_thw[0]))
+    pixel_batch = pixel_values.unsqueeze(0).to(device, dtype)
+    position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
+    cu_seqlens = torch.tensor([0, seq_len], dtype=torch.int32, device=device)
+
+    log_header("Running Inference")
+    with torch.no_grad():
+        origin_model(
+            pixel_batch,
+            position_ids=position_ids,
+            image_grid_thw=image_grid_thw,
+            cu_seqlens=cu_seqlens,
+            interpolate_pos_encoding=True,
+            window_size=-1,
+            use_rope=True,
+        )
+        muse_model(
+            pixel_batch,
+            position_ids=position_ids,
+            image_grid_thw=image_grid_thw,
+            cu_seqlens=cu_seqlens,
+            interpolate_pos_encoding=True,
+            has_learnable_position_embedding=True,
+        )
+
+    log_header("Layer 0 Internal Tensor Diff Analysis")
+    keys = [
+        "1. LN1 Output",
+        "2. Q_Proj Out",
+        "2. K_Proj Out",
+        "2. V_Proj Out",
+        "3. Attn Raw (Pre-Proj)",
+        "4. Attn Out (Post-Proj)",
+        "5. Residual1 (LN2 In)",
+        "6. MLP Hidden (fc1)",
+        "7. MLP Out (fc2)",
+    ]
+
+    for key in keys:
+        if key in activations["origin"] and key in activations["muse"]:
+            compare_tensors(key, activations["origin"][key], activations["muse"][key])
+        else:
+            logger.warning(f"Missing capture for {key}")
+
+
 if __name__ == "__main__":
+    test_keye_vision_layer0_step_by_step()
     test_keye_vision_align_with_hf_checkpoint()
