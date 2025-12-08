@@ -42,7 +42,7 @@ class HFKeyeConfig(PretrainedConfig):
 
 def _ensure_origin_ready():
     # Helper to inject config classes so Origin model can import them
-    mod = "muse.tests.model_for_compare.keye_vit.configuration_keye"
+    mod = "tests.model_for_compare.keye_vit.configuration_keye"
     if mod not in sys.modules:
         c = types.ModuleType(mod)
         c.KeyeConfig = HFKeyeConfig
@@ -52,7 +52,7 @@ def _ensure_origin_ready():
 _ensure_origin_ready()
 # Import the Reference Implementation (Origin)
 # Assuming this file exists in your path as per previous debug sessions
-from muse.tests.model_for_compare.keye_vit import modeling_keye_origin as keye_origin
+from tests.model_for_compare.keye_vit import modeling_keye_origin as keye_origin
 OriginKeyeVisionModel = keye_origin.SiglipVisionModel 
 
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
