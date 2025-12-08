@@ -18,6 +18,12 @@ from muse.config.model_config import KeyeVisionConfig
 from muse.models.keye_vit import KeyeVisionTransformer as MuseKeyeVisionModel
 from muse.models.keye_vit.image_processing_keye import KeyeVisionImageProcessor
 from muse.training.common import set_default_dtype
+try:
+    from flash_attn.layers.rotary import apply_rotary_emb as flash_apply_rotary_emb
+    FLASH_ATTN_AVAILABLE = True
+except ImportError:
+    FLASH_ATTN_AVAILABLE = False
+
 
 # === 路径设置 ===
 CHECKPOINT_PATH = "/mmu_mllm_hdd_2/zangdunju/output2/RecoVLM/SigLIP/3.0.0.3/global_step18200/mp_rank_00_model_states.pt"

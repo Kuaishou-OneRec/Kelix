@@ -390,11 +390,64 @@ class MultiHeadAttention(nn.Module):
 #         sin = torch.cat([sin_h, sin_w], dim=-1).to(dtype=x.dtype)
 #         # x 需 reshape 为 [batch, seq, num_heads, head_dim] 再传进来
 #         return (x * cos) + (self._rotate_half(x) * sin)
+# class KeyeAxialRotaryEmbedding(nn.Module):
+#     """
+#     Axial RoPE that strictly mimics HuggingFace SigLIP's BF16 precision behavior.
+    
+#     This implementation matches the Logic that PASSED the bitwise unit test.
+#     """
+
+#     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
+#         super().__init__()
+#         self.dim = head_dim // 2
+#         self.base = base
+        
+#         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
+#         self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+#     @staticmethod
+#     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
+#         x1, x2 = x.chunk(2, dim=-1)
+#         return torch.cat([-x2, x1], dim=-1)
+
+#     def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
+#         if input_pos is None:
+#             return x
+        
+#         if isinstance(input_pos, dict):
+#             height_ids = input_pos["height"]
+#             width_ids = input_pos["width"]
+#         else:
+#             height_ids, width_ids = input_pos
+
+#         max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
+        
+#         seq = torch.arange(max_pos, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+#         freqs = torch.outer(seq, self.inv_freq)
+#         pids = torch.stack([height_ids, width_ids], dim=-1)
+#         rope_emb = freqs[pids].flatten(1).repeat(1, 2)
+#         cos = rope_emb.cos()
+#         sin = rope_emb.sin()
+
+#         cos = cos.unsqueeze(-2) # Broadcast heads
+#         sin = sin.unsqueeze(-2)
+
+#         x_float = x.float()
+#         cos_float = cos.float()
+#         sin_float = sin.float()
+
+#         out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
+
+#         return out.to(dtype=x.dtype)
+
 class KeyeAxialRotaryEmbedding(nn.Module):
     """
-    Axial RoPE that strictly mimics HuggingFace SigLIP's BF16 precision behavior.
+    Axial RoPE that strictly mimics HuggingFace SigLIP's behavior.
     
-    This implementation matches the Logic that PASSED the bitwise unit test.
+    Alignment Strategy:
+    1. Cache Construction: Lazy build in `forward` using current dtype (BF16) to replicate HF's index precision loss.
+    2. Calculation: Compute cos/sin in BF16.
+    3. Application: Use FlashAttention Kernel if available (to match HF's CUDA path), otherwise fall back to strict Python FP32 math.
     """
 
     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
@@ -402,8 +455,18 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         self.dim = head_dim // 2
         self.base = base
         
+        # Init inv_freq (Standard FP32 init)
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("freqs_cache", torch.empty(0), persistent=False)
+
+    def build_freq_cache(self, seqlen: int):
+        # BF16-faithful generation to match HF
+        dtype = self.inv_freq.dtype
+        device = self.inv_freq.device
+        seq = torch.arange(seqlen, device=device, dtype=dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        self.register_buffer("freqs_cache", freqs, persistent=False)
 
     @staticmethod
     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -420,22 +483,57 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         else:
             height_ids, width_ids = input_pos
 
+        # 1. Prepare Frequencies (BF16)
         max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
+        if self.freqs_cache.numel() == 0 or max_pos > self.freqs_cache.shape[0]:
+            self.build_freq_cache(max_pos + 128)
+
+        freqs_h = self.freqs_cache[height_ids]
+        freqs_w = self.freqs_cache[width_ids]
         
-        seq = torch.arange(max_pos, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        pids = torch.stack([height_ids, width_ids], dim=-1)
-        rope_emb = freqs[pids].flatten(1).repeat(1, 2)
-        cos = rope_emb.cos()
-        sin = rope_emb.sin()
+        # 2. Concat & Flatten (BF16) -> [Seq, 36]
+        # This corresponds to 'rope_emb' in HF before repeat
+        rope_emb_half = torch.cat([freqs_h, freqs_w], dim=-1)
+        
+        # 3. Compute Cos/Sin (BF16)
+        # HF calculates cos/sin on the flattened representation.
+        # Note: HF's rope_emb is repeated (72 dim) then cos() is called.
+        # But cos([A, A]) == [cos(A), cos(A)]. 
+        # So we can calculate on half dim to save memory, then expand.
+        cos_half = rope_emb_half.cos() 
+        sin_half = rope_emb_half.sin()
 
-        cos = cos.unsqueeze(-2) # Broadcast heads
-        sin = sin.unsqueeze(-2)
+        if FLASH_ATTN_AVAILABLE:
+            # === PATH A: Flash Attention Kernel (Matches HF exact numeric behavior) ===
+            # HF passes the "half" cos/sin to the kernel.
+            # kernel input requirement: cos shape last dim should be rot_dim / 2.
+            # Our x is [..., 72], rot_dim is 72. Kernel expects cos [..., 36].
+            # This matches 'cos_half' perfectly.
+            # HF Code: cos.chunk(2)[0] -> takes the first half.
+            
+            # Ensure correct shape for broadcasting: [Seq, 1, 36]
+            cos_kernel = cos_half.unsqueeze(1) 
+            sin_kernel = sin_half.unsqueeze(1)
+            
+            # The kernel handles the .float() conversion internally/efficiently
+            # We explicitly cast inputs to float to match HF's python wrapper usage:
+            # apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
+            return flash_apply_rotary_emb(
+                x.float(), cos_kernel.float(), sin_kernel.float()
+            ).to(dtype=x.dtype)
+            
+        else:
+            # === PATH B: Python Fallback (Numerically close, but maybe 1e-4 diff) ===
+            # Replicate the full size for manual calculation
+            cos = torch.cat([cos_half, cos_half], dim=-1) # [Seq, 72]
+            sin = torch.cat([sin_half, sin_half], dim=-1)
+            
+            cos = cos.unsqueeze(-2) # [Seq, 1, 72]
+            sin = sin.unsqueeze(-2)
 
-        x_float = x.float()
-        cos_float = cos.float()
-        sin_float = sin.float()
-
-        out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
-
-        return out.to(dtype=x.dtype)
+            x_float = x.float()
+            cos_float = cos.float()
+            sin_float = sin.float()
+            
+            out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
+            return out.to(dtype=x.dtype)
