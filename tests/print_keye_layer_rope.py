@@ -162,7 +162,6 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
 
         return out.to(dtype=x.dtype)
-
 # ==========================================
 # 3. Test Runner
 # ==========================================
