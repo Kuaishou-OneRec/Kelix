@@ -9,9 +9,9 @@ import torch.nn.init as init
 
 from muse.config.model_config import KeyeVisionConfig
 from muse.models.keye_vit._layers import (
-    MultiHeadAttention,
     KeyeMLP,
 )
+from muse.layers.attention import MultiHeadAttention
 from muse.layers.position_embeddings import TwoD_RotaryEmbedding
 from muse.layers.transformer import TransformerSelfAttentionLayer
 from muse.layers.rms_norm import RMSNorm
