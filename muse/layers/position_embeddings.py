@@ -44,7 +44,7 @@ from typing import Any, Optional
 
 import torch
 from torch import nn
-
+from flash_attn.layers.rotary import apply_rotary_emb as flash_apply_rotary_emb
 
 class LlamaRotaryPositionalEmbeddings(nn.Module):
     """
@@ -293,6 +293,49 @@ class RotaryPositionalEmbeddings(nn.Module):
 
         return x_out
 
+
+class TwoD_RotaryEmbedding(nn.Module):
+
+    def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
+        super().__init__()
+        self.dim = head_dim // 2
+        self.base = base
+        
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("freqs_cache", torch.empty(0), persistent=False)
+
+    def build_freq_cache(self, seqlen: int):
+        dtype = self.inv_freq.dtype
+        device = self.inv_freq.device
+        seq = torch.arange(seqlen, device=device, dtype=dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        self.register_buffer("freqs_cache", freqs, persistent=False)
+
+
+    def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
+        if input_pos is None:
+            return x
+        
+        if isinstance(input_pos, dict):
+            height_ids = input_pos["height"]
+            width_ids = input_pos["width"]
+        else:
+            height_ids, width_ids = input_pos
+        max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
+        if self.freqs_cache.numel() == 0 or max_pos > self.freqs_cache.shape[0]:
+            self.build_freq_cache(max_pos + 128)
+
+        freqs_h = self.freqs_cache[height_ids]
+        freqs_w = self.freqs_cache[width_ids]
+        rope_emb_half = torch.cat([freqs_h, freqs_w], dim=-1)
+        
+        cos_half = rope_emb_half.cos() 
+        sin_half = rope_emb_half.sin()
+        return flash_apply_rotary_emb(
+            x.float(), cos_half.float(), sin_half.float()
+        ).to(dtype=x.dtype)
+            
 
 class VisionRotaryPositionalEmbeddings(nn.Module):
     """

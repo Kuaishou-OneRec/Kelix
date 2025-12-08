@@ -256,23 +256,17 @@ class MultiHeadAttention(nn.Module):
             - d: embed dim
             - h_d: head dim
         """
-        # x has shape [b, s_x, d]
-        # y has shape [b, s_y, d]
         b, s_x, _ = x.shape
         s_y = y.shape[1] if y is not None else 0
 
-        # q has shape [b, s_x, num_heads * head_dim]
         q = self.q_proj(x)
 
-        # number of queries per key/value
         q_per_kv = self.num_heads // self.num_kv_heads
         q = q.view(b, s_x, self.num_kv_heads * q_per_kv, self.head_dim)
 
-        # Apply positional embeddings
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
 
-        # Normalize q
         if self.q_norm is not None:
             q = self.q_norm(q)
 
@@ -284,47 +278,23 @@ class MultiHeadAttention(nn.Module):
             k = self.kv_cache.k_cache
             v = self.kv_cache.v_cache
         else:
-            # Update k and v shape, positional embeddings, and normalization
-
-            # k,v shape [b, s_y, num_kv_heads * head_dim]
             k = self.k_proj(y)
             v = self.v_proj(y)
 
-            # Apply positional embeddings
-            # k,v shape: [b, s_y, n_kv, h_d]
             k = k.view(b, s_y, -1, self.head_dim)
             v = v.view(b, s_y, -1, self.head_dim)
             if self.pos_embeddings is not None:
                 k = self.pos_embeddings(k, input_pos=input_pos)
 
-            # Normalize k
             if self.k_norm is not None:
                 k = self.k_norm(k)
-
-            # Update key-value cache
             if self.kv_cache is not None and self.cache_enabled:
                 k, v = self.kv_cache.update(k, v)
-
-        # If needed, expand the key and value tensors to have the same shape
-        # as the query tensor by copying values across the relevant dim
-        # k,v shape: [b, n_kv, s, h_d] -> [b, n_h, s, h_d]
         if self.num_heads != self.num_kv_heads:
-            # For cross attention, we need to handle different sequence lengths
-            # k,v have shape [b, n_kv, s_y, h_d], q has shape [b, n_h, s_x, h_d]
-            # We need to expand k,v to [b, n_h, s_y, h_d]
             expand_shape = (b, self.num_kv_heads, q_per_kv, k.size(2), self.head_dim)
             k = k.unsqueeze(2).expand(expand_shape).flatten(1, 2)
             v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
 
-        # if get_context_parallel_world_size() > 1:
-        #     cpg = get_context_parallel_group()
-        #     # If context parallel is enabled, the input is sharded along
-        #     # the sequence length dimension. We need to recover the original 
-        #     # sequence length before the attention function.
-        #     # q, k, v: [b, s_x, n_h, h_d] -> [b, s_x * P, n_h // P, h_d]
-        #     q = SeqAllToAll4D.apply(cpg, q, 2, 1)
-        #     k = SeqAllToAll4D.apply(cpg, k, 2, 1)
-        #     v = SeqAllToAll4D.apply(cpg, v, 2, 1)
         q = q.transpose(1, 2) 
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
@@ -336,49 +306,29 @@ class MultiHeadAttention(nn.Module):
             attn_dropout=self.attn_dropout,
             **kwargs
         )
-
-        # if get_context_parallel_world_size() > 1:
-        #     cpg = get_context_parallel_group()
-        #     # output: [b, s_x * P, n_h // P, h_d] -> [b, s_x, n_h, h_d]
-        #     output = SeqAllToAll4D.apply(cpg, output, 1, 2)
-        # # reshape the output to be the same shape as the input
         output = output.transpose(1, 2).contiguous().view(b, s_x, -1)
         return self.output_proj(output)
 
 
 
 class KeyeAxialRotaryEmbedding(nn.Module):
-    """
-    Axial RoPE that strictly mimics HuggingFace SigLIP's behavior.
-    
-    Alignment Strategy:
-    1. Cache Construction: Lazy build in `forward` using current dtype (BF16) to replicate HF's index precision loss.
-    2. Calculation: Compute cos/sin in BF16.
-    3. Application: Use FlashAttention Kernel if available (to match HF's CUDA path), otherwise fall back to strict Python FP32 math.
-    """
 
     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
         super().__init__()
         self.dim = head_dim // 2
         self.base = base
         
-        # Init inv_freq (Standard FP32 init)
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.register_buffer("freqs_cache", torch.empty(0), persistent=False)
 
     def build_freq_cache(self, seqlen: int):
-        # BF16-faithful generation to match HF
         dtype = self.inv_freq.dtype
         device = self.inv_freq.device
         seq = torch.arange(seqlen, device=device, dtype=dtype)
         freqs = torch.outer(seq, self.inv_freq)
         self.register_buffer("freqs_cache", freqs, persistent=False)
 
-    @staticmethod
-    def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-        x1, x2 = x.chunk(2, dim=-1)
-        return torch.cat([-x2, x1], dim=-1)
 
     def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
         if input_pos is None:
@@ -389,24 +339,14 @@ class KeyeAxialRotaryEmbedding(nn.Module):
             width_ids = input_pos["width"]
         else:
             height_ids, width_ids = input_pos
-
-        # 1. Prepare Frequencies (BF16)
         max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
         if self.freqs_cache.numel() == 0 or max_pos > self.freqs_cache.shape[0]:
             self.build_freq_cache(max_pos + 128)
 
         freqs_h = self.freqs_cache[height_ids]
         freqs_w = self.freqs_cache[width_ids]
-        
-        # 2. Concat & Flatten (BF16) -> [Seq, 36]
-        # This corresponds to 'rope_emb' in HF before repeat
         rope_emb_half = torch.cat([freqs_h, freqs_w], dim=-1)
         
-        # 3. Compute Cos/Sin (BF16)
-        # HF calculates cos/sin on the flattened representation.
-        # Note: HF's rope_emb is repeated (72 dim) then cos() is called.
-        # But cos([A, A]) == [cos(A), cos(A)]. 
-        # So we can calculate on half dim to save memory, then expand.
         cos_half = rope_emb_half.cos() 
         sin_half = rope_emb_half.sin()
         return flash_apply_rotary_emb(

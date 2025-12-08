@@ -11,15 +11,11 @@ from muse.config.model_config import KeyeVisionConfig
 from muse.models.keye_vit._layers import (
     MultiHeadAttention,
     KeyeMLP,
-    KeyeAxialRotaryEmbedding,
 )
+from muse.layers.position_embeddings import TwoD_RotaryEmbedding
 from muse.layers.transformer import TransformerSelfAttentionLayer
 from muse.layers.rms_norm import RMSNorm
 from muse.models.base import Model
-
-# Import will be done when muse.models is imported, avoiding circular import
-# The actual registration happens in __init__.py after import
-
 logger = logging.getLogger(__name__)
 
 
@@ -140,9 +136,6 @@ class KeyeVisionEmbeddings(nn.Module):
             self.config, "has_learnable_position_embedding"
         ) else has_learnable_position_embedding
         target_dtype = self.patch_embedding.weight.dtype
-        print('maosiyang:::pixel',pixel_values.shape)
-        # if pixel_values.dim() == 4:
-        #     pixel_values = pixel_values.unsqueeze(0)#expand to 5 dimension
         if pixel_values.dim() == 5:
             if position_ids is None:
                 for thw_tuple in image_grid_thw:
@@ -156,9 +149,7 @@ class KeyeVisionEmbeddings(nn.Module):
             batch_size, sequence_len, channel, height, width = pixel_values.shape
             pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
             patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-            # print('maosiyang::::',patch_embeds.shape)
             embeddings = patch_embeds.flatten(-2).squeeze(-1)
-            # print('maosiyang2222::::',embeddings.shape)
             embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=sequence_len)
 
             # todo: not dubug
@@ -204,7 +195,7 @@ class KeyeVisionEncoder(nn.Module):
         num_heads = config.num_attention_heads
         head_dim = embed_dim // num_heads
         num_kv_heads = num_heads
-        self.rope = KeyeAxialRotaryEmbedding(head_dim, max_grid_size=4096, base=config.rope_theta)
+        self.rope = TwoD_RotaryEmbedding(head_dim, max_grid_size=4096, base=config.rope_theta)
 
         attn_dropout = getattr(config, "attention_dropout", 0.0)
         intermediate_dim = getattr(config, "intermediate_size", embed_dim * 4)
@@ -403,18 +394,13 @@ class KeyeVisionTransformer(Model):
                             break
                 break
         
-        # Handle TiedLinear: its weight is actually the tied_module's weight
-        # TiedLinear is not an nn.Module, so it won't appear in named_modules()
         if module is None:
-            # Try to get the module by attribute access
             parts = module_name.split(".")
             try:
                 current = self
                 for part in parts:
                     current = getattr(current, part)
-                # Check if it's a TiedLinear
                 if isinstance(current, TiedLinear):
-                    # TiedLinear's weight is the tied_module's weight
                     module = current.tied_module
                 else:
                     module = current if isinstance(current, nn.Module) else None
@@ -422,34 +408,25 @@ class KeyeVisionTransformer(Model):
                 module = None
         
         if module is None:
-            # If module not found, return a default lecun_normal initializer
             return lecun_normal_
         
-        # Check if this is part of an Attention module
         is_attention = isinstance(parent_module, MultiHeadAttention)
         
-        # Check if this is part of an MLP/FeedForward module
         is_mlp = isinstance(parent_module, FeedForward)
-        
-        # Define initializer based on module type
+
         if isinstance(module, nn.Linear):
             def linear_init(tensor: torch.Tensor):
                 if param_suffix == "weight" and tensor is not None:
                     if is_attention:
-                        # Attention layers use xavier_uniform_
                         init.xavier_uniform_(tensor)
                     elif is_mlp:
-                        # MLP layers use xavier_uniform_ for weights
                         init.xavier_uniform_(tensor)
                     else:
-                        # Other Linear layers use lecun_normal_
                         lecun_normal_(tensor)
                 elif param_suffix == "bias" and tensor is not None:
                     if is_mlp:
-                        # MLP bias uses normal with std=1e-6
                         init.normal_(tensor, mean=0.0, std=1e-6)
                     else:
-                        # Other biases use zeros
                         init.zeros_(tensor)
             return linear_init
             
@@ -489,7 +466,6 @@ class KeyeVisionTransformer(Model):
                     init.zeros_(tensor)
             return norm_init
         
-        # Default: lecun_normal initialization
         return lecun_normal_
 
     def convert_hf_state_dict(self,
@@ -545,8 +521,6 @@ class KeyeVisionTransformer(Model):
             
             # Handle encoder layers
             if rel_key.startswith("encoder.layers."):
-                # Extract layer index and remaining key
-                # encoder.layers.{i}.{rest}
                 parts = rel_key.split(".", 3)  # ["encoder", "layers", "{i}", "rest"]
                 if len(parts) < 4:
                     skipped_keys.append(hf_key)
@@ -555,45 +529,37 @@ class KeyeVisionTransformer(Model):
                 layer_idx = parts[2]
                 rest_key = parts[3]
                 
-                # Handle layer_norm1 -> sa_norm
                 if rest_key.startswith("layer_norm1."):
                     suffix = rest_key.replace("layer_norm1.", "")
                     converted_key = f"encoder.layers.{layer_idx}.sa_norm.{suffix}"
                     converted_state_dict[converted_key] = tensor
                     continue
                 
-                # Handle layer_norm2 -> mlp_norm
                 if rest_key.startswith("layer_norm2."):
                     suffix = rest_key.replace("layer_norm2.", "")
                     converted_key = f"encoder.layers.{layer_idx}.mlp_norm.{suffix}"
                     converted_state_dict[converted_key] = tensor
                     continue
                 
-                # Handle self_attn -> attn
                 if rest_key.startswith("self_attn."):
                     attn_key = rest_key.replace("self_attn.", "attn.")
-                    # Map out_proj -> output_proj
                     attn_key = attn_key.replace("out_proj.", "output_proj.")
                     converted_key = f"encoder.layers.{layer_idx}.{attn_key}"
                     converted_state_dict[converted_key] = tensor
                     continue
                 
                 if rest_key.startswith("mlp."):
-                    # Muse FeedForward uses w1/w2, HF uses fc1/fc2
                     new_rest_key = rest_key.replace("fc1", "w1").replace("fc2", "w2")
                     converted_key = f"encoder.layers.{layer_idx}.{new_rest_key}"
                     converted_state_dict[converted_key] = tensor
                     continue
                 
-                # Unknown layer key
                 skipped_keys.append(hf_key)
                 continue
             
-            # If key doesn't match any pattern, skip it
             skipped_keys.append(hf_key)
         
         if skipped_keys:
-            # Optionally filter out known skipped keys (like text model) to reduce log noise
             interesting_skips = [k for k in skipped_keys if "text_model" not in k]
             if interesting_skips:
                 logger.warning(
@@ -609,8 +575,6 @@ class KeyeVisionTransformer(Model):
         return converted_state_dict
 
     def get_layers_to_shard(self):
-        # Return the ModuleList directly - it's iterable and supports reversed()
-        # fully_shard will be applied to each individual layer, not the ModuleList itself
         return self.encoder.layers
 
     def get_checkpointable_module_classes(self):
