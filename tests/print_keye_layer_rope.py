@@ -114,16 +114,10 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         
         seq = torch.arange(max_pos, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.outer(seq, self.inv_freq)
-        # 1. Fetch Frequencies (BF16)
-        freqs_h = freqs[height_ids] 
-        freqs_w = freqs[width_ids]
-        
-        # 2. Concat [H, W] -> [Seq, 36] (BF16)
-        freqs = torch.cat([freqs_h, freqs_w], dim=-1)
-        
-        # 3. Compute Cos/Sin (BF16)
-        cos = freqs.cos()
-        sin = freqs.sin()
+        pids = torch.stack([height_ids, width_ids], dim=-1)
+        rope_emb = freqs[pids].flatten(1).repeat(1, 2)
+        cos = rope_emb.cos()
+        sin = rope_emb.sin()
         
         # 4. Expand to Full Head Dim
         cos = torch.cat([cos, cos], dim=-1) # [Seq, 72]
@@ -195,8 +189,9 @@ def run_rope_test():
     with torch.no_grad():
         # Force rebuild to ensure we are checking what happened inside forward
         # muse_rope.build_freq_cache(4096) 
-        muse_freqs_h = muse_rope.freqs_cache[h_ids]
-        muse_freqs_w = muse_rope.freqs_cache[w_ids]
+        freqs = rope_emb_max[pids].flatten(1).repeat(1, 2)
+        muse_freqs_h = freqs[h_ids]
+        muse_freqs_w = freqs[w_ids]
         muse_freqs = torch.cat([muse_freqs_h, muse_freqs_w], dim=-1)
         muse_cos = torch.cat([muse_freqs.cos(), muse_freqs.cos()], dim=-1)
         
