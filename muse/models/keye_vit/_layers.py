@@ -390,15 +390,14 @@ class MultiHeadAttention(nn.Module):
 #         sin = torch.cat([sin_h, sin_w], dim=-1).to(dtype=x.dtype)
 #         # x 需 reshape 为 [batch, seq, num_heads, head_dim] 再传进来
 #         return (x * cos) + (self._rotate_half(x) * sin)
-
 class KeyeAxialRotaryEmbedding(nn.Module):
     """
-    Axial RoPE that computes frequencies on-the-fly to match SigLIP's implementation exactly.
+    Axial RoPE implementation that strictly matches SigLIP's logic and precision.
     
-    Logic: 
-    1. Compute H_freqs and W_freqs using FP32.
-    2. Concatenate as [H, W, H, W] to match Origin's 'repeat(1, 2)' logic.
-    3. Apply rotation in FP32.
+    Logic Alignment:
+    1. Computes frequencies on-the-fly (no cache lookup) to match Origin's math path.
+    2. Constructs frequency layout as [H, W, H, W] directly.
+    3. Forces FP32 calculation for high precision, casting back to input dtype at the end.
     """
 
     def __init__(self, head_dim: int, *, max_grid_size: int, base: int = 10_000) -> None:
@@ -407,8 +406,8 @@ class KeyeAxialRotaryEmbedding(nn.Module):
             raise ValueError("head_dim must be divisible by 2.")
         axis_dim = head_dim // 2
         
-        # We still use the base class to hold the 'theta' (inv_freq) parameters
-        # But we won't use its .cache for forward pass to avoid lookup precision diffs
+        # We instantiate these sub-modules primarily to hold the 'theta' (inv_freq) buffers 
+        # compatible with checkpoints, but we won't use their forward/cache methods.
         self.height_rope = RotaryPositionalEmbeddings(
             dim=axis_dim, max_seq_len=max_grid_size, base=base
         )
@@ -418,29 +417,39 @@ class KeyeAxialRotaryEmbedding(nn.Module):
 
     @staticmethod
     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
+        """
+        Rotates half the hidden dims of the input.
+        Corresponds to [-x2, x1] logic.
+        """
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat([-x2, x1], dim=-1)
 
     def _compute_freqs(self, theta: torch.Tensor, pos_ids: torch.Tensor) -> torch.Tensor:
         """
-        Compute frequencies on-the-fly in FP32.
+        Compute rotation angles (freqs) on-the-fly in FP32.
+        
         Args:
-            theta: [dim/2] (18)
-            pos_ids: [Batch, Seq] or [Seq]
+            theta: [dim/2] (18) - The base inverse frequencies
+            pos_ids: [Batch, Seq] or [Seq] - Position indices
+            
         Returns:
             angles: [..., dim/2] (18)
         """
-        # Ensure FP32 for calculation
+        # Force FP32 for precision alignment
         pos_ids = pos_ids.to(dtype=torch.float32)
         theta = theta.to(dtype=torch.float32, device=pos_ids.device)
         
-        # Outer product: pos * theta
-        # Support arbitrary batch dimensions via broadcasting
-        # pos_ids: [..., 1] * theta: [1, dim] -> [..., dim]
+        # Outer product: pos_ids * theta
+        # pos_ids [..., 1] * theta [1, dim] -> [..., dim]
         freqs = pos_ids.unsqueeze(-1) * theta.unsqueeze(0)
         return freqs
 
     def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
+        """
+        Args:
+            x: Input tensor [Batch, Seq, NumHeads, HeadDim]
+            input_pos: Dict with 'height' and 'width' position IDs
+        """
         if input_pos is None:
             return x
         
@@ -450,45 +459,48 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         else:
             height_ids, width_ids = input_pos
 
-        # [STEP 1] On-the-fly Calculation (FP32)
-        # 1. Get base frequencies (theta) from sub-modules
+        # [Step 1] Compute Frequencies On-the-fly (FP32)
+        # Avoids cache lookup errors (1e-8) and aligns with Origin's "outer product" logic
         theta_h = self.height_rope.theta
         theta_w = self.width_rope.theta
 
-        # 2. Compute angles: Shape [Batch, Seq, 18] (assuming axis_dim=36, so 18 freqs)
+        # Calculate angles for Height and Width
+        # Shape: [Batch, Seq, 18] (assuming axis_dim=36)
         freqs_h = self._compute_freqs(theta_h, height_ids)
         freqs_w = self._compute_freqs(theta_w, width_ids)
 
-        # [STEP 2] Construct Layout [H, W, H, W]
-        # Origin SigLIP Logic: 
-        #   rope_val = flatten([freqs_h, freqs_w])  -> Shape [36]
-        #   rope_emb = rope_val.repeat(1, 2)        -> Shape [72] ([H, W, H, W])
+        # [Step 2] Construct Layout [H, W, H, W]
+        # Origin Logic: rope_emb = cat([H, W]).repeat(1, 2)
+        # We replicate this by concatenating H and W, then concatenating the result with itself.
         
-        # Concat H and W -> [..., 36]
+        # 1. Combine H and W -> [..., 36]
         freqs_half = torch.cat([freqs_h, freqs_w], dim=-1)
         
-        # Repeat -> [..., 72] ([H, W, H, W])
+        # 2. Duplicate to fill HeadDim -> [..., 72] (Structure: H, W, H, W)
         freqs_full = torch.cat([freqs_half, freqs_half], dim=-1)
         
-        # Compute Cos/Sin in FP32
+        # 3. Compute Cos/Sin in FP32
         cos = freqs_full.cos()
         sin = freqs_full.sin()
 
-        # [STEP 3] Apply Rotation (FP32)
-        # Ensure input x is also FP32 for the operation
+        # [Step 3] Apply Rotation (FP32)
+        # Origin Logic: apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
+        # This step is crucial for BF16 alignment (eliminates 0.05 error)
+        
         x_float = x.float()
         
-        # Reshape cos/sin to broadcast over Head dimension
-        # x shape: [Batch, Seq, NumHeads, HeadDim] -> [B, S, H, D]
-        # cos shape: [Batch, Seq, HeadDim] -> needs unsqueeze at dim -2
-        # If cos is [Seq, D], it becomes [Seq, 1, D]
-        # If cos is [Batch, Seq, D], it becomes [Batch, Seq, 1, D]
+        # Reshape cos/sin for broadcasting over NumHeads dimension
+        # x: [Batch, Seq, NumHeads, HeadDim]
+        # cos: [Batch, Seq, HeadDim] -> [Batch, Seq, 1, HeadDim]
+        # Note: If x is [Batch, NumHeads, Seq, HeadDim], modify unsqueeze dim accordingly.
+        # Muse MHA passes [Batch, Seq, NumHeads, HeadDim] here.
         cos = cos.unsqueeze(-2)
         sin = sin.unsqueeze(-2)
 
+        # Standard RoPE application: x * cos + rotate_half(x) * sin
         out = (x_float * cos) + (self._rotate_half(x_float) * sin)
 
-        # Cast back to original dtype
+        # Cast back to original input dtype (e.g. bfloat16)
         return out.to(dtype=x.dtype)
 
 
