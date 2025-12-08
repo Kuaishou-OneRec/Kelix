@@ -15,11 +15,7 @@ from muse.layers.rms_norm import RMSNorm
 from muse.layers.position_embeddings import RotaryPositionalEmbeddings
 from muse.layers.kv_cache import KVCache
 
-try:
-    from flash_attn.layers.rotary import apply_rotary_emb as flash_apply_rotary_emb
-    FLASH_ATTN_AVAILABLE = True
-except ImportError:
-    FLASH_ATTN_AVAILABLE = False
+from flash_attn.layers.rotary import apply_rotary_emb as flash_apply_rotary_emb
 
 
 logger = logging.getLogger(__name__)
@@ -350,102 +346,6 @@ class MultiHeadAttention(nn.Module):
         return self.output_proj(output)
 
 
-# class KeyeAxialRotaryEmbedding(nn.Module):
-#     """把二维 (h, w) RoPE 封装成 attention 可直接调用的模块。"""
-
-#     def __init__(self, head_dim: int, *, max_grid_size: int, base: int = 10_000) -> None:
-#         super().__init__()
-#         if head_dim % 2 != 0:
-#             raise ValueError("head_dim 必须能被 2 整除，才能按 h/w 分半。")
-#         axis_dim = head_dim // 2
-#         self.height_rope = RotaryPositionalEmbeddings(
-#             dim=axis_dim, max_seq_len=max_grid_size, base=base
-#         )
-#         self.width_rope = RotaryPositionalEmbeddings(
-#             dim=axis_dim, max_seq_len=max_grid_size, base=base
-#         )
-
-#     @staticmethod
-#     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-#         x1, x2 = x.chunk(2, dim=-1)
-#         return torch.cat([-x2, x1], dim=-1)
-
-#     def _lookup(self, rope: RotaryPositionalEmbeddings, pos_ids: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-#         if pos_ids.dtype != torch.long:
-#             pos_ids = pos_ids.long()
-#         cache = rope.cache  # [max_seq_len, dim, 2]
-#         gathered = cache[pos_ids]  # [..., dim, 2]
-#         cos = gathered[..., 0].unsqueeze(-2)  # [..., 1, dim]
-#         sin = gathered[..., 1].unsqueeze(-2)
-#         if cos.dim() == 3:  # 处理 [seq, 1, dim] 的情况
-#             cos = cos.unsqueeze(0)
-#             sin = sin.unsqueeze(0)
-#         return cos, sin
-
-#     def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
-#         if input_pos is None:
-#             return x
-#         if isinstance(input_pos, dict):
-#             height_ids = input_pos["height"]
-#             width_ids = input_pos["width"]
-#         else:
-#             height_ids, width_ids = input_pos  # 形状可为 [seq] 或 [batch, seq]
-
-#         cos_h, sin_h = self._lookup(self.height_rope, height_ids)
-#         cos_w, sin_w = self._lookup(self.width_rope, width_ids)
-#         cos = torch.cat([cos_h, cos_w], dim=-1).to(dtype=x.dtype)
-#         sin = torch.cat([sin_h, sin_w], dim=-1).to(dtype=x.dtype)
-#         # x 需 reshape 为 [batch, seq, num_heads, head_dim] 再传进来
-#         return (x * cos) + (self._rotate_half(x) * sin)
-# class KeyeAxialRotaryEmbedding(nn.Module):
-#     """
-#     Axial RoPE that strictly mimics HuggingFace SigLIP's BF16 precision behavior.
-    
-#     This implementation matches the Logic that PASSED the bitwise unit test.
-#     """
-
-#     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
-#         super().__init__()
-#         self.dim = head_dim // 2
-#         self.base = base
-        
-#         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
-#         self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-#     @staticmethod
-#     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-#         x1, x2 = x.chunk(2, dim=-1)
-#         return torch.cat([-x2, x1], dim=-1)
-
-#     def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
-#         if input_pos is None:
-#             return x
-        
-#         if isinstance(input_pos, dict):
-#             height_ids = input_pos["height"]
-#             width_ids = input_pos["width"]
-#         else:
-#             height_ids, width_ids = input_pos
-
-#         max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
-        
-#         seq = torch.arange(max_pos, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-#         freqs = torch.outer(seq, self.inv_freq)
-#         pids = torch.stack([height_ids, width_ids], dim=-1)
-#         rope_emb = freqs[pids].flatten(1).repeat(1, 2)
-#         cos = rope_emb.cos()
-#         sin = rope_emb.sin()
-
-#         cos = cos.unsqueeze(-2) # Broadcast heads
-#         sin = sin.unsqueeze(-2)
-
-#         x_float = x.float()
-#         cos_float = cos.float()
-#         sin_float = sin.float()
-
-#         out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
-
-#         return out.to(dtype=x.dtype)
 
 class KeyeAxialRotaryEmbedding(nn.Module):
     """
@@ -509,31 +409,7 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         # So we can calculate on half dim to save memory, then expand.
         cos_half = rope_emb_half.cos() 
         sin_half = rope_emb_half.sin()
-        if FLASH_ATTN_AVAILABLE:
-            # === PATH A: Flash Attention Kernel ===
-            # Kernel expects:
-            # x: [Batch, Seq, Heads, Dim] or [TotalSeq, Heads, Dim]
-            # cos/sin: [TotalSeq, RotDim] -> 2D Tensor!
-            # Our cos_half is [Seq, 36]. This is exactly what it wants.
+        return flash_apply_rotary_emb(
+            x.float(), cos_half.float(), sin_half.float()
+        ).to(dtype=x.dtype)
             
-            # Note: We must cast to float to match HF's apply_rotary_emb(q.float()...) behavior
-            # The kernel itself handles the precision, but passing float ensures we don't truncate early.
-            return flash_apply_rotary_emb(
-                x.float(), cos_half.float(), sin_half.float()
-            ).to(dtype=x.dtype)
-            
-        else:
-            # === PATH B: Python Fallback (Numerically close, but maybe 1e-4 diff) ===
-            # Replicate the full size for manual calculation
-            cos = torch.cat([cos_half, cos_half], dim=-1) # [Seq, 72]
-            sin = torch.cat([sin_half, sin_half], dim=-1)
-            
-            cos = cos.unsqueeze(-2) # [Seq, 1, 72]
-            sin = sin.unsqueeze(-2)
-
-            x_float = x.float()
-            cos_float = cos.float()
-            sin_float = sin.float()
-            
-            out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
-            return out.to(dtype=x.dtype)
