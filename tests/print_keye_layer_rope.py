@@ -83,18 +83,21 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
     """
     Axial RoPE that strictly mimics HuggingFace SigLIP's BF16 precision behavior.
     
-    Mechanism:
-    1. 'inv_freq' is registered as a buffer. When model.to(bfloat16) is called, it becomes BF16.
-    2. We MUST compute 'freqs' and 'cos/sin' in BF16 to match HF's values.
-    3. We then cast to Float (FP32) only during the rotation application, matching flash_attn kernel logic.
+    CRITICAL DETAILS to match HF:
+    1. Full RoPE: Rotates all 72 dimensions (not partial).
+    2. BF16 Indices: 'seq' uses inv_freq.dtype. If BF16, indices > 256 are quantized!
+    3. BF16 Trig: cos/sin computed in BF16.
+    4. FP32 App: Final rotate application is in FP32.
     """
 
     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
         super().__init__()
+        # SigLIP config: dim = head_dim // 2 (e.g. 36 for head_dim 72)
         self.dim = head_dim // 2
         self.base = base
         
-        # Initialize in FP32 (Standard), but will be cast to BF16 by model.to()
+        # Init inv_freq in FP32 (Standard), registered as buffer.
+        # It will become BF16 when model.to(bfloat16) is called.
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         
@@ -102,8 +105,9 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         self.build_freq_cache(max_grid_size)
 
     def build_freq_cache(self, seqlen: int):
-        # [CRITICAL] Do NOT force .float() here. 
-        # Use the current dtype of inv_freq (likely bfloat16) to match HF's precision.
+        # [CRITICAL] Use the current dtype of inv_freq (BF16).
+        # HF: seq = torch.arange(..., dtype=self.inv_freq.dtype)
+        # This truncates indices > 256 if dtype is BF16. We MUST replicate this.
         dtype = self.inv_freq.dtype
         
         seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=dtype)
@@ -112,6 +116,7 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
 
     @staticmethod
     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
+        # GPT-NeoX style rotation
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat([-x2, x1], dim=-1)
 
@@ -130,35 +135,33 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         if max_pos > self.freqs_cache.shape[0]:
             self.build_freq_cache(max_pos + 128)
 
-        # 1. Fetch Frequencies (Maintains Buffer Dtype, likely BF16)
-        freqs_h = self.freqs_cache[height_ids] 
+        # 1. Fetch Frequencies (BF16)
+        freqs_h = self.freqs_cache[height_ids] # [Seq, 18]
         freqs_w = self.freqs_cache[width_ids]
         
-        # 2. Concat [H, W] (BF16)
-        freqs = torch.cat([freqs_h, freqs_w], dim=-1) # [Seq, 36]
+        # 2. Concat [H, W] (BF16) -> [Seq, 36]
+        freqs = torch.cat([freqs_h, freqs_w], dim=-1)
         
         # 3. Compute Cos/Sin (BF16)
-        # [CRITICAL] This must happen in BF16 to match HF's values
         cos = freqs.cos() 
         sin = freqs.sin()
         
-        # 4. Expand to Full Head Dim (BF16)
-        # HF: rope_emb(36) -> repeat(72) -> cos(72) -> chunk(36) -> Kernel(x1, x2)
-        # Effectively applies cos(36) to both halves of x(72).
-        # We simulate this by repeating cos to 72.
+        # 4. Expand for GPT-NeoX RoPE (BF16)
+        # We need to apply cos(36) to both halves of x(72).
+        # x1(36) * cos(36) ... x2(36) * cos(36)
+        # So we repeat cos to 72.
         cos = torch.cat([cos, cos], dim=-1) # [Seq, 72]
         sin = torch.cat([sin, sin], dim=-1)
 
-        # 5. Apply Rotation in FP32
-        # HF/FlashAttn Kernel: takes BF16 input/cos, casts to Float, calculates, returns BF16.
-        # Broadcast cos: [Seq, 72] -> [Seq, 1, 72]
-        cos = cos.unsqueeze(-2)
+        # 5. Apply Rotation in FP32 (Matches HF apply_rotary_emb logic)
+        cos = cos.unsqueeze(-2) # Broadcast heads: [Seq, 1, 72]
         sin = sin.unsqueeze(-2)
 
         x_float = x.float()
         cos_float = cos.float()
         sin_float = sin.float()
 
+        # x * cos + rotate_half(x) * sin
         out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
 
         return out.to(dtype=x.dtype)
