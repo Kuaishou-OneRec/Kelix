@@ -390,7 +390,7 @@ class MultiHeadAttention(nn.Module):
 #         sin = torch.cat([sin_h, sin_w], dim=-1).to(dtype=x.dtype)
 #         # x 需 reshape 为 [batch, seq, num_heads, head_dim] 再传进来
 #         return (x * cos) + (self._rotate_half(x) * sin)
-class Muse_KeyeAxialRotaryEmbedding(nn.Module):
+class KeyeAxialRotaryEmbedding(nn.Module):
     """
     Axial RoPE that strictly mimics HuggingFace SigLIP's BF16 precision behavior.
     
