@@ -79,7 +79,7 @@ def hf_apply_rotary_pos_emb(q, cos, sin):
 # ==========================================
 # 2. Muse Implementation (Your Reverted Code)
 # ==========================================
-class KeyeAxialRotaryEmbedding(nn.Module):
+class Muse_KeyeAxialRotaryEmbedding(nn.Module):
     """
     Axial RoPE that strictly mimics HuggingFace SigLIP's BF16 precision behavior.
     
