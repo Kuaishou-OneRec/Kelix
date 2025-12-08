@@ -81,42 +81,42 @@ def hf_apply_rotary_pos_emb(q, cos, sin):
 # ==========================================
 class Muse_KeyeAxialRotaryEmbedding(nn.Module):
     """
-    Axial RoPE that strictly mimics HuggingFace SigLIP's BF16 precision behavior.
+    Axial RoPE with Delayed Initialization to strictly match HF's BF16 arithmetic.
     
-    CRITICAL DETAILS to match HF:
-    1. Full RoPE: Rotates all 72 dimensions (not partial).
-    2. BF16 Indices: 'seq' uses inv_freq.dtype. If BF16, indices > 256 are quantized!
-    3. BF16 Trig: cos/sin computed in BF16.
-    4. FP32 App: Final rotate application is in FP32.
+    CRITICAL FIX:
+    We must NOT build the cache in __init__. If we do, we use FP32 arithmetic.
+    HF calculates frequencies on-the-fly using current dtype (BF16).
+    BF16 `torch.arange` loses precision for indices > 256. 
+    To match HF, we must build the cache inside `forward` using the current dtype.
     """
 
     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
         super().__init__()
-        # SigLIP config: dim = head_dim // 2 (e.g. 36 for head_dim 72)
         self.dim = head_dim // 2
         self.base = base
         
-        # Init inv_freq in FP32 (Standard), registered as buffer.
-        # It will become BF16 when model.to(bfloat16) is called.
+        # Init inv_freq in FP32 (Standard)
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         
-        # Build initial cache
-        self.build_freq_cache(max_grid_size)
+        # [FIX] Do NOT build cache here. Initialize as empty.
+        # This forces `forward` to build it using the correct runtime dtype (BF16).
+        self.register_buffer("freqs_cache", torch.empty(0), persistent=False)
 
     def build_freq_cache(self, seqlen: int):
-        # [CRITICAL] Use the current dtype of inv_freq (BF16).
-        # HF: seq = torch.arange(..., dtype=self.inv_freq.dtype)
-        # This truncates indices > 256 if dtype is BF16. We MUST replicate this.
+        # [CRITICAL] Use the current dtype of inv_freq (BF16 during inference)
         dtype = self.inv_freq.dtype
+        device = self.inv_freq.device
         
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=dtype)
-        freqs = torch.outer(seq, self.inv_freq) # BF16 * BF16 -> BF16
+        # This replicates HF's precision loss:
+        # If dtype is BF16, torch.arange(257) -> 256.0 (or similar loss)
+        seq = torch.arange(seqlen, device=device, dtype=dtype)
+        freqs = torch.outer(seq, self.inv_freq) # BF16 * BF16
         self.register_buffer("freqs_cache", freqs, persistent=False)
 
     @staticmethod
     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-        # GPT-NeoX style rotation
+        # Standard GPT-NeoX style rotation (Full RoPE)
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat([-x2, x1], dim=-1)
 
@@ -130,38 +130,38 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         else:
             height_ids, width_ids = input_pos
 
-        # Dynamic resize
+        # Determine required size
         max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
-        if max_pos > self.freqs_cache.shape[0]:
+        
+        # [FIX] Lazy Build: Build if empty or too small
+        if self.freqs_cache.numel() == 0 or max_pos > self.freqs_cache.shape[0]:
             self.build_freq_cache(max_pos + 128)
 
         # 1. Fetch Frequencies (BF16)
-        freqs_h = self.freqs_cache[height_ids] # [Seq, 18]
+        freqs_h = self.freqs_cache[height_ids] 
         freqs_w = self.freqs_cache[width_ids]
         
-        # 2. Concat [H, W] (BF16) -> [Seq, 36]
+        # 2. Concat [H, W] -> [Seq, 36]
         freqs = torch.cat([freqs_h, freqs_w], dim=-1)
         
         # 3. Compute Cos/Sin (BF16)
-        cos = freqs.cos() 
+        cos = freqs.cos()
         sin = freqs.sin()
         
-        # 4. Expand for GPT-NeoX RoPE (BF16)
-        # We need to apply cos(36) to both halves of x(72).
-        # x1(36) * cos(36) ... x2(36) * cos(36)
-        # So we repeat cos to 72.
+        # 4. Expand for Full RoPE
+        # x is [..., 72]. cos is [..., 36].
+        # We need cos to cover both halves of x.
         cos = torch.cat([cos, cos], dim=-1) # [Seq, 72]
         sin = torch.cat([sin, sin], dim=-1)
 
-        # 5. Apply Rotation in FP32 (Matches HF apply_rotary_emb logic)
-        cos = cos.unsqueeze(-2) # Broadcast heads: [Seq, 1, 72]
+        # 5. Apply Rotation in FP32 (Matches FlashAttn Kernel)
+        cos = cos.unsqueeze(-2) # Broadcast heads
         sin = sin.unsqueeze(-2)
 
         x_float = x.float()
         cos_float = cos.float()
         sin_float = sin.float()
 
-        # x * cos + rotate_half(x) * sin
         out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
 
         return out.to(dtype=x.dtype)
