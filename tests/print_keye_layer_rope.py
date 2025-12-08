@@ -81,13 +81,9 @@ def hf_apply_rotary_pos_emb(q, cos, sin):
 # ==========================================
 class Muse_KeyeAxialRotaryEmbedding(nn.Module):
     """
-    Axial RoPE with Delayed Initialization to strictly match HF's BF16 arithmetic.
+    Axial RoPE that strictly mimics HuggingFace SigLIP's BF16 precision behavior.
     
-    CRITICAL FIX:
-    We must NOT build the cache in __init__. If we do, we use FP32 arithmetic.
-    HF calculates frequencies on-the-fly using current dtype (BF16).
-    BF16 `torch.arange` loses precision for indices > 256. 
-    To match HF, we must build the cache inside `forward` using the current dtype.
+    This implementation matches the Logic that PASSED the bitwise unit test.
     """
 
     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
@@ -95,28 +91,12 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         self.dim = head_dim // 2
         self.base = base
         
-        # Init inv_freq in FP32 (Standard)
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         
-        # [FIX] Do NOT build cache here. Initialize as empty.
-        # This forces `forward` to build it using the correct runtime dtype (BF16).
-        self.register_buffer("freqs_cache", torch.empty(0), persistent=False)
-
-    def build_freq_cache(self, seqlen: int):
-        # [CRITICAL] Use the current dtype of inv_freq (BF16 during inference)
-        dtype = self.inv_freq.dtype
-        device = self.inv_freq.device
-        
-        # This replicates HF's precision loss:
-        # If dtype is BF16, torch.arange(257) -> 256.0 (or similar loss)
-        seq = torch.arange(seqlen, device=device, dtype=dtype)
-        freqs = torch.outer(seq, self.inv_freq) # BF16 * BF16
-        self.register_buffer("freqs_cache", freqs, persistent=False)
 
     @staticmethod
     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
-        # Standard GPT-NeoX style rotation (Full RoPE)
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat([-x2, x1], dim=-1)
 
@@ -130,31 +110,26 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         else:
             height_ids, width_ids = input_pos
 
-        # Determine required size
         max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
         
-        # [FIX] Lazy Build: Build if empty or too small
-        if self.freqs_cache.numel() == 0 or max_pos > self.freqs_cache.shape[0]:
-            self.build_freq_cache(max_pos + 128)
-
+        seq = torch.arange(max_pos, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
         # 1. Fetch Frequencies (BF16)
-        freqs_h = self.freqs_cache[height_ids] 
-        freqs_w = self.freqs_cache[width_ids]
+        freqs_h = freqs[height_ids] 
+        freqs_w = freqs[width_ids]
         
-        # 2. Concat [H, W] -> [Seq, 36]
+        # 2. Concat [H, W] -> [Seq, 36] (BF16)
         freqs = torch.cat([freqs_h, freqs_w], dim=-1)
         
         # 3. Compute Cos/Sin (BF16)
         cos = freqs.cos()
         sin = freqs.sin()
         
-        # 4. Expand for Full RoPE
-        # x is [..., 72]. cos is [..., 36].
-        # We need cos to cover both halves of x.
+        # 4. Expand to Full Head Dim
         cos = torch.cat([cos, cos], dim=-1) # [Seq, 72]
         sin = torch.cat([sin, sin], dim=-1)
 
-        # 5. Apply Rotation in FP32 (Matches FlashAttn Kernel)
+        # 5. Apply Rotation in FP32 (Matches FlashAttn Kernel Logic)
         cos = cos.unsqueeze(-2) # Broadcast heads
         sin = sin.unsqueeze(-2)
 
@@ -165,6 +140,7 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
 
         return out.to(dtype=x.dtype)
+    
 # ==========================================
 # 3. Test Runner
 # ==========================================
@@ -203,7 +179,6 @@ def run_rope_test():
     q_hf_out = hf_apply_rotary_pos_emb(q.float(), cos_hf_apply.float(), sin_hf_apply.float()).to(dtype)
     
     # --- Muse Setup ---
-    # [FIX] 必须加上 .to(dtype)，否则 Muse 内部会用 FP32 计算
     muse_rope = Muse_KeyeAxialRotaryEmbedding(HEAD_DIM).to(device).to(dtype) 
     
     # --- Muse Forward ---
