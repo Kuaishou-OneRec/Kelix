@@ -15,6 +15,13 @@ from muse.layers.rms_norm import RMSNorm
 from muse.layers.position_embeddings import RotaryPositionalEmbeddings
 from muse.layers.kv_cache import KVCache
 
+try:
+    from flash_attn.layers.rotary import apply_rotary_emb as flash_apply_rotary_emb
+    FLASH_ATTN_AVAILABLE = True
+except ImportError:
+    FLASH_ATTN_AVAILABLE = False
+
+
 logger = logging.getLogger(__name__)
 
 def KeyeMLP(dim: int, hidden_dim: int, activation_fn: Optional[nn.Module] = None) -> FeedForward:
