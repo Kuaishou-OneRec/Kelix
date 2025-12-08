@@ -392,7 +392,12 @@ class MultiHeadAttention(nn.Module):
 #         return (x * cos) + (self._rotate_half(x) * sin)
 class KeyeAxialRotaryEmbedding(nn.Module):
     """
-    Axial RoPE with strict FP32 precision to match HuggingFace SigLIP.
+    Axial RoPE that strictly mimics HuggingFace SigLIP's BF16 precision behavior.
+    
+    Mechanism:
+    1. 'inv_freq' is registered as a buffer. When model.to(bfloat16) is called, it becomes BF16.
+    2. We MUST compute 'freqs' and 'cos/sin' in BF16 to match HF's values.
+    3. We then cast to Float (FP32) only during the rotation application, matching flash_attn kernel logic.
     """
 
     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
@@ -400,18 +405,20 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         self.dim = head_dim // 2
         self.base = base
         
-        # Init inv_freq (matches HF)
+        # Initialize in FP32 (Standard), but will be cast to BF16 by model.to()
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         
-        # Build Cache
+        # Build initial cache
         self.build_freq_cache(max_grid_size)
 
     def build_freq_cache(self, seqlen: int):
-        # Always compute cache in FP32
-        inv_freq_float = self.inv_freq.float()
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=torch.float)
-        freqs = torch.outer(seq, inv_freq_float)
+        # [CRITICAL] Do NOT force .float() here. 
+        # Use the current dtype of inv_freq (likely bfloat16) to match HF's precision.
+        dtype = self.inv_freq.dtype
+        
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=dtype)
+        freqs = torch.outer(seq, self.inv_freq) # BF16 * BF16 -> BF16
         self.register_buffer("freqs_cache", freqs, persistent=False)
 
     @staticmethod
@@ -429,56 +436,43 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         else:
             height_ids, width_ids = input_pos
 
-        # Resize cache if needed
+        # Dynamic resize
         max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
         if max_pos > self.freqs_cache.shape[0]:
             self.build_freq_cache(max_pos + 128)
 
-        # 1. Fetch Frequencies (FP32 from cache)
-        freqs_h = self.freqs_cache[height_ids] # [Seq, 18]
+        # 1. Fetch Frequencies (Maintains Buffer Dtype, likely BF16)
+        freqs_h = self.freqs_cache[height_ids] 
         freqs_w = self.freqs_cache[width_ids]
         
-        # 2. Concat & Compute Cos/Sin in FP32
-        # HF Logic: flatten(1) -> repeat(1,2) -> chunk(2)[0]
-        # Equivalent to: cat([h, w])
+        # 2. Concat [H, W] (BF16)
         freqs = torch.cat([freqs_h, freqs_w], dim=-1) # [Seq, 36]
         
-        # Calculate cos/sin in strict FP32
-        cos = freqs.cos() # [Seq, 36]
+        # 3. Compute Cos/Sin (BF16)
+        # [CRITICAL] This must happen in BF16 to match HF's values
+        cos = freqs.cos() 
         sin = freqs.sin()
         
-        # 3. Expand to match Head Dimension for Element-wise Mul
-        # HF FlashAttn kernel logic applies [x1(36), x2(36)] against [cos(36)]
-        # This implies:
-        #   Left Half (0-35)  is multiplied by cos (H, W)
-        #   Right Half (36-71) is multiplied by cos (H, W)
-        # To do this element-wise on full x(72), we concat cos to [cos, cos]
+        # 4. Expand to Full Head Dim (BF16)
+        # HF: rope_emb(36) -> repeat(72) -> cos(72) -> chunk(36) -> Kernel(x1, x2)
+        # Effectively applies cos(36) to both halves of x(72).
+        # We simulate this by repeating cos to 72.
         cos = torch.cat([cos, cos], dim=-1) # [Seq, 72]
         sin = torch.cat([sin, sin], dim=-1)
 
-        # 4. Apply RoPE in FP32
-        # Ensure x is FP32
-        x_float = x.float()
-        
-        # Broadcast cos/sin: [Seq, 72] -> [Seq, 1, 72] (Broadcast over Heads)
-        # Note: Muse x is [Batch, Seq, Heads, Dim], but RoPE usually applied after transpose?
-        # Check Muse MultiHeadAttention: q = q.view(b, s, n, d). RoPE applied. Then transpose.
-        # So x is [Batch, Seq, NumHeads, HeadDim]. 
-        # cos needs to broadcast dim 0 (Batch) and dim 2 (Heads).
-        
-        # freqs/cos are currently [Seq, 72] (assuming B=1 for pids or broadcastable)
-        # If pids was [Batch, Seq], then cos is [Batch, Seq, 72].
-        # We need [Batch, Seq, 1, 72].
+        # 5. Apply Rotation in FP32
+        # HF/FlashAttn Kernel: takes BF16 input/cos, casts to Float, calculates, returns BF16.
+        # Broadcast cos: [Seq, 72] -> [Seq, 1, 72]
         cos = cos.unsqueeze(-2)
         sin = sin.unsqueeze(-2)
 
-        # Strict FP32 arithmetic
-        # x' = x * cos + rotate_half(x) * sin
-        out = (x_float * cos) + (self._rotate_half(x_float) * sin)
+        x_float = x.float()
+        cos_float = cos.float()
+        sin_float = sin.float()
 
-        # Cast back to input dtype (BF16)
+        out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
+
         return out.to(dtype=x.dtype)
-
 
     # def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
     #     if input_pos is None:
