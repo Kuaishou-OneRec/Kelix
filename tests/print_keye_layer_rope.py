@@ -79,20 +79,35 @@ def hf_apply_rotary_pos_emb(q, cos, sin):
 # ==========================================
 # 2. Muse Implementation (Your Reverted Code)
 # ==========================================
-class Muse_KeyeAxialRotaryEmbedding(nn.Module):
+class KeyeAxialRotaryEmbedding(nn.Module):
+    """
+    Axial RoPE that strictly mimics HuggingFace SigLIP's BF16 precision behavior.
+    
+    Mechanism:
+    1. 'inv_freq' is registered as a buffer. When model.to(bfloat16) is called, it becomes BF16.
+    2. We MUST compute 'freqs' and 'cos/sin' in BF16 to match HF's values.
+    3. We then cast to Float (FP32) only during the rotation application, matching flash_attn kernel logic.
+    """
+
     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
         super().__init__()
         self.dim = head_dim // 2
         self.base = base
         
+        # Initialize in FP32 (Standard), but will be cast to BF16 by model.to()
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
+        
+        # Build initial cache
         self.build_freq_cache(max_grid_size)
 
     def build_freq_cache(self, seqlen: int):
-        inv_freq_float = self.inv_freq.float()
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=torch.float)
-        freqs = torch.outer(seq, inv_freq_float)
+        # [CRITICAL] Do NOT force .float() here. 
+        # Use the current dtype of inv_freq (likely bfloat16) to match HF's precision.
+        dtype = self.inv_freq.dtype
+        
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=dtype)
+        freqs = torch.outer(seq, self.inv_freq) # BF16 * BF16 -> BF16
         self.register_buffer("freqs_cache", freqs, persistent=False)
 
     @staticmethod
@@ -100,30 +115,52 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         x1, x2 = x.chunk(2, dim=-1)
         return torch.cat([-x2, x1], dim=-1)
 
-    def forward(self, x: torch.Tensor, *, input_pos=None) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
+        if input_pos is None:
+            return x
+        
         if isinstance(input_pos, dict):
             height_ids = input_pos["height"]
             width_ids = input_pos["width"]
         else:
             height_ids, width_ids = input_pos
 
+        # Dynamic resize
+        max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
+        if max_pos > self.freqs_cache.shape[0]:
+            self.build_freq_cache(max_pos + 128)
+
+        # 1. Fetch Frequencies (Maintains Buffer Dtype, likely BF16)
         freqs_h = self.freqs_cache[height_ids] 
         freqs_w = self.freqs_cache[width_ids]
         
-        freqs = torch.cat([freqs_h, freqs_w], dim=-1)
+        # 2. Concat [H, W] (BF16)
+        freqs = torch.cat([freqs_h, freqs_w], dim=-1) # [Seq, 36]
         
-        cos = freqs.cos()
+        # 3. Compute Cos/Sin (BF16)
+        # [CRITICAL] This must happen in BF16 to match HF's values
+        cos = freqs.cos() 
         sin = freqs.sin()
         
-        cos = torch.cat([cos, cos], dim=-1)
+        # 4. Expand to Full Head Dim (BF16)
+        # HF: rope_emb(36) -> repeat(72) -> cos(72) -> chunk(36) -> Kernel(x1, x2)
+        # Effectively applies cos(36) to both halves of x(72).
+        # We simulate this by repeating cos to 72.
+        cos = torch.cat([cos, cos], dim=-1) # [Seq, 72]
         sin = torch.cat([sin, sin], dim=-1)
 
-        # Broadcast over heads
+        # 5. Apply Rotation in FP32
+        # HF/FlashAttn Kernel: takes BF16 input/cos, casts to Float, calculates, returns BF16.
+        # Broadcast cos: [Seq, 72] -> [Seq, 1, 72]
         cos = cos.unsqueeze(-2)
         sin = sin.unsqueeze(-2)
 
         x_float = x.float()
-        out = (x_float * cos) + (self._rotate_half(x_float) * sin)
+        cos_float = cos.float()
+        sin_float = sin.float()
+
+        out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
+
         return out.to(dtype=x.dtype)
 
 # ==========================================
