@@ -392,15 +392,18 @@ class MultiHeadAttention(nn.Module):
 #         return (x * cos) + (self._rotate_half(x) * sin)
 class KeyeAxialRotaryEmbedding(nn.Module):
     """
-    Axial RoPE with strict FP32 precision to match HuggingFace SigLIP.
+    Axial RoPE with Partial Rotation (First 50% of dimensions only).
+    Strict FP32 precision matches HuggingFace SigLIP implementation.
     """
 
     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
         super().__init__()
-        self.dim = head_dim // 2
+        # SigLIP calculates inv_freq based on dim = head_dim // 2
+        self.dim = head_dim // 2 
         self.base = base
         
-        # Init inv_freq (matches HF)
+        # Init inv_freq in FP32 (Matches HF SigLIPRotaryEmbedding)
+        # Note: torch.arange(0, dim, 2) generates dim/2 frequencies.
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         
@@ -408,7 +411,7 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         self.build_freq_cache(max_grid_size)
 
     def build_freq_cache(self, seqlen: int):
-        # Always compute cache in FP32
+        # Force FP32 for cache construction
         inv_freq_float = self.inv_freq.float()
         seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=torch.float)
         freqs = torch.outer(seq, inv_freq_float)
@@ -429,56 +432,57 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         else:
             height_ids, width_ids = input_pos
 
-        # Resize cache if needed
+        # Dynamic Cache Resizing
         max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
         if max_pos > self.freqs_cache.shape[0]:
             self.build_freq_cache(max_pos + 128)
 
-        # 1. Fetch Frequencies (FP32 from cache)
-        freqs_h = self.freqs_cache[height_ids] # [Seq, 18]
+        # 1. Fetch Frequencies (FP32)
+        freqs_h = self.freqs_cache[height_ids] # [Seq, Dim/2]
         freqs_w = self.freqs_cache[width_ids]
         
-        # 2. Concat & Compute Cos/Sin in FP32
-        # HF Logic: flatten(1) -> repeat(1,2) -> chunk(2)[0]
-        # Equivalent to: cat([h, w])
-        freqs = torch.cat([freqs_h, freqs_w], dim=-1) # [Seq, 36]
+        # 2. Concat to get [H, W] frequencies
+        # Result shape: [Seq, Dim] where Dim = head_dim // 2
+        freqs = torch.cat([freqs_h, freqs_w], dim=-1)
         
-        # Calculate cos/sin in strict FP32
-        cos = freqs.cos() # [Seq, 36]
+        # 3. Compute Cos/Sin in FP32
+        cos = freqs.cos() # [Seq, HeadDim // 2]
         sin = freqs.sin()
         
-        # 3. Expand to match Head Dimension for Element-wise Mul
-        # HF FlashAttn kernel logic applies [x1(36), x2(36)] against [cos(36)]
-        # This implies:
-        #   Left Half (0-35)  is multiplied by cos (H, W)
-        #   Right Half (36-71) is multiplied by cos (H, W)
-        # To do this element-wise on full x(72), we concat cos to [cos, cos]
-        cos = torch.cat([cos, cos], dim=-1) # [Seq, 72]
-        sin = torch.cat([sin, sin], dim=-1)
-
-        # 4. Apply RoPE in FP32
-        # Ensure x is FP32
-        x_float = x.float()
-        
-        # Broadcast cos/sin: [Seq, 72] -> [Seq, 1, 72] (Broadcast over Heads)
-        # Note: Muse x is [Batch, Seq, Heads, Dim], but RoPE usually applied after transpose?
-        # Check Muse MultiHeadAttention: q = q.view(b, s, n, d). RoPE applied. Then transpose.
-        # So x is [Batch, Seq, NumHeads, HeadDim]. 
-        # cos needs to broadcast dim 0 (Batch) and dim 2 (Heads).
-        
-        # freqs/cos are currently [Seq, 72] (assuming B=1 for pids or broadcastable)
-        # If pids was [Batch, Seq], then cos is [Batch, Seq, 72].
-        # We need [Batch, Seq, 1, 72].
+        # 4. Broadcast for Head Dimension
+        # x shape: [Batch, Seq, NumHeads, HeadDim]
+        # cos shape: [Seq, HeadDim//2] -> [Seq, 1, HeadDim//2]
         cos = cos.unsqueeze(-2)
         sin = sin.unsqueeze(-2)
 
-        # Strict FP32 arithmetic
-        # x' = x * cos + rotate_half(x) * sin
-        out = (x_float * cos) + (self._rotate_half(x_float) * sin)
+        # 5. Partial RoPE Application
+        # SigLIP only rotates the first half of the dimensions!
+        # x_rot: First half (HeadDim // 2) -> Applied RoPE
+        # x_pass: Second half (HeadDim // 2) -> Kept as is
+        
+        # Ensure we are slicing the last dimension
+        rot_dim = cos.shape[-1] # This should be head_dim // 2
+        
+        x_float = x.float()
+        x_rot = x_float[..., :rot_dim]
+        x_pass = x_float[..., rot_dim:]
+        
+        # Standard RoPE on the rotary part
+        # Note: Since cos/sin shape matches x_rot, we assume they align with the 
+        # rotate_half logic implied by [H, W] structure.
+        # x_rot has shape [..., H_part, W_part].
+        # cos has shape [..., H_freq, W_freq].
+        # rotate_half(x_rot) -> [-W_part, H_part].
+        # term1: H_part * H_freq, W_part * W_freq
+        # term2: -W_part * H_freq, H_part * W_freq
+        # This effectively mixes H and W which is consistent with flash_attn behavior
+        # given the flattened input.
+        x_rot_out = (x_rot * cos) + (self._rotate_half(x_rot) * sin)
+        
+        # 6. Concatenate back
+        out = torch.cat([x_rot_out, x_pass], dim=-1)
 
-        # Cast back to input dtype (BF16)
         return out.to(dtype=x.dtype)
-
 
     # def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
     #     if input_pos is None:
