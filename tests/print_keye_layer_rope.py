@@ -93,7 +93,7 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        
+        self.debug_cos = None
 
     @staticmethod
     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -117,12 +117,9 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         pids = torch.stack([height_ids, width_ids], dim=-1)
         rope_emb = freqs[pids].flatten(1).repeat(1, 2)
         cos = rope_emb.cos()
+        self.debug_cos = cos 
         sin = rope_emb.sin()
         
-        # 4. Expand to Full Head Dim
-        cos = torch.cat([cos, cos], dim=-1) # [Seq, 72]
-        sin = torch.cat([sin, sin], dim=-1)
-
         # 5. Apply Rotation in FP32 (Matches FlashAttn Kernel Logic)
         cos = cos.unsqueeze(-2) # Broadcast heads
         sin = sin.unsqueeze(-2)
@@ -156,54 +153,41 @@ def run_rope_test():
     h_ids = torch.arange(GRID_H, device=device).repeat_interleave(GRID_W)
     w_ids = torch.arange(GRID_W, device=device).repeat(GRID_H)
     
-    # --- HF Setup ---
+    # --- HF Run ---
     hf_rope = HF_SigLIPRotaryEmbedding(DIM).to(device).to(dtype)
-    
-    # --- HF Forward ---
     rope_emb_max = hf_rope(4096)
     pids = torch.stack([h_ids, w_ids], dim=-1)
+    # Match HF Logic: Select -> Flatten -> Repeat
     rope_emb_hf = rope_emb_max[pids].flatten(1).repeat(1, 2)
-    
     cos_hf = rope_emb_hf.cos()
     sin_hf = rope_emb_hf.sin()
     
     cos_hf_apply = cos_hf.unsqueeze(1)
     sin_hf_apply = sin_hf.unsqueeze(1)
-    
     q_hf_out = hf_apply_rotary_pos_emb(q.float(), cos_hf_apply.float(), sin_hf_apply.float()).to(dtype)
     
-    # --- Muse Setup ---
+    # --- Muse Run ---
     muse_rope = Muse_KeyeAxialRotaryEmbedding(HEAD_DIM).to(device).to(dtype) 
-    
-    # --- Muse Forward ---
     input_pos = {"height": h_ids, "width": w_ids}
     q_muse_out = muse_rope(q, input_pos=input_pos)
     
     # --- Comparison ---
     logger.info("\n--- Tensor Diffs ---")
     
+    # 1. Output Check
     diff = (q_hf_out - q_muse_out).abs()
-    logger.info(f"Output Diff | Max: {diff.max().item():.2e} | Mean: {diff.mean().item():.2e}")
+    logger.info(f"Output Diff | Max: {diff.max().item():.2e}")
     
-    # Verify internal frequencies
-    with torch.no_grad():
-        # Force rebuild to ensure we are checking what happened inside forward
-        # muse_rope.build_freq_cache(4096) 
-        freqs = rope_emb_max[pids].flatten(1).repeat(1, 2)
-        muse_freqs_h = freqs[h_ids]
-        muse_freqs_w = freqs[w_ids]
-        muse_freqs = torch.cat([muse_freqs_h, muse_freqs_w], dim=-1)
-        muse_cos = torch.cat([muse_freqs.cos(), muse_freqs.cos()], dim=-1)
-        
-    hf_cos_native = cos_hf # This is BF16
-    
-    cos_diff = (hf_cos_native - muse_cos).abs()
+    # 2. Internal Cos Check (Directly from instance)
+    # cos_hf is [Seq, 72] (BF16)
+    # muse_rope.debug_cos is [Seq, 72] (BF16)
+    cos_diff = (cos_hf - muse_rope.debug_cos).abs()
     logger.info(f"Cos Diff    | Max: {cos_diff.max().item():.2e}")
 
-    if diff.max().item() < 1e-6:
-        logger.info("\n✅ SUCCESS: RoPE outputs match perfectly!")
+    if diff.max().item() < 1e-6 and cos_diff.max().item() < 1e-6:
+        logger.info("\n✅ SUCCESS: Perfectly Aligned!")
     else:
-        logger.info("\n❌ FAILURE: Diffs persist.")
+        logger.info("\n❌ FAILURE: Diffs exist.")
 
 if __name__ == "__main__":
     run_rope_test()
