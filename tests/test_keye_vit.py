@@ -67,11 +67,10 @@ def _build_muse_config(hf_cfg: Dict[str, Any]) -> KeyeVisionConfig:
         attention_dropout=hf_cfg.get("attention_dropout", 0.0),
         rope_theta=hf_cfg.get("rope_theta", 10000.0),
         # Ensure we use eager for comparison to avoid kernel nondeterminism
-        attention_function="eager", 
+        attention_function="flash_attention_2", 
         # Additional params
         use_qk_norm=hf_cfg.get("use_qk_norm", False),
         qk_norm_eps=hf_cfg.get("qk_norm_eps", 1e-6),
-        vision_use_head=False, # We are testing the vision tower
         has_learnable_position_embedding=hf_cfg.get("has_learnable_position_embedding", False)
     )
 
