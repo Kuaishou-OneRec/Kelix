@@ -390,7 +390,7 @@ class MultiHeadAttention(nn.Module):
 #         sin = torch.cat([sin_h, sin_w], dim=-1).to(dtype=x.dtype)
 #         # x 需 reshape 为 [batch, seq, num_heads, head_dim] 再传进来
 #         return (x * cos) + (self._rotate_half(x) * sin)
-class KeyeAxialRotaryEmbedding(nn.Module):
+class Muse_KeyeAxialRotaryEmbedding(nn.Module):
     """
     Axial RoPE that strictly mimics HuggingFace SigLIP's BF16 precision behavior.
     
@@ -399,15 +399,11 @@ class KeyeAxialRotaryEmbedding(nn.Module):
 
     def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
         super().__init__()
-        # SigLIP config: dim = head_dim // 2
         self.dim = head_dim // 2
         self.base = base
         
-        # Init inv_freq in FP32. 
-        # IMPORTANT: When loading from HF checkpoint, this will be overwritten by the BF16 tensor from the file.
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        
 
     @staticmethod
     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -426,26 +422,13 @@ class KeyeAxialRotaryEmbedding(nn.Module):
 
         max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
         
-        # Lazy Build: Ensure cache exists and is large enough
         seq = torch.arange(max_pos, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.outer(seq, self.inv_freq)
-        # 1. Fetch Frequencies (BF16)
-        freqs_h = freqs[height_ids] 
-        freqs_w = freqs[width_ids]
-        
-        # 2. Concat [H, W] -> [Seq, 36] (BF16)
-        freqs = torch.cat([freqs_h, freqs_w], dim=-1)
-        
-        # 3. Compute Cos/Sin (BF16)
-        # MUST be computed in BF16 to match HF's values
-        cos = freqs.cos()
-        sin = freqs.sin()
-        
-        # 4. Expand to Full Head Dim
-        cos = torch.cat([cos, cos], dim=-1) # [Seq, 72]
-        sin = torch.cat([sin, sin], dim=-1)
+        pids = torch.stack([height_ids, width_ids], dim=-1)
+        rope_emb = freqs[pids].flatten(1).repeat(1, 2)
+        cos = rope_emb.cos()
+        sin = rope_emb.sin()
 
-        # 5. Apply Rotation in FP32 (Matches FlashAttn Kernel Logic)
         cos = cos.unsqueeze(-2) # Broadcast heads
         sin = sin.unsqueeze(-2)
 
@@ -456,4 +439,3 @@ class KeyeAxialRotaryEmbedding(nn.Module):
         out = (x_float * cos_float) + (self._rotate_half(x_float) * sin_float)
 
         return out.to(dtype=x.dtype)
-    

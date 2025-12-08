@@ -93,7 +93,6 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.debug_cos = None
 
     @staticmethod
     def _rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -117,10 +116,8 @@ class Muse_KeyeAxialRotaryEmbedding(nn.Module):
         pids = torch.stack([height_ids, width_ids], dim=-1)
         rope_emb = freqs[pids].flatten(1).repeat(1, 2)
         cos = rope_emb.cos()
-        self.debug_cos = cos 
         sin = rope_emb.sin()
-        
-        # 5. Apply Rotation in FP32 (Matches FlashAttn Kernel Logic)
+
         cos = cos.unsqueeze(-2) # Broadcast heads
         sin = sin.unsqueeze(-2)
 
@@ -174,13 +171,9 @@ def run_rope_test():
     # --- Comparison ---
     logger.info("\n--- Tensor Diffs ---")
     
-    # 1. Output Check
     diff = (q_hf_out - q_muse_out).abs()
     logger.info(f"Output Diff | Max: {diff.max().item():.2e}")
     
-    # 2. Internal Cos Check (Directly from instance)
-    # cos_hf is [Seq, 72] (BF16)
-    # muse_rope.debug_cos is [Seq, 72] (BF16)
     cos_diff = (cos_hf - muse_rope.debug_cos).abs()
     logger.info(f"Cos Diff    | Max: {cos_diff.max().item():.2e}")
 
