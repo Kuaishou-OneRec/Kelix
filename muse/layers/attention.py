@@ -142,6 +142,9 @@ class MultiHeadAttention(nn.Module):
 
         self._attention_function = get_attention_function(attention_function)
 
+        # this flag indicates whether to update the kv-cache during forward
+        # passes. when disabled, we can have the cache setup but still
+        # perform normal forward passes
         self.cache_enabled = False
 
     def setup_cache(
@@ -303,9 +306,7 @@ class MultiHeadAttention(nn.Module):
             q = SeqAllToAll4D.apply(cpg, q, 2, 1)
             k = SeqAllToAll4D.apply(cpg, k, 2, 1)
             v = SeqAllToAll4D.apply(cpg, v, 2, 1)
-        q = q.transpose(1, 2) 
-        k = k.transpose(1, 2)
-        v = v.transpose(1, 2)
+
         output = self._attention_function(
             q=q,
             k=k,
@@ -315,9 +316,11 @@ class MultiHeadAttention(nn.Module):
             training=self.training,
             **kwargs
         )
+
         if get_context_parallel_world_size() > 1:
             cpg = get_context_parallel_group()
             # output: [b, s_x * P, n_h // P, h_d] -> [b, s_x, n_h, h_d]
             output = SeqAllToAll4D.apply(cpg, output, 1, 2)
-        output = output.transpose(1, 2).contiguous().view(b, s_x, -1)
+        # reshape the output to be the same shape as the input
+        output = output.contiguous().view(b, s_x, -1)
         return self.output_proj(output)
