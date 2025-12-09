@@ -28,6 +28,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _resolve_target_dtype() -> torch.dtype:
+    """Prefer BF16; fall back to FP32 if unsupported."""
+    if torch.cuda.is_available():
+        is_supported = getattr(torch.cuda, "is_bf16_supported", None)
+        if is_supported is None or is_supported():
+            return torch.bfloat16
+        logger.warning("CUDA BF16 not supported on this device, falling back to float32.")
+        return torch.float32
+    logger.warning("CUDA not available; using float32.")
+    return torch.float32
+
+
 @contextmanager
 def _mock_context_parallel():
     """Stub context parallel helpers so tests can run without torch.distributed init."""
@@ -69,7 +81,7 @@ def _build_siglip_config(hf_cfg: Dict[str, Any]) -> SiglipVisionConfig:
         use_qk_norm=hf_cfg.get("use_qk_norm", False),
         qk_norm_eps=hf_cfg.get("qk_norm_eps", 1e-6),
         rope_theta=hf_cfg.get("rope_theta", 10000.0),
-        attention_function="eager",
+        attention_function="flash_attention_2",
         output_attentions=False,
         output_hidden_states=False,
     )
@@ -122,6 +134,8 @@ def _run_siglip_logits_align_with_hf_checkpoint():
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(0)
 
+    target_dtype = _resolve_target_dtype()
+
     # =========================================================================
     # 1. 配置路径
     # =========================================================================
@@ -131,17 +145,20 @@ def _run_siglip_logits_align_with_hf_checkpoint():
     # =========================================================================
     # 2. 加载 HF 模型
     # =========================================================================
-    logger.info("Loading HF model...")
+    logger.info(f"Loading HF model with dtype={target_dtype} ...")
     processor = AutoImageProcessor.from_pretrained(checkpoint_dir)
     hf_model = HFSiglipVisionModel.from_pretrained(
         checkpoint_dir,
-        torch_dtype="auto",
+        torch_dtype=target_dtype,
         device_map="auto"
     )
     hf_model.eval()
 
     device = next(hf_model.parameters()).device
-    dtype = next(hf_model.parameters()).dtype
+    actual_dtype = next(hf_model.parameters()).dtype
+    if actual_dtype != target_dtype:
+        logger.warning(f"Requested dtype {target_dtype} but HF model is {actual_dtype}.")
+    dtype = actual_dtype
     logger.info(f"Reference Model Device: {device}, Dtype: {dtype}")
 
     # =========================================================================
@@ -151,8 +168,7 @@ def _run_siglip_logits_align_with_hf_checkpoint():
     hf_config_dict = hf_model.config.to_dict()
     muse_config = _build_siglip_config(hf_config_dict)
 
-    model_dtype = torch.bfloat16 if dtype == torch.bfloat16 else torch.float32
-    with set_default_dtype(model_dtype):
+    with set_default_dtype(dtype):
         muse_model = SiglipVisionModel(muse_config)
 
     # =========================================================================
