@@ -294,7 +294,121 @@ def debug_first_block(diffusers_model, muse_model, inputs, dtype):
         compare_tensors("norm1", diff_norm1, muse_norm1)
         compare_tensors("norm1_modulated", diff_norm1_mod, muse_norm1_mod)
         
-        # Self attention output
+        # ====== STEP 3b: Detailed Self-Attention comparison ======
+        print("\n  [3b] Self-Attention step-by-step...")
+        
+        diff_attn = diff_block.attn1
+        muse_attn = muse_block.attn
+        N = diff_norm1_mod.shape[1]  # sequence length (H*W)
+        C = diff_norm1_mod.shape[-1]  # hidden dimension
+        
+        # Step 1: QKV linear projection
+        print("\n    Checking QKV projection...")
+        
+        # Diffusers: separate q, k, v projections
+        diff_q = diff_attn.to_q(diff_norm1_mod)
+        diff_k = diff_attn.to_k(diff_norm1_mod)
+        diff_v = diff_attn.to_v(diff_norm1_mod)
+        
+        # Muse: combined qkv projection
+        muse_qkv = muse_attn.qkv(muse_norm1_mod).reshape(B, N, 3, C)
+        muse_q, muse_k, muse_v = muse_qkv.unbind(2)
+        
+        compare_tensors("q_after_linear", diff_q, muse_q)
+        compare_tensors("k_after_linear", diff_k, muse_k)
+        compare_tensors("v_after_linear", diff_v, muse_v)
+        
+        # Step 2: QK normalization
+        print("\n    Checking QK normalization...")
+        if diff_attn.norm_q is not None:
+            diff_q_normed = diff_attn.norm_q(diff_q)
+            diff_k_normed = diff_attn.norm_k(diff_k)
+        else:
+            diff_q_normed = diff_q
+            diff_k_normed = diff_k
+        
+        muse_q_normed = muse_attn.q_norm(muse_q)
+        muse_k_normed = muse_attn.k_norm(muse_k)
+        
+        compare_tensors("q_after_norm", diff_q_normed, muse_q_normed)
+        compare_tensors("k_after_norm", diff_k_normed, muse_k_normed)
+        
+        # Step 3: Reshape for attention
+        print("\n    Checking reshape...")
+        heads = diff_attn.heads
+        head_dim = C // heads
+        
+        # Diffusers reshape
+        diff_q_reshape = diff_q_normed.transpose(1, 2).unflatten(1, (heads, -1))  # [B, heads, head_dim, N]
+        diff_k_reshape = diff_k_normed.transpose(1, 2).unflatten(1, (heads, -1)).transpose(2, 3)  # [B, heads, N, head_dim]
+        diff_v_reshape = diff_v.transpose(1, 2).unflatten(1, (heads, -1))  # [B, heads, head_dim, N]
+        
+        # Muse reshape
+        muse_q_t = muse_q_normed.transpose(-1, -2)  # [B, C, N]
+        muse_k_t = muse_k_normed.transpose(-1, -2)
+        muse_v_t = muse_v.transpose(-1, -2)
+        
+        muse_q_reshape = muse_q_t.reshape(B, heads, head_dim, N)  # [B, heads, head_dim, N]
+        muse_k_reshape = muse_k_t.reshape(B, heads, head_dim, N).transpose(-1, -2)  # [B, heads, N, head_dim]
+        muse_v_reshape = muse_v_t.reshape(B, heads, head_dim, N)  # [B, heads, head_dim, N]
+        
+        compare_tensors("q_reshaped", diff_q_reshape, muse_q_reshape)
+        compare_tensors("k_reshaped", diff_k_reshape, muse_k_reshape)
+        compare_tensors("v_reshaped", diff_v_reshape, muse_v_reshape)
+        
+        # Step 4: ReLU activation
+        print("\n    Checking ReLU activation...")
+        diff_q_relu = F.relu(diff_q_reshape)
+        diff_k_relu = F.relu(diff_k_reshape)
+        
+        muse_q_relu = F.relu(muse_q_reshape)
+        muse_k_relu = F.relu(muse_k_reshape)
+        
+        compare_tensors("q_after_relu", diff_q_relu, muse_q_relu)
+        compare_tensors("k_after_relu", diff_k_relu, muse_k_relu)
+        
+        # Step 5: Float conversion and matmul
+        print("\n    Checking linear attention computation...")
+        diff_q_f = diff_q_relu.float()
+        diff_k_f = diff_k_relu.float()
+        diff_v_f = diff_v_reshape.float()
+        
+        muse_q_f = muse_q_relu.float()
+        muse_k_f = muse_k_relu.float()
+        muse_v_f = muse_v_reshape.float()
+        
+        # Pad value
+        diff_v_pad = F.pad(diff_v_f, (0, 0, 0, 1), mode="constant", value=1.0)
+        muse_v_pad = F.pad(muse_v_f, (0, 0, 0, 1), mode="constant", value=1.0)
+        compare_tensors("v_padded", diff_v_pad, muse_v_pad)
+        
+        # First matmul: vk = v @ k
+        diff_vk = torch.matmul(diff_v_pad, diff_k_f)
+        muse_vk = torch.matmul(muse_v_pad, muse_k_f)
+        compare_tensors("vk_matmul", diff_vk, muse_vk)
+        
+        # Second matmul: out = vk @ q
+        diff_out = torch.matmul(diff_vk, diff_q_f)
+        muse_out = torch.matmul(muse_vk, muse_q_f)
+        compare_tensors("vkq_matmul", diff_out, muse_out)
+        
+        # Normalization
+        diff_out_norm = diff_out[:, :, :-1] / (diff_out[:, :, -1:] + 1e-15)
+        muse_out_norm = muse_out[:, :, :-1] / (muse_out[:, :, -1:] + 1e-15)
+        compare_tensors("attn_normalized", diff_out_norm, muse_out_norm)
+        
+        # Reshape back
+        diff_out_reshape = diff_out_norm.flatten(1, 2).transpose(1, 2).to(dtype)
+        muse_out_reshape = muse_out_norm.view(B, C, N).permute(0, 2, 1).to(dtype)
+        compare_tensors("attn_reshaped", diff_out_reshape, muse_out_reshape)
+        
+        # Output projection
+        diff_out_proj = diff_attn.to_out[0](diff_out_reshape)
+        muse_out_proj = muse_attn.proj(muse_out_reshape)
+        compare_tensors("attn_projected", diff_out_proj, muse_out_proj)
+        
+        # Full self attention output
+        print("\n    Full self-attention output...")
         diff_attn_out = diff_block.attn1(diff_norm1_mod)
         muse_attn_out = muse_block.attn(muse_norm1_mod, HW=(H, W))
         compare_tensors("self_attn_output", diff_attn_out, muse_attn_out)
