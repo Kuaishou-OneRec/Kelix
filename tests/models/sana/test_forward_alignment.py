@@ -56,7 +56,7 @@ def mock_build_from_cfg(cfg, registry, default_args=None):
     """Mock build_from_cfg function."""
     return None
 
-# Patch mmcv
+# Patch mmcv and its submodules
 try:
     import mmcv
     if not hasattr(mmcv, 'Registry'):
@@ -68,6 +68,21 @@ except ImportError:
     mmcv.Registry = MockRegistry
     mmcv.build_from_cfg = mock_build_from_cfg
     sys.modules['mmcv'] = mmcv
+
+# Mock mmcv.utils and mmcv.utils.logging
+if 'mmcv.utils' not in sys.modules:
+    mmcv_utils = types.ModuleType('mmcv.utils')
+    sys.modules['mmcv.utils'] = mmcv_utils
+    mmcv.utils = mmcv_utils
+
+if 'mmcv.utils.logging' not in sys.modules:
+    import logging
+    mmcv_utils_logging = types.ModuleType('mmcv.utils.logging')
+    mmcv_utils_logging.get_logger = logging.getLogger
+    mmcv_utils_logging.print_log = print
+    sys.modules['mmcv.utils.logging'] = mmcv_utils_logging
+    if hasattr(mmcv, 'utils'):
+        mmcv.utils.logging = mmcv_utils_logging
 
 import pytest
 import torch
@@ -134,7 +149,8 @@ def load_official_model(state_dict: dict, device: torch.device, dtype: torch.dty
     """Load the official Sana model from the Sana repo."""
     try:
         from diffusion.model.nets.sana_multi_scale import SanaMS_1600M_P1_D20
-    except ImportError:
+    except ImportError as e:
+        print(f"Error importing official Sana model: {e}")
         raise ImportError(
             "Cannot import official Sana model. Make sure:\n"
             "1. Sana repo is in PYTHONPATH\n"
