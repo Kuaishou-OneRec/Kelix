@@ -212,6 +212,209 @@ def compare_tensors(name: str, tensor1: torch.Tensor, tensor2: torch.Tensor, ato
     return passed
 
 
+def debug_first_block(diffusers_model, muse_model, inputs, dtype):
+    """Debug the first transformer block step by step to find divergence."""
+    print("\n" + "=" * 70)
+    print("[DEBUG] First Transformer Block - Step by Step Comparison")
+    print("=" * 70)
+    
+    with torch.no_grad():
+        x = inputs["x"].to(dtype)
+        timestep_float = inputs["timestep"].float()
+        B = x.shape[0]
+        H = W = x.shape[-1]  # 32x32 latent
+        
+        # ====== STEP 1: Embeddings (should be identical) ======
+        print("\n[Step 1] Embeddings...")
+        
+        # Patch embedding
+        diff_x = diffusers_model.patch_embed(x)
+        muse_x = muse_model.x_embedder(x)
+        compare_tensors("patch_embed", diff_x, muse_x)
+        
+        # Timestep embedding
+        diff_time, diff_t_emb = diffusers_model.time_embed(
+            timestep_float, batch_size=B, hidden_dtype=dtype
+        )
+        muse_t = muse_model.t_embedder(timestep_float.long().float())
+        muse_t0 = muse_model.t_block(muse_t)
+        compare_tensors("t_embedder", diff_t_emb, muse_t)
+        compare_tensors("t_block", diff_time, muse_t0)
+        
+        # Caption embedding
+        y_diff = inputs["y_diffusers"]
+        y_muse = inputs["y_muse"]
+        
+        diff_caption = diffusers_model.caption_projection(y_diff)
+        diff_caption = diff_caption.view(B, -1, diff_x.shape[-1])
+        diff_caption = diffusers_model.caption_norm(diff_caption)
+        
+        muse_caption = muse_model.y_embedder(y_muse, False)
+        if muse_model.y_norm:
+            muse_caption = muse_model.attention_y_norm(muse_caption)
+        muse_caption_squeezed = muse_caption.squeeze(1)
+        compare_tensors("caption_embed", diff_caption, muse_caption_squeezed)
+        
+        # ====== STEP 2: First Block - Modulation ======
+        print("\n[Step 2] First Block - Modulation Parameters...")
+        
+        diff_block = diffusers_model.transformer_blocks[0]
+        muse_block = muse_model.blocks[0]
+        
+        # Diffusers modulation
+        diff_shift_msa, diff_scale_msa, diff_gate_msa, diff_shift_mlp, diff_scale_mlp, diff_gate_mlp = (
+            diff_block.scale_shift_table[None] + diff_time.reshape(B, 6, -1)
+        ).chunk(6, dim=1)
+        
+        # Muse modulation
+        muse_shift_msa, muse_scale_msa, muse_gate_msa, muse_shift_mlp, muse_scale_mlp, muse_gate_mlp = (
+            muse_block.scale_shift_table[None] + muse_t0.reshape(B, 6, -1)
+        ).chunk(6, dim=1)
+        
+        compare_tensors("shift_msa", diff_shift_msa, muse_shift_msa)
+        compare_tensors("scale_msa", diff_scale_msa, muse_scale_msa)
+        compare_tensors("gate_msa", diff_gate_msa, muse_gate_msa)
+        compare_tensors("shift_mlp", diff_shift_mlp, muse_shift_mlp)
+        compare_tensors("scale_mlp", diff_scale_mlp, muse_scale_mlp)
+        compare_tensors("gate_mlp", diff_gate_mlp, muse_gate_mlp)
+        
+        # ====== STEP 3: First Block - Self Attention ======
+        print("\n[Step 3] First Block - Self Attention...")
+        
+        # Diffusers: norm + modulate + attn
+        diff_norm1 = diff_block.norm1(diff_x)
+        diff_norm1_mod = diff_norm1 * (1 + diff_scale_msa) + diff_shift_msa
+        diff_norm1_mod = diff_norm1_mod.to(dtype)
+        
+        # Muse: norm + modulate (using t2i_modulate)
+        muse_norm1 = muse_block.norm1(muse_x)
+        muse_norm1_mod = muse_norm1 * (1 + muse_scale_msa) + muse_shift_msa
+        
+        compare_tensors("norm1", diff_norm1, muse_norm1)
+        compare_tensors("norm1_modulated", diff_norm1_mod, muse_norm1_mod)
+        
+        # Self attention output
+        diff_attn_out = diff_block.attn1(diff_norm1_mod)
+        muse_attn_out = muse_block.attn(muse_norm1_mod, HW=(H, W))
+        compare_tensors("self_attn_output", diff_attn_out, muse_attn_out)
+        
+        # After self-attention residual
+        diff_x_after_attn = diff_x + diff_gate_msa * diff_attn_out
+        muse_x_after_attn = muse_x + muse_gate_msa * muse_attn_out
+        compare_tensors("after_self_attn", diff_x_after_attn, muse_x_after_attn)
+        
+        # ====== STEP 4: First Block - Cross Attention ======
+        print("\n[Step 4] First Block - Cross Attention...")
+        
+        # Diffusers cross attention
+        # encoder_attention_mask processing (same as in full forward)
+        encoder_attention_mask = inputs["mask_diffusers"]
+        if encoder_attention_mask.ndim == 2:
+            encoder_attention_mask = (1 - encoder_attention_mask.to(dtype)) * -10000.0
+            encoder_attention_mask = encoder_attention_mask.unsqueeze(1)
+        
+        diff_cross_out = diff_block.attn2(
+            diff_x_after_attn,
+            encoder_hidden_states=diff_caption,
+            attention_mask=encoder_attention_mask,
+        )
+        diff_x_after_cross = diff_cross_out + diff_x_after_attn
+        
+        # Muse cross attention - need to prepare y and mask like in forward
+        # Check for xformers
+        _xformers_available = False
+        try:
+            import xformers.ops
+            _xformers_available = True
+        except ImportError:
+            pass
+        
+        mask = inputs["mask_muse"].clone()
+        y_for_cross = muse_caption.clone()
+        
+        if mask is not None:
+            mask = mask.to(torch.int16)
+            if mask.shape[0] != y_for_cross.shape[0]:
+                mask = mask.repeat(y_for_cross.shape[0] // mask.shape[0], 1)
+            mask = mask.squeeze(1).squeeze(1) if mask.ndim > 2 else mask
+            if _xformers_available:
+                y_for_cross = y_for_cross.squeeze(1) if y_for_cross.ndim == 4 else y_for_cross
+                y_for_cross = y_for_cross.masked_select(mask.unsqueeze(-1) != 0).view(1, -1, muse_x.shape[-1])
+                y_lens = mask.sum(dim=1).tolist()
+            else:
+                y_lens = mask
+                y_for_cross = y_for_cross.squeeze(1) if y_for_cross.ndim == 4 else y_for_cross
+        elif _xformers_available:
+            y_lens = [y_for_cross.shape[2]] * y_for_cross.shape[0] if y_for_cross.ndim == 4 else [y_for_cross.shape[1]] * y_for_cross.shape[0]
+            y_for_cross = y_for_cross.squeeze(1) if y_for_cross.ndim == 4 else y_for_cross
+            y_for_cross = y_for_cross.view(1, -1, muse_x.shape[-1])
+        else:
+            y_lens = None
+            y_for_cross = y_for_cross.squeeze(1) if y_for_cross.ndim == 4 else y_for_cross
+        
+        muse_cross_out = muse_block.cross_attn(muse_x_after_attn, y_for_cross, y_lens)
+        muse_x_after_cross = muse_x_after_attn + muse_cross_out
+        
+        compare_tensors("cross_attn_output", diff_cross_out, muse_cross_out)
+        compare_tensors("after_cross_attn", diff_x_after_cross, muse_x_after_cross)
+        
+        # ====== STEP 5: First Block - FFN ======
+        print("\n[Step 5] First Block - FFN (GLUMBConv)...")
+        
+        # Diffusers: norm2 + modulate + ff
+        diff_norm2 = diff_block.norm2(diff_x_after_cross)
+        diff_norm2_mod = diff_norm2 * (1 + diff_scale_mlp) + diff_shift_mlp
+        
+        # Muse: norm2 + modulate
+        muse_norm2 = muse_block.norm2(muse_x_after_cross)
+        muse_norm2_mod = muse_norm2 * (1 + muse_scale_mlp) + muse_shift_mlp
+        
+        compare_tensors("norm2", diff_norm2, muse_norm2)
+        compare_tensors("norm2_modulated", diff_norm2_mod, muse_norm2_mod)
+        
+        # FFN input reshaping
+        # Diffusers: unflatten to (H, W) and permute to NCHW
+        diff_ff_input = diff_norm2_mod.unflatten(1, (H, W)).permute(0, 3, 1, 2)
+        
+        # Muse: reshape to (H, W) and permute to NCHW  
+        muse_ff_input = muse_norm2_mod.reshape(B, H, W, -1).permute(0, 3, 1, 2)
+        
+        compare_tensors("ff_input_nchw", diff_ff_input, muse_ff_input)
+        
+        # FFN output
+        diff_ff_out = diff_block.ff(diff_ff_input)
+        diff_ff_out = diff_ff_out.flatten(2, 3).permute(0, 2, 1)
+        
+        muse_ff_out = muse_block.mlp(muse_norm2_mod, HW=(H, W))
+        
+        compare_tensors("ff_output", diff_ff_out, muse_ff_out)
+        
+        # After FFN residual
+        diff_x_after_ff = diff_x_after_cross + diff_gate_mlp * diff_ff_out
+        muse_x_after_ff = muse_x_after_cross + muse_gate_mlp * muse_ff_out
+        
+        compare_tensors("after_ff (block 0 output)", diff_x_after_ff, muse_x_after_ff)
+        
+        # ====== STEP 6: Check against full block forward ======
+        print("\n[Step 6] Verify against full block forward...")
+        
+        # Run full block
+        diff_block_out = diff_block(
+            diff_x,
+            encoder_hidden_states=diff_caption,
+            encoder_attention_mask=encoder_attention_mask,
+            timestep=diff_time,
+            height=H,
+            width=W,
+        )
+        
+        muse_block_out = muse_block(muse_x, y_for_cross, muse_t0, y_lens, (H, W))
+        
+        compare_tensors("full_block_output", diff_block_out, muse_block_out)
+        
+        print("\n" + "=" * 70)
+
+
 def compare_state_dicts(diffusers_model, muse_model):
     """Compare state dict keys and values between models."""
     print("\n[State Dict Comparison]")
@@ -387,6 +590,9 @@ def run_full_alignment_test():
         muse_caption = muse_caption.squeeze(1)  # Remove extra dim for comparison
         
         compare_tensors("caption_embed", diff_caption, muse_caption)
+    
+    # Debug first block
+    debug_first_block(diffusers_model, muse_model, inputs, dtype)
     
     # Summary
     print("\n" + "=" * 70)
