@@ -25,26 +25,28 @@ class TestEagerAttention:
         attn = EagerAttention()
         
         batch_size = 2
-        num_heads = 4
         seq_len = 8
+        num_heads = 4
         head_dim = 16
         
-        q = torch.randn(batch_size, num_heads, seq_len, head_dim, device=device)
-        k = torch.randn(batch_size, num_heads, seq_len, head_dim, device=device)
-        v = torch.randn(batch_size, num_heads, seq_len, head_dim, device=device)
+        # Shape: (b, s, n_h, h_d)
+        q = torch.randn(batch_size, seq_len, num_heads, head_dim, device=device)
+        k = torch.randn(batch_size, seq_len, num_heads, head_dim, device=device)
+        v = torch.randn(batch_size, seq_len, num_heads, head_dim, device=device)
         
         output = attn.forward(q, k, v, is_causal=False, attn_dropout=0.0)
         
-        assert output.shape == (batch_size, num_heads, seq_len, head_dim)
+        assert output.shape == (batch_size, seq_len, num_heads, head_dim)
         assert output.device.type == device.type
     
     def test_forward_without_causal(self, device):
         """Test forward without causal masking."""
         attn = EagerAttention()
         
-        q = torch.randn(1, 2, 4, 8, device=device)
-        k = torch.randn(1, 2, 4, 8, device=device)
-        v = torch.randn(1, 2, 4, 8, device=device)
+        # Shape: (b, s, n_h, h_d) = (1, 4, 2, 8)
+        q = torch.randn(1, 4, 2, 8, device=device)
+        k = torch.randn(1, 4, 2, 8, device=device)
+        v = torch.randn(1, 4, 2, 8, device=device)
         
         output = attn.forward(q, k, v, is_causal=False, attn_dropout=0.0)
         
@@ -56,13 +58,14 @@ class TestEagerAttention:
         attn = EagerAttention()
         
         batch_size = 1
-        num_heads = 2
         seq_len = 6
+        num_heads = 2
         head_dim = 8
         
-        q = torch.randn(batch_size, num_heads, seq_len, head_dim, device=device)
-        k = torch.randn(batch_size, num_heads, seq_len, head_dim, device=device)
-        v = torch.randn(batch_size, num_heads, seq_len, head_dim, device=device)
+        # Shape: (b, s, n_h, h_d)
+        q = torch.randn(batch_size, seq_len, num_heads, head_dim, device=device)
+        k = torch.randn(batch_size, seq_len, num_heads, head_dim, device=device)
+        v = torch.randn(batch_size, seq_len, num_heads, head_dim, device=device)
         
         output = attn.forward(q, k, v, is_causal=True, attn_dropout=0.0)
         
@@ -75,14 +78,15 @@ class TestEagerAttention:
         
         # Use simple input where we can verify causality
         batch_size = 1
-        num_heads = 1
         seq_len = 4
+        num_heads = 1
         head_dim = 4
         
         # Create queries, keys, values with specific pattern
-        q = torch.ones(batch_size, num_heads, seq_len, head_dim, device=device)
-        k = torch.ones(batch_size, num_heads, seq_len, head_dim, device=device)
-        v = torch.arange(seq_len, device=device).view(1, 1, seq_len, 1).expand(-1, -1, -1, head_dim).float()
+        # Shape: (b, s, n_h, h_d)
+        q = torch.ones(batch_size, seq_len, num_heads, head_dim, device=device)
+        k = torch.ones(batch_size, seq_len, num_heads, head_dim, device=device)
+        v = torch.arange(seq_len, device=device).view(1, seq_len, 1, 1).expand(-1, -1, num_heads, head_dim).float()
         
         output_causal = attn.forward(q, k, v, is_causal=True, attn_dropout=0.0)
         output_no_causal = attn.forward(q, k, v, is_causal=False, attn_dropout=0.0)
@@ -94,9 +98,10 @@ class TestEagerAttention:
         """Test that attention scores are properly scaled by sqrt(d_k)."""
         attn = EagerAttention()
         
-        q = torch.randn(1, 1, 4, 16, device=device)
-        k = torch.randn(1, 1, 4, 16, device=device)
-        v = torch.randn(1, 1, 4, 16, device=device)
+        # Shape: (b, s, n_h, h_d) = (1, 4, 1, 16)
+        q = torch.randn(1, 4, 1, 16, device=device)
+        k = torch.randn(1, 4, 1, 16, device=device)
+        v = torch.randn(1, 4, 1, 16, device=device)
         
         output = attn.forward(q, k, v, is_causal=False, attn_dropout=0.0)
         
@@ -108,9 +113,10 @@ class TestEagerAttention:
         """Test gradients flow through attention."""
         attn = EagerAttention()
         
-        q = torch.randn(1, 2, 4, 8, device=device, requires_grad=True)
-        k = torch.randn(1, 2, 4, 8, device=device, requires_grad=True)
-        v = torch.randn(1, 2, 4, 8, device=device, requires_grad=True)
+        # Shape: (b, s, n_h, h_d) = (1, 4, 2, 8)
+        q = torch.randn(1, 4, 2, 8, device=device, requires_grad=True)
+        k = torch.randn(1, 4, 2, 8, device=device, requires_grad=True)
+        v = torch.randn(1, 4, 2, 8, device=device, requires_grad=True)
         
         output = attn.forward(q, k, v, is_causal=False, attn_dropout=0.0)
         loss = output.sum()
@@ -129,14 +135,68 @@ class TestEagerAttention:
         
         q_seq_len = 4
         k_seq_len = 8
+        num_heads = 2
+        head_dim = 16
         
-        q = torch.randn(1, 2, q_seq_len, 16, device=device)
-        k = torch.randn(1, 2, k_seq_len, 16, device=device)
-        v = torch.randn(1, 2, k_seq_len, 16, device=device)
+        # Shape: (b, s, n_h, h_d)
+        q = torch.randn(1, q_seq_len, num_heads, head_dim, device=device)
+        k = torch.randn(1, k_seq_len, num_heads, head_dim, device=device)
+        v = torch.randn(1, k_seq_len, num_heads, head_dim, device=device)
         
         output = attn.forward(q, k, v, is_causal=False, attn_dropout=0.0)
         
-        assert output.shape == (1, 2, q_seq_len, 16)
+        assert output.shape == (1, q_seq_len, num_heads, head_dim)
+    
+    def test_dropout_disabled_by_default(self, device):
+        """Test that dropout is disabled by default (training=False)."""
+        attn = EagerAttention()
+        
+        # Shape: (b, s, n_h, h_d)
+        q = torch.randn(1, 4, 2, 8, device=device)
+        k = torch.randn(1, 4, 2, 8, device=device)
+        v = torch.randn(1, 4, 2, 8, device=device)
+        
+        # Run multiple times with dropout - without training=True, results should be identical
+        output1 = attn.forward(q, k, v, is_causal=False, attn_dropout=0.5)
+        output2 = attn.forward(q, k, v, is_causal=False, attn_dropout=0.5)
+        
+        # Without training=True, dropout should not be applied, so outputs should be identical
+        assert torch.allclose(output1, output2)
+    
+    def test_dropout_enabled_in_training_mode(self, device):
+        """Test that dropout is applied when training=True."""
+        torch.manual_seed(42)
+        attn = EagerAttention()
+        
+        # Shape: (b, s, n_h, h_d)
+        q = torch.randn(1, 8, 4, 16, device=device)
+        k = torch.randn(1, 8, 4, 16, device=device)
+        v = torch.randn(1, 8, 4, 16, device=device)
+        
+        # Run with training=True - different random seeds should give different results
+        torch.manual_seed(123)
+        output1 = attn.forward(q, k, v, is_causal=False, attn_dropout=0.5, training=True)
+        
+        torch.manual_seed(456)
+        output2 = attn.forward(q, k, v, is_causal=False, attn_dropout=0.5, training=True)
+        
+        # With training=True and dropout > 0, outputs should be different due to dropout randomness
+        assert not torch.allclose(output1, output2)
+    
+    def test_zero_dropout_same_output(self, device):
+        """Test that zero dropout gives identical outputs regardless of training mode."""
+        attn = EagerAttention()
+        
+        # Shape: (b, s, n_h, h_d)
+        q = torch.randn(1, 4, 2, 8, device=device)
+        k = torch.randn(1, 4, 2, 8, device=device)
+        v = torch.randn(1, 4, 2, 8, device=device)
+        
+        output_train = attn.forward(q, k, v, is_causal=False, attn_dropout=0.0, training=True)
+        output_eval = attn.forward(q, k, v, is_causal=False, attn_dropout=0.0, training=False)
+        
+        # With zero dropout, training mode should not affect output
+        assert torch.allclose(output_train, output_eval)
 
 
 class TestFlashAttention2:
@@ -233,6 +293,55 @@ class TestFlashAttention2:
         )
         
         assert output.shape == q.shape
+    
+    def test_dropout_disabled_by_default(self, device):
+        """Test that dropout is disabled by default (training=False)."""
+        if not torch.cuda.is_available():
+            pytest.skip("FlashAttention requires CUDA")
+        
+        attn = FlashAttention2()
+        
+        seq_len = 16
+        num_heads = 4
+        head_dim = 32
+        
+        # Shape: (b, s, n_h, h_d)
+        q = torch.randn(1, seq_len, num_heads, head_dim, device=device, dtype=torch.float16)
+        k = torch.randn(1, seq_len, num_heads, head_dim, device=device, dtype=torch.float16)
+        v = torch.randn(1, seq_len, num_heads, head_dim, device=device, dtype=torch.float16)
+        
+        # Run multiple times with dropout - without training=True, results should be identical
+        output1 = attn.forward(q, k, v, is_causal=False, attn_dropout=0.5)
+        output2 = attn.forward(q, k, v, is_causal=False, attn_dropout=0.5)
+        
+        # Without training=True, dropout should not be applied (dropout_p becomes 0.0)
+        assert torch.allclose(output1, output2)
+    
+    def test_training_mode_affects_dropout(self, device):
+        """Test that training=True enables dropout."""
+        if not torch.cuda.is_available():
+            pytest.skip("FlashAttention requires CUDA")
+        
+        attn = FlashAttention2()
+        
+        seq_len = 32
+        num_heads = 4
+        head_dim = 32
+        
+        # Shape: (b, s, n_h, h_d)
+        q = torch.randn(1, seq_len, num_heads, head_dim, device=device, dtype=torch.float16)
+        k = torch.randn(1, seq_len, num_heads, head_dim, device=device, dtype=torch.float16)
+        v = torch.randn(1, seq_len, num_heads, head_dim, device=device, dtype=torch.float16)
+        
+        # Run with training=True - different random states should give different results
+        torch.manual_seed(123)
+        output1 = attn.forward(q, k, v, is_causal=False, attn_dropout=0.5, training=True)
+        
+        torch.manual_seed(456)
+        output2 = attn.forward(q, k, v, is_causal=False, attn_dropout=0.5, training=True)
+        
+        # With training=True and dropout > 0, outputs should be different
+        assert not torch.allclose(output1, output2)
 
 
 class TestGetAttentionFunction:

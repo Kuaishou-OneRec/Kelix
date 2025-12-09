@@ -11,6 +11,7 @@ from muse.config import Qwen3Config
 from muse.models.qwen3 import Qwen3Model
 from muse.training.common import set_default_dtype
 
+from unittest.mock import patch
 
 def _build_qwen3_config(hf_cfg: Dict[str, Any]) -> Qwen3Config:
     """Map Hugging Face config to Muse Qwen3Config."""
@@ -65,7 +66,6 @@ def _build_qwen3_config(hf_cfg: Dict[str, Any]) -> Qwen3Config:
         k_norm=q_norm_flag,
     )
 
-
 def test_qwen3_logits_align_with_hf_checkpoint():
     """Ensure Muse Qwen3 logits match the Hugging Face reference model."""
     torch.manual_seed(0)
@@ -79,7 +79,8 @@ def test_qwen3_logits_align_with_hf_checkpoint():
     hf_model = AutoModelForCausalLM.from_pretrained(
         checkpoint_dir,
         torch_dtype="auto",
-        device_map="auto"
+        device_map="auto",
+        trust_remote_code=True
     )
 
     # prepare the model input
@@ -550,7 +551,8 @@ def test_checkpint():
     hf_checkpoint_dir = "/llm_reco_ssd/zhouyang12/models/Qwen3-8B-Base"
     checkpoint_dir = "/llm_reco_ssd/zhouyang12/models/muse/Qwen3-8B-Base"
     with set_default_dtype(torch.bfloat16):
-        model = Qwen3Model.from_pretrained(checkpoint_dir)
+        model = Qwen3Model.from_pretrained(
+            checkpoint_dir, attention_function="flash_attention_2")
     
     # load the tokenizer and the model
     tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_dir)
@@ -579,11 +581,7 @@ def test_checkpint():
     model = model.to(device=device)
 
     # Ensure eager attention is used
-    hf_model.config._attn_implementation = "eager"
-    
-    # Ensure Muse model uses eager attention
-    model.config.attention_function = "eager"
-
+    hf_model.config._attn_implementation = "flash_attention_2"
 
     with torch.no_grad():
         # HF forward
@@ -622,7 +620,6 @@ def test_checkpint():
         else:
             print("✗ FAILURE: Logits differ beyond tolerance")
 
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     #test_qwen3_logits_align_with_hf_checkpoint()
     test_checkpint()
