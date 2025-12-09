@@ -53,6 +53,9 @@ class Model(nn.Module):
         
         # Load config using get_config (handles __class__ field)
         config = get_config(config_dict)
+
+        attention_function = kwargs.pop("attention_function", "eager")
+        config.attention_function = attention_function
         
         # Get model_class from config
         model_class_name = config.model_class

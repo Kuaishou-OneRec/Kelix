@@ -59,12 +59,12 @@ class AttentionFunction(Protocol):
         """Forward propagation function
         
         Args:
-            q: Query tensor, shape: (batch_size, seq_len, d_model) or (batch_size, num_heads, seq_len, head_dim)
-            k: Key tensor, same shape as q
-            v: Value tensor, same shape as q  
+            q: Query tensor, shape: (b, s_q, n_h, h_d)
+            k: Key tensor, shape: (b, s_kv, n_h, h_d)
+            v: Value tensor, shape: (b, s_kv, n_h, h_d)
             is_causal: Whether to use causal mask (only see information before current position)
             attn_dropout: Dropout probability for attention weights
-            **kwargs: Other optional parameters, such as attention mask, positional encoding, etc.
+            **kwargs: Other optional parameters, such as attention mask, positional encoding, training mode, etc.
             
         Returns:
             torch.Tensor: Attention output, same shape as input
@@ -93,14 +93,26 @@ class EagerAttention:
                 is_causal: bool = False,
                 attn_dropout: float = 0.0,
                 **kwargs: Any) -> torch.Tensor:
-        """Implements standard eager attention"""
+        """Implements standard eager attention
+        Args:
+            q: Query tensor, shape: (b, s_q, n_h, h_d)
+            k: Key tensor, shape: (b, s_k, n_h, h_d)
+            v: Value tensor, shape: (b, s_v, n_h, h_d)
+            is_causal: Whether to use causal mask (only see information before current position)
+            attn_dropout: Dropout probability for attention weights
+            **kwargs: Other optional parameters, such as attention mask, positional encoding, cu_seqlens, etc.
+        """
         # Calculate attention scores
-        dim = q.size(-1)
+        h_d = q.size(-1)
         
         # Handle custom mask if provided
         mask = kwargs.get('mask', None)
         
-        scores = torch.matmul(q, k.transpose(-2, -1)) / (dim ** 0.5)
+        # Use einsum for efficient batch matrix multiplication: Q @ K^T
+        # q: (b, s_q, n_h, h_d), k: (b, s_k, n_h, h_d) -> scores: (b, n_h, s_q, s_k)
+        # Contract over h_d dimension, match n_h, compute s_q @ s_k
+        scores = torch.einsum('bqnd, bknd -> bnqk', q, k) * \
+            kwargs.get("softmax_scale", (h_d ** -0.5))
         
         # Apply custom mask (if provided)
         if mask is not None:
@@ -113,24 +125,41 @@ class EagerAttention:
         
         # Apply causal mask
         if is_causal:
-            # For cross attention, we only apply causal mask if q and k have the same sequence length
-            q_seq_len = q.size(-2)
-            k_seq_len = k.size(-2)
-            if q_seq_len == k_seq_len:
-                causal_mask = torch.triu(torch.ones(q_seq_len, q_seq_len, device=q.device), diagonal=1).bool()
-                scores = scores.masked_fill(causal_mask, -float('inf'))
+            assert mask is None, "Causal mask and custom mask are not supported together"
+            # Flash Attention 2.1 style: right-bottom aligned causal mask
+            # This supports incremental decoding where seqlen_q != seqlen_k
+            s_q, s_k = q.size(1), k.size(1)
+            # Show causal_mask:
+            # q=2, k=2 (square, most common case):
+            #   1 1
+            #   1 1
+            # q=2, k=4 (with common prefix):
+            #   1 1 1 0
+            #   1 1 1 1
+            # q=4, k=2 (uncommon case, just keep same as flash attention 2.1 & sdpa):
+            #   0 0
+            #   0 0
+            #   1 0
+            #   1 1
+            causal_mask = torch.tril(
+                torch.ones(s_q, s_k, device=q.device), diagonal=s_k - s_q).bool()
+            # Mask out positions where causal_mask is False (invert for masked_fill)
+            scores.masked_fill_(~causal_mask, -float('inf'))
             
         # Calculate attention weights
         attn_weights = F.softmax(scores, dim=-1)
         
         # Apply dropout
         if attn_dropout > 0.0:
-            attn_weights = F.dropout(attn_weights, p=attn_dropout, training=kwargs.get('training', False))
+            # Get training mode from kwargs, default to False (eval mode) for safety
+            # This matches FlashAttention's behavior where dropout is automatically handled
+            training = kwargs.get('training', False)
+            attn_weights = F.dropout(attn_weights, p=attn_dropout, training=training)
         
         # Calculate output
-        output = torch.matmul(attn_weights, v)
-        return output
-
+        output = torch.einsum('bnqk, bnkd -> bnqd', attn_weights, v.transpose(1, 2))
+        # transpose back to (b, s_q, n_h, h_d)
+        return output.transpose(1, 2)
 
 class FlashAttention2:
     """FlashAttention2 implementation, also conforming to AttentionFunction protocol"""
@@ -176,23 +205,27 @@ class FlashAttention2:
 
         window_size = kwargs.get("window_size", -1)
         
-        # Flash attention expects [batch, seq_len, num_heads, head_dim]
-        # Input tensors have shape [batch, num_heads, seq_len, head_dim]
-        # So we need to transpose from [b, n_h, s, h_d] to [b, s, n_h, h_d]
-        q = q.transpose(1, 2)  # [b, n_h, s, h_d] -> [b, s, n_h, h_d]
-        k = k.transpose(1, 2)  # [b, n_h, s, h_d] -> [b, s, n_h, h_d]
-        v = v.transpose(1, 2)  # [b, n_h, s, h_d] -> [b, s, n_h, h_d]
+        # FlashAttention doesn't automatically handle training mode, so we need to
+        # set dropout_p to 0.0 during evaluation, matching the behavior of Qwen3Attention
+        # Get training mode from kwargs, default to False (eval mode) for safety
+        training = kwargs.get('training', False)
+        dropout_p = attn_dropout if training else 0.0
+        head_dim = q.size(-1)
+        softmax_scale = kwargs.get("softmax_scale", head_dim ** -0.5)
         
+        # Flash attention expects [batch, seq_len, num_heads, head_dim]
         if cu_seqlens_q is None or cu_seqlens_k is None:
             attn_output = flash_attn_func(
                 q=q,
                 k=k,
                 v=v,
-                dropout_p=attn_dropout,
+                softmax_scale=softmax_scale,
+                dropout_p=dropout_p,
                 window_size=(window_size, window_size),
                 causal=is_causal
             )
         else:
+            # if q,k,v is packing, the batch dimension is 1, so we need to squeeze it
             attn_output = flash_attn_varlen_func(
                 q=q.squeeze(0),
                 k=k.squeeze(0),
@@ -201,18 +234,13 @@ class FlashAttention2:
                 cu_seqlens_k=cu_seqlens_k,
                 max_seqlen_q=max_seqlen_q,
                 max_seqlen_k=max_seqlen_k,
-                dropout_p=attn_dropout,
+                softmax_scale=softmax_scale,
+                dropout_p=dropout_p,
                 window_size=(window_size, window_size),
                 causal=is_causal
             )
         # TODO: support return_attn_weights
-        if attn_output is not None:
-            # Flash attention returns [b, s, n_h, h_d], convert back to [b, n_h, s, h_d]
-            attn_output = attn_output.transpose(1, 2)  # [b, s, n_h, h_d] -> [b, n_h, s, h_d]
-            return attn_output
-        return None
-
-
+        return attn_output
 
 # Usage example: Factory function
 def get_attention_function(attention_type: str) -> AttentionFunction:

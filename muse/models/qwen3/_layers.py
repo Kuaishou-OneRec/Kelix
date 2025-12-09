@@ -13,6 +13,9 @@ from muse.layers.attention_utils import get_attention_function
 from muse.layers.feed_forward import FeedForward
 from muse.layers.kv_cache import KVCache
 
+from muse.training.parallel import get_context_parallel_world_size, \
+    get_context_parallel_group, SeqAllToAll4D
+
 logger = logging.getLogger(__name__)
 
 def qwen3_mlp(dim: int, hidden_dim: int) -> FeedForward:
@@ -117,7 +120,6 @@ class Qwen3Attention(nn.Module):
         self.k_norm = k_norm
         self.pos_embeddings = pos_embeddings
 
-        # Use flex attention if supported and we are sample packing
         self._attention_function = get_attention_function(attention_function)
 
         # this flag indicates whether to update the kv-cache during forward
@@ -213,6 +215,7 @@ class Qwen3Attention(nn.Module):
         q_per_kv = self.num_heads // self.num_kv_heads
         q = q.view(b, s_x, self.num_kv_heads * q_per_kv, self.head_dim)
 
+        # Qwen3 applies QK-norm before the RoPE, which is different from most of the models.
         # Normalize q
         if self.q_norm is not None:
             q = self.q_norm(q)
@@ -220,8 +223,6 @@ class Qwen3Attention(nn.Module):
         # Apply positional embeddings after q-norm
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
-
-        q = q.transpose(1, 2)
 
         if y is None:
             if self.kv_cache is None or not self.cache_enabled:
@@ -249,10 +250,6 @@ class Qwen3Attention(nn.Module):
             if self.pos_embeddings is not None:
                 k = self.pos_embeddings(k, input_pos=input_pos)
 
-            # k,v shape: [b, n_kv, s_y, h_d]
-            k = k.transpose(1, 2)
-            v = v.transpose(1, 2)
-
             # Update key-value cache
             if self.kv_cache is not None and self.cache_enabled:
                 k, v = self.kv_cache.update(k, v)
@@ -261,22 +258,34 @@ class Qwen3Attention(nn.Module):
         # as the query tensor by copying values across the relevant dim
         # k,v shape: [b, n_kv, s, h_d] -> [b, n_h, s, h_d]
         if self.num_heads != self.num_kv_heads:
-            expand_shape = (b, self.num_kv_heads, q_per_kv, -1, self.head_dim)
-            k = k.unsqueeze(2).expand(expand_shape).flatten(1, 2)
-            v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
+            expand_shape = (b, -1, self.num_kv_heads, q_per_kv, self.head_dim)
+            k = k.unsqueeze(3).expand(expand_shape).flatten(2, 3)
+            v = v.unsqueeze(3).expand(expand_shape).flatten(2, 3)
 
-        # Print q, k, v shapes and contents
+        if get_context_parallel_world_size() > 1:
+            cpg = get_context_parallel_group()
+            # If context parallel is enabled, the input is sharded along
+            # the sequence length dimension. We need to recover the original 
+            # sequence length before the attention function.
+            # q, k, v: [b, s_x, n_h, h_d] -> [b, s_x * P, n_h // P, h_d]
+            q = SeqAllToAll4D.apply(cpg, q, 2, 1)
+            k = SeqAllToAll4D.apply(cpg, k, 2, 1)
+            v = SeqAllToAll4D.apply(cpg, v, 2, 1)
 
         output = self._attention_function(
-            q,
-            k,
-            v,
+            q=q,
+            k=k,
+            v=v,
             mask=mask,
-            dropout_p=self.attn_dropout if self.training else 0.0,
+            attention_dropout=self.attn_dropout,
             is_causal=self.kv_cache is None and mask is None and self.is_causal,
+            training=self.training,
             **kwargs,
         )
-
+        if get_context_parallel_world_size() > 1:
+            cpg = get_context_parallel_group()
+            # output: [b, s_x * P, n_h // P, h_d] -> [b, s_x, n_h, h_d]
+            output = SeqAllToAll4D.apply(cpg, output, 1, 2)
         # reshape the output to be the same shape as the input
-        output = output.transpose(1, 2).contiguous().view(b, s_x, -1)
+        output = output.contiguous().view(b, s_x, -1)
         return self.output_proj(output)

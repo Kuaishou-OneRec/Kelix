@@ -114,6 +114,8 @@ def get_context_parallel_group(backend="nccl"):
 
 def get_context_parallel_world_size():
     """Get the context parallel world size."""
+    if not (torch.distributed.is_available() and torch.distributed.is_initialized()):
+        return 1
     return dist.get_world_size(group=get_context_parallel_group())
 
 def get_context_parallel_rank():
