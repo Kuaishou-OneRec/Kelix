@@ -32,6 +32,35 @@ Usage:
 
 import os
 import sys
+import types
+
+# Mock mmcv.Registry before importing Sana (newer mmcv moved Registry to mmengine)
+class MockRegistry:
+    def __init__(self, name, **kwargs):
+        self.name = name
+        self._module_dict = {}
+    
+    def register_module(self, name=None, force=False, module=None):
+        def decorator(cls):
+            key = name if name else cls.__name__
+            self._module_dict[key] = cls
+            return cls
+        if module is not None:
+            return decorator(module)
+        return decorator
+    
+    def build(self, cfg, *args, **kwargs):
+        return None
+
+# Patch mmcv.Registry
+try:
+    import mmcv
+    if not hasattr(mmcv, 'Registry'):
+        mmcv.Registry = MockRegistry
+except ImportError:
+    mmcv = types.ModuleType('mmcv')
+    mmcv.Registry = MockRegistry
+    sys.modules['mmcv'] = mmcv
 
 import pytest
 import torch
