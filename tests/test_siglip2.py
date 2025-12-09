@@ -72,7 +72,7 @@ def _build_siglip_config(hf_cfg: Dict[str, Any]) -> SiglipVisionConfig:
         use_qk_norm=hf_cfg.get("use_qk_norm", False),
         qk_norm_eps=hf_cfg.get("qk_norm_eps", 1e-6),
         rope_theta=hf_cfg.get("rope_theta", 10000.0),
-        attention_function="eager", # 建议这里先改回 eager 排查，如果环境允许 flash_attn 再开
+        attention_function="flash_attention_2", # 建议这里先改回 eager 排查，如果环境允许 flash_attn 再开
         output_attentions=False,
         output_hidden_states=False,
     )
