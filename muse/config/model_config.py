@@ -42,7 +42,7 @@ Example:
 
 """Model configuration classes."""
 
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from pydantic import Field, field_validator, model_validator
 
 from muse.config.base import BaseConfig
@@ -286,4 +286,27 @@ class KeyeVisionConfig(ModelConfig):
     )
 
 
-    
+class KeyeTokenizerConfig(ModelConfig):
+    """视觉Tokenizer配置，供 KeyeImageTokenizer 使用。"""
+
+    model_class: str = Field(
+        default="KeyeImageTokenizer",
+        description="模型注册名，对应 KeyeImageTokenizer",
+    )
+    vision_config: KeyeVisionConfig = Field(
+        default_factory=KeyeVisionConfig,
+        description="视觉编码器配置，默认与 KeyeVisionConfig 一致",
+    )
+    codebook_size: int = Field(default=8192, description="码本大小")
+    embedding_dim: int = Field(default=128, description="量化后维度")
+    init_embedding_dim: int = Field(default=4096, description="初始码本维度")
+    llm_hidden_size: int = Field(default=4096, description="对齐到LLM的维度")
+    n_q_tokens: int = Field(default=8, description="每个位置量化token数量")
+    split_dim: bool = Field(default=False, description="是否按维度切分码本")
+    split_voc: int = Field(default=1, description="词表切分数量")
+    add_voc_reducer: bool = Field(default=False, description="是否使用voc reducer")
+    vq_sampling_mode: str = Field(default="argmin", description="VQ采样方式 argmin/softmax")
+    vq_temperature: float = Field(default=1.0, description="softmax温度")
+    vq_temperature_decay: float = Field(default=0.999, description="温度衰减")
+    vq_min_temperature: float = Field(default=0.1, description="最低温度")
+    pre_llm_align: bool = Field(default=False, description="是否先线性对齐到LLM维度")

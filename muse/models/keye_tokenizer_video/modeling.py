@@ -1,20 +1,17 @@
-from typing import Dict, Callable
+from typing import Dict, Callable, List, Optional, Tuple
 from functools import partial
 import math
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.nn.init as init
 import logging
 
 from muse.models.base import Model
-from muse.config import Qwen3Config,KeyeVisionConfig
-from muse.layers.position_embeddings import RotaryPositionalEmbeddings
-from muse.layers.transformer import TransformerDecoder, TransformerSelfAttentionLayer
-from muse.layers.rms_norm import RMSNorm
-from muse.layers.linear import TiedLinear
+from muse.config import Qwen3Config, KeyeVisionConfig
+from muse.config.model_config import ModelConfig, KeyeTokenizerConfig
 from muse.models.qwen3.modeling import Qwen3Model
 from muse.models.keye_vit.modeling import KeyeVisionTransformer
-from muse.layers.feed_forward import FeedForward
 
 # Import will be done when muse.models is imported, avoiding circular import
 # The actual registration happens in __init__.py after import
@@ -54,8 +51,6 @@ def default_flax_embed_init(tensor: torch.Tensor) -> None:
     Uses normal distribution with std = 1.0
     """
     init.normal_(tensor, mean=0.0, std=1.0)
-
-
 
 
 class VectorQuantizer(Model):
@@ -238,11 +233,227 @@ class VectorQuantizer(Model):
 
 
 
+def _build_position_ids(
+    image_grid_thw: List[Tuple[int, int, int]], device: torch.device
+) -> torch.Tensor:
+    """根据(t,h,w)构造扁平的position ids (长度=sum(t*h*w))."""
+    pos_list = []
+    for t, h, w in image_grid_thw:
+        numel = int(t * h * w)
+        pos_list.append(torch.arange(numel, device=device) % (h * w))
+    return torch.cat(pos_list, dim=0)
+
+
 class KeyeImageTokenizer(Model):
-    def 
-    #add vit and vq here
+    """使用Keye ViT + VQ 的视觉Tokenizer（无Transformers依赖）。"""
 
-class KeyeForConditionalGeneration
-    #add qwen 3 and image tokenizer here
+    def __init__(self, config: KeyeTokenizerConfig):
+        super().__init__(config)
+        self.config: KeyeTokenizerConfig = config
+        self.visual = KeyeVisionTransformer(config.vision_config)
 
-    
+        align_in_dim = config.vision_config.hidden_size
+        self.pre_llm_align = (
+            nn.Linear(align_in_dim, config.llm_hidden_size)
+            if config.pre_llm_align or align_in_dim != config.llm_hidden_size
+            else nn.Identity()
+        )
+        proj_out_dim = (
+            config.embedding_dim if config.split_dim else config.n_q_tokens * config.embedding_dim
+        )
+        self.encoder = nn.Linear(config.llm_hidden_size, proj_out_dim)
+
+        per_token_dim = (
+            config.embedding_dim // config.n_q_tokens if config.split_dim else config.embedding_dim
+        )
+        self.quantizer: nn.ModuleList = nn.ModuleList(
+            [
+                VectorQuantizer(
+                    num_embeddings=config.codebook_size,
+                    embedding_dim=per_token_dim,
+                    init_embedding_dim=config.init_embedding_dim,
+                    sampling_mode=config.vq_sampling_mode,
+                    temperature=config.vq_temperature,
+                    temperature_decay=config.vq_temperature_decay,
+                    min_temperature=config.vq_min_temperature,
+                    split_voc=config.split_voc,
+                    split_voc_index=i,
+                    add_voc_reducer=config.add_voc_reducer,
+                )
+                for i in range(config.n_q_tokens)
+            ]
+        )
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        image_grid_thw: List[Tuple[int, int, int]],
+        position_ids: Optional[torch.Tensor] = None,
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Args:
+            pixel_values: 形状 [b, seq, c, h, w]，当前只支持 b=1。
+            image_grid_thw: 每张图的(t,h,w)列表，长度等于seq。
+        """
+        if pixel_values.dim() != 5:
+            raise ValueError(f"pixel_values 维度应为5，实际 {pixel_values.shape}")
+        if pixel_values.size(0) != 1:
+            raise ValueError("当前实现假定 batch=1，方便与位置编码对齐。")
+
+        device = pixel_values.device
+        if position_ids is None:
+            position_ids = _build_position_ids(image_grid_thw, device)
+
+        vision_out = self.visual(
+            pixel_values=pixel_values,
+            position_ids=position_ids,
+            image_grid_thw=image_grid_thw,
+            interpolate_pos_encoding=True,
+            has_learnable_position_embedding=True,
+        )
+        vision_hidden = vision_out["last_hidden_state"].squeeze(0)  # (seq, dim)
+        vision_hidden = self.pre_llm_align(vision_hidden)
+
+        z_e = self.encoder(vision_hidden)
+        z_chunks = torch.chunk(z_e, self.config.n_q_tokens, dim=-1)
+
+        vq_outputs = [quant(z) for quant, z in zip(self.quantizer, z_chunks)]
+        z_q_list = [o["z_q"] for o in vq_outputs]
+        codebook_loss = [o["codebook_loss"] for o in vq_outputs]
+        commitment_loss = [o["commitment_loss"] for o in vq_outputs]
+        indices = [o["indices"] for o in vq_outputs]
+
+        return {
+            "z_q_list": z_q_list,
+            "codebook_loss": codebook_loss,
+            "commitment_loss": commitment_loss,
+            "indices": indices,
+            "vision_hidden": vision_hidden,
+        }
+
+    def get_initializer(self, name: str) -> Callable[[torch.Tensor], None]:
+        # 直接复用LeCun初始化
+        return lecun_normal_
+
+    def get_layers_to_shard(self):
+        return []
+
+    def get_checkpointable_module_classes(self):
+        return set()
+
+
+class KeyeForConditionalGeneration(Model):
+    """简单的多模态生成模型：Keye ViT Tokenizer + Qwen3 LLM。"""
+
+    def __init__(
+        self,
+        qwen_config: Qwen3Config,
+        vision_config: KeyeVisionConfig,
+        tokenizer_config: Optional[KeyeTokenizerConfig] = None,
+        image_token_id: int = -1,
+        pool: str = "avg",
+        amplifier: float = 1.0,
+    ):
+        super().__init__(qwen_config)
+        self.text_model = Qwen3Model(qwen_config)
+        tokenizer_config = tokenizer_config or KeyeTokenizerConfig(
+            vision_config=vision_config, llm_hidden_size=qwen_config.embed_dim
+        )
+        self.visual_tokenizer = KeyeImageTokenizer(tokenizer_config)
+        self.quant_projector = nn.ModuleList(
+            [
+                nn.Linear(tokenizer_config.embedding_dim, qwen_config.embed_dim, bias=False)
+                for _ in range(tokenizer_config.n_q_tokens)
+            ]
+        )
+        self.image_token_id = image_token_id
+        self.pool = pool
+        self.amplifier = amplifier
+        self.vocab_size = qwen_config.vocab_size
+
+    def get_initializer(self, name: str) -> Callable[[torch.Tensor], None]:
+        # 文本子模块的初始化交给其自身逻辑，其余使用LeCun。
+        if name.startswith("text_model."):
+            sub_name = name[len("text_model.") :]
+            return self.text_model.get_initializer(sub_name)
+        return lecun_normal_
+
+    def get_layers_to_shard(self):
+        return self.text_model.get_layers_to_shard()
+
+    def get_checkpointable_module_classes(self):
+        return self.text_model.get_checkpointable_module_classes()
+
+    def _project_visual_tokens(self, z_q_list: List[torch.Tensor]) -> torch.Tensor:
+        projected = [proj(z) for proj, z in zip(self.quant_projector, z_q_list)]
+        merged = sum(projected) * self.amplifier
+        if self.pool == "avg":
+            merged = merged / len(projected)
+        return merged
+
+    def forward(
+        self,
+        input_ids: torch.LongTensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        pixel_values: Optional[torch.Tensor] = None,
+        image_grid_thw: Optional[List[Tuple[int, int, int]]] = None,
+        labels: Optional[torch.LongTensor] = None,
+        vision_token_mask: Optional[torch.Tensor] = None,
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Args:
+            input_ids: 文本token id，形状 [b, s]
+            attention_mask: 可选，传递给LLM的mask（布尔或同dtype）。
+            pixel_values: 视觉输入，形状 [b, seq, c, h, w]，当前仅支持 b=1。
+            image_grid_thw: 对应每个视觉切片的(t,h,w)列表。
+            labels: 语言模型标签，计算自回归loss。
+            vision_token_mask: 指定哪些位置替换为视觉嵌入，形状同input_ids的bool。
+        """
+        # 文本嵌入
+        inputs_embeds = self.text_model.model.tok_embeddings(input_ids)
+
+        aux_losses: Dict[str, torch.Tensor] = {}
+        if pixel_values is not None:
+            if image_grid_thw is None:
+                raise ValueError("使用视觉输入时必须提供 image_grid_thw。")
+            vq_out = self.visual_tokenizer(pixel_values, image_grid_thw=image_grid_thw)
+            visual_tokens = self._project_visual_tokens(vq_out["z_q_list"])
+
+            if vision_token_mask is None:
+                if self.image_token_id < 0:
+                    raise ValueError("需提供 vision_token_mask 或设置有效的 image_token_id。")
+                vision_token_mask = input_ids == self.image_token_id
+
+            if vision_token_mask.sum() != visual_tokens.size(0):
+                raise ValueError(
+                    f"视觉token数量({visual_tokens.size(0)})与mask中位置({vision_token_mask.sum().item()})不一致"
+                )
+            inputs_embeds = inputs_embeds.clone()
+            inputs_embeds[vision_token_mask] = visual_tokens.to(inputs_embeds)
+
+            # 记录loss
+            aux_losses["codebook_loss"] = sum(vq_out["codebook_loss"]) / len(vq_out["codebook_loss"])
+            aux_losses["commitment_loss"] = sum(vq_out["commitment_loss"]) / len(
+                vq_out["commitment_loss"]
+            )
+            aux_losses["indices"] = vq_out["indices"]
+
+        logits = self.text_model.model(
+            tokens=None, mask=attention_mask, input_embeds=inputs_embeds
+        )
+
+        # TransformerDecoder可能返回list/张量，这里取最后一个为logits
+        if isinstance(logits, list):
+            logits = logits[-1]
+
+        loss = None
+        if labels is not None:
+            shift_logits = logits[:, :-1, :].contiguous()
+            shift_labels = labels[:, 1:].contiguous()
+            loss = F.cross_entropy(shift_logits.view(-1, self.vocab_size), shift_labels.view(-1))
+
+        return {
+            "loss": loss,
+            "logits": logits,
+            **aux_losses,
+        }

@@ -3,6 +3,10 @@ Qwen3 model implementation.
 """
 
 from muse.models.qwen3.modeling import Qwen3Model
+from muse.models.keye_tokenizer_video.modeling import (
+    KeyeImageTokenizer,
+    KeyeForConditionalGeneration,
+)
 
 # Register the model (import here to avoid circular imports)
 # The registration decorator is applied when this module is imported by muse.models
@@ -15,11 +19,13 @@ def _register_qwen3():
         from muse.models import register_model
         # Register the model
         register_model("Qwen3Model")(Qwen3Model)
+        register_model("KeyeImageTokenizer")(KeyeImageTokenizer)
+        register_model("KeyeForConditionalGeneration")(KeyeForConditionalGeneration)
     except ImportError:
         # Registry not yet available during initial import
         pass
 
 _register_qwen3()
 
-__all__ = ["Qwen3Model"]
+__all__ = ["Qwen3Model", "KeyeImageTokenizer", "KeyeForConditionalGeneration"]
 
