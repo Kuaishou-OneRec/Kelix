@@ -33,22 +33,13 @@ Usage:
 import os
 import sys
 
-# Mock out problematic imports before importing muse modules
-class MockFlashAttn:
-    def flash_attn_func(*args, **kwargs):
-        raise NotImplementedError("flash_attn not available")
-    def flash_attn_varlen_func(*args, **kwargs):
-        raise NotImplementedError("flash_attn not available")
-
-sys.modules['flash_attn'] = MockFlashAttn
-
 import pytest
 import torch
 import torch.nn as nn
 
 # Paths - update these to your locations
 CHECKPOINT_PATH = "/llm_reco_ssd/zhouyang12/models/Sana_1600M_1024px/checkpoints/Sana_1600M_1024px.pth"
-SANA_REPO_PATH = "/Users/zhouyang/code/Sana"
+SANA_REPO_PATH = "/llm_reco_ssd/zhouyang12/code/dev/Sana"
 
 # Model configuration for SanaMS_1600M_P1_D20 (from Sana_1600M_img1024.yaml)
 MODEL_CONFIG = {
