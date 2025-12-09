@@ -34,7 +34,7 @@ import os
 import sys
 import types
 
-# Mock mmcv.Registry before importing Sana (newer mmcv moved Registry to mmengine)
+# Mock mmcv functions before importing Sana (newer mmcv moved these to mmengine)
 class MockRegistry:
     def __init__(self, name, **kwargs):
         self.name = name
@@ -52,14 +52,21 @@ class MockRegistry:
     def build(self, cfg, *args, **kwargs):
         return None
 
-# Patch mmcv.Registry
+def mock_build_from_cfg(cfg, registry, default_args=None):
+    """Mock build_from_cfg function."""
+    return None
+
+# Patch mmcv
 try:
     import mmcv
     if not hasattr(mmcv, 'Registry'):
         mmcv.Registry = MockRegistry
+    if not hasattr(mmcv, 'build_from_cfg'):
+        mmcv.build_from_cfg = mock_build_from_cfg
 except ImportError:
     mmcv = types.ModuleType('mmcv')
     mmcv.Registry = MockRegistry
+    mmcv.build_from_cfg = mock_build_from_cfg
     sys.modules['mmcv'] = mmcv
 
 import pytest
