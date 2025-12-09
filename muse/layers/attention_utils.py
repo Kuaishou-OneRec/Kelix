@@ -72,18 +72,74 @@ class AttentionFunction(Protocol):
         ...
 
 
-# Example: Concrete implementation conforming to AttentionFunction protocol
-class EagerAttention:
-    """Standard eager attention implementation, conforming to AttentionFunction protocol"""
+# # Example: Concrete implementation conforming to AttentionFunction protocol
+# class EagerAttention:
+#     """Standard eager attention implementation, conforming to AttentionFunction protocol"""
     
-    def __call__(self,
-                 q: torch.Tensor,
-                 k: torch.Tensor,
-                 v: torch.Tensor,
-                 is_causal: bool = False,
-                 attn_dropout: float = 0.0,
-                 **kwargs: Any) -> torch.Tensor:
-        """Make the class callable, delegates to forward method"""
+#     def __call__(self,
+#                  q: torch.Tensor,
+#                  k: torch.Tensor,
+#                  v: torch.Tensor,
+#                  is_causal: bool = False,
+#                  attn_dropout: float = 0.0,
+#                  **kwargs: Any) -> torch.Tensor:
+#         """Make the class callable, delegates to forward method"""
+#         return self.forward(q, k, v, is_causal, attn_dropout, **kwargs)
+    
+#     def forward(self,
+#                 q: torch.Tensor,
+#                 k: torch.Tensor,
+#                 v: torch.Tensor,
+#                 is_causal: bool = False,
+#                 attn_dropout: float = 0.0,
+#                 **kwargs: Any) -> torch.Tensor:
+#         """Implements standard eager attention"""
+#         # Calculate attention scores
+#         dim = q.size(-1)
+        
+#         # Handle custom mask if provided
+#         mask = kwargs.get('mask', None)
+        
+#         scores = torch.matmul(q, k.transpose(-2, -1)) / (dim ** 0.5)
+        
+#         # Apply custom mask (if provided)
+#         if mask is not None:
+#             # mask shape: [b, s_q, s_k] or [b, n_h, s_q, s_k]
+#             # scores shape: [b, n_h, s_q, s_k]
+#             # If mask doesn't have the head dimension, unsqueeze it
+#             if mask.dim() == 3:
+#                 mask = mask.unsqueeze(1)  # [b, 1, s_q, s_k]
+#             scores = scores + mask
+        
+#         # Apply causal mask
+#         if is_causal:
+#             # For cross attention, we only apply causal mask if q and k have the same sequence length
+#             q_seq_len = q.size(-2)
+#             k_seq_len = k.size(-2)
+#             if q_seq_len == k_seq_len:
+#                 causal_mask = torch.triu(torch.ones(q_seq_len, q_seq_len, device=q.device), diagonal=1).bool()
+#                 scores = scores.masked_fill(causal_mask, -float('inf'))
+            
+#         # Calculate attention weights
+#         attn_weights = F.softmax(scores, dim=-1)
+        
+#         # Apply dropout
+#         if attn_dropout > 0.0:
+#             attn_weights = F.dropout(attn_weights, p=attn_dropout, training=kwargs.get('training', False))
+        
+#         # Calculate output
+#         output = torch.matmul(attn_weights, v)
+#         return output
+
+
+
+class EagerAttention:
+    """
+    Optimized attention implementation using PyTorch's SDPA, 
+    conforming to AttentionFunction protocol.
+    """
+    
+    def __call__(self, q, k, v, is_causal=False, attn_dropout=0.0, **kwargs):
         return self.forward(q, k, v, is_causal, attn_dropout, **kwargs)
     
     def forward(self,
@@ -93,44 +149,26 @@ class EagerAttention:
                 is_causal: bool = False,
                 attn_dropout: float = 0.0,
                 **kwargs: Any) -> torch.Tensor:
-        """Implements standard eager attention"""
-        # Calculate attention scores
-        dim = q.size(-1)
         
-        # Handle custom mask if provided
+        # 1. 获取 Mask (如果有的话)
+        # SigLIP Vision 通常没有 mask，或者是 padding mask
         mask = kwargs.get('mask', None)
         
-        scores = torch.matmul(q, k.transpose(-2, -1)) / (dim ** 0.5)
+        # 2. 如果 mask 是布尔型或 add 类型，SDPA 支持 attn_mask 参数
+        # 注意：SDPA 的 attn_mask 如果是 None，则不进行 mask
         
-        # Apply custom mask (if provided)
-        if mask is not None:
-            # mask shape: [b, s_q, s_k] or [b, n_h, s_q, s_k]
-            # scores shape: [b, n_h, s_q, s_k]
-            # If mask doesn't have the head dimension, unsqueeze it
-            if mask.dim() == 3:
-                mask = mask.unsqueeze(1)  # [b, 1, s_q, s_k]
-            scores = scores + mask
+        # 3. 直接调用 PyTorch 优化的算子
+        # scale 默认就是 1 / sqrt(dim)，无需手动指定
+        output = F.scaled_dot_product_attention(
+            query=q,
+            key=k,
+            value=v,
+            attn_mask=mask,
+            dropout_p=attn_dropout if kwargs.get('training', False) else 0.0,
+            is_causal=is_causal
+        )
         
-        # Apply causal mask
-        if is_causal:
-            # For cross attention, we only apply causal mask if q and k have the same sequence length
-            q_seq_len = q.size(-2)
-            k_seq_len = k.size(-2)
-            if q_seq_len == k_seq_len:
-                causal_mask = torch.triu(torch.ones(q_seq_len, q_seq_len, device=q.device), diagonal=1).bool()
-                scores = scores.masked_fill(causal_mask, -float('inf'))
-            
-        # Calculate attention weights
-        attn_weights = F.softmax(scores, dim=-1)
-        
-        # Apply dropout
-        if attn_dropout > 0.0:
-            attn_weights = F.dropout(attn_weights, p=attn_dropout, training=kwargs.get('training', False))
-        
-        # Calculate output
-        output = torch.matmul(attn_weights, v)
         return output
-
 
 class FlashAttention2:
     """FlashAttention2 implementation, also conforming to AttentionFunction protocol"""
