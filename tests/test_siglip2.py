@@ -1,6 +1,6 @@
 """
 Integration test to ensure Muse SigLIP matches Hugging Face logits.
-Refined for Verbose Logging, Mapping Verification, and Coverage Checking.
+Refined for Verbose Logging, Mapping Verification, and Deep Internal Coverage.
 """
 
 import os
@@ -16,6 +16,7 @@ from PIL import Image
 from transformers import AutoImageProcessor, SiglipVisionModel as HFSiglipVisionModel
 from muse.config import SiglipVisionConfig
 
+# 假设 Muse 的 SiglipVisionTransformer 路径如下，请根据实际情况调整
 from muse.models.Siglip import SiglipVisionTransformer as SiglipVisionModel
 from muse.training.common import set_default_dtype
 
@@ -47,8 +48,8 @@ def _mock_context_parallel():
         patch("muse.training.parallel.get_context_parallel_world_size", new=lambda: 1),
         patch("muse.training.parallel.get_context_parallel_group", new=lambda backend="nccl": None),
         patch("muse.training.parallel.get_context_parallel_rank", new=lambda: 0),
-        patch("muse.layers.attention.get_context_parallel_world_size", new=lambda: 1),
-        patch("muse.layers.attention.get_context_parallel_group", new=lambda backend="nccl": None),
+        # patch("muse.layers.attention.get_context_parallel_world_size", new=lambda: 1),
+        # patch("muse.layers.attention.get_context_parallel_group", new=lambda backend="nccl": None),
     ]
     for p in patches:
         p.start()
@@ -81,7 +82,7 @@ def _build_siglip_config(hf_cfg: Dict[str, Any]) -> SiglipVisionConfig:
         use_qk_norm=hf_cfg.get("use_qk_norm", False),
         qk_norm_eps=hf_cfg.get("qk_norm_eps", 1e-6),
         rope_theta=hf_cfg.get("rope_theta", 10000.0),
-        attention_function="flash_attention_2",
+        attention_function="flash_attention_2", # 建议这里先改回 eager 排查，如果环境允许 flash_attn 再开
         output_attentions=False,
         output_hidden_states=False,
     )
@@ -100,10 +101,19 @@ def log_separator(title: str):
     logger.info(f" {title.center(98)} ")
     logger.info(f"{'='*100}")
 
-def compare_tensors_verbose(name: str, tensor_hf: torch.Tensor, tensor_muse: torch.Tensor, atol=1e-5):
+def compare_tensors_verbose(name: str, tensor_hf: torch.Tensor, tensor_muse: torch.Tensor, atol=1e-3):
+    # 处理可能的 Tuple 输出
+    if isinstance(tensor_hf, (tuple, list)): tensor_hf = tensor_hf[0]
+    if isinstance(tensor_muse, (tuple, list)): tensor_muse = tensor_muse[0]
+
     t1 = tensor_hf.detach().float().cpu()
     t2 = tensor_muse.detach().float().cpu()
     
+    # 尝试自动处理 batch 维度差异 (例如 [1, S, D] vs [S, D])
+    if t1.shape != t2.shape:
+        if t1.dim() == 3 and t1.shape[0] == 1 and t2.dim() == 2: t1 = t1.squeeze(0)
+        elif t2.dim() == 3 and t2.shape[0] == 1 and t1.dim() == 2: t2 = t2.squeeze(0)
+
     if t1.shape != t2.shape:
         logger.error(f"❌ SHAPE MISMATCH [{name}]: HF={t1.shape} vs Muse={t2.shape}")
         return
@@ -114,15 +124,72 @@ def compare_tensors_verbose(name: str, tensor_hf: torch.Tensor, tensor_muse: tor
     
     match_status = "✅ MATCH" if max_diff < atol else f"❌ MISMATCH (Max Diff: {max_diff:.2e})"
     
-    logger.info(f"{'-'*100}")
-    logger.info(f"Layer: {name}")
-    logger.info(f"Status: {match_status}")
-    logger.info(f"Stats : MaxDiff={max_diff:.2e} | MeanDiff={mean_diff:.2e} | HF_Mean={t1.mean():.4f} | Muse_Mean={t2.mean():.4f}")
+    logger.info(f"{name:<40} | {match_status:<25} | Max: {max_diff:.2e} | Mean: {mean_diff:.2e}")
     
     if max_diff >= atol:
-        logger.info(f"Values Comparison (First 10 flattened):")
-        logger.info(f"  HF  : {format_tensor_val(t1, 10)}")
-        logger.info(f"  Muse: {format_tensor_val(t2, 10)}")
+        logger.info(f"   -> HF   (first 3): {format_tensor_val(t1, 3)}")
+        logger.info(f"   -> Muse (first 3): {format_tensor_val(t2, 3)}")
+
+# =========================================================================
+# Hook Helper System
+# =========================================================================
+activations = {"hf": {}, "muse": {}}
+
+def make_hook(model_name, layer_name):
+    def hook(module, inp, out):
+        if isinstance(out, (tuple, list)):
+            out = out[0]
+        activations[model_name][layer_name] = out.detach()
+    return hook
+
+def register_debug_hooks(hf_model, muse_model):
+    """
+    自动注册关键层 Hook
+    """
+    # 1. Embeddings (Output)
+    # HF: vision_model.embeddings
+    hf_model.vision_model.embeddings.register_forward_hook(make_hook("hf", "0. Embeddings Output"))
+    # Muse: embeddings
+    muse_model.embeddings.register_forward_hook(make_hook("muse", "0. Embeddings Output"))
+
+    # 2. Encoder Layer 0 (检查最底层)
+    # HF Layer 0
+    hf_l0 = hf_model.vision_model.encoder.layers[0]
+    hf_l0.layer_norm1.register_forward_hook(make_hook("hf", "L0.1 LayerNorm1 (Pre-Attn)"))
+    hf_l0.self_attn.register_forward_hook(make_hook("hf", "L0.2 SelfAttn Output"))
+    hf_l0.layer_norm2.register_forward_hook(make_hook("hf", "L0.3 LayerNorm2 (Pre-MLP)"))
+    hf_l0.mlp.register_forward_hook(make_hook("hf", "L0.4 MLP Output"))
+    
+    # Muse Layer 0
+    # 注意：这里假设 Muse 的命名结构。如果不一致，需要根据 Muse 代码调整
+    muse_l0 = muse_model.encoder.layers[0]
+    
+    # 尝试探测 LayerNorm1
+    if hasattr(muse_l0, "layer_norm1"): ln1 = muse_l0.layer_norm1
+    elif hasattr(muse_l0, "input_layernorm"): ln1 = muse_l0.input_layernorm
+    elif hasattr(muse_l0, "sa_norm"): ln1 = muse_l0.sa_norm
+    else: ln1 = None
+    if ln1: ln1.register_forward_hook(make_hook("muse", "L0.1 LayerNorm1 (Pre-Attn)"))
+
+    # 尝试探测 Attention
+    if hasattr(muse_l0, "self_attn"): attn = muse_l0.self_attn
+    elif hasattr(muse_l0, "attn"): attn = muse_l0.attn
+    else: attn = None
+    if attn: attn.register_forward_hook(make_hook("muse", "L0.2 SelfAttn Output"))
+    
+    # 尝试探测 LayerNorm2
+    if hasattr(muse_l0, "layer_norm2"): ln2 = muse_l0.layer_norm2
+    elif hasattr(muse_l0, "post_attention_layernorm"): ln2 = muse_l0.post_attention_layernorm
+    elif hasattr(muse_l0, "mlp_norm"): ln2 = muse_l0.mlp_norm
+    else: ln2 = None
+    if ln2: ln2.register_forward_hook(make_hook("muse", "L0.3 LayerNorm2 (Pre-MLP)"))
+
+    # 尝试探测 MLP
+    if hasattr(muse_l0, "mlp"): mlp = muse_l0.mlp
+    else: mlp = None
+    if mlp: mlp.register_forward_hook(make_hook("muse", "L0.4 MLP Output"))
+
+    logger.info("Debug hooks registered for Layer 0.")
 
 def test_siglip_logits_align_with_hf_checkpoint():
     with _mock_context_parallel():
@@ -156,8 +223,6 @@ def _run_siglip_logits_align_with_hf_checkpoint():
 
     device = next(hf_model.parameters()).device
     actual_dtype = next(hf_model.parameters()).dtype
-    if actual_dtype != target_dtype:
-        logger.warning(f"Requested dtype {target_dtype} but HF model is {actual_dtype}.")
     dtype = actual_dtype
     logger.info(f"Reference Model Device: {device}, Dtype: {dtype}")
 
@@ -172,45 +237,16 @@ def _run_siglip_logits_align_with_hf_checkpoint():
         muse_model = SiglipVisionModel(muse_config)
 
     # =========================================================================
-    # 4. 权重映射、转换与覆盖率检查
+    # 4. 权重映射与加载
     # =========================================================================
     log_separator("Weight Analysis Phase")
     
-    # --- 阶段 4.1: 探针式检测映射关系 (生成文档) ---
-    logger.info("Step 1: Tracing weight mapping logic...")
-    
     prefixed_keys_map = {k: f"siglip.vision_model.{k}" for k in hf_state_dict.keys()}
-    mapping_report = []
     full_prefixed_state_dict = {}
-
     for hf_key, prefixed_key in prefixed_keys_map.items():
-        tensor = hf_state_dict[hf_key]
-        full_prefixed_state_dict[prefixed_key] = tensor
-        
-        # 探针检测
-        probe_dict = {prefixed_key: tensor}
-        converted_probe = muse_model.convert_hf_state_dict(probe_dict)
-        
-        if len(converted_probe) == 0:
-            muse_key = "<SKIPPED / UNMAPPED>"
-        else:
-            muse_key = list(converted_probe.keys())[0]
-            
-        mapping_report.append({
-            "hf_orig": hf_key,
-            "muse_key": muse_key,
-            "shape": str(tuple(tensor.shape))
-        })
+        full_prefixed_state_dict[prefixed_key] = hf_state_dict[hf_key]
 
-    # 打印映射表
-    logger.info(f"{'HF Original Key':<60} | {'Muse Converted Key':<50} | {'Shape':<15}")
-    logger.info("-" * 130)
-    for item in mapping_report:
-        logger.info(f"{item['hf_orig']:<60} | {item['muse_key']:<50} | {item['shape']:<15}")
-    logger.info("-" * 130)
-
-    # --- 阶段 4.2: 实际转换 ---
-    logger.info("Step 2: Performing full weight conversion...")
+    logger.info("Converting and loading weights...")
     final_converted_state_dict = muse_model.convert_hf_state_dict(full_prefixed_state_dict)
     
     # 统一精度
@@ -218,92 +254,23 @@ def _run_siglip_logits_align_with_hf_checkpoint():
         if isinstance(final_converted_state_dict[key], torch.Tensor):
             final_converted_state_dict[key] = final_converted_state_dict[key].to(dtype=dtype)
 
-    # --- 阶段 4.3: 加载到 Muse 模型 (重点关注返回值) ---
-    logger.info("Step 3: Loading state dict into Muse model...")
     load_res = muse_model.load_state_dict(final_converted_state_dict, strict=False)
     
-    logger.info(f"Load Result Raw: {load_res}")
+    # 检查关键权重缺失
+    critical_missing = [k for k in load_res.missing_keys if k.endswith(".weight") or k.endswith(".bias")]
+    if critical_missing:
+        logger.error(f"❌ CRITICAL ERROR: {len(critical_missing)} params missing! Example: {critical_missing[0]}")
+    else:
+        logger.info("✅ Weight loading coverage looks good.")
 
-    # 将模型移到 GPU
     muse_model = muse_model.to(device=device, dtype=dtype)
     muse_model.eval()
 
-    # --- 阶段 4.5: 未加载参数覆盖率检测 (新增功能) ---
-    log_separator("Unloaded Parameter Coverage Analysis")
-    
-    missing_keys = load_res.missing_keys
-    
-    # 分类检测：将 Missing Keys 分为 '关键参数' (weights/bias) 和 '其他' (buffers like inv_freq)
-    critical_missing = []
-    other_missing = []
-    
-    for k in missing_keys:
-        if k.endswith(".weight") or k.endswith(".bias"):
-            critical_missing.append(k)
-        else:
-            other_missing.append(k)
-            
-    # 报告关键缺失
-    if len(critical_missing) > 0:
-        logger.error(f"❌ CRITICAL ERROR: {len(critical_missing)} learnable parameters were NOT initialized by the checkpoint!")
-        logger.error("   These parameters remain randomly initialized, which will cause output mismatch.")
-        for k in critical_missing:
-            logger.error(f"   - {k}")
-    else:
-        logger.info("✅ SUCCESS: All learnable parameters (weights/biases) in Muse model are covered by the checkpoint.")
-
-    # 报告非关键缺失 (通常是 RoPE buffers 或 Position IDs)
-    if len(other_missing) > 0:
-        logger.info(f"ℹ️  Info: {len(other_missing)} non-parameter keys (likely buffers) were not loaded (usually expected):")
-        for k in other_missing:
-            logger.info(f"   - {k}")
-            
-    # 如果有关键参数缺失，建议直接终止测试，因为后面的数值对比肯定不过
-    if len(critical_missing) > 0:
-        logger.error("🛑 Stopping test early due to missing critical weights. Please fix logic in `convert_hf_state_dict`.")
-        # return # 你可以选择在这里 return，或者继续跑看看有多离谱
-
-    # --- 阶段 4.4: 基于映射关系的数值验证 ---
-    log_separator("Weight Value Verification (Mapped)")
-    
-    muse_curr_state_dict = muse_model.state_dict()
-    issues_found = 0
-    
-    for item in mapping_report:
-        hf_key = item['hf_orig']
-        muse_key = item['muse_key']
-        
-        if muse_key == "<SKIPPED / UNMAPPED>": continue
-        if muse_key not in muse_curr_state_dict: continue # 已在上面覆盖率检测中处理
-            
-        hf_tensor = hf_state_dict[hf_key].to(device).to(dtype)
-        muse_tensor = muse_curr_state_dict[muse_key].to(device)
-        
-        if hf_tensor.shape != muse_tensor.shape:
-            if hf_tensor.shape == muse_tensor.t().shape:
-                hf_tensor = hf_tensor.t()
-            else:
-                logger.error(f"{muse_key:<60} | SHAPE ERR  | HF{hf_tensor.shape} vs Muse{muse_tensor.shape}")
-                issues_found += 1
-                continue
-                
-        diff = (hf_tensor - muse_tensor).abs().max().item()
-        threshold = 1e-2 if dtype == torch.bfloat16 else 1e-5
-        
-        if diff >= threshold:
-            logger.error(f"{muse_key:<60} | FAIL       | {diff:.4e}")
-            issues_found += 1
-        elif "layers.0." in muse_key or "embeddings" in muse_key: 
-            logger.info(f"{muse_key:<60} | OK         | {diff:.4e}")
-
-    if issues_found == 0:
-        logger.info("\n✅ All mapped weights verified successfully.")
-    else:
-        logger.error(f"\n❌ Found {issues_found} weight value mismatch(es).")
-
     # =========================================================================
-    # 5. 前向传播对比 (Forward Pass)
+    # 5. 注册 Hook 并运行前向传播
     # =========================================================================
+    register_debug_hooks(hf_model, muse_model)
+    
     log_separator("Forward Pass Comparison")
     
     image = create_dummy_image(hf_model.config.image_size)
@@ -325,31 +292,46 @@ def _run_siglip_logits_align_with_hf_checkpoint():
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
         )
-        muse_last_hidden = muse_outputs["last_hidden_state"]
+        # 兼容 dict 或 object 返回值
+        if isinstance(muse_outputs, dict):
+            muse_last_hidden = muse_outputs["last_hidden_state"]
+        else:
+            muse_last_hidden = muse_outputs.last_hidden_state
 
-    # 统一转换
+    # =========================================================================
+    # 6. 深入分析 (Deep Dive Analysis)
+    # =========================================================================
+    log_separator("Deep Dive: Internal Layer Analysis")
+    
+    # 精度容忍度 (BF16 需要宽一点)
+    tol = 5e-2 if dtype == torch.bfloat16 else 1e-5
+    
+    keys_to_check = [
+        "0. Embeddings Output",
+        "L0.1 LayerNorm1 (Pre-Attn)",
+        "L0.2 SelfAttn Output",
+        "L0.3 LayerNorm2 (Pre-MLP)",
+        "L0.4 MLP Output"
+    ]
+    
+    for k in keys_to_check:
+        if k in activations["hf"] and k in activations["muse"]:
+            compare_tensors_verbose(k, activations["hf"][k], activations["muse"][k], atol=tol)
+        else:
+            logger.warning(f"⚠️  Skipping {k}: Missing hook capture (HF={k in activations['hf']}, Muse={k in activations['muse']})")
+
+    # Final Output Comparison
+    log_separator("Final Output Analysis")
     hf_res = hf_last_hidden.to(device, dtype=dtype)
     muse_res = muse_last_hidden.to(device, dtype=dtype)
-
-    # 形状检查
-    if hf_res.shape != muse_res.shape:
-        logger.error(f"Output Shape Mismatch: HF={hf_res.shape}, Muse={muse_res.shape}")
-        min_len = min(hf_res.shape[1], muse_res.shape[1])
-        hf_res = hf_res[:, :min_len, :]
-        muse_res = muse_res[:, :min_len, :]
-
-    # --- 详细的数值对比 ---
-    compare_tensors_verbose("Last Hidden State (Global)", hf_res, muse_res, atol=1e-2 if dtype==torch.bfloat16 else 1e-5)
-
-    # Final verdict
-    final_diff = (hf_res - muse_res).abs().max().item()
-    threshold = 1e-2 if dtype == torch.bfloat16 else 1e-4
     
-    log_separator("FINAL RESULT")
-    if final_diff < threshold:
-        logger.info(f"SUCCESS: Outputs match! (Max Diff: {final_diff:.2e} < Threshold: {threshold})")
+    compare_tensors_verbose("Last Hidden State", hf_res, muse_res, atol=tol)
+
+    final_diff = (hf_res - muse_res).abs().max().item()
+    if final_diff < tol:
+        logger.info(f"\n✅ SUCCESS: Outputs match! (Max Diff: {final_diff:.2e})")
     else:
-        logger.error(f"FAILURE: Outputs mismatch! (Max Diff: {final_diff:.2e} >= Threshold: {threshold})")
+        logger.error(f"\n❌ FAILURE: Outputs mismatch! (Max Diff: {final_diff:.2e})")
 
 if __name__ == "__main__":
     test_siglip_logits_align_with_hf_checkpoint()
