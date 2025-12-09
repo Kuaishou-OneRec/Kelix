@@ -476,7 +476,26 @@ class SanaModel(Model):
         """
         muse_state_dict = {}
         
+        # Keys that are handled separately (qkv combination, etc.)
+        skip_keys = set()
+        
+        # First pass: identify keys to skip (will be combined later)
+        for i in range(self.config.depth):
+            # Self-attention q, k, v will be combined into qkv
+            for suffix in [".weight", ".bias"]:
+                skip_keys.add(f"transformer_blocks.{i}.attn1.to_q{suffix}")
+                skip_keys.add(f"transformer_blocks.{i}.attn1.to_k{suffix}")
+                skip_keys.add(f"transformer_blocks.{i}.attn1.to_v{suffix}")
+            # Cross-attention k, v will be combined into kv_linear
+            for suffix in [".weight", ".bias"]:
+                skip_keys.add(f"transformer_blocks.{i}.attn2.to_k{suffix}")
+                skip_keys.add(f"transformer_blocks.{i}.attn2.to_v{suffix}")
+        
         for key, value in diffusers_state_dict.items():
+            # Skip keys that will be handled separately
+            if key in skip_keys:
+                continue
+            
             new_key = key
             
             # Patch embedding: patch_embed -> x_embedder
@@ -484,11 +503,13 @@ class SanaModel(Model):
                 new_key = key.replace("patch_embed.", "x_embedder.")
             
             # Time embedding (AdaLayerNormSingle)
-            # diffusers: time_embed.emb.timestep_embedder.* -> muse: t_embedder.mlp.*
+            # diffusers: time_embed.emb.timestep_embedder.linear_1/2 -> muse: t_embedder.mlp.0/2
             # diffusers: time_embed.linear.* -> muse: t_block.1.*
             elif key.startswith("time_embed."):
-                if "emb.timestep_embedder." in key:
-                    new_key = key.replace("time_embed.emb.timestep_embedder.", "t_embedder.mlp.")
+                if "emb.timestep_embedder.linear_1." in key:
+                    new_key = key.replace("time_embed.emb.timestep_embedder.linear_1.", "t_embedder.mlp.0.")
+                elif "emb.timestep_embedder.linear_2." in key:
+                    new_key = key.replace("time_embed.emb.timestep_embedder.linear_2.", "t_embedder.mlp.2.")
                 elif "linear." in key:
                     new_key = key.replace("time_embed.linear.", "t_block.1.")
                 else:
@@ -511,35 +532,36 @@ class SanaModel(Model):
                 new_key = key.replace("transformer_blocks.", "blocks.")
                 
                 # Self attention: attn1 -> attn (for LiteLA)
-                # Cross attention: attn2 -> cross_attn
                 new_key = new_key.replace(".attn1.", ".attn.")
+                # Cross attention: attn2 -> cross_attn
                 new_key = new_key.replace(".attn2.", ".cross_attn.")
                 
                 # FFN: ff -> mlp
                 new_key = new_key.replace(".ff.", ".mlp.")
                 
                 # GLUMBConv mappings
-                new_key = new_key.replace(".conv_inverted.", ".inverted_conv.")
-                new_key = new_key.replace(".conv_depth.", ".depth_conv.")
-                new_key = new_key.replace(".conv_point.", ".point_conv.")
+                # diffusers uses nn.Conv2d directly, muse uses ConvLayer wrapper
+                # ff.conv_inverted -> mlp.inverted_conv.conv
+                new_key = new_key.replace(".mlp.conv_inverted.", ".mlp.inverted_conv.conv.")
+                new_key = new_key.replace(".mlp.conv_depth.", ".mlp.depth_conv.conv.")
+                new_key = new_key.replace(".mlp.conv_point.", ".mlp.point_conv.conv.")
+                # ff.nonlinearity has no parameters, skip
+                # ff.norm -> mlp.norm (if exists) - but muse GLUMBConv doesn't have separate norm
                 
-                # Attention layer mappings for self-attention (LiteLA uses qkv combined)
-                # diffusers uses to_q, to_k, to_v separately
-                # We need special handling for this
-                if ".attn.to_q." in new_key or ".attn.to_k." in new_key or ".attn.to_v." in new_key:
-                    # Skip - need special handling for qkv combination
-                    # Will be handled below
-                    pass
+                # Self-attention output projection: to_out.0 -> proj
+                new_key = new_key.replace(".attn.to_out.0.", ".attn.proj.")
                 
-                # Cross attention: to_q -> q_linear, to_k+to_v -> kv_linear
-                if ".cross_attn.to_q." in new_key:
-                    new_key = new_key.replace(".cross_attn.to_q.", ".cross_attn.q_linear.")
-                elif ".cross_attn.to_k." in new_key or ".cross_attn.to_v." in new_key:
-                    # kv_linear combines k and v
-                    # Skip individual - handle separately
-                    pass
-                elif ".cross_attn.to_out.0." in new_key:
-                    new_key = new_key.replace(".cross_attn.to_out.0.", ".cross_attn.proj.")
+                # Self-attention norms: norm_q -> q_norm, norm_k -> k_norm
+                new_key = new_key.replace(".attn.norm_q.", ".attn.q_norm.")
+                new_key = new_key.replace(".attn.norm_k.", ".attn.k_norm.")
+                
+                # Cross-attention: to_q -> q_linear, to_out.0 -> proj
+                new_key = new_key.replace(".cross_attn.to_q.", ".cross_attn.q_linear.")
+                new_key = new_key.replace(".cross_attn.to_out.0.", ".cross_attn.proj.")
+                
+                # Cross-attention norms
+                new_key = new_key.replace(".cross_attn.norm_q.", ".cross_attn.q_norm.")
+                new_key = new_key.replace(".cross_attn.norm_k.", ".cross_attn.k_norm.")
             
             # Final layer: norm_out -> final_layer.norm_final
             elif key.startswith("norm_out."):
@@ -575,19 +597,7 @@ class SanaModel(Model):
                 qkv_weight = torch.cat([q_weight, k_weight, v_weight], dim=0)
                 muse_state_dict[f"{prefix}qkv.weight"] = qkv_weight
             
-            # Handle cross attention kv_linear
-            cross_k_key = f"transformer_blocks.{i}.attn2.to_k.weight"
-            cross_v_key = f"transformer_blocks.{i}.attn2.to_v.weight"
-            
-            if cross_k_key in diffusers_state_dict and cross_v_key in diffusers_state_dict:
-                k_weight = diffusers_state_dict[cross_k_key]
-                v_weight = diffusers_state_dict[cross_v_key]
-                
-                # Combine k and v: [2*hidden, caption_channels]
-                kv_weight = torch.cat([k_weight, v_weight], dim=0)
-                muse_state_dict[f"blocks.{i}.cross_attn.kv_linear.weight"] = kv_weight
-            
-            # Handle biases if present
+            # Handle biases if present for self-attention
             q_bias_key = f"transformer_blocks.{i}.attn1.to_q.bias"
             k_bias_key = f"transformer_blocks.{i}.attn1.to_k.bias"
             v_bias_key = f"transformer_blocks.{i}.attn1.to_v.bias"
@@ -600,6 +610,19 @@ class SanaModel(Model):
                     qkv_bias = torch.cat([q_bias, k_bias, v_bias], dim=0)
                     muse_state_dict[f"{prefix}qkv.bias"] = qkv_bias
             
+            # Handle cross attention kv_linear
+            cross_k_key = f"transformer_blocks.{i}.attn2.to_k.weight"
+            cross_v_key = f"transformer_blocks.{i}.attn2.to_v.weight"
+            
+            if cross_k_key in diffusers_state_dict and cross_v_key in diffusers_state_dict:
+                k_weight = diffusers_state_dict[cross_k_key]
+                v_weight = diffusers_state_dict[cross_v_key]
+                
+                # Combine k and v: [2*hidden, caption_channels]
+                kv_weight = torch.cat([k_weight, v_weight], dim=0)
+                muse_state_dict[f"blocks.{i}.cross_attn.kv_linear.weight"] = kv_weight
+            
+            # Handle biases for cross-attention kv
             cross_k_bias_key = f"transformer_blocks.{i}.attn2.to_k.bias"
             cross_v_bias_key = f"transformer_blocks.{i}.attn2.to_v.bias"
             

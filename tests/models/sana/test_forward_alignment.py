@@ -210,6 +210,18 @@ def compare_state_dicts(diffusers_model, muse_model):
     print(f"  Diffusers keys: {len(diff_sd)}")
     print(f"  Muse keys: {len(muse_sd)}")
     
+    # Print some raw diffusers keys for debugging
+    print("\n  Sample raw diffusers keys:")
+    for i, key in enumerate(sorted(diff_sd.keys())):
+        if i < 20:
+            print(f"    {key}")
+    
+    # Print some muse keys for debugging
+    print("\n  Sample muse keys:")
+    for i, key in enumerate(sorted(muse_sd.keys())):
+        if i < 20:
+            print(f"    {key}")
+    
     # Try to match keys using model's converter
     converted = muse_model.convert_diffusers_state_dict(diff_sd)
     
@@ -227,13 +239,13 @@ def compare_state_dicts(diffusers_model, muse_model):
         if key not in converted:
             unmatched_muse.append(key)
     
-    print(f"  Matched keys: {matched}")
-    print(f"  Unmatched from diffusers: {len(unmatched_diff)}")
-    if unmatched_diff[:5]:
-        print(f"    Examples: {unmatched_diff[:5]}")
+    print(f"\n  Matched keys: {matched}")
+    print(f"  Unmatched from diffusers (after conversion): {len(unmatched_diff)}")
+    if unmatched_diff[:10]:
+        print(f"    Examples: {unmatched_diff[:10]}")
     print(f"  Unmatched in muse: {len(unmatched_muse)}")
-    if unmatched_muse[:5]:
-        print(f"    Examples: {unmatched_muse[:5]}")
+    if unmatched_muse[:10]:
+        print(f"    Examples: {unmatched_muse[:10]}")
 
 
 def run_full_alignment_test():
