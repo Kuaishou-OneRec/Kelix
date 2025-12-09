@@ -163,7 +163,7 @@ def smart_resize(
     return h_bar, w_bar
 
 
-class KeyeVisionImageProcessor(BaseImageProcessor):
+class SiglipImageProcessor(BaseImageProcessor):
     r"""
     Constructs a Qwen2-VL image processor that dynamically resizes images based on the original images.
 
@@ -231,6 +231,46 @@ class KeyeVisionImageProcessor(BaseImageProcessor):
         self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
         self.do_convert_rgb = do_convert_rgb
         
+    def mvit_rescale(
+        self, image: Image.Image, merge_size: int = 2
+    ) -> Image.Image:
+        try:
+            w, h = image.size
+        except:
+            raise ValueError(str((type(image), image)))
+        patch_size = self.patch_size
+
+        if (w // patch_size) * (h // patch_size) > self.in_token_limit:
+            scale = math.sqrt(self.in_token_limit / ((w // patch_size) * (h // patch_size)))
+            new_w, new_h = int(w * scale), int(h * scale)
+            
+            image = image.resize((new_w, new_h), Image.Resampling.BICUBIC)
+        if self.pad_input:
+            new_w, new_h = image.size
+            pad_size_h = merge_size * patch_size
+            pad_size_w = merge_size * patch_size
+
+            pad_h = (pad_size_h - new_h % pad_size_h) % pad_size_h
+            pad_w = (pad_size_w - new_w % pad_size_w) % pad_size_w
+
+            image = TF.pad(image, (0, 0, pad_w, pad_h))
+        else:
+            new_w, new_h = image.size
+            new_w = new_w - new_w % patch_size
+            new_h = new_h - new_h % patch_size
+
+            new_w = adjust_size(new_w, patch_size)
+            new_h = adjust_size(new_h, patch_size)
+
+            image = TF.center_crop(image, (new_h, new_w))
+
+        w, h = image.size
+        if w // patch_size >= 512 or h // patch_size >= 512:
+            new_h = min(patch_size * 510, h)
+            new_w = min(patch_size * 510, w)
+            image = TF.center_crop(image, (new_h, new_w))
+            #raise ValueError("Exceed pos emb")
+        return image
     def _preprocess(
         self,
         images: Union[ImageInput, VideoInput],
