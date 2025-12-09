@@ -34,6 +34,7 @@ import sys
 import pytest
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 # Paths - update these to your locations
 # Diffusers format checkpoint directory (containing transformer/ subfolder)
@@ -381,7 +382,61 @@ def debug_first_block(diffusers_model, muse_model, inputs, dtype):
         
         compare_tensors("ff_input_nchw", diff_ff_input, muse_ff_input)
         
-        # FFN output
+        # ====== STEP 5b: Detailed GLUMBConv comparison ======
+        print("\n  [5b] GLUMBConv step-by-step...")
+        
+        diff_ff = diff_block.ff
+        muse_ff = muse_block.mlp
+        
+        # Compare weights first
+        print("\n    Checking weights...")
+        compare_tensors("conv_inverted.weight", diff_ff.conv_inverted.weight, muse_ff.inverted_conv.conv.weight)
+        compare_tensors("conv_inverted.bias", diff_ff.conv_inverted.bias, muse_ff.inverted_conv.conv.bias)
+        compare_tensors("conv_depth.weight", diff_ff.conv_depth.weight, muse_ff.depth_conv.conv.weight)
+        compare_tensors("conv_depth.bias", diff_ff.conv_depth.bias, muse_ff.depth_conv.conv.bias)
+        compare_tensors("conv_point.weight", diff_ff.conv_point.weight, muse_ff.point_conv.conv.weight)
+        
+        print("\n    Checking intermediate activations...")
+        
+        # Step 1: conv_inverted (before SiLU)
+        diff_after_inv_conv = diff_ff.conv_inverted(diff_ff_input.clone())
+        muse_after_inv_conv = muse_ff.inverted_conv.conv(muse_ff_input.clone())
+        compare_tensors("after_conv_inverted (before SiLU)", diff_after_inv_conv, muse_after_inv_conv)
+        
+        # Step 2: after SiLU (clone to avoid inplace issues)
+        diff_after_silu = diff_ff.nonlinearity(diff_after_inv_conv.clone())
+        # Muse uses SiLU(inplace=True), so use F.silu to avoid inplace modification
+        muse_after_silu = F.silu(muse_after_inv_conv.clone())
+        compare_tensors("after_inverted_silu", diff_after_silu, muse_after_silu)
+        
+        # Step 3: after depth_conv
+        diff_after_depth = diff_ff.conv_depth(diff_after_silu.clone())
+        muse_after_depth = muse_ff.depth_conv.conv(muse_after_silu.clone())
+        compare_tensors("after_depth_conv", diff_after_depth, muse_after_depth)
+        
+        # Step 4: after chunk
+        diff_x_chunk, diff_gate = torch.chunk(diff_after_depth.clone(), 2, dim=1)
+        muse_x_chunk, muse_gate = torch.chunk(muse_after_depth.clone(), 2, dim=1)
+        compare_tensors("chunk_x", diff_x_chunk, muse_x_chunk)
+        compare_tensors("chunk_gate", diff_gate, muse_gate)
+        
+        # Step 5: after gate activation
+        diff_gate_act = diff_ff.nonlinearity(diff_gate.clone())
+        muse_gate_act = F.silu(muse_gate.clone())  # glu_act is SiLU(inplace=False), but use F.silu for consistency
+        compare_tensors("gate_after_silu", diff_gate_act, muse_gate_act)
+        
+        # Step 6: after multiplication
+        diff_mult = diff_x_chunk * diff_gate_act
+        muse_mult = muse_x_chunk * muse_gate_act
+        compare_tensors("after_glu_mult", diff_mult, muse_mult)
+        
+        # Step 7: after point_conv
+        diff_after_point = diff_ff.conv_point(diff_mult.clone())
+        muse_after_point = muse_ff.point_conv.conv(muse_mult.clone())
+        compare_tensors("after_point_conv", diff_after_point, muse_after_point)
+        
+        # Full FFN output comparison
+        print("\n    Full FFN output...")
         diff_ff_out = diff_block.ff(diff_ff_input)
         diff_ff_out = diff_ff_out.flatten(2, 3).permute(0, 2, 1)
         
