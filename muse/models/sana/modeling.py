@@ -453,6 +453,165 @@ class SanaModel(Model):
         
         return converted_state_dict
     
+    def convert_diffusers_state_dict(
+        self,
+        diffusers_state_dict: Dict[str, torch.Tensor],
+        **kwargs,
+    ) -> Dict[str, torch.Tensor]:
+        """Convert diffusers SanaTransformer2DModel state dict to muse format.
+        
+        Key mappings:
+        - patch_embed -> x_embedder
+        - time_embed -> t_embedder + t_block
+        - caption_projection -> y_embedder.y_proj
+        - caption_norm -> attention_y_norm
+        - transformer_blocks -> blocks
+        - norm_out + proj_out + scale_shift_table -> final_layer
+        
+        Args:
+            diffusers_state_dict: State dict from diffusers model
+        
+        Returns:
+            Converted state dict for muse SanaModel
+        """
+        muse_state_dict = {}
+        
+        for key, value in diffusers_state_dict.items():
+            new_key = key
+            
+            # Patch embedding: patch_embed -> x_embedder
+            if key.startswith("patch_embed."):
+                new_key = key.replace("patch_embed.", "x_embedder.")
+            
+            # Time embedding (AdaLayerNormSingle)
+            # diffusers: time_embed.emb.timestep_embedder.* -> muse: t_embedder.mlp.*
+            # diffusers: time_embed.linear.* -> muse: t_block.1.*
+            elif key.startswith("time_embed."):
+                if "emb.timestep_embedder." in key:
+                    new_key = key.replace("time_embed.emb.timestep_embedder.", "t_embedder.mlp.")
+                elif "linear." in key:
+                    new_key = key.replace("time_embed.linear.", "t_block.1.")
+                else:
+                    # Skip other time_embed keys that don't map directly
+                    continue
+            
+            # Caption projection: caption_projection -> y_embedder.y_proj
+            elif key.startswith("caption_projection."):
+                new_key = key.replace("caption_projection.", "y_embedder.y_proj.")
+                # PixArtAlphaTextProjection: linear_1, linear_2 -> Mlp: fc1, fc2
+                new_key = new_key.replace("linear_1.", "fc1.")
+                new_key = new_key.replace("linear_2.", "fc2.")
+            
+            # Caption norm: caption_norm -> attention_y_norm
+            elif key.startswith("caption_norm."):
+                new_key = key.replace("caption_norm.", "attention_y_norm.")
+            
+            # Transformer blocks: transformer_blocks -> blocks
+            elif key.startswith("transformer_blocks."):
+                new_key = key.replace("transformer_blocks.", "blocks.")
+                
+                # Self attention: attn1 -> attn (for LiteLA)
+                # Cross attention: attn2 -> cross_attn
+                new_key = new_key.replace(".attn1.", ".attn.")
+                new_key = new_key.replace(".attn2.", ".cross_attn.")
+                
+                # FFN: ff -> mlp
+                new_key = new_key.replace(".ff.", ".mlp.")
+                
+                # GLUMBConv mappings
+                new_key = new_key.replace(".conv_inverted.", ".inverted_conv.")
+                new_key = new_key.replace(".conv_depth.", ".depth_conv.")
+                new_key = new_key.replace(".conv_point.", ".point_conv.")
+                
+                # Attention layer mappings for self-attention (LiteLA uses qkv combined)
+                # diffusers uses to_q, to_k, to_v separately
+                # We need special handling for this
+                if ".attn.to_q." in new_key or ".attn.to_k." in new_key or ".attn.to_v." in new_key:
+                    # Skip - need special handling for qkv combination
+                    # Will be handled below
+                    pass
+                
+                # Cross attention: to_q -> q_linear, to_k+to_v -> kv_linear
+                if ".cross_attn.to_q." in new_key:
+                    new_key = new_key.replace(".cross_attn.to_q.", ".cross_attn.q_linear.")
+                elif ".cross_attn.to_k." in new_key or ".cross_attn.to_v." in new_key:
+                    # kv_linear combines k and v
+                    # Skip individual - handle separately
+                    pass
+                elif ".cross_attn.to_out.0." in new_key:
+                    new_key = new_key.replace(".cross_attn.to_out.0.", ".cross_attn.proj.")
+            
+            # Final layer: norm_out -> final_layer.norm_final
+            elif key.startswith("norm_out."):
+                new_key = key.replace("norm_out.norm.", "final_layer.norm_final.")
+            
+            # proj_out -> final_layer.linear
+            elif key.startswith("proj_out."):
+                new_key = key.replace("proj_out.", "final_layer.linear.")
+            
+            # scale_shift_table -> final_layer.scale_shift_table
+            elif key == "scale_shift_table":
+                new_key = "final_layer.scale_shift_table"
+            
+            muse_state_dict[new_key] = value
+        
+        # Handle combined qkv for LiteLA self-attention
+        # Diffusers has separate to_q, to_k, to_v but muse LiteLA has combined qkv
+        for i in range(self.config.depth):
+            prefix = f"blocks.{i}.attn."
+            
+            # Check if this block's attention weights exist in diffusers format
+            q_key = f"transformer_blocks.{i}.attn1.to_q.weight"
+            k_key = f"transformer_blocks.{i}.attn1.to_k.weight"
+            v_key = f"transformer_blocks.{i}.attn1.to_v.weight"
+            
+            if q_key in diffusers_state_dict and k_key in diffusers_state_dict and v_key in diffusers_state_dict:
+                # Combine q, k, v into qkv
+                q_weight = diffusers_state_dict[q_key]
+                k_weight = diffusers_state_dict[k_key]
+                v_weight = diffusers_state_dict[v_key]
+                
+                # Stack along output dimension: [3*hidden, hidden]
+                qkv_weight = torch.cat([q_weight, k_weight, v_weight], dim=0)
+                muse_state_dict[f"{prefix}qkv.weight"] = qkv_weight
+            
+            # Handle cross attention kv_linear
+            cross_k_key = f"transformer_blocks.{i}.attn2.to_k.weight"
+            cross_v_key = f"transformer_blocks.{i}.attn2.to_v.weight"
+            
+            if cross_k_key in diffusers_state_dict and cross_v_key in diffusers_state_dict:
+                k_weight = diffusers_state_dict[cross_k_key]
+                v_weight = diffusers_state_dict[cross_v_key]
+                
+                # Combine k and v: [2*hidden, caption_channels]
+                kv_weight = torch.cat([k_weight, v_weight], dim=0)
+                muse_state_dict[f"blocks.{i}.cross_attn.kv_linear.weight"] = kv_weight
+            
+            # Handle biases if present
+            q_bias_key = f"transformer_blocks.{i}.attn1.to_q.bias"
+            k_bias_key = f"transformer_blocks.{i}.attn1.to_k.bias"
+            v_bias_key = f"transformer_blocks.{i}.attn1.to_v.bias"
+            
+            if q_bias_key in diffusers_state_dict:
+                q_bias = diffusers_state_dict.get(q_bias_key)
+                k_bias = diffusers_state_dict.get(k_bias_key)
+                v_bias = diffusers_state_dict.get(v_bias_key)
+                if q_bias is not None and k_bias is not None and v_bias is not None:
+                    qkv_bias = torch.cat([q_bias, k_bias, v_bias], dim=0)
+                    muse_state_dict[f"{prefix}qkv.bias"] = qkv_bias
+            
+            cross_k_bias_key = f"transformer_blocks.{i}.attn2.to_k.bias"
+            cross_v_bias_key = f"transformer_blocks.{i}.attn2.to_v.bias"
+            
+            if cross_k_bias_key in diffusers_state_dict:
+                k_bias = diffusers_state_dict.get(cross_k_bias_key)
+                v_bias = diffusers_state_dict.get(cross_v_bias_key)
+                if k_bias is not None and v_bias is not None:
+                    kv_bias = torch.cat([k_bias, v_bias], dim=0)
+                    muse_state_dict[f"blocks.{i}.cross_attn.kv_linear.bias"] = kv_bias
+        
+        return muse_state_dict
+    
     def get_initializer(self, name: str) -> Callable[[torch.Tensor], None]:
         """Return initializer function for given parameter name."""
         def default_init(tensor: torch.Tensor):

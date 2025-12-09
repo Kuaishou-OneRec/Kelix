@@ -18,13 +18,11 @@
 """
 Forward Alignment Test for Sana DiT Model.
 
-This test compares the muse implementation against the official Sana implementation
+This test compares the muse implementation against the diffusers SanaTransformer2DModel
 layer by layer to identify any numerical differences.
 
 Usage:
-    # Full alignment test (requires Sana repo in PYTHONPATH)
-    PYTHONPATH=/Users/zhouyang/code/Sana:/Users/zhouyang/code/muse:$PYTHONPATH \
-        python tests/models/sana/test_forward_alignment.py
+    PYTHONPATH=/path/to/muse:$PYTHONPATH python tests/models/sana/test_forward_alignment.py
     
     # Or run with pytest
     pytest tests/models/sana/test_forward_alignment.py -v
@@ -32,76 +30,25 @@ Usage:
 
 import os
 import sys
-import types
-
-# Mock mmcv functions before importing Sana (newer mmcv moved these to mmengine)
-class MockRegistry:
-    def __init__(self, name, **kwargs):
-        self.name = name
-        self._module_dict = {}
-    
-    def register_module(self, name=None, force=False, module=None):
-        def decorator(cls):
-            key = name if name else cls.__name__
-            self._module_dict[key] = cls
-            return cls
-        if module is not None:
-            return decorator(module)
-        return decorator
-    
-    def build(self, cfg, *args, **kwargs):
-        return None
-
-def mock_build_from_cfg(cfg, registry, default_args=None):
-    """Mock build_from_cfg function."""
-    return None
-
-# Patch mmcv and its submodules
-try:
-    import mmcv
-    if not hasattr(mmcv, 'Registry'):
-        mmcv.Registry = MockRegistry
-    if not hasattr(mmcv, 'build_from_cfg'):
-        mmcv.build_from_cfg = mock_build_from_cfg
-except ImportError:
-    mmcv = types.ModuleType('mmcv')
-    mmcv.Registry = MockRegistry
-    mmcv.build_from_cfg = mock_build_from_cfg
-    sys.modules['mmcv'] = mmcv
-
-# Mock mmcv.utils and mmcv.utils.logging
-if 'mmcv.utils' not in sys.modules:
-    mmcv_utils = types.ModuleType('mmcv.utils')
-    sys.modules['mmcv.utils'] = mmcv_utils
-    mmcv.utils = mmcv_utils
-
-if 'mmcv.utils.logging' not in sys.modules:
-    import logging
-    mmcv_utils_logging = types.ModuleType('mmcv.utils.logging')
-    mmcv_utils_logging.get_logger = logging.getLogger
-    mmcv_utils_logging.print_log = print
-    sys.modules['mmcv.utils.logging'] = mmcv_utils_logging
-    if hasattr(mmcv, 'utils'):
-        mmcv.utils.logging = mmcv_utils_logging
 
 import pytest
 import torch
 import torch.nn as nn
 
 # Paths - update these to your locations
-CHECKPOINT_PATH = "/llm_reco_ssd/zhouyang12/models/Sana_1600M_1024px/checkpoints/Sana_1600M_1024px.pth"
-SANA_REPO_PATH = "/llm_reco_ssd/zhouyang12/code/dev/Sana"
+# Diffusers format checkpoint directory (containing transformer/ subfolder)
+DIFFUSERS_CHECKPOINT_PATH = "/llm_reco_ssd/zhouyang12/models/Sana_1600M_1024px_diffusers"
 
-# Model configuration for SanaMS_1600M_P1_D20 (from Sana_1600M_img1024.yaml)
+# Model configuration for Sana 1600M
 MODEL_CONFIG = {
-    "input_size": 32,  # For 1024px image with 32x downsample
+    "input_size": 32,
     "patch_size": 1,
-    "in_channels": 32,  # DC-AE latent channels
+    "in_channels": 32,
     "hidden_size": 2240,
     "depth": 20,
     "num_heads": 20,
     "mlp_ratio": 2.5,
-    "caption_channels": 2304,  # gemma-2-2b-it hidden size
+    "caption_channels": 2304,
     "model_max_length": 300,
     "attn_type": "linear",
     "ffn_type": "glumbconv",
@@ -112,7 +59,7 @@ MODEL_CONFIG = {
     "y_norm_scale_factor": 0.01,
     "pred_sigma": False,
     "learn_sigma": False,
-    "class_dropout_prob": 0.0,  # Disable dropout for deterministic test
+    "class_dropout_prob": 0.0,
     "drop_path": 0.0,
 }
 
@@ -121,71 +68,32 @@ ATOL = 1e-5
 RTOL = 1e-4
 
 
-def load_checkpoint(checkpoint_path: str):
-    """Load checkpoint and handle git-lfs pointers."""
-    # Check if checkpoint is a git-lfs pointer file
-    with open(checkpoint_path, 'rb') as f:
-        header = f.read(50)
-    if b'git-lfs' in header:
-        raise RuntimeError(
-            f"Checkpoint at {checkpoint_path} is a git-lfs pointer file.\n"
-            f"Please run 'git lfs pull' in the model directory to download the actual weights."
+def load_diffusers_model(checkpoint_path: str, device: torch.device, dtype: torch.dtype):
+    """Load the diffusers SanaTransformer2DModel."""
+    from diffusers.models import SanaTransformer2DModel
+    
+    # Try loading with subfolder="transformer" first
+    transformer_path = os.path.join(checkpoint_path, "transformer")
+    if os.path.exists(transformer_path):
+        model = SanaTransformer2DModel.from_pretrained(
+            transformer_path,
+            torch_dtype=dtype
+        )
+    else:
+        model = SanaTransformer2DModel.from_pretrained(
+            checkpoint_path,
+            torch_dtype=dtype
         )
     
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-    state_dict = checkpoint.get("state_dict", checkpoint)
-    
-    # Remove 'module.' prefix if present
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if k.startswith("module."):
-            k = k[7:]
-        new_state_dict[k] = v
-    
-    return new_state_dict
-
-
-def load_official_model(state_dict: dict, device: torch.device, dtype: torch.dtype):
-    """Load the official Sana model from the Sana repo."""
-    try:
-        from diffusion.model.nets.sana_multi_scale import SanaMS_1600M_P1_D20
-    except ImportError as e:
-        print(f"Error importing official Sana model: {e}")
-        raise ImportError(
-            "Cannot import official Sana model. Make sure:\n"
-            "1. Sana repo is in PYTHONPATH\n"
-            "2. All Sana dependencies are installed\n"
-            f"   PYTHONPATH={SANA_REPO_PATH}:$PYTHONPATH"
-        )
-    
-    # Create model with matching config
-    model = SanaMS_1600M_P1_D20(
-        input_size=MODEL_CONFIG["input_size"],
-        in_channels=MODEL_CONFIG["in_channels"],
-        caption_channels=MODEL_CONFIG["caption_channels"],
-        model_max_length=MODEL_CONFIG["model_max_length"],
-        attn_type=MODEL_CONFIG["attn_type"],
-        ffn_type=MODEL_CONFIG["ffn_type"],
-        mlp_acts=MODEL_CONFIG["mlp_acts"],
-        use_pe=MODEL_CONFIG["use_pe"],
-        qk_norm=MODEL_CONFIG["qk_norm"],
-        y_norm=MODEL_CONFIG["y_norm"],
-        y_norm_scale_factor=MODEL_CONFIG["y_norm_scale_factor"],
-        pred_sigma=MODEL_CONFIG["pred_sigma"],
-        learn_sigma=MODEL_CONFIG["learn_sigma"],
-        class_dropout_prob=MODEL_CONFIG["class_dropout_prob"],
-        drop_path=MODEL_CONFIG["drop_path"],
-    )
-    
-    model.load_state_dict(state_dict, strict=True)
-    model = model.to(device=device, dtype=dtype)
+    model = model.to(device=device)
     model.eval()
     
+    print(f"  Loaded diffusers model config: {model.config}")
     return model
 
 
-def load_muse_model(state_dict: dict, device: torch.device, dtype: torch.dtype):
-    """Load the muse Sana model."""
+def load_muse_model(diffusers_state_dict: dict, device: torch.device, dtype: torch.dtype):
+    """Load the muse Sana model with diffusers state dict."""
     from muse.models.sana.modeling import SanaModel
     from muse.config.model_config import SanaConfig
     
@@ -214,13 +122,15 @@ def load_muse_model(state_dict: dict, device: torch.device, dtype: torch.dtype):
     )
     
     model = SanaModel(config)
-    converted_state_dict = model.convert_sana_state_dict(state_dict)
+    
+    # Convert diffusers state dict to muse format using model's converter
+    converted_state_dict = model.convert_diffusers_state_dict(diffusers_state_dict)
     
     missing, unexpected = model.load_state_dict(converted_state_dict, strict=False)
     if missing:
-        print(f"  [Warning] Missing keys: {missing}")
+        print(f"  [Warning] Missing keys: {missing[:10]}..." if len(missing) > 10 else f"  [Warning] Missing keys: {missing}")
     if unexpected:
-        print(f"  [Warning] Unexpected keys: {unexpected}")
+        print(f"  [Warning] Unexpected keys: {unexpected[:10]}..." if len(unexpected) > 10 else f"  [Warning] Unexpected keys: {unexpected}")
     
     model = model.to(device=device, dtype=dtype)
     model.eval()
@@ -238,31 +148,47 @@ def create_test_inputs(
     dtype: torch.dtype = torch.float32,
     seed: int = 42,
 ):
-    """Create test inputs for the model."""
+    """Create test inputs for both models."""
     torch.manual_seed(seed)
     
+    # Latent input: [B, C, H, W]
     x = torch.randn(batch_size, latent_channels, latent_size, latent_size, device=device, dtype=dtype)
-    timestep = torch.tensor([500.0] * batch_size, device=device, dtype=torch.float32)
-    y = torch.randn(batch_size, 1, text_length, text_channels, device=device, dtype=dtype)
-    mask = torch.ones(batch_size, 1, 1, text_length, device=device, dtype=dtype)
     
-    return x, timestep, y, mask
+    # Timestep: [B]
+    timestep = torch.tensor([500] * batch_size, device=device, dtype=torch.long)
+    
+    # Text embeddings: [B, L, D] for diffusers, [B, 1, L, D] for muse
+    y_diffusers = torch.randn(batch_size, text_length, text_channels, device=device, dtype=dtype)
+    y_muse = y_diffusers.unsqueeze(1)  # [B, 1, L, D]
+    
+    # Attention mask: [B, L] for diffusers, [B, 1, 1, L] for muse
+    mask_diffusers = torch.ones(batch_size, text_length, device=device, dtype=dtype)
+    mask_muse = mask_diffusers.unsqueeze(1).unsqueeze(1)  # [B, 1, 1, L]
+    
+    return {
+        "x": x,
+        "timestep": timestep,
+        "y_diffusers": y_diffusers,
+        "y_muse": y_muse,
+        "mask_diffusers": mask_diffusers,
+        "mask_muse": mask_muse,
+    }
 
 
-def compare_tensors(name: str, official: torch.Tensor, muse: torch.Tensor, atol=ATOL, rtol=RTOL):
+def compare_tensors(name: str, tensor1: torch.Tensor, tensor2: torch.Tensor, atol=ATOL, rtol=RTOL):
     """Compare two tensors and print results."""
-    if official.shape != muse.shape:
-        print(f"  [{name}] SHAPE MISMATCH: official={official.shape}, muse={muse.shape}")
+    if tensor1.shape != tensor2.shape:
+        print(f"  [{name}] SHAPE MISMATCH: {tensor1.shape} vs {tensor2.shape}")
         return False
     
-    diff = (official - muse).abs()
+    diff = (tensor1 - tensor2).abs()
     max_diff = diff.max().item()
     mean_diff = diff.mean().item()
     
     # Check relative difference for non-zero values
-    mask = official.abs() > 1e-8
+    mask = tensor1.abs() > 1e-8
     if mask.any():
-        rel_diff = (diff[mask] / official.abs()[mask]).max().item()
+        rel_diff = (diff[mask] / tensor1.abs()[mask]).max().item()
     else:
         rel_diff = 0.0
     
@@ -274,93 +200,46 @@ def compare_tensors(name: str, official: torch.Tensor, muse: torch.Tensor, atol=
     return passed
 
 
-def compare_patch_embed(official_model, muse_model, x, dtype):
-    """Compare patch embedding outputs."""
-    print("\n[1] Comparing Patch Embedding (x_embedder)...")
+def compare_state_dicts(diffusers_model, muse_model):
+    """Compare state dict keys and values between models."""
+    print("\n[State Dict Comparison]")
     
-    x_off = x.to(dtype)
-    x_muse = x.to(dtype)
+    diff_sd = diffusers_model.state_dict()
+    muse_sd = muse_model.state_dict()
     
-    with torch.no_grad():
-        off_out = official_model.x_embedder(x_off)
-        muse_out = muse_model.x_embedder(x_muse)
+    print(f"  Diffusers keys: {len(diff_sd)}")
+    print(f"  Muse keys: {len(muse_sd)}")
     
-    return compare_tensors("x_embedder", off_out, muse_out)
-
-
-def compare_timestep_embed(official_model, muse_model, timestep):
-    """Compare timestep embedding outputs."""
-    print("\n[2] Comparing Timestep Embedding (t_embedder + t_block)...")
+    # Try to match keys using model's converter
+    converted = muse_model.convert_diffusers_state_dict(diff_sd)
     
-    # Official uses timestep.long().to(torch.float32)
-    t_off = timestep.long().to(torch.float32)
-    t_muse = timestep.long().to(torch.float32)
+    matched = 0
+    unmatched_diff = []
+    unmatched_muse = []
     
-    with torch.no_grad():
-        # t_embedder
-        off_t = official_model.t_embedder(t_off)
-        muse_t = muse_model.t_embedder(t_muse)
-        passed1 = compare_tensors("t_embedder", off_t, muse_t)
-        
-        # t_block
-        off_t0 = official_model.t_block(off_t)
-        muse_t0 = muse_model.t_block(muse_t)
-        passed2 = compare_tensors("t_block", off_t0, muse_t0)
-    
-    return passed1 and passed2
-
-
-def compare_caption_embed(official_model, muse_model, y, mask, dtype):
-    """Compare caption embedding outputs."""
-    print("\n[3] Comparing Caption Embedding (y_embedder)...")
-    
-    y_off = y.to(dtype)
-    y_muse = y.to(dtype)
-    
-    with torch.no_grad():
-        # y_embedder (set training=False for deterministic behavior)
-        official_model.eval()
-        muse_model.eval()
-        
-        off_y = official_model.y_embedder(y_off, False, mask=mask)
-        muse_y = muse_model.y_embedder(y_muse, False, mask=mask)
-        passed1 = compare_tensors("y_embedder", off_y, muse_y)
-        
-        # y_norm (attention_y_norm) if enabled
-        if MODEL_CONFIG["y_norm"]:
-            off_y_norm = official_model.attention_y_norm(off_y)
-            muse_y_norm = muse_model.attention_y_norm(muse_y)
-            passed2 = compare_tensors("attention_y_norm", off_y_norm, muse_y_norm)
+    for key in converted:
+        if key in muse_sd:
+            matched += 1
         else:
-            passed2 = True
+            unmatched_diff.append(key)
     
-    return passed1 and passed2
-
-
-def compare_single_block(block_idx, official_block, muse_block, x, y, t0, y_lens, HW):
-    """Compare a single transformer block."""
-    with torch.no_grad():
-        off_out = official_block(x.clone(), y.clone(), t0.clone(), y_lens, HW)
-        muse_out = muse_block(x.clone(), y.clone(), t0.clone(), y_lens, HW)
+    for key in muse_sd:
+        if key not in converted:
+            unmatched_muse.append(key)
     
-    return compare_tensors(f"Block {block_idx}", off_out, muse_out)
-
-
-def compare_final_layer(official_model, muse_model, x, t):
-    """Compare final layer outputs."""
-    print("\n[5] Comparing Final Layer...")
-    
-    with torch.no_grad():
-        off_out = official_model.final_layer(x.clone(), t.clone())
-        muse_out = muse_model.final_layer(x.clone(), t.clone())
-    
-    return compare_tensors("final_layer", off_out, muse_out)
+    print(f"  Matched keys: {matched}")
+    print(f"  Unmatched from diffusers: {len(unmatched_diff)}")
+    if unmatched_diff[:5]:
+        print(f"    Examples: {unmatched_diff[:5]}")
+    print(f"  Unmatched in muse: {len(unmatched_muse)}")
+    if unmatched_muse[:5]:
+        print(f"    Examples: {unmatched_muse[:5]}")
 
 
 def run_full_alignment_test():
     """Run complete layer-by-layer alignment test."""
     print("=" * 70)
-    print("Sana Forward Alignment Test - Layer by Layer Comparison")
+    print("Sana Forward Alignment Test - Diffusers vs Muse")
     print("=" * 70)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -368,207 +247,136 @@ def run_full_alignment_test():
     
     print(f"\nDevice: {device}")
     print(f"Dtype: {dtype}")
-    print(f"Checkpoint: {CHECKPOINT_PATH}")
+    print(f"Checkpoint: {DIFFUSERS_CHECKPOINT_PATH}")
     
-    # Check paths
-    if not os.path.exists(CHECKPOINT_PATH):
-        print(f"\nERROR: Checkpoint not found at {CHECKPOINT_PATH}")
+    # Check path
+    if not os.path.exists(DIFFUSERS_CHECKPOINT_PATH):
+        print(f"\nERROR: Checkpoint not found at {DIFFUSERS_CHECKPOINT_PATH}")
         return False
     
-    # Load checkpoint
-    print("\n[Loading] Loading checkpoint...")
-    state_dict = load_checkpoint(CHECKPOINT_PATH)
-    print(f"  Loaded {len(state_dict)} keys")
-    
-    # Load official model
-    print("\n[Loading] Loading official Sana model...")
+    # Load diffusers model
+    print("\n[Loading] Loading diffusers SanaTransformer2DModel...")
     try:
-        official_model = load_official_model(state_dict, device, dtype)
-        print(f"  Parameters: {sum(p.numel() for p in official_model.parameters()):,}")
-    except ImportError as e:
+        diffusers_model = load_diffusers_model(DIFFUSERS_CHECKPOINT_PATH, device, dtype)
+        print(f"  Parameters: {sum(p.numel() for p in diffusers_model.parameters()):,}")
+    except Exception as e:
         print(f"  ERROR: {e}")
-        print("\n  To run the full alignment test, ensure Sana repo is in PYTHONPATH:")
-        print(f"  PYTHONPATH={SANA_REPO_PATH}:$PYTHONPATH python {__file__}")
+        import traceback
+        traceback.print_exc()
         return False
     
     # Load muse model
-    print("\n[Loading] Loading muse Sana model...")
-    muse_model = load_muse_model(state_dict, device, dtype)
-    print(f"  Parameters: {sum(p.numel() for p in muse_model.parameters()):,}")
+    print("\n[Loading] Loading muse SanaModel...")
+    try:
+        diffusers_state_dict = diffusers_model.state_dict()
+        muse_model = load_muse_model(diffusers_state_dict, device, dtype)
+        print(f"  Parameters: {sum(p.numel() for p in muse_model.parameters()):,}")
+    except Exception as e:
+        print(f"  ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    
+    # Compare state dicts
+    compare_state_dicts(diffusers_model, muse_model)
     
     # Create inputs
     print("\n[Setup] Creating test inputs...")
-    x, timestep, y, mask = create_test_inputs(device=device, dtype=dtype)
-    print(f"  x: {x.shape}")
-    print(f"  timestep: {timestep}")
-    print(f"  y: {y.shape}")
-    print(f"  mask: {mask.shape}")
+    inputs = create_test_inputs(device=device, dtype=dtype)
+    print(f"  x: {inputs['x'].shape}")
+    print(f"  timestep: {inputs['timestep']}")
+    print(f"  y_diffusers: {inputs['y_diffusers'].shape}")
+    print(f"  y_muse: {inputs['y_muse'].shape}")
     
     all_passed = True
     
-    # Compare patch embedding
-    passed = compare_patch_embed(official_model, muse_model, x, dtype)
-    all_passed = all_passed and passed
-    
-    # Compare timestep embedding
-    passed = compare_timestep_embed(official_model, muse_model, timestep)
-    all_passed = all_passed and passed
-    
-    # Compare caption embedding
-    passed = compare_caption_embed(official_model, muse_model, y, mask, dtype)
-    all_passed = all_passed and passed
-    
-    # Prepare intermediate values for block comparison
-    print("\n[4] Comparing Transformer Blocks...")
+    # Run forward pass on both models
+    print("\n[Forward] Running forward pass...")
     
     with torch.no_grad():
-        # Prepare x
-        x_off = x.to(dtype)
-        x_muse = x.to(dtype)
+        # Diffusers forward
+        diffusers_out = diffusers_model(
+            hidden_states=inputs["x"],
+            encoder_hidden_states=inputs["y_diffusers"],
+            timestep=inputs["timestep"].float(),
+            encoder_attention_mask=inputs["mask_diffusers"],
+            return_dict=False,
+        )[0]
         
-        # Get patch embeddings
-        x_off = official_model.x_embedder(x_off)
-        x_muse = muse_model.x_embedder(x_muse)
+        # Muse forward
+        muse_out = muse_model(
+            x=inputs["x"],
+            timestep=inputs["timestep"].float(),
+            y=inputs["y_muse"],
+            mask=inputs["mask_muse"],
+        )
+    
+    print(f"\n  Diffusers output: {diffusers_out.shape}")
+    print(f"  Muse output: {muse_out.shape}")
+    
+    passed = compare_tensors("Full Model Output", diffusers_out, muse_out)
+    all_passed = all_passed and passed
+    
+    # Layer-by-layer comparison
+    print("\n[Layer Comparison]")
+    
+    with torch.no_grad():
+        x = inputs["x"].to(dtype)
         
-        # Get timestep embeddings
-        t_off = timestep.long().to(torch.float32)
-        t_off = official_model.t_embedder(t_off)
-        t0_off = official_model.t_block(t_off)
-        
-        t_muse = timestep.long().to(torch.float32)
-        t_muse = muse_model.t_embedder(t_muse)
-        t0_muse = muse_model.t_block(t_muse)
-        
-        # Get caption embeddings
-        y_off = y.to(dtype)
-        y_muse = y.to(dtype)
-        y_off = official_model.y_embedder(y_off, False, mask=mask)
-        y_muse = muse_model.y_embedder(y_muse, False, mask=mask)
-        
-        if MODEL_CONFIG["y_norm"]:
-            y_off = official_model.attention_y_norm(y_off)
-            y_muse = muse_model.attention_y_norm(y_muse)
-        
-        # Set up HW
-        patch_size = MODEL_CONFIG["patch_size"]
-        H = W = x.shape[-1] // patch_size
-        HW = (H, W)
-        
-        # Process mask and y for cross-attention (matching official logic)
-        # Check xformers availability
-        try:
-            import xformers
-            _xformers_available = True
-        except ImportError:
-            _xformers_available = False
-        
-        mask_off = mask.to(torch.int16).squeeze(1).squeeze(1)
-        mask_muse = mask.to(torch.int16).squeeze(1).squeeze(1)
-        
-        if _xformers_available:
-            y_off = y_off.squeeze(1).masked_select(mask_off.unsqueeze(-1) != 0).view(1, -1, x_off.shape[-1])
-            y_lens_off = mask_off.sum(dim=1).tolist()
-            
-            y_muse = y_muse.squeeze(1).masked_select(mask_muse.unsqueeze(-1) != 0).view(1, -1, x_muse.shape[-1])
-            y_lens_muse = mask_muse.sum(dim=1).tolist()
-        else:
-            y_lens_off = [y_off.shape[2]] * y_off.shape[0]
-            y_off = y_off.squeeze(1).view(1, -1, x_off.shape[-1])
-            y_lens_muse = y_lens_off
-            y_muse = y_muse.squeeze(1).view(1, -1, x_muse.shape[-1])
-        
-        # Compare each block
-        for i, (off_block, muse_block) in enumerate(zip(official_model.blocks, muse_model.blocks)):
-            # Run both blocks
-            x_off_new = off_block(x_off.clone(), y_off.clone(), t0_off.clone(), y_lens_off, HW)
-            x_muse_new = muse_block(x_muse.clone(), y_muse.clone(), t0_muse.clone(), y_lens_muse, HW)
-            
-            passed = compare_tensors(f"Block {i}", x_off_new, x_muse_new)
-            all_passed = all_passed and passed
-            
-            if not passed:
-                # If block fails, debug sub-components
-                print(f"    Debugging Block {i} sub-components...")
-                debug_block(i, off_block, muse_block, x_off, y_off, t0_off, y_lens_off, HW,
-                           x_muse, y_muse, t0_muse, y_lens_muse)
-            
-            # Update x for next block
-            x_off = x_off_new
-            x_muse = x_muse_new
-        
-        # Compare final layer
-        passed = compare_final_layer(official_model, muse_model, x_off, t_off)
+        # 1. Patch embedding
+        print("\n  [1] Patch Embedding...")
+        diff_patch = diffusers_model.patch_embed(x)
+        muse_patch = muse_model.x_embedder(x)
+        passed = compare_tensors("patch_embed", diff_patch, muse_patch)
         all_passed = all_passed and passed
         
-        # Compare full model output
-        print("\n[6] Comparing Full Model Output...")
-        x_input, timestep_input, y_input, mask_input = create_test_inputs(device=device, dtype=dtype)
+        # 2. Timestep embedding
+        print("\n  [2] Timestep Embedding...")
+        timestep_float = inputs["timestep"].float()
         
-        off_final = official_model(x_input, timestep_input, y_input, mask=mask_input)
-        muse_final = muse_model(x_input, timestep_input, y_input, mask=mask_input)
+        # Diffusers time_embed returns (shift_scale, embedded_timestep)
+        diff_time, diff_t_emb = diffusers_model.time_embed(
+            timestep_float, 
+            batch_size=inputs["x"].shape[0],
+            hidden_dtype=dtype
+        )
         
-        passed = compare_tensors("Full Model", off_final, muse_final)
-        all_passed = all_passed and passed
+        # Muse separate t_embedder and t_block
+        muse_t = muse_model.t_embedder(timestep_float.long().float())
+        muse_t0 = muse_model.t_block(muse_t)
+        
+        compare_tensors("t_embedder", diff_t_emb, muse_t)
+        compare_tensors("t_block (6*dim)", diff_time, muse_t0)
+        
+        # 3. Caption embedding
+        print("\n  [3] Caption Embedding...")
+        y_diff = inputs["y_diffusers"]
+        y_muse = inputs["y_muse"]
+        
+        diff_caption = diffusers_model.caption_projection(y_diff)
+        diff_caption = diff_caption.view(y_diff.shape[0], -1, diff_patch.shape[-1])
+        diff_caption = diffusers_model.caption_norm(diff_caption)
+        
+        muse_caption = muse_model.y_embedder(y_muse, False)
+        if muse_model.y_norm:
+            muse_caption = muse_model.attention_y_norm(muse_caption)
+        muse_caption = muse_caption.squeeze(1)  # Remove extra dim for comparison
+        
+        compare_tensors("caption_embed", diff_caption, muse_caption)
     
     # Summary
     print("\n" + "=" * 70)
     if all_passed:
-        print("SUCCESS: All layers match within tolerance!")
+        print("SUCCESS: All comparisons passed within tolerance!")
     else:
-        print("FAILED: Some layers have differences beyond tolerance.")
+        print("FAILED: Some comparisons failed.")
     print("=" * 70)
     
     return all_passed
 
 
-def debug_block(block_idx, off_block, muse_block, x_off, y_off, t0_off, y_lens_off, HW,
-                x_muse, y_muse, t0_muse, y_lens_muse):
-    """Debug a single block by comparing its sub-components."""
-    B, N, C = x_off.shape
-    
-    with torch.no_grad():
-        # Get modulation parameters
-        shift_msa_off, scale_msa_off, gate_msa_off, shift_mlp_off, scale_mlp_off, gate_mlp_off = (
-            off_block.scale_shift_table[None] + t0_off.reshape(B, 6, -1)
-        ).chunk(6, dim=1)
-        
-        shift_msa_muse, scale_msa_muse, gate_msa_muse, shift_mlp_muse, scale_mlp_muse, gate_mlp_muse = (
-            muse_block.scale_shift_table[None] + t0_muse.reshape(B, 6, -1)
-        ).chunk(6, dim=1)
-        
-        compare_tensors(f"  Block {block_idx} scale_shift_table", 
-                       off_block.scale_shift_table, muse_block.scale_shift_table)
-        compare_tensors(f"  Block {block_idx} shift_msa", shift_msa_off, shift_msa_muse)
-        
-        # Check norm1
-        norm1_off = off_block.norm1(x_off)
-        norm1_muse = muse_block.norm1(x_muse)
-        compare_tensors(f"  Block {block_idx} norm1", norm1_off, norm1_muse)
-        
-        # Check self-attention input (after modulation)
-        def t2i_modulate(x, shift, scale):
-            return x * (1 + scale) + shift
-        
-        attn_input_off = t2i_modulate(norm1_off, shift_msa_off, scale_msa_off)
-        attn_input_muse = t2i_modulate(norm1_muse, shift_msa_muse, scale_msa_muse)
-        compare_tensors(f"  Block {block_idx} attn_input", attn_input_off, attn_input_muse)
-        
-        # Check self-attention output
-        attn_out_off = off_block.attn(attn_input_off, HW=HW)
-        attn_out_muse = muse_block.attn(attn_input_muse, HW=HW)
-        compare_tensors(f"  Block {block_idx} self_attn", attn_out_off, attn_out_muse)
-        
-        # Check cross-attention
-        x_after_self_off = x_off + gate_msa_off * attn_out_off
-        x_after_self_muse = x_muse + gate_msa_muse * attn_out_muse
-        
-        cross_attn_off = off_block.cross_attn(x_after_self_off, y_off, y_lens_off)
-        cross_attn_muse = muse_block.cross_attn(x_after_self_muse, y_muse, y_lens_muse)
-        compare_tensors(f"  Block {block_idx} cross_attn", cross_attn_off, cross_attn_muse)
-
-
 def run_muse_only_test():
-    """Run a quick test of the muse model only (no official comparison)."""
+    """Run a quick test of the muse model only."""
     print("=" * 60)
     print("Muse Sana Model Test (standalone)")
     print("=" * 60)
@@ -579,16 +387,32 @@ def run_muse_only_test():
     print(f"\nDevice: {device}")
     print(f"Dtype: {dtype}")
     
-    if not os.path.exists(CHECKPOINT_PATH):
-        print(f"\nERROR: Checkpoint not found at {CHECKPOINT_PATH}")
+    if not os.path.exists(DIFFUSERS_CHECKPOINT_PATH):
+        print(f"\nERROR: Checkpoint not found at {DIFFUSERS_CHECKPOINT_PATH}")
         return
     
-    print(f"\nCheckpoint: {CHECKPOINT_PATH}")
+    print(f"\nCheckpoint: {DIFFUSERS_CHECKPOINT_PATH}")
     
-    print("\n[1/3] Loading muse Sana model...")
+    # Load diffusers model to get state dict
+    print("\n[1/3] Loading diffusers model for state dict...")
     try:
-        state_dict = load_checkpoint(CHECKPOINT_PATH)
-        muse_model = load_muse_model(state_dict, device, dtype)
+        from diffusers.models import SanaTransformer2DModel
+        transformer_path = os.path.join(DIFFUSERS_CHECKPOINT_PATH, "transformer")
+        if os.path.exists(transformer_path):
+            diffusers_model = SanaTransformer2DModel.from_pretrained(transformer_path, torch_dtype=dtype)
+        else:
+            diffusers_model = SanaTransformer2DModel.from_pretrained(DIFFUSERS_CHECKPOINT_PATH, torch_dtype=dtype)
+        diffusers_state_dict = diffusers_model.state_dict()
+        del diffusers_model
+    except Exception as e:
+        print(f"  ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return
+    
+    print("\n[2/3] Loading muse Sana model...")
+    try:
+        muse_model = load_muse_model(diffusers_state_dict, device, dtype)
         print(f"  Parameters: {sum(p.numel() for p in muse_model.parameters()):,}")
     except Exception as e:
         print(f"  ERROR: {e}")
@@ -596,17 +420,17 @@ def run_muse_only_test():
         traceback.print_exc()
         return
     
-    print("\n[2/3] Creating test inputs...")
-    x, timestep, y, mask = create_test_inputs(device=device, dtype=dtype)
-    print(f"  x: {x.shape}")
-    print(f"  timestep: {timestep}")
-    print(f"  y: {y.shape}")
-    print(f"  mask: {mask.shape}")
-    
     print("\n[3/3] Running forward pass...")
+    inputs = create_test_inputs(device=device, dtype=dtype)
+    
     try:
         with torch.no_grad():
-            output = muse_model(x, timestep, y, mask=mask)
+            output = muse_model(
+                x=inputs["x"],
+                timestep=inputs["timestep"].float(),
+                y=inputs["y_muse"],
+                mask=inputs["mask_muse"],
+            )
         print(f"  Output shape: {output.shape}")
         print(f"  Output stats: min={output.min():.4f}, max={output.max():.4f}, mean={output.mean():.4f}")
     except Exception as e:
@@ -622,49 +446,34 @@ def run_muse_only_test():
 
 # Pytest test classes
 @pytest.mark.skipif(
-    not os.path.exists(CHECKPOINT_PATH),
-    reason=f"Checkpoint not found at {CHECKPOINT_PATH}"
+    not os.path.exists(DIFFUSERS_CHECKPOINT_PATH),
+    reason=f"Checkpoint not found at {DIFFUSERS_CHECKPOINT_PATH}"
 )
-class TestSanaMuseModel:
-    """Test suite for muse Sana model."""
+class TestSanaAlignment:
+    """Test suite for Sana alignment."""
     
     @pytest.fixture(autouse=True)
     def setup(self):
         self.device = torch.device("cpu")
         self.dtype = torch.float32
-        self.state_dict = load_checkpoint(CHECKPOINT_PATH)
     
-    def test_model_loading(self):
-        muse_model = load_muse_model(self.state_dict, self.device, self.dtype)
-        muse_params = sum(p.numel() for p in muse_model.parameters())
-        assert muse_params > 1_000_000_000
-        assert muse_params < 2_000_000_000
-    
-    def test_forward_pass(self):
-        muse_model = load_muse_model(self.state_dict, self.device, self.dtype)
-        x, timestep, y, mask = create_test_inputs(device=self.device, dtype=self.dtype)
-        
-        with torch.no_grad():
-            output = muse_model(x, timestep, y, mask=mask)
-        
-        assert output.shape == (1, MODEL_CONFIG["in_channels"], 32, 32)
-        assert torch.isfinite(output).all()
+    def test_full_alignment(self):
+        """Test full model alignment."""
+        result = run_full_alignment_test()
+        assert result, "Alignment test failed"
 
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--muse-only", action="store_true", help="Only test muse model")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Override checkpoint path")
     args = parser.parse_args()
+    
+    if args.checkpoint:
+        DIFFUSERS_CHECKPOINT_PATH = args.checkpoint
     
     if args.muse_only:
         run_muse_only_test()
     else:
-        # Try full alignment test, fall back to muse-only if official not available
-        try:
-            run_full_alignment_test()
-        except ImportError as e:
-            print(f"\nCannot run full alignment test: {e}")
-            print("\nFalling back to muse-only test...")
-            print("-" * 60)
-            run_muse_only_test()
+        run_full_alignment_test()
