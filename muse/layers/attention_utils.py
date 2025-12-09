@@ -150,15 +150,8 @@ class EagerAttention:
                 attn_dropout: float = 0.0,
                 **kwargs: Any) -> torch.Tensor:
         
-        # 1. 获取 Mask (如果有的话)
-        # SigLIP Vision 通常没有 mask，或者是 padding mask
         mask = kwargs.get('mask', None)
         
-        # 2. 如果 mask 是布尔型或 add 类型，SDPA 支持 attn_mask 参数
-        # 注意：SDPA 的 attn_mask 如果是 None，则不进行 mask
-        
-        # 3. 直接调用 PyTorch 优化的算子
-        # scale 默认就是 1 / sqrt(dim)，无需手动指定
         output = F.scaled_dot_product_attention(
             query=q,
             key=k,
