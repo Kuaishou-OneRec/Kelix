@@ -29,16 +29,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _resolve_target_dtype() -> torch.dtype:
-    """Prefer BF16; fall back to FP32 if unsupported."""
-    if torch.cuda.is_available():
-        is_supported = getattr(torch.cuda, "is_bf16_supported", None)
-        if is_supported is None or is_supported():
-            return torch.bfloat16
-        logger.warning("CUDA BF16 not supported on this device, falling back to float32.")
-        return torch.float32
-    logger.warning("CUDA not available; using float32.")
-    return torch.float32
 
 
 @contextmanager
@@ -217,7 +207,7 @@ def test_siglip_logits_align_with_hf_checkpoint():
 def _run_siglip_logits_align_with_hf_checkpoint():
     torch.manual_seed(0)
     if torch.cuda.is_available(): torch.cuda.manual_seed_all(0)
-    target_dtype = _resolve_target_dtype()
+    target_dtype = torch.float32()
 
     checkpoint_dir = "/llm_reco_ssd/zhouyang12/models/siglip2-so400m-patch14-384"
     logger.info(f"Testing checkpoint: {checkpoint_dir}")
