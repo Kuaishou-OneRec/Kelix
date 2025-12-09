@@ -48,8 +48,8 @@ def _mock_context_parallel():
         patch("muse.training.parallel.get_context_parallel_world_size", new=lambda: 1),
         patch("muse.training.parallel.get_context_parallel_group", new=lambda backend="nccl": None),
         patch("muse.training.parallel.get_context_parallel_rank", new=lambda: 0),
-        # patch("muse.layers.attention.get_context_parallel_world_size", new=lambda: 1),
-        # patch("muse.layers.attention.get_context_parallel_group", new=lambda backend="nccl": None),
+        patch("muse.layers.attention.get_context_parallel_world_size", new=lambda: 1),
+        patch("muse.layers.attention.get_context_parallel_group", new=lambda backend="nccl": None),
     ]
     for p in patches:
         p.start()
