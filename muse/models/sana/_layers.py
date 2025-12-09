@@ -579,16 +579,19 @@ class LiteLA(nn.Module):
             self.k_norm = nn.Identity()
     
     def attn_matmul(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
-        """Lightweight linear attention computation."""
-        q = self.kernel_func(q)  # B, h, h_d, N
-        k = self.kernel_func(k)
+        """Lightweight linear attention computation.
+        
+        Always computes in float32 for numerical stability, matching diffusers' behavior.
+        """
+        # Convert to float32 BEFORE matmul operations (matches diffusers)
+        q = self.kernel_func(q).float()  # B, h, h_d, N
+        k = self.kernel_func(k).float()
+        v = v.float()
         
         v = F.pad(v, (0, 0, 0, 1), mode="constant", value=self.PAD_VAL)
         vk = torch.matmul(v, k)
         out = torch.matmul(vk, q)
         
-        if out.dtype in [torch.float16, torch.bfloat16]:
-            out = out.float()
         out = out[:, :, :-1] / (out[:, :, -1:] + self.eps)
         
         return out
