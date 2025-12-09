@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import logging
-from typing import Optional
+from typing import Optional, Literal
 
 import torch
 from torch import nn
@@ -101,7 +101,7 @@ class MultiHeadAttention(nn.Module):
         max_seq_len: int = 4096,
         is_causal: bool = True,
         attn_dropout: float = 0.0,
-        attention_function: str = "eager",
+        attention_function: Literal["eager", "flash_attention_2"] = "eager",
     ) -> None:
         super().__init__()
         if num_heads % num_kv_heads != 0:
@@ -293,9 +293,9 @@ class MultiHeadAttention(nn.Module):
             # For cross attention, we need to handle different sequence lengths
             # k,v have shape [b, n_kv, s_y, h_d], q has shape [b, n_h, s_x, h_d]
             # We need to expand k,v to [b, n_h, s_y, h_d]
-            expand_shape = (b, self.num_kv_heads, q_per_kv, k.size(2), self.head_dim)
-            k = k.unsqueeze(2).expand(expand_shape).flatten(1, 2)
-            v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
+            expand_shape = (b, -1, self.num_kv_heads, q_per_kv, self.head_dim)
+            k = k.unsqueeze(3).expand(expand_shape).flatten(2, 3)
+            v = v.unsqueeze(3).expand(expand_shape).flatten(2, 3)
 
         if get_context_parallel_world_size() > 1:
             cpg = get_context_parallel_group()
@@ -311,8 +311,9 @@ class MultiHeadAttention(nn.Module):
             q=q,
             k=k,
             v=v,
-            is_causal=self.is_causal,
+            is_causal=self.kv_cache is None and mask is None and self.is_causal,
             attn_dropout=self.attn_dropout,
+            training=self.training,
             **kwargs
         )
 
