@@ -121,7 +121,8 @@ class EagerAttention:
                 scores = scores.masked_fill(causal_mask, -float('inf'))
             
         # Calculate attention weights
-        attn_weights = F.softmax(scores, dim=-1)
+        # [关键修复] 强制使用 FP32 进行 Softmax，以对齐 HuggingFace SigLIP 实现
+        attn_weights = F.softmax(scores, dim=-1, dtype=torch.float32).to(scores.dtype)
         
         # Apply dropout
         if attn_dropout > 0.0:
@@ -130,7 +131,6 @@ class EagerAttention:
         # Calculate output
         output = torch.matmul(attn_weights, v)
         return output
-
 
 class FlashAttention2:
     """FlashAttention2 implementation, also conforming to AttentionFunction protocol"""
