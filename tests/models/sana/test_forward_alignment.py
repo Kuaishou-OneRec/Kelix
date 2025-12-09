@@ -302,6 +302,31 @@ def debug_first_block(diffusers_model, muse_model, inputs, dtype):
         N = diff_norm1_mod.shape[1]  # sequence length (H*W)
         C = diff_norm1_mod.shape[-1]  # hidden dimension
         
+        # Step 0: QKV weight comparison
+        print("\n    Checking QKV weights...")
+        
+        # Compare QKV weights directly
+        expected_qkv_weight = torch.cat([
+            diff_attn.to_q.weight, 
+            diff_attn.to_k.weight, 
+            diff_attn.to_v.weight
+        ], dim=0)
+        compare_tensors("qkv_weight", expected_qkv_weight, muse_attn.qkv.weight)
+        
+        # Check if bias exists and compare
+        if hasattr(diff_attn.to_q, 'bias') and diff_attn.to_q.bias is not None:
+            expected_qkv_bias = torch.cat([
+                diff_attn.to_q.bias, 
+                diff_attn.to_k.bias, 
+                diff_attn.to_v.bias
+            ], dim=0)
+            if muse_attn.qkv.bias is not None:
+                compare_tensors("qkv_bias", expected_qkv_bias, muse_attn.qkv.bias)
+            else:
+                print("    [qkv_bias] diffusers has bias but muse doesn't!")
+        else:
+            print("    [qkv_bias] Neither has bias (OK)")
+        
         # Step 1: QKV linear projection
         print("\n    Checking QKV projection...")
         
