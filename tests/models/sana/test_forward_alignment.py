@@ -54,7 +54,8 @@ MODEL_CONFIG = {
     "ffn_type": "glumbconv",
     "mlp_acts": ("silu", "silu", None),
     "use_pe": False,
-    "qk_norm": False,
+    "qk_norm": True,       # Enable for diffusers alignment (diffusers always has RMSNorm)
+    "cross_norm": True,    # Enable for diffusers alignment (diffusers always has RMSNorm)
     "y_norm": True,
     "y_norm_scale_factor": 0.01,
     "pred_sigma": False,
@@ -113,6 +114,7 @@ def load_muse_model(diffusers_state_dict: dict, device: torch.device, dtype: tor
         mlp_acts=MODEL_CONFIG["mlp_acts"],
         use_pe=MODEL_CONFIG["use_pe"],
         qk_norm=MODEL_CONFIG["qk_norm"],
+        cross_norm=MODEL_CONFIG["cross_norm"],
         y_norm=MODEL_CONFIG["y_norm"],
         y_norm_scale_factor=MODEL_CONFIG["y_norm_scale_factor"],
         pred_sigma=MODEL_CONFIG["pred_sigma"],
@@ -126,11 +128,21 @@ def load_muse_model(diffusers_state_dict: dict, device: torch.device, dtype: tor
     # Convert diffusers state dict to muse format using model's converter
     converted_state_dict = model.convert_diffusers_state_dict(diffusers_state_dict)
     
+    # Expected missing keys (muse-only parameters not in diffusers):
+    # - pos_embed: positional embedding buffer (not used when use_pe=False)
+    # - y_embedder.y_embedding: learnable caption embedding for unconditional generation
+    expected_missing = {"pos_embed", "y_embedder.y_embedding"}
+    
     missing, unexpected = model.load_state_dict(converted_state_dict, strict=False)
-    if missing:
-        print(f"  [Warning] Missing keys: {missing[:10]}..." if len(missing) > 10 else f"  [Warning] Missing keys: {missing}")
+    
+    unexpected_missing = set(missing) - expected_missing
+    if unexpected_missing:
+        print(f"  [ERROR] Unexpected missing keys: {list(unexpected_missing)}")
+    elif missing:
+        print(f"  [Info] Expected missing keys (muse-only): {missing}")
+    
     if unexpected:
-        print(f"  [Warning] Unexpected keys: {unexpected[:10]}..." if len(unexpected) > 10 else f"  [Warning] Unexpected keys: {unexpected}")
+        print(f"  [ERROR] Unexpected keys in state dict: {unexpected[:10]}..." if len(unexpected) > 10 else f"  [ERROR] Unexpected keys: {unexpected}")
     
     model = model.to(device=device, dtype=dtype)
     model.eval()
