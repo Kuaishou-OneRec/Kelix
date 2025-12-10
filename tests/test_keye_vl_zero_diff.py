@@ -231,7 +231,7 @@ def test_keye_vl_zero_diff(dtype):
         attention_dropout=inner_vcfg.get("attention_dropout", 0.0),
         rope_theta=inner_vcfg.get("rope_theta", 10000),
         has_learnable_position_embedding=inner_vcfg.get("has_learnable_position_embedding", True),
-        _attn_implementation=inner_vcfg.get("_attn_implementation", "flash_attention_2"),
+        attention_function=inner_vcfg.get("_attn_implementation", "flash_attention_2"),
         use_qk_norm=inner_vcfg.get("use_qk_norm", False),
     )
 
