@@ -453,12 +453,12 @@ class SanaModel(Model):
         
         return converted_state_dict
     
-    def convert_diffusers_state_dict(
+    def convert_hf_state_dict(
         self,
-        diffusers_state_dict: Dict[str, torch.Tensor],
+        hf_state_dict: Dict[str, torch.Tensor],
         **kwargs,
     ) -> Dict[str, torch.Tensor]:
-        """Convert diffusers SanaTransformer2DModel state dict to muse format.
+        """Convert Diffusers SanaTransformer2DModel state dict to muse format.
         
         Key mappings:
         - patch_embed -> x_embedder
@@ -469,14 +469,14 @@ class SanaModel(Model):
         - norm_out + proj_out + scale_shift_table -> final_layer
         
         Args:
-            diffusers_state_dict: State dict from diffusers model
+            hf_state_dict: State dict from Hugging Face model
         
         Returns:
             Converted state dict for muse SanaModel
         """
         muse_state_dict = {}
         
-        for key, value in diffusers_state_dict.items():
+        for key, value in hf_state_dict.items():
             
             new_key = key
             
