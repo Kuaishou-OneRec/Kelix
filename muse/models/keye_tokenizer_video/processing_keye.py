@@ -27,6 +27,7 @@
 from typing import List, Union
 
 from transformers.feature_extraction_utils import BatchFeature
+import numpy as np
 ImageInput = Union[
     "PIL.Image.Image", np.ndarray, "torch.Tensor", list["PIL.Image.Image"], list[np.ndarray], list["torch.Tensor"]
 ]  # noqa
