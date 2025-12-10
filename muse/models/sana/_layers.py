@@ -382,8 +382,8 @@ class MultiHeadCrossAttention(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
         
         if qk_norm:
-            self.q_norm = RMSNorm(d_model, scale_factor=1.0, eps=1e-6)
-            self.k_norm = RMSNorm(d_model, scale_factor=1.0, eps=1e-6)
+            self.q_norm = RMSNorm(d_model, scale_factor=1.0, eps=1e-5)
+            self.k_norm = RMSNorm(d_model, scale_factor=1.0, eps=1e-5)
         else:
             self.q_norm = nn.Identity()
             self.k_norm = nn.Identity()
