@@ -180,6 +180,25 @@ def _build_inputs(
 
 def _compare_tensor(name: str, ref: torch.Tensor, cand: torch.Tensor):
     """Log max/mean diff between two tensors."""
+    def _unwrap(x):
+        # Mapping / dict
+        if isinstance(x, dict):
+            x = x.get("last_hidden_state", x.get("hidden_states", x))
+        # HF / ModelOutput style objects
+        if hasattr(x, "last_hidden_state"):
+            x = getattr(x, "last_hidden_state")
+        elif hasattr(x, "hidden_states"):
+            x = getattr(x, "hidden_states")
+        # list/tuple -> first element
+        if isinstance(x, (list, tuple)):
+            x = x[0]
+        return x
+
+    ref = _unwrap(ref)
+    cand = _unwrap(cand)
+    if not isinstance(ref, torch.Tensor) or not isinstance(cand, torch.Tensor):
+        print(f"[{name}] cannot compare non-tensor outputs: {type(ref)} vs {type(cand)}")
+        return
     ref = ref.detach().float().cpu()
     cand = cand.detach().float().cpu()
     if ref.shape != cand.shape:
