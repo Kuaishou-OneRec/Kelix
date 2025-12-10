@@ -1077,6 +1077,31 @@ def run_full_alignment_test():
                 compare_tensors("block1_diff_q_module_vs_manual", diff_cross_q, diff_cross_q_manual)
                 compare_tensors("block1_muse_q_module_vs_manual", muse_cross_q, muse_cross_q_manual)
                 
+                # CRITICAL: Use SAME input with both weights to isolate the issue
+                print("\n  Isolating the difference:")
+                print(f"  diff_after_attn shape: {diff_after_attn.shape}, contiguous: {diff_after_attn.is_contiguous()}, stride: {diff_after_attn.stride()}")
+                print(f"  muse_after_attn shape: {muse_after_attn.shape}, contiguous: {muse_after_attn.is_contiguous()}, stride: {muse_after_attn.stride()}")
+                
+                # Use diff input with both weights
+                q_with_diff_weight = F.linear(diff_after_attn, diff_block.attn2.to_q.weight, diff_block.attn2.to_q.bias)
+                q_with_muse_weight = F.linear(diff_after_attn, muse_block.cross_attn.q_linear.weight, muse_block.cross_attn.q_linear.bias)
+                compare_tensors("block1_same_input_diff_weight", q_with_diff_weight, q_with_muse_weight)
+                
+                # Use muse input with both weights
+                q_with_diff_weight2 = F.linear(muse_after_attn, diff_block.attn2.to_q.weight, diff_block.attn2.to_q.bias)
+                q_with_muse_weight2 = F.linear(muse_after_attn, muse_block.cross_attn.q_linear.weight, muse_block.cross_attn.q_linear.bias)
+                compare_tensors("block1_same_input_muse_weight", q_with_diff_weight2, q_with_muse_weight2)
+                
+                # Check if the actual tensor values are truly identical (element-wise)
+                input_diff = (diff_after_attn - muse_after_attn).abs()
+                print(f"  Input actual max diff: {input_diff.max().item()}, mean diff: {input_diff.mean().item()}")
+                
+                weight_diff = (diff_block.attn2.to_q.weight - muse_block.cross_attn.q_linear.weight).abs()
+                print(f"  Weight actual max diff: {weight_diff.max().item()}, mean diff: {weight_diff.mean().item()}")
+                
+                bias_diff = (diff_block.attn2.to_q.bias - muse_block.cross_attn.q_linear.bias).abs()
+                print(f"  Bias actual max diff: {bias_diff.max().item()}, mean diff: {bias_diff.mean().item()}")
+                
                 # K, V from encoder hidden states (caption)
                 # Handle muse_caption shape if needed
                 muse_caption_for_cross = muse_caption.squeeze(1) if muse_caption.ndim == 4 else muse_caption
