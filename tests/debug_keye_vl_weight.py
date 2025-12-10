@@ -279,10 +279,9 @@ def prepare_inputs_via_processor(ckpt_path: str, device: str, dtype: torch.dtype
     if num_img_tokens != expected_tokens:
         logger.warning(f"⚠️ Token mismatch! Processor produced {num_img_tokens}, expected {expected_tokens} based on grid.")
 
-    # 适配 Muse Forward 需要的 Pixel Values 维度 [1, Seq, C, H, W]
-    # Processor 输出通常是 [Seq, C, H, W]
-    if pixel_values.dim() == 4:
-        pixel_values = pixel_values.unsqueeze(0)
+    # 模型期望输入为 [num_patches, C, H, W]，若 Processor 返回 [1, num_patches, C, H, W] 则去掉批维
+    if pixel_values.dim() == 5 and pixel_values.shape[0] == 1:
+        pixel_values = pixel_values.squeeze(0)
 
     return {
         "input_ids": input_ids,
