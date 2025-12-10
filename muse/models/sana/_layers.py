@@ -375,7 +375,8 @@ class MultiHeadCrossAttention(nn.Module):
         self.head_dim = d_model // num_heads
         
         self.q_linear = nn.Linear(d_model, d_model)
-        self.kv_linear = nn.Linear(d_model, d_model * 2)
+        self.to_k = nn.Linear(d_model, d_model)
+        self.to_v = nn.Linear(d_model, d_model)
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(d_model, d_model)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -414,17 +415,13 @@ class MultiHeadCrossAttention(nn.Module):
         """
         B, N, C = x.shape
         
-        # Determine first_dim based on xformers availability
-        # When using xformers with packed sequences, cond is [1, L*B, C]
-        first_dim = 1 if self._xformers_available else B
-        
         q = self.q_linear(x)
-        kv = self.kv_linear(cond).view(first_dim, -1, 2, C)
-        k, v = kv.unbind(2)
+        k = self.to_k(cond)
+        v = self.to_v(cond)
         
-        q = self.q_norm(q).view(first_dim, -1, self.num_heads, self.head_dim)
-        k = self.k_norm(k).view(first_dim, -1, self.num_heads, self.head_dim)
-        v = v.view(first_dim, -1, self.num_heads, self.head_dim)
+        q = self.q_norm(q).view(B, -1, self.num_heads, self.head_dim)
+        k = self.k_norm(k).view(B, -1, self.num_heads, self.head_dim)
+        v = v.view(B, -1, self.num_heads, self.head_dim)
         
         if self._xformers_available:
             # Use xformers memory efficient attention with block diagonal mask

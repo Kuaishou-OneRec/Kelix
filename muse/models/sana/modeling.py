@@ -476,20 +476,7 @@ class SanaModel(Model):
         """
         muse_state_dict = {}
         
-        # Keys that are handled separately (qkv combination, etc.)
-        skip_keys = set()
-        
-        # First pass: identify keys to skip (will be combined later)
-        for i in range(self.config.depth):
-            # Cross-attention k, v will be combined into kv_linear
-            for suffix in [".weight", ".bias"]:
-                skip_keys.add(f"transformer_blocks.{i}.attn2.to_k{suffix}")
-                skip_keys.add(f"transformer_blocks.{i}.attn2.to_v{suffix}")
-        
         for key, value in diffusers_state_dict.items():
-            # Skip keys that will be handled separately
-            if key in skip_keys:
-                continue
             
             new_key = key
             
@@ -571,32 +558,6 @@ class SanaModel(Model):
                 new_key = "final_layer.scale_shift_table"
             
             muse_state_dict[new_key] = value
-        
-        # Handle combined kv for cross-attention
-        # Diffusers has separate to_k, to_v but muse cross_attn uses combined kv_linear
-        for i in range(self.config.depth):
-            # Handle cross attention kv_linear
-            cross_k_key = f"transformer_blocks.{i}.attn2.to_k.weight"
-            cross_v_key = f"transformer_blocks.{i}.attn2.to_v.weight"
-            
-            if cross_k_key in diffusers_state_dict and cross_v_key in diffusers_state_dict:
-                k_weight = diffusers_state_dict[cross_k_key]
-                v_weight = diffusers_state_dict[cross_v_key]
-                
-                # Combine k and v: [2*hidden, caption_channels]
-                kv_weight = torch.cat([k_weight, v_weight], dim=0)
-                muse_state_dict[f"blocks.{i}.cross_attn.kv_linear.weight"] = kv_weight
-            
-            # Handle biases for cross-attention kv
-            cross_k_bias_key = f"transformer_blocks.{i}.attn2.to_k.bias"
-            cross_v_bias_key = f"transformer_blocks.{i}.attn2.to_v.bias"
-            
-            if cross_k_bias_key in diffusers_state_dict:
-                k_bias = diffusers_state_dict.get(cross_k_bias_key)
-                v_bias = diffusers_state_dict.get(cross_v_bias_key)
-                if k_bias is not None and v_bias is not None:
-                    kv_bias = torch.cat([k_bias, v_bias], dim=0)
-                    muse_state_dict[f"blocks.{i}.cross_attn.kv_linear.bias"] = kv_bias
         
         return muse_state_dict
     
