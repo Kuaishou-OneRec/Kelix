@@ -1123,7 +1123,7 @@ def run_full_alignment_test():
                 
                 # Full cross-attention output
                 diff_cross_out = diff_block.attn2(diff_after_attn, encoder_hidden_states=diff_caption)
-                muse_cross_out = muse_block.cross_attn(muse_after_attn, muse_caption)
+                muse_cross_out = muse_block.cross_attn(muse_after_attn, y_for_cross, y_lens)
                 compare_tensors("block1_cross_attn_out", diff_cross_out, muse_cross_out)
                 
                 # After cross-attention (with residual)
@@ -1239,7 +1239,7 @@ def run_full_alignment_test():
                 # Cross-attention
                 print("\n  Block 2 Cross-Attention:")
                 diff_cross2_out = diff_block.attn2(diff_after_attn2, encoder_hidden_states=diff_caption)
-                muse_cross2_out = muse_block.cross_attn(muse_after_attn2, muse_caption)
+                muse_cross2_out = muse_block.cross_attn(muse_after_attn2, y_for_cross, y_lens)
                 compare_tensors("block2_cross_attn_out", diff_cross2_out, muse_cross2_out)
                 
                 # After cross-attention
