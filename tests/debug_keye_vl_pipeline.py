@@ -320,7 +320,7 @@ def test_pipeline_alignment():
     patch = inner_vcfg.get("patch_size", 14)
     t_frames, h_patches, w_patches = 1, 2, 2  # grid -> seq_len = 4
     seq_len = t_frames * h_patches * w_patches
-    pixel_values = torch.randn(1, seq_len, 3, patch, patch, device=device, dtype=dtype)
+    pixel_values = torch.randn(seq_len, 3, patch, patch, device=device, dtype=dtype)
     image_grid_thw = torch.tensor([[t_frames, h_patches, w_patches]], device=device, dtype=torch.long)
     
     image_token_id = raw_cfg.get("image_token_id", 151655)
