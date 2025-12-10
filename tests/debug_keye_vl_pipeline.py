@@ -190,6 +190,7 @@ def test_pipeline_alignment():
     
     # Build Qwen Config
     qwen_cfg = Qwen3Config(
+        model_class="Qwen3Model",  # required field in Muse Qwen3Config
         vocab_size=raw_cfg["vocab_size"],
         embed_dim=raw_cfg["hidden_size"],
         num_layers=raw_cfg["num_hidden_layers"],
