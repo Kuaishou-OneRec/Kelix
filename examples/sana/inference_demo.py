@@ -293,16 +293,20 @@ def load_scheduler(scheduler_path: Optional[str], num_steps: int):
     Returns:
         Configured scheduler
     """
-    from diffusers import FlowMatchEulerDiscreteScheduler
+    from diffusers import DPMSolverMultistepScheduler
     
     if scheduler_path:
         logger.info(f"Loading scheduler from {scheduler_path}")
-        scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(scheduler_path)
+        scheduler = DPMSolverMultistepScheduler.from_pretrained(scheduler_path)
     else:
-        logger.info("Creating default FlowMatchEulerDiscreteScheduler")
-        scheduler = FlowMatchEulerDiscreteScheduler(
+        logger.info("Creating default DPMSolverMultistepScheduler")
+        scheduler = DPMSolverMultistepScheduler(
             num_train_timesteps=1000,
-            shift=3.0,
+            prediction_type="flow_prediction",
+            flow_shift=3.0,
+            use_flow_sigmas=True,
+            algorithm_type="dpmsolver++",
+            solver_order=2,
         )
     
     scheduler.set_timesteps(num_steps)
@@ -414,7 +418,8 @@ def generate(
         latent_model_input = torch.cat([latents] * 2) if do_cfg else latents
         
         # Scale latents (some schedulers require this)
-        latent_model_input = scheduler.scale_model_input(latent_model_input, t)
+        if hasattr(scheduler, 'scale_model_input'):
+            latent_model_input = scheduler.scale_model_input(latent_model_input, t)
         
         # Prepare timestep
         timestep = torch.tensor([t] * latent_model_input.shape[0], device=device, dtype=dtype)
