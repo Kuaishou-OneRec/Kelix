@@ -559,7 +559,7 @@ class LiteLA(nn.Module):
         heads_ratio: float = 1.0,
         dim: int = 32,
         eps: float = 1e-15,
-        use_bias: bool = True,
+        use_bias: bool = False,
         qk_norm: bool = False,
         norm_eps: float = 1e-5,
     ):
@@ -789,7 +789,6 @@ class SanaMSBlock(nn.Module):
                 hidden_size,
                 heads=self_num_heads,
                 eps=1e-15,
-                use_bias=True,
                 qk_norm=qk_norm,
             )
         else:
