@@ -439,7 +439,13 @@ class MultiHeadCrossAttention(nn.Module):
             attn_mask = None
             if mask is not None and not isinstance(mask, list):
                 if mask.ndim == 2:
-                    attn_mask = (1 - mask.to(q.dtype)) * -10000.0
+                    # Check if mask is already in additive format (values <= 0)
+                    if mask.max() <= 0:
+                        # Already additive mask format
+                        attn_mask = mask.to(q.dtype)
+                    else:
+                        # Binary mask format, convert to additive
+                        attn_mask = (1 - mask.to(q.dtype)) * -10000.0
                     attn_mask = attn_mask[:, None, None].repeat(1, self.num_heads, 1, 1)
             
             x = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=0.0, is_causal=False)

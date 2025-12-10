@@ -932,14 +932,17 @@ def run_full_alignment_test():
                 y_for_cross = y_for_cross.masked_select(mask.unsqueeze(-1) != 0).view(1, -1, muse_x.shape[-1])
                 y_lens = mask.sum(dim=1).tolist()
             else:
-                y_lens = mask
                 y_for_cross = y_for_cross.squeeze(1) if y_for_cross.ndim == 4 else y_for_cross
         
-        # encoder_attention_mask for diffusers
+        # encoder_attention_mask for diffusers (convert to additive mask)
         encoder_attention_mask = inputs["mask_diffusers"]
         if encoder_attention_mask.ndim == 2:
             encoder_attention_mask = (1 - encoder_attention_mask.to(dtype)) * -10000.0
             encoder_attention_mask = encoder_attention_mask.unsqueeze(1)
+        
+        # For muse without xformers, use same additive mask format
+        if not _xformers_available:
+            y_lens = encoder_attention_mask.squeeze(1)  # [B, 1, L] -> [B, L]
         
         # Run all transformer blocks
         print("\n  Running all transformer blocks...")
