@@ -889,6 +889,27 @@ def run_full_alignment_test():
         diff_x = diffusers_model.patch_embed(x)
         muse_x = muse_model.x_embedder(x)
         
+        patch_size = muse_model.patch_size
+        h, w = x.shape[-2] // patch_size, x.shape[-1] // patch_size
+        
+        # Position embedding for muse (if enabled)
+        if muse_model.use_pe:
+            from muse.models.sana.modeling import get_2d_sincos_pos_embed
+            pos_embed_ms = (
+                torch.from_numpy(
+                    get_2d_sincos_pos_embed(
+                        muse_model.pos_embed.shape[-1],
+                        (h, w),
+                        pe_interpolation=muse_model.pe_interpolation,
+                        base_size=muse_model.base_size,
+                    )
+                )
+                .unsqueeze(0)
+                .to(muse_x.device)
+                .to(dtype)
+            )
+            muse_x = muse_x + pos_embed_ms
+        
         # Timestep embedding
         diff_time, diff_t_emb = diffusers_model.time_embed(
             timestep, batch_size=x.shape[0], hidden_dtype=dtype
@@ -935,9 +956,6 @@ def run_full_alignment_test():
             encoder_attention_mask = (1 - encoder_attention_mask.to(dtype)) * -10000.0
             encoder_attention_mask = encoder_attention_mask.unsqueeze(1)
         
-        patch_size = muse_model.patch_size
-        h, w = x.shape[-2] // patch_size, x.shape[-1] // patch_size
-        
         # Run all transformer blocks
         print("\n  Running all transformer blocks...")
         for i, (diff_block, muse_block) in enumerate(zip(diffusers_model.transformer_blocks, muse_model.blocks)):
@@ -961,8 +979,8 @@ def run_full_alignment_test():
         print("\n  Final Layer...")
         
         # Diffusers: norm_out + scale_shift_table + proj_out
-        # Get scale, shift from diffusers
-        diff_norm_out = diffusers_model.norm_out(diff_x, diff_t_emb)
+        # norm_out needs: hidden_states, temb, scale_shift_table
+        diff_norm_out = diffusers_model.norm_out(diff_x, diff_t_emb, diffusers_model.scale_shift_table)
         diff_final_out = diffusers_model.proj_out(diff_norm_out)
         
         # Muse: final_layer
