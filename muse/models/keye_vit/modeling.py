@@ -587,7 +587,10 @@ class KeyeVisionTransformer(Model):
         interpolate_pos_encoding: bool = True, 
         attention_mask: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[List[torch.Tensor]] = None,
-        has_learnable_position_embedding: bool = False) -> Dict[str, torch.Tensor]:
+        has_learnable_position_embedding: bool = False,
+        **kwargs) -> Dict[str, torch.Tensor]:
+        # 兼容来自旧调用的多余参数（如 vision_return_embed_list / use_rope / window_size / sample_indices）
+        # 这些参数在当前实现中未使用，安全忽略。
         embeddings = self.embeddings(
             pixel_values,
             position_ids,
