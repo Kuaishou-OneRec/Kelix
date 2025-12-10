@@ -282,7 +282,6 @@ def main():
     # 2. Initialize Origin (如果不关心 Origin 可以注释掉，但为了对比最好保留)
     logger.info("\nInitializing Origin Model...")
     origin_cfg = origin_mod.KeyeConfig.from_pretrained(ckpt_path)
-    origin_cfg.vision_config["vq_sampling_mode"] = "argmin"
     
     with set_default_dtype(dtype):
         origin_model = origin_mod.KeyeForConditionalGeneration(origin_cfg)
