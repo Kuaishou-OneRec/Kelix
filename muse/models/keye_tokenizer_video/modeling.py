@@ -417,16 +417,16 @@ class KeyeImageTokenizer(Model):
         self.visual = KeyeVisionTransformer(config.vision_config)
         self.mlp_AR = Projector(config.vision_config.hidden_size, config.llm_hidden_size)
 
-        align_in_dim = config.vision_config.hidden_size
-        self.pre_llm_align = (
-            nn.Linear(align_in_dim, config.llm_hidden_size)
-            if config.pre_llm_align or align_in_dim != config.llm_hidden_size
-            else nn.Identity()
-        )
-        proj_out_dim = (
-            config.embedding_dim if config.split_dim else config.n_q_tokens * config.embedding_dim
-        )
-        self.encoder = nn.Linear(config.llm_hidden_size, proj_out_dim)
+        self.pre_llm_align = getattr(config, "pre_llm_align", False)
+        llm_align_size = getattr(config, "llm_align_size", config.llm_hidden_size)
+        align_in_dim = config.llm_hidden_size if self.pre_llm_align else config.llm_hidden_size
+        # pre_llm_aligner: only used when pre_llm_align=True; otherwise Identity
+        self.pre_llm_aligner = nn.Linear(config.llm_hidden_size, llm_align_size) if self.pre_llm_align else nn.Identity()
+
+        # encoder 输入维度：若 pre_llm_align=True，用对齐后的 llm_align_size；否则直接用 llm_hidden_size
+        encoder_in_dim = llm_align_size if self.pre_llm_align else config.llm_hidden_size
+        proj_out_dim = config.embedding_dim if config.split_dim else config.n_q_tokens * config.embedding_dim
+        self.encoder = nn.Linear(encoder_in_dim, proj_out_dim)
 
         per_token_dim = (
             config.embedding_dim // config.n_q_tokens if config.split_dim else config.embedding_dim
