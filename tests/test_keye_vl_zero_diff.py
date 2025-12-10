@@ -178,6 +178,19 @@ def _build_inputs(
     )
 
 
+def _compare_tensor(name: str, ref: torch.Tensor, cand: torch.Tensor):
+    """Log max/mean diff between two tensors."""
+    ref = ref.detach().float().cpu()
+    cand = cand.detach().float().cpu()
+    if ref.shape != cand.shape:
+        print(f"[{name}] shape mismatch: {ref.shape} vs {cand.shape}")
+        return
+    diff = (ref - cand).abs()
+    print(
+        f"[{name}] max_diff={diff.max().item():.6e}, mean_diff={diff.mean().item():.6e}, shape={ref.shape}"
+    )
+
+
 @pytest.mark.parametrize("dtype", [torch.float16])
 def test_keye_vl_zero_diff(dtype):
     ckpt_path = os.environ.get("KEYE_VL_CHECKPOINT", DEFAULT_CKPT)
@@ -311,15 +324,41 @@ def test_keye_vl_zero_diff(dtype):
 
     inputs, vision_mask = _build_inputs(image_token_id, device, dtype, slowfast_dir)
 
+    # Hook containers
+    activations = {"muse_vision": None, "origin_vision": None}
+
+    def _hook_vision_muse(module, inp, out):
+        # out is dict or BaseModelOutput
+        activations["muse_vision"] = out.last_hidden_state if hasattr(out, "last_hidden_state") else out
+
+    def _hook_vision_origin(module, inp, out):
+        activations["origin_vision"] = out.last_hidden_state if hasattr(out, "last_hidden_state") else out
+
+    muse_vis_mod = getattr(muse_model.visual_tokenizer, "visual", None)
+    origin_vis_mod = getattr(origin_model.visual_tokenizer, "visual", None)
+    muse_hook = muse_vis_mod.register_forward_hook(_hook_vision_muse) if muse_vis_mod else None
+    origin_hook = origin_vis_mod.register_forward_hook(_hook_vision_origin) if origin_vis_mod else None
+
     muse_model.eval()
     origin_model.eval()
     with torch.no_grad():
         origin_out = origin_model(**inputs)
         muse_out = muse_model(**inputs)
 
+    # Remove hooks
+    if muse_hook:
+        muse_hook.remove()
+    if origin_hook:
+        origin_hook.remove()
+
     # Align logits tensors
     origin_logits = origin_out.logits
     muse_logits = muse_out["logits"] if isinstance(muse_out, dict) else muse_out.logits
+
+    # Debug diffs
+    if activations["origin_vision"] is not None and activations["muse_vision"] is not None:
+        _compare_tensor("vision_hidden", activations["origin_vision"], activations["muse_vision"])
+    _compare_tensor("logits", origin_logits, muse_logits)
 
     torch.testing.assert_close(
         origin_logits, muse_logits, atol=0.0, rtol=0.0, msg="Origin vs Muse logits differ"
