@@ -259,7 +259,13 @@ def convert_hf_checkpoint(
     
     # Load Diffusers model
     hf_model = load_diffusers_model(hf_path, subfolder, dtype, device)
-    hf_config_dict = hf_model.config.to_dict()
+    
+    # Get config dict - handle both regular config and FrozenDict
+    if hasattr(hf_model.config, 'to_dict'):
+        hf_config_dict = hf_model.config.to_dict()
+    else:
+        # FrozenDict or similar - convert directly to dict
+        hf_config_dict = dict(hf_model.config)
     
     logger.info("Diffusers config:")
     for key, value in sorted(hf_config_dict.items()):
