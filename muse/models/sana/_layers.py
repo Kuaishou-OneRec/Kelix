@@ -857,4 +857,4 @@ class SanaMSBlock(nn.Module):
             )
         )
         
-        return x
+        return x.contiguous()
