@@ -344,7 +344,7 @@ class GLUMBConv(nn.Module):
         x = x * gate
         
         x = self.point_conv(x)
-        x = x.reshape(B, C, N).permute(0, 2, 1)
+        x = x.reshape(B, C, N).permute(0, 2, 1).contiguous()
         
         return x
 
