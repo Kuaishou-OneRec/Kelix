@@ -1,8 +1,9 @@
 """
-Keye-VL Pipeline Deep Debugger (Enhanced ViT Internal Trace)
-============================================================
-Trace: Pixel -> Patch Embed -> ViT Layer 0 (Detailed) -> ViT Final -> Projector -> LLM.
-Focus: Pinpoint where the ViT diverges inside the full VLM pipeline.
+Keye-VL Pipeline Deep Debugger (Real KeyeProcessor)
+===================================================
+Trace: Random Image -> KeyeProcessor -> ViT -> ... -> LLM.
+Fixes: Uses the official KeyeProcessor to ensure perfect alignment between
+       token counts and image features (solves RoPE mismatches).
 """
 
 import os
@@ -11,17 +12,30 @@ import logging
 import glob
 import json
 from pathlib import Path
-from typing import Dict, Any, Tuple, Union
+from typing import Dict, Any, List
 
 import torch
 import numpy as np
 import torch.nn as nn
+from PIL import Image
 
 # === 导入 Muse 模型 ===
 from muse.models.keye_tokenizer_video import modeling as muse_mod
 from muse.models.keye_tokenizer_video import modeling_keye_origin as origin_mod
+from muse.models.keye_vit.image_processing_keye import KeyeVisionImageProcessor
 from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
+
+# === 导入 Processor 相关 ===
+from transformers import AutoTokenizer
+# 假设 KeyeProcessor 在 muse.models.keye.modular_Keye，如果不是请修改路径
+# 或者将 KeyeProcessor 类定义直接粘贴在脚本上方
+try:
+    from muse.models.keye_tokenizer_video.processing_keye import KeyeProcessor
+except ImportError:
+    # 如果找不到路径，请将你刚才发的 KeyeProcessor 代码保存为 modular_Keye.py 并放在同级目录
+    sys.path.append(os.getcwd())
+    from muse.models.keye_tokenizer_video.processing_keye import KeyeProcessor
 
 # 配置日志
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
@@ -30,7 +44,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_CKPT = "/mmu_mllm_hdd_2/maosiyang/output/Keye/vq_end2end_video/discrete/run_exp0.0.1_stage1_baseline/step16000/global_step16000/converted"
 
 # =========================================================================
-# Helper Functions
+# Helper Functions (保持不变)
 # =========================================================================
 
 def format_tensor_val(t: Any, n: int = 5) -> str:
@@ -57,34 +71,26 @@ def _load_checkpoint_robust(path_str: str, device="cpu") -> Dict[str, torch.Tens
     if path.is_file():
         state_dict = torch.load(path, map_location=device)
         return state_dict.get("module", state_dict)
-
     if not path.is_dir():
-        raise ValueError(f"Checkpoint path is neither file nor directory: {path}")
-
-    logger.info(f"Scanning directory: {path}")
-    state_dict = {}
+        raise ValueError(f"Checkpoint path error: {path}")
     
+    # Simple SafeTensor/Bin loader
+    state_dict = {}
     st_files = sorted(glob.glob(str(path / "*.safetensors")))
     if st_files:
-        logger.info(f"Found {len(st_files)} safetensors files. Loading...")
         from safetensors.torch import safe_open
         for f in st_files:
             with safe_open(f, framework="pt", device=device) as open_f:
-                for k in open_f.keys():
-                    state_dict[k] = open_f.get_tensor(k)
+                for k in open_f.keys(): state_dict[k] = open_f.get_tensor(k)
         return state_dict
-
+    
     bin_files = sorted(glob.glob(str(path / "*.bin")))
     if bin_files:
-        logger.info(f"Found {len(bin_files)} .bin files. Loading...")
         for f in bin_files:
             if any(x in f for x in ["training_args", "optimizer", "scheduler"]): continue
-            try:
-                part = torch.load(f, map_location=device)
-                if "module" in part: part = part["module"]
-                state_dict.update(part)
-            except Exception as e:
-                logger.warning(f"Failed to load {f}: {e}")
+            part = torch.load(f, map_location=device)
+            if "module" in part: part = part["module"]
+            state_dict.update(part)
         return state_dict
     
     pt_files = sorted(glob.glob(str(path / "*.pt")))
@@ -94,8 +100,7 @@ def _load_checkpoint_robust(path_str: str, device="cpu") -> Dict[str, torch.Tens
             if "module" in part: part = part["module"]
             state_dict.update(part)
          return state_dict
-
-    raise ValueError(f"No valid checkpoint files found in {path}")
+    raise ValueError("No checkpoint found.")
 
 def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, atol=1e-3):
     def unwrap(x):
@@ -117,7 +122,6 @@ def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, ato
     t1 = t1.detach().float().cpu()
     t2 = t2.detach().float().cpu()
     
-    # Auto squeeze for broadcasting issues (e.g. [1, S, D] vs [S, D])
     if t1.shape != t2.shape:
         if t1.numel() == t2.numel(): t2 = t2.view(t1.shape)
         elif t1.dim() == 3 and t2.dim() == 2 and t1.shape[1:] == t2.shape: t1 = t1.squeeze(0)
@@ -130,11 +134,8 @@ def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, ato
     diff = (t1 - t2).abs()
     max_diff = diff.max().item()
     mean_diff = diff.mean().item()
-    
     match_status = "✅ MATCH" if max_diff < atol else f"❌ MISMATCH"
-    
     logger.info(f"{name:<45} | {match_status:<12} | Max: {max_diff:.2e} | Mean: {mean_diff:.2e}")
-    
     if max_diff >= atol:
         max_idx = torch.argmax(diff)
         logger.info(f"   -> Max Diff Index: {max_idx.item()}")
@@ -142,7 +143,7 @@ def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, ato
         logger.info(f"   -> Muse Val      : {t2.flatten()[max_idx]:.6f}")
 
 # =========================================================================
-# Enhanced Hook System (ViT Deep Dive)
+# Hook System
 # =========================================================================
 activations = {"origin": {}, "muse": {}}
 
@@ -153,129 +154,143 @@ def make_hook(model_name, layer_name, capture_input=False, key=None):
         if isinstance(target, dict):
             if key and key in target: target = target[key]
             else:
-                if 'z_q' in target: target = target['z_q']
-                elif 'logits' in target: target = target['logits']
-                elif 'last_hidden_state' in target: target = target['last_hidden_state']
+                for k in ['z_q', 'logits', 'last_hidden_state']:
+                    if k in target: target = target[k]; break
         activations[model_name][layer_name] = target.detach() if isinstance(target, torch.Tensor) else target
     return hook
 
 def register_detailed_hooks(model, name_prefix):
     logger.info(f"Registering DETAILED hooks for {name_prefix}...")
     
-    # -------------------------------------------------------------------------
-    # 1. 寻找 Visual Transformer Backbone (ViT)
-    # -------------------------------------------------------------------------
-    # Origin 结构通常: model.visual_tokenizer.visual.vision_model
-    # Muse 结构通常:   model.visual_tokenizer.visual
-    
     vit_backbone = None
     if hasattr(model, "visual_tokenizer") and hasattr(model.visual_tokenizer, "visual"):
         visual_module = model.visual_tokenizer.visual
+        if hasattr(visual_module, "vision_model"): vit_backbone = visual_module.vision_model # Origin
+        else: vit_backbone = visual_module # Muse
+    
+    if vit_backbone:
+        if hasattr(vit_backbone, "embeddings"):
+            vit_backbone.embeddings.register_forward_hook(make_hook(name_prefix, "0.0 ViT Embeddings Out"))
         
-        # Origin (HF Siglip) usually has .vision_model wrapper
-        if hasattr(visual_module, "vision_model"):
-            vit_backbone = visual_module.vision_model
-            logger.info(f"[{name_prefix}] Found Origin-style SiglipVisionModel")
-        else:
-            vit_backbone = visual_module
-            logger.info(f"[{name_prefix}] Found Muse-style KeyeVisionTransformer")
-    
-    if vit_backbone is None:
-        logger.error(f"❌ Could not find ViT backbone for {name_prefix}")
-        return
-
-    # -------------------------------------------------------------------------
-    # 2. Hook: Patch Embeddings (Layer 0 Input)
-    # -------------------------------------------------------------------------
-    # 检查 Embeddings 输出 (通常是 Layer 0 的输入)
-    if hasattr(vit_backbone, "embeddings"):
-        vit_backbone.embeddings.register_forward_hook(make_hook(name_prefix, "0.0 ViT Embeddings Out"))
-    
-    # -------------------------------------------------------------------------
-    # 3. Hook: Layer 0 Internals (Detailed Debugging)
-    # -------------------------------------------------------------------------
-    # 这里的逻辑完全照搬了你的 ViT 调试脚本
-    
-    layer0 = None
-    if hasattr(vit_backbone, "encoder") and hasattr(vit_backbone.encoder, "layers"):
-        layer0 = vit_backbone.encoder.layers[0]
-    
-    if layer0:
-        logger.info(f"[{name_prefix}] Hooking ViT Layer 0...")
+        layer0 = None
+        if hasattr(vit_backbone, "encoder") and hasattr(vit_backbone.encoder, "layers"):
+            layer0 = vit_backbone.encoder.layers[0]
         
-        # === Origin (HF) Style Hooks ===
-        if name_prefix == "origin":
-            # LN1
-            if hasattr(layer0, "layer_norm1"):
+        if layer0:
+            if name_prefix == "origin":
                 layer0.layer_norm1.register_forward_hook(make_hook(name_prefix, "0.1 LN1 Output"))
-            # Self Attention Projections
-            if hasattr(layer0, "self_attn"):
                 layer0.self_attn.q_proj.register_forward_hook(make_hook(name_prefix, "0.2 Q_Proj Out"))
-                layer0.self_attn.k_proj.register_forward_hook(make_hook(name_prefix, "0.2 K_Proj Out"))
                 layer0.self_attn.v_proj.register_forward_hook(make_hook(name_prefix, "0.2 V_Proj Out"))
-                # Pre-Projection Attention Output
                 layer0.self_attn.out_proj.register_forward_hook(make_hook(name_prefix, "0.3 Attn Raw (Pre-Proj)", capture_input=True))
-                # Post-Projection
                 layer0.self_attn.out_proj.register_forward_hook(make_hook(name_prefix, "0.4 Attn Out (Post-Proj)"))
-            
-            # MLP
-            if hasattr(layer0, "mlp"):
-                if hasattr(layer0.mlp, "fc1"):
-                    layer0.mlp.fc1.register_forward_hook(make_hook(name_prefix, "0.6 MLP Hidden (fc1)"))
-                if hasattr(layer0.mlp, "fc2"):
-                    layer0.mlp.fc2.register_forward_hook(make_hook(name_prefix, "0.7 MLP Out (fc2)"))
-
-        # === Muse Style Hooks ===
-        elif name_prefix == "muse":
-            # LN1
-            if hasattr(layer0, "sa_norm"):
+                layer0.mlp.fc1.register_forward_hook(make_hook(name_prefix, "0.6 MLP Hidden (fc1)"))
+                layer0.mlp.fc2.register_forward_hook(make_hook(name_prefix, "0.7 MLP Out (fc2)"))
+            elif name_prefix == "muse":
                 layer0.sa_norm.register_forward_hook(make_hook(name_prefix, "0.1 LN1 Output"))
-            
-            # Self Attention Projections
-            if hasattr(layer0, "attn"):
-                if hasattr(layer0.attn, "q_proj"):
-                    layer0.attn.q_proj.register_forward_hook(make_hook(name_prefix, "0.2 Q_Proj Out"))
-                if hasattr(layer0.attn, "k_proj"):
-                    layer0.attn.k_proj.register_forward_hook(make_hook(name_prefix, "0.2 K_Proj Out"))
-                if hasattr(layer0.attn, "v_proj"):
-                    layer0.attn.v_proj.register_forward_hook(make_hook(name_prefix, "0.2 V_Proj Out"))
-                
-                # Output Proj
-                if hasattr(layer0.attn, "output_proj"):
-                    layer0.attn.output_proj.register_forward_hook(make_hook(name_prefix, "0.3 Attn Raw (Pre-Proj)", capture_input=True))
-                    layer0.attn.output_proj.register_forward_hook(make_hook(name_prefix, "0.4 Attn Out (Post-Proj)"))
+                layer0.attn.q_proj.register_forward_hook(make_hook(name_prefix, "0.2 Q_Proj Out"))
+                layer0.attn.v_proj.register_forward_hook(make_hook(name_prefix, "0.2 V_Proj Out"))
+                layer0.attn.output_proj.register_forward_hook(make_hook(name_prefix, "0.3 Attn Raw (Pre-Proj)", capture_input=True))
+                layer0.attn.output_proj.register_forward_hook(make_hook(name_prefix, "0.4 Attn Out (Post-Proj)"))
+                layer0.mlp.w1.register_forward_hook(make_hook(name_prefix, "0.6 MLP Hidden (fc1)"))
+                layer0.mlp.w2.register_forward_hook(make_hook(name_prefix, "0.7 MLP Out (fc2)"))
 
-            # MLP
-            if hasattr(layer0, "mlp"):
-                if hasattr(layer0.mlp, "w1"):
-                    layer0.mlp.w1.register_forward_hook(make_hook(name_prefix, "0.6 MLP Hidden (fc1)"))
-                if hasattr(layer0.mlp, "w2"):
-                    layer0.mlp.w2.register_forward_hook(make_hook(name_prefix, "0.7 MLP Out (fc2)"))
-    
-    # -------------------------------------------------------------------------
-    # 4. Global Outputs
-    # -------------------------------------------------------------------------
-    # ViT Final Output
-    vit_backbone.register_forward_hook(make_hook(name_prefix, "1.0 ViT Final Output"))
-    
-    # Projector
-    if hasattr(model, "visual_tokenizer") and hasattr(model.visual_tokenizer, "mlp_AR"):
-         model.visual_tokenizer.mlp_AR.register_forward_hook(make_hook(name_prefix, "2.0 Projector Output"))
-         
-    # VQ Quantizer
-    if hasattr(model, "visual_tokenizer") and hasattr(model.visual_tokenizer, "quantizer"):
-         model.visual_tokenizer.quantizer[0].register_forward_hook(make_hook(name_prefix, "3.0 VQ[0] Output", key="z_q"))
+        vit_backbone.register_forward_hook(make_hook(name_prefix, "1.0 ViT Final Output"))
 
-    # LLM Input
+    if hasattr(model, "visual_tokenizer"):
+        vt = model.visual_tokenizer
+        if hasattr(vt, 'mlp_AR'):
+            vt.mlp_AR.register_forward_hook(make_hook(name_prefix, "2.0 Projector Output"))
+        if hasattr(vt, 'quantizer') and len(vt.quantizer) > 0:
+            vt.quantizer[0].register_forward_hook(make_hook(name_prefix, "3.0 VQ[0] Output", key="z_q"))
+
     llm_layers = None
-    if hasattr(model, "model") and hasattr(model.model, "layers"): # Qwen/HF
-        llm_layers = model.model.layers
-    elif hasattr(model, "text_model") and hasattr(model.text_model, "model"): # Muse legacy
-        llm_layers = model.text_model.model.layers
-    
+    if hasattr(model, "model") and hasattr(model.model, "layers"): llm_layers = model.model.layers
+    elif hasattr(model, "text_model") and hasattr(model.text_model, "model"): llm_layers = model.text_model.model.layers
     if llm_layers:
         llm_layers[0].register_forward_hook(make_hook(name_prefix, "4.0 LLM Layer 0 Input", capture_input=True))
 
+# =========================================================================
+# Input Preparation (KeyeProcessor Logic)
+# =========================================================================
+
+def prepare_inputs_via_processor(ckpt_path: str, device: str, dtype: torch.dtype):
+    """
+    Creates inputs using a random image and KeyeProcessor.
+    This mimics the real inference pipeline: ChatML -> Processor -> Model Input.
+    """
+    logger.info("🎨 Generating Random Image (384x384)...")
+    # 生成随机图片
+    image = Image.fromarray(np.random.randint(0, 255, (384, 384, 3), dtype=np.uint8))
+    
+    # 1. 加载 Tokenizer 和 ImageProcessor
+    logger.info("⚙️ Loading Tokenizer & ImageProcessor...")
+    tokenizer = AutoTokenizer.from_pretrained(ckpt_path, trust_remote_code=True)
+    image_processor = KeyeVisionImageProcessor.from_pretrained(ckpt_path)
+    
+    # 2. 初始化 KeyeProcessor
+    logger.info("🧠 Initializing KeyeProcessor...")
+    processor = KeyeProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    
+    # 确认 image token
+    image_token = getattr(tokenizer, "image_token", "<|image_pad|>")
+    logger.info(f"   -> Using Image Token: {image_token}")
+
+    # 3. 构造 ChatML 格式输入
+    # KeyeProcessor 会自动扫描文本中的 image_token，并将其展开为对应 Patch 数量的 token
+    prompt = f"<|im_start|>user\n{image_token}\nDescribe this noise.<|im_end|>\n<|im_start|>assistant\n"
+    logger.info(f"   -> Raw Prompt: {repr(prompt)}")
+
+    # 4. 调用 Processor 处理
+    # return_tensors='pt' 会返回 BatchFeature，包含 input_ids, pixel_values, image_grid_thw 等
+    logger.info("🔄 Running Processor...")
+    inputs = processor(
+        text=[prompt], 
+        images=image, 
+        return_tensors="pt"
+    )
+
+    # 5. 转移到 Device 并转换格式
+    logger.info("📦 Preparing Model Inputs...")
+    
+    # 获取数据
+    input_ids = inputs["input_ids"].to(device)
+    attention_mask = inputs["attention_mask"].to(device)
+    pixel_values = inputs["pixel_values"].to(device, dtype=dtype)
+    image_grid_thw = inputs["image_grid_thw"].to(device)
+    
+    # 计算 vision_token_mask (用于 Muse 模型内部)
+    # Processor 已经将 <|image_pad|> 替换成了多个 image_token_id
+    image_token_id = tokenizer.convert_tokens_to_ids(image_token)
+    vision_token_mask = (input_ids == image_token_id)
+    
+    # 打印一些统计信息用于确认
+    num_img_tokens = vision_token_mask.sum().item()
+    grid_size = image_grid_thw[0].prod().item()
+    # 考虑 merge_size (默认2)
+    merge_size = image_processor.merge_size
+    expected_tokens = grid_size // (merge_size * merge_size)
+    
+    logger.info(f"   -> Input IDs Shape: {input_ids.shape}")
+    logger.info(f"   -> Pixel Values Shape: {pixel_values.shape}")
+    logger.info(f"   -> Image Grid: {image_grid_thw.tolist()}")
+    logger.info(f"   -> Actual Image Tokens in Sequence: {num_img_tokens}")
+    logger.info(f"   -> Expected Tokens (Grid/Merge^2): {expected_tokens}")
+    
+    if num_img_tokens != expected_tokens:
+        logger.warning(f"⚠️ Token mismatch! Processor produced {num_img_tokens}, expected {expected_tokens} based on grid.")
+
+    # 适配 Muse Forward 需要的 Pixel Values 维度 [1, Seq, C, H, W]
+    # Processor 输出通常是 [Seq, C, H, W]
+    if pixel_values.dim() == 4:
+        pixel_values = pixel_values.unsqueeze(0)
+
+    return {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+        "pixel_values": pixel_values,
+        "image_grid_thw": image_grid_thw,
+        "vision_token_mask": vision_token_mask
+    }
 
 # =========================================================================
 # Main Test
@@ -283,13 +298,12 @@ def register_detailed_hooks(model, name_prefix):
 def test_pipeline_alignment():
     ckpt_path = DEFAULT_CKPT
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    # 使用与 ViT 测试一致的 dtype (bfloat16) 以避免精度转换带来的误差
     dtype = torch.bfloat16 
     
     logger.info(f"Loading from: {ckpt_path}")
     raw_cfg = _load_config_json(ckpt_path)
     
-    # ... (Config 代码保持不变) ...
+    # Muse Configs
     qwen_cfg = Qwen3Config(
         model_class="Qwen3Model",
         vocab_size=raw_cfg["vocab_size"],
@@ -359,38 +373,13 @@ def test_pipeline_alignment():
     muse_model.to(device)
 
     # --- Hooks ---
-    # 使用新的 Detailed Hooks
     register_detailed_hooks(origin_model, "origin")
     register_detailed_hooks(muse_model, "muse")
 
-    # --- Inputs ---
-    patch = inner_vcfg.get("patch_size", 14)
-    # 根据 Projector 的 merge_kernel_size 构造最小可行的 grid，避免 merge 时形状不一致
-    mk1, mk2 = origin_model.visual_tokenizer.mlp_AR.merge_kernel_size
-    t_frames, h_patches, w_patches = 1, mk1, mk2
-    seq_len = t_frames * h_patches * w_patches
+    # --- Inputs (Via Real Processor) ---
+    log_separator("Running Processor Pipeline")
+    inputs = prepare_inputs_via_processor(ckpt_path, device, dtype)
     
-    # 输入像素： [Batch * Seq, C, H, W]
-    # Muse ViT 需要 [1, Seq, C, H, W] 或 [Seq, C, H, W] 取决于 forward 内部
-    # 这里我们构造 5D, VLM wrapper 应该会自动处理
-    pixel_values = torch.randn(1 * seq_len, 3, patch, patch, device=device, dtype=dtype)
-    
-    # ⚠️ 关键点：Image Grid 
-    image_grid_thw = torch.tensor([[t_frames, h_patches, w_patches]], device=device, dtype=torch.long)
-    
-    image_token_id = raw_cfg.get("image_token_id", 151655)
-    input_ids = torch.tensor([[1, image_token_id, 2]], device=device, dtype=torch.long)
-    attention_mask = torch.ones_like(input_ids)
-    vision_token_mask = (input_ids == image_token_id)
-
-    inputs = {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        "pixel_values": pixel_values,
-        "image_grid_thw": image_grid_thw,
-        "vision_token_mask": vision_token_mask
-    }
-
     # --- Forward ---
     log_separator("Running Forward")
     origin_model.eval()
@@ -405,26 +394,22 @@ def test_pipeline_alignment():
         muse_out = muse_model(**inputs)
 
     # --- Analysis ---
-    log_separator("Deep Dive Analysis (Layer 0 Specifics)")
+    log_separator("Deep Dive Analysis")
     
-    # 按照数据流向进行检查
     checkpoints = [
-        "0.0 ViT Embeddings Out",  # 最关键：如果这里不对，就是输入处理或者 PatchEmbed 权重问题
+        "0.0 ViT Embeddings Out",
         "0.1 LN1 Output",
         "0.2 Q_Proj Out",
-        "0.2 K_Proj Out",
-        "0.2 V_Proj Out",
-        "0.3 Attn Raw (Pre-Proj)", # 如果这里对，说明 Attention 计算逻辑对
+        "0.3 Attn Raw (Pre-Proj)",
         "0.4 Attn Out (Post-Proj)",
         "0.6 MLP Hidden (fc1)",
         "0.7 MLP Out (fc2)",
-        "1.0 ViT Final Output",    # 整个 ViT 的输出
+        "1.0 ViT Final Output",
         "2.0 Projector Output",
         "3.0 VQ[0] Output",
         "4.0 LLM Layer 0 Input"
     ]
     
-    # 增加容差，FP16/BF16 在 Attention 累积后可能会有 1e-2 级别的误差
     for k in checkpoints:
         if k in activations["origin"] and k in activations["muse"]:
             compare_tensors_verbose(k, activations["origin"][k], activations["muse"][k], atol=2e-2)

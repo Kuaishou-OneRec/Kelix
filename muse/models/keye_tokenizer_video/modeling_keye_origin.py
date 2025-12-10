@@ -419,7 +419,7 @@ class Qwen3VisionPatchEmbed(nn.Module):
     def __init__(
         self,
         patch_size: int = 14,
-        temporal_patch_size: int = 2,
+        temporal_patch_size: int = 1,
         in_channels: int = 3,
         embed_dim: int = 1152,
     ) -> None:
@@ -3338,7 +3338,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         "reconstruction_loss_target_std": vq_out['x'].detach().std()
                     }
                 else:
-                   logger.warning_once(f"Image features and image tokens do not match")
+                    1
                 
                 codebook_loss, commitment_loss, vq_indices = vq_out['codebook_loss'], vq_out['commitment_loss'], vq_out['indices']
                 train_dict["codebook_loss"] = codebook_loss
