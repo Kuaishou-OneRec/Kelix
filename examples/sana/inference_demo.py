@@ -394,8 +394,9 @@ def generate(
         dtype=dtype,
     )
     
-    # Scale initial noise by scheduler
-    latents = latents * scheduler.init_noise_sigma
+    # Scale initial noise by scheduler (if applicable)
+    if hasattr(scheduler, 'init_noise_sigma'):
+        latents = latents * scheduler.init_noise_sigma
     
     # Prepare CFG: concat conditional and unconditional
     do_cfg = cfg_scale > 1.0 and uncond_embeds is not None
