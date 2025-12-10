@@ -34,7 +34,7 @@ DEFAULT_CKPT = (
     "/mmu_mllm_hdd_2/maosiyang/output/Keye/vq_end2end_video/discrete/"
     "run_exp0.0.1_stage1_baseline/step16000/global_step16000/converted"
 )
-SLOWFAST_MODEL_DIR_ENV = "/mmu_mllm_hdd_2/maosiyang/output/Keye/vq_end2end_video/discrete/run_exp0.0.1_stage1_baseline/step16000/global_step16000/converted"
+SLOWFAST_MODEL_DIR_ENV = "KEYE_SLOWFAST_MODEL_DIR"
 
 
 def _load_safetensors_file(file_path: str, dtype: torch.dtype) -> dict:
@@ -174,22 +174,30 @@ def test_keye_vl_zero_diff(dtype):
     assert Path(ckpt_path).exists(), f"Checkpoint not found: {ckpt_path}"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    slowfast_dir = os.environ.get(SLOWFAST_MODEL_DIR_ENV, None)
+    # 优先环境变量，否则默认用同一 converted 目录（其中包含处理器/processing）
+    slowfast_dir = os.environ.get(SLOWFAST_MODEL_DIR_ENV, DEFAULT_CKPT)
 
     # Build configs (align key ids to supplied config)
     qwen_cfg = Qwen3Config(
+        model_class="Qwen3Model",
         vocab_size=151936,
-        embed_dim=1024,
-        num_attention_heads=16,
-        num_hidden_layers=28,
-        num_key_value_heads=8,
-        rms_norm_eps=1e-6,
-        rope_theta=1_000_000,
-        attention_dropout=0.0,
-        use_sliding_window=False,
-        pad_token_id=151645,  # eos used as pad in many setups; adjust if needed
-        bos_token_id=151643,
-        eos_token_id=151645,
+        embed_dim=1024,          # hidden size
+        num_layers=28,
+        num_heads=8,             # set consistent with embed_dim/head_dim
+        num_kv_heads=8,
+        head_dim=128,
+        attn_dropout=0.0,
+        attention_function="flash_attention_2",
+        q_proj_bias=False,
+        k_proj_bias=False,
+        v_proj_bias=False,
+        intermediate_dim=3072,
+        max_seq_len=40960,
+        rope_base=1_000_000.0,
+        norm_eps=1e-6,
+        q_norm=True,
+        k_norm=True,
+        tie_word_embeddings=True,
     )
     vision_cfg = KeyeVisionConfig(
         hidden_size=1152,
