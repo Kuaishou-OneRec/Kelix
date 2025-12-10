@@ -1,8 +1,7 @@
 """
-Qwen3 model implementation.
+Keye tokenizer video model implementation.
 """
 
-from muse.models.qwen3.modeling import Qwen3Model
 from muse.models.keye_tokenizer_video.modeling import (
     KeyeImageTokenizer,
     KeyeForConditionalGeneration,
@@ -13,19 +12,18 @@ from muse.models.keye_tokenizer_video.modeling import (
 from muse.models.base import Model
 
 # Apply decorator manually to avoid circular import issues
-def _register_qwen3():
-    """Register Qwen3Model in the model registry."""
+def _register_keye_tokenizer_video():
+    """Register KeyeImageTokenizer and KeyeForConditionalGeneration in the model registry."""
     try:
         from muse.models import register_model
         # Register the model
-        register_model("Qwen3Model")(Qwen3Model)
         register_model("KeyeImageTokenizer")(KeyeImageTokenizer)
         register_model("KeyeForConditionalGeneration")(KeyeForConditionalGeneration)
     except ImportError:
         # Registry not yet available during initial import
         pass
 
-_register_qwen3()
+_register_keye_tokenizer_video()
 
-__all__ = ["Qwen3Model", "KeyeImageTokenizer", "KeyeForConditionalGeneration"]
+__all__ = ["KeyeImageTokenizer", "KeyeForConditionalGeneration"]
 
