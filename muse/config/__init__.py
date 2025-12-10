@@ -22,7 +22,13 @@ Example usage:
 """
 
 from muse.config.base import BaseConfig, get_config, load_config
-from muse.config.model_config import ModelConfig, Qwen3Config, SiglipVisionConfig
+from muse.config.model_config import (
+    ModelConfig,
+    Qwen3Config,
+    SiglipVisionConfig,
+    KeyeVisionConfig,
+    KeyeTokenizerConfig,
+)
 from muse.config.dataset_config import DatasetConfig
 from muse.config.training_config import (
     TrainingConfig,
