@@ -327,5 +327,6 @@ def test_keye_vl_zero_diff(dtype):
 
 
 if __name__ == "__main__":
-    test_keye_vl_zero_diff(torch.float32)
+    # FlashAttention 仅支持 fp16/bf16，这里保持与 pytest 参数一致
+    test_keye_vl_zero_diff(torch.float16)
 
