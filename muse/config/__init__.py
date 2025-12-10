@@ -49,7 +49,8 @@ __all__ = [
     "ModelConfig",
     "Qwen3Config",
     "SiglipVisionConfig",
-    
+    "KeyeVisionConfig",
+    "KeyeTokenizerConfig",
     # Dataset config
     "DatasetConfig",
     
