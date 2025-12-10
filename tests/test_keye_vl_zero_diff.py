@@ -198,26 +198,22 @@ def test_keye_vl_zero_diff(dtype):
 
     raw_cfg = _load_config_json(ckpt_path)
 
-    # LLM (Qwen3) config mapping
-    embed_dim = raw_cfg.get("hidden_size", 1024)
-    head_dim = raw_cfg.get("head_dim", 128)
-    num_heads = embed_dim // head_dim  # ensure consistency
-    num_kv_heads = raw_cfg.get("num_key_value_heads", num_heads)
+    # LLM (Qwen3) config mapping — use raw fields directly to match checkpoint shapes
     qwen_cfg = Qwen3Config(
         model_class="Qwen3Model",
-        vocab_size=raw_cfg.get("vocab_size", 151936),
-        embed_dim=embed_dim,
-        num_layers=raw_cfg.get("num_hidden_layers", 28),
-        num_heads=num_heads,
-        num_kv_heads=num_kv_heads,
-        head_dim=head_dim,
+        vocab_size=raw_cfg["vocab_size"],
+        embed_dim=raw_cfg["hidden_size"],            # 1024
+        num_layers=raw_cfg["num_hidden_layers"],     # 28
+        num_heads=raw_cfg["num_attention_heads"],    # 16 -> q_proj out = 16*128=2048
+        num_kv_heads=raw_cfg["num_key_value_heads"], # 8
+        head_dim=raw_cfg["head_dim"],                # 128
         attn_dropout=raw_cfg.get("attention_dropout", 0.0),
         attention_function="flash_attention_2",
         q_proj_bias=raw_cfg.get("attention_bias", False),
         k_proj_bias=raw_cfg.get("attention_bias", False),
         v_proj_bias=raw_cfg.get("attention_bias", False),
-        intermediate_dim=raw_cfg.get("intermediate_size", 3072),
-        max_seq_len=raw_cfg.get("max_position_embeddings", 40960),
+        intermediate_dim=raw_cfg["intermediate_size"],  # 3072
+        max_seq_len=raw_cfg["max_position_embeddings"], # 40960
         rope_base=float(raw_cfg.get("rope_theta", 1_000_000)),
         norm_eps=raw_cfg.get("rms_norm_eps", 1e-6),
         q_norm=True,
@@ -226,16 +222,16 @@ def test_keye_vl_zero_diff(dtype):
     )
 
     # Vision config: use inner vision_config["vision_config"]
-    outer_vcfg = raw_cfg.get("vision_config", {})
-    inner_vcfg = outer_vcfg.get("vision_config", {})
+    outer_vcfg = raw_cfg["vision_config"]
+    inner_vcfg = outer_vcfg["vision_config"]
     vision_cfg = KeyeVisionConfig(
-        hidden_size=inner_vcfg.get("hidden_size", 1152),
-        intermediate_size=inner_vcfg.get("intermediate_size", 4304),
-        num_hidden_layers=inner_vcfg.get("num_hidden_layers", 27),
-        num_attention_heads=inner_vcfg.get("num_attention_heads", 16),
-        num_channels=inner_vcfg.get("num_channels", 3),
-        image_size=inner_vcfg.get("image_size", 384),
-        patch_size=inner_vcfg.get("patch_size", 14),
+        hidden_size=inner_vcfg["hidden_size"],               # 1152
+        intermediate_size=inner_vcfg["intermediate_size"],   # 4304
+        num_hidden_layers=inner_vcfg["num_hidden_layers"],   # 27
+        num_attention_heads=inner_vcfg["num_attention_heads"], # 16
+        num_channels=inner_vcfg["num_channels"],             # 3
+        image_size=inner_vcfg["image_size"],                 # 384
+        patch_size=inner_vcfg["patch_size"],                 # 14
         layer_norm_eps=inner_vcfg.get("layer_norm_eps", 1e-6),
         attention_dropout=inner_vcfg.get("attention_dropout", 0.0),
         rope_theta=inner_vcfg.get("rope_theta", 10000),
@@ -247,7 +243,7 @@ def test_keye_vl_zero_diff(dtype):
     # Tokenizer config from outer vision_config (tokenizer block)
     tokenizer_cfg = KeyeTokenizerConfig(
         vision_config=vision_cfg,
-        llm_hidden_size=qwen_cfg.embed_dim,  # align to LLM hidden size to avoid shape mismatch
+        llm_hidden_size=outer_vcfg.get("llm_hidden_size", 4096),  # align to ckpt: 4096
         embedding_dim=outer_vcfg.get("embedding_dim", 128),
         init_embedding_dim=outer_vcfg.get("init_embedding_dim", 4096),
         codebook_size=outer_vcfg.get("codebook_size", 65536),
@@ -268,13 +264,13 @@ def test_keye_vl_zero_diff(dtype):
     # Build origin config from raw config (HuggingFace style)
     # KeyeConfig takes vision_config as dict or KeyeImageTokenizerConfig
     origin_cfg = origin_mod.KeyeConfig(
-        vocab_size=raw_cfg.get("vocab_size", 151936),
-        hidden_size=raw_cfg.get("hidden_size", 1024),
-        intermediate_size=raw_cfg.get("intermediate_size", 3072),
-        num_hidden_layers=raw_cfg.get("num_hidden_layers", 28),
-        num_attention_heads=raw_cfg.get("num_attention_heads", 8),
-        num_key_value_heads=raw_cfg.get("num_key_value_heads", 8),
-        max_position_embeddings=raw_cfg.get("max_position_embeddings", 40960),
+        vocab_size=raw_cfg["vocab_size"],
+        hidden_size=raw_cfg["hidden_size"],
+        intermediate_size=raw_cfg["intermediate_size"],
+        num_hidden_layers=raw_cfg["num_hidden_layers"],
+        num_attention_heads=raw_cfg["num_attention_heads"],
+        num_key_value_heads=raw_cfg["num_key_value_heads"],
+        max_position_embeddings=raw_cfg["max_position_embeddings"],
         rms_norm_eps=raw_cfg.get("rms_norm_eps", 1e-6),
         rope_theta=raw_cfg.get("rope_theta", 1_000_000),
         attention_dropout=raw_cfg.get("attention_dropout", 0.0),
@@ -284,7 +280,7 @@ def test_keye_vl_zero_diff(dtype):
         image_token_id=image_token_id,
         video_token_id=raw_cfg.get("video_token_id", 151656),
         vision_start_token_id=raw_cfg.get("vision_start_token_id", 151652),
-        fast_video_token_id=raw_cfg.get("fast_video_token_id", 151657),
+        fast_video_token_id=raw_cfg.get("fast_video_token_id", 151678),
     )
     
     muse_model = muse_mod.KeyeForConditionalGeneration(
