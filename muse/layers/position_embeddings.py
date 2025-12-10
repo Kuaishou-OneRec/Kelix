@@ -332,12 +332,15 @@ class TwoD_RotaryEmbedding(nn.Module):
         
         cos_half = rope_emb_half.cos() 
         sin_half = rope_emb_half.sin()
+        # stash for external debug comparison
+        self.debug_cos = cos_half
+        self.debug_sin = sin_half
         # Debug: print partial cos/sin for RoPE (Muse)
         try:
             cos_flat = cos_half.flatten()
             sin_flat = sin_half.flatten()
-            print(f"[DEBUG rope muse cos_half] first10={cos_flat[:10].tolist()}")
-            print(f"[DEBUG rope muse sin_half] first10={sin_flat[:10].tolist()}")
+            print(f"[DEBUG rope muse cos_half all]={cos_flat.tolist()}")
+            print(f"[DEBUG rope muse sin_half all]={sin_flat.tolist()}")
         except Exception as e:
             print(f"[DEBUG rope muse cos/sin print failed]: {e}")
         return flash_apply_rotary_emb(

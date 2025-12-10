@@ -1254,11 +1254,13 @@ class SiglipEncoder(nn.Module):
             rope_emb = rope_emb_max_grid[pids].flatten(1)
             rope_emb = rope_emb.repeat(1, 2)
             rope_emb = (rope_emb.cos(), rope_emb.sin())
+            # stash for external debug comparison
+            self.debug_rope = rope_emb
             try:
                 cos_flat = rope_emb[0].flatten()
                 sin_flat = rope_emb[1].flatten()
-                print(f"[DEBUG rope origin] cos first10={cos_flat[:10].tolist()}")
-                print(f"[DEBUG rope origin] sin first10={sin_flat[:10].tolist()}")
+                print(f"[DEBUG rope origin] cos_all={cos_flat.tolist()}")
+                print(f"[DEBUG rope origin] sin_all={sin_flat.tolist()}")
             except Exception as e:
                 print(f"[DEBUG rope origin] cos/sin print failed: {e}")
         else:

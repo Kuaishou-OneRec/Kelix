@@ -379,6 +379,47 @@ def test_keye_vl_zero_diff(dtype):
         _compare_tensor("vision_hidden", activations["origin_vision"], activations["muse_vision"])
     _compare_tensor("logits", origin_logits, muse_logits)
 
+    # ==== RoPE cos/sin full print & diff ====
+    try:
+        muse_rope = getattr(muse_vis_mod.encoder, "rope", None)
+        origin_debug_rope = getattr(origin_vis_mod.encoder, "debug_rope", None)
+        if muse_rope is not None and origin_debug_rope is not None:
+            muse_cos_half = muse_rope.debug_cos.detach().cpu() if hasattr(muse_rope, "debug_cos") else None
+            muse_sin_half = muse_rope.debug_sin.detach().cpu() if hasattr(muse_rope, "debug_sin") else None
+            origin_cos_full, origin_sin_full = origin_debug_rope
+            origin_cos_full = origin_cos_full.detach().cpu()
+            origin_sin_full = origin_sin_full.detach().cpu()
+
+            if muse_cos_half is not None and muse_sin_half is not None:
+                print(f"[DEBUG rope muse cos_half all] {muse_cos_half.flatten().tolist()}")
+                print(f"[DEBUG rope muse sin_half all] {muse_sin_half.flatten().tolist()}")
+                print(f"[DEBUG rope origin cos_full all] {origin_cos_full.flatten().tolist()}")
+                print(f"[DEBUG rope origin sin_full all] {origin_sin_full.flatten().tolist()}")
+
+                # Compare origin full vs muse half (chunk first half of origin)
+                origin_cos_chunk = origin_cos_full.chunk(2, dim=-1)[0]
+                origin_sin_chunk = origin_sin_full.chunk(2, dim=-1)[0]
+
+                def _print_diff(name, a, b):
+                    if a.shape != b.shape:
+                        print(f"[DEBUG rope diff] {name} shape mismatch {a.shape} vs {b.shape}")
+                        return
+                    diff = (a - b).abs()
+                    print(
+                        f"[DEBUG rope diff] {name} max={diff.max().item():.6e} mean={diff.mean().item():.6e} shape={a.shape}"
+                    )
+
+                _print_diff("cos_chunk_vs_muse_half", origin_cos_chunk, muse_cos_half)
+                _print_diff("sin_chunk_vs_muse_half", origin_sin_chunk, muse_sin_half)
+
+                # Also compare origin full vs muse repeated to full
+                muse_cos_full = muse_cos_half.repeat(1, 2)
+                muse_sin_full = muse_sin_half.repeat(1, 2)
+                _print_diff("cos_full_vs_repeated_muse", origin_cos_full, muse_cos_full)
+                _print_diff("sin_full_vs_repeated_muse", origin_sin_full, muse_sin_full)
+    except Exception as e:
+        print(f"[DEBUG rope diff] failed to compute rope diff: {e}")
+
     torch.testing.assert_close(
         origin_logits, muse_logits, atol=0.0, rtol=0.0, msg="Origin vs Muse logits differ"
     )
