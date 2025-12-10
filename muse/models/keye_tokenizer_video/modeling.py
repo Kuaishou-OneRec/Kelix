@@ -548,7 +548,7 @@ class KeyeForConditionalGeneration(Model):
         amplifier: float = 1.0,
     ):
         super().__init__(qwen_config)
-        self.text_model = Qwen3Model(qwen_config)
+        self.model = Qwen3Model(qwen_config)
         tokenizer_config = tokenizer_config or KeyeTokenizerConfig(
             vision_config=vision_config, llm_hidden_size=qwen_config.embed_dim
         )
@@ -566,16 +566,16 @@ class KeyeForConditionalGeneration(Model):
 
     def get_initializer(self, name: str) -> Callable[[torch.Tensor], None]:
         # 文本子模块的初始化交给其自身逻辑，其余使用LeCun。
-        if name.startswith("text_model."):
-            sub_name = name[len("text_model.") :]
-            return self.text_model.get_initializer(sub_name)
+        if name.startswith("model."):
+            sub_name = name[len("model.") :]
+            return self.model.get_initializer(sub_name)
         return lecun_normal_
 
     def get_layers_to_shard(self):
-        return self.text_model.get_layers_to_shard()
+        return self.model.get_layers_to_shard()
 
     def get_checkpointable_module_classes(self):
-        return self.text_model.get_checkpointable_module_classes()
+        return self.model.get_checkpointable_module_classes()
 
     @classmethod
     def convert_hf_state_dict(cls,
@@ -673,25 +673,25 @@ class KeyeForConditionalGeneration(Model):
                 skipped_keys.append(hf_key)
                 continue
             
-            # Handle embedding layer: model.embed_tokens.* -> text_model.model.tok_embeddings.*
+            # Handle embedding layer: model.embed_tokens.* -> model.model.tok_embeddings.*
             if hf_key == "model.embed_tokens.weight":
-                converted_key = "text_model.model.tok_embeddings.weight"
+                converted_key = "model.model.tok_embeddings.weight"
                 converted_state_dict[converted_key] = tensor
                 continue
             
             # Handle final norm (RMSNorm uses 'scale' not 'weight')
             if hf_key == "model.norm.weight":
-                converted_key = "text_model.model.norm.scale"
+                converted_key = "model.model.norm.scale"
                 converted_state_dict[converted_key] = tensor
                 continue
             
             # Handle output layer (lm_head)
             if hf_key == "lm_head.weight":
-                converted_key = "text_model.model.output.weight"
+                converted_key = "model.model.output.weight"
                 converted_state_dict[converted_key] = tensor
                 continue
             
-            # Handle transformer layers: model.layers.* -> text_model.model.layers.*
+            # Handle transformer layers: model.layers.* -> model.model.layers.*
             if hf_key.startswith("model.layers."):
                 parts = hf_key.split(".", 3)  # ["model", "layers", "{i}", "rest"]
                 if len(parts) < 4:
@@ -707,7 +707,7 @@ class KeyeForConditionalGeneration(Model):
                     attn_key = attn_key.replace("o_proj", "output_proj")
                     attn_key = attn_key.replace("q_norm.weight", "q_norm.scale")
                     attn_key = attn_key.replace("k_norm.weight", "k_norm.scale")
-                    converted_key = f"text_model.model.layers.{layer_idx}.{attn_key}"
+                    converted_key = f"model.model.layers.{layer_idx}.{attn_key}"
                     converted_state_dict[converted_key] = tensor
                     continue
                 
@@ -715,11 +715,11 @@ class KeyeForConditionalGeneration(Model):
                 if rest_key.startswith("mlp."):
                     mlp_key = rest_key.replace("mlp.", "")
                     if mlp_key == "gate_proj.weight":
-                        converted_key = f"text_model.model.layers.{layer_idx}.mlp.w1.weight"
+                        converted_key = f"model.model.layers.{layer_idx}.mlp.w1.weight"
                     elif mlp_key == "up_proj.weight":
-                        converted_key = f"text_model.model.layers.{layer_idx}.mlp.w3.weight"
+                        converted_key = f"model.model.layers.{layer_idx}.mlp.w3.weight"
                     elif mlp_key == "down_proj.weight":
-                        converted_key = f"text_model.model.layers.{layer_idx}.mlp.w2.weight"
+                        converted_key = f"model.model.layers.{layer_idx}.mlp.w2.weight"
                     else:
                         skipped_keys.append(hf_key)
                         continue
@@ -728,12 +728,12 @@ class KeyeForConditionalGeneration(Model):
                 
                 # Handle layer norms (RMSNorm uses 'scale' not 'weight')
                 if rest_key == "input_layernorm.weight":
-                    converted_key = f"text_model.model.layers.{layer_idx}.sa_norm.scale"
+                    converted_key = f"model.model.layers.{layer_idx}.sa_norm.scale"
                     converted_state_dict[converted_key] = tensor
                     continue
                 
                 if rest_key == "post_attention_layernorm.weight":
-                    converted_key = f"text_model.model.layers.{layer_idx}.mlp_norm.scale"
+                    converted_key = f"model.model.layers.{layer_idx}.mlp_norm.scale"
                     converted_state_dict[converted_key] = tensor
                     continue
             
@@ -868,7 +868,7 @@ class KeyeForConditionalGeneration(Model):
             vision_token_mask: 指定哪些位置替换为视觉嵌入，形状同input_ids的bool。
         """
         # 文本嵌入
-        inputs_embeds = self.text_model.model.tok_embeddings(input_ids)
+        inputs_embeds = self.model.model.tok_embeddings(input_ids)
 
         aux_losses: Dict[str, torch.Tensor] = {}
         if pixel_values is not None:
@@ -897,7 +897,7 @@ class KeyeForConditionalGeneration(Model):
             aux_losses["indices"] = vq_out["indices"]
 
         # Call through Qwen3Model.forward which delegates to TransformerDecoder
-        logits = self.text_model(
+        logits = self.model(
             tokens=None, mask=attention_mask, input_embeds=inputs_embeds
         )
 
