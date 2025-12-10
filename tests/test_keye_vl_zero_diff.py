@@ -27,8 +27,7 @@ from transformers import AutoProcessor
 
 from muse.models.keye_tokenizer_video import modeling as muse_mod
 from muse.models.keye_tokenizer_video import modeling_keye_origin as origin_mod
-from muse.config import Qwen3Config, KeyeVisionConfig
-from muse.config.model_config import KeyeTokenizerConfig
+from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
 
 
 DEFAULT_CKPT = (
