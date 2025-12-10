@@ -1,17 +1,20 @@
 """
-Keye-VL Weight Loading Debugger
-===============================
-Directly compares model parameters against the source checkpoint file to verify loading correctness.
+Keye-VL Pipeline Deep Debugger (Enhanced ViT Internal Trace)
+============================================================
+Trace: Pixel -> Patch Embed -> ViT Layer 0 (Detailed) -> ViT Final -> Projector -> LLM.
+Focus: Pinpoint where the ViT diverges inside the full VLM pipeline.
 """
 
 import os
 import sys
 import logging
 import glob
+import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Tuple, Union
 
 import torch
+import numpy as np
 import torch.nn as nn
 
 # === 导入 Muse 模型 ===
@@ -20,206 +23,273 @@ from muse.models.keye_tokenizer_video import modeling_keye_origin as origin_mod
 from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
+# 配置日志
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 DEFAULT_CKPT = "/mmu_mllm_hdd_2/maosiyang/output/Keye/vq_end2end_video/discrete/run_exp0.0.1_stage1_baseline/step16000/global_step16000/converted"
 
-def _load_checkpoint_robust(path_str: str, device="cpu") -> Dict[str, torch.Tensor]:
-    path = Path(path_str)
-    if path.is_file(): return torch.load(path, map_location=device)
-    
-    state_dict = {}
-    from safetensors.torch import safe_open
-    
-    # Safetensors
-    st_files = sorted(glob.glob(str(path / "*.safetensors")))
-    if st_files:
-        logger.info(f"Loading {len(st_files)} safetensors files...")
-        for f in st_files:
-            with safe_open(f, framework="pt", device=device) as open_f:
-                for k in open_f.keys(): state_dict[k] = open_f.get_tensor(k)
-        return state_dict
-    
-    # Bin
-    bin_files = sorted(glob.glob(str(path / "*.bin")))
-    if bin_files:
-        logger.info(f"Loading {len(bin_files)} bin files...")
-        for f in bin_files:
-            if "training_args" in f: continue
-            part = torch.load(f, map_location=device)
-            if "module" in part: part = part["module"]
-            state_dict.update(part)
-        return state_dict
+# =========================================================================
+# Helper Functions
+# =========================================================================
 
-    raise ValueError(f"No weights found in {path_str}")
+def format_tensor_val(t: Any, n: int = 5) -> str:
+    if not isinstance(t, torch.Tensor): return str(type(t))
+    vals = t.detach().float().cpu().flatten()[:n].numpy()
+    return "[" + ", ".join([f"{x:.6f}" for x in vals]) + "]"
+
+def log_separator(title: str):
+    logger.info(f"\n{'='*120}")
+    logger.info(f" {title.center(118)} ")
+    logger.info(f"{'='*120}")
 
 def _load_config_json(ckpt_path: str) -> Dict[str, Any]:
     p = Path(ckpt_path)
     base_dir = p if p.is_dir() else p.parent
-    with open(base_dir / "config.json", "r") as f: return json.load(f)
+    cfg_path = base_dir / "config.json"
+    if not cfg_path.exists():
+        raise FileNotFoundError(f"config.json not found in {base_dir}")
+    with open(cfg_path, "r") as f:
+        return json.load(f)
 
-import json
+def _load_checkpoint_robust(path_str: str, device="cpu") -> Dict[str, torch.Tensor]:
+    path = Path(path_str)
+    if path.is_file():
+        state_dict = torch.load(path, map_location=device)
+        return state_dict.get("module", state_dict)
 
-def check_weight_consistency(model_name: str, model: nn.Module, ckpt_state_dict: Dict[str, torch.Tensor]):
-    logger.info(f"\n{'='*80}")
-    logger.info(f"Checking Weights for: {model_name}")
-    logger.info(f"{'='*80}")
-    
-    model_state = model.state_dict()
-    
-    # Statistics
-    total_params = len(model_state)
-    matched_exact_name = 0
-    matched_value = 0
-    mismatched_value = 0
-    not_found_in_ckpt = 0
-    
-    # Sample errors
-    mismatches = []
-    missing = []
-    
-    # 1. 遍历模型参数
-    for name, param in model_state.items():
-        # 跳过 buffer 中不需要梯度的 (如 position_ids)
-        if not param.is_floating_point(): continue 
-        
-        # 尝试在 Checkpoint 中找到对应的 Key
-        # Muse 需要反向查找 Convert 逻辑，这里比较难，所以我们主要检查 Origin
-        # 或者尝试模糊匹配
-        
-        target_k = None
-        
-        # === 简单匹配逻辑 ===
-        # 1. 直接匹配
-        if name in ckpt_state_dict:
-            target_k = name
-        # 2. Origin 常见前缀差异 (siglip.vision_model vs visual_tokenizer...)
-        else:
-            # 这是一个启发式搜索，尝试找到 ckpt 中对应的 key
-            # 你可以根据实际情况添加更多规则
-            pass
+    if not path.is_dir():
+        raise ValueError(f"Checkpoint path is neither file nor directory: {path}")
 
-        # 另外一种方式：如果提供了 convert_hf_state_dict，我们可以反向推导
-        # 但这里为了简单，我们只对比那些名字能对上的，或者在 Convert 过程中我们手动映射过的
-        
-        # 对于 Muse，我们假设 Convert 逻辑是： ckpt_key -> muse_key
-        # 所以我们应该遍历 ckpt_keys，看转换后的 key 是否在 muse model 中，且数值一致
-        pass 
+    logger.info(f"Scanning directory: {path}")
+    state_dict = {}
+    
+    st_files = sorted(glob.glob(str(path / "*.safetensors")))
+    if st_files:
+        logger.info(f"Found {len(st_files)} safetensors files. Loading...")
+        from safetensors.torch import safe_open
+        for f in st_files:
+            with safe_open(f, framework="pt", device=device) as open_f:
+                for k in open_f.keys():
+                    state_dict[k] = open_f.get_tensor(k)
+        return state_dict
 
-    # === 反向检查策略 ===
-    # 遍历 Checkpoint 中的 Key，经过 Convert 后，去 Model 里查值
+    bin_files = sorted(glob.glob(str(path / "*.bin")))
+    if bin_files:
+        logger.info(f"Found {len(bin_files)} .bin files. Loading...")
+        for f in bin_files:
+            if any(x in f for x in ["training_args", "optimizer", "scheduler"]): continue
+            try:
+                part = torch.load(f, map_location=device)
+                if "module" in part: part = part["module"]
+                state_dict.update(part)
+            except Exception as e:
+                logger.warning(f"Failed to load {f}: {e}")
+        return state_dict
     
-    # 如果是 Origin 模型，通常 Key 变化不大
-    # 如果是 Muse 模型，使用了 convert_hf_state_dict
+    pt_files = sorted(glob.glob(str(path / "*.pt")))
+    if pt_files:
+         for f in pt_files:
+            part = torch.load(f, map_location=device)
+            if "module" in part: part = part["module"]
+            state_dict.update(part)
+         return state_dict
+
+    raise ValueError(f"No valid checkpoint files found in {path}")
+
+def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, atol=1e-3):
+    def unwrap(x):
+        if hasattr(x, 'last_hidden_state'): return x.last_hidden_state
+        if isinstance(x, (tuple, list)): return x[0]
+        if isinstance(x, dict): 
+            for k in ['logits', 'z_q', 'last_hidden_state']:
+                if k in x: return x[k]
+            return list(x.values())[0]
+        return x
+
+    t1 = unwrap(tensor_origin)
+    t2 = unwrap(tensor_muse)
+
+    if not isinstance(t1, torch.Tensor) or not isinstance(t2, torch.Tensor):
+        logger.warning(f"⚠️  [{name}] Skipped: Not tensors")
+        return
+
+    t1 = t1.detach().float().cpu()
+    t2 = t2.detach().float().cpu()
     
-    logger.info(f"Model Parameters: {len(model_state)}")
-    logger.info(f"Checkpoint Keys : {len(ckpt_state_dict)}")
+    # Auto squeeze for broadcasting issues (e.g. [1, S, D] vs [S, D])
+    if t1.shape != t2.shape:
+        if t1.numel() == t2.numel(): t2 = t2.view(t1.shape)
+        elif t1.dim() == 3 and t2.dim() == 2 and t1.shape[1:] == t2.shape: t1 = t1.squeeze(0)
+        elif t2.dim() == 3 and t1.dim() == 2 and t2.shape[1:] == t1.shape: t2 = t2.squeeze(0)
     
-    if hasattr(model, "convert_hf_state_dict"):
-        logger.info("Using model.convert_hf_state_dict for mapping...")
-        # 模拟转换过程
-        mapped_ckpt = model.convert_hf_state_dict(ckpt_state_dict, tie_word_embeddings=True)
-        
-        for muse_key, muse_val in model_state.items():
-            if muse_key in mapped_ckpt:
-                ckpt_val = mapped_ckpt[muse_key].to(muse_val.device)
-                
-                # Shape check
-                if muse_val.shape != ckpt_val.shape:
-                     # 尝试转置 (Linear weights)
-                     if muse_val.shape == ckpt_val.t().shape:
-                         ckpt_val = ckpt_val.t()
-                
-                if muse_val.shape != ckpt_val.shape:
-                    logger.error(f"❌ Shape Mismatch: {muse_key} | Model {muse_val.shape} != Ckpt {ckpt_val.shape}")
-                    continue
-                    
-                diff = (muse_val - ckpt_val).abs().max().item()
-                if diff > 1e-3:
-                    mismatches.append((muse_key, diff, muse_val.mean().item(), ckpt_val.mean().item()))
-                    mismatched_value += 1
-                else:
-                    matched_value += 1
+    if t1.shape != t2.shape:
+        logger.error(f"{name:<45} | ❌ SHAPE ERR  | Origin={t1.shape} vs Muse={t2.shape}")
+        return
+
+    diff = (t1 - t2).abs()
+    max_diff = diff.max().item()
+    mean_diff = diff.mean().item()
+    
+    match_status = "✅ MATCH" if max_diff < atol else f"❌ MISMATCH"
+    
+    logger.info(f"{name:<45} | {match_status:<12} | Max: {max_diff:.2e} | Mean: {mean_diff:.2e}")
+    
+    if max_diff >= atol:
+        max_idx = torch.argmax(diff)
+        logger.info(f"   -> Max Diff Index: {max_idx.item()}")
+        logger.info(f"   -> Origin Val    : {t1.flatten()[max_idx]:.6f}")
+        logger.info(f"   -> Muse Val      : {t2.flatten()[max_idx]:.6f}")
+
+# =========================================================================
+# Enhanced Hook System (ViT Deep Dive)
+# =========================================================================
+activations = {"origin": {}, "muse": {}}
+
+def make_hook(model_name, layer_name, capture_input=False, key=None):
+    def hook(module, inp, out):
+        target = inp if capture_input else out
+        if isinstance(target, (tuple, list)): target = target[0]
+        if isinstance(target, dict):
+            if key and key in target: target = target[key]
             else:
-                # 忽略一些统计量 buffer
-                if "running_mean" in muse_key or "running_var" in muse_key or "num_batches_tracked" in muse_key:
-                    continue
-                not_found_in_ckpt += 1
-                missing.append(muse_key)
+                if 'z_q' in target: target = target['z_q']
+                elif 'logits' in target: target = target['logits']
+                elif 'last_hidden_state' in target: target = target['last_hidden_state']
+        activations[model_name][layer_name] = target.detach() if isinstance(target, torch.Tensor) else target
+    return hook
+
+def register_detailed_hooks(model, name_prefix):
+    logger.info(f"Registering DETAILED hooks for {name_prefix}...")
+    
+    # -------------------------------------------------------------------------
+    # 1. 寻找 Visual Transformer Backbone (ViT)
+    # -------------------------------------------------------------------------
+    # Origin 结构通常: model.visual_tokenizer.visual.vision_model
+    # Muse 结构通常:   model.visual_tokenizer.visual
+    
+    vit_backbone = None
+    if hasattr(model, "visual_tokenizer") and hasattr(model.visual_tokenizer, "visual"):
+        visual_module = model.visual_tokenizer.visual
+        
+        # Origin (HF Siglip) usually has .vision_model wrapper
+        if hasattr(visual_module, "vision_model"):
+            vit_backbone = visual_module.vision_model
+            logger.info(f"[{name_prefix}] Found Origin-style SiglipVisionModel")
+        else:
+            vit_backbone = visual_module
+            logger.info(f"[{name_prefix}] Found Muse-style KeyeVisionTransformer")
+    
+    if vit_backbone is None:
+        logger.error(f"❌ Could not find ViT backbone for {name_prefix}")
+        return
+
+    # -------------------------------------------------------------------------
+    # 2. Hook: Patch Embeddings (Layer 0 Input)
+    # -------------------------------------------------------------------------
+    # 检查 Embeddings 输出 (通常是 Layer 0 的输入)
+    if hasattr(vit_backbone, "embeddings"):
+        vit_backbone.embeddings.register_forward_hook(make_hook(name_prefix, "0.0 ViT Embeddings Out"))
+    
+    # -------------------------------------------------------------------------
+    # 3. Hook: Layer 0 Internals (Detailed Debugging)
+    # -------------------------------------------------------------------------
+    # 这里的逻辑完全照搬了你的 ViT 调试脚本
+    
+    layer0 = None
+    if hasattr(vit_backbone, "encoder") and hasattr(vit_backbone.encoder, "layers"):
+        layer0 = vit_backbone.encoder.layers[0]
+    
+    if layer0:
+        logger.info(f"[{name_prefix}] Hooking ViT Layer 0...")
+        
+        # === Origin (HF) Style Hooks ===
+        if name_prefix == "origin":
+            # LN1
+            if hasattr(layer0, "layer_norm1"):
+                layer0.layer_norm1.register_forward_hook(make_hook(name_prefix, "0.1 LN1 Output"))
+            # Self Attention Projections
+            if hasattr(layer0, "self_attn"):
+                layer0.self_attn.q_proj.register_forward_hook(make_hook(name_prefix, "0.2 Q_Proj Out"))
+                layer0.self_attn.k_proj.register_forward_hook(make_hook(name_prefix, "0.2 K_Proj Out"))
+                layer0.self_attn.v_proj.register_forward_hook(make_hook(name_prefix, "0.2 V_Proj Out"))
+                # Pre-Projection Attention Output
+                layer0.self_attn.out_proj.register_forward_hook(make_hook(name_prefix, "0.3 Attn Raw (Pre-Proj)", capture_input=True))
+                # Post-Projection
+                layer0.self_attn.out_proj.register_forward_hook(make_hook(name_prefix, "0.4 Attn Out (Post-Proj)"))
+            
+            # MLP
+            if hasattr(layer0, "mlp"):
+                if hasattr(layer0.mlp, "fc1"):
+                    layer0.mlp.fc1.register_forward_hook(make_hook(name_prefix, "0.6 MLP Hidden (fc1)"))
+                if hasattr(layer0.mlp, "fc2"):
+                    layer0.mlp.fc2.register_forward_hook(make_hook(name_prefix, "0.7 MLP Out (fc2)"))
+
+        # === Muse Style Hooks ===
+        elif name_prefix == "muse":
+            # LN1
+            if hasattr(layer0, "sa_norm"):
+                layer0.sa_norm.register_forward_hook(make_hook(name_prefix, "0.1 LN1 Output"))
+            
+            # Self Attention Projections
+            if hasattr(layer0, "attn"):
+                if hasattr(layer0.attn, "q_proj"):
+                    layer0.attn.q_proj.register_forward_hook(make_hook(name_prefix, "0.2 Q_Proj Out"))
+                if hasattr(layer0.attn, "k_proj"):
+                    layer0.attn.k_proj.register_forward_hook(make_hook(name_prefix, "0.2 K_Proj Out"))
+                if hasattr(layer0.attn, "v_proj"):
+                    layer0.attn.v_proj.register_forward_hook(make_hook(name_prefix, "0.2 V_Proj Out"))
                 
-    else:
-        # Origin Model (通常不需要复杂转换，或者转换逻辑在内部)
-        # 我们尝试直接匹配
-        for orig_key, orig_val in model_state.items():
-            # Origin 模型加载时可能加了前缀，或者 ckpt 里有前缀
-            # Ckpt: visual_tokenizer.visual.vision_model.embeddings...
-            # Model: visual_tokenizer.visual.embeddings... (如果是 SiglipVisionModel)
-            
-            # 暴力尝试匹配
-            candidates = [
-                orig_key, 
-                f"siglip.{orig_key}", 
-                f"visual_tokenizer.{orig_key}",
-                f"model.{orig_key}"
-            ]
-            
-            # 也要处理 ckpt key 比 model key 长的情况
-            # 例如 model key: visual.embeddings...
-            # ckpt key: visual_tokenizer.visual.vision_model.embeddings...
-            
-            found = False
-            for k in ckpt_state_dict:
-                if k.endswith(orig_key): # 简单的后缀匹配
-                    # 进一步确认
-                    # 如果 orig_key 很短 (e.g. "weight")，后缀匹配不可靠
-                    if len(orig_key) < 10: continue
-                    
-                    ckpt_val = ckpt_state_dict[k].to(orig_val.device)
-                    if ckpt_val.shape == orig_val.shape:
-                        diff = (orig_val - ckpt_val).abs().max().item()
-                        if diff > 1e-3:
-                            mismatches.append((orig_key, diff, orig_val.mean().item(), ckpt_val.mean().item()))
-                            mismatched_value += 1
-                        else:
-                            matched_value += 1
-                        found = True
-                        break
-            
-            if not found:
-                not_found_in_ckpt += 1
-                missing.append(orig_key)
+                # Output Proj
+                if hasattr(layer0.attn, "output_proj"):
+                    layer0.attn.output_proj.register_forward_hook(make_hook(name_prefix, "0.3 Attn Raw (Pre-Proj)", capture_input=True))
+                    layer0.attn.output_proj.register_forward_hook(make_hook(name_prefix, "0.4 Attn Out (Post-Proj)"))
 
-    # Report
-    logger.info(f"✅ Matched Weights: {matched_value}")
-    logger.info(f"❌ Mismatched Weights: {mismatched_value}")
-    logger.info(f"❓ Not found in Checkpoint: {not_found_in_ckpt}")
+            # MLP
+            if hasattr(layer0, "mlp"):
+                if hasattr(layer0.mlp, "w1"):
+                    layer0.mlp.w1.register_forward_hook(make_hook(name_prefix, "0.6 MLP Hidden (fc1)"))
+                if hasattr(layer0.mlp, "w2"):
+                    layer0.mlp.w2.register_forward_hook(make_hook(name_prefix, "0.7 MLP Out (fc2)"))
     
-    if mismatches:
-        logger.info("\nTop 10 Mismatches (Key | Diff | Model Mean | Ckpt Mean):")
-        for m in mismatches[:10]:
-            logger.info(f"  {m[0]:<60} | {m[1]:.2e} | {m[2]:.4f} | {m[3]:.4f}")
-            
-    if missing:
-        logger.info("\nTop 10 Missing Keys (Present in Model, Absent in Ckpt):")
-        for m in missing[:10]:
-            logger.info(f"  {m}")
+    # -------------------------------------------------------------------------
+    # 4. Global Outputs
+    # -------------------------------------------------------------------------
+    # ViT Final Output
+    vit_backbone.register_forward_hook(make_hook(name_prefix, "1.0 ViT Final Output"))
+    
+    # Projector
+    if hasattr(model, "visual_tokenizer") and hasattr(model.visual_tokenizer, "mlp_AR"):
+         model.visual_tokenizer.mlp_AR.register_forward_hook(make_hook(name_prefix, "2.0 Projector Output"))
+         
+    # VQ Quantizer
+    if hasattr(model, "visual_tokenizer") and hasattr(model.visual_tokenizer, "quantizer"):
+         model.visual_tokenizer.quantizer[0].register_forward_hook(make_hook(name_prefix, "3.0 VQ[0] Output", key="z_q"))
 
-def main():
+    # LLM Input
+    llm_layers = None
+    if hasattr(model, "model") and hasattr(model.model, "layers"): # Qwen/HF
+        llm_layers = model.model.layers
+    elif hasattr(model, "text_model") and hasattr(model.text_model, "model"): # Muse legacy
+        llm_layers = model.text_model.model.layers
+    
+    if llm_layers:
+        llm_layers[0].register_forward_hook(make_hook(name_prefix, "4.0 LLM Layer 0 Input", capture_input=True))
+
+
+# =========================================================================
+# Main Test
+# =========================================================================
+def test_pipeline_alignment():
     ckpt_path = DEFAULT_CKPT
-    device = "cpu" # 权重对比用 CPU 足够，且显存更省
-    dtype = torch.float16
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # 使用与 ViT 测试一致的 dtype (bfloat16) 以避免精度转换带来的误差
+    dtype = torch.bfloat16 
     
-    logger.info(f"Loading Checkpoint from {ckpt_path} ...")
-    ckpt_state = _load_checkpoint_robust(ckpt_path, device=device)
-    
-    # 统一转 dtype
-    for k, v in ckpt_state.items():
-        ckpt_state[k] = v.to(dtype)
-
+    logger.info(f"Loading from: {ckpt_path}")
     raw_cfg = _load_config_json(ckpt_path)
     
-    # --- 构建 Muse Config ---
+    # ... (Config 代码保持不变) ...
     qwen_cfg = Qwen3Config(
         model_class="Qwen3Model",
         vocab_size=raw_cfg["vocab_size"],
@@ -237,6 +307,7 @@ def main():
     
     outer_vcfg = raw_cfg["vision_config"]
     inner_vcfg = outer_vcfg["vision_config"]
+    
     vision_cfg = KeyeVisionConfig(
         hidden_size=inner_vcfg["hidden_size"],
         num_hidden_layers=inner_vcfg["num_hidden_layers"],
@@ -247,6 +318,7 @@ def main():
         has_learnable_position_embedding=inner_vcfg.get("has_learnable_position_embedding", True),
         attention_function="flash_attention_2",
     )
+    
     tokenizer_cfg = KeyeTokenizerConfig(
         vision_config=vision_cfg,
         llm_hidden_size=outer_vcfg.get("llm_hidden_size", 4096),
@@ -259,40 +331,107 @@ def main():
         split_dim=outer_vcfg.get("split_dim", False),
         vq_sampling_mode="argmin",
     )
+    
+    origin_cfg = origin_mod.KeyeConfig.from_pretrained(ckpt_path)
 
-    # 1. Initialize Muse
-    logger.info("Initializing Muse Model...")
+    # --- Initialize Models ---
     with set_default_dtype(dtype):
+        logger.info("Initializing Muse Model...")
         muse_model = muse_mod.KeyeForConditionalGeneration(
             qwen_config=qwen_cfg,
             vision_config=vision_cfg,
             tokenizer_config=tokenizer_cfg,
             image_token_id=raw_cfg.get("image_token_id", 151655),
             pool="sum"
-        )
-    
-    logger.info("Loading Muse Weights...")
-    # 使用转换逻辑加载
-    muse_converted = muse_model.convert_hf_state_dict(ckpt_state, tie_word_embeddings=qwen_cfg.tie_word_embeddings)
-    muse_model.load_state_dict(muse_converted, strict=False)
-    
-    # Check Muse
-    check_weight_consistency("Muse Model", muse_model, ckpt_state)
-
-    # 2. Initialize Origin (如果不关心 Origin 可以注释掉，但为了对比最好保留)
-    logger.info("\nInitializing Origin Model...")
-    origin_cfg = origin_mod.KeyeConfig.from_pretrained(ckpt_path)
-    
-    with set_default_dtype(dtype):
-        origin_model = origin_mod.KeyeForConditionalGeneration(origin_cfg)
+        ).to(device)
         
-    logger.info("Loading Origin Weights...")
-    origin_model.load_state_dict(ckpt_state, strict=False)
+        logger.info("Initializing Origin Model...")
+        origin_model = origin_mod.KeyeForConditionalGeneration(origin_cfg).to(device, dtype)
+
+    # --- Load Weights ---
+    logger.info("Loading Weights...")
+    state_dict = _load_checkpoint_robust(ckpt_path, device="cpu")
+    origin_model.load_state_dict(state_dict, strict=False)
+    muse_state = muse_model.convert_hf_state_dict(state_dict, tie_word_embeddings=qwen_cfg.tie_word_embeddings)
+    muse_model.load_state_dict(muse_state, strict=False)
+
+    origin_model.to(device)
+    muse_model.to(device)
+
+    # --- Hooks ---
+    # 使用新的 Detailed Hooks
+    register_detailed_hooks(origin_model, "origin")
+    register_detailed_hooks(muse_model, "muse")
+
+    # --- Inputs ---
+    patch = inner_vcfg.get("patch_size", 14)
+    # 构造与 ViT 测试一致的简单 Grid (1, 1, 1) -> seq_len = 1 frame * 1*1 patches
+    # 也可以保持你之前的 2x2，这里为了调试简单设为 14x14 像素
+    t_frames, h_patches, w_patches = 1, 1, 1 
+    seq_len = t_frames * h_patches * w_patches # = 1
     
-    # Check Origin
-    # Origin 的结构比较深，check_weight_consistency 的简单后缀匹配可能不够
-    # 但我们主要看 visual 部分
-    check_weight_consistency("Origin Model", origin_model, ckpt_state)
+    # 输入像素： [Batch * Seq, C, H, W]
+    # Muse ViT 需要 [1, Seq, C, H, W] 或 [Seq, C, H, W] 取决于 forward 内部
+    # 这里我们构造 5D, VLM wrapper 应该会自动处理
+    pixel_values = torch.randn(1 * seq_len, 3, patch, patch, device=device, dtype=dtype)
+    
+    # ⚠️ 关键点：Image Grid 
+    image_grid_thw = torch.tensor([[t_frames, h_patches, w_patches]], device=device, dtype=torch.long)
+    
+    image_token_id = raw_cfg.get("image_token_id", 151655)
+    input_ids = torch.tensor([[1, image_token_id, 2]], device=device, dtype=torch.long)
+    attention_mask = torch.ones_like(input_ids)
+    vision_token_mask = (input_ids == image_token_id)
+
+    inputs = {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+        "pixel_values": pixel_values,
+        "image_grid_thw": image_grid_thw,
+        "vision_token_mask": vision_token_mask
+    }
+
+    # --- Forward ---
+    log_separator("Running Forward")
+    origin_model.eval()
+    muse_model.eval()
+    
+    origin_inputs = {k: v for k, v in inputs.items() if k != "vision_token_mask"}
+    
+    with torch.no_grad():
+        logger.info("Running Origin Forward...")
+        origin_out = origin_model(**origin_inputs)
+        logger.info("Running Muse Forward...")
+        muse_out = muse_model(**inputs)
+
+    # --- Analysis ---
+    log_separator("Deep Dive Analysis (Layer 0 Specifics)")
+    
+    # 按照数据流向进行检查
+    checkpoints = [
+        "0.0 ViT Embeddings Out",  # 最关键：如果这里不对，就是输入处理或者 PatchEmbed 权重问题
+        "0.1 LN1 Output",
+        "0.2 Q_Proj Out",
+        "0.2 K_Proj Out",
+        "0.2 V_Proj Out",
+        "0.3 Attn Raw (Pre-Proj)", # 如果这里对，说明 Attention 计算逻辑对
+        "0.4 Attn Out (Post-Proj)",
+        "0.6 MLP Hidden (fc1)",
+        "0.7 MLP Out (fc2)",
+        "1.0 ViT Final Output",    # 整个 ViT 的输出
+        "2.0 Projector Output",
+        "3.0 VQ[0] Output",
+        "4.0 LLM Layer 0 Input"
+    ]
+    
+    # 增加容差，FP16/BF16 在 Attention 累积后可能会有 1e-2 级别的误差
+    for k in checkpoints:
+        if k in activations["origin"] and k in activations["muse"]:
+            compare_tensors_verbose(k, activations["origin"][k], activations["muse"][k], atol=2e-2)
+        else:
+            status_o = "Found" if k in activations["origin"] else "MISSING"
+            status_m = "Found" if k in activations["muse"] else "MISSING"
+            logger.warning(f"⚠️  Missing hook: {k} (Origin={status_o}, Muse={status_m})")
 
 if __name__ == "__main__":
-    main()
+    test_pipeline_alignment()
