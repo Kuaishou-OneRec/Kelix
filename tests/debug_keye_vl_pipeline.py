@@ -15,6 +15,7 @@ from typing import Dict, Any, Tuple, Union
 
 import torch
 import numpy as np
+import torch.nn as nn
 
 # === 导入 Muse 模型 ===
 from muse.models.keye_tokenizer_video import modeling as muse_mod
@@ -155,6 +156,84 @@ def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, ato
         logger.info(f"   -> Muse   (first 3): {format_tensor_val(t2, 3)}")
         max_idx = torch.argmax(diff)
         logger.info(f"   -> Max Diff Val    : Origin={t1.flatten()[max_idx]:.6f}, Muse={t2.flatten()[max_idx]:.6f}")
+
+# =========================================================================
+# Weight Consistency Checker (borrowed from debug_keye_vl_weight)
+# =========================================================================
+def check_weight_consistency(model_name: str, model: nn.Module, ckpt_state_dict: Dict[str, torch.Tensor], tie_word_embeddings: bool = True):
+    logger.info(f"\n{'='*80}")
+    logger.info(f"Checking Weights for: {model_name}")
+    logger.info(f"{'='*80}")
+    
+    model_state = model.state_dict()
+    matched_value = 0
+    mismatched_value = 0
+    not_found_in_ckpt = 0
+    mismatches = []
+    missing = []
+    
+    # Prefer official convert mapping when available (Muse)
+    mapped_ckpt: Dict[str, torch.Tensor] = ckpt_state_dict
+    if hasattr(model, "convert_hf_state_dict"):
+        try:
+            mapped_ckpt = model.convert_hf_state_dict(ckpt_state_dict, tie_word_embeddings=tie_word_embeddings)
+            logger.info("Using model.convert_hf_state_dict for mapping...")
+        except Exception as e:
+            logger.warning(f"convert_hf_state_dict failed ({e}), fallback to suffix match.")
+            mapped_ckpt = ckpt_state_dict
+    
+    for param_name, param_val in model_state.items():
+        # Skip buffers / non-fp params
+        if not param_val.is_floating_point():
+            continue
+        
+        ckpt_val = None
+        
+        # Direct match
+        if param_name in mapped_ckpt:
+            ckpt_val = mapped_ckpt[param_name]
+        else:
+            # Heuristic suffix match for Origin-style keys
+            for k in ckpt_state_dict.keys():
+                if k.endswith(param_name) and len(param_name) >= 10:
+                    ckpt_val = ckpt_state_dict[k]
+                    break
+        
+        if ckpt_val is None:
+            not_found_in_ckpt += 1
+            missing.append(param_name)
+            continue
+        
+        # Align dtype/device for comparison
+        ckpt_val = ckpt_val.to(param_val.device)
+        if param_val.shape != ckpt_val.shape and param_val.shape == ckpt_val.t().shape:
+            ckpt_val = ckpt_val.t()
+        if param_val.shape != ckpt_val.shape:
+            logger.error(f"❌ Shape Mismatch: {param_name} | Model {param_val.shape} != Ckpt {ckpt_val.shape}")
+            mismatched_value += 1
+            mismatches.append((param_name, float('inf'), param_val.mean().item(), ckpt_val.mean().item()))
+            continue
+        
+        diff = (param_val - ckpt_val.to(param_val.dtype)).abs().max().item()
+        if diff > 1e-3:
+            mismatched_value += 1
+            mismatches.append((param_name, diff, param_val.mean().item(), ckpt_val.mean().item()))
+        else:
+            matched_value += 1
+    
+    logger.info(f"✅ Matched Weights: {matched_value}")
+    logger.info(f"❌ Mismatched Weights: {mismatched_value}")
+    logger.info(f"❓ Not found in Checkpoint: {not_found_in_ckpt}")
+    
+    if mismatches:
+        logger.info("\nTop 10 Mismatches (Key | Diff | Model Mean | Ckpt Mean):")
+        for m in mismatches[:10]:
+            logger.info(f"  {m[0]:<60} | {m[1]:.2e} | {m[2]:.4f} | {m[3]:.4f}")
+            
+    if missing:
+        logger.info("\nTop 10 Missing Keys (Present in Model, Absent in Ckpt):")
+        for m in missing[:10]:
+            logger.info(f"  {m}")
 
 # =========================================================================
 # Hook System
@@ -308,6 +387,11 @@ def test_pipeline_alignment():
     logger.info("Converting weights for Muse...")
     muse_state = muse_model.convert_hf_state_dict(state_dict, tie_word_embeddings=qwen_cfg.tie_word_embeddings)
     muse_model.load_state_dict(muse_state, strict=False)
+
+    # --- Weight Consistency Check ---
+    log_separator("Weight Consistency Check")
+    check_weight_consistency("Origin Model", origin_model, state_dict, tie_word_embeddings=qwen_cfg.tie_word_embeddings)
+    check_weight_consistency("Muse Model", muse_model, state_dict, tie_word_embeddings=qwen_cfg.tie_word_embeddings)
 
     # Move to GPU
     origin_model.to(device)
