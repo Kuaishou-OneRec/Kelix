@@ -201,7 +201,6 @@ def test_pipeline_alignment():
     
     # Origin Config
     origin_cfg = origin_mod.KeyeConfig.from_pretrained(ckpt_path)
-    origin_cfg.vision_config["vq_sampling_mode"] = "argmin"
 
     # --- Initialize Models ---
     with set_default_dtype(dtype):
