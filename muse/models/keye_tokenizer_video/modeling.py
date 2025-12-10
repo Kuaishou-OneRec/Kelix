@@ -1,11 +1,13 @@
 from typing import Dict, Callable, List, Optional, Tuple
 from functools import partial
 import math
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 import logging
+from einops import rearrange
 
 from muse.models.base import Model
 from muse.config import Qwen3Config, KeyeVisionConfig
@@ -231,6 +233,151 @@ class VectorQuantizer(Model):
             
         return result
 
+class Projector(nn.Module):
+    """
+    视觉特征降采样/投影模块，移植自 origin，实现时序/空间合并。
+    """
+
+    def __init__(
+        self,
+        in_channels: int,
+        out_channels: int,
+        temporal_merge_position: str = "before",
+        temporal_merge_mode: str = "avg",
+        merge_kernel_size: Tuple[int, int] = (2, 2),
+    ):
+        super().__init__()
+        self.merge_kernel_size = merge_kernel_size
+        self.temporal_merge_position = temporal_merge_position
+        self.temporal_merge_mode = temporal_merge_mode
+
+        if self.temporal_merge_position not in ["before", "after"]:
+            raise ValueError(f"Unsupported temporal_merge_position={self.temporal_merge_position}")
+        if self.temporal_merge_position == "before" and self.temporal_merge_mode not in ["avg", "delta"]:
+            raise ValueError("temporal_merge_mode must be 'avg' or 'delta' when temporal_merge_position='before'")
+        if self.temporal_merge_position == "after" and self.temporal_merge_mode not in ["avg", "delta"]:
+            raise ValueError("temporal_merge_mode must be 'avg' or 'delta' when temporal_merge_position='after'")
+
+        self.hidden_size = in_channels * self.merge_kernel_size[0] * self.merge_kernel_size[1]
+        self.temporal_delta_norm_before = None
+        self.temporal_delta_rnn_before = None
+        self.temporal_delta_norm_after = None
+        self.temporal_delta_rnn_after = None
+        if self.temporal_merge_position == "before" and self.temporal_merge_mode == "delta":
+            self.temporal_delta_norm_before = torch.nn.LayerNorm(self.hidden_size, eps=1e-05)
+            self.temporal_delta_rnn_before = nn.GRU(
+                input_size=self.hidden_size,
+                hidden_size=self.hidden_size,
+                num_layers=1,
+                batch_first=True,
+            )
+        if self.temporal_merge_position == "after" and self.temporal_merge_mode == "delta":
+            self.temporal_delta_norm_after = torch.nn.LayerNorm(out_channels, eps=1e-05)
+            self.temporal_delta_rnn_after = nn.GRU(
+                input_size=out_channels,
+                hidden_size=out_channels,
+                num_layers=1,
+                batch_first=True,
+            )
+
+        self.pre_norm = torch.nn.LayerNorm(self.hidden_size, eps=1e-05)
+        self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
+        self.act = nn.GELU()
+        self.linear_2 = nn.Linear(self.hidden_size, out_channels, bias=True)
+
+    def split(self, last_hidden_state: torch.Tensor, grid_thw: torch.Tensor):
+        sample_hidden_state = list()
+        lengths = np.prod(grid_thw.cpu().numpy(), axis=1).tolist()
+        assert sum(lengths) == last_hidden_state.shape[1]
+        start = 0
+        for length in lengths:
+            end = start + length
+            tensor = last_hidden_state[:, start:end, :].squeeze(0)
+            sample_hidden_state.append(tensor)
+            start = end
+        return sample_hidden_state
+
+    def _project_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
+        tokens = self.pre_norm(tokens)
+        tokens = self.linear_1(tokens)
+        tokens = self.act(tokens)
+        tokens = self.linear_2(tokens)
+        return tokens
+
+    def _temporal_reduce_before(self, x: torch.Tensor) -> torch.Tensor:
+        if self.temporal_merge_mode == "avg":
+            return x.mean(dim=0)
+        if self.temporal_merge_mode == "delta":
+            x = x.permute(1, 0, 2)  # (n, t, hidden)
+            if x.size(1) == 1:
+                x = x.repeat(1, 2, 1)
+            x = self.temporal_delta_norm_before(x)
+            _, h_n = self.temporal_delta_rnn_before(x)
+            return h_n[-1]
+        raise ValueError(f"Unsupported temporal_merge_mode {self.temporal_merge_mode} for before merge.")
+
+    def _temporal_reduce_after(self, x: torch.Tensor, spatial_h: int, spatial_w: int) -> torch.Tensor:
+        if self.temporal_merge_mode == "avg":
+            return x.mean(dim=0)
+        if self.temporal_merge_mode == "delta":
+            x = x.permute(1, 0, 2)  # (n, t, hidden)
+            if x.size(1) == 1:
+                x = x.repeat(1, 2, 1)
+            x = self.temporal_delta_norm_after(x)
+            _, h_n = self.temporal_delta_rnn_after(x)
+            return h_n[-1]
+
+    def _process_sequence(self, image_feature: torch.Tensor, image_grid: Tuple[int, int, int]) -> torch.Tensor:
+        t, h, w = [int(x) for x in image_grid]
+        if t == 0:
+            return image_feature.new_zeros((0, self.linear_2.out_features))
+        m1, m2 = self.merge_kernel_size
+        spatial_h = max(1, h // m1)
+        spatial_w = max(1, w // m2)
+        x = rearrange(
+            image_feature,
+            "(t h p1 w p2) d -> t (h w) (p1 p2 d)",
+            t=t,
+            h=spatial_h,
+            p1=m1,
+            w=spatial_w,
+            p2=m2,
+        )
+        if self.temporal_merge_position == "before":
+            reduced = self._temporal_reduce_before(x)
+            reduced = reduced.reshape(-1, self.hidden_size)
+            return self._project_tokens(reduced)
+        projected = self._project_tokens(x.reshape(-1, self.hidden_size))
+        projected = projected.view(t, spatial_h * spatial_w, -1)
+        reduced = self._temporal_reduce_after(projected, spatial_h, spatial_w)
+        return reduced.reshape(-1, projected.shape[-1])
+
+    def forward(self, image_features: torch.Tensor, image_grid_thw: List[Tuple[int, int, int]]) -> torch.Tensor:
+        image_grid_thw_tensor = torch.tensor(image_grid_thw, device=image_features.device)
+        image_features = self.split(image_features, image_grid_thw_tensor)
+        if isinstance(image_features, (list, tuple)):
+            return torch.cat(
+                [
+                    self._process_sequence(image_feature, image_grid)
+                    for image_feature, image_grid in zip(image_features, image_grid_thw)
+                ],
+                dim=0,
+            )
+        outputs = []
+        start = 0
+        m1, m2 = self.merge_kernel_size
+        for grid in image_grid_thw:
+            t, h, w = [int(x) for x in grid]
+            spatial_h = max(1, h // m1)
+            spatial_w = max(1, w // m2)
+            num_tokens = t * spatial_h * spatial_w
+            sample = image_features[start : start + num_tokens]
+            start += num_tokens
+            outputs.append(self._process_sequence(sample, (t, h, w)))
+        return torch.cat(outputs, dim=0)
+
+
+
 
 
 def _build_position_ids(
@@ -244,13 +391,30 @@ def _build_position_ids(
     return torch.cat(pos_list, dim=0)
 
 
+def split_thw(tensor: torch.Tensor) -> torch.Tensor:
+    """将 (n,3) 的 thw 展开时间维，得到 [sum(t),3]."""
+    if tensor.dim() == 1:
+        tensor = tensor.unsqueeze(0)
+    repeats = tensor[:, 0]
+    new_thw = torch.cat(
+        [
+            torch.ones(tensor.shape[0], 1, dtype=tensor.dtype, device=tensor.device),
+            tensor[:, 1:],
+        ],
+        dim=1,
+    )
+    return torch.repeat_interleave(new_thw, repeats, dim=0)
+
+
 class KeyeImageTokenizer(Model):
     """使用Keye ViT + VQ 的视觉Tokenizer（无Transformers依赖）。"""
 
     def __init__(self, config: KeyeTokenizerConfig):
         super().__init__(config)
         self.config: KeyeTokenizerConfig = config
+        self.n_q_tokens = config.n_q_tokens
         self.visual = KeyeVisionTransformer(config.vision_config)
+        self.mlp_AR = Projector(config.vision_config.hidden_size, config.llm_hidden_size)
 
         align_in_dim = config.vision_config.hidden_size
         self.pre_llm_align = (
@@ -284,51 +448,84 @@ class KeyeImageTokenizer(Model):
             ]
         )
 
+    def get_image_embeds(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        **kwargs,
+    ):
+        # Get dtype from model parameters
+        target_dtype = next(self.visual.parameters()).dtype
+        pixel_values = pixel_values.type(target_dtype)
+        pixel_values = pixel_values.unsqueeze(0)
+        image_grid_thw_split = split_thw(image_grid_thw.squeeze(0))
+        siglip_position_ids = []
+        image_grid_hws = []
+        sample_indices = []
+        cu_seqlens = [0]
+
+        for idx, thw in enumerate(image_grid_thw_split):
+            thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
+            numel = np.prod(thw_tuple)
+            image_grid_hws.append(thw_tuple)
+            image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+            siglip_position_ids.append(image_position_ids)
+            sample_indices.append(torch.full((numel,), idx, dtype=torch.int64))
+            cu_seqlens.append(cu_seqlens[-1] + numel)
+
+        siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
+        cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
+        sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
+
+        vision_outputs = self.visual(
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_hws,
+            position_ids=siglip_position_ids,
+            vision_return_embed_list=True,
+            interpolate_pos_encoding=True,
+            sample_indices=sample_indices,
+            cu_seqlens=cu_seqlens,
+            return_pooler_output=False,
+            use_rope=True,
+            window_size=-1,
+        )
+        image_embeds = vision_outputs.last_hidden_state
+        image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
+        return image_embeds
+
     def forward(
         self,
         pixel_values: torch.Tensor,
-        image_grid_thw: List[Tuple[int, int, int]],
-        position_ids: Optional[torch.Tensor] = None,
+        image_grid_thw: torch.Tensor,
     ) -> Dict[str, torch.Tensor]:
         """
         Args:
-            pixel_values: 形状 [b, seq, c, h, w]，当前只支持 b=1。
-            image_grid_thw: 每张图的(t,h,w)列表，长度等于seq。
+            pixel_values: 视觉patches，形状 [num_patches, C, H, W]（与原版一致）。
+            image_grid_thw: 形状 [num_images, 3]，每张图的(t,h,w)。
         """
-        if pixel_values.dim() != 5:
-            raise ValueError(f"pixel_values 维度应为5，实际 {pixel_values.shape}")
-        if pixel_values.size(0) != 1:
-            raise ValueError("当前实现假定 batch=1，方便与位置编码对齐。")
+        # 与原版一致：输入是 4D (num_patches, C, H, W)
+        # get_image_embeds 内部会 unsqueeze(0) 变成 5D
+        if pixel_values.dim() != 4:
+            raise ValueError(f"pixel_values 维度应为4 (num_patches, C, H, W)，实际 {pixel_values.shape}")
 
-        device = pixel_values.device
-        if position_ids is None:
-            position_ids = _build_position_ids(image_grid_thw, device)
+        image_embeds = self.get_image_embeds(pixel_values, image_grid_thw)
+        image_embeds = self.pre_llm_align(image_embeds)
 
-        vision_out = self.visual(
-            pixel_values=pixel_values,
-            position_ids=position_ids,
-            image_grid_thw=image_grid_thw,
-            interpolate_pos_encoding=True,
-            has_learnable_position_embedding=True,
-        )
-        vision_hidden = vision_out["last_hidden_state"].squeeze(0)  # (seq, dim)
-        vision_hidden = self.pre_llm_align(vision_hidden)
+        z_e = self.encoder(image_embeds).chunk(self.n_q_tokens, dim=-1)
 
-        z_e = self.encoder(vision_hidden)
-        z_chunks = torch.chunk(z_e, self.config.n_q_tokens, dim=-1)
-
-        vq_outputs = [quant(z) for quant, z in zip(self.quantizer, z_chunks)]
-        z_q_list = [o["z_q"] for o in vq_outputs]
-        codebook_loss = [o["codebook_loss"] for o in vq_outputs]
-        commitment_loss = [o["commitment_loss"] for o in vq_outputs]
-        indices = [o["indices"] for o in vq_outputs]
+        vq_outputs = [self.quantizer[i](z_e_i) for i, z_e_i in enumerate(z_e)]
+        z_q = [v["z_q"] for v in vq_outputs]
+        codebook_loss = [v["codebook_loss"] for v in vq_outputs]
+        commitment_loss = [v["commitment_loss"] for v in vq_outputs]
+        indices = [v["indices"] for v in vq_outputs]
 
         return {
-            "z_q_list": z_q_list,
+            "z_q": z_q,
+            "z_e": z_e,
             "codebook_loss": codebook_loss,
             "commitment_loss": commitment_loss,
             "indices": indices,
-            "vision_hidden": vision_hidden,
+            "x": image_embeds,
         }
 
     def get_initializer(self, name: str) -> Callable[[torch.Tensor], None]:
@@ -384,6 +581,182 @@ class KeyeForConditionalGeneration(Model):
     def get_checkpointable_module_classes(self):
         return self.text_model.get_checkpointable_module_classes()
 
+    @classmethod
+    def convert_hf_state_dict(cls,
+                              hf_state_dict: Dict[str, torch.Tensor],
+                              tie_word_embeddings: bool = True,
+                              **kwargs) -> Dict[str, torch.Tensor]:
+        """Convert a Hugging Face state dictionary to Muse model state dictionary.
+        
+        Args:
+            hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
+            tie_word_embeddings: Whether the model ties embeddings (skip lm_head if True).
+            **kwargs: Additional keyword arguments.
+        
+        Returns:
+            A dictionary of model state with converted key names.
+        """
+        converted_state_dict = {}
+        skipped_keys = []
+        
+        for hf_key, tensor in hf_state_dict.items():
+            # ============ Visual Tokenizer ============
+            if hf_key.startswith("visual_tokenizer."):
+                rest_key = hf_key[len("visual_tokenizer."):]
+                
+                # visual.vision_model.* -> visual_tokenizer.visual.*
+                if rest_key.startswith("visual.vision_model."):
+                    vision_rest = rest_key[len("visual.vision_model."):]
+                    # Convert vision model keys using KeyeVisionTransformer patterns
+                    # Skip pooling head (vision_model.head.*) – not used in Muse KeyeVisionTransformer
+                    if vision_rest.startswith("head."):
+                        skipped_keys.append(hf_key)
+                        continue
+                    # Handle embeddings
+                    if vision_rest.startswith("embeddings."):
+                        converted_key = f"visual_tokenizer.visual.{vision_rest}"
+                        converted_state_dict[converted_key] = tensor
+                        continue
+                    
+                    # Handle post_layernorm -> ln_post
+                    if vision_rest.startswith("post_layernorm."):
+                        suffix = vision_rest.replace("post_layernorm.", "")
+                        converted_key = f"visual_tokenizer.visual.ln_post.{suffix}"
+                        converted_state_dict[converted_key] = tensor
+                        continue
+                    
+                    # Handle encoder layers
+                    if vision_rest.startswith("encoder.layers."):
+                        parts = vision_rest.split(".", 3)  # ["encoder", "layers", "{i}", "rest"]
+                        if len(parts) >= 4:
+                            layer_idx = parts[2]
+                            layer_rest = parts[3]
+                            
+                            if layer_rest.startswith("layer_norm1."):
+                                suffix = layer_rest.replace("layer_norm1.", "")
+                                converted_key = f"visual_tokenizer.visual.encoder.layers.{layer_idx}.sa_norm.{suffix}"
+                                converted_state_dict[converted_key] = tensor
+                                continue
+                            
+                            if layer_rest.startswith("layer_norm2."):
+                                suffix = layer_rest.replace("layer_norm2.", "")
+                                converted_key = f"visual_tokenizer.visual.encoder.layers.{layer_idx}.mlp_norm.{suffix}"
+                                converted_state_dict[converted_key] = tensor
+                                continue
+                            
+                            if layer_rest.startswith("self_attn."):
+                                attn_key = layer_rest.replace("self_attn.", "attn.")
+                                attn_key = attn_key.replace("out_proj.", "output_proj.")
+                                converted_key = f"visual_tokenizer.visual.encoder.layers.{layer_idx}.{attn_key}"
+                                converted_state_dict[converted_key] = tensor
+                                continue
+                            
+                            if layer_rest.startswith("mlp."):
+                                new_rest_key = layer_rest.replace("fc1", "w1").replace("fc2", "w2")
+                                converted_key = f"visual_tokenizer.visual.encoder.layers.{layer_idx}.{new_rest_key}"
+                                converted_state_dict[converted_key] = tensor
+                                continue
+                    
+                    skipped_keys.append(hf_key)
+                    continue
+                
+                # mlp_AR, pre_llm_aligner, encoder, quantizer - direct mapping
+                converted_key = f"visual_tokenizer.{rest_key}"
+                converted_state_dict[converted_key] = tensor
+                continue
+            
+            # ============ Quant Projector ============
+            if hf_key.startswith("quant_projector."):
+                # Direct mapping
+                converted_state_dict[hf_key] = tensor
+                continue
+            
+            # ============ LLM Model ============
+            # Skip lm_head if tie_word_embeddings is True
+            if tie_word_embeddings and hf_key == "lm_head.weight":
+                skipped_keys.append(hf_key)
+                continue
+            
+            # Handle embedding layer: model.embed_tokens.* -> text_model.model.tok_embeddings.*
+            if hf_key == "model.embed_tokens.weight":
+                converted_key = "text_model.model.tok_embeddings.weight"
+                converted_state_dict[converted_key] = tensor
+                continue
+            
+            # Handle final norm (RMSNorm uses 'scale' not 'weight')
+            if hf_key == "model.norm.weight":
+                converted_key = "text_model.model.norm.scale"
+                converted_state_dict[converted_key] = tensor
+                continue
+            
+            # Handle output layer (lm_head)
+            if hf_key == "lm_head.weight":
+                converted_key = "text_model.model.output.weight"
+                converted_state_dict[converted_key] = tensor
+                continue
+            
+            # Handle transformer layers: model.layers.* -> text_model.model.layers.*
+            if hf_key.startswith("model.layers."):
+                parts = hf_key.split(".", 3)  # ["model", "layers", "{i}", "rest"]
+                if len(parts) < 4:
+                    skipped_keys.append(hf_key)
+                    continue
+                
+                layer_idx = parts[2]
+                rest_key = parts[3]
+                
+                # Handle attention weights
+                if rest_key.startswith("self_attn."):
+                    attn_key = rest_key.replace("self_attn.", "attn.")
+                    attn_key = attn_key.replace("o_proj", "output_proj")
+                    attn_key = attn_key.replace("q_norm.weight", "q_norm.scale")
+                    attn_key = attn_key.replace("k_norm.weight", "k_norm.scale")
+                    converted_key = f"text_model.model.layers.{layer_idx}.{attn_key}"
+                    converted_state_dict[converted_key] = tensor
+                    continue
+                
+                # Handle MLP weights: gate_proj->w1, up_proj->w3, down_proj->w2
+                if rest_key.startswith("mlp."):
+                    mlp_key = rest_key.replace("mlp.", "")
+                    if mlp_key == "gate_proj.weight":
+                        converted_key = f"text_model.model.layers.{layer_idx}.mlp.w1.weight"
+                    elif mlp_key == "up_proj.weight":
+                        converted_key = f"text_model.model.layers.{layer_idx}.mlp.w3.weight"
+                    elif mlp_key == "down_proj.weight":
+                        converted_key = f"text_model.model.layers.{layer_idx}.mlp.w2.weight"
+                    else:
+                        skipped_keys.append(hf_key)
+                        continue
+                    converted_state_dict[converted_key] = tensor
+                    continue
+                
+                # Handle layer norms (RMSNorm uses 'scale' not 'weight')
+                if rest_key == "input_layernorm.weight":
+                    converted_key = f"text_model.model.layers.{layer_idx}.sa_norm.scale"
+                    converted_state_dict[converted_key] = tensor
+                    continue
+                
+                if rest_key == "post_attention_layernorm.weight":
+                    converted_key = f"text_model.model.layers.{layer_idx}.mlp_norm.scale"
+                    converted_state_dict[converted_key] = tensor
+                    continue
+            
+            # If key doesn't match any pattern, skip it
+            skipped_keys.append(hf_key)
+        
+        if skipped_keys:
+            logger.warning(
+                f"Skipped {len(skipped_keys)} keys during conversion. "
+                f"First few: {skipped_keys[:10]}"
+            )
+        
+        logger.info(
+            f"Converted {len(converted_state_dict)} keys from "
+            f"{len(hf_state_dict)} Hugging Face keys"
+        )
+        
+        return converted_state_dict
+
     def _project_visual_tokens(self, z_q_list: List[torch.Tensor]) -> torch.Tensor:
         projected = [proj(z) for proj, z in zip(self.quant_projector, z_q_list)]
         merged = sum(projected) * self.amplifier
@@ -391,12 +764,101 @@ class KeyeForConditionalGeneration(Model):
             merged = merged / len(projected)
         return merged
 
+
+    def get_rope_index_slowfast(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+        fast_video_grid_thw: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
+
+        Explanation:
+            Each embedding sequence contains vision embedding and text embedding or just contains text embedding.
+
+            For pure text embedding sequence, the rotary position embedding has no difference with modern LLMs.
+            Examples:
+                input_ids: [T T T T T], here T is for text.
+                temporal position_ids: [0, 1, 2, 3, 4]
+                height position_ids: [0, 1, 2, 3, 4]
+                width position_ids: [0, 1, 2, 3, 4]
+
+            For vision and text embedding sequence, we calculate 3D rotary position embedding for vision part
+            and 1D rotary position embedding for text part.
+            Examples:
+                Temporal (Time): 3 patches, representing different segments of the video in time.
+                Height: 2 patches, dividing each frame vertically.
+                Width: 2 patches, dividing each frame horizontally.
+                We also have some important parameters:
+                fps (Frames Per Second): The video's frame rate, set to 1. This means one frame is processed each second.
+                tokens_per_second: This is a crucial parameter. It dictates how many "time-steps" or "temporal tokens" are conceptually packed into a one-second interval of the video. In this case, we have 25 tokens per second. So each second of the video will be represented with 25 separate time points. It essentially defines the temporal granularity.
+                temporal_patch_size: The number of frames that compose one temporal patch. Here, it's 2 frames.
+                interval: The step size for the temporal position IDs, calculated as tokens_per_second * temporal_patch_size / fps. In this case, 25 * 2 / 1 = 50. This means that each temporal patch will be have a difference of 50 in the temporal position IDs.
+                input_ids: [V V V V V V V V V V V V T T T T T], here V is for vision.
+                vision temporal position_ids: [0, 0, 0, 0, 50, 50, 50, 50, 100, 100, 100, 100]
+                vision height position_ids: [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1]
+                vision width position_ids: [0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1]
+                text temporal position_ids: [101, 102, 103, 104, 105]
+                text height position_ids: [101, 102, 103, 104, 105]
+                text width position_ids: [101, 102, 103, 104, 105]
+                Here we calculate the text start position_ids as the max vision position_ids plus 1.
+
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+            second_per_grid_ts (`torch.Tensor` of shape `(num_videos)`, *optional*):
+                The time interval (in seconds) for each grid along the temporal dimension in the 3D position IDs.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+        Returns:
+            position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
+            mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
+        """
+        spatial_merge_size = self.config.vision_config.spatial_merge_size
+        image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
+        fast_video_token_id = self.config.fast_video_token_id
+        vision_start_token_id = self.config.vision_start_token_id
+        mrope_position_deltas = []
+        if attention_mask is not None:
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
+            max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
+            mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
+        else:
+            position_ids = (
+                torch.arange(input_ids.shape[1], device=input_ids.device)
+                .view(1, 1, -1)
+                .expand(3, input_ids.shape[0], -1)
+            )
+            mrope_position_deltas = torch.zeros(
+                [input_ids.shape[0], 1],
+                device=input_ids.device,
+                dtype=input_ids.dtype,
+            )
+        return position_ids, mrope_position_deltas
+
+
+
     def forward(
         self,
         input_ids: torch.LongTensor,
         attention_mask: Optional[torch.Tensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
-        image_grid_thw: Optional[List[Tuple[int, int, int]]] = None,
+        image_grid_thw: Optional[torch.Tensor] = None,
         labels: Optional[torch.LongTensor] = None,
         vision_token_mask: Optional[torch.Tensor] = None,
     ) -> Dict[str, torch.Tensor]:
@@ -404,8 +866,8 @@ class KeyeForConditionalGeneration(Model):
         Args:
             input_ids: 文本token id，形状 [b, s]
             attention_mask: 可选，传递给LLM的mask（布尔或同dtype）。
-            pixel_values: 视觉输入，形状 [b, seq, c, h, w]，当前仅支持 b=1。
-            image_grid_thw: 对应每个视觉切片的(t,h,w)列表。
+            pixel_values: 视觉输入，形状 [num_patches, C, H, W] 或 [1, num_patches, C, H, W]。
+            image_grid_thw: 形状 [num_images, 3]，每张图的(t,h,w)。
             labels: 语言模型标签，计算自回归loss。
             vision_token_mask: 指定哪些位置替换为视觉嵌入，形状同input_ids的bool。
         """
@@ -416,8 +878,8 @@ class KeyeForConditionalGeneration(Model):
         if pixel_values is not None:
             if image_grid_thw is None:
                 raise ValueError("使用视觉输入时必须提供 image_grid_thw。")
-            vq_out = self.visual_tokenizer(pixel_values, image_grid_thw=image_grid_thw)
-            visual_tokens = self._project_visual_tokens(vq_out["z_q_list"])
+            vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
+            visual_tokens = self._project_visual_tokens(vq_out["z_q"])
 
             if vision_token_mask is None:
                 if self.image_token_id < 0:
@@ -438,7 +900,8 @@ class KeyeForConditionalGeneration(Model):
             )
             aux_losses["indices"] = vq_out["indices"]
 
-        logits = self.text_model.model(
+        # Call through Qwen3Model.forward which delegates to TransformerDecoder
+        logits = self.text_model(
             tokens=None, mask=attention_mask, input_embeds=inputs_embeds
         )
 

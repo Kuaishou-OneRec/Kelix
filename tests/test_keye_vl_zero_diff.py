@@ -74,16 +74,22 @@ def _load_checkpoint(path: str, dtype: torch.dtype) -> dict:
     return {k: v.to(dtype) for k, v in ckpt.items()}
 
 
-def _maybe_convert_for_muse(model: torch.nn.Module, state_dict: dict) -> dict:
+def _maybe_convert_for_muse(model: torch.nn.Module, state_dict: dict, tie_word_embeddings: bool = True) -> dict:
     """
     如果模型实现了 convert_hf_state_dict（常见于 vision 子模块），则先做转换；
     否则直接返回原字典。
     """
-    convert_fn = getattr(model, "convert_hf_state_dict", None)
+    # Check if convert_hf_state_dict exists on the class or instance
+    model_cls = model.__class__
+    convert_fn = getattr(model_cls, "convert_hf_state_dict", None)
+    if convert_fn is None:
+        convert_fn = getattr(model, "convert_hf_state_dict", None)
+    
     if callable(convert_fn):
         try:
-            return convert_fn(state_dict)
-        except Exception:
+            return convert_fn(state_dict, tie_word_embeddings=tie_word_embeddings)
+        except Exception as e:
+            print(f"Warning: convert_hf_state_dict failed with {e}, falling back to original state_dict")
             # 转换失败则回退原权重，再由 strict=False 兜底
             return state_dict
     return state_dict
@@ -135,25 +141,28 @@ def _build_inputs(
 ) -> Tuple[dict, torch.Tensor]:
     """
     优先使用 SlowFastVisionPadder 生成占位输入；否则退回最小随机样例。
+    Both models expect image_grid_thw as tensor [num_images, 3].
     """
     if slowfast_dir:
         padder = SlowFastVisionPadder(slowfast_dir)
         img_pad = padder.gen_img_pad(n_merged_slow_tokens=1)
-        # image_grid_thw 转为 python list[tuple]
-        grid = [tuple(int(x) for x in img_pad["image_grid_thw"][0].tolist())]
+        # image_grid_thw as tensor [num_images, 3]
+        grid_thw = img_pad["image_grid_thw"].to(device)  # [1, 3]
         inputs = {
             "input_ids": img_pad["input_ids"].to(device),
             "attention_mask": img_pad["attention_mask"].to(device),
-            "pixel_values": img_pad["pixel_values"].unsqueeze(0).to(device, dtype),
-            "image_grid_thw": grid,
+            "pixel_values": img_pad["pixel_values"].to(device, dtype),  # [num_patches, 3, H, W]
+            "image_grid_thw": grid_thw,
             # 让模型内部根据 image_token_id 生成 mask
         }
         vision_token_mask = None
         return inputs, vision_token_mask
 
     # fallback: One 14x14 patch -> one vision token
-    pixel_values = torch.randn(1, 1, 3, 14, 14, device=device, dtype=dtype)
-    image_grid_thw = [(1, 1, 1)]
+    # pixel_values: [num_patches, C, H, W] where num_patches = t*h*w = 1*1*1 = 1
+    pixel_values = torch.randn(1, 3, 14, 14, device=device, dtype=dtype)
+    # image_grid_thw: [num_images, 3] where num_images = 1
+    image_grid_thw = torch.tensor([[1, 1, 1]], device=device, dtype=torch.long)
     input_ids = torch.tensor([[image_token_id, 1, 2, 3]], device=device, dtype=torch.long)
     attention_mask = torch.ones_like(input_ids)
     vision_token_mask = input_ids == image_token_id
@@ -256,7 +265,28 @@ def test_keye_vl_zero_diff(dtype):
 
     image_token_id = padder_token_id if padder_token_id is not None else raw_cfg.get("image_token_id", 151655)
 
-    origin_cfg = origin_mod.KeyeConfig(vision_config=vision_cfg, image_token_id=image_token_id)
+    # Build origin config from raw config (HuggingFace style)
+    # KeyeConfig takes vision_config as dict or KeyeImageTokenizerConfig
+    origin_cfg = origin_mod.KeyeConfig(
+        vocab_size=raw_cfg.get("vocab_size", 151936),
+        hidden_size=raw_cfg.get("hidden_size", 1024),
+        intermediate_size=raw_cfg.get("intermediate_size", 3072),
+        num_hidden_layers=raw_cfg.get("num_hidden_layers", 28),
+        num_attention_heads=raw_cfg.get("num_attention_heads", 8),
+        num_key_value_heads=raw_cfg.get("num_key_value_heads", 8),
+        max_position_embeddings=raw_cfg.get("max_position_embeddings", 40960),
+        rms_norm_eps=raw_cfg.get("rms_norm_eps", 1e-6),
+        rope_theta=raw_cfg.get("rope_theta", 1_000_000),
+        attention_dropout=raw_cfg.get("attention_dropout", 0.0),
+        attention_bias=raw_cfg.get("attention_bias", False),
+        tie_word_embeddings=raw_cfg.get("tie_word_embeddings", True),
+        vision_config=outer_vcfg,  # Pass the dict, KeyeConfig will convert it
+        image_token_id=image_token_id,
+        video_token_id=raw_cfg.get("video_token_id", 151656),
+        vision_start_token_id=raw_cfg.get("vision_start_token_id", 151652),
+        fast_video_token_id=raw_cfg.get("fast_video_token_id", 151657),
+    )
+    
     muse_model = muse_mod.KeyeForConditionalGeneration(
         qwen_config=qwen_cfg,
         vision_config=vision_cfg,
@@ -266,7 +296,8 @@ def test_keye_vl_zero_diff(dtype):
     origin_model = origin_mod.KeyeForConditionalGeneration(origin_cfg).to(device, dtype)
 
     state_dict = _load_checkpoint(ckpt_path, dtype)
-    muse_state = _maybe_convert_for_muse(muse_model, state_dict)
+    tie_word_embeddings = qwen_cfg.tie_word_embeddings
+    muse_state = _maybe_convert_for_muse(muse_model, state_dict, tie_word_embeddings=tie_word_embeddings)
     muse_model.load_state_dict(muse_state, strict=False)
     origin_model.load_state_dict(state_dict, strict=False)
 
