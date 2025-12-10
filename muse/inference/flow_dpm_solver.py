@@ -253,7 +253,8 @@ class DPM_Solver:
         t_0: float, 
         N: int, 
         device: torch.device,
-        shift: float = 1.0
+        shift: float = 1.0,
+        dtype: torch.dtype = None,
     ) -> torch.Tensor:
         """Compute the intermediate time steps for sampling.
         
@@ -264,21 +265,22 @@ class DPM_Solver:
             N: Number of steps.
             device: Target device.
             shift: Flow shift parameter for time_uniform_flow.
+            dtype: Data type for the timesteps tensor.
         
         Returns:
             Tensor of time steps with shape (N + 1,).
         """
         if skip_type == "time_uniform":
-            return torch.linspace(t_T, t_0, N + 1).to(device)
+            return torch.linspace(t_T, t_0, N + 1, dtype=dtype, device=device)
         elif skip_type == "time_uniform_flow":
-            betas = torch.linspace(t_T, t_0, N + 1).to(device)
+            betas = torch.linspace(t_T, t_0, N + 1, dtype=dtype, device=device)
             sigmas = 1.0 - betas
             sigmas = (shift * sigmas / (1 + (shift - 1) * sigmas)).flip(dims=[0])
             return sigmas
         elif skip_type == "logSNR":
-            lambda_T = self.noise_schedule.marginal_lambda(torch.tensor(t_T).to(device))
-            lambda_0 = self.noise_schedule.marginal_lambda(torch.tensor(t_0).to(device))
-            logSNR_steps = torch.linspace(lambda_T.cpu().item(), lambda_0.cpu().item(), N + 1).to(device)
+            lambda_T = self.noise_schedule.marginal_lambda(torch.tensor(t_T, dtype=dtype, device=device))
+            lambda_0 = self.noise_schedule.marginal_lambda(torch.tensor(t_0, dtype=dtype, device=device))
+            logSNR_steps = torch.linspace(lambda_T.cpu().item(), lambda_0.cpu().item(), N + 1, dtype=dtype, device=device)
             return self.noise_schedule.inverse_lambda(logSNR_steps)
         else:
             raise ValueError(f"Unsupported skip_type: {skip_type}")
@@ -418,13 +420,14 @@ class DPM_Solver:
         assert t_0 > 0 and t_T > 0, "Time range needs to be greater than 0"
         
         device = x.device
+        dtype = x.dtype
         intermediates = []
         
         with torch.no_grad():
             if method == "multistep":
                 assert steps >= order
                 timesteps = self.get_time_steps(
-                    skip_type=skip_type, t_T=t_T, t_0=t_0, N=steps, device=device, shift=flow_shift
+                    skip_type=skip_type, t_T=t_T, t_0=t_0, N=steps, device=device, shift=flow_shift, dtype=dtype
                 )
                 assert timesteps.shape[0] - 1 == steps
                 
