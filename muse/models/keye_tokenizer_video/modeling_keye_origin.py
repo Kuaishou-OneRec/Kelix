@@ -1256,11 +1256,13 @@ class SiglipEncoder(nn.Module):
             rope_emb = (rope_emb.cos(), rope_emb.sin())
             # stash for external debug comparison
             self.debug_rope = rope_emb
-            try:
-                print(f"[DEBUG rope origin] cos dtype={rope_emb[0].dtype}, shape={rope_emb[0].shape}")
-                print(f"[DEBUG rope origin] sin dtype={rope_emb[1].dtype}, shape={rope_emb[1].shape}")
-            except Exception as e:
-                print(f"[DEBUG rope origin] cos/sin print failed: {e}")
+            if not getattr(self, "_debug_rope_logged", False):
+                try:
+                    print(f"[DEBUG rope origin] cos dtype={rope_emb[0].dtype}, shape={rope_emb[0].shape}")
+                    print(f"[DEBUG rope origin] sin dtype={rope_emb[1].dtype}, shape={rope_emb[1].shape}")
+                except Exception as e:
+                    print(f"[DEBUG rope origin] cos/sin print failed: {e}")
+                self._debug_rope_logged = True
         else:
 
             rope_emb = None

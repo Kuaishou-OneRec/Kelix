@@ -330,17 +330,19 @@ class TwoD_RotaryEmbedding(nn.Module):
         freqs_w = self.freqs_cache[width_ids]
         rope_emb_half = torch.cat([freqs_h, freqs_w], dim=-1)
         
-        cos_half = rope_emb_half.cos() 
-        sin_half = rope_emb_half.sin()
-        # stash for external debug comparison
+        cos_half = rope_emb_half.cos().to(dtype=x.dtype)
+        sin_half = rope_emb_half.sin().to(dtype=x.dtype)
+        # stash for external debug comparison (already cast to input dtype)
         self.debug_cos = cos_half
         self.debug_sin = sin_half
-        # Debug: only print dtype to avoid spam
-        try:
-            print(f"[DEBUG rope muse] cos_half dtype={cos_half.dtype}, shape={cos_half.shape}")
-            print(f"[DEBUG rope muse] sin_half dtype={sin_half.dtype}, shape={sin_half.shape}")
-        except Exception as e:
-            print(f"[DEBUG rope muse cos/sin print failed]: {e}")
+        # Debug: print once to avoid spam
+        if not getattr(self, "_debug_rope_logged", False):
+            try:
+                print(f"[DEBUG rope muse] cos_half dtype={cos_half.dtype}, shape={cos_half.shape}")
+                print(f"[DEBUG rope muse] sin_half dtype={sin_half.dtype}, shape={sin_half.shape}")
+            except Exception as e:
+                print(f"[DEBUG rope muse cos/sin print failed]: {e}")
+            self._debug_rope_logged = True
         return flash_apply_rotary_emb(
             x.float(), cos_half.float(), sin_half.float()
         ).to(dtype=x.dtype)
