@@ -133,15 +133,19 @@ def model_wrapper(
     def noise_pred_fn(
         x: torch.Tensor, 
         t_continuous: torch.Tensor, 
-        cond: Optional[torch.Tensor] = None
+        cond: Optional[torch.Tensor] = None,
+        **extra_kwargs,
     ) -> torch.Tensor:
         """Predict noise from the model output."""
         t_input = get_model_input_time(t_continuous)
         
+        # Merge model_kwargs with extra_kwargs (extra_kwargs takes precedence)
+        merged_kwargs = {**model_kwargs, **extra_kwargs}
+        
         if cond is None:
-            output = model(x, t_input, **model_kwargs)
+            output = model(x, t_input, **merged_kwargs)
         else:
-            output = model(x, t_input, cond, **model_kwargs)
+            output = model(x, t_input, cond, **merged_kwargs)
         
         if model_type == "flow":
             # Flow model predicts velocity v = noise - x_0
@@ -169,7 +173,15 @@ def model_wrapper(
             t_in = torch.cat([t_continuous] * 2)
             c_in = torch.cat([unconditional_condition, condition])
             
-            noise_output = noise_pred_fn(x_in, t_in, cond=c_in)
+            # Expand model_kwargs tensors for CFG (double batch size)
+            cfg_kwargs = {}
+            for k, v in model_kwargs.items():
+                if isinstance(v, torch.Tensor):
+                    cfg_kwargs[k] = torch.cat([v] * 2)
+                else:
+                    cfg_kwargs[k] = v
+            
+            noise_output = noise_pred_fn(x_in, t_in, cond=c_in, **cfg_kwargs)
             noise_uncond, noise_cond = noise_output.chunk(2)
             
             return noise_uncond + guidance_scale * (noise_cond - noise_uncond)
