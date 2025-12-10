@@ -485,7 +485,7 @@ class KeyeImageTokenizer(Model):
             interpolate_pos_encoding=True,
             cu_seqlens=cu_seqlens,
         )
-        image_embeds = vision_outputs.last_hidden_state
+        image_embeds = vision_outputs['last_hidden_state']
         image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
         return image_embeds
 
