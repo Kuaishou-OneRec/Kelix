@@ -1156,6 +1156,119 @@ def run_full_alignment_test():
                 muse_final = muse_after_cross + muse_gate_mlp * muse_ff_out
                 compare_tensors("block1_final_output", diff_final, muse_final)
             
+            # Debug block 2 before running
+            if i == 2:
+                print(f"\n  [Debug Block 2]")
+                # 1. Compare input to block 2 (should be block 1 output)
+                compare_tensors(f"block2_input", diff_x, muse_x)
+                
+                # 2. Check if input is contiguous
+                print(f"  diff_x contiguous: {diff_x.is_contiguous()}, stride: {diff_x.stride()}")
+                print(f"  muse_x contiguous: {muse_x.is_contiguous()}, stride: {muse_x.stride()}")
+                
+                # 3. Step-by-step forward for block 2
+                B = diff_x.shape[0]
+                C = diff_x.shape[-1]
+                
+                # Modulation
+                diff_shift_msa2, diff_scale_msa2, diff_gate_msa2, diff_shift_mlp2, diff_scale_mlp2, diff_gate_mlp2 = (
+                    diff_block.scale_shift_table[None] + diff_time.reshape(B, 6, -1)
+                ).chunk(6, dim=1)
+                muse_shift_msa2, muse_scale_msa2, muse_gate_msa2, muse_shift_mlp2, muse_scale_mlp2, muse_gate_mlp2 = (
+                    muse_block.scale_shift_table[None] + muse_t0.reshape(B, 6, -1)
+                ).chunk(6, dim=1)
+                compare_tensors("block2_modulation", diff_shift_msa2, muse_shift_msa2)
+                
+                # Norm1
+                diff_norm1_2 = diff_block.norm1(diff_x)
+                muse_norm1_2 = muse_block.norm1(muse_x)
+                compare_tensors("block2_norm1", diff_norm1_2, muse_norm1_2)
+                
+                # Norm1 + modulation
+                diff_norm1_mod2 = diff_norm1_2 * (1 + diff_scale_msa2) + diff_shift_msa2
+                muse_norm1_mod2 = muse_norm1_2 * (1 + muse_scale_msa2) + muse_shift_msa2
+                compare_tensors("block2_norm1_mod", diff_norm1_mod2, muse_norm1_mod2)
+                
+                # Self-attention Q, K, V
+                diff_q2 = diff_block.attn1.to_q(diff_norm1_mod2)
+                diff_k2 = diff_block.attn1.to_k(diff_norm1_mod2)
+                diff_v2 = diff_block.attn1.to_v(diff_norm1_mod2)
+                muse_q2 = muse_block.attn.to_q(muse_norm1_mod2)
+                muse_k2 = muse_block.attn.to_k(muse_norm1_mod2)
+                muse_v2 = muse_block.attn.to_v(muse_norm1_mod2)
+                compare_tensors("block2_self_attn_q", diff_q2, muse_q2)
+                compare_tensors("block2_self_attn_k", diff_k2, muse_k2)
+                compare_tensors("block2_self_attn_v", diff_v2, muse_v2)
+                
+                # QK norm
+                diff_q2_normed = diff_block.attn1.norm_q(diff_q2)
+                diff_k2_normed = diff_block.attn1.norm_k(diff_k2)
+                muse_q2_normed = muse_block.attn.q_norm(muse_q2)
+                muse_k2_normed = muse_block.attn.k_norm(muse_k2)
+                compare_tensors("block2_q_normed", diff_q2_normed, muse_q2_normed)
+                compare_tensors("block2_k_normed", diff_k2_normed, muse_k2_normed)
+                
+                # Reshape for attention
+                num_heads = diff_block.attn1.heads
+                head_dim = diff_q2.shape[-1] // num_heads
+                diff_q2_reshape = diff_q2_normed.view(B, -1, num_heads, head_dim).transpose(1, 2)
+                diff_k2_reshape = diff_k2_normed.view(B, -1, num_heads, head_dim).transpose(1, 2)
+                diff_v2_reshape = diff_v2.view(B, -1, num_heads, head_dim).transpose(1, 2)
+                muse_q2_reshape = muse_q2_normed.view(B, -1, num_heads, head_dim).transpose(1, 2)
+                muse_k2_reshape = muse_k2_normed.view(B, -1, num_heads, head_dim).transpose(1, 2)
+                muse_v2_reshape = muse_v2.view(B, -1, num_heads, head_dim).transpose(1, 2)
+                compare_tensors("block2_q_reshape", diff_q2_reshape, muse_q2_reshape)
+                
+                # Self-attention SDPA
+                diff_attn2_out = F.scaled_dot_product_attention(diff_q2_reshape, diff_k2_reshape, diff_v2_reshape)
+                muse_attn2_out = F.scaled_dot_product_attention(muse_q2_reshape, muse_k2_reshape, muse_v2_reshape)
+                compare_tensors("block2_self_attn_sdpa", diff_attn2_out, muse_attn2_out)
+                
+                # Self-attention output projection
+                diff_attn2_out_t = diff_attn2_out.transpose(1, 2).reshape(B, -1, C)
+                muse_attn2_out_t = muse_attn2_out.transpose(1, 2).reshape(B, -1, C)
+                diff_attn2_proj = diff_block.attn1.to_out[0](diff_attn2_out_t)
+                muse_attn2_proj = muse_block.attn.proj(muse_attn2_out_t)
+                compare_tensors("block2_self_attn_proj", diff_attn2_proj, muse_attn2_proj)
+                
+                # After self-attention (with gate and residual)
+                diff_after_attn2 = diff_x + diff_gate_msa2 * diff_attn2_proj
+                muse_after_attn2 = muse_x + muse_gate_msa2 * muse_attn2_proj
+                compare_tensors("block2_after_self_attn", diff_after_attn2, muse_after_attn2)
+                
+                # Cross-attention
+                print("\n  Block 2 Cross-Attention:")
+                diff_cross2_out = diff_block.attn2(diff_after_attn2, encoder_hidden_states=diff_caption)
+                muse_cross2_out = muse_block.cross_attn(muse_after_attn2, muse_caption)
+                compare_tensors("block2_cross_attn_out", diff_cross2_out, muse_cross2_out)
+                
+                # After cross-attention
+                diff_after_cross2 = diff_after_attn2 + diff_cross2_out
+                muse_after_cross2 = muse_after_attn2 + muse_cross2_out
+                compare_tensors("block2_after_cross_attn", diff_after_cross2, muse_after_cross2)
+                
+                # FFN
+                print("\n  Block 2 FFN:")
+                diff_norm2_2 = diff_block.norm2(diff_after_cross2)
+                muse_norm2_2 = muse_block.norm2(muse_after_cross2)
+                compare_tensors("block2_norm2", diff_norm2_2, muse_norm2_2)
+                
+                diff_norm2_mod2 = diff_norm2_2 * (1 + diff_scale_mlp2) + diff_shift_mlp2
+                muse_norm2_mod2 = muse_norm2_2 * (1 + muse_scale_mlp2) + muse_shift_mlp2
+                compare_tensors("block2_norm2_mod", diff_norm2_mod2, muse_norm2_mod2)
+                
+                # FFN forward
+                diff_ff2_in = diff_norm2_mod2.unflatten(1, (h, w)).permute(0, 3, 1, 2)
+                diff_ff2_out = diff_block.ff(diff_ff2_in)
+                diff_ff2_out_flat = diff_ff2_out.permute(0, 2, 3, 1).flatten(1, 2)
+                muse_ff2_out = muse_block.mlp(muse_norm2_mod2)
+                compare_tensors("block2_ff_output", diff_ff2_out_flat, muse_ff2_out)
+                
+                # Final output
+                diff_final2 = diff_after_cross2 + diff_gate_mlp2 * diff_ff2_out_flat
+                muse_final2 = muse_after_cross2 + muse_gate_mlp2 * muse_ff2_out
+                compare_tensors("block2_final_output", diff_final2, muse_final2)
+            
             # Run blocks
             diff_out = diff_block(
                 diff_x,
