@@ -22,14 +22,31 @@ Sana Inference Demo.
 This script demonstrates loading a Sana model checkpoint and generating images
 from text prompts using the muse framework.
 
+Supports two sampling methods:
+- dpm-solver (default): Flow-DPM-Solver for faster sampling with fewer steps
+- euler: Standard Euler scheduler from diffusers
+
 Usage:
+    # Using DPM-Solver (recommended, faster)
     python examples/sana/inference_demo.py \
         --model-dir /path/to/checkpoint \
         --tokenizer google/gemma-2-2b-it \
         --prompt "A cat sitting on a couch" \
         --output output.png \
         --num-steps 20 \
-        --cfg-scale 4.5
+        --cfg-scale 4.5 \
+        --sampler dpm-solver \
+        --flow-shift 3.0
+    
+    # Using Euler scheduler
+    python examples/sana/inference_demo.py \
+        --model-dir /path/to/checkpoint \
+        --tokenizer google/gemma-2-2b-it \
+        --prompt "A cat sitting on a couch" \
+        --output output.png \
+        --num-steps 20 \
+        --cfg-scale 4.5 \
+        --sampler euler
 """
 
 import argparse
@@ -101,6 +118,21 @@ def get_args():
         type=str,
         default=None,
         help="Scheduler path (optional, will create default if not specified)"
+    )
+    
+    # Sampler arguments
+    parser.add_argument(
+        "--sampler",
+        type=str,
+        default="dpm-solver",
+        choices=["dpm-solver", "euler"],
+        help="Sampling algorithm: dpm-solver (faster) or euler"
+    )
+    parser.add_argument(
+        "--flow-shift",
+        type=float,
+        default=3.0,
+        help="Flow shift parameter for DPM-Solver (default: 3.0)"
     )
     
     # Generation arguments
@@ -367,7 +399,114 @@ def encode_prompts(
 
 
 @torch.no_grad()
-def generate(
+def generate_with_dpm_solver(
+    model,
+    vae,
+    text_embeds: torch.Tensor,
+    attention_mask: torch.Tensor,
+    uncond_embeds: Optional[torch.Tensor] = None,
+    uncond_mask: Optional[torch.Tensor] = None,
+    cfg_scale: float = 4.5,
+    num_steps: int = 20,
+    flow_shift: float = 3.0,
+    image_size: int = 1024,
+    latent_channels: int = 32,
+    vae_downsample: int = 32,
+    device: torch.device = None,
+    dtype: torch.dtype = None,
+    seed: int = 42,
+):
+    """Generate images using Flow-DPM-Solver (faster sampling).
+    
+    Args:
+        model: Sana model
+        vae: VAE decoder
+        text_embeds: Conditional text embeddings [B, 1, L, D]
+        attention_mask: Text attention mask [B, 1, 1, L]
+        uncond_embeds: Unconditional embeddings for CFG
+        uncond_mask: Unconditional attention mask
+        cfg_scale: Classifier-free guidance scale
+        num_steps: Number of sampling steps
+        flow_shift: Flow shift parameter
+        image_size: Output image size
+        latent_channels: Number of latent channels
+        vae_downsample: VAE downsampling factor
+        device: Target device
+        dtype: Data type
+        seed: Random seed
+    
+    Returns:
+        List of PIL images
+    """
+    from muse.inference import create_flow_dpm_solver
+    
+    batch_size = text_embeds.shape[0]
+    latent_size = image_size // vae_downsample
+    
+    # Set random seed
+    generator = torch.Generator(device=device).manual_seed(seed)
+    
+    # Initialize latents with random noise
+    latents = torch.randn(
+        (batch_size, latent_channels, latent_size, latent_size),
+        generator=generator,
+        device=device,
+        dtype=dtype,
+    )
+    
+    # Prepare model function that accepts (x, t, cond, mask) 
+    def model_fn(x, t, cond, mask=None):
+        return model.forward_with_dpmsolver(x, t, cond, mask=mask)
+    
+    # Prepare condition and uncondition for DPM-Solver
+    # DPM-Solver handles CFG internally
+    condition = text_embeds
+    uncondition = uncond_embeds if uncond_embeds is not None else torch.zeros_like(text_embeds)
+    
+    # Create model kwargs with attention mask
+    model_kwargs = {"mask": attention_mask}
+    
+    # Create DPM-Solver
+    logger.info(f"Using DPM-Solver with {num_steps} steps, flow_shift={flow_shift}")
+    solver = create_flow_dpm_solver(
+        model_fn,
+        condition=condition,
+        uncondition=uncondition,
+        cfg_scale=cfg_scale,
+        model_kwargs=model_kwargs,
+    )
+    
+    # Sample
+    latents = solver.sample(
+        latents,
+        steps=num_steps,
+        flow_shift=flow_shift,
+        order=2,
+        skip_type="time_uniform_flow",
+        method="multistep",
+        lower_order_final=True,
+    )
+    
+    # Decode latents to images
+    logger.info("Decoding latents to images...")
+    
+    # Apply inverse scaling factor
+    if hasattr(vae, 'config') and hasattr(vae.config, 'scaling_factor'):
+        latents = latents / vae.config.scaling_factor
+    
+    images = vae.decode(latents).sample
+    
+    # Convert to PIL images
+    images = (images / 2 + 0.5).clamp(0, 1)
+    images = images.cpu().permute(0, 2, 3, 1).float().numpy()
+    images = (images * 255).round().astype("uint8")
+    pil_images = [Image.fromarray(img) for img in images]
+    
+    return pil_images
+
+
+@torch.no_grad()
+def generate_with_euler(
     model,
     vae,
     scheduler,
@@ -383,7 +522,7 @@ def generate(
     dtype: torch.dtype = None,
     seed: int = 42,
 ):
-    """Generate images from text embeddings."""
+    """Generate images using Euler scheduler (from diffusers)."""
     batch_size = text_embeds.shape[0]
     latent_size = image_size // vae_downsample
     
@@ -412,7 +551,7 @@ def generate(
         attention_mask_cfg = attention_mask
     
     # Sampling loop
-    logger.info(f"Starting sampling with {len(scheduler.timesteps)} steps...")
+    logger.info(f"Starting Euler sampling with {len(scheduler.timesteps)} steps...")
     for i, t in enumerate(scheduler.timesteps):
         # Expand latents for CFG
         latent_model_input = torch.cat([latents] * 2) if do_cfg else latents
@@ -474,6 +613,7 @@ def main():
     dtype = dtype_map[args.dtype]
     
     logger.info(f"Device: {device}, dtype: {dtype}")
+    logger.info(f"Sampler: {args.sampler}")
     
     # Load models
     model = load_model(args.model_dir, device, dtype, args.transformer_subfolder)
@@ -481,7 +621,11 @@ def main():
     tokenizer, text_encoder = load_tokenizer_and_encoder(
         args.tokenizer, args.text_encoder, device, dtype
     )
-    scheduler = load_scheduler(args.scheduler, args.num_steps)
+    
+    # Only load scheduler for euler sampler
+    scheduler = None
+    if args.sampler == "euler":
+        scheduler = load_scheduler(args.scheduler, args.num_steps)
     
     # Encode prompts
     logger.info(f"Prompt: {args.prompt}")
@@ -508,22 +652,42 @@ def main():
     
     # Generate images
     logger.info("Generating image...")
-    images = generate(
-        model=model,
-        vae=vae,
-        scheduler=scheduler,
-        text_embeds=text_embeds,
-        attention_mask=attention_mask,
-        uncond_embeds=uncond_embeds,
-        uncond_mask=uncond_mask,
-        cfg_scale=args.cfg_scale,
-        image_size=args.image_size,
-        latent_channels=model.config.in_channels,
-        vae_downsample=model.config.vae_downsample_rate,
-        device=device,
-        dtype=dtype,
-        seed=args.seed,
-    )
+    
+    if args.sampler == "dpm-solver":
+        images = generate_with_dpm_solver(
+            model=model,
+            vae=vae,
+            text_embeds=text_embeds,
+            attention_mask=attention_mask,
+            uncond_embeds=uncond_embeds,
+            uncond_mask=uncond_mask,
+            cfg_scale=args.cfg_scale,
+            num_steps=args.num_steps,
+            flow_shift=args.flow_shift,
+            image_size=args.image_size,
+            latent_channels=model.config.in_channels,
+            vae_downsample=model.config.vae_downsample_rate,
+            device=device,
+            dtype=dtype,
+            seed=args.seed,
+        )
+    else:  # euler
+        images = generate_with_euler(
+            model=model,
+            vae=vae,
+            scheduler=scheduler,
+            text_embeds=text_embeds,
+            attention_mask=attention_mask,
+            uncond_embeds=uncond_embeds,
+            uncond_mask=uncond_mask,
+            cfg_scale=args.cfg_scale,
+            image_size=args.image_size,
+            latent_channels=model.config.in_channels,
+            vae_downsample=model.config.vae_downsample_rate,
+            device=device,
+            dtype=dtype,
+            seed=args.seed,
+        )
     
     # Save images
     output_path = args.output
