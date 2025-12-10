@@ -271,36 +271,133 @@ def test_pipeline_alignment():
     muse_state = muse_model.convert_hf_state_dict(state_dict, tie_word_embeddings=qwen_cfg.tie_word_embeddings)
     muse_model.load_state_dict(muse_state, strict=False)
 
-    # --- 4. Prepare Inputs ---
-    # Construct a simple but valid input: 1 image, 1 patch (minimal)
-    # Note: Using >1 patch to test Projector's merge logic
-    
-    # Image Input: [Batch=1, C=3, H=14*2, W=14*2] (2x2 patches to trigger projector kernel=2x2)
-    # Projector Kernel (2,2) means input spatial must be at least 2x2 patches? 
-    # Your Projector code: hidden_size = in_channels * k[0] * k[1].
-    # Let's give it 28x28 image (2x2 patches of 14x14).
-    
-    pixel_values = torch.randn(1, 3, 28, 28, device=device, dtype=dtype)
-    # Grid: (t=1, h=2, w=2) -> patches = 4
-    image_grid_thw = torch.tensor([[1, 2, 2]], device=device, dtype=torch.long)
-    
-    # Token IDs
-    image_token_id = raw_cfg.get("image_token_id", 151655)
-    # Input: [Text, ImageToken, Text]
-    input_ids = torch.tensor([[1, image_token_id, 2]], device=device, dtype=torch.long)
+
+
+
+class SlowFastVisionPadder:
+    """
+    极简版 SlowFast padding 构造器，按照用户提供的片段实现，只保留需要的字段。
+    - 仅生成 image_pad（不使用 fast_video 以避免额外依赖）。
+    - position_ids 交由模型内部生成，确保两端一致。
+    """
+
+    def __init__(self, model_dir: str):
+        processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
+        self.processor = processor
+        self.patch_size = processor.image_processor.patch_size
+        self.merge_size = processor.image_processor.merge_size
+        assert (
+            self.merge_size == 2
+        ), f"SlowFastVisionPadder only supports merge_size==2, got {self.merge_size}"
+
+        self.image_pad = processor.tokenizer.encode("<|image_pad|>")[0]
+        self.video_pad = processor.tokenizer.encode("<|video_pad|>")[0]
+        fast_video_pad = processor.tokenizer.encode("<|fast_video_pad|>")
+        assert len(fast_video_pad) == 1, f"Decode fast_video_pad failed: {fast_video_pad}"
+        self.fast_video_pad = fast_video_pad[0]
+        self.vision_start = processor.tokenizer.encode("<|vision_start|>")[0]
+        self.vision_end = processor.tokenizer.encode("<|vision_end|>")[0]
+        self.frame = processor.tokenizer.encode("<|frame|>")[0]
+
+    def gen_img_pad(self, n_merged_slow_tokens: int = 1) -> Dict[str, Any]:
+        input_ids = [self.vision_start] + [self.image_pad] * n_merged_slow_tokens + [self.vision_end]
+        inputs = {
+            "input_ids": torch.tensor([input_ids], dtype=torch.int64),
+            "attention_mask": torch.tensor([[1] * (n_merged_slow_tokens + 2)], dtype=torch.int64),
+            # merge_size=2 -> 每个 merged token 对应 2x2 patch = 4 patch tokens
+            "pixel_values": torch.rand(
+                n_merged_slow_tokens * 4, 3, self.patch_size, self.patch_size
+            ).float(),
+            "image_grid_thw": torch.tensor([[1, 2, n_merged_slow_tokens * 2]], dtype=torch.int64),
+            "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
+        }
+        # 让模型内部生成 position_ids，保持两端一致
+        return inputs
+
+def _build_inputs(
+    image_token_id: int, device: torch.device, dtype: torch.dtype, slowfast_dir: Union[str, None]
+) -> Tuple[dict, torch.Tensor]:
+    """
+    优先使用 SlowFastVisionPadder 生成占位输入；否则退回最小随机样例。
+    Both models expect image_grid_thw as tensor [num_images, 3].
+    """
+    if slowfast_dir:
+        padder = SlowFastVisionPadder(slowfast_dir)
+        img_pad = padder.gen_img_pad(n_merged_slow_tokens=1)
+        # image_grid_thw as tensor [num_images, 3]
+        grid_thw = img_pad["image_grid_thw"].to(device)  # [1, 3]
+        inputs = {
+            "input_ids": img_pad["input_ids"].to(device),
+            "attention_mask": img_pad["attention_mask"].to(device),
+            "pixel_values": img_pad["pixel_values"].to(device, dtype),  # [num_patches, 3, H, W]
+            "image_grid_thw": grid_thw,
+            # 让模型内部根据 image_token_id 生成 mask
+        }
+        vision_token_mask = None
+        return inputs, vision_token_mask
+
+    # fallback: One 14x14 patch -> one vision token
+    # pixel_values: [num_patches, C, H, W] where num_patches = t*h*w = 1*1*1 = 1
+    pixel_values = torch.randn(1, 3, 14, 14, device=device, dtype=dtype)
+    # image_grid_thw: [num_images, 3] where num_images = 1
+    image_grid_thw = torch.tensor([[1, 1, 1]], device=device, dtype=torch.long)
+    input_ids = torch.tensor([[image_token_id, 1, 2, 3]], device=device, dtype=torch.long)
     attention_mask = torch.ones_like(input_ids)
+    vision_token_mask = input_ids == image_token_id
+    return (
+        {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": pixel_values,
+            "image_grid_thw": image_grid_thw,
+            "vision_token_mask": vision_token_mask,
+        },
+        vision_token_mask,
+    )
+
+    # # --- 4. Prepare Inputs ---
+    # # The model expects pixel_values in packed format: (num_patches, C, patch_H, patch_W)
+    # # where num_patches = t * h * w from image_grid_thw.
+    # # 
+    # # For image_grid_thw = [[1, 2, 2]] (t=1, h=2, w=2), we have 4 patches.
+    # # Each patch is 14x14 pixels (the patch_size from config).
+    # # So pixel_values should be [4, 3, 14, 14].
     
-    # Vision Mask: Where is the image token?
-    vision_token_mask = (input_ids == image_token_id)
-
-    inputs = {
-        "input_ids": input_ids,
-        "attention_mask": attention_mask,
-        "pixel_values": pixel_values,
-        "image_grid_thw": image_grid_thw,
-        "vision_token_mask": vision_token_mask
-    }
-
+    # patch_size = inner_vcfg.get("patch_size", 14)
+    # t, h, w = 1, 2, 2  # Grid dimensions
+    # num_patches = t * h * w  # = 4
+    
+    # pixel_values = torch.randn(num_patches, 3, patch_size, patch_size, device=device, dtype=dtype)
+    # image_grid_thw = torch.tensor([[t, h, w]], device=device, dtype=torch.long)
+    
+    # # Token IDs
+    # image_token_id = raw_cfg.get("image_token_id", 151655)
+    
+    # # Calculate how many image tokens the Projector outputs
+    # # Projector uses merge_kernel_size = (2, 2)
+    # # After merge: spatial_h = h/2, spatial_w = w/2
+    # # With temporal merge, output = (h/2) * (w/2) = 1 token for h=2, w=2
+    # # So we need exactly 1 image_token_id in input_ids.
+    # n_image_tokens = (h // 2) * (w // 2)  # = 1
+    
+    # # Input: [Text, ImageToken(s), Text]
+    # input_ids_list = [1] + [image_token_id] * n_image_tokens + [2]
+    # input_ids = torch.tensor([input_ids_list], device=device, dtype=torch.long)
+    # attention_mask = torch.ones_like(input_ids)
+    
+    # inputs = {
+    #     "input_ids": input_ids,
+    #     "attention_mask": attention_mask,
+    #     "pixel_values": pixel_values,
+    #     "image_grid_thw": image_grid_thw,
+    # }
+    
+    # logger.info(f"Input shapes: pixel_values={pixel_values.shape}, image_grid_thw={image_grid_thw}, input_ids={input_ids.shape}")
+    image_token_id = padder_token_id if padder_token_id is not None else raw_cfg.get("image_token_id", 151655)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    dtype = torch.float16
+    slowfast_dir = 
+    inputs, vision_mask = _build_inputs(image_token_id, device, dtype, DEFAULT_CKPT)
     # --- 5. Register Hooks ---
     register_hooks(origin_model, "origin")
     register_hooks(muse_model, "muse")
