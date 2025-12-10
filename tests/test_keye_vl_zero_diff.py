@@ -224,6 +224,9 @@ def test_keye_vl_zero_diff(dtype):
     # Vision config: use inner vision_config["vision_config"]
     outer_vcfg = raw_cfg["vision_config"]
     inner_vcfg = outer_vcfg["vision_config"]
+    # 强制保证 _attn_implementation 传递为 flash_attention_2，避免 origin 端退回 SDPA
+    inner_vcfg["_attn_implementation"] = "flash_attention_2"
+    outer_vcfg["_attn_implementation"] = outer_vcfg.get("_attn_implementation", "flash_attention_2")
     vision_cfg = KeyeVisionConfig(
         hidden_size=inner_vcfg["hidden_size"],               # 1152
         intermediate_size=inner_vcfg["intermediate_size"],   # 4304
@@ -239,6 +242,8 @@ def test_keye_vl_zero_diff(dtype):
         attention_function=inner_vcfg.get("_attn_implementation", "flash_attention_2"),
         use_qk_norm=inner_vcfg.get("use_qk_norm", False),
     )
+    # 显式写入以防 KeyeVisionConfig 未存储该字段
+    vision_cfg._attn_implementation = "flash_attention_2"
 
     # Tokenizer config from outer vision_config (tokenizer block)
     tokenizer_cfg = KeyeTokenizerConfig(
@@ -260,31 +265,35 @@ def test_keye_vl_zero_diff(dtype):
         padder_token_id = SlowFastVisionPadder(slowfast_dir).image_pad
 
     image_token_id = padder_token_id if padder_token_id is not None else raw_cfg.get("image_token_id", 151655)
-
-    # Build origin config from raw config (HuggingFace style)
-    # KeyeConfig takes vision_config as dict or KeyeImageTokenizerConfig
-    # 必须传入 head_dim，否则原版模型会默认用 hidden_size // num_attention_heads = 64，
-    # 而 checkpoint 用的是 head_dim=128，导致 q_proj/o_proj 维度不匹配。
-    origin_cfg = origin_mod.KeyeConfig(
-        vocab_size=raw_cfg["vocab_size"],
-        hidden_size=raw_cfg["hidden_size"],
-        intermediate_size=raw_cfg["intermediate_size"],
-        num_hidden_layers=raw_cfg["num_hidden_layers"],
-        num_attention_heads=raw_cfg["num_attention_heads"],
-        num_key_value_heads=raw_cfg["num_key_value_heads"],
-        head_dim=raw_cfg["head_dim"],  # 关键！必须传入 head_dim=128
-        max_position_embeddings=raw_cfg["max_position_embeddings"],
-        rms_norm_eps=raw_cfg.get("rms_norm_eps", 1e-6),
-        rope_theta=raw_cfg.get("rope_theta", 1_000_000),
-        attention_dropout=raw_cfg.get("attention_dropout", 0.0),
-        attention_bias=raw_cfg.get("attention_bias", False),
-        tie_word_embeddings=raw_cfg.get("tie_word_embeddings", True),
-        vision_config=outer_vcfg,  # Pass the dict, KeyeConfig will convert it
-        image_token_id=image_token_id,
-        video_token_id=raw_cfg.get("video_token_id", 151656),
-        vision_start_token_id=raw_cfg.get("vision_start_token_id", 151652),
-        fast_video_token_id=raw_cfg.get("fast_video_token_id", 151678),
-    )
+    # # Build origin config from raw config (HuggingFace style)
+    # # KeyeConfig takes vision_config as dict or KeyeImageTokenizerConfig
+    # # 必须传入 head_dim，否则原版模型会默认用 hidden_size // num_attention_heads = 64，
+    # # 而 checkpoint 用的是 head_dim=128，导致 q_proj/o_proj 维度不匹配。
+    # origin_cfg = origin_mod.KeyeConfig(
+    #     vocab_size=raw_cfg["vocab_size"],
+    #     hidden_size=raw_cfg["hidden_size"],
+    #     intermediate_size=raw_cfg["intermediate_size"],
+    #     num_hidden_layers=raw_cfg["num_hidden_layers"],
+    #     num_attention_heads=raw_cfg["num_attention_heads"],
+    #     num_key_value_heads=raw_cfg["num_key_value_heads"],
+    #     head_dim=raw_cfg["head_dim"],  # 关键！必须传入 head_dim=128
+    #     max_position_embeddings=raw_cfg["max_position_embeddings"],
+    #     rms_norm_eps=raw_cfg.get("rms_norm_eps", 1e-6),
+    #     rope_theta=raw_cfg.get("rope_theta", 1_000_000),
+    #     attention_dropout=raw_cfg.get("attention_dropout", 0.0),
+    #     attention_bias=raw_cfg.get("attention_bias", False),
+    #     tie_word_embeddings=raw_cfg.get("tie_word_embeddings", True),
+    #     vision_config=outer_vcfg,  # Pass the dict, KeyeConfig will convert it
+    #     image_token_id=image_token_id,
+    #     video_token_id=raw_cfg.get("video_token_id", 151656),
+    #     vision_start_token_id=raw_cfg.get("vision_start_token_id", 151652),
+    #     fast_video_token_id=raw_cfg.get("fast_video_token_id", 151678),
+    # )
+    # Build origin config directly from config.json to避免手动映射遗漏字段（如 _attn_implementation/head_dim）
+    cfg_path = Path(ckpt_path) if Path(ckpt_path).is_dir() else Path(ckpt_path).with_name("config.json")
+    origin_cfg = origin_mod.KeyeConfig.from_pretrained(cfg_path)
+    # 对齐 slowfast padder 的 image_token_id（其余 token_id 已在 config.json 中）
+    origin_cfg.image_token_id = image_token_id
     
     muse_model = muse_mod.KeyeForConditionalGeneration(
         qwen_config=qwen_cfg,
