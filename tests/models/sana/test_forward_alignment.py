@@ -1050,9 +1050,35 @@ def run_full_alignment_test():
                 muse_after_attn = muse_x + muse_gate_msa * muse_attn_proj
                 compare_tensors("block1_after_self_attn", diff_after_attn, muse_after_attn)
                 
-                # Cross-attention
+                # Cross-attention - step by step
+                print("\n  Block 1 Cross-Attention Step-by-Step:")
+                
+                # Q from hidden states
+                diff_cross_q = diff_block.attn2.to_q(diff_after_attn)
+                muse_cross_q = muse_block.cross_attn.q_linear(muse_after_attn)
+                compare_tensors("block1_cross_q", diff_cross_q, muse_cross_q)
+                
+                # K, V from encoder hidden states (caption)
+                # Handle muse_caption shape if needed
+                muse_caption_for_cross = muse_caption.squeeze(1) if muse_caption.ndim == 4 else muse_caption
+                
+                diff_cross_k = diff_block.attn2.to_k(diff_caption)
+                diff_cross_v = diff_block.attn2.to_v(diff_caption)
+                muse_cross_k = muse_block.cross_attn.to_k(muse_caption_for_cross)
+                muse_cross_v = muse_block.cross_attn.to_v(muse_caption_for_cross)
+                compare_tensors("block1_cross_k", diff_cross_k, muse_cross_k)
+                compare_tensors("block1_cross_v", diff_cross_v, muse_cross_v)
+                
+                # QK norm
+                diff_cross_q_normed = diff_block.attn2.norm_q(diff_cross_q)
+                diff_cross_k_normed = diff_block.attn2.norm_k(diff_cross_k)
+                muse_cross_q_normed = muse_block.cross_attn.q_norm(muse_cross_q)
+                muse_cross_k_normed = muse_block.cross_attn.k_norm(muse_cross_k)
+                compare_tensors("block1_cross_q_normed", diff_cross_q_normed, muse_cross_q_normed)
+                compare_tensors("block1_cross_k_normed", diff_cross_k_normed, muse_cross_k_normed)
+                
+                # Full cross-attention output
                 diff_cross_out = diff_block.attn2(diff_after_attn, encoder_hidden_states=diff_caption)
-                # For muse cross_attn, input is (B, N, C) format
                 muse_cross_out = muse_block.cross_attn(muse_after_attn, muse_caption)
                 compare_tensors("block1_cross_attn_out", diff_cross_out, muse_cross_out)
                 
@@ -1070,20 +1096,20 @@ def run_full_alignment_test():
                 muse_norm2_mod = muse_norm2 * (1 + muse_scale_mlp) + muse_shift_mlp
                 compare_tensors("block1_norm2_mod", diff_norm2_mod, muse_norm2_mod)
                 
-                # FFN forward (need to reshape for conv)
+                # FFN forward
+                # diffusers ff expects (B, C, H, W) format
                 diff_ff_in = diff_norm2_mod.unflatten(1, (h, w)).permute(0, 3, 1, 2)  # B, C, H, W
-                muse_ff_in = muse_norm2_mod.unflatten(1, (h, w)).permute(0, 3, 1, 2)  # B, C, H, W
-                compare_tensors("block1_ff_input", diff_ff_in, muse_ff_in)
-                
                 diff_ff_out = diff_block.ff(diff_ff_in)
-                muse_ff_out = muse_block.mlp(muse_ff_in)
-                compare_tensors("block1_ff_output", diff_ff_out, muse_ff_out)
+                diff_ff_out_flat = diff_ff_out.permute(0, 2, 3, 1).flatten(1, 2)  # B, N, C
+                
+                # muse mlp expects (B, N, C) format
+                muse_ff_out = muse_block.mlp(muse_norm2_mod)
+                
+                compare_tensors("block1_ff_output", diff_ff_out_flat, muse_ff_out)
                 
                 # After FFN (with gate and residual)
-                diff_ff_out_flat = diff_ff_out.permute(0, 2, 3, 1).flatten(1, 2)
-                muse_ff_out_flat = muse_ff_out.permute(0, 2, 3, 1).flatten(1, 2)
                 diff_final = diff_after_cross + diff_gate_mlp * diff_ff_out_flat
-                muse_final = muse_after_cross + muse_gate_mlp * muse_ff_out_flat
+                muse_final = muse_after_cross + muse_gate_mlp * muse_ff_out
                 compare_tensors("block1_final_output", diff_final, muse_final)
             
             # Run blocks
