@@ -18,6 +18,7 @@ logits 全零差异。
 
 import os
 import glob
+import json
 from pathlib import Path
 from typing import Tuple, Dict, Any, Union
 
@@ -177,54 +178,75 @@ def test_keye_vl_zero_diff(dtype):
     # 优先环境变量，否则默认用同一 converted 目录（其中包含处理器/processing）
     slowfast_dir = os.environ.get(SLOWFAST_MODEL_DIR_ENV, DEFAULT_CKPT)
 
-    # Build configs (align key ids to supplied config)
+    # ------------------ load config.json ------------------
+    def _load_config_json(ckpt_path: str) -> Dict[str, Any]:
+        p = Path(ckpt_path)
+        cfg_path = p / "config.json" if p.is_dir() else p.with_name("config.json")
+        if not cfg_path.exists():
+            raise FileNotFoundError(f"config.json not found near {ckpt_path}")
+        with open(cfg_path, "r") as f:
+            return json.load(f)
+
+    raw_cfg = _load_config_json(ckpt_path)
+
+    # LLM (Qwen3) config mapping
+    embed_dim = raw_cfg.get("hidden_size", 1024)
+    head_dim = raw_cfg.get("head_dim", 128)
+    num_heads = embed_dim // head_dim  # ensure consistency
+    num_kv_heads = raw_cfg.get("num_key_value_heads", num_heads)
     qwen_cfg = Qwen3Config(
         model_class="Qwen3Model",
-        vocab_size=151936,
-        embed_dim=1024,          # hidden size
-        num_layers=28,
-        num_heads=8,             # set consistent with embed_dim/head_dim
-        num_kv_heads=8,
-        head_dim=128,
-        attn_dropout=0.0,
+        vocab_size=raw_cfg.get("vocab_size", 151936),
+        embed_dim=embed_dim,
+        num_layers=raw_cfg.get("num_hidden_layers", 28),
+        num_heads=num_heads,
+        num_kv_heads=num_kv_heads,
+        head_dim=head_dim,
+        attn_dropout=raw_cfg.get("attention_dropout", 0.0),
         attention_function="flash_attention_2",
-        q_proj_bias=False,
-        k_proj_bias=False,
-        v_proj_bias=False,
-        intermediate_dim=3072,
-        max_seq_len=40960,
-        rope_base=1_000_000.0,
-        norm_eps=1e-6,
+        q_proj_bias=raw_cfg.get("attention_bias", False),
+        k_proj_bias=raw_cfg.get("attention_bias", False),
+        v_proj_bias=raw_cfg.get("attention_bias", False),
+        intermediate_dim=raw_cfg.get("intermediate_size", 3072),
+        max_seq_len=raw_cfg.get("max_position_embeddings", 40960),
+        rope_base=float(raw_cfg.get("rope_theta", 1_000_000)),
+        norm_eps=raw_cfg.get("rms_norm_eps", 1e-6),
         q_norm=True,
         k_norm=True,
-        tie_word_embeddings=True,
+        tie_word_embeddings=raw_cfg.get("tie_word_embeddings", True),
     )
+
+    # Vision config: use inner vision_config["vision_config"]
+    outer_vcfg = raw_cfg.get("vision_config", {})
+    inner_vcfg = outer_vcfg.get("vision_config", {})
     vision_cfg = KeyeVisionConfig(
-        hidden_size=1152,
-        intermediate_size=4304,
-        num_hidden_layers=27,
-        num_attention_heads=16,
-        num_channels=3,
-        image_size=384,
-        patch_size=14,
-        layer_norm_eps=1e-6,
-        attention_dropout=0.0,
-        rope_theta=10000,
-        has_learnable_position_embedding=True,
-        _attn_implementation="flash_attention_2",
-        use_qk_norm=False,
+        hidden_size=inner_vcfg.get("hidden_size", 1152),
+        intermediate_size=inner_vcfg.get("intermediate_size", 4304),
+        num_hidden_layers=inner_vcfg.get("num_hidden_layers", 27),
+        num_attention_heads=inner_vcfg.get("num_attention_heads", 16),
+        num_channels=inner_vcfg.get("num_channels", 3),
+        image_size=inner_vcfg.get("image_size", 384),
+        patch_size=inner_vcfg.get("patch_size", 14),
+        layer_norm_eps=inner_vcfg.get("layer_norm_eps", 1e-6),
+        attention_dropout=inner_vcfg.get("attention_dropout", 0.0),
+        rope_theta=inner_vcfg.get("rope_theta", 10000),
+        has_learnable_position_embedding=inner_vcfg.get("has_learnable_position_embedding", True),
+        _attn_implementation=inner_vcfg.get("_attn_implementation", "flash_attention_2"),
+        use_qk_norm=inner_vcfg.get("use_qk_norm", False),
     )
+
+    # Tokenizer config from outer vision_config (tokenizer block)
     tokenizer_cfg = KeyeTokenizerConfig(
         vision_config=vision_cfg,
-        llm_hidden_size=qwen_cfg.embed_dim,
-        embedding_dim=128,
-        init_embedding_dim=4096,
-        codebook_size=65536,
-        n_q_tokens=8,
-        split_voc=8,
-        add_voc_reducer=False,
-        split_dim=False,
-        vq_sampling_mode="argmin",
+        llm_hidden_size=qwen_cfg.embed_dim,  # align to LLM hidden size to avoid shape mismatch
+        embedding_dim=outer_vcfg.get("embedding_dim", 128),
+        init_embedding_dim=outer_vcfg.get("init_embedding_dim", 4096),
+        codebook_size=outer_vcfg.get("codebook_size", 65536),
+        n_q_tokens=outer_vcfg.get("n_q_tokens", 8),
+        split_voc=outer_vcfg.get("split_voc", 1),
+        add_voc_reducer=outer_vcfg.get("add_voc_reducer", False),
+        split_dim=outer_vcfg.get("split_dim", False),
+        vq_sampling_mode=outer_vcfg.get("vq_sampling_mode", "argmin"),
     )
 
     # 当使用 SlowFast padder 时，将 image_token_id 与 padder 的 image_pad 对齐
@@ -232,7 +254,7 @@ def test_keye_vl_zero_diff(dtype):
     if slowfast_dir:
         padder_token_id = SlowFastVisionPadder(slowfast_dir).image_pad
 
-    image_token_id = padder_token_id if padder_token_id is not None else 151655
+    image_token_id = padder_token_id if padder_token_id is not None else raw_cfg.get("image_token_id", 151655)
 
     origin_cfg = origin_mod.KeyeConfig(vision_config=vision_cfg, image_token_id=image_token_id)
     muse_model = muse_mod.KeyeForConditionalGeneration(
