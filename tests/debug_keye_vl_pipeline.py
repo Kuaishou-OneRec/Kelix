@@ -1,16 +1,17 @@
 """
-Keye-VL Pipeline Deep Debugger (Fast Version)
+Keye-VL Pipeline Deep Debugger (Fixed Loader)
 =============================================
-Trace the entire data flow: ViT -> Projector -> VQ -> LLM Input -> LLM Output.
-Optimized to skip slow AutoProcessor loading.
+Trace the entire data flow from Pixel -> ViT -> Projector -> VQ -> LLM.
+Fixes: Supports loading checkpoints from directories (Safetensors/Bin).
 """
 
 import os
 import sys
 import logging
+import glob
 import json
 from pathlib import Path
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Union
 
 import torch
 import numpy as np
@@ -21,6 +22,7 @@ from muse.models.keye_tokenizer_video import modeling_keye_origin as origin_mod
 from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
+# 配置日志
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
@@ -39,6 +41,75 @@ def log_separator(title: str):
     logger.info(f"\n{'='*120}")
     logger.info(f" {title.center(118)} ")
     logger.info(f"{'='*120}")
+
+def _load_config_json(ckpt_path: str) -> Dict[str, Any]:
+    p = Path(ckpt_path)
+    # 如果是文件，找同级目录下的 config.json
+    base_dir = p if p.is_dir() else p.parent
+    cfg_path = base_dir / "config.json"
+    
+    if not cfg_path.exists():
+        raise FileNotFoundError(f"config.json not found in {base_dir}")
+        
+    with open(cfg_path, "r") as f:
+        return json.load(f)
+
+def _load_checkpoint_robust(path_str: str, device="cpu") -> Dict[str, torch.Tensor]:
+    """Robustly load weights from a file or a directory (safetensors/bin)."""
+    path = Path(path_str)
+    
+    # Case 1: Direct file
+    if path.is_file():
+        logger.info(f"Loading single file: {path}")
+        state_dict = torch.load(path, map_location=device)
+        return state_dict.get("module", state_dict)
+
+    # Case 2: Directory
+    if not path.is_dir():
+        raise ValueError(f"Checkpoint path is neither file nor directory: {path}")
+
+    logger.info(f"Scanning directory: {path}")
+    state_dict = {}
+    
+    # 2.1 Try SafeTensors (High Priority)
+    st_files = sorted(glob.glob(str(path / "*.safetensors")))
+    if st_files:
+        logger.info(f"Found {len(st_files)} safetensors files. Loading...")
+        from safetensors.torch import safe_open
+        for f in st_files:
+            with safe_open(f, framework="pt", device=device) as open_f:
+                for k in open_f.keys():
+                    state_dict[k] = open_f.get_tensor(k)
+        return state_dict
+
+    # 2.2 Try PyTorch Bin (Standard HF)
+    bin_files = sorted(glob.glob(str(path / "*.bin")))
+    if bin_files:
+        logger.info(f"Found {len(bin_files)} .bin files. Loading...")
+        for f in bin_files:
+            # Skip non-model files
+            if any(x in f for x in ["training_args", "optimizer", "scheduler"]):
+                continue
+            try:
+                part = torch.load(f, map_location=device)
+                if "module" in part: part = part["module"]
+                state_dict.update(part)
+            except Exception as e:
+                logger.warning(f"Failed to load {f}: {e}")
+        return state_dict
+
+    # 2.3 Try PyTorch PT (DeepSpeed/Megatron dumps)
+    pt_files = sorted(glob.glob(str(path / "*.pt")))
+    if pt_files:
+        logger.info(f"Found {len(pt_files)} .pt files. Loading...")
+        for f in pt_files:
+            # Usually strict mapping needed, but loading all for now
+            part = torch.load(f, map_location=device)
+            if "module" in part: part = part["module"]
+            state_dict.update(part)
+        return state_dict
+
+    raise ValueError(f"No valid checkpoint files (*.safetensors, *.bin, *.pt) found in {path}")
 
 def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, atol=1e-3):
     def unwrap(x):
@@ -60,10 +131,12 @@ def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, ato
     t1 = t1.detach().float().cpu()
     t2 = t2.detach().float().cpu()
     
-    # 自动对齐 Batch/Seq
     if t1.shape != t2.shape:
-        if t1.numel() == t2.numel(): t2 = t2.view(t1.shape)
-        elif t1.dim() == 3 and t2.dim() == 2 and t1.shape[1:] == t2.shape: t1 = t1.squeeze(0)
+        # Auto squeeze
+        if t1.numel() == t2.numel(): 
+            t2 = t2.view(t1.shape)
+        elif t1.dim() == 3 and t2.dim() == 2 and t1.shape[1:] == t2.shape:
+            t1 = t1.squeeze(0)
     
     if t1.shape != t2.shape:
         logger.error(f"{name:<40} | ❌ SHAPE ERR  | Origin={t1.shape} vs Muse={t2.shape}")
@@ -71,20 +144,17 @@ def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, ato
 
     diff = (t1 - t2).abs()
     max_diff = diff.max().item()
+    mean_diff = diff.mean().item()
     
     match_status = "✅ MATCH" if max_diff < atol else f"❌ MISMATCH"
-    logger.info(f"{name:<40} | {match_status:<12} | Max: {max_diff:.2e} | Mean: {diff.mean().item():.2e}")
+    
+    logger.info(f"{name:<40} | {match_status:<12} | Max: {max_diff:.2e} | Mean: {mean_diff:.2e}")
     
     if max_diff >= atol:
         logger.info(f"   -> Origin (first 3): {format_tensor_val(t1, 3)}")
         logger.info(f"   -> Muse   (first 3): {format_tensor_val(t2, 3)}")
         max_idx = torch.argmax(diff)
         logger.info(f"   -> Max Diff Val    : Origin={t1.flatten()[max_idx]:.6f}, Muse={t2.flatten()[max_idx]:.6f}")
-
-def _load_config_json(ckpt_path: str) -> Dict[str, Any]:
-    p = Path(ckpt_path)
-    cfg_path = p / "config.json" if p.is_dir() else p.with_name("config.json")
-    with open(cfg_path, "r") as f: return json.load(f)
 
 # =========================================================================
 # Hook System
@@ -127,17 +197,28 @@ def register_hooks(model, name_prefix):
     llm_backbone = None
     llm_head = None
     
-    # Adapt to structure
-    if hasattr(model, "text_model"): # Muse
-        if hasattr(model.text_model, "model"):
-            llm_backbone = model.text_model.model
-            if hasattr(model.text_model.model, "output"): llm_head = model.text_model.model.output # Tied linear case
-    elif hasattr(model, "model"): # HF
+    # Adaptive Structural Finding
+    # Case A: Muse (model.text_model.model...) or (model.model...) if renamed
+    # Case B: HF (model.model...)
+    
+    # Try to find the inner LLM backbone (Transformer)
+    if hasattr(model, "model") and hasattr(model.model, "layers"):
+        # This covers HF and Muse (if renamed to self.model)
         llm_backbone = model.model
-        if hasattr(model, "lm_head"): llm_head = model.lm_head
+    elif hasattr(model, "text_model") and hasattr(model.text_model, "model"):
+        # This covers Muse (old self.text_model structure)
+        llm_backbone = model.text_model.model
+    
+    # Try to find Head
+    if hasattr(model, "lm_head"):
+        llm_head = model.lm_head
+    elif hasattr(model, "text_model") and hasattr(model.text_model, "output"):
+        llm_head = model.text_model.output
 
     if llm_backbone and hasattr(llm_backbone, 'layers'):
         llm_backbone.layers[0].register_forward_hook(make_hook(name_prefix, "6. LLM Layer 0 Input", capture_input=True))
+    else:
+        logger.error(f"❌ Could not find LLM backbone for {name_prefix}")
     
     if llm_head:
         llm_head.register_forward_hook(make_hook(name_prefix, "7. LM Head Logits"))
@@ -151,7 +232,7 @@ def register_hooks(model, name_prefix):
 def test_pipeline_alignment():
     ckpt_path = DEFAULT_CKPT
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    dtype = torch.float16
+    dtype = torch.float16 # FP16
     
     logger.info(f"Loading from: {ckpt_path}")
     raw_cfg = _load_config_json(ckpt_path)
@@ -201,6 +282,7 @@ def test_pipeline_alignment():
     
     # Origin Config
     origin_cfg = origin_mod.KeyeConfig.from_pretrained(ckpt_path)
+    origin_cfg.vision_config["vq_sampling_mode"] = "argmin"
 
     # --- Initialize Models ---
     with set_default_dtype(dtype):
@@ -216,10 +298,9 @@ def test_pipeline_alignment():
         logger.info("Initializing Origin Model...")
         origin_model = origin_mod.KeyeForConditionalGeneration(origin_cfg).to(device, dtype)
 
-    # --- Load Weights ---
-    logger.info("Loading Weights from checkpoint...")
-    state_dict = torch.load(ckpt_path, map_location="cpu")
-    if "module" in state_dict: state_dict = state_dict["module"]
+    # --- Load Weights (Robust Loader) ---
+    logger.info("Loading Weights from checkpoint directory...")
+    state_dict = _load_checkpoint_robust(ckpt_path, device="cpu") # Load to CPU first to save GPU mem
 
     # Origin Load
     origin_model.load_state_dict(state_dict, strict=False)
@@ -229,28 +310,25 @@ def test_pipeline_alignment():
     muse_state = muse_model.convert_hf_state_dict(state_dict, tie_word_embeddings=qwen_cfg.tie_word_embeddings)
     muse_model.load_state_dict(muse_state, strict=False)
 
-    # --- Prepare Inputs (Manual Construction to avoid hang) ---
+    # Move to GPU
+    origin_model.to(device)
+    muse_model.to(device)
+
+    # --- Prepare Inputs ---
     logger.info("Constructing Dummy Inputs...")
     
-    # 构造一个极简输入：1张图，Patch尺寸匹配 kernel size
-    # 假设 projector kernel (2,2)，输入 spatial 必须能整除
-    # 28x28 (patch 14) -> 2x2 patches -> merge后 1x1 token
+    # 28x28 (patch 14) -> 2x2 patches
     H, W = 28, 28 
     t_frames = 1
     
     pixel_values = torch.randn(1, 3, H, W, device=device, dtype=dtype)
-    # Muse 需要 tensor grid: [[t, h, w]]
-    # h = H // 14 = 2, w = W // 14 = 2
     image_grid_thw = torch.tensor([[t_frames, 2, 2]], device=device, dtype=torch.long)
     
     image_token_id = raw_cfg.get("image_token_id", 151655)
-    # Input: [Text, Image, Text]
-    # 注意：Image token 数量需匹配。
-    # Projector out size: (h/2) * (w/2) * t = 1*1*1 = 1
+    # Projector out size: (h/2) * (w/2) * t = 1*1*1 = 1 image token
     input_ids = torch.tensor([[1, image_token_id, 2]], device=device, dtype=torch.long)
     attention_mask = torch.ones_like(input_ids)
     
-    # Muse 额外需要的 mask
     vision_token_mask = (input_ids == image_token_id)
 
     inputs = {
@@ -270,7 +348,6 @@ def test_pipeline_alignment():
     origin_model.eval()
     muse_model.eval()
     
-    # Origin 兼容性调整：Origin 模型可能不接受 vision_token_mask
     origin_inputs = {k: v for k, v in inputs.items() if k != "vision_token_mask"}
     
     with torch.no_grad():
