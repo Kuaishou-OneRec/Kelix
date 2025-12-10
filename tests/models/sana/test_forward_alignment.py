@@ -1053,10 +1053,29 @@ def run_full_alignment_test():
                 # Cross-attention - step by step
                 print("\n  Block 1 Cross-Attention Step-by-Step:")
                 
+                # First verify inputs are identical
+                compare_tensors("block1_cross_input_verify", diff_after_attn, muse_after_attn)
+                
+                # Check Q linear weights AND bias
+                compare_tensors("block1_cross_q_weight_verify", diff_block.attn2.to_q.weight, muse_block.cross_attn.q_linear.weight)
+                if diff_block.attn2.to_q.bias is not None and muse_block.cross_attn.q_linear.bias is not None:
+                    compare_tensors("block1_cross_q_bias", diff_block.attn2.to_q.bias, muse_block.cross_attn.q_linear.bias)
+                else:
+                    print(f"  Q bias: diff={diff_block.attn2.to_q.bias is not None}, muse={muse_block.cross_attn.q_linear.bias is not None}")
+                
                 # Q from hidden states
                 diff_cross_q = diff_block.attn2.to_q(diff_after_attn)
                 muse_cross_q = muse_block.cross_attn.q_linear(muse_after_attn)
                 compare_tensors("block1_cross_q", diff_cross_q, muse_cross_q)
+                
+                # Manual computation to verify
+                diff_cross_q_manual = F.linear(diff_after_attn, diff_block.attn2.to_q.weight, diff_block.attn2.to_q.bias)
+                muse_cross_q_manual = F.linear(muse_after_attn, muse_block.cross_attn.q_linear.weight, muse_block.cross_attn.q_linear.bias)
+                compare_tensors("block1_cross_q_manual", diff_cross_q_manual, muse_cross_q_manual)
+                
+                # Check if there's any difference between the module call and manual F.linear
+                compare_tensors("block1_diff_q_module_vs_manual", diff_cross_q, diff_cross_q_manual)
+                compare_tensors("block1_muse_q_module_vs_manual", muse_cross_q, muse_cross_q_manual)
                 
                 # K, V from encoder hidden states (caption)
                 # Handle muse_caption shape if needed
