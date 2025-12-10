@@ -316,15 +316,15 @@ def test_pipeline_alignment():
     # --- Prepare Inputs ---
     logger.info("Constructing Dummy Inputs...")
     
-    # 28x28 (patch 14) -> 2x2 patches
-    H, W = 28, 28 
-    t_frames = 1
-    
-    pixel_values = torch.randn(1, 3, H, W, device=device, dtype=dtype)
-    image_grid_thw = torch.tensor([[t_frames, 2, 2]], device=device, dtype=torch.long)
+    # Use packed 5D pixel_values: (batch, seq_len, C, H, W)
+    patch = inner_vcfg.get("patch_size", 14)
+    t_frames, h_patches, w_patches = 1, 2, 2  # grid -> seq_len = 4
+    seq_len = t_frames * h_patches * w_patches
+    pixel_values = torch.randn(1, seq_len, 3, patch, patch, device=device, dtype=dtype)
+    image_grid_thw = torch.tensor([[t_frames, h_patches, w_patches]], device=device, dtype=torch.long)
     
     image_token_id = raw_cfg.get("image_token_id", 151655)
-    # Projector out size: (h/2) * (w/2) * t = 1*1*1 = 1 image token
+    # Projector out size after merge (2x2): (h/2)*(w/2)*t = 1
     input_ids = torch.tensor([[1, image_token_id, 2]], device=device, dtype=torch.long)
     attention_mask = torch.ones_like(input_ids)
     
