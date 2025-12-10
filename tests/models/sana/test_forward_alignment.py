@@ -1052,20 +1052,18 @@ def run_full_alignment_test():
                 
                 # Cross-attention
                 diff_cross_out = diff_block.attn2(diff_after_attn, encoder_hidden_states=diff_caption)
-                # For muse, we need to pass y in the expected format
-                muse_cross_in = muse_after_attn.reshape(B, h, w, C)
-                muse_cross_out = muse_block.cross_attn(muse_cross_in, muse_caption)
-                muse_cross_out_flat = muse_cross_out.reshape(B, -1, C)
-                compare_tensors("block1_cross_attn_out", diff_cross_out, muse_cross_out_flat)
+                # For muse cross_attn, input is (B, N, C) format
+                muse_cross_out = muse_block.cross_attn(muse_after_attn, muse_caption)
+                compare_tensors("block1_cross_attn_out", diff_cross_out, muse_cross_out)
                 
                 # After cross-attention (with residual)
                 diff_after_cross = diff_after_attn + diff_cross_out
-                muse_after_cross_flat = muse_after_attn + muse_cross_out_flat
-                compare_tensors("block1_after_cross_attn", diff_after_cross, muse_after_cross_flat)
+                muse_after_cross = muse_after_attn + muse_cross_out
+                compare_tensors("block1_after_cross_attn", diff_after_cross, muse_after_cross)
                 
                 # FFN/MLP
                 diff_norm2 = diff_block.norm2(diff_after_cross)
-                muse_norm2 = muse_block.norm2(muse_after_cross_flat)
+                muse_norm2 = muse_block.norm2(muse_after_cross)
                 compare_tensors("block1_norm2", diff_norm2, muse_norm2)
                 
                 diff_norm2_mod = diff_norm2 * (1 + diff_scale_mlp) + diff_shift_mlp
@@ -1085,7 +1083,7 @@ def run_full_alignment_test():
                 diff_ff_out_flat = diff_ff_out.permute(0, 2, 3, 1).flatten(1, 2)
                 muse_ff_out_flat = muse_ff_out.permute(0, 2, 3, 1).flatten(1, 2)
                 diff_final = diff_after_cross + diff_gate_mlp * diff_ff_out_flat
-                muse_final = muse_after_cross_flat + muse_gate_mlp * muse_ff_out_flat
+                muse_final = muse_after_cross + muse_gate_mlp * muse_ff_out_flat
                 compare_tensors("block1_final_output", diff_final, muse_final)
             
             # Run blocks
