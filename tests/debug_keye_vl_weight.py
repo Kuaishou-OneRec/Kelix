@@ -365,10 +365,10 @@ def test_pipeline_alignment():
 
     # --- Inputs ---
     patch = inner_vcfg.get("patch_size", 14)
-    # 构造与 ViT 测试一致的简单 Grid (1, 1, 1) -> seq_len = 1 frame * 1*1 patches
-    # 也可以保持你之前的 2x2，这里为了调试简单设为 14x14 像素
-    t_frames, h_patches, w_patches = 1, 1, 1 
-    seq_len = t_frames * h_patches * w_patches # = 1
+    # 根据 Projector 的 merge_kernel_size 构造最小可行的 grid，避免 merge 时形状不一致
+    mk1, mk2 = origin_model.visual_tokenizer.mlp_AR.merge_kernel_size
+    t_frames, h_patches, w_patches = 1, mk1, mk2
+    seq_len = t_frames * h_patches * w_patches
     
     # 输入像素： [Batch * Seq, C, H, W]
     # Muse ViT 需要 [1, Seq, C, H, W] 或 [Seq, C, H, W] 取决于 forward 内部

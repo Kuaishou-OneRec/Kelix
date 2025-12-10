@@ -281,16 +281,24 @@ def register_hooks(model, name_prefix):
     # Case B: HF (model.model...)
     
     # Try to find the inner LLM backbone (Transformer)
-    if hasattr(model, "model") and hasattr(model.model, "layers"):
-        # This covers HF and Muse (if renamed to self.model)
-        llm_backbone = model.model
+    # Preferred: nested model.model.model (KeyeForConditionalGeneration -> Qwen3Model -> TransformerDecoder)
+    if hasattr(model, "model"):
+        if hasattr(model.model, "layers"):
+            llm_backbone = model.model
+        elif hasattr(model.model, "model") and hasattr(model.model.model, "layers"):
+            llm_backbone = model.model.model
     elif hasattr(model, "text_model") and hasattr(model.text_model, "model"):
-        # This covers Muse (old self.text_model structure)
+        # This covers some older Muse structures (self.text_model.model)
         llm_backbone = model.text_model.model
     
     # Try to find Head
     if hasattr(model, "lm_head"):
         llm_head = model.lm_head
+    elif hasattr(model, "model"):
+        if hasattr(model.model, "output"):
+            llm_head = model.model.output
+        elif hasattr(model.model, "model") and hasattr(model.model.model, "output"):
+            llm_head = model.model.model.output
     elif hasattr(model, "text_model") and hasattr(model.text_model, "output"):
         llm_head = model.text_model.output
 
