@@ -447,7 +447,7 @@ class MultiHeadCrossAttention(nn.Module):
                         # Binary mask format, convert to additive
                         attn_mask = (1 - mask.to(q.dtype)) * -10000.0
                     attn_mask = attn_mask[:, None, None].repeat(1, self.num_heads, 1, 1)
-            
+                    # the output of sdp = (batch, num_heads, seq_len, head_dim)
             x = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=0.0, is_causal=False)
             x = x.transpose(1, 2)
         
@@ -603,7 +603,7 @@ class LiteLA(nn.Module):
         out = out[:, :, :-1] / (out[:, :, -1:] + self.eps)
         
         return out
-    
+
     def forward(
         self,
         x: torch.Tensor,
@@ -863,4 +863,4 @@ class SanaMSBlock(nn.Module):
             )
         )
         
-        return x
+        return x.contiguous()
