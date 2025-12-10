@@ -1166,6 +1166,8 @@ def run_full_alignment_test():
                 width=w,
             )
             muse_x = muse_block(muse_x, y_for_cross, muse_t0, y_lens, (h, w))
+            # Ensure muse_x is contiguous to match diffusers memory layout
+            muse_x = muse_x.contiguous()
             
             # Check if diffusers returns tuple
             if isinstance(diff_out, tuple):

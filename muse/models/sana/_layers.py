@@ -344,7 +344,7 @@ class GLUMBConv(nn.Module):
         x = x * gate
         
         x = self.point_conv(x)
-        x = x.reshape(B, C, N).permute(0, 2, 1).contiguous()
+        x = x.reshape(B, C, N).permute(0, 2, 1)
         
         return x
 
@@ -627,7 +627,7 @@ class LiteLA(nn.Module):
         
         out = self.attn_matmul(q, k.transpose(-1, -2), v).to(dtype)
         
-        out = out.view(B, C, N).permute(0, 2, 1).contiguous()  # B, N, C
+        out = out.view(B, C, N).permute(0, 2, 1)  # B, N, C
         out = self.proj(out)
         
         return out
@@ -857,4 +857,4 @@ class SanaMSBlock(nn.Module):
             )
         )
         
-        return x.contiguous()
+        return x
