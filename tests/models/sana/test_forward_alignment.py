@@ -877,6 +877,103 @@ def run_full_alignment_test():
     # Debug first block
     debug_first_block(diffusers_model, muse_model, inputs, dtype)
     
+    # Debug all transformer blocks and final layer
+    print("\n[All Blocks & Final Layer Debug]")
+    
+    with torch.no_grad():
+        # Prepare inputs like in forward
+        x = inputs["x"].to(dtype)
+        timestep = inputs["timestep"].float()
+        
+        # Patch embedding
+        diff_x = diffusers_model.patch_embed(x)
+        muse_x = muse_model.x_embedder(x)
+        
+        # Timestep embedding
+        diff_time, diff_t_emb = diffusers_model.time_embed(
+            timestep, batch_size=x.shape[0], hidden_dtype=dtype
+        )
+        muse_t = muse_model.t_embedder(timestep.long().float())
+        muse_t0 = muse_model.t_block(muse_t)
+        
+        # Caption embedding
+        y_diff = inputs["y_diffusers"]
+        y_muse = inputs["y_muse"]
+        
+        diff_caption = diffusers_model.caption_projection(y_diff)
+        diff_caption = diff_caption.view(y_diff.shape[0], -1, diff_x.shape[-1])
+        diff_caption = diffusers_model.caption_norm(diff_caption)
+        
+        muse_caption = muse_model.y_embedder(y_muse, False)
+        if muse_model.y_norm:
+            muse_caption = muse_model.attention_y_norm(muse_caption)
+        
+        # Prepare mask/y for muse cross-attention
+        _xformers_available = False
+        try:
+            import xformers.ops
+            _xformers_available = True
+        except ImportError:
+            pass
+        
+        mask = inputs["mask_muse"].clone()
+        y_for_cross = muse_caption.clone()
+        if mask is not None:
+            mask = mask.to(torch.int16)
+            mask = mask.squeeze(1).squeeze(1) if mask.ndim > 2 else mask
+            if _xformers_available:
+                y_for_cross = y_for_cross.squeeze(1) if y_for_cross.ndim == 4 else y_for_cross
+                y_for_cross = y_for_cross.masked_select(mask.unsqueeze(-1) != 0).view(1, -1, muse_x.shape[-1])
+                y_lens = mask.sum(dim=1).tolist()
+            else:
+                y_lens = mask
+                y_for_cross = y_for_cross.squeeze(1) if y_for_cross.ndim == 4 else y_for_cross
+        
+        # encoder_attention_mask for diffusers
+        encoder_attention_mask = inputs["mask_diffusers"]
+        if encoder_attention_mask.ndim == 2:
+            encoder_attention_mask = (1 - encoder_attention_mask.to(dtype)) * -10000.0
+            encoder_attention_mask = encoder_attention_mask.unsqueeze(1)
+        
+        h, w = x.shape[-2] // 1, x.shape[-1] // 1  # patch_size=1
+        
+        # Run all transformer blocks
+        print("\n  Running all transformer blocks...")
+        for i, (diff_block, muse_block) in enumerate(zip(diffusers_model.transformer_blocks, muse_model.blocks)):
+            diff_x = diff_block(
+                diff_x,
+                encoder_hidden_states=diff_caption,
+                encoder_attention_mask=encoder_attention_mask,
+                timestep=diff_time,
+            )
+            muse_x = muse_block(muse_x, y_for_cross, muse_t0, y_lens, (h, w))
+            
+            if i == len(muse_model.blocks) - 1:  # Last block
+                compare_tensors(f"block_{i}_output (last)", diff_x, muse_x)
+        
+        # Compare output after all blocks
+        compare_tensors("all_blocks_output", diff_x, muse_x)
+        
+        # Final layer comparison
+        print("\n  Final Layer...")
+        
+        # Diffusers: norm_out + scale_shift_table + proj_out
+        # Get scale, shift from diffusers
+        diff_norm_out = diffusers_model.norm_out(diff_x, diff_t_emb)
+        diff_final_out = diffusers_model.proj_out(diff_norm_out)
+        
+        # Muse: final_layer
+        muse_final_out = muse_model.final_layer(muse_x, muse_t)
+        
+        compare_tensors("final_layer_output", diff_final_out, muse_final_out)
+        
+        # Unpatchify comparison
+        print("\n  Unpatchify...")
+        diff_img = diffusers_model.unpatchify(diff_final_out, h, w)
+        muse_img = muse_model.unpatchify(muse_final_out)
+        
+        compare_tensors("unpatchify_output", diff_img, muse_img)
+    
     # Summary
     print("\n" + "=" * 70)
     if all_passed:
