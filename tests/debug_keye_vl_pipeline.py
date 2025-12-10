@@ -234,8 +234,6 @@ def test_pipeline_alignment():
     
     # Origin Config
     origin_cfg = origin_mod.KeyeConfig.from_pretrained(ckpt_path)
-    # Force argmin on Origin too just in case
-    origin_cfg.vision_config["vq_sampling_mode"] = "argmin"
 
     # --- 2. Initialize Models ---
     with set_default_dtype(dtype):
