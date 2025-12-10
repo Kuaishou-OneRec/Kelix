@@ -391,10 +391,10 @@ def test_keye_vl_zero_diff(dtype):
             origin_sin_full = origin_sin_full.detach().cpu()
 
             if muse_cos_half is not None and muse_sin_half is not None:
-                print(f"[DEBUG rope muse cos_half all] {muse_cos_half.flatten().tolist()}")
-                print(f"[DEBUG rope muse sin_half all] {muse_sin_half.flatten().tolist()}")
-                print(f"[DEBUG rope origin cos_full all] {origin_cos_full.flatten().tolist()}")
-                print(f"[DEBUG rope origin sin_full all] {origin_sin_full.flatten().tolist()}")
+                print(f"[DEBUG rope muse] cos_half dtype={muse_cos_half.dtype}, shape={muse_cos_half.shape}")
+                print(f"[DEBUG rope muse] sin_half dtype={muse_sin_half.dtype}, shape={muse_sin_half.shape}")
+                print(f"[DEBUG rope origin] cos_full dtype={origin_cos_full.dtype}, shape={origin_cos_full.shape}")
+                print(f"[DEBUG rope origin] sin_full dtype={origin_sin_full.dtype}, shape={origin_sin_full.shape}")
 
                 # Compare origin full vs muse half (chunk first half of origin)
                 origin_cos_chunk = origin_cos_full.chunk(2, dim=-1)[0]
