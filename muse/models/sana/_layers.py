@@ -627,7 +627,7 @@ class LiteLA(nn.Module):
         
         out = self.attn_matmul(q, k.transpose(-1, -2), v).to(dtype)
         
-        out = out.view(B, C, N).permute(0, 2, 1)  # B, N, C
+        out = out.view(B, C, N).permute(0, 2, 1).contiguous()  # B, N, C
         out = self.proj(out)
         
         return out
