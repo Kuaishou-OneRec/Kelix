@@ -892,23 +892,8 @@ def run_full_alignment_test():
         patch_size = muse_model.patch_size
         h, w = x.shape[-2] // patch_size, x.shape[-1] // patch_size
         
-        # Position embedding for muse (if enabled)
-        if muse_model.use_pe:
-            from muse.models.sana.modeling import get_2d_sincos_pos_embed
-            pos_embed_ms = (
-                torch.from_numpy(
-                    get_2d_sincos_pos_embed(
-                        muse_model.pos_embed.shape[-1],
-                        (h, w),
-                        pe_interpolation=muse_model.pe_interpolation,
-                        base_size=muse_model.base_size,
-                    )
-                )
-                .unsqueeze(0)
-                .to(muse_x.device)
-                .to(dtype)
-            )
-            muse_x = muse_x + pos_embed_ms
+        # Note: Not adding position embedding here (same as debug_first_block)
+        # because we want to test block-by-block equivalence
         
         # Timestep embedding
         diff_time, diff_t_emb = diffusers_model.time_embed(
@@ -969,8 +954,9 @@ def run_full_alignment_test():
             )
             muse_x = muse_block(muse_x, y_for_cross, muse_t0, y_lens, (h, w))
             
-            if i == len(muse_model.blocks) - 1:  # Last block
-                compare_tensors(f"block_{i}_output (last)", diff_x, muse_x)
+            # Compare every block to find where divergence starts
+            if i < 3 or i == len(muse_model.blocks) - 1:  # First 3 and last block
+                compare_tensors(f"block_{i}_output", diff_x, muse_x)
         
         # Compare output after all blocks
         compare_tensors("all_blocks_output", diff_x, muse_x)
@@ -987,13 +973,6 @@ def run_full_alignment_test():
         muse_final_out = muse_model.final_layer(muse_x, muse_t)
         
         compare_tensors("final_layer_output", diff_final_out, muse_final_out)
-        
-        # Unpatchify comparison
-        print("\n  Unpatchify...")
-        diff_img = diffusers_model.unpatchify(diff_final_out, h, w)
-        muse_img = muse_model.unpatchify(muse_final_out)
-        
-        compare_tensors("unpatchify_output", diff_img, muse_img)
     
     # Summary
     print("\n" + "=" * 70)
