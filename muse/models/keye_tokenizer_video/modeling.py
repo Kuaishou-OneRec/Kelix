@@ -482,13 +482,8 @@ class KeyeImageTokenizer(Model):
             pixel_values=pixel_values,
             image_grid_thw=image_grid_hws,
             position_ids=siglip_position_ids,
-            vision_return_embed_list=True,
             interpolate_pos_encoding=True,
-            sample_indices=sample_indices,
             cu_seqlens=cu_seqlens,
-            return_pooler_output=False,
-            use_rope=True,
-            window_size=-1,
         )
         image_embeds = vision_outputs.last_hidden_state
         image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
