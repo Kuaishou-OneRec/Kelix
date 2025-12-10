@@ -944,7 +944,24 @@ def run_full_alignment_test():
         # Run all transformer blocks
         print("\n  Running all transformer blocks...")
         for i, (diff_block, muse_block) in enumerate(zip(diffusers_model.transformer_blocks, muse_model.blocks)):
-            diff_x = diff_block(
+            # Debug block 1 before running
+            if i == 1:
+                print(f"\n  [Debug Block 1]")
+                # 1. Compare input to block 1 (should be block 0 output)
+                compare_tensors(f"block1_input", diff_x, muse_x)
+                
+                # 2. Compare block 1 weights
+                compare_tensors(f"block1_to_q_weight", diff_block.attn1.to_q.weight, muse_block.attn.to_q.weight)
+                compare_tensors(f"block1_to_k_weight", diff_block.attn1.to_k.weight, muse_block.attn.to_k.weight)
+                compare_tensors(f"block1_to_v_weight", diff_block.attn1.to_v.weight, muse_block.attn.to_v.weight)
+                compare_tensors(f"block1_proj_weight", diff_block.attn1.to_out[0].weight, muse_block.attn.proj.weight)
+                compare_tensors(f"block1_cross_q_weight", diff_block.attn2.to_q.weight, muse_block.cross_attn.q_linear.weight)
+                compare_tensors(f"block1_cross_k_weight", diff_block.attn2.to_k.weight, muse_block.cross_attn.to_k.weight)
+                compare_tensors(f"block1_cross_v_weight", diff_block.attn2.to_v.weight, muse_block.cross_attn.to_v.weight)
+                compare_tensors(f"block1_scale_shift_table", diff_block.scale_shift_table, muse_block.scale_shift_table)
+            
+            # Run blocks
+            diff_out = diff_block(
                 diff_x,
                 encoder_hidden_states=diff_caption,
                 encoder_attention_mask=encoder_attention_mask,
@@ -953,6 +970,13 @@ def run_full_alignment_test():
                 width=w,
             )
             muse_x = muse_block(muse_x, y_for_cross, muse_t0, y_lens, (h, w))
+            
+            # Check if diffusers returns tuple
+            if isinstance(diff_out, tuple):
+                print(f"  Block {i} diffusers output is tuple of length {len(diff_out)}")
+                diff_x = diff_out[0]
+            else:
+                diff_x = diff_out
             
             # Compare every block to find where divergence starts
             if i < 3 or i == len(muse_model.blocks) - 1:  # First 3 and last block
