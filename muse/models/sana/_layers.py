@@ -474,7 +474,9 @@ class FlashAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         
-        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.to_q = nn.Linear(dim, dim, bias=qkv_bias)
+        self.to_k = nn.Linear(dim, dim, bias=qkv_bias)
+        self.to_v = nn.Linear(dim, dim, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
@@ -496,8 +498,9 @@ class FlashAttention(nn.Module):
     ) -> torch.Tensor:
         B, N, C = x.shape
         
-        qkv = self.qkv(x).reshape(B, N, 3, C)
-        q, k, v = qkv.unbind(2)
+        q = self.to_q(x)
+        k = self.to_k(x)
+        v = self.to_v(x)
         dtype = q.dtype
         
         q = self.q_norm(q)
@@ -566,7 +569,9 @@ class LiteLA(nn.Module):
         self.dim = out_dim // heads
         self.eps = eps
         
-        self.qkv = nn.Linear(in_dim, in_dim * 3, bias=use_bias)
+        self.to_q = nn.Linear(in_dim, in_dim, bias=use_bias)
+        self.to_k = nn.Linear(in_dim, in_dim, bias=use_bias)
+        self.to_v = nn.Linear(in_dim, in_dim, bias=use_bias)
         self.proj = nn.Linear(in_dim, out_dim)
         
         self.kernel_func = nn.ReLU(inplace=False)
@@ -606,8 +611,9 @@ class LiteLA(nn.Module):
     ) -> torch.Tensor:
         B, N, C = x.shape
         
-        qkv = self.qkv(x).reshape(B, N, 3, C)
-        q, k, v = qkv.unbind(2)  # B, N, C
+        q = self.to_q(x)
+        k = self.to_k(x)
+        v = self.to_v(x)
         dtype = q.dtype
         
         q = self.q_norm(q).transpose(-1, -2)  # (B, N, C) -> (B, C, N)

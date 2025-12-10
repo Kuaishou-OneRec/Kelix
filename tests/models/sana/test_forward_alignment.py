@@ -305,23 +305,17 @@ def debug_first_block(diffusers_model, muse_model, inputs, dtype):
         # Step 0: QKV weight comparison
         print("\n    Checking QKV weights...")
         
-        # Compare QKV weights directly
-        expected_qkv_weight = torch.cat([
-            diff_attn.to_q.weight, 
-            diff_attn.to_k.weight, 
-            diff_attn.to_v.weight
-        ], dim=0)
-        compare_tensors("qkv_weight", expected_qkv_weight, muse_attn.qkv.weight)
+        # Compare Q, K, V weights directly (now both use separate layers)
+        compare_tensors("to_q_weight", diff_attn.to_q.weight, muse_attn.to_q.weight)
+        compare_tensors("to_k_weight", diff_attn.to_k.weight, muse_attn.to_k.weight)
+        compare_tensors("to_v_weight", diff_attn.to_v.weight, muse_attn.to_v.weight)
         
         # Check if bias exists and compare
         if hasattr(diff_attn.to_q, 'bias') and diff_attn.to_q.bias is not None:
-            expected_qkv_bias = torch.cat([
-                diff_attn.to_q.bias, 
-                diff_attn.to_k.bias, 
-                diff_attn.to_v.bias
-            ], dim=0)
-            if muse_attn.qkv.bias is not None:
-                compare_tensors("qkv_bias", expected_qkv_bias, muse_attn.qkv.bias)
+            if muse_attn.to_q.bias is not None:
+                compare_tensors("to_q_bias", diff_attn.to_q.bias, muse_attn.to_q.bias)
+                compare_tensors("to_k_bias", diff_attn.to_k.bias, muse_attn.to_k.bias)
+                compare_tensors("to_v_bias", diff_attn.to_v.bias, muse_attn.to_v.bias)
             else:
                 print("    [qkv_bias] diffusers has bias but muse doesn't!")
         else:
@@ -335,9 +329,10 @@ def debug_first_block(diffusers_model, muse_model, inputs, dtype):
         diff_k = diff_attn.to_k(diff_norm1_mod)
         diff_v = diff_attn.to_v(diff_norm1_mod)
         
-        # Muse: combined qkv projection
-        muse_qkv = muse_attn.qkv(muse_norm1_mod).reshape(B, N, 3, C)
-        muse_q, muse_k, muse_v = muse_qkv.unbind(2)
+        # Muse: also separate q, k, v projections (aligned with diffusers)
+        muse_q = muse_attn.to_q(muse_norm1_mod)
+        muse_k = muse_attn.to_k(muse_norm1_mod)
+        muse_v = muse_attn.to_v(muse_norm1_mod)
         
         compare_tensors("q_after_linear", diff_q, muse_q)
         compare_tensors("k_after_linear", diff_k, muse_k)

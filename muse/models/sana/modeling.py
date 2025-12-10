@@ -577,39 +577,9 @@ class SanaModel(Model):
             
             muse_state_dict[new_key] = value
         
-        # Handle combined qkv for LiteLA self-attention
-        # Diffusers has separate to_q, to_k, to_v but muse LiteLA has combined qkv
+        # Handle combined kv for cross-attention
+        # Diffusers has separate to_k, to_v but muse cross_attn uses combined kv_linear
         for i in range(self.config.depth):
-            prefix = f"blocks.{i}.attn."
-            
-            # Check if this block's attention weights exist in diffusers format
-            q_key = f"transformer_blocks.{i}.attn1.to_q.weight"
-            k_key = f"transformer_blocks.{i}.attn1.to_k.weight"
-            v_key = f"transformer_blocks.{i}.attn1.to_v.weight"
-            
-            if q_key in diffusers_state_dict and k_key in diffusers_state_dict and v_key in diffusers_state_dict:
-                # Combine q, k, v into qkv
-                q_weight = diffusers_state_dict[q_key]
-                k_weight = diffusers_state_dict[k_key]
-                v_weight = diffusers_state_dict[v_key]
-                
-                # Stack along output dimension: [3*hidden, hidden]
-                qkv_weight = torch.cat([q_weight, k_weight, v_weight], dim=0)
-                muse_state_dict[f"{prefix}qkv.weight"] = qkv_weight
-            
-            # Handle biases if present for self-attention
-            q_bias_key = f"transformer_blocks.{i}.attn1.to_q.bias"
-            k_bias_key = f"transformer_blocks.{i}.attn1.to_k.bias"
-            v_bias_key = f"transformer_blocks.{i}.attn1.to_v.bias"
-            
-            if q_bias_key in diffusers_state_dict:
-                q_bias = diffusers_state_dict.get(q_bias_key)
-                k_bias = diffusers_state_dict.get(k_bias_key)
-                v_bias = diffusers_state_dict.get(v_bias_key)
-                if q_bias is not None and k_bias is not None and v_bias is not None:
-                    qkv_bias = torch.cat([q_bias, k_bias, v_bias], dim=0)
-                    muse_state_dict[f"{prefix}qkv.bias"] = qkv_bias
-            
             # Handle cross attention kv_linear
             cross_k_key = f"transformer_blocks.{i}.attn2.to_k.weight"
             cross_v_key = f"transformer_blocks.{i}.attn2.to_v.weight"
