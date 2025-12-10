@@ -1,5 +1,5 @@
 # TODO: clean utils
-from typing import Tuple
+from typing import Tuple, Any
 #from rich import print
 import time
 import torch
