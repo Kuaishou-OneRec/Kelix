@@ -303,14 +303,20 @@ class TwoD_RotaryEmbedding(nn.Module):
         
         inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("freqs_cache", torch.empty(0), persistent=False)
+        # self.register_buffer("freqs_cache", torch.empty(0), persistent=False)
 
-    def build_freq_cache(self, seqlen: int):
-        dtype = self.inv_freq.dtype
-        device = self.inv_freq.device
-        seq = torch.arange(seqlen, device=device, dtype=dtype)
+    # def build_freq_cache(self, seqlen: int):
+    #     dtype = self.inv_freq.dtype
+    #     device = self.inv_freq.device
+    #     seq = torch.arange(seqlen, device=device, dtype=dtype)
+    #     freqs = torch.outer(seq, self.inv_freq)
+    #     self.register_buffer("freqs_cache", freqs, persistent=False)
+    def calculate_freqs(self, seqlen: int) -> torch.Tensor:
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
         freqs = torch.outer(seq, self.inv_freq)
-        self.register_buffer("freqs_cache", freqs, persistent=False)
+        return freqs
+
+
 
 
     def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
@@ -323,27 +329,39 @@ class TwoD_RotaryEmbedding(nn.Module):
         else:
             height_ids, width_ids = input_pos
         max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
-        if self.freqs_cache.numel() == 0 or max_pos > self.freqs_cache.shape[0]:
-            self.build_freq_cache(max_pos + 128)
+        # if self.freqs_cache.numel() == 0 or max_pos > self.freqs_cache.shape[0]:
+        #     self.build_freq_cache(max_pos + 128)
+        rope_emb_max_grid = self.calculate_freqs(max_pos)
 
-        freqs_h = self.freqs_cache[height_ids]
-        freqs_w = self.freqs_cache[width_ids]
-        rope_emb_half = torch.cat([freqs_h, freqs_w], dim=-1).type_as(x)
-        
-        cos_half = rope_emb_half.cos() 
-        sin_half = rope_emb_half.sin()
-        # stash for external debug comparison
-        self.debug_cos = cos_half
-        self.debug_sin = sin_half
-        # Debug: only print dtype to avoid spam
-        try:
-            print(f"[DEBUG rope muse] cos_half dtype={cos_half.dtype}, shape={cos_half.shape}")
-            print(f"[DEBUG rope muse] sin_half dtype={sin_half.dtype}, shape={sin_half.shape}")
-        except Exception as e:
-            print(f"[DEBUG rope muse cos/sin print failed]: {e}")
+
+        pids = torch.stack([height_ids, width_ids], dim=-1)
+        rope_emb = rope_emb_max_grid[pids].flatten(1)
+        rope_emb = rope_emb.repeat(1, 2)
+        cos, sin = (rope_emb.cos(), rope_emb.sin())
+        cos = cos.chunk(2, dim=-1)[0].contiguous()
+        sin = sin.chunk(2, dim=-1)[0].contiguous()
         return flash_apply_rotary_emb(
-            x.float(), cos_half.float(), sin_half.float()
+            x.float(), cos.float(), sin.float()
         ).to(dtype=x.dtype)
+
+        # freqs_h = rope_emb_max_grid[height_ids]
+        # freqs_w = rope_emb_max_grid[width_ids]
+        # rope_emb_half = torch.cat([freqs_h, freqs_w], dim=-1).type_as(x)
+        
+        # cos_half = rope_emb_half.cos() 
+        # sin_half = rope_emb_half.sin()
+        # # stash for external debug comparison
+        # self.debug_cos = cos_half
+        # self.debug_sin = sin_half
+        # # Debug: only print dtype to avoid spam
+        # try:
+        #     print(f"[DEBUG rope muse] cos_half dtype={cos_half.dtype}, shape={cos_half.shape}")
+        #     print(f"[DEBUG rope muse] sin_half dtype={sin_half.dtype}, shape={sin_half.shape}")
+        # except Exception as e:
+        #     print(f"[DEBUG rope muse cos/sin print failed]: {e}")
+        # return flash_apply_rotary_emb(
+        #     x.float(), cos_half.float(), sin_half.float()
+        # ).to(dtype=x.dtype)
             
 
 class VisionRotaryPositionalEmbeddings(nn.Module):
