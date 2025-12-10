@@ -499,7 +499,8 @@ def debug_first_block(diffusers_model, muse_model, inputs, dtype):
         # 输入检查
         print("\n    Checking inputs...")
         compare_tensors("cross_attn_x_input", diff_x_after_attn, muse_x_after_attn)
-        compare_tensors("cross_attn_cond_input", diff_caption, muse_caption)
+        muse_caption_for_debug = muse_caption.squeeze(1) if muse_caption.ndim == 4 else muse_caption
+        compare_tensors("cross_attn_cond_input", diff_caption, muse_caption_for_debug)
         
         # Step 0: 权重检查
         print("\n    Checking weights...")
@@ -521,9 +522,9 @@ def debug_first_block(diffusers_model, muse_model, inputs, dtype):
         diff_cross_k = diff_cross_attn.to_k(diff_caption)
         diff_cross_v = diff_cross_attn.to_v(diff_caption)
         
-        # 对于 muse，使用相同的 muse_caption 来对比（绕过 xformers packing）
-        muse_cross_k = muse_cross_attn.to_k(muse_caption)
-        muse_cross_v = muse_cross_attn.to_v(muse_caption)
+        # 对于 muse，使用 squeeze 后的 muse_caption 来对比（绕过 xformers packing）
+        muse_cross_k = muse_cross_attn.to_k(muse_caption_for_debug)
+        muse_cross_v = muse_cross_attn.to_v(muse_caption_for_debug)
         compare_tensors("cross_k", diff_cross_k, muse_cross_k)
         compare_tensors("cross_v", diff_cross_v, muse_cross_v)
         
