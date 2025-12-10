@@ -490,6 +490,99 @@ def debug_first_block(diffusers_model, muse_model, inputs, dtype):
         muse_cross_out = muse_block.cross_attn(muse_x_after_attn, y_for_cross, y_lens)
         muse_x_after_cross = muse_x_after_attn + muse_cross_out
         
+        # ====== STEP 4a: Cross Attention Step-by-Step ======
+        print("\n  [4a] Cross-Attention step-by-step...")
+        
+        diff_cross_attn = diff_block.attn2
+        muse_cross_attn = muse_block.cross_attn
+        
+        # 输入检查
+        print("\n    Checking inputs...")
+        compare_tensors("cross_attn_x_input", diff_x_after_attn, muse_x_after_attn)
+        compare_tensors("cross_attn_cond_input", diff_caption, muse_caption)
+        
+        # Step 0: 权重检查
+        print("\n    Checking weights...")
+        compare_tensors("cross_to_q_weight", diff_cross_attn.to_q.weight, muse_cross_attn.q_linear.weight)
+        compare_tensors("cross_to_k_weight", diff_cross_attn.to_k.weight, muse_cross_attn.to_k.weight)
+        compare_tensors("cross_to_v_weight", diff_cross_attn.to_v.weight, muse_cross_attn.to_v.weight)
+        compare_tensors("cross_proj_weight", diff_cross_attn.to_out[0].weight, muse_cross_attn.proj.weight)
+        
+        # Step 1: Q 投影
+        print("\n    Checking Q projection...")
+        diff_cross_q = diff_cross_attn.to_q(diff_x_after_attn)
+        muse_cross_q = muse_cross_attn.q_linear(muse_x_after_attn)
+        compare_tensors("cross_q", diff_cross_q, muse_cross_q)
+        
+        # Step 2: K, V 投影 - 注意输入不同！
+        # diffusers 用 diff_caption [B, L, C]
+        # muse 用 y_for_cross (可能是 packed [1, L*B, C] 或 [B, L, C])
+        print("\n    Checking K, V projection...")
+        diff_cross_k = diff_cross_attn.to_k(diff_caption)
+        diff_cross_v = diff_cross_attn.to_v(diff_caption)
+        
+        # 对于 muse，使用相同的 muse_caption 来对比（绕过 xformers packing）
+        muse_cross_k = muse_cross_attn.to_k(muse_caption)
+        muse_cross_v = muse_cross_attn.to_v(muse_caption)
+        compare_tensors("cross_k", diff_cross_k, muse_cross_k)
+        compare_tensors("cross_v", diff_cross_v, muse_cross_v)
+        
+        # Step 3: QK norm (如果有)
+        print("\n    Checking QK norm...")
+        if hasattr(diff_cross_attn, 'norm_q') and diff_cross_attn.norm_q is not None:
+            diff_cross_q_normed = diff_cross_attn.norm_q(diff_cross_q)
+            diff_cross_k_normed = diff_cross_attn.norm_k(diff_cross_k)
+        else:
+            diff_cross_q_normed = diff_cross_q
+            diff_cross_k_normed = diff_cross_k
+            print("    [cross_qk_norm] diffusers has no qk_norm")
+        
+        muse_cross_q_normed = muse_cross_attn.q_norm(muse_cross_q)
+        muse_cross_k_normed = muse_cross_attn.k_norm(muse_cross_k)
+        compare_tensors("cross_q_normed", diff_cross_q_normed, muse_cross_q_normed)
+        compare_tensors("cross_k_normed", diff_cross_k_normed, muse_cross_k_normed)
+        
+        # Step 4: Reshape for attention
+        print("\n    Checking reshape...")
+        heads = diff_cross_attn.heads
+        head_dim = C // heads
+        
+        # diffusers reshape: [B, N, C] -> [B, heads, N, head_dim]
+        diff_cross_q_reshape = diff_cross_q_normed.view(B, -1, heads, head_dim).transpose(1, 2)
+        diff_cross_k_reshape = diff_cross_k_normed.view(B, -1, heads, head_dim).transpose(1, 2)
+        diff_cross_v_reshape = diff_cross_v.view(B, -1, heads, head_dim).transpose(1, 2)
+        
+        # muse reshape: [B, N, C] -> [B, N, heads, head_dim] -> [B, heads, N, head_dim]
+        muse_cross_q_reshape = muse_cross_q_normed.view(B, -1, heads, head_dim).transpose(1, 2)
+        muse_cross_k_reshape = muse_cross_k_normed.view(B, -1, heads, head_dim).transpose(1, 2)
+        muse_cross_v_reshape = muse_cross_v.view(B, -1, heads, head_dim).transpose(1, 2)
+        
+        compare_tensors("cross_q_reshape", diff_cross_q_reshape, muse_cross_q_reshape)
+        compare_tensors("cross_k_reshape", diff_cross_k_reshape, muse_cross_k_reshape)
+        compare_tensors("cross_v_reshape", diff_cross_v_reshape, muse_cross_v_reshape)
+        
+        # Step 5: Attention computation
+        print("\n    Checking attention computation...")
+        # 使用相同的 attention 计算
+        cross_attn_out_diff = F.scaled_dot_product_attention(
+            diff_cross_q_reshape, diff_cross_k_reshape, diff_cross_v_reshape, 
+            attn_mask=None, dropout_p=0.0, is_causal=False
+        )
+        cross_attn_out_muse = F.scaled_dot_product_attention(
+            muse_cross_q_reshape, muse_cross_k_reshape, muse_cross_v_reshape, 
+            attn_mask=None, dropout_p=0.0, is_causal=False
+        )
+        compare_tensors("cross_attn_sdpa", cross_attn_out_diff, cross_attn_out_muse)
+        
+        # Step 6: Output projection
+        print("\n    Checking output projection...")
+        cross_attn_out_diff_flat = cross_attn_out_diff.transpose(1, 2).reshape(B, -1, C)
+        cross_attn_out_muse_flat = cross_attn_out_muse.transpose(1, 2).reshape(B, -1, C)
+        
+        diff_cross_proj = diff_cross_attn.to_out[0](cross_attn_out_diff_flat)
+        muse_cross_proj = muse_cross_attn.proj(cross_attn_out_muse_flat)
+        compare_tensors("cross_proj_output", diff_cross_proj, muse_cross_proj)
+        
         compare_tensors("cross_attn_output", diff_cross_out, muse_cross_out)
         compare_tensors("after_cross_attn", diff_x_after_cross, muse_x_after_cross)
         
