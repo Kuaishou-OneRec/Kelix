@@ -24,7 +24,8 @@ from text prompts using the muse framework.
 
 Usage:
     python examples/sana/inference_demo.py \
-        --model-dir /path/to/muse/checkpoint \
+        --model-dir /path/to/checkpoint \
+        --tokenizer google/gemma-2-2b-it \
         --prompt "A cat sitting on a couch" \
         --output output.png \
         --num-steps 20 \
@@ -34,6 +35,7 @@ Usage:
 import argparse
 import logging
 import os
+from pathlib import Path
 from typing import Optional
 
 import torch
@@ -56,7 +58,13 @@ def get_args():
         "--model-dir",
         type=str,
         required=True,
-        help="Path to Muse format checkpoint directory (contains config.json and model.safetensors)"
+        help="Path to checkpoint directory"
+    )
+    parser.add_argument(
+        "--transformer-subfolder",
+        type=str,
+        default="transformer",
+        help="Subfolder for transformer in Diffusers format (default: transformer)"
     )
     
     # VAE arguments
@@ -67,18 +75,32 @@ def get_args():
         help="Pretrained VAE model path or HuggingFace repo"
     )
     
-    # Text encoder arguments
+    # Tokenizer and text encoder arguments
+    parser.add_argument(
+        "--tokenizer",
+        type=str,
+        default="google/gemma-2-2b-it",
+        help="Tokenizer path or HuggingFace repo"
+    )
     parser.add_argument(
         "--text-encoder",
         type=str,
-        default="google/gemma-2-2b-it",
-        help="Text encoder model name"
+        default=None,
+        help="Text encoder path (defaults to same as tokenizer)"
     )
     parser.add_argument(
         "--max-text-length",
         type=int,
         default=300,
         help="Maximum text sequence length"
+    )
+    
+    # Scheduler arguments
+    parser.add_argument(
+        "--scheduler",
+        type=str,
+        default=None,
+        help="Scheduler path (optional, will create default if not specified)"
     )
     
     # Generation arguments
@@ -145,21 +167,51 @@ def get_args():
     return parser.parse_args()
 
 
-def load_model(model_dir: str, device: torch.device, dtype: torch.dtype):
-    """Load Sana model from Muse format checkpoint.
+def load_model(model_dir: str, device: torch.device, dtype: torch.dtype, subfolder: str = "transformer"):
+    """Load Sana model from checkpoint.
     
     Args:
         model_dir: Path to checkpoint directory
         device: Target device
         dtype: Model dtype
+        subfolder: Subfolder for transformer in Diffusers format
     
     Returns:
         Loaded SanaModel
     """
     from muse.models.sana import SanaModel
     
-    logger.info(f"Loading model from {model_dir}")
-    model = SanaModel.from_pretrained(model_dir)
+    model_path = Path(model_dir)
+    
+    # Check if it's Muse format (config.json at root without transformer subfolder)
+    # or Diffusers format (has transformer/ subfolder)
+    if (model_path / "config.json").exists() and not (model_path / subfolder).exists():
+        # Muse format
+        logger.info(f"Loading Muse format model from {model_dir}")
+        model = SanaModel.from_pretrained(model_dir)
+    else:
+        # Diffusers format - need to convert
+        logger.info(f"Loading Diffusers format model from {model_dir}/{subfolder}")
+        from examples.sana.convert_hf_checkpoint import load_diffusers_model, _build_sana_config
+        from muse.training.common import set_default_dtype
+        
+        hf_model = load_diffusers_model(model_dir, subfolder, dtype, device)
+        
+        # Get config
+        if hasattr(hf_model.config, 'to_dict'):
+            hf_config_dict = hf_model.config.to_dict()
+        else:
+            hf_config_dict = dict(hf_model.config)
+        
+        config = _build_sana_config(hf_config_dict)
+        
+        # Create and load model
+        with set_default_dtype(str(dtype).split('.')[-1]):
+            model = SanaModel(config)
+        
+        muse_state_dict = model.convert_hf_state_dict(hf_model.state_dict())
+        model.load_state_dict(muse_state_dict, strict=False)
+    
     model = model.to(device=device, dtype=dtype)
     model.eval()
     
@@ -180,40 +232,81 @@ def load_vae(vae_pretrained: str, device: torch.device, dtype: torch.dtype):
     Returns:
         Loaded VAE model
     """
-    from muse.models.sana import get_vae
+    from diffusers import AutoencoderDC
     
     logger.info(f"Loading VAE from {vae_pretrained}")
-    vae = get_vae(
-        vae_type="AutoencoderDC",
-        vae_pretrained=vae_pretrained,
-        device=device,
-        dtype=dtype,
-    )
+    vae = AutoencoderDC.from_pretrained(vae_pretrained, torch_dtype=dtype)
+    vae = vae.to(device)
+    vae.eval()
+    vae.requires_grad_(False)
     
     return vae
 
 
-def load_text_encoder(text_encoder_name: str, device: torch.device, dtype: torch.dtype):
-    """Load text encoder and tokenizer.
+def load_tokenizer_and_encoder(
+    tokenizer_path: str,
+    text_encoder_path: Optional[str],
+    device: torch.device,
+    dtype: torch.dtype
+):
+    """Load tokenizer and text encoder.
     
     Args:
-        text_encoder_name: Text encoder model name
+        tokenizer_path: Tokenizer path or HuggingFace repo
+        text_encoder_path: Text encoder path (defaults to tokenizer_path)
         device: Target device
         dtype: Model dtype
     
     Returns:
         Tuple of (tokenizer, text_encoder)
     """
-    from muse.models.sana import get_text_encoder
+    from transformers import AutoTokenizer, AutoModelForCausalLM
     
-    logger.info(f"Loading text encoder from {text_encoder_name}")
-    tokenizer, text_encoder = get_text_encoder(
-        name=text_encoder_name,
-        device=device,
-        dtype=dtype,
-    )
+    encoder_path = text_encoder_path or tokenizer_path
+    
+    logger.info(f"Loading tokenizer from {tokenizer_path}")
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+    
+    logger.info(f"Loading text encoder from {encoder_path}")
+    model = AutoModelForCausalLM.from_pretrained(encoder_path, torch_dtype=dtype)
+    
+    # Get decoder if available
+    if hasattr(model, 'get_decoder'):
+        text_encoder = model.get_decoder()
+    else:
+        text_encoder = model
+    
+    text_encoder = text_encoder.to(device)
+    text_encoder.eval()
+    text_encoder.requires_grad_(False)
     
     return tokenizer, text_encoder
+
+
+def load_scheduler(scheduler_path: Optional[str], num_steps: int):
+    """Load scheduler.
+    
+    Args:
+        scheduler_path: Scheduler path (optional)
+        num_steps: Number of sampling steps
+    
+    Returns:
+        Configured scheduler
+    """
+    from diffusers import FlowMatchEulerDiscreteScheduler
+    
+    if scheduler_path:
+        logger.info(f"Loading scheduler from {scheduler_path}")
+        scheduler = FlowMatchEulerDiscreteScheduler.from_pretrained(scheduler_path)
+    else:
+        logger.info("Creating default FlowMatchEulerDiscreteScheduler")
+        scheduler = FlowMatchEulerDiscreteScheduler(
+            num_train_timesteps=1000,
+            shift=3.0,
+        )
+    
+    scheduler.set_timesteps(num_steps)
+    return scheduler
 
 
 def encode_prompts(
@@ -235,38 +328,38 @@ def encode_prompts(
     Returns:
         Tuple of (text_embeds, attention_mask)
     """
-    from muse.models.sana import encode_text
-    
-    text_embeds, attention_mask = encode_text(
-        tokenizer=tokenizer,
-        text_encoder=text_encoder,
-        texts=prompts,
+    # Tokenize
+    tokens = tokenizer(
+        prompts,
         max_length=max_length,
-        device=device,
+        padding="max_length",
+        truncation=True,
+        return_tensors="pt",
     )
+    
+    input_ids = tokens.input_ids.to(device)
+    attention_mask = tokens.attention_mask.to(device)
+    
+    # Encode
+    with torch.no_grad():
+        outputs = text_encoder(
+            input_ids,
+            attention_mask=attention_mask,
+        )
+        
+        # Get hidden states
+        if hasattr(outputs, 'last_hidden_state'):
+            text_embeds = outputs.last_hidden_state
+        elif isinstance(outputs, tuple):
+            text_embeds = outputs[0]
+        else:
+            text_embeds = outputs
+    
+    # Add dimension for cross attention: [B, 1, L, D]
+    text_embeds = text_embeds[:, None]
+    attention_mask = attention_mask[:, None, None]
     
     return text_embeds, attention_mask
-
-
-def get_scheduler(num_steps: int, flow_shift: float = 3.0):
-    """Get diffusers scheduler for sampling.
-    
-    Args:
-        num_steps: Number of sampling steps
-        flow_shift: Flow shift parameter
-    
-    Returns:
-        Configured scheduler
-    """
-    from diffusers import FlowMatchEulerDiscreteScheduler
-    
-    scheduler = FlowMatchEulerDiscreteScheduler(
-        num_train_timesteps=1000,
-        shift=flow_shift,
-    )
-    scheduler.set_timesteps(num_steps)
-    
-    return scheduler
 
 
 @torch.no_grad()
@@ -286,29 +379,7 @@ def generate(
     dtype: torch.dtype = None,
     seed: int = 42,
 ):
-    """Generate images from text embeddings.
-    
-    Args:
-        model: Sana diffusion model
-        vae: VAE decoder
-        scheduler: Diffusion scheduler
-        text_embeds: Text embeddings [B, 1, L, D]
-        attention_mask: Attention mask [B, 1, 1, L]
-        uncond_embeds: Unconditional embeddings for CFG
-        uncond_mask: Unconditional attention mask
-        cfg_scale: Classifier-free guidance scale
-        image_size: Output image size
-        latent_channels: Number of latent channels
-        vae_downsample: VAE downsample factor
-        device: Target device
-        dtype: Model dtype
-        seed: Random seed
-    
-    Returns:
-        Generated images as PIL Image list
-    """
-    from muse.models.sana import vae_decode
-    
+    """Generate images from text embeddings."""
     batch_size = text_embeds.shape[0]
     latent_size = image_size // vae_downsample
     
@@ -368,7 +439,12 @@ def generate(
     
     # Decode latents to images
     logger.info("Decoding latents to images...")
-    images = vae_decode(vae, latents)
+    
+    # Apply inverse scaling factor
+    if hasattr(vae, 'config') and hasattr(vae.config, 'scaling_factor'):
+        latents = latents / vae.config.scaling_factor
+    
+    images = vae.decode(latents).sample
     
     # Convert to PIL images
     images = (images / 2 + 0.5).clamp(0, 1)
@@ -394,12 +470,12 @@ def main():
     logger.info(f"Device: {device}, dtype: {dtype}")
     
     # Load models
-    model = load_model(args.model_dir, device, dtype)
+    model = load_model(args.model_dir, device, dtype, args.transformer_subfolder)
     vae = load_vae(args.vae_pretrained, device, dtype)
-    tokenizer, text_encoder = load_text_encoder(args.text_encoder, device, dtype)
-    
-    # Get scheduler
-    scheduler = get_scheduler(args.num_steps)
+    tokenizer, text_encoder = load_tokenizer_and_encoder(
+        args.tokenizer, args.text_encoder, device, dtype
+    )
+    scheduler = load_scheduler(args.scheduler, args.num_steps)
     
     # Encode prompts
     logger.info(f"Prompt: {args.prompt}")
