@@ -935,7 +935,8 @@ def run_full_alignment_test():
             encoder_attention_mask = (1 - encoder_attention_mask.to(dtype)) * -10000.0
             encoder_attention_mask = encoder_attention_mask.unsqueeze(1)
         
-        h, w = x.shape[-2] // 1, x.shape[-1] // 1  # patch_size=1
+        patch_size = muse_model.patch_size
+        h, w = x.shape[-2] // patch_size, x.shape[-1] // patch_size
         
         # Run all transformer blocks
         print("\n  Running all transformer blocks...")
@@ -945,6 +946,8 @@ def run_full_alignment_test():
                 encoder_hidden_states=diff_caption,
                 encoder_attention_mask=encoder_attention_mask,
                 timestep=diff_time,
+                height=h,
+                width=w,
             )
             muse_x = muse_block(muse_x, y_for_cross, muse_t0, y_lens, (h, w))
             
