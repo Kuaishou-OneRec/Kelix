@@ -263,6 +263,8 @@ def test_keye_vl_zero_diff(dtype):
 
     # Build origin config from raw config (HuggingFace style)
     # KeyeConfig takes vision_config as dict or KeyeImageTokenizerConfig
+    # 必须传入 head_dim，否则原版模型会默认用 hidden_size // num_attention_heads = 64，
+    # 而 checkpoint 用的是 head_dim=128，导致 q_proj/o_proj 维度不匹配。
     origin_cfg = origin_mod.KeyeConfig(
         vocab_size=raw_cfg["vocab_size"],
         hidden_size=raw_cfg["hidden_size"],
@@ -270,6 +272,7 @@ def test_keye_vl_zero_diff(dtype):
         num_hidden_layers=raw_cfg["num_hidden_layers"],
         num_attention_heads=raw_cfg["num_attention_heads"],
         num_key_value_heads=raw_cfg["num_key_value_heads"],
+        head_dim=raw_cfg["head_dim"],  # 关键！必须传入 head_dim=128
         max_position_embeddings=raw_cfg["max_position_embeddings"],
         rms_norm_eps=raw_cfg.get("rms_norm_eps", 1e-6),
         rope_theta=raw_cfg.get("rope_theta", 1_000_000),
