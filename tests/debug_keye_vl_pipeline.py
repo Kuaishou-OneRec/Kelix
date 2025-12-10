@@ -10,7 +10,7 @@ import logging
 import glob
 import json
 from pathlib import Path
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Union
 
 import torch
 import numpy as np
@@ -27,6 +27,7 @@ logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
 DEFAULT_CKPT = "/mmu_mllm_hdd_2/maosiyang/output/Keye/vq_end2end_video/discrete/run_exp0.0.1_stage1_baseline/step16000/global_step16000/converted"
+SLOWFAST_MODEL_DIR_ENV = "KEYE_SLOWFAST_MODEL_DIR"
 
 # =========================================================================
 # Helper Functions (Printing & Input Gen)
@@ -271,9 +272,17 @@ def test_pipeline_alignment():
     muse_state = muse_model.convert_hf_state_dict(state_dict, tie_word_embeddings=qwen_cfg.tie_word_embeddings)
     muse_model.load_state_dict(muse_state, strict=False)
 
-
-
-
+    # --- 4. Prepare Inputs (align with zero_diff flow) ---
+    slowfast_dir = os.environ.get(SLOWFAST_MODEL_DIR_ENV, DEFAULT_CKPT)
+    padder_token_id = None
+    if slowfast_dir:
+        try:
+            padder_token_id = SlowFastVisionPadder(slowfast_dir).image_pad
+        except Exception as e:
+            logger.warning(f"SlowFast padder init failed ({e}), fallback to config image_token_id")
+            padder_token_id = None
+    image_token_id = padder_token_id if padder_token_id is not None else raw_cfg.get("image_token_id", 151655)
+    inputs, vision_mask = _build_inputs(image_token_id, device, dtype, slowfast_dir)
 class SlowFastVisionPadder:
     """
     极简版 SlowFast padding 构造器，按照用户提供的片段实现，只保留需要的字段。
@@ -393,11 +402,11 @@ def _build_inputs(
     # }
     
     # logger.info(f"Input shapes: pixel_values={pixel_values.shape}, image_grid_thw={image_grid_thw}, input_ids={input_ids.shape}")
-    image_token_id = padder_token_id if padder_token_id is not None else raw_cfg.get("image_token_id", 151655)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dtype = torch.float16
-    slowfast_dir = 
-    inputs, vision_mask = _build_inputs(image_token_id, device, dtype, DEFAULT_CKPT)
+    # image_token_id = padder_token_id if padder_token_id is not None else raw_cfg.get("image_token_id", 151655)
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # dtype = torch.float16
+    # slowfast_dir = 
+    # inputs, vision_mask = _build_inputs(image_token_id, device, dtype, DEFAULT_CKPT)
     # --- 5. Register Hooks ---
     register_hooks(origin_model, "origin")
     register_hooks(muse_model, "muse")
