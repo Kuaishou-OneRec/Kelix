@@ -329,6 +329,10 @@ def test_pipeline_alignment():
         patch_size=inner_vcfg["patch_size"],
         intermediate_size=inner_vcfg["intermediate_size"],
         has_learnable_position_embedding=inner_vcfg.get("has_learnable_position_embedding", True),
+        attention_dropout=inner_vcfg.get("attention_dropout", 0.0),
+        rope_theta=inner_vcfg.get("rope_theta", 10000.0),
+        use_qk_norm=inner_vcfg.get("use_qk_norm", False),
+        qk_norm_eps=inner_vcfg.get("qk_norm_eps", 1e-6),
         attention_function="flash_attention_2",
     )
     
