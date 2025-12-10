@@ -481,11 +481,6 @@ class SanaModel(Model):
         
         # First pass: identify keys to skip (will be combined later)
         for i in range(self.config.depth):
-            # Self-attention q, k, v will be combined into qkv
-            for suffix in [".weight", ".bias"]:
-                skip_keys.add(f"transformer_blocks.{i}.attn1.to_q{suffix}")
-                skip_keys.add(f"transformer_blocks.{i}.attn1.to_k{suffix}")
-                skip_keys.add(f"transformer_blocks.{i}.attn1.to_v{suffix}")
             # Cross-attention k, v will be combined into kv_linear
             for suffix in [".weight", ".bias"]:
                 skip_keys.add(f"transformer_blocks.{i}.attn2.to_k{suffix}")
