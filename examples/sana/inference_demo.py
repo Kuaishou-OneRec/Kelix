@@ -156,10 +156,10 @@ def load_model(model_dir: str, device: torch.device, dtype: torch.dtype):
     Returns:
         Loaded SanaModel
     """
-    from muse.models.base import Model
+    from muse.models.sana import SanaModel
     
     logger.info(f"Loading model from {model_dir}")
-    model = Model.from_pretrained(model_dir)
+    model = SanaModel.from_pretrained(model_dir)
     model = model.to(device=device, dtype=dtype)
     model.eval()
     
