@@ -505,7 +505,7 @@ class KeyeImageTokenizer(Model):
             raise ValueError(f"pixel_values 维度应为4 (num_patches, C, H, W)，实际 {pixel_values.shape}")
 
         image_embeds = self.get_image_embeds(pixel_values, image_grid_thw)
-        image_embeds = self.pre_llm_align(image_embeds)
+        image_embeds = self.pre_llm_aligner(image_embeds)
 
         z_e = self.encoder(image_embeds).chunk(self.n_q_tokens, dim=-1)
 
