@@ -55,25 +55,26 @@ def default_flax_embed_init(tensor: torch.Tensor) -> None:
     init.normal_(tensor, mean=0.0, std=1.0)
 
 
-class VectorQuantizer(Model):
+class VectorQuantizer(nn.Module):
     """
-    Vector Quantization Layer with support for both argmin and softmax sampling
+    Vector Quantization Layer with support for both argmin and softmax sampling.
+    Note: 不依赖 Model 基类（无 config），避免初始化报错。
     """
-    def __init__(self,
-                num_embeddings: int,
-                embedding_dim: int,
-                init_embedding_dim: int,
-                sampling_mode: str = "argmin",
-                norm_type: str = 'LayerNorm',
-                temperature: float = 1.0,
-                temperature_decay: float = 0.999,
-                min_temperature: float = 0.1,
-                split_voc=1, # 分割成几个词表
-                split_voc_index=0,
-                add_voc_reducer=False, # 是否添加一个voc reducer
-                
-                ):
-        super(VectorQuantizer, self).__init__()
+    def __init__(
+        self,
+        num_embeddings: int,
+        embedding_dim: int,
+        init_embedding_dim: int,
+        sampling_mode: str = "argmin",
+        norm_type: str = "LayerNorm",
+        temperature: float = 1.0,
+        temperature_decay: float = 0.999,
+        min_temperature: float = 0.1,
+        split_voc: int = 1,  # 分割成几个词表
+        split_voc_index: int = 0,
+        add_voc_reducer: bool = False,  # 是否添加一个voc reducer
+    ):
+        super().__init__()
         print(f"[DEBUG] VectorQuantizer.__init__: sampling_mode={sampling_mode}, temperature={temperature}, split_voc={split_voc}, add_voc_reducer={add_voc_reducer}, split_voc_index={split_voc_index}")
         self.embedding_dim = embedding_dim
         self.num_embeddings = num_embeddings
