@@ -950,15 +950,63 @@ def run_full_alignment_test():
                 # 1. Compare input to block 1 (should be block 0 output)
                 compare_tensors(f"block1_input", diff_x, muse_x)
                 
-                # 2. Compare block 1 weights
+                # 2. Compare block 1 self-attention weights
+                print(f"\n  Self-Attention weights:")
                 compare_tensors(f"block1_to_q_weight", diff_block.attn1.to_q.weight, muse_block.attn.to_q.weight)
                 compare_tensors(f"block1_to_k_weight", diff_block.attn1.to_k.weight, muse_block.attn.to_k.weight)
                 compare_tensors(f"block1_to_v_weight", diff_block.attn1.to_v.weight, muse_block.attn.to_v.weight)
                 compare_tensors(f"block1_proj_weight", diff_block.attn1.to_out[0].weight, muse_block.attn.proj.weight)
+                # QK norm weights
+                if hasattr(diff_block.attn1, 'norm_q') and diff_block.attn1.norm_q is not None:
+                    compare_tensors(f"block1_norm_q_weight", diff_block.attn1.norm_q.weight, muse_block.attn.q_norm.weight)
+                    compare_tensors(f"block1_norm_k_weight", diff_block.attn1.norm_k.weight, muse_block.attn.k_norm.weight)
+                
+                # 3. Compare cross-attention weights
+                print(f"\n  Cross-Attention weights:")
                 compare_tensors(f"block1_cross_q_weight", diff_block.attn2.to_q.weight, muse_block.cross_attn.q_linear.weight)
                 compare_tensors(f"block1_cross_k_weight", diff_block.attn2.to_k.weight, muse_block.cross_attn.to_k.weight)
                 compare_tensors(f"block1_cross_v_weight", diff_block.attn2.to_v.weight, muse_block.cross_attn.to_v.weight)
+                compare_tensors(f"block1_cross_proj_weight", diff_block.attn2.to_out[0].weight, muse_block.cross_attn.proj.weight)
+                
+                # 4. Compare FFN/MLP weights
+                print(f"\n  FFN/MLP weights:")
+                # diffusers: ff.conv_inverted, ff.conv_depth, ff.conv_point
+                # muse: mlp.inverted_conv.conv, mlp.depth_conv.conv, mlp.point_conv.conv
+                compare_tensors(f"block1_ff_inverted_weight", diff_block.ff.conv_inverted.weight, muse_block.mlp.inverted_conv.conv.weight)
+                compare_tensors(f"block1_ff_depth_weight", diff_block.ff.conv_depth.weight, muse_block.mlp.depth_conv.conv.weight)
+                compare_tensors(f"block1_ff_point_weight", diff_block.ff.conv_point.weight, muse_block.mlp.point_conv.conv.weight)
+                
+                # 5. Compare scale_shift_table
+                print(f"\n  Other weights:")
                 compare_tensors(f"block1_scale_shift_table", diff_block.scale_shift_table, muse_block.scale_shift_table)
+                
+                # 6. Step-by-step forward for block 1
+                print(f"\n  Block 1 Step-by-Step Forward:")
+                B = diff_x.shape[0]
+                C = diff_x.shape[-1]
+                
+                # Modulation
+                diff_shift_msa, diff_scale_msa, diff_gate_msa, diff_shift_mlp, diff_scale_mlp, diff_gate_mlp = (
+                    diff_block.scale_shift_table[None] + diff_time.reshape(B, 6, -1)
+                ).chunk(6, dim=1)
+                muse_shift_msa, muse_scale_msa, muse_gate_msa, muse_shift_mlp, muse_scale_mlp, muse_gate_mlp = (
+                    muse_block.scale_shift_table[None] + muse_t0.reshape(B, 6, -1)
+                ).chunk(6, dim=1)
+                compare_tensors("block1_modulation", diff_shift_msa, muse_shift_msa)
+                
+                # Norm + modulate for self-attention
+                diff_norm1 = diff_block.norm1(diff_x)
+                muse_norm1 = muse_block.norm1(muse_x)
+                compare_tensors("block1_norm1", diff_norm1, muse_norm1)
+                
+                diff_norm1_mod = diff_norm1 * (1 + diff_scale_msa) + diff_shift_msa
+                muse_norm1_mod = muse_norm1 * (1 + muse_scale_msa) + muse_shift_msa
+                compare_tensors("block1_norm1_mod", diff_norm1_mod, muse_norm1_mod)
+                
+                # Self-attention Q projection
+                diff_q = diff_block.attn1.to_q(diff_norm1_mod)
+                muse_q = muse_block.attn.to_q(muse_norm1_mod)
+                compare_tensors("block1_self_attn_q", diff_q, muse_q)
             
             # Run blocks
             diff_out = diff_block(
