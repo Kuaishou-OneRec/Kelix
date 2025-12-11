@@ -164,6 +164,9 @@ def get_argument_parser():
     parser.add_argument("--save-checkpoint-per-step", type=int, default=1000,
                         help="Save checkpoint every N steps")
 
+    parser.add_argument("--save-checkpoint-every-epoch", action="store_true",
+                      help="Save checkpoint at the end of every epoch")
+
     parser.add_argument("--output-dir", type=str, required=True,
                         help="Output directory for checkpoints and logs")
     
