@@ -226,7 +226,17 @@ class KeyeVisionEncoder(nn.Module):
                 attn_dropout=attn_dropout,
                 attention_function=config.attention_function,
             )
-            mlp = KeyeMLP(dim=embed_dim, hidden_dim=intermediate_dim, activation_fn=nn.SiLU())
+            # 使用配置中的 hidden_act，默认为 gelu_pytorch_tanh（与 Origin 一致）
+            hidden_act = getattr(config, 'hidden_act', 'gelu_pytorch_tanh')
+            if hidden_act == 'gelu_pytorch_tanh':
+                activation_fn = nn.GELU(approximate='tanh')
+            elif hidden_act == 'silu':
+                activation_fn = nn.SiLU()
+            elif hidden_act == 'gelu':
+                activation_fn = nn.GELU()
+            else:
+                activation_fn = nn.GELU(approximate='tanh')  # 默认
+            mlp = KeyeMLP(dim=embed_dim, hidden_dim=intermediate_dim, activation_fn=activation_fn)
             layer = TransformerSelfAttentionLayer(
                 attn=self_attn,
                 mlp=mlp,
