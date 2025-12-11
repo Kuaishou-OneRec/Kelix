@@ -434,10 +434,10 @@ def train():
         # Continue pretrain mode: get model_class from model_dir/config.json
         model_config_path = Path(args.model_dir) / "config.json"
         if not model_config_path.exists():
-        raise FileNotFoundError(
-            f"Config file not found: {model_config_path}. "
-            f"Cannot continue pretrain without config.json in {args.model_dir}"
-        )
+            raise FileNotFoundError(
+                f"Config file not found: {model_config_path}. "
+                f"Cannot continue pretrain without config.json in {args.model_dir}"
+            )
         model_config = load_config(model_config_path)
     elif args.model_config:
         # Train from scratch mode: get model_class from model_config
@@ -468,9 +468,9 @@ def train():
     if args.model_dir:
         # Continue pretrain: load weights from checkpoint
         if dist.get_rank() == 0:
-        with set_default_dtype(args.model_dtype):
-            print_rank_0(f"Loading checkpoint from: {args.model_dir}")
-            state_dict = load_hf_checkpoint(args.model_dir)
+            with set_default_dtype(args.model_dtype):
+                print_rank_0(f"Loading checkpoint from: {args.model_dir}")
+                state_dict = load_hf_checkpoint(args.model_dir)
         dist.barrier()
     else:
         # Train from scratch: no weights to load
@@ -509,16 +509,16 @@ def train():
     # 需要保证每个rank都执行了参数初始化或加载
     if args.model_dir:
         with Timer("Load state dict"):
-        # Convert meta tensors to CUDA tensors
-        # distribute the state_dict from rank 0 to all ranks
-        load_from_full_model_state_dict(
-            model=model, full_sd=state_dict,
-            allow_random_init_params=args.allow_random_init_params
-        )
+            # Convert meta tensors to CUDA tensors
+            # distribute the state_dict from rank 0 to all ranks
+            load_from_full_model_state_dict(
+                model=model, full_sd=state_dict,
+                allow_random_init_params=args.allow_random_init_params
+            )
     else:
         # Train from scratch: initialize model parameters randomly
         with Timer("Initialize model parameters"):
-        initialize_model_params(model)
+            initialize_model_params(model)
 
     with torch.device(torch.cuda.current_device()):
         # Initialize RoPE, if the buffer is not in the state_dict,
@@ -548,9 +548,9 @@ def train():
     print_rank_0("Parameters:")
     for name, param in model.named_parameters():
         if param.requires_grad:
-        print_rank_0(f"  {name}: {param.shape}")
+            print_rank_0(f"  {name}: {param.shape}")
         else:
-        print_rank_0(f"  {name}: {param.shape} (not trainable)")
+            print_rank_0(f"  {name}: {param.shape} (not trainable)")
     print_rank_0("=" * 50)
 
     ############## Load VAE and text encoder ##############
