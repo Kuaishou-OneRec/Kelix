@@ -101,7 +101,7 @@ def get_argument_parser():
     parser = argparse.ArgumentParser()
 
     ############ Model args ############
-    parser.add_argument("--model-config", type=str, required=True,
+    parser.add_argument("--model-config", type=str, default=None,
                         help="The config file path of the model to train")
 
     parser.add_argument("--model-dir", type=str, default=None,
