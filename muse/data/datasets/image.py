@@ -375,7 +375,8 @@ class Text2ImageDataset(DistributedDataset):
         pair = self.extract_image_text(sample)
         if pair:
             images = json.loads(sample.get("images", '{}'))
-            if pair["image"] in images:
+            image = pair["image"]
+            if image in images:
                 pair["image"] = images[image]
             return self._process_pair(pair)
         return None
