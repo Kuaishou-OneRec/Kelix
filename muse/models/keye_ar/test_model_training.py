@@ -31,7 +31,10 @@ def test_model_training():
         "attention_function": "eager"
     }
     
-    # 2. 初始化模型
+    # 创建LM Head用于训练
+    lm_head = nn.Linear(config["d_model"], config["vocab_size"])
+    
+    # 2. 初始化模型，将lm_head作为参数传入
     print("\n初始化模型...")
     model = TokenDecoder(
         vocab_size=config["vocab_size"],
@@ -43,12 +46,9 @@ def test_model_training():
         dim_feedforward=config["dim_feedforward"],
         use_gradient_checkpointing=config["use_gradient_checkpointing"],
         reduce=config["reduce"],
-        attention_function=config["attention_function"]
+        attention_function=config["attention_function"],
+        lm_head=lm_head  # 将lm_head作为参数传入
     )
-    
-    # 注意：对于reduce=False模式，模型的forward方法已经包含了lm_head的处理
-    # 如果model.lm_head不为None，forward方法会自动应用它
-    # 因此我们不需要在测试中再次应用lm_head
     
     # 3. 创建优化器和损失函数
     print("\n创建优化器和损失函数...")
