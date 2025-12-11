@@ -281,16 +281,8 @@ def vae_encode(vae, images: torch.Tensor, sample_posterior: bool = True) -> torc
     """
     with torch.no_grad():
         # VAE runs in float32 for precision, images should already be float32
-        output = vae.encode(images)
-        # AutoencoderDC returns tuple, get first element
-        if isinstance(output, tuple):
-            z = output[0]
-        elif hasattr(output, 'latent_dist'):
-            # For other VAEs with latent_dist
-            posterior = output.latent_dist
-            z = posterior.sample() if sample_posterior else posterior.mode()
-        else:
-            z = output
+        # Use indexing [0] which works for both tuple and EncoderOutput
+        z = vae.encode(images)[0]
         z = z * vae.config.scaling_factor
     return z
 
