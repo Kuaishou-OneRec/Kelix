@@ -99,31 +99,31 @@ class Text2ImageDataset(DistributedDataset):
         
         return T.Compose(transform_list)
     
-    def _load_image(self, image_data: Any) -> Optional[Image.Image]:
-        """Load image from various formats.
+    # def _load_image(self, image_data: Any) -> Optional[Image.Image]:
+    #     """Load image from various formats.
         
-        Args:
-            image_data: Image path, base64 string, or bytes
+    #     Args:
+    #         image_data: Image path, base64 string, or bytes
         
-        Returns:
-            PIL Image or None if loading fails
-        """
-        try:
-            if isinstance(image_data, str):
-                return load_image(image_data)
-            elif isinstance(image_data, bytes):
-                from io import BytesIO
-                return Image.open(BytesIO(image_data))
-            elif isinstance(image_data, Image.Image):
-                return image_data
-            elif hasattr(image_data, 'tobytes'):
-                # numpy array
-                return Image.fromarray(image_data)
-            else:
-                return load_image(str(image_data))
-        except Exception as e:
-            logger.warning(f"Failed to load image: {e}")
-            return None
+    #     Returns:
+    #         PIL Image or None if loading fails
+    #     """
+    #     try:
+    #         if isinstance(image_data, str):
+    #             return load_image(image_data)
+    #         elif isinstance(image_data, bytes):
+    #             from io import BytesIO
+    #             return Image.open(BytesIO(image_data))
+    #         elif isinstance(image_data, Image.Image):
+    #             return image_data
+    #         elif hasattr(image_data, 'tobytes'):
+    #             # numpy array
+    #             return Image.fromarray(image_data)
+    #         else:
+    #             return load_image(str(image_data))
+    #     except Exception as e:
+    #         logger.warning(f"Failed to load image: {e}")
+    #         return None
     
     def get_content(self,
                     sample: Dict[str, Any],
@@ -305,6 +305,13 @@ class Text2ImageDataset(DistributedDataset):
             text = segments[0]["text"]
             image = segments[1]["image"]
         
+        if image is None or text is None:
+            return None
+        
+        images = json.loads(sample.get("images", '{}'))
+        if image in images:
+            image = images[image]
+
         return {
             "image": image,
             "text": text
