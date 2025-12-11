@@ -57,23 +57,23 @@ class TokenDecoder(Model):
         else:
             self.token_embedding = nn.Embedding(vocab_size, d_model)
         
-        # 位置编码
-        self.rope = LlamaRotaryPositionalEmbeddings(dim=head_dim, max_seq_len=max_length)
+        # 位置编码 - 添加可训练的位置编码以匹配原始模型
+        self.position_embedding = nn.Embedding(max_length, d_model)
         
         # 创建解码器层
         layers = []
         for _ in range(num_layers):
-            # 创建注意力层
+            # 创建注意力层 - 修改为支持偏置参数
             self_attn = MultiHeadAttention(
                 embed_dim=d_model,
                 num_heads=nhead,
                 num_kv_heads=nhead,
                 head_dim=head_dim,
-                q_proj=nn.Linear(d_model, nhead * head_dim, bias=False),
-                k_proj=nn.Linear(d_model, nhead * head_dim, bias=False),
-                v_proj=nn.Linear(d_model, nhead * head_dim, bias=False),
-                output_proj=nn.Linear(nhead * head_dim, d_model, bias=False),
-                pos_embeddings=self.rope,
+                q_proj=nn.Linear(d_model, nhead * head_dim, bias=True),  # 修改为True
+                k_proj=nn.Linear(d_model, nhead * head_dim, bias=True),  # 修改为True
+                v_proj=nn.Linear(d_model, nhead * head_dim, bias=True),  # 修改为True
+                output_proj=nn.Linear(nhead * head_dim, d_model, bias=True),  # 修改为True
+                pos_embeddings=None,  # 移除RoPE，使用可训练位置编码
                 kv_cache=None,
                 max_seq_len=max_length,
                 is_causal=True,
@@ -81,11 +81,11 @@ class TokenDecoder(Model):
                 attention_function=attention_function
             )
             
-            # 创建前馈网络
+            # 创建前馈网络 - 修改为支持偏置参数
             mlp = FeedForward(
-                gate_proj=nn.Linear(d_model, dim_feedforward, bias=False),
-                up_proj=nn.Linear(d_model, dim_feedforward, bias=False),
-                down_proj=nn.Linear(dim_feedforward, d_model, bias=False),
+                gate_proj=nn.Linear(d_model, dim_feedforward, bias=True),  # 修改为True
+                up_proj=nn.Linear(d_model, dim_feedforward, bias=True),   # 修改为True
+                down_proj=nn.Linear(dim_feedforward, d_model, bias=True), # 修改为True
                 activation=nn.SiLU()
             )
             
@@ -135,6 +135,11 @@ class TokenDecoder(Model):
         
         # 输入线性层
         x_emb = self.input_linear(x_emb)
+        
+        # 添加位置编码（匹配原始模型）
+        positions = torch.arange(seq_len, device=x_emb.device).unsqueeze(0)
+        pos_emb = self.position_embedding(positions)
+        x_emb = x_emb + pos_emb
         
         # 前向传播
         output = self.transformer(input_embeds=x_emb)
@@ -276,13 +281,12 @@ class TokenDecoder(Model):
             
             return generated_ids
     
-    @classmethod
-    def convert_hf_state_dict(cls, state_dict, config=None):
+    def convert_hf_state_dict(state_dict: dict, reduce_mode: bool = False) -> dict:
         """
-        将原始token_decoder_ori.py的state dict转换为新token_decoder.py的state dict
+        将原始模型的状态字典转换为新模型的状态字典
         Args:
             state_dict: 原始模型的状态字典
-            config: 可选的配置对象
+            reduce_mode: 是否为reduce模式（影响output_linear的处理）
         Returns:
             converted_state_dict: 转换后的状态字典
         """
@@ -291,8 +295,7 @@ class TokenDecoder(Model):
         converted_count = 0
         total_count = len(state_dict)
         
-        # 检测是否为reduce=False的情况
-        reduce_mode = any("output_linear.weight" in key for key in state_dict.keys())
+        print(f"原始模型状态字典键数: {total_count}")
         
         for key, value in state_dict.items():
             new_key = None
@@ -368,10 +371,6 @@ class TokenDecoder(Model):
                     new_key = f"transformer.layers.{layer_idx}.attn.output_proj.weight"
                 elif ".out_proj.bias" in key:
                     new_key = f"transformer.layers.{layer_idx}.attn.output_proj.bias"
-                elif ".out_proj.bias" in key:
-                    # 跳过偏置参数（新模型没有偏置）
-                    skipped_keys.append(key)
-                    continue
                 
                 # 4.3 处理MLP层
                 elif ".mlp.gate_proj.weight" in key:
@@ -387,15 +386,9 @@ class TokenDecoder(Model):
             elif key == "final_norm.bias":
                 new_key = "transformer.norm.bias"
             
-            # 6. 处理位置编码（原始模型有可训练的位置编码，新模型使用RoPE，不需要这些权重）
+            # 6. 处理位置编码（现在模型有位置编码层，直接映射）
             elif key == "position_embedding.weight":
-                # 关键修复：新模型没有位置编码层，但为了参数对齐，我们创建一个虚拟的位置编码权重
-                # 并将其设置为零，这样不会影响模型输出
-                dummy_pos_emb = torch.zeros_like(value)
-                converted_state_dict["position_embedding.weight"] = dummy_pos_emb
-                print(f"  创建虚拟位置编码权重，维度: {value.shape}")
-                converted_count += 1
-                continue
+                new_key = "position_embedding.weight"
             
             # 如果找到了新键名
             if new_key is not None:
@@ -428,7 +421,7 @@ class TokenDecoder(Model):
             print(f"  跳过的键: {skipped_keys}")
         
         return converted_state_dict
-    
+
 
 def test_generate_with_correct_embedding_dim():
     # 配置参数
