@@ -10,6 +10,7 @@ from muse.layers.feed_forward import FeedForward
 from muse.layers.layer_norm import Fp32LayerNorm
 from muse.layers.position_embeddings import LlamaRotaryPositionalEmbeddings
 
+
 class TokenDecoder(Model):
     def __init__(self, 
                  vocab_size: int,
@@ -83,9 +84,9 @@ class TokenDecoder(Model):
             
             # 创建前馈网络 - 修改为支持偏置参数
             mlp = FeedForward(
-                gate_proj=nn.Linear(d_model, dim_feedforward, bias=False),  # 修改为True
-                up_proj=nn.Linear(d_model, dim_feedforward, bias=False),   # 修改为True
-                down_proj=nn.Linear(dim_feedforward, d_model, bias=False), # 修改为True
+                gate_proj=nn.Linear(d_model, dim_feedforward, bias=False),
+                up_proj=nn.Linear(d_model, dim_feedforward, bias=False),
+                down_proj=nn.Linear(dim_feedforward, d_model, bias=False),
                 activation=nn.SiLU()
             )
             
@@ -107,9 +108,9 @@ class TokenDecoder(Model):
             self.input_linear = nn.Linear(input_dim, d_model)
             self.output_linear = nn.Linear(d_model, input_dim)
         
-        # 创建Transformer解码器
+        # 创建Transformer解码器 - 修改为使用nn.Identity()作为tok_embeddings
         self.transformer = TransformerDecoder(
-            tok_embeddings=self.token_embedding,
+            tok_embeddings=nn.Identity(),  # 修改为Identity，直接接收embeddings
             layers=layers,
             max_seq_len=max_length,
             num_heads=nhead,
@@ -141,8 +142,8 @@ class TokenDecoder(Model):
         pos_emb = self.position_embedding(positions)
         x_emb = x_emb + pos_emb
         
-        # 前向传播
-        output = self.transformer(input_embeds=x_emb)
+        # 前向传播 - 修改为传入tokens=None，input_embeds=x_emb
+        output = self.transformer(tokens=None, input_embeds=x_emb)
         
         # 输出线性层和残差连接（只有当lm_head为None时才应用）
         if self.lm_head is None:
@@ -300,11 +301,10 @@ class TokenDecoder(Model):
         for key, value in state_dict.items():
             new_key = None
             
-            # 1. 处理Token Embedding层
+            # 1. 处理Token Embedding层 - 修改为只复制到token_embedding.weight
             if key == "token_embedding.weight":
-                # Token embedding在两个地方都有，需要复制
+                # 现在只需要复制到token_embedding.weight，因为TransformerDecoder使用Identity
                 converted_state_dict["token_embedding.weight"] = value
-                converted_state_dict["transformer.tok_embeddings.weight"] = value
                 converted_count += 1
                 continue
             
