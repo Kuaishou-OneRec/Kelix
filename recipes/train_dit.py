@@ -563,11 +563,11 @@ def train():
     tokenizer = None
     text_encoder = None
 
-    # VAE uses float32 for better precision (matching original Sana)
+    # VAE uses bfloat16 to match model compute dtype
     vae = load_vae(
         vae_dir=args.vae_dir,
         device=torch.cuda.current_device(),
-        dtype=torch.float32
+        dtype=get_torch_dtype(args.model_dtype)
     )
     text_encoder = load_text_encoder(
         text_encoder_dir=args.text_encoder_dir,

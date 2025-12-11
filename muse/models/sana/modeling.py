@@ -385,6 +385,9 @@ class SanaModel(Model):
     
     @property
     def dtype(self):
+        # Use compute dtype if set by FSDP (for mixed precision training)
+        if hasattr(self, '_compute_dtype') and self._compute_dtype is not None:
+            return self._compute_dtype
         return next(self.parameters()).dtype
     
     def get_layers_to_shard(self):

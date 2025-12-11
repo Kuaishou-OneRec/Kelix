@@ -262,6 +262,9 @@ def shard_model(
     if cpu_offload:
         fsdp_kwargs["offload_policy"] = CPUOffloadPolicy()
 
+    # Store compute dtype on model for use in forward pass
+    model._compute_dtype = param_dtype if fp32_weight else None
+
     # Shard the model with FSDP, iterating in reverse to start with
     # lowest-level modules first
     num_layers_sharded = 0
