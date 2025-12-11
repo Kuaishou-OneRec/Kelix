@@ -1,0 +1,456 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from typing import Optional, Union
+
+from muse.models.base import Model
+from muse.layers.transformer import TransformerDecoder, TransformerSelfAttentionLayer
+from muse.layers.attention import MultiHeadAttention
+from muse.layers.feed_forward import FeedForward
+from muse.layers.layer_norm import Fp32LayerNorm
+from muse.layers.position_embeddings import LlamaRotaryPositionalEmbeddings
+
+class TokenDecoder(Model):
+    def __init__(self, 
+                 vocab_size: int,
+                 max_length: int,
+                 d_model: int,
+                 eos_token: int,
+                 nhead: int = 8,
+                 num_layers: int = 6,
+                 dim_feedforward: int = 2048,
+                 token_embedding: Optional[nn.Embedding] = None,
+                 use_gradient_checkpointing: bool = True,
+                 input_dim: Optional[int] = None,
+                 reduce: bool = False,
+                 lm_head: Optional[nn.Linear] = None,
+                 infer_id_embs_fn = None,
+                 attention_function: str = "eager"):
+        
+        # 创建一个简单的config对象用于Model基类
+        class Config:
+            def __init__(self):
+                self.model_class = "TokenDecoder"
+                self.attention_function = attention_function
+                
+        super().__init__(Config())
+        
+        self.vocab_size = vocab_size
+        self.d_model = d_model
+        self.max_length = max_length
+        self.eos_token = eos_token
+        self.use_gradient_checkpointing = use_gradient_checkpointing
+        self.input_dim = input_dim
+        self.reduce = reduce
+        self.lm_head = lm_head
+        self.infer_id_embs_fn = infer_id_embs_fn
+        
+        # 检查head_dim合法性
+        head_dim = d_model // nhead
+        assert head_dim * nhead == d_model, "d_model must be divisible by nhead"
+        
+        # Token Embedding层
+        if token_embedding is not None:
+            self.token_embedding = token_embedding
+            assert token_embedding.embedding_dim == d_model, "Embedding dimension must match d_model"
+            assert token_embedding.num_embeddings == vocab_size, "Embedding vocab size must match vocab_size"
+        else:
+            self.token_embedding = nn.Embedding(vocab_size, d_model)
+        
+        # 位置编码
+        self.rope = LlamaRotaryPositionalEmbeddings(dim=head_dim, max_seq_len=max_length)
+        
+        # 创建解码器层
+        layers = []
+        for _ in range(num_layers):
+            # 创建注意力层
+            self_attn = MultiHeadAttention(
+                embed_dim=d_model,
+                num_heads=nhead,
+                num_kv_heads=nhead,
+                head_dim=head_dim,
+                q_proj=nn.Linear(d_model, nhead * head_dim, bias=False),
+                k_proj=nn.Linear(d_model, nhead * head_dim, bias=False),
+                v_proj=nn.Linear(d_model, nhead * head_dim, bias=False),
+                output_proj=nn.Linear(nhead * head_dim, d_model, bias=False),
+                pos_embeddings=self.rope,
+                kv_cache=None,
+                max_seq_len=max_length,
+                is_causal=True,
+                attn_dropout=0.0,
+                attention_function=attention_function
+            )
+            
+            # 创建前馈网络
+            mlp = FeedForward(
+                gate_proj=nn.Linear(d_model, dim_feedforward, bias=False),
+                up_proj=nn.Linear(d_model, dim_feedforward, bias=False),
+                down_proj=nn.Linear(dim_feedforward, d_model, bias=False),
+                activation=nn.SiLU()
+            )
+            
+            # 创建Transformer层
+            layer = TransformerSelfAttentionLayer(
+                attn=self_attn,
+                mlp=mlp,
+                sa_norm=Fp32LayerNorm(d_model, eps=1e-5),
+                mlp_norm=Fp32LayerNorm(d_model, eps=1e-5)
+            )
+            layers.append(layer)
+        
+        # 创建输入/输出线性层
+        if not reduce:
+            self.input_linear = nn.Identity()
+            self.output_linear = nn.Identity()
+        else:
+            assert input_dim is not None, "input_dim must be provided when reduce=True"
+            self.input_linear = nn.Linear(input_dim, d_model)
+            self.output_linear = nn.Linear(d_model, input_dim)
+        
+        # 创建Transformer解码器
+        self.transformer = TransformerDecoder(
+            tok_embeddings=self.token_embedding,
+            layers=layers,
+            max_seq_len=max_length,
+            num_heads=nhead,
+            head_dim=head_dim,
+            norm=Fp32LayerNorm(d_model, eps=1e-5),
+            output=nn.Linear(d_model, vocab_size, bias=False) if lm_head is None else lm_head
+        )
+    
+    def forward(self, x_emb: torch.Tensor) -> torch.Tensor:
+        """
+        前向传播（输入为embedding）
+        Args:
+            x_emb: (Batch, Seq_Len, d_model)
+        Returns:
+            out: (Batch, Seq_Len, d_model) 或 (Batch, Seq_Len, vocab_size) 如果lm_head不为None
+        """
+        batch_size, seq_len, _ = x_emb.shape
+        
+        if not self.reduce:
+            x_emb0 = 0
+        else:
+            x_emb0 = x_emb
+        
+        # 输入线性层
+        x_emb = self.input_linear(x_emb)
+        
+        # 前向传播
+        output = self.transformer(input_embeds=x_emb)
+        
+        # 输出线性层和残差连接
+        if self.lm_head is None:
+            output = self.output_linear(output)
+            output = output + x_emb0
+        
+        return output
+    
+    def forward_with_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
+        """
+        完善的辅助方法：支持输入token ID直接前向传播，可选择使用infer_id_embs_fn
+        Args:
+            tokens: (Batch, Seq_Len) token ID序列
+        Returns:
+            out: (Batch, Seq_Len, d_model) 或 (Batch, Seq_Len, vocab_size) 如果lm_head不为None
+        """
+        # 如果提供了infer_id_embs_fn，则使用它来获取token embeddings
+        if self.infer_id_embs_fn is not None:
+            x_emb = self.infer_id_embs_fn(tokens)
+        else:
+            # 否则使用标准的token embedding
+            x_emb = self.token_embedding(tokens)
+        
+        # 通过主forward方法传递
+        output = self.forward(x_emb)
+        return output
+    
+    def generate(self, input_ids: Optional[torch.Tensor] = None, 
+                 input_embeddings: Optional[torch.Tensor] = None, 
+                 max_new_tokens: int = 50, 
+                 temperature: float = 1.0, 
+                 top_k: Optional[int] = None, 
+                 top_p: Optional[float] = None,
+                 do_sample: bool = False, 
+                 pad_token_id: Optional[int] = None,
+                 return_logits: bool = True,
+                 only_last: bool = False) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        """
+        生成函数：统一使用input_embeddings作为输入（prefill后也保持embedding输入）
+        """
+        self.eval()
+        
+        # 检查输入合法性
+        if (input_ids is None and input_embeddings is None) or \
+           (input_ids is not None and input_embeddings is not None):
+            raise ValueError("Must provide either input_ids or input_embeddings, not both")
+        
+        with torch.no_grad():
+            # 1. 统一初始输入为embeddings（无论输入是ids还是embeddings）
+            if input_ids is not None:
+                batch_size, seq_len = input_ids.shape
+                device = input_ids.device
+                generated_ids = input_ids.clone()
+                
+                # 从input_ids生成初始embeddings
+                if self.infer_id_embs_fn is not None:
+                    current_embeddings = self.infer_id_embs_fn(input_ids)
+                else:
+                    current_embeddings = self.token_embedding(input_ids)
+                
+            else:  # input_embeddings is not None
+                batch_size, seq_len, emb_dim = input_embeddings.shape
+                device = input_embeddings.device
+                current_embeddings = input_embeddings.clone()
+                generated_ids = torch.zeros((batch_size, 0), dtype=torch.long, device=device)
+            
+            # 初始化logits存储
+            logits_list = []
+            
+            # 2. 自回归生成循环（始终用embeddings输入）
+            for _ in range(max_new_tokens):
+                # 序列长度限制检查
+                if current_embeddings.shape[1] >= self.max_length:
+                    break
+                
+                # 前向传播
+                logits = self.forward(current_embeddings)
+                
+                next_token_logits = logits[:, -1, :]
+                
+                # 保存logits
+                if return_logits:
+                    logits_list.append(next_token_logits)
+                
+                # 采样策略处理
+                if temperature > 0:
+                    next_token_logits = next_token_logits / temperature
+                
+                # Top-k过滤
+                if top_k is not None and top_k > 0:
+                    v, _ = torch.topk(next_token_logits, min(top_k, next_token_logits.size(-1)))
+                    next_token_logits[next_token_logits < v[:, [-1]]] = -float('Inf')
+                
+                # Top-p过滤
+                if top_p is not None and top_p < 1.0:
+                    next_token_probs = F.softmax(next_token_logits, dim=-1)
+                    sorted_probs, sorted_indices = torch.sort(next_token_probs, descending=True)
+                    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+                    sorted_indices_to_remove = cumulative_probs > top_p
+                    sorted_indices_to_remove[:, 0] = 0  # 保留至少一个token
+                    indices_to_remove = sorted_indices[sorted_indices_to_remove]
+                    for batch_idx in range(batch_size):
+                        next_token_logits[batch_idx, indices_to_remove[batch_idx]] = -float('Inf')
+                
+                # 生成下一个token
+                if do_sample:
+                    probs = F.softmax(next_token_logits, dim=-1)
+                    next_token = torch.multinomial(probs, num_samples=1)
+                else:
+                    next_token = torch.argmax(next_token_logits, dim=-1).unsqueeze(-1)
+                
+                # 更新生成序列
+                generated_ids = torch.cat([generated_ids, next_token], dim=1)
+                
+                # 生成新token的embedding并更新输入embeddings
+                if self.infer_id_embs_fn is not None:
+                    next_token_emb = self.infer_id_embs_fn(next_token)
+                else:
+                    next_token_emb = self.token_embedding(next_token)
+                
+                current_embeddings = torch.cat([current_embeddings, next_token_emb], dim=1)
+                
+                # 检查EOS停止条件
+                if self.eos_token is not None:
+                    if next_token[-1, 0] == self.eos_token:
+                        break
+            
+            # 处理返回结果
+            if only_last:
+                generated_ids = generated_ids[..., -1:]
+                logits_list = logits_list[-1:]
+                
+            if return_logits and logits_list:
+                logits_tensor = torch.stack(logits_list, dim=1)
+                return generated_ids, logits_tensor
+            
+            return generated_ids
+    
+    @classmethod
+    def convert_hf_state_dict(cls, state_dict, config=None):
+        """
+        将原始token_decoder_ori.py的state dict转换为新token_decoder.py的state dict
+        Args:
+            state_dict: 原始模型的状态字典
+            config: 可选的配置对象
+        Returns:
+            converted_state_dict: 转换后的状态字典
+        """
+        converted_state_dict = {}
+        skipped_keys = []
+        converted_count = 0
+        total_count = len(state_dict)
+        
+        for key, value in state_dict.items():
+            new_key = None
+            
+            # 1. 处理Token Embedding层
+            if key == "token_embedding.weight":
+                # Token embedding在两个地方都有，需要复制
+                converted_state_dict["token_embedding.weight"] = value
+                converted_state_dict["transformer.tok_embeddings.weight"] = value
+                converted_count += 1
+                continue
+            
+            # 2. 处理输入/输出线性层
+            elif key == "input_linear.weight":
+                new_key = "input_linear.weight"
+            elif key == "input_linear.bias":
+                new_key = "input_linear.bias"
+            elif key == "output_linear.weight":
+                new_key = "output_linear.weight"
+            elif key == "output_linear.bias":
+                new_key = "output_linear.bias"
+            
+            # 3. 处理LM Head
+            elif key == "lm_head.weight":
+                new_key = "lm_head.weight"
+            elif key == "lm_head.bias":
+                new_key = "lm_head.bias"
+            
+            # 4. 处理Decoder层
+            elif key.startswith("layers."):
+                # 提取层索引
+                layer_parts = key.split(".")
+                layer_idx = layer_parts[1]
+                
+                # 4.1 处理层归一化
+                if ".norm1.weight" in key:
+                    new_key = f"transformer.layers.{layer_idx}.sa_norm.scale"
+                elif ".norm2.weight" in key:
+                    new_key = f"transformer.layers.{layer_idx}.mlp_norm.scale"
+                
+                # 4.2 处理注意力层
+                elif ".self_attn.q_proj.weight" in key:
+                    new_key = f"transformer.layers.{layer_idx}.attn.q_proj.weight"
+                elif ".self_attn.k_proj.weight" in key:
+                    new_key = f"transformer.layers.{layer_idx}.attn.k_proj.weight"
+                elif ".self_attn.v_proj.weight" in key:
+                    new_key = f"transformer.layers.{layer_idx}.attn.v_proj.weight"
+                elif ".self_attn.out_proj.weight" in key:
+                    new_key = f"transformer.layers.{layer_idx}.attn.output_proj.weight"
+                
+                # 4.3 处理MLP层
+                elif ".mlp.fc1.weight" in key:
+                    new_key = f"transformer.layers.{layer_idx}.mlp.w1.weight"
+                elif ".mlp.fc2.weight" in key:
+                    new_key = f"transformer.layers.{layer_idx}.mlp.w2.weight"
+            
+            # 5. 处理最终归一化
+            elif key == "final_norm.weight":
+                new_key = "transformer.norm.scale"
+            
+            # 6. 处理位置编码（原始模型有可训练的位置编码，新模型使用RoPE，不需要这些权重）
+            elif key == "position_embedding.weight":
+                skipped_keys.append(key)
+                continue
+            
+            # 如果找到了新键名
+            if new_key is not None:
+                converted_state_dict[new_key] = value
+                converted_count += 1
+            else:
+                # 其他键跳过
+                skipped_keys.append(key)
+        
+        # 打印转换统计信息
+        print(f"转换状态字典统计:")
+        print(f"  总键数: {total_count}")
+        print(f"  转换成功: {converted_count}")
+        print(f"  跳过键数: {len(skipped_keys)}")
+        if skipped_keys:
+            print(f"  跳过的键: {skipped_keys}")
+        
+        return converted_state_dict
+
+def test_generate_with_correct_embedding_dim():
+    # 配置参数
+    vocab_size = 1000
+    max_length = 30
+    d_model = 128
+    eos_token = 999
+    nhead = 4
+    num_layers = 2
+    dim_feedforward = 512
+    
+    # 必须手动创建token_embedding
+    token_embedding = nn.Embedding(vocab_size, d_model)
+    
+    # 创建模型
+    model = TokenDecoder(
+        vocab_size=vocab_size,
+        max_length=max_length,
+        d_model=d_model,
+        eos_token=eos_token,
+        nhead=nhead,
+        num_layers=num_layers,
+        dim_feedforward=dim_feedforward,
+        token_embedding=token_embedding,
+        use_gradient_checkpointing=False,
+        reduce=False
+    )
+    
+    print("="*60)
+    print("测试1：Input IDs输入 → 转为d_model维度embedding")
+    input_ids = torch.tensor([[10, 20, 30], [40, 50, 60]])
+    generated_ids, logits = model.generate(
+        input_ids=input_ids,
+        max_new_tokens=5,
+        do_sample=False,
+        temperature=1.0
+    )
+    print(f"输入IDs形状: {input_ids.shape}")
+    print(f"生成IDs形状: {generated_ids.shape}")
+    print(f"生成IDs:\n{generated_ids}")
+    print(f"Logits形状: {logits.shape} (batch_size, new_tokens, vocab_size)")
+    
+    print("\n" + "="*60)
+    print("测试2：直接输入d_model维度的embedding")
+    batch_size = 2
+    seq_len = 3
+    input_embeddings = torch.randn(batch_size, seq_len, d_model)
+    print(f"输入embedding形状: {input_embeddings.shape} → (batch_size, seq_len, d_model={d_model})")
+    
+    generated_ids_emb, logits_emb = model.generate(
+        input_embeddings=input_embeddings,
+        max_new_tokens=5,
+        do_sample=True,
+        temperature=0.7,
+        top_k=10
+    )
+    print(f"生成IDs形状: {generated_ids_emb.shape}")
+    print(f"生成IDs:\n{generated_ids_emb}")
+    print(f"Logits形状: {logits_emb.shape}")
+    
+    print("\n" + "="*60)
+    print("测试3：生成到EOS自动停止")
+    input_ids_eos = torch.tensor([[5, 6, 7]])
+    # 临时修改模型让其更容易生成EOS
+    with torch.no_grad():
+        if hasattr(model, 'lm_head') and model.lm_head is not None:
+            model.lm_head.weight[eos_token] *= 1000
+        else:
+            model.transformer.output.weight[eos_token] *= 1000
+    
+    generated_ids_eos, logits_eos = model.generate(
+        input_ids=input_ids_eos,
+        max_new_tokens=10,
+        do_sample=False
+    )
+    print(f"输入IDs: {input_ids_eos}")
+    print(f"生成IDs: {generated_ids_eos}")
+    print(f"是否包含EOS: {eos_token in generated_ids_eos[0]}")
+    print(f"生成长度: {len(generated_ids_eos[0])} (预期小于等于{len(input_ids_eos[0])+10})")
+
+if __name__ == "__main__":
+    test_generate_with_correct_embedding_dim()
