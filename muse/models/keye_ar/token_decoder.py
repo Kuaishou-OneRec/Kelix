@@ -324,7 +324,7 @@ class TokenDecoder(Model):
                 layer_parts = key.split(".")
                 layer_idx = layer_parts[1]
                 
-                # 4.1 处理层归一化 - 修复：使用weight/bias而不是scale
+                # 4.1 处理层归一化
                 if ".norm1.weight" in key:
                     new_key = f"transformer.layers.{layer_idx}.sa_norm.weight"
                 elif ".norm1.bias" in key:
@@ -334,9 +334,9 @@ class TokenDecoder(Model):
                 elif ".norm2.bias" in key:
                     new_key = f"transformer.layers.{layer_idx}.mlp_norm.bias"
                 
-                # 4.2 处理注意力层 - 修复：拆分qkv_proj为q_proj/k_proj/v_proj
+                # 4.2 处理注意力层 - 修复：只转换权重，跳过偏置（新模型没有偏置）
                 elif ".qkv_proj.weight" in key:
-                    # 拆分qkv_proj为q_proj, k_proj, v_proj
+                    # 拆分qkv_proj为q_proj, k_proj, v_proj（只转换权重）
                     d_model = value.shape[0]  # 获取d_model维度
                     q_weight, k_weight, v_weight = torch.chunk(value, 3, dim=0)
                     converted_state_dict[f"transformer.layers.{layer_idx}.attn.q_proj.weight"] = q_weight
@@ -345,20 +345,17 @@ class TokenDecoder(Model):
                     converted_count += 1
                     continue
                 elif ".qkv_proj.bias" in key:
-                    # 拆分qkv_proj.bias为q_proj.bias, k_proj.bias, v_proj.bias
-                    d_model = value.shape[0]  # 获取d_model维度
-                    q_bias, k_bias, v_bias = torch.chunk(value, 3, dim=0)
-                    converted_state_dict[f"transformer.layers.{layer_idx}.attn.q_proj.bias"] = q_bias
-                    converted_state_dict[f"transformer.layers.{layer_idx}.attn.k_proj.bias"] = k_bias
-                    converted_state_dict[f"transformer.layers.{layer_idx}.attn.v_proj.bias"] = v_bias
-                    converted_count += 1
+                    # 跳过偏置参数（新模型没有偏置）
+                    skipped_keys.append(key)
                     continue
                 elif ".out_proj.weight" in key:
                     new_key = f"transformer.layers.{layer_idx}.attn.output_proj.weight"
                 elif ".out_proj.bias" in key:
-                    new_key = f"transformer.layers.{layer_idx}.attn.output_proj.bias"
+                    # 跳过偏置参数（新模型没有偏置）
+                    skipped_keys.append(key)
+                    continue
                 
-                # 4.3 处理MLP层 - 修复：映射gate_proj/up_proj/down_proj到w1/w2/w3
+                # 4.3 处理MLP层
                 elif ".mlp.gate_proj.weight" in key:
                     new_key = f"transformer.layers.{layer_idx}.mlp.w1.weight"
                 elif ".mlp.up_proj.weight" in key:
@@ -366,13 +363,13 @@ class TokenDecoder(Model):
                 elif ".mlp.down_proj.weight" in key:
                     new_key = f"transformer.layers.{layer_idx}.mlp.w2.weight"
             
-            # 5. 处理最终归一化 - 修复：使用weight/bias而不是scale
+            # 5. 处理最终归一化
             elif key == "final_norm.weight":
                 new_key = "transformer.norm.weight"
             elif key == "final_norm.bias":
                 new_key = "transformer.norm.bias"
             
-            # 6. 处理transformer输出层
+            # 6. 处理transformer输出层 - 修复：添加output.weight映射
             elif key == "output.weight":
                 new_key = "transformer.output.weight"
             
