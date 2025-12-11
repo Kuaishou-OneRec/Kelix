@@ -149,7 +149,7 @@ class TokenDecoder(Model):
         # 输出线性层和残差连接（修复：移除条件判断，始终应用残差连接）
         output = self.output_linear(output)
         output = output + x_emb0
-        
+        print(output.shape, self.lm_head)
         # 应用lm_head（如果存在）
         if self.lm_head is not None:
             output = self.lm_head(output)
