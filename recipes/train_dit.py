@@ -64,6 +64,7 @@ from muse.training.distributed import (
 from muse.training.checkpoint import (
     AppState, 
     DistributedCheckpointer,
+    load_hf_checkpoint,
     get_checkpoint_path,
     save_checkpoint
 )
