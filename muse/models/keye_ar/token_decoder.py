@@ -285,6 +285,7 @@ class TokenDecoder(Model):
             
             return generated_ids
     
+    @staticmethod
     def convert_hf_state_dict(state_dict: dict, reduce_mode: bool = False) -> dict:
         """
         将原始模型的状态字典转换为新模型的状态字典
@@ -424,6 +425,169 @@ class TokenDecoder(Model):
             print(f"  跳过的键: {skipped_keys}")
         
         return converted_state_dict
+
+    @staticmethod
+    def revert_hf_state_dict(state_dict: dict, reduce_mode: bool = False) -> dict:
+        """
+        将新模型的状态字典转换回原始模型的状态字典（convert_hf_state_dict的逆操作）
+        Args:
+            state_dict: 新模型的状态字典
+            reduce_mode: 是否为reduce模式（影响output_linear的处理）
+        Returns:
+            reverted_state_dict: 转换回的原始模型状态字典
+        """
+        reverted_state_dict = {}
+        skipped_keys = []
+        reverted_count = 0
+        total_count = len(state_dict)
+        
+        print(f"新模型状态字典键数: {total_count}")
+        
+        for key, value in state_dict.items():
+            old_key = None
+            
+            # 1. 处理Token Embedding层
+            if key == "token_embedding.weight":
+                old_key = "token_embedding.weight"
+                reverted_state_dict[old_key] = value
+                reverted_count += 1
+                continue
+            
+            # 2. 处理输入/输出线性层
+            elif key == "input_linear.weight":
+                old_key = "input_linear.weight"
+            elif key == "input_linear.bias":
+                old_key = "input_linear.bias"
+            elif key == "output_linear.weight":
+                # 根据reduce_mode决定是否映射
+                if reduce_mode:
+                    old_key = "output_linear.weight"
+                else:
+                    # reduce=False时，跳过这个键
+                    skipped_keys.append(key)
+                    continue
+            elif key == "output_linear.bias":
+                old_key = "output_linear.bias"
+            
+            # 3. 处理LM Head
+            elif key == "lm_head.weight":
+                old_key = "lm_head.weight"
+            elif key == "lm_head.bias":
+                old_key = "lm_head.bias"
+            
+            # 4. 处理Decoder层
+            elif key.startswith("transformer.layers."):
+                # 提取层索引
+                layer_parts = key.split(".")
+                layer_idx = layer_parts[2]
+                
+                # 4.1 处理层归一化
+                if ".sa_norm.weight" in key:
+                    old_key = f"layers.{layer_idx}.norm1.weight"
+                elif ".sa_norm.bias" in key:
+                    old_key = f"layers.{layer_idx}.norm1.bias"
+                elif ".mlp_norm.weight" in key:
+                    old_key = f"layers.{layer_idx}.norm2.weight"
+                elif ".mlp_norm.bias" in key:
+                    old_key = f"layers.{layer_idx}.norm2.bias"
+                
+                # 4.2 处理注意力层
+                elif ".attn.q_proj.weight" in key:
+                    # 收集q,k,v权重，稍后合并
+                    q_weight_key = key
+                    k_weight_key = key.replace(".q_proj.", ".k_proj.")
+                    v_weight_key = key.replace(".q_proj.", ".v_proj.")
+                    
+                    # 检查是否都有对应的k,v权重
+                    if k_weight_key in state_dict and v_weight_key in state_dict:
+                        q_weight = state_dict[q_weight_key]
+                        k_weight = state_dict[k_weight_key]
+                        v_weight = state_dict[v_weight_key]
+                        
+                        # 合并为qkv_proj.weight
+                        qkv_weight = torch.cat([q_weight, k_weight, v_weight], dim=0)
+                        old_key = f"layers.{layer_idx}.qkv_proj.weight"
+                        reverted_state_dict[old_key] = qkv_weight
+                        reverted_count += 1
+                        
+                        # 跳过k_proj和v_proj的处理
+                        skipped_keys.extend([k_weight_key, v_weight_key])
+                        continue
+                    else:
+                        # 如果缺少对应的权重，跳过
+                        skipped_keys.append(key)
+                        continue
+                elif ".attn.q_proj.bias" in key:
+                    # 收集q,k,v偏置，稍后合并
+                    q_bias_key = key
+                    k_bias_key = key.replace(".q_proj.", ".k_proj.")
+                    v_bias_key = key.replace(".q_proj.", ".v_proj.")
+                    
+                    # 检查是否都有对应的k,v偏置
+                    if k_bias_key in state_dict and v_bias_key in state_dict:
+                        q_bias = state_dict[q_bias_key]
+                        k_bias = state_dict[k_bias_key]
+                        v_bias = state_dict[v_bias_key]
+                        
+                        # 合并为qkv_proj.bias
+                        qkv_bias = torch.cat([q_bias, k_bias, v_bias], dim=0)
+                        old_key = f"layers.{layer_idx}.qkv_proj.bias"
+                        reverted_state_dict[old_key] = qkv_bias
+                        reverted_count += 1
+                        
+                        # 跳过k_proj和v_proj的处理
+                        skipped_keys.extend([k_bias_key, v_bias_key])
+                        continue
+                    else:
+                        # 如果缺少对应的偏置，跳过
+                        skipped_keys.append(key)
+                        continue
+                elif ".attn.k_proj." in key or ".attn.v_proj." in key:
+                    # 这些权重已经在上面处理过了，跳过
+                    if key not in skipped_keys:
+                        skipped_keys.append(key)
+                    continue
+                elif ".attn.output_proj.weight" in key:
+                    old_key = f"layers.{layer_idx}.out_proj.weight"
+                elif ".attn.output_proj.bias" in key:
+                    old_key = f"layers.{layer_idx}.out_proj.bias"
+                
+                # 4.3 处理MLP层
+                elif ".mlp.w1.weight" in key:
+                    old_key = f"layers.{layer_idx}.mlp.gate_proj.weight"
+                elif ".mlp.w3.weight" in key:
+                    old_key = f"layers.{layer_idx}.mlp.up_proj.weight"
+                elif ".mlp.w2.weight" in key:
+                    old_key = f"layers.{layer_idx}.mlp.down_proj.weight"
+            
+            # 5. 处理最终归一化
+            elif key == "transformer.norm.weight":
+                old_key = "final_norm.weight"
+            elif key == "transformer.norm.bias":
+                old_key = "final_norm.bias"
+            
+            # 6. 处理位置编码
+            elif key == "position_embedding.weight":
+                old_key = "position_embedding.weight"
+            
+            # 如果找到了旧键名
+            if old_key is not None:
+                reverted_state_dict[old_key] = value
+                reverted_count += 1
+            else:
+                # 其他键跳过
+                if key not in skipped_keys:
+                    skipped_keys.append(key)
+        
+        # 打印转换统计信息
+        print(f"还原状态字典统计:")
+        print(f"  总键数: {total_count}")
+        print(f"  还原成功: {reverted_count}")
+        print(f"  跳过键数: {len(skipped_keys)}")
+        if skipped_keys:
+            print(f"  跳过的键: {skipped_keys}")
+        
+        return reverted_state_dict
 
 
 def test_generate_with_correct_embedding_dim():

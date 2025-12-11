@@ -58,6 +58,12 @@ def test_infer_id_embs_consistency():
         infer_id_embs_fn=None
     )
     
+    # 获取原始模型的状态字典
+    ori_state_dict = ori_model_no_fn.state_dict()
+    
+    # 使用TokenDecoder的convert_hf_state_dict方法转换状态字典
+    converted_state_dict = TokenDecoder.convert_hf_state_dict(ori_state_dict, reduce_mode=config["reduce"])
+    
     # 初始化新模型 (TokenDecoder) 不使用infer_id_embs_fn
     new_model_no_fn = TokenDecoder(
         vocab_size=config["vocab_size"],
@@ -74,6 +80,9 @@ def test_infer_id_embs_consistency():
         infer_id_embs_fn=None,
         attention_function=config["attention_function"]
     )
+    
+    # 将转换后的状态字典加载到新模型中
+    new_model_no_fn.load_state_dict(converted_state_dict)
     
     # 设置为评估模式
     ori_model_no_fn.eval()
@@ -125,6 +134,12 @@ def test_infer_id_embs_consistency():
         infer_id_embs_fn=infer_id_embs_fn
     )
     
+    # 获取原始模型的状态字典
+    ori_state_dict_with_fn = ori_model_with_fn.state_dict()
+    
+    # 使用TokenDecoder的convert_hf_state_dict方法转换状态字典
+    converted_state_dict_with_fn = TokenDecoder.convert_hf_state_dict(ori_state_dict_with_fn, reduce_mode=config["reduce"])
+    
     # 初始化新模型 (TokenDecoder) 使用infer_id_embs_fn
     new_model_with_fn = TokenDecoder(
         vocab_size=config["vocab_size"],
@@ -141,6 +156,9 @@ def test_infer_id_embs_consistency():
         infer_id_embs_fn=infer_id_embs_fn,
         attention_function=config["attention_function"]
     )
+    
+    # 将转换后的状态字典加载到新模型中
+    new_model_with_fn.load_state_dict(converted_state_dict_with_fn)
     
     # 设置为评估模式
     ori_model_with_fn.eval()
