@@ -345,7 +345,7 @@ class TokenDecoder(Model):
                 elif ".norm2.bias" in key:
                     new_key = f"transformer.layers.{layer_idx}.mlp_norm.bias"
                 
-                # 4.2 处理注意力层 - 修复：只转换权重，跳过偏置（新模型没有偏置）
+                # 4.2 处理注意力层 - 修复：转换权重和偏置
                 elif ".qkv_proj.weight" in key:
                     # 拆分qkv_proj为q_proj, k_proj, v_proj（只转换权重）
                     d_model = value.shape[0]  # 获取d_model维度
@@ -356,11 +356,18 @@ class TokenDecoder(Model):
                     converted_count += 1
                     continue
                 elif ".qkv_proj.bias" in key:
-                    # 跳过偏置参数（新模型没有偏置）
-                    skipped_keys.append(key)
+                    # 拆分qkv_proj.bias为q_proj.bias, k_proj.bias, v_proj.bias
+                    d_model = value.shape[0]  # 获取d_model维度
+                    q_bias, k_bias, v_bias = torch.chunk(value, 3, dim=0)
+                    converted_state_dict[f"transformer.layers.{layer_idx}.attn.q_proj.bias"] = q_bias
+                    converted_state_dict[f"transformer.layers.{layer_idx}.attn.k_proj.bias"] = k_bias
+                    converted_state_dict[f"transformer.layers.{layer_idx}.attn.v_proj.bias"] = v_bias
+                    converted_count += 1
                     continue
                 elif ".out_proj.weight" in key:
                     new_key = f"transformer.layers.{layer_idx}.attn.output_proj.weight"
+                elif ".out_proj.bias" in key:
+                    new_key = f"transformer.layers.{layer_idx}.attn.output_proj.bias"
                 elif ".out_proj.bias" in key:
                     # 跳过偏置参数（新模型没有偏置）
                     skipped_keys.append(key)
@@ -382,8 +389,12 @@ class TokenDecoder(Model):
             
             # 6. 处理位置编码（原始模型有可训练的位置编码，新模型使用RoPE，不需要这些权重）
             elif key == "position_embedding.weight":
-                # 关键修复：新模型没有位置编码层，但需要跳过这个键
-                skipped_keys.append(key)
+                # 关键修复：新模型没有位置编码层，但为了参数对齐，我们创建一个虚拟的位置编码权重
+                # 并将其设置为零，这样不会影响模型输出
+                dummy_pos_emb = torch.zeros_like(value)
+                converted_state_dict["position_embedding.weight"] = dummy_pos_emb
+                print(f"  创建虚拟位置编码权重，维度: {value.shape}")
+                converted_count += 1
                 continue
             
             # 如果找到了新键名
