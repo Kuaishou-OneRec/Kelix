@@ -337,8 +337,16 @@ def test_pipeline_alignment():
         head_dim=raw_cfg["head_dim"],
         intermediate_dim=raw_cfg["intermediate_size"],
         max_seq_len=raw_cfg["max_position_embeddings"],
+        hidden_act=raw_cfg.get("hidden_act", "silu"),
+        attention_bias=raw_cfg.get("attention_bias", False),
         rope_base=float(raw_cfg.get("rope_theta", 1_000_000)),
-        attention_function="flash_attention_2",
+        rope_theta=float(raw_cfg.get("rope_theta", 1_000_000)),
+        rope_scaling=raw_cfg.get("rope_scaling"),
+        attention_function=raw_cfg.get("_attn_implementation", "flash_attention_2"),
+        use_sliding_window=raw_cfg.get("use_sliding_window", False),
+        sliding_window=raw_cfg.get("sliding_window"),
+        norm_eps=raw_cfg.get("norm_eps", 1e-6),
+        rms_norm_eps=raw_cfg.get("rms_norm_eps", 1e-6),
         tie_word_embeddings=raw_cfg.get("tie_word_embeddings", True),
     )
     
@@ -352,12 +360,13 @@ def test_pipeline_alignment():
         image_size=inner_vcfg["image_size"],
         patch_size=inner_vcfg["patch_size"],
         intermediate_size=inner_vcfg["intermediate_size"],
+        hidden_act=inner_vcfg.get("hidden_act", "gelu_pytorch_tanh"),
         has_learnable_position_embedding=inner_vcfg.get("has_learnable_position_embedding", True),
         attention_dropout=inner_vcfg.get("attention_dropout", 0.0),
         rope_theta=inner_vcfg.get("rope_theta", 10000.0),
         use_qk_norm=inner_vcfg.get("use_qk_norm", False),
         qk_norm_eps=inner_vcfg.get("qk_norm_eps", 1e-6),
-        attention_function="flash_attention_2",
+        attention_function=raw_cfg.get("_attn_implementation", "flash_attention_2"),
     )
     
     tokenizer_cfg = KeyeTokenizerConfig(

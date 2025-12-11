@@ -83,6 +83,10 @@ class Qwen3Config(ModelConfig):
         default=True,
         description="Whether to tie the word embeddings"
     )
+    hidden_act: str = Field(
+        default="silu",
+        description="Activation function for MLP (e.g., silu, gelu, gelu_pytorch_tanh)"
+    )
     # Attention configuration
     num_heads: int = Field(
         default=32,
@@ -118,6 +122,10 @@ class Qwen3Config(ModelConfig):
         default=False,
         description="Whether to use bias in the v_proj layer"
     )
+    attention_bias: bool = Field(
+        default=False,
+        description="Whether to use bias terms in attention projections"
+    )
     
     # Feed-forward configuration
     intermediate_dim: int = Field(
@@ -138,11 +146,31 @@ class Qwen3Config(ModelConfig):
         default="llama",
         description="RoPE implementation style: 'llama' (interleaved cos/sin) or 'hf' (separated cos/sin)"
     )
+    rope_theta: float = Field(
+        default=10000.0,
+        description="RoPE theta parameter (alias for rope_base)"
+    )
+    rope_scaling: Optional[dict] = Field(
+        default=None,
+        description="RoPE scaling config (e.g., {'rope_type': 'default', 'mrope_section': [...]})"
+    )
+    use_sliding_window: bool = Field(
+        default=False,
+        description="Enable sliding-window attention"
+    )
+    sliding_window: Optional[int] = Field(
+        default=None,
+        description="Sliding window size when use_sliding_window is enabled"
+    )
     
     # Normalization
     norm_eps: float = Field(
         default=1e-6,
         description="RMS normalization epsilon"
+    )
+    rms_norm_eps: float = Field(
+        default=1e-6,
+        description="Alias for RMS normalization epsilon"
     )
     q_norm: bool = Field(
         default=True,
@@ -206,6 +234,10 @@ class SiglipVisionConfig(ModelConfig):
     num_hidden_layers: int = Field(default=27, description="Number of encoder blocks.")
     num_attention_heads: int = Field(default=16, description="Attention heads.")
     intermediate_size: int = Field(default=4304, description="MLP hidden dimension.")
+    hidden_act: str = Field(
+        default="gelu_pytorch_tanh",
+        description="Activation function used in the vision MLP (e.g., gelu_pytorch_tanh, silu, gelu)."
+    )
     max_seq_len: int = Field(
         default=4096,
         description="Maximum sequence length for attention. Typically (image_size/patch_size)^2.",
@@ -224,6 +256,10 @@ class SiglipVisionConfig(ModelConfig):
     attention_function: Literal["eager", "flash_attention_2"] = Field(
         default="flash_attention_2",
         description="Attention backend implementation.",
+    )
+    _attn_implementation: Literal["eager", "flash_attention_2", "sdpa"] = Field(
+        default="flash_attention_2",
+        description="Attention backend implementation."
     )
     output_attentions: bool = Field(
         default=False,
