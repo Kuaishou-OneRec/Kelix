@@ -272,8 +272,9 @@ class Projector(nn.Module):
             processed_features = torch.concat(processed_features, dim=0)
 
             return processed_features
-        print("maosiyangdebug:::",image_features.shape)
-        # assert image_features.dim() == 2
+
+        # Fallback for single tensor input (should not reach here normally)
+        assert image_features.dim() == 2, f"Expected 2D tensor, got {image_features.shape}"
         dim = image_features.shape[-1]
         hidden_states = self.pre_norm(image_features.view(-1, self.hidden_size))
         hidden_states = self.linear_1(hidden_states)
@@ -375,7 +376,20 @@ class KeyeImageTokenizer(Model):
             cu_seqlens=cu_seqlens,
         )
         image_embeds = vision_outputs['last_hidden_state']
-        image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
+        
+        # Convert tensor to list of tensors (one per image) to match origin model behavior
+        # image_embeds: [1, total_seq, hidden] or [total_seq, hidden] -> list of [seq_i, hidden]
+        if image_embeds.dim() == 3:
+            image_embeds = image_embeds.squeeze(0)  # [total_seq, hidden]
+        
+        # Split by cu_seqlens to get list of embeddings
+        image_embeds_list = []
+        for i in range(len(cu_seqlens) - 1):
+            start_idx = cu_seqlens[i]
+            end_idx = cu_seqlens[i + 1]
+            image_embeds_list.append(image_embeds[start_idx:end_idx])
+        
+        image_embeds = self.mlp_AR(image_embeds_list, image_grid_hws)
         return image_embeds
 
     def forward(
