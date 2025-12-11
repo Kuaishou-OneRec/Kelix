@@ -514,6 +514,20 @@ def test_pipeline_alignment():
         if hasattr(rope_module, '_debug_rope_outputs'):
             rope_module._debug_rope_outputs = []
 
+    # 清空 LLM RoPE 调试输出
+    if hasattr(origin_mod, "_DEBUG_ROPE_OUTPUTS"):
+        for key in origin_mod._DEBUG_ROPE_OUTPUTS.keys():
+            origin_mod._DEBUG_ROPE_OUTPUTS[key] = None
+    muse_llm_rope = None
+    if hasattr(muse_model, "model") and hasattr(muse_model.model, "rope"):
+        muse_llm_rope = muse_model.model.rope
+        if hasattr(muse_llm_rope, "_debug_rope_outputs"):
+            muse_llm_rope._debug_rope_outputs = []
+        if hasattr(muse_llm_rope, "_debug_rope_intermediates"):
+            # reset intermediates to avoid stale values
+            for k in muse_llm_rope._debug_rope_intermediates.keys():
+                muse_llm_rope._debug_rope_intermediates[k] = None
+
     with torch.no_grad():
         logger.info("Running Origin Forward...")
         origin_out = origin_model(**origin_inputs)
@@ -549,6 +563,22 @@ def test_pipeline_alignment():
     if ORIGIN_ROPE_DEBUG["k_after_rope"] is not None:
         activations["origin"]["0.25 K After RoPE"] = ORIGIN_ROPE_DEBUG["k_after_rope"]
     
+    # LLM RoPE: Origin 模型（Keye） - 全局 _DEBUG_ROPE_OUTPUTS
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("inv_freq") is not None:
+        activations["origin"]["4.R inv_freq"] = origin_mod._DEBUG_ROPE_OUTPUTS["inv_freq"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("cos_before_chunk") is not None:
+        activations["origin"]["4.R cos_before_chunk"] = origin_mod._DEBUG_ROPE_OUTPUTS["cos_before_chunk"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("sin_before_chunk") is not None:
+        activations["origin"]["4.R sin_before_chunk"] = origin_mod._DEBUG_ROPE_OUTPUTS["sin_before_chunk"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("cos_after_chunk") is not None:
+        activations["origin"]["4.R cos_after_chunk"] = origin_mod._DEBUG_ROPE_OUTPUTS["cos_after_chunk"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("sin_after_chunk") is not None:
+        activations["origin"]["4.R sin_after_chunk"] = origin_mod._DEBUG_ROPE_OUTPUTS["sin_after_chunk"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("q_after_rope") is not None:
+        activations["origin"]["4.R Q After RoPE"] = origin_mod._DEBUG_ROPE_OUTPUTS["q_after_rope"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("k_after_rope") is not None:
+        activations["origin"]["4.R K After RoPE"] = origin_mod._DEBUG_ROPE_OUTPUTS["k_after_rope"]
+
     # Muse 模型: 从 rope 模块读取中间变量
     if vit_backbone_muse and hasattr(vit_backbone_muse, "encoder"):
         rope_module = vit_backbone_muse.encoder.rope
@@ -577,6 +607,28 @@ def test_pipeline_alignment():
             activations["muse"]["0.25 Q After RoPE"] = rope_module._debug_rope_outputs[0]
             activations["muse"]["0.25 K After RoPE"] = rope_module._debug_rope_outputs[1]
 
+    # Muse 模型: LLM RoPE 中间变量
+    if muse_llm_rope is not None:
+        if hasattr(muse_llm_rope, "_debug_rope_intermediates"):
+            intermediates = muse_llm_rope._debug_rope_intermediates
+            if intermediates.get("inv_freq") is not None:
+                activations["muse"]["4.R inv_freq"] = intermediates["inv_freq"]
+            if intermediates.get("position_ids") is not None:
+                activations["muse"]["4.R position_ids"] = intermediates["position_ids"]
+            if intermediates.get("cos_before_split") is not None:
+                activations["muse"]["4.R cos_before_split"] = intermediates["cos_before_split"]
+            if intermediates.get("sin_before_split") is not None:
+                activations["muse"]["4.R sin_before_split"] = intermediates["sin_before_split"]
+            if intermediates.get("cos_after_split") is not None:
+                activations["muse"]["4.R cos_after_split"] = intermediates["cos_after_split"]
+            if intermediates.get("sin_after_split") is not None:
+                activations["muse"]["4.R sin_after_split"] = intermediates["sin_after_split"]
+            if intermediates.get("mrope_section") is not None:
+                activations["muse"]["4.R mrope_section"] = intermediates["mrope_section"]
+        if hasattr(muse_llm_rope, "_debug_rope_outputs") and len(muse_llm_rope._debug_rope_outputs) >= 2:
+            activations["muse"]["4.R Q After RoPE"] = muse_llm_rope._debug_rope_outputs[0]
+            activations["muse"]["4.R K After RoPE"] = muse_llm_rope._debug_rope_outputs[1]
+
     # --- Analysis ---
     log_separator("Deep Dive Analysis")
     
@@ -594,6 +646,20 @@ def test_pipeline_alignment():
         "0.22 sin_after_chunk",
         "0.25 Q After RoPE",
         "0.25 K After RoPE",
+        # LLM RoPE checkpoints
+        "4.R inv_freq",
+        "4.R position_ids",
+        "4.R cos_before_chunk",
+        "4.R sin_before_chunk",
+        "4.R cos_after_chunk",
+        "4.R sin_after_chunk",
+        "4.R cos_before_split",
+        "4.R sin_before_split",
+        "4.R cos_after_split",
+        "4.R sin_after_split",
+        "4.R mrope_section",
+        "4.R Q After RoPE",
+        "4.R K After RoPE",
         "0.3 Attn Raw (Pre-Proj)",
         "0.4 Attn Out (Post-Proj)",
         "0.6 MLP Hidden (fc1)",
@@ -637,6 +703,19 @@ def test_pipeline_alignment():
         "0.22 sin_after_chunk",
         "0.25 Q After RoPE",
         "0.25 K After RoPE",
+        # LLM RoPE detailed
+        "4.R inv_freq",
+        "4.R position_ids",
+        "4.R cos_before_chunk",
+        "4.R sin_before_chunk",
+        "4.R cos_after_chunk",
+        "4.R sin_after_chunk",
+        "4.R cos_before_split",
+        "4.R sin_before_split",
+        "4.R cos_after_split",
+        "4.R sin_after_split",
+        "4.R Q After RoPE",
+        "4.R K After RoPE",
     }
     
     for k in checkpoints:

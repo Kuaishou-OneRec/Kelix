@@ -417,6 +417,25 @@ class MultimodalRotaryEmbedding(nn.Module):
         cos_sections = cos.split(mrope_section_doubled, dim=-1)
         sin_sections = sin.split(mrope_section_doubled, dim=-1)
         
+        # Debug store (raw cos/sin before section selection)
+        if not hasattr(self, "_debug_rope_intermediates"):
+            self._debug_rope_intermediates = {
+                "inv_freq": None,
+                "position_ids": None,
+                "cos_before_split": None,
+                "sin_before_split": None,
+                "cos_after_split": None,
+                "sin_after_split": None,
+                "mrope_section": None,
+            }
+        self._debug_rope_intermediates["inv_freq"] = self.inv_freq.to(dtype=x.dtype).detach()
+        self._debug_rope_intermediates["position_ids"] = position_ids.detach()
+        self._debug_rope_intermediates["cos_before_split"] = cos.detach()
+        self._debug_rope_intermediates["sin_before_split"] = sin.detach()
+        self._debug_rope_intermediates["mrope_section"] = torch.tensor(
+            self.mrope_section, device=x.device
+        )
+
         # Select appropriate dimension for each section (cycling through 0, 1, 2)
         # section[i % 3] selects temporal(0), height(1), or width(2)
         # Result shape: [batch_size, seq_len, dim]
@@ -428,6 +447,10 @@ class MultimodalRotaryEmbedding(nn.Module):
             [section[i % 3] for i, section in enumerate(sin_sections)],
             dim=-1
         )
+
+        # Store combined cos/sin (after section selection)
+        self._debug_rope_intermediates["cos_after_split"] = cos_combined.detach()
+        self._debug_rope_intermediates["sin_after_split"] = sin_combined.detach()
         
         # Add head dimension for broadcasting: [batch_size, seq_len, 1, dim]
         cos_combined = cos_combined.unsqueeze(2).to(dtype=x.dtype)
@@ -436,6 +459,11 @@ class MultimodalRotaryEmbedding(nn.Module):
         # Apply RoPE: x_embed = (x * cos) + (rotate_half(x) * sin)
         x_rotated = self.rotate_half(x)
         x_out = (x * cos_combined) + (x_rotated * sin_combined)
+
+        # Store outputs for debugging
+        if not hasattr(self, "_debug_rope_outputs"):
+            self._debug_rope_outputs = []
+        self._debug_rope_outputs.append(x_out.detach())
         
         return x_out
     

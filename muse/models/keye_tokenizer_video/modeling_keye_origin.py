@@ -1927,6 +1927,10 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
+    # Debug: store raw cos/sin before split
+    _DEBUG_ROPE_OUTPUTS["cos_before_chunk"] = cos.detach()
+    _DEBUG_ROPE_OUTPUTS["sin_before_chunk"] = sin.detach()
+
     mrope_section = mrope_section * 2
     cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
         unsqueeze_dim
@@ -1935,8 +1939,15 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
         unsqueeze_dim
     )
 
+    # Debug: store cos/sin after split
+    _DEBUG_ROPE_OUTPUTS["cos_after_chunk"] = cos.detach()
+    _DEBUG_ROPE_OUTPUTS["sin_after_chunk"] = sin.detach()
+
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
+    # Debug: store outputs
+    _DEBUG_ROPE_OUTPUTS["q_after_rope"] = q_embed.detach()
+    _DEBUG_ROPE_OUTPUTS["k_after_rope"] = k_embed.detach()
     return q_embed, k_embed
 
 
