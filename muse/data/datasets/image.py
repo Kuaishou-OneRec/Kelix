@@ -145,19 +145,117 @@ class Text2ImageDataset(DistributedDataset):
         except (json.JSONDecodeError, TypeError):
             return []
 
+    def _validate_messages(self, messages: List[Dict[str, Any]]) -> None:
+        """Validate messages format.
+        
+        Messages must be single-turn: exactly 2 messages (1 user + 1 assistant).
+        - User message content: str or list with exactly 1 text block
+        - Assistant message content: list with exactly 1 image/image_gen block
+        
+        Args:
+            messages: List of message dicts
+            
+        Raises:
+            ValueError: If messages format is invalid
+        """
+        if len(messages) != 2:
+            raise ValueError(
+                f"Messages must have exactly 2 messages (1 user + 1 assistant), "
+                f"got {len(messages)}"
+            )
+        
+        user_msg = None
+        assistant_msg = None
+        
+        for msg in messages:
+            role = msg.get("role")
+            if role == "user":
+                user_msg = msg
+            elif role == "assistant":
+                assistant_msg = msg
+        
+        if user_msg is None:
+            raise ValueError("Messages must contain exactly 1 user message")
+        if assistant_msg is None:
+            raise ValueError("Messages must contain exactly 1 assistant message")
+        
+        # Validate user message content
+        user_content = user_msg.get("content")
+        if isinstance(user_content, list):
+            text_blocks = [b for b in user_content if b.get("type") == "text"]
+            if len(text_blocks) != 1:
+                raise ValueError(
+                    f"User message must contain exactly 1 text block, "
+                    f"got {len(text_blocks)}"
+                )
+        elif not isinstance(user_content, str):
+            raise ValueError(
+                f"User message content must be str or list, got {type(user_content)}"
+            )
+        
+        # Validate assistant message content
+        assistant_content = assistant_msg.get("content")
+        if not isinstance(assistant_content, list):
+            raise ValueError(
+                f"Assistant message content must be list, got {type(assistant_content)}"
+            )
+        
+        image_blocks = [
+            b for b in assistant_content 
+            if b.get("type") in ("image", "image_gen")
+        ]
+        if len(image_blocks) != 1:
+            raise ValueError(
+                f"Assistant message must contain exactly 1 image block, "
+                f"got {len(image_blocks)}"
+            )
+
+    def _validate_segments(self, segments: List[Dict[str, Any]]) -> None:
+        """Validate segments format.
+        
+        Segments must have exactly 2 items:
+        - First segment: type="text"
+        - Second segment: type="image"
+        
+        Args:
+            segments: List of segment dicts
+            
+        Raises:
+            ValueError: If segments format is invalid
+        """
+        if len(segments) != 2:
+            raise ValueError(
+                f"Segments must have exactly 2 items, got {len(segments)}"
+            )
+        
+        if segments[0].get("type") != "text":
+            raise ValueError(
+                f"First segment must be type='text', "
+                f"got type='{segments[0].get('type')}'"
+            )
+        
+        if segments[1].get("type") != "image":
+            raise ValueError(
+                f"Second segment must be type='image', "
+                f"got type='{segments[1].get('type')}'"
+            )
+
     def extract_image_text(self, sample: Dict[str, Any]) -> Dict[str, Any]:
         """Extract image and text from sample.
         
         Supports multiple formats:
         - Direct image/text fields
-        - Messages format (chat-style)
-        - Segments format
+        - Messages format (chat-style, single-turn only)
+        - Segments format (exactly 2 segments: text + image)
         
         Args:
             sample: Raw sample dict
             
         Returns:
             Dict with 'image' and 'text' keys
+            
+        Raises:
+            ValueError: If messages or segments format is invalid
         """
         image = sample.get("image", None)
         text = sample.get("text", None)
@@ -166,43 +264,44 @@ class Text2ImageDataset(DistributedDataset):
                 "image": image,
                 "text": text
             }
-        # 需要保证messages和segments都是单轮，否则逻辑会有问题
+        
         messages = self.get_content(sample, "messages")
         segments = self.get_content(sample, "segments")
+        
         if messages:
+            # Validate messages format
+            self._validate_messages(messages)
+            
             for turn in messages:
                 if turn["role"] == "user":
                     content = turn["content"]
                     if isinstance(content, str):
                         text = content
                     elif isinstance(content, list):
+                        # Already validated: exactly 1 text block
                         for block in content:
                             if block["type"] == "text":
                                 text = block["text"]
                                 break
                 elif turn["role"] == "assistant":
                     content = turn["content"]
+                    # Already validated: exactly 1 image block
                     for block in content:
                         if block["type"] == "image":
                             image = block["image"]
                             break
-                        # TODO: 兼容有问题的数据格式，后续得下掉
                         if block["type"] == "image_gen":
                             image = block["image_gen"]
                             break
-                else:
-                    continue
 
         if segments:
-            for segment in segments:
-                if segment["type"] == "image":
-                    image = segment["image"]
-                    break
-                elif segment["type"] == "text":
-                    text = segment["text"]
-                    break
-                else:
-                    continue
+            # Validate segments format
+            self._validate_segments(segments)
+            
+            # First segment is text, second is image (validated)
+            text = segments[0]["text"]
+            image = segments[1]["image"]
+        
         return {
             "image": image,
             "text": text

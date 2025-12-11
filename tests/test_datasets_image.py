@@ -435,8 +435,8 @@ class TestExtractImageText:
         
         result = dataset.extract_image_text(sample)
         
-        # Segments loop breaks on first match, so text comes first
         assert result["text"] == "Segment text"
+        assert result["image"] == img_data
 
     def test_extract_empty_sample(self, tmp_path):
         """Test extraction from empty sample"""
@@ -454,6 +454,289 @@ class TestExtractImageText:
         
         assert result["image"] is None
         assert result["text"] is None
+
+
+class TestValidateMessages:
+    """Test _validate_messages method"""
+
+    def test_validate_messages_valid_string_content(self, tmp_path):
+        """Test validation passes for valid messages with string content"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        messages = [
+            {"role": "user", "content": "Generate an image"},
+            {"role": "assistant", "content": [{"type": "image", "image": "data"}]}
+        ]
+        
+        # Should not raise
+        dataset._validate_messages(messages)
+
+    def test_validate_messages_valid_list_content(self, tmp_path):
+        """Test validation passes for valid messages with list content"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": "Generate"}]},
+            {"role": "assistant", "content": [{"type": "image", "image": "data"}]}
+        ]
+        
+        # Should not raise
+        dataset._validate_messages(messages)
+
+    def test_validate_messages_invalid_count(self, tmp_path):
+        """Test validation fails for wrong message count"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Too few messages
+        messages = [{"role": "user", "content": "Hello"}]
+        with pytest.raises(ValueError, match="exactly 2 messages"):
+            dataset._validate_messages(messages)
+        
+        # Too many messages
+        messages = [
+            {"role": "user", "content": "Hello"},
+            {"role": "assistant", "content": [{"type": "image", "image": "data"}]},
+            {"role": "user", "content": "More"}
+        ]
+        with pytest.raises(ValueError, match="exactly 2 messages"):
+            dataset._validate_messages(messages)
+
+    def test_validate_messages_missing_user(self, tmp_path):
+        """Test validation fails when user message is missing"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        messages = [
+            {"role": "assistant", "content": [{"type": "image", "image": "data"}]},
+            {"role": "assistant", "content": [{"type": "image", "image": "data2"}]}
+        ]
+        with pytest.raises(ValueError, match="1 user message"):
+            dataset._validate_messages(messages)
+
+    def test_validate_messages_missing_assistant(self, tmp_path):
+        """Test validation fails when assistant message is missing"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        messages = [
+            {"role": "user", "content": "Hello"},
+            {"role": "user", "content": "World"}
+        ]
+        with pytest.raises(ValueError, match="1 assistant message"):
+            dataset._validate_messages(messages)
+
+    def test_validate_messages_multiple_text_blocks(self, tmp_path):
+        """Test validation fails when user has multiple text blocks"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        messages = [
+            {"role": "user", "content": [
+                {"type": "text", "text": "First"},
+                {"type": "text", "text": "Second"}
+            ]},
+            {"role": "assistant", "content": [{"type": "image", "image": "data"}]}
+        ]
+        with pytest.raises(ValueError, match="exactly 1 text block"):
+            dataset._validate_messages(messages)
+
+    def test_validate_messages_no_text_block(self, tmp_path):
+        """Test validation fails when user has no text block"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        messages = [
+            {"role": "user", "content": [{"type": "other", "data": "stuff"}]},
+            {"role": "assistant", "content": [{"type": "image", "image": "data"}]}
+        ]
+        with pytest.raises(ValueError, match="exactly 1 text block"):
+            dataset._validate_messages(messages)
+
+    def test_validate_messages_multiple_image_blocks(self, tmp_path):
+        """Test validation fails when assistant has multiple image blocks"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        messages = [
+            {"role": "user", "content": "Generate"},
+            {"role": "assistant", "content": [
+                {"type": "image", "image": "data1"},
+                {"type": "image", "image": "data2"}
+            ]}
+        ]
+        with pytest.raises(ValueError, match="exactly 1 image block"):
+            dataset._validate_messages(messages)
+
+    def test_validate_messages_no_image_block(self, tmp_path):
+        """Test validation fails when assistant has no image block"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        messages = [
+            {"role": "user", "content": "Generate"},
+            {"role": "assistant", "content": [{"type": "text", "text": "response"}]}
+        ]
+        with pytest.raises(ValueError, match="exactly 1 image block"):
+            dataset._validate_messages(messages)
+
+    def test_validate_messages_assistant_content_not_list(self, tmp_path):
+        """Test validation fails when assistant content is not a list"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        messages = [
+            {"role": "user", "content": "Generate"},
+            {"role": "assistant", "content": "just a string"}
+        ]
+        with pytest.raises(ValueError, match="must be list"):
+            dataset._validate_messages(messages)
+
+
+class TestValidateSegments:
+    """Test _validate_segments method"""
+
+    def test_validate_segments_valid(self, tmp_path):
+        """Test validation passes for valid segments"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        segments = [
+            {"type": "text", "text": "Caption"},
+            {"type": "image", "image": "data"}
+        ]
+        
+        # Should not raise
+        dataset._validate_segments(segments)
+
+    def test_validate_segments_invalid_count(self, tmp_path):
+        """Test validation fails for wrong segment count"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Too few
+        segments = [{"type": "text", "text": "Only one"}]
+        with pytest.raises(ValueError, match="exactly 2 items"):
+            dataset._validate_segments(segments)
+        
+        # Too many
+        segments = [
+            {"type": "text", "text": "One"},
+            {"type": "image", "image": "Two"},
+            {"type": "text", "text": "Three"}
+        ]
+        with pytest.raises(ValueError, match="exactly 2 items"):
+            dataset._validate_segments(segments)
+
+    def test_validate_segments_wrong_first_type(self, tmp_path):
+        """Test validation fails when first segment is not text"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        segments = [
+            {"type": "image", "image": "data"},
+            {"type": "text", "text": "Caption"}
+        ]
+        with pytest.raises(ValueError, match="First segment must be type='text'"):
+            dataset._validate_segments(segments)
+
+    def test_validate_segments_wrong_second_type(self, tmp_path):
+        """Test validation fails when second segment is not image"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        segments = [
+            {"type": "text", "text": "Caption"},
+            {"type": "text", "text": "Another text"}
+        ]
+        with pytest.raises(ValueError, match="Second segment must be type='image'"): 
+            dataset._validate_segments(segments)
 
 
 class TestProcessPair:
