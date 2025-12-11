@@ -311,9 +311,12 @@ class TwoD_RotaryEmbedding(nn.Module):
     #     seq = torch.arange(seqlen, device=device, dtype=dtype)
     #     freqs = torch.outer(seq, self.inv_freq)
     #     self.register_buffer("freqs_cache", freqs, persistent=False)
-    def calculate_freqs(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
+    def calculate_freqs(self, seqlen: int, dtype: torch.dtype = None) -> torch.Tensor:
+        # 使用传入的 dtype，确保与模型精度一致
+        target_dtype = dtype if dtype is not None else self.inv_freq.dtype
+        inv_freq = self.inv_freq.to(dtype=target_dtype)
+        seq = torch.arange(seqlen, device=inv_freq.device, dtype=target_dtype)
+        freqs = torch.outer(seq, inv_freq)
         return freqs
 
 
@@ -331,14 +334,14 @@ class TwoD_RotaryEmbedding(nn.Module):
         max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
         # if self.freqs_cache.numel() == 0 or max_pos > self.freqs_cache.shape[0]:
         #     self.build_freq_cache(max_pos + 128)
-        rope_emb_max_grid = self.calculate_freqs(max_pos)
+        # 传入 x 的 dtype，确保整个 RoPE 计算在相同精度下进行
+        rope_emb_max_grid = self.calculate_freqs(max_pos, dtype=x.dtype)
 
 
         pids = torch.stack([height_ids, width_ids], dim=-1)
         rope_emb = rope_emb_max_grid[pids].flatten(1)
         rope_emb = rope_emb.repeat(1, 2)
-        # 转换为与输入 x 相同的 dtype，确保与 Origin 模型计算精度一致
-        rope_emb = rope_emb.to(dtype=x.dtype)
+        # rope_emb 已经是 x.dtype（从 calculate_freqs 传入），无需再转换
         cos, sin = (rope_emb.cos(), rope_emb.sin())
         
         # Store rope_emb, cos, sin before chunk for debugging
@@ -353,7 +356,8 @@ class TwoD_RotaryEmbedding(nn.Module):
                 "cos_after_chunk": None,
                 "sin_after_chunk": None,
             }
-        self._debug_rope_intermediates["inv_freq"] = self.inv_freq.detach()
+        # 保存转换后的 inv_freq（与 x.dtype 一致）
+        self._debug_rope_intermediates["inv_freq"] = self.inv_freq.to(dtype=x.dtype).detach()
         self._debug_rope_intermediates["rope_emb_max_grid"] = rope_emb_max_grid.detach()
         self._debug_rope_intermediates["pids"] = pids.detach()
         self._debug_rope_intermediates["rope_emb"] = rope_emb.detach()
