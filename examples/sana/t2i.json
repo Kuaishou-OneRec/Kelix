@@ -1,0 +1,5 @@
+{
+  "name": "TextToImageDataset",
+  "sources": "/llm_reco/vlm/datahub/datasets/Ketu_Generation/2.0.1/index/parquet.json",
+  "num_workers": 8
+}

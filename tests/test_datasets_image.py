@@ -1,0 +1,695 @@
+"""
+Unit tests for muse.data.datasets.image module.
+"""
+import pytest
+import json
+import torch
+import tempfile
+import base64
+from io import BytesIO
+from unittest.mock import Mock, patch, MagicMock
+import pandas as pd
+import numpy as np
+from pathlib import Path
+from PIL import Image
+
+from muse.data.datasets.image import Text2ImageDataset
+
+
+class MockTokenizer:
+    """Mock tokenizer for testing"""
+    def __init__(self):
+        self.pad_token_id = 0
+    
+    def encode(self, text):
+        """Simple encode: return list of integers based on text length"""
+        if not text:
+            return []
+        # Simple encoding: each character maps to an integer
+        return [ord(c) % 100 for c in text[:10]]
+
+
+def create_test_image(width=100, height=100, color='red', mode='RGB'):
+    """Create a test PIL Image"""
+    return Image.new(mode, (width, height), color=color)
+
+
+def create_test_parquet(tmp_path, data=None):
+    """Create a test parquet file"""
+    if data is None:
+        data = {
+            'uuid': ['1'],
+            'source': ['test'],
+            'image': [None],
+            'text': ['test caption']
+        }
+    df = pd.DataFrame(data)
+    parquet_path = tmp_path / "test.parquet"
+    df.to_parquet(parquet_path)
+    return str(parquet_path)
+
+
+class TestText2ImageDatasetInit:
+    """Test Text2ImageDataset initialization"""
+
+    def test_init_basic(self, tmp_path):
+        """Test basic initialization with default parameters"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            image_size=512,
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        assert dataset.image_size == (512, 512)
+        assert dataset.tokenizer is tokenizer
+        assert dataset.max_text_length == 300
+        assert dataset.center_crop is True
+
+    def test_init_with_tuple_size(self, tmp_path):
+        """Test initialization with tuple image_size"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            image_size=(256, 512),
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        assert dataset.image_size == (256, 512)
+
+    def test_init_center_crop_false(self, tmp_path):
+        """Test initialization with center_crop=False"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            image_size=256,
+            tokenizer=tokenizer,
+            center_crop=False,
+            num_workers=1
+        )
+        
+        assert dataset.center_crop is False
+
+
+class TestBuildTransform:
+    """Test _build_transform method"""
+
+    def test_build_transform_center_crop(self, tmp_path):
+        """Test transform building with center crop enabled"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            image_size=256,
+            tokenizer=tokenizer,
+            center_crop=True,
+            num_workers=1
+        )
+        
+        # Test that transform works
+        img = create_test_image(300, 200)
+        transformed = dataset.transform(img)
+        
+        assert isinstance(transformed, torch.Tensor)
+        assert transformed.shape == (3, 256, 256)
+        # Check normalization: values should be in [-1, 1] range
+        assert transformed.min() >= -1.0
+        assert transformed.max() <= 1.0
+
+    def test_build_transform_no_center_crop(self, tmp_path):
+        """Test transform building without center crop"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            image_size=(128, 256),
+            tokenizer=tokenizer,
+            center_crop=False,
+            num_workers=1
+        )
+        
+        img = create_test_image(300, 200)
+        transformed = dataset.transform(img)
+        
+        assert isinstance(transformed, torch.Tensor)
+        assert transformed.shape == (3, 128, 256)
+
+
+class TestLoadImage:
+    """Test _load_image method"""
+
+    def test_load_image_from_path(self, tmp_path):
+        """Test loading image from file path"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Create and save a test image
+        img_path = tmp_path / "test.jpg"
+        img = create_test_image()
+        img.save(img_path)
+        
+        loaded = dataset._load_image(str(img_path))
+        
+        assert loaded is not None
+        assert isinstance(loaded, Image.Image)
+        assert loaded.size == (100, 100)
+
+    def test_load_image_from_bytes(self, tmp_path):
+        """Test loading image from bytes"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Create image bytes
+        img = create_test_image(50, 50)
+        buffer = BytesIO()
+        img.save(buffer, format='PNG')
+        img_bytes = buffer.getvalue()
+        
+        loaded = dataset._load_image(img_bytes)
+        
+        assert loaded is not None
+        assert isinstance(loaded, Image.Image)
+        assert loaded.size == (50, 50)
+
+    def test_load_image_from_base64(self, tmp_path):
+        """Test loading image from base64 string"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Create base64 encoded image
+        img = create_test_image(60, 60, color='blue')
+        buffer = BytesIO()
+        img.save(buffer, format='PNG')
+        img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        loaded = dataset._load_image(img_base64)
+        
+        assert loaded is not None
+        assert isinstance(loaded, Image.Image)
+
+    def test_load_image_from_pil(self, tmp_path):
+        """Test loading image from PIL Image (passthrough)"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        img = create_test_image(80, 80)
+        loaded = dataset._load_image(img)
+        
+        assert loaded is img  # Should be the same object
+
+    def test_load_image_from_numpy(self, tmp_path):
+        """Test loading image from numpy array"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Create numpy array (RGB image)
+        np_img = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+        
+        loaded = dataset._load_image(np_img)
+        
+        assert loaded is not None
+        assert isinstance(loaded, Image.Image)
+        assert loaded.size == (100, 100)
+
+    def test_load_image_invalid(self, tmp_path):
+        """Test loading invalid image returns None"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Test with non-existent path
+        loaded = dataset._load_image("/nonexistent/path/image.jpg")
+        assert loaded is None
+        
+        # Test with invalid base64
+        loaded = dataset._load_image("not_valid_base64_or_path!!!")
+        assert loaded is None
+
+
+class TestGetContent:
+    """Test get_content method"""
+
+    def test_get_content_valid_json(self, tmp_path):
+        """Test get_content with valid JSON"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        sample = {"messages": '[{"role": "user", "content": "hello"}]'}
+        content = dataset.get_content(sample, "messages")
+        
+        assert len(content) == 1
+        assert content[0]["role"] == "user"
+        assert content[0]["content"] == "hello"
+
+    def test_get_content_invalid_json(self, tmp_path):
+        """Test get_content with invalid JSON returns empty list"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        sample = {"messages": "invalid json"}
+        content = dataset.get_content(sample, "messages")
+        
+        assert content == []
+
+    def test_get_content_missing_key(self, tmp_path):
+        """Test get_content with missing key returns empty list"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        sample = {}
+        content = dataset.get_content(sample, "messages")
+        
+        assert content == []
+
+
+class TestExtractImageText:
+    """Test extract_image_text method"""
+
+    def test_extract_direct_fields(self, tmp_path):
+        """Test extraction from direct image/text fields"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        img = create_test_image()
+        sample = {"image": img, "text": "A beautiful sunset"}
+        
+        result = dataset.extract_image_text(sample)
+        
+        assert result["image"] is img
+        assert result["text"] == "A beautiful sunset"
+
+    def test_extract_from_messages_string_content(self, tmp_path):
+        """Test extraction from messages format with string content"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        img_data = "base64_image_data"
+        messages = [
+            {"role": "user", "content": "Generate an image of a cat"},
+            {"role": "assistant", "content": [{"type": "image", "image": img_data}]}
+        ]
+        sample = {"messages": json.dumps(messages)}
+        
+        result = dataset.extract_image_text(sample)
+        
+        assert result["text"] == "Generate an image of a cat"
+        assert result["image"] == img_data
+
+    def test_extract_from_messages_list_content(self, tmp_path):
+        """Test extraction from messages format with list content"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        img_data = "base64_image_data"
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": "Generate a dog"}]},
+            {"role": "assistant", "content": [{"type": "image", "image": img_data}]}
+        ]
+        sample = {"messages": json.dumps(messages)}
+        
+        result = dataset.extract_image_text(sample)
+        
+        assert result["text"] == "Generate a dog"
+        assert result["image"] == img_data
+
+    def test_extract_from_messages_image_gen_type(self, tmp_path):
+        """Test extraction from messages with image_gen type (legacy format)"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        img_data = "base64_image_data"
+        messages = [
+            {"role": "user", "content": "Generate something"},
+            {"role": "assistant", "content": [{"type": "image_gen", "image_gen": img_data}]}
+        ]
+        sample = {"messages": json.dumps(messages)}
+        
+        result = dataset.extract_image_text(sample)
+        
+        assert result["image"] == img_data
+
+    def test_extract_from_segments(self, tmp_path):
+        """Test extraction from segments format"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        img_data = "segment_image_data"
+        segments = [
+            {"type": "text", "text": "Segment text"},
+            {"type": "image", "image": img_data}
+        ]
+        sample = {"segments": json.dumps(segments)}
+        
+        result = dataset.extract_image_text(sample)
+        
+        # Segments loop breaks on first match, so text comes first
+        assert result["text"] == "Segment text"
+
+    def test_extract_empty_sample(self, tmp_path):
+        """Test extraction from empty sample"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        sample = {}
+        result = dataset.extract_image_text(sample)
+        
+        assert result["image"] is None
+        assert result["text"] is None
+
+
+class TestProcessPair:
+    """Test _process_pair method"""
+
+    def test_process_pair_basic(self, tmp_path):
+        """Test basic processing of image-text pair"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            image_size=64,
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        img = create_test_image()
+        sample = {"image": img, "text": "A test caption"}
+        
+        result = dataset._process_pair(sample)
+        
+        assert result is not None
+        assert "image" in result
+        assert "text" in result
+        assert "input_ids" in result
+        assert "attention_mask" in result
+        assert isinstance(result["image"], torch.Tensor)
+        assert result["image"].shape == (3, 64, 64)
+        assert result["text"] == "A test caption"
+        assert len(result["input_ids"]) > 0
+        assert len(result["attention_mask"]) == len(result["input_ids"])
+
+    def test_process_pair_image_none(self, tmp_path):
+        """Test processing returns None when image is None"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        sample = {"image": None, "text": "Some text"}
+        result = dataset._process_pair(sample)
+        
+        assert result is None
+
+    def test_process_pair_text_none(self, tmp_path):
+        """Test processing returns None when text is None"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        img = create_test_image()
+        sample = {"image": img, "text": None}
+        result = dataset._process_pair(sample)
+        
+        assert result is None
+
+    def test_process_pair_rgb_conversion(self, tmp_path):
+        """Test that non-RGB images are converted to RGB"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            image_size=64,
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Create RGBA image
+        img = create_test_image(mode='RGBA')
+        sample = {"image": img, "text": "RGBA image"}
+        
+        result = dataset._process_pair(sample)
+        
+        assert result is not None
+        assert result["image"].shape == (3, 64, 64)  # RGB has 3 channels
+
+    def test_process_pair_grayscale_conversion(self, tmp_path):
+        """Test that grayscale images are converted to RGB"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            image_size=64,
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Create grayscale image
+        img = create_test_image(mode='L')
+        sample = {"image": img, "text": "Grayscale image"}
+        
+        result = dataset._process_pair(sample)
+        
+        assert result is not None
+        assert result["image"].shape == (3, 64, 64)  # Converted to RGB
+
+
+class TestProcess:
+    """Test process method (main entry point)"""
+
+    def test_process_direct_fields(self, tmp_path):
+        """Test process with direct image/text fields"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            image_size=64,
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        img = create_test_image()
+        sample = {"image": img, "text": "Direct text"}
+        
+        result = dataset.process(sample)
+        
+        assert result is not None
+        assert result["text"] == "Direct text"
+
+    def test_process_from_messages(self, tmp_path):
+        """Test process with messages format"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            image_size=64,
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Create base64 image
+        img = create_test_image()
+        buffer = BytesIO()
+        img.save(buffer, format='PNG')
+        img_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+        
+        messages = [
+            {"role": "user", "content": "Generate a flower"},
+            {"role": "assistant", "content": [{"type": "image", "image": img_base64}]}
+        ]
+        sample = {"messages": json.dumps(messages)}
+        
+        result = dataset.process(sample)
+        
+        assert result is not None
+        assert result["text"] == "Generate a flower"
+
+    def test_process_returns_none_for_invalid(self, tmp_path):
+        """Test process returns None for invalid samples"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Empty sample
+        sample = {}
+        result = dataset.process(sample)
+        
+        assert result is None
+
+
+class TestCollateFn:
+    """Test collate_fn method"""
+
+    def test_collate_basic(self, tmp_path):
+        """Test basic batch collation"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            image_size=64,
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Create batch of processed samples
+        batch = [
+            {
+                "image": torch.randn(3, 64, 64),
+                "input_ids": torch.tensor([1, 2, 3]),
+                "attention_mask": torch.tensor([1, 1, 1])
+            },
+            {
+                "image": torch.randn(3, 64, 64),
+                "input_ids": torch.tensor([4, 5, 6]),
+                "attention_mask": torch.tensor([1, 1, 1])
+            }
+        ]
+        
+        result = dataset.collate_fn(batch)
+        
+        assert "image" in result
+        assert "input_ids" in result
+        assert "attention_mask" in result
+        assert result["image"].shape == (2, 3, 64, 64)
+        assert result["input_ids"].shape == (2, 3)
+        assert result["attention_mask"].shape == (2, 3)
+
+    def test_collate_missing_keys(self, tmp_path):
+        """Test collation with missing keys"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # Batch with only image key
+        batch = [
+            {"image": torch.randn(3, 64, 64)},
+            {"image": torch.randn(3, 64, 64)}
+        ]
+        
+        result = dataset.collate_fn(batch)
+        
+        assert "image" in result
+        assert "input_ids" not in result
+        assert "attention_mask" not in result

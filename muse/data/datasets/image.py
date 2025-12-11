@@ -40,7 +40,7 @@ from muse.data.datasets.base import DistributedDataset, load_image
 logger = logging.getLogger(__name__)
 
 
-class TextToImageDataset(DistributedDataset):
+class Text2ImageDataset(DistributedDataset):
     """Dataset for text-to-image pairs.
     
     This dataset loads image-text pairs and processes them for diffusion training.
@@ -126,67 +126,39 @@ class TextToImageDataset(DistributedDataset):
             logger.warning(f"Failed to load image: {e}")
             return None
     
-    def process(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
-        """Process a single sample.
-        
-        Args:
-            sample: Raw sample dict from parquet
-        
-        Returns:
-            Processed sample dict or None if processing fails
-        """
-        result = {}
-
-        # Load and process image
-        image_data = sample["image"]
-        if image_data is None:
-            return None
-        
-        image = self._load_image(image_data)
-        if image is None:
-            return None
-        
-        # Convert to RGB
-        if image.mode != "RGB":
-            image = image.convert("RGB")
-        
-        # Apply transforms
-        image = self.transform(image)
-        result["image"] = image
-
-        # Tokenize text
-        text = sample["text"]
-
-
-        result["text"] = text
-        result["input_ids"] = self.tokenizer.encode(text)
-        result["attention_mask"] = [1] * len(result["input_ids"])
-        
-        return result
-    
-      def get_content(self,
-                  sample: Dict[str, Any],
-                  key: str) -> List[Dict[str, Any]]:
-        """Get content from sample"""
-        content = sample.get(key, "[]")
-        try:
-            content = json.loads(content)
-        except (json.JSONDecodeError, TypeError) as e:
-            return []
-            return content
-
     def get_content(self,
                     sample: Dict[str, Any],
                     key: str) -> List[Dict[str, Any]]:
-        """Get content from sample"""
+        """Get content from sample.
+        
+        Args:
+            sample: Sample dict
+            key: Key to get content from
+            
+        Returns:
+            Parsed JSON content or empty list if parsing fails
+        """
         content = sample.get(key, "[]")
         try:
             content = json.loads(content)
-        except (json.JSONDecodeError, TypeError) as e:
-            return []
             return content
+        except (json.JSONDecodeError, TypeError):
+            return []
 
-    def extract_image_text(sample: Dict[str, Any]) -> Tuple[Optional[Image.Image], Optional[str]]:
+    def extract_image_text(self, sample: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract image and text from sample.
+        
+        Supports multiple formats:
+        - Direct image/text fields
+        - Messages format (chat-style)
+        - Segments format
+        
+        Args:
+            sample: Raw sample dict
+            
+        Returns:
+            Dict with 'image' and 'text' keys
+        """
         image = sample.get("image", None)
         text = sample.get("text", None)
         if image and text:
@@ -236,10 +208,58 @@ class TextToImageDataset(DistributedDataset):
             "text": text
         }
 
+    def _process_pair(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
+        """Process a single image-text pair.
+        
+        Args:
+            sample: Sample dict with 'image' and 'text' keys
+        
+        Returns:
+            Processed sample dict or None if processing fails
+        """
+        result = {}
 
-    def process(self, sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+        # Load and process image
+        image_data = sample.get("image")
+        if image_data is None:
+            return None
+        
+        image = self._load_image(image_data)
+        if image is None:
+            return None
+        
+        # Convert to RGB
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        
+        # Apply transforms
+        image = self.transform(image)
+        result["image"] = image
+
+        # Tokenize text
+        text = sample.get("text")
+        if text is None:
+            return None
+
+        result["text"] = text
+        result["input_ids"] = self.tokenizer.encode(text)
+        result["attention_mask"] = [1] * len(result["input_ids"])
+        
+        return result
+
+    def process(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
+        """Process a single sample.
+        
+        Extracts image-text pair from sample and processes it.
+        
+        Args:
+            sample: Raw sample dict from parquet
+        
+        Returns:
+            Processed sample dict or None if processing fails
+        """
         pair = self.extract_image_text(sample)
-        return self.process(pair)
+        return self._process_pair(pair)
 
     def collate_fn(
         self,
