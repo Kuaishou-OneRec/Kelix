@@ -308,7 +308,8 @@ class TokenDecoder(Model):
             elif key == "input_linear.bias":
                 new_key = "input_linear.bias"
             elif key == "output_linear.weight":
-                new_key = "output_linear.weight"
+                # 关键修复：原始模型的output_linear.weight对应新模型的transformer.output.weight
+                new_key = "transformer.output.weight"
             elif key == "output_linear.bias":
                 new_key = "output_linear.bias"
             
@@ -369,12 +370,9 @@ class TokenDecoder(Model):
             elif key == "final_norm.bias":
                 new_key = "transformer.norm.bias"
             
-            # 6. 处理transformer输出层 - 修复：添加output.weight映射
-            elif key == "output.weight":
-                new_key = "transformer.output.weight"
-            
-            # 7. 处理位置编码（原始模型有可训练的位置编码，新模型使用RoPE，不需要这些权重）
+            # 6. 处理位置编码（原始模型有可训练的位置编码，新模型使用RoPE，不需要这些权重）
             elif key == "position_embedding.weight":
+                # 关键修复：新模型没有位置编码层，但需要跳过这个键
                 skipped_keys.append(key)
                 continue
             
