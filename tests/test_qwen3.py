@@ -555,11 +555,12 @@ def test_checkpint():
             checkpoint_dir, attention_function="flash_attention_2")
     
     # load the tokenizer and the model
-    tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_dir)
+    tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_dir, trust_remote_code=True)
     hf_model = AutoModelForCausalLM.from_pretrained(
         hf_checkpoint_dir,
         torch_dtype=torch.bfloat16,
-        device_map="auto"
+        device_map="auto",
+        trust_remote_code=True,
     )
 
     # prepare the model input
