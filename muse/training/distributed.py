@@ -436,16 +436,21 @@ def initialize_model_params(model: "FSDPModule"):
                 device='cuda'
             )
         
-        # Broadcast from rank 0 to all ranks
-        mesh = meta_param.device_mesh
-        dist.broadcast(param_tensor, src=0, group=mesh.get_group(0))
-        dist.barrier()
-        
-        # Distribute tensor according to FSDP sharding
-        sharded_tensor = distribute_tensor(
-            param_tensor, mesh, meta_param.placements
-        )
-        initialized_sd[param_name] = nn.Parameter(sharded_tensor)
+        # Check if it's a DTensor (sharded parameter) or regular Tensor (e.g., buffer)
+        if isinstance(meta_param, DTensor):
+            mesh = meta_param.device_mesh
+            dist.broadcast(param_tensor, src=0, group=mesh.get_group(0))
+            dist.barrier()
+            # Distribute tensor according to FSDP sharding
+            sharded_tensor = distribute_tensor(
+                param_tensor, mesh, meta_param.placements
+            )
+            initialized_sd[param_name] = nn.Parameter(sharded_tensor)
+        else:
+            # Regular tensor (e.g., buffers) - just broadcast and store
+            dist.broadcast(param_tensor, src=0)
+            dist.barrier()
+            initialized_sd[param_name] = param_tensor
     
     # Load initialized parameters into model
     model.load_state_dict(initialized_sd, assign=True)
