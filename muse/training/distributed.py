@@ -350,14 +350,21 @@ def load_from_full_model_state_dict(model: "FSDPModule",
                 dtype=sharded_meta_param.dtype,
             )
         print(param_name, sharded_meta_param)
-        mesh = sharded_meta_param.device_mesh
-
-        dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
-        dist.barrier()
-        sharded_tensor = distribute_tensor(
-            full_tensor, mesh, sharded_meta_param.placements
-        )
-        sharded_sd[param_name] = nn.Parameter(sharded_tensor) # default: requires_grad=True
+        
+        # Check if it's a DTensor (sharded parameter) or regular Tensor (e.g., buffer)
+        if isinstance(sharded_meta_param, DTensor):
+            mesh = sharded_meta_param.device_mesh
+            dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
+            dist.barrier()
+            sharded_tensor = distribute_tensor(
+                full_tensor, mesh, sharded_meta_param.placements
+            )
+            sharded_sd[param_name] = nn.Parameter(sharded_tensor)  # default: requires_grad=True
+        else:
+            # Regular tensor (e.g., buffers) - just broadcast and store
+            dist.broadcast(full_tensor, src=0)
+            dist.barrier()
+            sharded_sd[param_name] = full_tensor
 
     model.load_state_dict(sharded_sd, assign=True)
 
