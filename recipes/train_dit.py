@@ -661,11 +661,11 @@ def train():
             temp_iter = iter(gather_by_group(dataloader, get_context_parallel_group()))
             for i in range(args.overfit_batches):
                 try:
-                batch = next(temp_iter)
-                cached_batches.append(batch)
+                    batch = next(temp_iter)
+                    cached_batches.append(batch)
                 except StopIteration:
-                print_rank_0(f"Warning: Only {i} batches available, less than requested {args.overfit_batches}")
-                break
+                    print_rank_0(f"Warning: Only {i} batches available, less than requested {args.overfit_batches}")
+                    break
             print_rank_0(f"Successfully cached {len(cached_batches)} batches for overfitting")
             print_rank_0(f"Model will cycle through these batches indefinitely")
             # Create infinite iterator that cycles through cached batches
