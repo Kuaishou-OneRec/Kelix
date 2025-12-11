@@ -313,6 +313,28 @@ def get_argument_parser():
     parser.add_argument("--overfit-batches", type=int, default=None,
                         help="Number of batches to cache for overfitting (debug mode)")
 
+    ############ FID Evaluation Args ############
+    parser.add_argument("--eval-fid-every-step", type=int, default=0,
+                        help="Evaluate FID every N steps (0 to disable)")
+    
+    parser.add_argument("--fid-num-samples", type=int, default=1000,
+                        help="Number of samples to generate for FID")
+    
+    parser.add_argument("--fid-reference-stats", type=str, default=None,
+                        help="Path to pre-computed reference statistics (.npz file)")
+    
+    parser.add_argument("--fid-prompts-file", type=str, default=None,
+                        help="Path to text file with prompts for FID evaluation (one per line)")
+    
+    parser.add_argument("--fid-num-inference-steps", type=int, default=20,
+                        help="Number of inference steps for FID sampling")
+    
+    parser.add_argument("--fid-cfg-scale", type=float, default=4.5,
+                        help="CFG scale for FID sampling")
+    
+    parser.add_argument("--fid-batch-size", type=int, default=8,
+                        help="Batch size for FID image generation")
+
     return parser
 
 
@@ -392,6 +414,189 @@ def encode_text(
     attention_mask = attention_mask[:, None, None]
     
     return text_embeds, attention_mask
+
+
+@torch.no_grad()
+def evaluate_fid(
+    model,
+    vae,
+    tokenizer,
+    text_encoder,
+    prompts_file: str,
+    reference_stats_path: str,
+    num_samples: int,
+    image_size: int,
+    num_inference_steps: int,
+    cfg_scale: float,
+    batch_size: int,
+    max_text_length: int,
+    device: torch.device,
+    dtype: torch.dtype,
+) -> float:
+    """
+    Evaluate FID (Frechet Inception Distance) by generating images and comparing 
+    to pre-computed reference statistics.
+    
+    Args:
+        model: The DiT model (must be on single device, not FSDP sharded)
+        vae: VAE decoder
+        tokenizer: Text tokenizer
+        text_encoder: Text encoder model
+        prompts_file: Path to text file with prompts (one per line)
+        reference_stats_path: Path to pre-computed reference statistics (.npz)
+        num_samples: Number of samples to generate
+        image_size: Output image size
+        num_inference_steps: Number of sampling steps
+        cfg_scale: Classifier-free guidance scale
+        batch_size: Batch size for generation
+        max_text_length: Maximum text sequence length
+        device: Target device
+        dtype: Model dtype
+        
+    Returns:
+        FID score (lower is better)
+    """
+    from torchmetrics.image.fid import FrechetInceptionDistance
+    from muse.inference import create_flow_dpm_solver
+    
+    print_rank_0(f"Starting FID evaluation with {num_samples} samples...")
+    
+    # Load prompts
+    with open(prompts_file, 'r', encoding='utf-8') as f:
+        all_prompts = [line.strip() for line in f if line.strip()]
+    
+    if len(all_prompts) < num_samples:
+        # Cycle through prompts if not enough
+        import itertools
+        all_prompts = list(itertools.islice(itertools.cycle(all_prompts), num_samples))
+    else:
+        all_prompts = all_prompts[:num_samples]
+    
+    print_rank_0(f"Loaded {len(all_prompts)} prompts from {prompts_file}")
+    
+    # Initialize FID metric
+    fid = FrechetInceptionDistance(feature=2048, normalize=True).to(device)
+    
+    # Load pre-computed reference statistics
+    print_rank_0(f"Loading reference statistics from {reference_stats_path}")
+    stats = np.load(reference_stats_path)
+    
+    # Set reference statistics directly
+    # The .npz file should contain 'mu' and 'sigma' keys
+    if 'mu' in stats and 'sigma' in stats:
+        ref_mu = torch.from_numpy(stats['mu']).to(device)
+        ref_sigma = torch.from_numpy(stats['sigma']).to(device)
+        fid.real_features_sum = ref_mu * num_samples
+        fid.real_features_cov_sum = ref_sigma * (num_samples - 1) + torch.outer(ref_mu, ref_mu) * num_samples
+        fid.real_features_num_samples = torch.tensor(num_samples, device=device)
+    else:
+        raise ValueError(f"Reference stats file must contain 'mu' and 'sigma' keys, got: {list(stats.keys())}")
+    
+    # Set model to eval mode
+    was_training = model.training
+    model.eval()
+    
+    # Get model config for latent size
+    latent_channels = model.config.in_channels
+    vae_downsample = model.config.vae_downsample_rate
+    latent_size = image_size // vae_downsample
+    
+    # Generate images in batches
+    num_batches = (num_samples + batch_size - 1) // batch_size
+    
+    for batch_idx in range(num_batches):
+        start_idx = batch_idx * batch_size
+        end_idx = min(start_idx + batch_size, num_samples)
+        batch_prompts = all_prompts[start_idx:end_idx]
+        current_batch_size = len(batch_prompts)
+        
+        # Tokenize prompts
+        tokens = tokenizer(
+            batch_prompts,
+            max_length=max_text_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+        )
+        input_ids = tokens.input_ids.to(device)
+        attention_mask = tokens.attention_mask.to(device)
+        
+        # Encode text
+        text_embeds, attn_mask = encode_text(
+            text_encoder, input_ids, attention_mask, max_text_length, device
+        )
+        
+        # Encode empty prompt for CFG
+        empty_tokens = tokenizer(
+            [""] * current_batch_size,
+            max_length=max_text_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+        )
+        empty_ids = empty_tokens.input_ids.to(device)
+        empty_mask = empty_tokens.attention_mask.to(device)
+        uncond_embeds, uncond_mask = encode_text(
+            text_encoder, empty_ids, empty_mask, max_text_length, device
+        )
+        
+        # Initialize random latents
+        latents = torch.randn(
+            (current_batch_size, latent_channels, latent_size, latent_size),
+            device=device, dtype=dtype,
+        )
+        
+        # Prepare model function for DPM-Solver
+        def model_fn(x, t, cond, mask=None):
+            return model.forward_with_dpmsolver(x, t, cond, mask=mask)
+        
+        # Create DPM-Solver
+        solver = create_flow_dpm_solver(
+            model_fn,
+            condition=text_embeds,
+            uncondition=uncond_embeds,
+            cfg_scale=cfg_scale,
+            model_kwargs={"mask": attn_mask},
+        )
+        
+        # Sample
+        latents = solver.sample(
+            latents,
+            steps=num_inference_steps,
+            flow_shift=3.0,
+            order=2,
+            skip_type="time_uniform_flow",
+            method="multistep",
+            lower_order_final=True,
+        )
+        
+        # Decode latents to images
+        if hasattr(vae, 'config') and hasattr(vae.config, 'scaling_factor'):
+            latents = latents / vae.config.scaling_factor
+        
+        images = vae.decode(latents).sample
+        
+        # Convert to uint8 [0, 255] for FID
+        images = (images / 2 + 0.5).clamp(0, 1)
+        images = (images * 255).to(torch.uint8)
+        
+        # Update FID with generated images
+        fid.update(images, real=False)
+        
+        if (batch_idx + 1) % 10 == 0 or batch_idx == num_batches - 1:
+            print_rank_0(f"  Generated {end_idx}/{num_samples} images")
+    
+    # Compute FID score
+    fid_score = fid.compute().item()
+    
+    # Restore training mode
+    if was_training:
+        model.train()
+    
+    print_rank_0(f"FID evaluation complete: {fid_score:.2f}")
+    
+    return fid_score
+
 
 def _init_profiler(output_dir) -> None:
     """Initialize torch profiler."""
@@ -482,6 +687,10 @@ def train():
         logging_per_step=args.logging_per_step,
         loggers=loggers
     )
+    
+    # Add FID metric if evaluation is enabled
+    if args.eval_fid_every_step > 0:
+        metrics.new("fid", dtype="float", reduce=None)
 
     # Determine training mode and get model_class
     if args.model_dir:
@@ -636,6 +845,12 @@ def train():
         device=torch.cuda.current_device(),
         dtype=get_torch_dtype(args.model_dtype)
     )
+    
+    # Load tokenizer for FID evaluation (if enabled)
+    if args.eval_fid_every_step > 0:
+        from transformers import AutoTokenizer
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_dir)
+        print_rank_0(f"Loaded tokenizer from {args.tokenizer_dir}")
     ############## Load VAE and text encoder ##############
 
     # Create optimizer
@@ -853,6 +1068,49 @@ def train():
                         checkpoint_dir=args.output_dir,
                         global_step=scheduler.global_step
                     )
+
+            # FID evaluation
+            if (args.eval_fid_every_step > 0 and 
+                scheduler.global_step > 0 and
+                scheduler.global_step % args.eval_fid_every_step == 0):
+                
+                if args.fid_reference_stats is None or args.fid_prompts_file is None:
+                    print_rank_0("Warning: FID evaluation skipped - fid_reference_stats or fid_prompts_file not provided")
+                else:
+                    # Only evaluate on rank 0 to avoid duplicate computation
+                    if dist.get_rank() == 0:
+                        torch.cuda.empty_cache()
+                        gc.collect()
+                        
+                        with Timer("FID evaluation"):
+                            try:
+                                # For FSDP, we need to summon full params for inference
+                                # Use the current sharded model and let PyTorch handle it
+                                fid_score = evaluate_fid(
+                                    model=model,
+                                    vae=vae,
+                                    tokenizer=tokenizer,
+                                    text_encoder=text_encoder,
+                                    prompts_file=args.fid_prompts_file,
+                                    reference_stats_path=args.fid_reference_stats,
+                                    num_samples=args.fid_num_samples,
+                                    image_size=args.image_size,
+                                    num_inference_steps=args.fid_num_inference_steps,
+                                    cfg_scale=args.fid_cfg_scale,
+                                    batch_size=args.fid_batch_size,
+                                    max_text_length=args.max_text_length,
+                                    device=torch.cuda.current_device(),
+                                    dtype=get_torch_dtype(args.model_dtype),
+                                )
+                                metrics.fid.append(fid_score)
+                                print_rank_0(f"FID at step {scheduler.global_step}: {fid_score:.2f}")
+                            except Exception as e:
+                                print_rank_0(f"FID evaluation failed: {e}")
+                                import traceback
+                                traceback.print_exc()
+                    
+                    # Synchronize all ranks after FID evaluation
+                    dist.barrier()
 
             if torch_profiler:
                 torch_profiler.step()
