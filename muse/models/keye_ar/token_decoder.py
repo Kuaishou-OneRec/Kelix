@@ -115,7 +115,7 @@ class TokenDecoder(Model):
             max_seq_len=max_length,
             num_heads=nhead,
             head_dim=head_dim,
-            norm=Fp32LayerNorm(d_model, eps=1e-5),
+            norm=nn.Identity(),  # 修改为Identity，直接接收normed_output
             output=nn.Identity() if lm_head is None else lm_head
         )
     
