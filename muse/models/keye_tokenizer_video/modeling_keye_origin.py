@@ -419,7 +419,7 @@ class Qwen3VisionPatchEmbed(nn.Module):
     def __init__(
         self,
         patch_size: int = 14,
-        temporal_patch_size: int = 2,
+        temporal_patch_size: int = 1,
         in_channels: int = 3,
         embed_dim: int = 1152,
     ) -> None:
@@ -1414,16 +1414,16 @@ class SiglipVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs.last_hidden_state
         last_hidden_state = self.post_layernorm(last_hidden_state)
 
-        sample_hidden_state = list()
-        #assert cu_seqlens is not None
-        for i in range(cu_seqlens.shape[0] - 1):
-            start = cu_seqlens[i]
-            end = cu_seqlens[i + 1]
-            tensor = last_hidden_state[:, start: end, :].squeeze(0)
-            sample_hidden_state.append(tensor)
-        
+        # sample_hidden_state = list()
+        # assert cu_seqlens is not None
+        # for i in range(cu_seqlens.shape[0] - 1):
+        #     start = cu_seqlens[i]
+        #     end = cu_seqlens[i + 1]
+        #     tensor = last_hidden_state[:, start: end, :].squeeze(0)
+        #     sample_hidden_state.append(tensor)
+
         return BaseModelOutputWithPooling(
-            last_hidden_state=sample_hidden_state,
+            last_hidden_state=last_hidden_state,
             pooler_output=None,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
@@ -2326,6 +2326,15 @@ class KeyeFlashAttention2(KeyeAttention):
         return attn_output, attn_weights, past_key_value
 
 
+
+def split_thw(thw: torch.Tensor):
+    if thw.dim() == 1:
+        thw = thw.unsqueeze(0)
+
+    clone = thw.clone()
+    clone[:, 0] = 1
+    return torch.repeat_interleave(clone, thw[:, 0], dim=0)
+
 class KeyeSdpaAttention(KeyeAttention):
     """
     Qwen3 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -2866,6 +2875,7 @@ class KeyeCausalLMOutputWithPast(ModelOutput):
     codebook_loss: Optional[torch.FloatTensor] = None
     commitment_loss: Optional[torch.FloatTensor] = None
     indices: Optional[torch.LongTensor] = None  # 改为 Optional
+    video_indices: Optional[torch.LongTensor] = None  # 改为 Optional
     logits: Optional[torch.FloatTensor] = None  # 改为 Optional
     past_key_values: Optional[List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -3033,6 +3043,7 @@ class KeyeImageTokenizer(PreTrainedModel):
 
         pixel_values = pixel_values.type(self.visual.dtype)
         pixel_values = pixel_values.unsqueeze(0)
+        image_grid_thw_split = split_thw(image_grid_thw.squeeze(0))
         siglip_position_ids = list()
         image_grid_hws = list()
         sample_indices = list()
@@ -3040,7 +3051,7 @@ class KeyeImageTokenizer(PreTrainedModel):
 
         #image_grid_hws = image_grid_thw.prod(dim=1)#elimate the temporal dimension
         pro = 0
-        for idx, thw in enumerate(image_grid_thw):
+        for idx, thw in enumerate(image_grid_thw_split):
             thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
             numel = np.prod(thw_tuple)
             image_grid_hws.append(thw_tuple)
@@ -3279,140 +3290,24 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         fast_video_token_id = self.config.fast_video_token_id
         vision_start_token_id = self.config.vision_start_token_id
         mrope_position_deltas = []
-        if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
-            total_input_ids = input_ids
-            if attention_mask is None:
-                attention_mask = torch.ones_like(total_input_ids)
-            position_ids = torch.ones(
-                3,
-                input_ids.shape[0],
-                input_ids.shape[1],
-                dtype=input_ids.dtype,
-                device=input_ids.device,
-            )
-            image_index, video_index, fast_video_index = 0, 0, 0
-            attention_mask = attention_mask.to(total_input_ids.device)
-            for i, input_ids in enumerate(total_input_ids):
-                input_ids = input_ids[attention_mask[i] == 1]
-
-                if image_grid_thw is not None:
-                    image_nums = image_grid_thw.size(0) # 这里实际上是图片的数量
-                else:
-                    image_nums = 0
-
-                if video_grid_thw is not None:
-                    video_nums = video_grid_thw.size(0) # 这里实际上是slow_frame的数量
-                else:
-                    video_nums = 0
-
-                if fast_video_grid_thw is not None:
-                    fast_video_nums = fast_video_grid_thw.size(0) # 这里实际上是fast_frame的数量
-                else:
-                    fast_video_nums = 0
-
-                input_tokens = input_ids.tolist()
-                llm_pos_ids_list: list = []
-                st = 0
-                remain_images, remain_videos_frames, remain_fast_videos_frames = image_nums, video_nums, fast_video_nums
-                # remain_images, remain_videos = image_nums, video_grid_thw.size(0)//2
-                for _ in range(image_nums + video_nums + fast_video_nums):
-
-                    if image_token_id in input_tokens and remain_images > 0:
-                        ed_image = input_tokens.index(image_token_id, st)
-                    else:
-                        ed_image = len(input_tokens) + 1
-
-                    if video_token_id in input_tokens and remain_videos_frames > 0:
-                        ed_video = input_tokens.index(video_token_id, st)
-                    else:
-                        ed_video = len(input_tokens) + 1
-                    
-                    if fast_video_token_id in input_tokens and remain_fast_videos_frames > 0:
-                        ed_fast_video = input_tokens.index(fast_video_token_id, st)
-                    else:
-                        ed_fast_video = len(input_tokens) + 1
-                    
-                    if ed_image < min(ed_video, ed_fast_video):
-                        t, h, w = (
-                            image_grid_thw[image_index][0],
-                            image_grid_thw[image_index][1],
-                            image_grid_thw[image_index][2],
-                        )
-                        image_index += 1
-                        remain_images -= 1
-                        ed = ed_image
-
-                    elif ed_video < min(ed_image, ed_fast_video):
-                        t, h, w = (
-                            video_grid_thw[video_index][0],
-                            video_grid_thw[video_index][1],
-                            video_grid_thw[video_index][2],
-                        )
-                        video_index += 1
-                        remain_videos_frames -= 1
-                        ed = ed_video
-                    
-                    elif ed_fast_video < min(ed_image, ed_video):
-                        t, h, w = (
-                            fast_video_grid_thw[fast_video_index][0],
-                            fast_video_grid_thw[fast_video_index][1],
-                            fast_video_grid_thw[fast_video_index][2],
-                        )
-                        fast_video_index += 1
-                        remain_fast_videos_frames -= 1
-                        ed = ed_fast_video
-
-
-                    llm_grid_t, llm_grid_h, llm_grid_w = (
-                        t.item(),
-                        h.item() // spatial_merge_size,
-                        w.item() // spatial_merge_size,
-                    )
-                    text_len = ed - st
-
-                    st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-                    llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
-
-                    range_tensor = torch.arange(llm_grid_t).view(-1, 1)
-                    expanded_range = range_tensor.expand(-1, llm_grid_h * llm_grid_w)
-
-                    t_index = expanded_range.flatten()
-                    h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
-                    w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
-                    llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + text_len + st_idx)
-                    st = ed + llm_grid_t * llm_grid_h * llm_grid_w
-
-                if st < len(input_tokens):
-                    st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
-                    text_len = len(input_tokens) - st
-                    llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
-
-                llm_positions = torch.cat(llm_pos_ids_list, dim=1).reshape(3, -1)
-                position_ids[..., i, attention_mask[i] == 1] = llm_positions.to(position_ids.device)
-                mrope_position_deltas.append(llm_positions.max() + 1 - len(total_input_ids[i]))
-            mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
-            # print("position_idsposition_ids=", position_ids)
-            # torch.save(position_ids, "position_ids_1.pth"); exit()
-            return position_ids, mrope_position_deltas
+        if attention_mask is not None:
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
+            max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
+            mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
         else:
-            if attention_mask is not None:
-                position_ids = attention_mask.long().cumsum(-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
-                max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
-                mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
-            else:
-                position_ids = (
-                    torch.arange(input_ids.shape[1], device=input_ids.device)
-                    .view(1, 1, -1)
-                    .expand(3, input_ids.shape[0], -1)
-                )
-                mrope_position_deltas = torch.zeros(
-                    [input_ids.shape[0], 1],
-                    device=input_ids.device,
-                    dtype=input_ids.dtype,
-                )
-            return position_ids, mrope_position_deltas
+            position_ids = (
+                torch.arange(input_ids.shape[1], device=input_ids.device)
+                .view(1, 1, -1)
+                .expand(3, input_ids.shape[0], -1)
+            )
+            mrope_position_deltas = torch.zeros(
+                [input_ids.shape[0], 1],
+                device=input_ids.device,
+                dtype=input_ids.dtype,
+            )
+        return position_ids, mrope_position_deltas
 
     @replace_return_docstrings(output_type=KeyeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -3484,10 +3379,9 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         from collections import defaultdict
         train_dict = defaultdict(lambda: torch.zeros(1).to(input_ids.device).float())
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        reconstruction_loss_dict = {}
+        reconstruction_loss_dict = defaultdict(lambda: torch.zeros(1).to(input_ids.device).float())
         if inputs_embeds is None:
             inputs_embeds = self.model.embed_tokens(input_ids)
-            from .investigations import compute_row_stats_str
             if pixel_values is not None:
                 vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
                 
@@ -3511,13 +3405,16 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                         "reconstruction_loss_diff_std": (image_embeds.detach() - vq_out['x'].detach()).std(),
                         "reconstruction_loss_target_std": vq_out['x'].detach().std()
                     }
-                #else:
-                #    logger.warning_once(f"Image features and image tokens do not match")
+                else:
+                    1
                 
                 codebook_loss, commitment_loss, vq_indices = vq_out['codebook_loss'], vq_out['commitment_loss'], vq_out['indices']
                 train_dict["codebook_loss"] = codebook_loss
                 train_dict["commitment_loss"] = commitment_loss
                 train_dict["indices"] = vq_indices
+
+
+
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 #image_embeds is a list of tensor, each tensor is a image feature,I want to concat them all into a tensor
                 n_image_features = image_embeds.shape[0]
@@ -3537,6 +3434,75 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
                 # text_inputs_embeds = inputs_embeds[~mask]
                 
+            if pixel_values_videos is not None:
+                video_beta = 1.0
+                vq_out_video = self.visual_tokenizer(pixel_values_videos, video_grid_thw)
+                # print("projected indices", torch.stack([x_i for x_i in vq_out_video['indices']], 0).T)
+                stacked = torch.stack([quant_projector_i(x_i) for x_i, quant_projector_i in zip(vq_out_video['z_q'], self.quant_projector) ], 0)
+                # print(stacked.shape)
+                stacked = stacked.transpose(0,1)
+                # print(f"stackeddd")
+                # print(stacked)
+
+                video_embeds = sum([quant_projector_i(x_i) for x_i, quant_projector_i in zip(vq_out_video['z_q'], self.quant_projector) ]) * self.amplifier
+                if self.pool == 'avg':
+                    video_embeds = video_embeds / len(self.quant_projector)
+                
+
+                if video_embeds.shape == vq_out_video['x'].shape:
+                    train_dict["reconstruction_loss"] +=  video_beta * F.mse_loss(video_embeds, vq_out_video['x'].detach())
+                    reconstruction_loss_dict ["reconstruction_loss_diff_mu"]+=  video_beta * (video_embeds.detach() - vq_out_video['x'].detach()).mean()
+                    reconstruction_loss_dict ["reconstruction_loss_diff_std"]+= video_beta * (video_embeds.detach() - vq_out_video['x'].detach()).std()
+                    reconstruction_loss_dict ["reconstruction_loss_target_std"]+= video_beta * vq_out_video['x'].detach().std()
+                else:
+                   logger.warning_once(f"Video features and video tokens do not match")
+
+                video_codebook_loss, video_commitment_loss, video_vq_indices = (
+                    vq_out_video['codebook_loss'],
+                    vq_out_video['commitment_loss'],
+                    vq_out_video['indices'],
+                )
+                if "codebook_loss" in train_dict:
+                    train_dict["codebook_loss"] = [
+                        img_loss + video_beta * vid_loss
+                        for img_loss, vid_loss in zip(train_dict["codebook_loss"], video_codebook_loss)
+                    ]
+                else:
+                    train_dict["codebook_loss"] = [video_beta * vid_loss for vid_loss in video_codebook_loss]
+
+                if "commitment_loss" in train_dict:
+                    train_dict["commitment_loss"] = [
+                        img_loss + video_beta * vid_loss
+                        for img_loss, vid_loss in zip(train_dict["commitment_loss"], video_commitment_loss)
+                    ]
+                else:
+                    train_dict["commitment_loss"] = [video_beta * vid_loss for vid_loss in video_commitment_loss]
+                train_dict["video_indices"] = video_vq_indices
+                image_indices = train_dict.get("indices")
+                if image_indices is None:
+                    train_dict["indices"] = video_vq_indices
+                else:
+                    train_dict["indices"] = [
+                        torch.cat([img_idx, vid_idx], dim=0)
+                        for img_idx, vid_idx in zip(image_indices, video_vq_indices)
+                    ]
+                n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
+                
+                n_video_features = video_embeds.shape[0]
+                if n_video_tokens != n_video_features:
+                    raise ValueError(
+                        f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
+                    )
+
+                mask = (input_ids == self.config.video_token_id)
+                mask_unsqueezed = mask.unsqueeze(-1)
+                mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
+                video_mask = mask_expanded.to(inputs_embeds.device)
+
+                video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+                inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
@@ -3784,13 +3750,51 @@ class Projector(nn.Module):
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
+                 temporal_merge_position: str = "before",
+                 temporal_merge_mode: str = "avg",
                  merge_kernel_size: Tuple[int, int] = (2, 2)):
         super().__init__()
         self.merge_kernel_size = merge_kernel_size
 
+        self.temporal_merge_position = temporal_merge_position
+        self.temporal_merge_mode = temporal_merge_mode
+
+        if self.temporal_merge_position not in ["before", "after"]:
+            raise ValueError(f"Unsupported temporal_merge_position={self.temporal_merge_position}")
+        if self.temporal_merge_position == "before" and self.temporal_merge_mode not in ["avg", "delta"]:
+            raise ValueError(
+                "temporal_merge_mode must be 'avg' or 'delta' when temporal_merge_position='before'"
+            )
+        if self.temporal_merge_position == "after" and self.temporal_merge_mode not in ["avg", "delta"]:
+            raise ValueError(
+                "temporal_merge_mode must be 'avg' or 'delta' when temporal_merge_position='after'"
+            )
+        print("maosiyang::temporal_merge_mode", self.temporal_merge_mode)
+        print("maosiyang::temporal_merge_position", self.temporal_merge_position)
+
         self.hidden_size = (
             in_channels * self.merge_kernel_size[0] * self.merge_kernel_size[1]
         )
+        self.temporal_delta_norm_before = None
+        self.temporal_delta_rnn_before = None
+        self.temporal_delta_norm_after = None
+        self.temporal_delta_rnn_after = None
+        if self.temporal_merge_position == "before" and self.temporal_merge_mode == "delta":
+            self.temporal_delta_norm_before = torch.nn.LayerNorm(self.hidden_size, eps=1e-05)
+            self.temporal_delta_rnn_before = nn.GRU(
+                input_size=self.hidden_size,
+                hidden_size=self.hidden_size,
+                num_layers=1,
+                batch_first=True,
+            )
+        if self.temporal_merge_position == "after" and self.temporal_merge_mode == "delta":
+            self.temporal_delta_norm_after = torch.nn.LayerNorm(self.out_channels, eps=1e-05)
+            self.temporal_delta_rnn_after = nn.GRU(
+                input_size=self.out_channels,
+                hidden_size=self.out_channels,
+                num_layers=1,
+                batch_first=True,
+            )
 
         self.pre_norm = torch.nn.LayerNorm(self.hidden_size, eps=1e-05)
         self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
@@ -3798,32 +3802,125 @@ class Projector(nn.Module):
         self.linear_2 = nn.Linear(
             self.hidden_size, out_channels, bias=True
         )
+    def split(self, last_hidden_state: torch.Tensor, grid_thw: torch.Tensor):
+        sample_hidden_state = list()
+
+        lengths = np.prod(grid_thw.cpu().numpy(), axis=1).tolist()
+
+        assert sum(lengths) == last_hidden_state.shape[1]
+        start = 0
+        for length in lengths:
+            end = start + length
+            tensor = last_hidden_state[:, start: end, :].squeeze(0)
+            sample_hidden_state.append(tensor)
+            start = end
+        return sample_hidden_state
+    def _project_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
+        tokens = self.pre_norm(tokens)
+        tokens = self.linear_1(tokens)
+        tokens = self.act(tokens)
+        tokens = self.linear_2(tokens)
+        return tokens
+
+    def _temporal_reduce_before(self, x: torch.Tensor) -> torch.Tensor:
+        if self.temporal_merge_mode == "avg":
+            return x.mean(dim=0)
+        if self.temporal_merge_mode == "delta":
+            x = x.permute(1, 0, 2)  # (n, t, hidden)
+            if x.size(1) == 1:
+                # Repeat single-frame sequences so GRU receives at least two time steps
+                x = x.repeat(1, 2, 1)
+            x = self.temporal_delta_norm_before(x)
+            _, h_n = self.temporal_delta_rnn_before(x)
+            return h_n[-1]
+        raise ValueError(f"Unsupported temporal_merge_mode {self.temporal_merge_mode} for before merge.")
+
+    def _temporal_reduce_after(self, x: torch.Tensor, spatial_h: int, spatial_w: int) -> torch.Tensor:
+        if self.temporal_merge_mode == "avg":
+            return x.mean(dim=0)
+        if self.temporal_merge_mode == "delta":
+            x = x.permute(1, 0, 2)  # (n, t, hidden)
+            if x.size(1) == 1:
+                # Repeat single-frame sequences so GRU receives at least two time steps
+                x = x.repeat(1, 2, 1)
+            x = self.temporal_delta_norm_after(x)
+            _, h_n = self.temporal_delta_rnn_after(x)
+            return h_n[-1]
+
+    def _process_sequence(self, image_feature: torch.Tensor, image_grid: Tuple[int, int, int]) -> torch.Tensor:
+        t, h, w = [int(x) for x in image_grid]
+        if t == 0:
+            return image_feature.new_zeros((0, self.out_channels))
+        m1, m2 = self.merge_kernel_size
+        spatial_h = max(1, h // m1)
+        spatial_w = max(1, w // m2)
+        x = rearrange(
+            image_feature,
+            "(t h p1 w p2) d -> t (h w) (p1 p2 d)",
+            t=t,
+            h=spatial_h,
+            p1=m1,
+            w=spatial_w,
+            p2=m2,
+        )
+        # print('3909::',x.shape)
+        if self.temporal_merge_position == "before":
+            reduced = self._temporal_reduce_before(x)
+            # print('maoisyang:_temporal_reduce_before', reduced.shape)
+            reduced = reduced.reshape(-1, self.hidden_size)
+            return self._project_tokens(reduced)
+        projected = self._project_tokens(x.reshape(-1, self.hidden_size))
+        projected = projected.view(t, spatial_h * spatial_w, self.output_hidden_size)
+        reduced = self._temporal_reduce_after(projected, spatial_h, spatial_w)
+        return reduced.reshape(-1, self.output_hidden_size)
+
 
     def forward(self,
                 image_features: torch.Tensor,
                 image_grid_thw: List[Tuple[int, int, int]]) -> torch.Tensor:
-        m1, m2 = self.merge_kernel_size
 
+
+        # print('projector forward', image_features.shape, image_grid_thw)
+        image_features = self.split(image_features, image_grid_thw)
         if isinstance(image_features, (list, tuple)):
-            processed_features = list()
-            for image_feature, image_grid in zip(image_features, image_grid_thw):
-                t, h, w = image_grid
-                from einops import rearrange
-                image_feature = rearrange(image_feature, "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2)
-                image_feature = self.pre_norm(image_feature)
-                hidden_states = self.linear_1(image_feature)
-                hidden_states = self.act(hidden_states)
-                hidden_states = self.linear_2(hidden_states)
-                processed_features.append(hidden_states)
-            processed_features = torch.concat(processed_features, dim=0)
+            return torch.cat([
+                self._process_sequence(image_feature, image_grid)
+                for image_feature, image_grid in zip(image_features, image_grid_thw)
+            ], dim=0)
+        outputs = []
+        start = 0
+        m1, m2 = self.merge_kernel_size
+        for grid in image_grid_thw:
+            t, h, w = [int(x) for x in grid]
+            spatial_h = max(1, h // m1)
+            spatial_w = max(1, w // m2)
+            num_tokens = t * spatial_h * spatial_w
+            sample = image_features[start : start + num_tokens]
+            start += num_tokens
+            outputs.append(self._process_sequence(sample, (t, h, w)))
+        return torch.cat(outputs, dim=0)
+        # m1, m2 = self.merge_kernel_size
 
-            return processed_features
+        # if isinstance(image_features, (list, tuple)):
+        #     processed_features = list()
+        #     for image_feature, image_grid in zip(image_features, image_grid_thw):
+        #         t, h, w = image_grid
+        #         from einops import rearrange
+        #         image_feature = rearrange(image_feature, "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2)
+        #         image_feature = self.pre_norm(image_feature)
+        #         hidden_states = self.linear_1(image_feature)
+        #         hidden_states = self.act(hidden_states)
+        #         hidden_states = self.linear_2(hidden_states)
+        #         processed_features.append(hidden_states)
+        #     processed_features = torch.concat(processed_features, dim=0)
 
-        assert image_features.dim() == 2
-        dim = image_features.shape[-1]
-        hidden_states = self.pre_norm(image_features.view(-1, self.hidden_size))
-        hidden_states = self.linear_1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
+        #     return processed_features
 
-        return hidden_states
+        # assert image_features.dim() == 2
+        # dim = image_features.shape[-1]
+        # hidden_states = self.pre_norm(image_features.view(-1, self.hidden_size))
+        # hidden_states = self.linear_1(hidden_states)
+        # hidden_states = self.act(hidden_states)
+        # hidden_states = self.linear_2(hidden_states)
+
+        # return hidden_states

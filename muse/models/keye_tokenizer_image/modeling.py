@@ -235,148 +235,53 @@ class VectorQuantizer(nn.Module):
         return result
 
 class Projector(nn.Module):
-    """
-    视觉特征降采样/投影模块，移植自 origin，实现时序/空间合并。
-    """
 
-    def __init__(
-        self,
-        in_channels: int,
-        out_channels: int,
-        temporal_merge_position: str = "before",
-        temporal_merge_mode: str = "avg",
-        merge_kernel_size: Tuple[int, int] = (2, 2),
-    ):
+    def __init__(self,
+                 in_channels: int,
+                 out_channels: int,
+                 merge_kernel_size: Tuple[int, int] = (2, 2)):
         super().__init__()
         self.merge_kernel_size = merge_kernel_size
-        self.temporal_merge_position = temporal_merge_position
-        self.temporal_merge_mode = temporal_merge_mode
 
-        if self.temporal_merge_position not in ["before", "after"]:
-            raise ValueError(f"Unsupported temporal_merge_position={self.temporal_merge_position}")
-        if self.temporal_merge_position == "before" and self.temporal_merge_mode not in ["avg", "delta"]:
-            raise ValueError("temporal_merge_mode must be 'avg' or 'delta' when temporal_merge_position='before'")
-        if self.temporal_merge_position == "after" and self.temporal_merge_mode not in ["avg", "delta"]:
-            raise ValueError("temporal_merge_mode must be 'avg' or 'delta' when temporal_merge_position='after'")
-
-        self.hidden_size = in_channels * self.merge_kernel_size[0] * self.merge_kernel_size[1]
-        self.temporal_delta_norm_before = None
-        self.temporal_delta_rnn_before = None
-        self.temporal_delta_norm_after = None
-        self.temporal_delta_rnn_after = None
-        if self.temporal_merge_position == "before" and self.temporal_merge_mode == "delta":
-            self.temporal_delta_norm_before = torch.nn.LayerNorm(self.hidden_size, eps=1e-05)
-            self.temporal_delta_rnn_before = nn.GRU(
-                input_size=self.hidden_size,
-                hidden_size=self.hidden_size,
-                num_layers=1,
-                batch_first=True,
-            )
-        if self.temporal_merge_position == "after" and self.temporal_merge_mode == "delta":
-            self.temporal_delta_norm_after = torch.nn.LayerNorm(out_channels, eps=1e-05)
-            self.temporal_delta_rnn_after = nn.GRU(
-                input_size=out_channels,
-                hidden_size=out_channels,
-                num_layers=1,
-                batch_first=True,
-            )
+        self.hidden_size = (
+            in_channels * self.merge_kernel_size[0] * self.merge_kernel_size[1]
+        )
 
         self.pre_norm = torch.nn.LayerNorm(self.hidden_size, eps=1e-05)
         self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
-        self.act = nn.GELU()
-        self.linear_2 = nn.Linear(self.hidden_size, out_channels, bias=True)
-
-    def split(self, last_hidden_state: torch.Tensor, grid_thw: torch.Tensor):
-        sample_hidden_state = list()
-        lengths = np.prod(grid_thw.cpu().numpy(), axis=1).tolist()
-        assert sum(lengths) == last_hidden_state.shape[1]
-        start = 0
-        for length in lengths:
-            end = start + length
-            tensor = last_hidden_state[:, start:end, :].squeeze(0)
-            sample_hidden_state.append(tensor)
-            start = end
-        return sample_hidden_state
-
-    def _project_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
-        tokens = self.pre_norm(tokens)
-        tokens = self.linear_1(tokens)
-        tokens = self.act(tokens)
-        tokens = self.linear_2(tokens)
-        return tokens
-
-    def _temporal_reduce_before(self, x: torch.Tensor) -> torch.Tensor:
-        if self.temporal_merge_mode == "avg":
-            return x.mean(dim=0)
-        if self.temporal_merge_mode == "delta":
-            x = x.permute(1, 0, 2)  # (n, t, hidden)
-            if x.size(1) == 1:
-                x = x.repeat(1, 2, 1)
-            x = self.temporal_delta_norm_before(x)
-            _, h_n = self.temporal_delta_rnn_before(x)
-            return h_n[-1]
-        raise ValueError(f"Unsupported temporal_merge_mode {self.temporal_merge_mode} for before merge.")
-
-    def _temporal_reduce_after(self, x: torch.Tensor, spatial_h: int, spatial_w: int) -> torch.Tensor:
-        if self.temporal_merge_mode == "avg":
-            return x.mean(dim=0)
-        if self.temporal_merge_mode == "delta":
-            x = x.permute(1, 0, 2)  # (n, t, hidden)
-            if x.size(1) == 1:
-                x = x.repeat(1, 2, 1)
-            x = self.temporal_delta_norm_after(x)
-            _, h_n = self.temporal_delta_rnn_after(x)
-            return h_n[-1]
-
-    def _process_sequence(self, image_feature: torch.Tensor, image_grid: Tuple[int, int, int]) -> torch.Tensor:
-        t, h, w = [int(x) for x in image_grid]
-        if t == 0:
-            return image_feature.new_zeros((0, self.linear_2.out_features))
-        m1, m2 = self.merge_kernel_size
-        spatial_h = max(1, h // m1)
-        spatial_w = max(1, w // m2)
-        x = rearrange(
-            image_feature,
-            "(t h p1 w p2) d -> t (h w) (p1 p2 d)",
-            t=t,
-            h=spatial_h,
-            p1=m1,
-            w=spatial_w,
-            p2=m2,
+        self.act = GELUActivation()
+        self.linear_2 = nn.Linear(
+            self.hidden_size, out_channels, bias=True
         )
-        if self.temporal_merge_position == "before":
-            reduced = self._temporal_reduce_before(x)
-            reduced = reduced.reshape(-1, self.hidden_size)
-            return self._project_tokens(reduced)
-        projected = self._project_tokens(x.reshape(-1, self.hidden_size))
-        projected = projected.view(t, spatial_h * spatial_w, -1)
-        reduced = self._temporal_reduce_after(projected, spatial_h, spatial_w)
-        return reduced.reshape(-1, projected.shape[-1])
 
-    def forward(self, image_features: torch.Tensor, image_grid_thw: List[Tuple[int, int, int]]) -> torch.Tensor:
-        image_grid_thw_tensor = torch.tensor(image_grid_thw, device=image_features.device)
-        image_features = self.split(image_features, image_grid_thw_tensor)
-        if isinstance(image_features, (list, tuple)):
-            return torch.cat(
-                [
-                    self._process_sequence(image_feature, image_grid)
-                    for image_feature, image_grid in zip(image_features, image_grid_thw)
-                ],
-                dim=0,
-            )
-        outputs = []
-        start = 0
+    def forward(self,
+                image_features: torch.Tensor,
+                image_grid_thw: List[Tuple[int, int, int]]) -> torch.Tensor:
         m1, m2 = self.merge_kernel_size
-        for grid in image_grid_thw:
-            t, h, w = [int(x) for x in grid]
-            spatial_h = max(1, h // m1)
-            spatial_w = max(1, w // m2)
-            num_tokens = t * spatial_h * spatial_w
-            sample = image_features[start : start + num_tokens]
-            start += num_tokens
-            outputs.append(self._process_sequence(sample, (t, h, w)))
-        return torch.cat(outputs, dim=0)
 
+        if isinstance(image_features, (list, tuple)):
+            processed_features = list()
+            for image_feature, image_grid in zip(image_features, image_grid_thw):
+                t, h, w = image_grid
+                from einops import rearrange
+                image_feature = rearrange(image_feature, "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2)
+                image_feature = self.pre_norm(image_feature)
+                hidden_states = self.linear_1(image_feature)
+                hidden_states = self.act(hidden_states)
+                hidden_states = self.linear_2(hidden_states)
+                processed_features.append(hidden_states)
+            processed_features = torch.concat(processed_features, dim=0)
+
+            return processed_features
+
+        assert image_features.dim() == 2
+        dim = image_features.shape[-1]
+        hidden_states = self.pre_norm(image_features.view(-1, self.hidden_size))
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+
+        return hidden_states
 
 
 
@@ -549,6 +454,7 @@ class KeyeForConditionalGeneration(Model):
     ):
         super().__init__(qwen_config)
         self.model = Qwen3Model(qwen_config)
+        self.use_multimodal_rope = qwen_config.use_multimodal_rope
         tokenizer_config = tokenizer_config or KeyeTokenizerConfig(
             vision_config=vision_config, llm_hidden_size=qwen_config.embed_dim
         )
@@ -880,7 +786,6 @@ class KeyeForConditionalGeneration(Model):
         pixel_values_videos: Optional[torch.FloatTensor] = None,
         image_grid_thw: Optional[torch.Tensor] = None,
         video_grid_thw: Optional[torch.LongTensor] = None,
-        rope_deltas: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         fast_pixel_values_videos: Optional[torch.FloatTensor] = None,
         fast_video_grid_thw: Optional[torch.LongTensor] = None,
@@ -904,8 +809,6 @@ class KeyeForConditionalGeneration(Model):
             image_embeds = self._project_visual_tokens(vq_out["z_q"])
 
             if vision_token_mask is None:
-                if self.image_token_id < 0:
-                    raise ValueError("需提供 vision_token_mask 或设置有效的 image_token_id。")
                 vision_token_mask = input_ids == self.image_token_id
 
             if vision_token_mask.sum() != image_embeds.size(0):
@@ -941,67 +844,39 @@ class KeyeForConditionalGeneration(Model):
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(inputs_embeds.device)
 
 
+        #maosiyang: for debug infer
+        if position_id is None:
+            position_id , _ = self.get_rope_index_slowfast(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                fast_video_grid_thw=fast_video_grid_thw,
+                attention_mask=attention_mask,
+            )
 
-        #maosiyang::debug here
-        if pixel_values_videos is not None:
-            video_beta = 1.0
-            vq_out_video = self.visual_tokenizer(pixel_values_videos, video_grid_thw)
-            video_embeds = self._project_visual_tokens(vq_out_video["z_q"])
+        if position_ids.ndim == 3 and position_ids.shape[0] == 3:
+            position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+        else:
+            raise ValueError("position id wrong!")
 
-            if vision_token_mask is None:
-                if self.image_token_id < 0:
-                    raise ValueError("需提供 vision_token_mask 或设置有效的 image_token_id。")
-                vision_token_mask = input_ids == self.image_token_id
+        if self.use_multimodal_rope:
+            if position_ids.dim()==2:
+                #from inside old qwen 3, using 3d rope
+                position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
-            if vision_token_mask.sum() != image_embeds.size(0):
-                raise ValueError(
-                    f"视觉token数量({image_embeds.size(0)})与mask中位置({vision_token_mask.sum().item()})不一致"
-                )
-            inputs_embeds = inputs_embeds.clone()
-            inputs_embeds[vision_token_mask] = image_embeds.to(inputs_embeds)
-
-            # 记录loss
-            codebook_loss, commitment_loss, vq_indices = vq_out['codebook_loss'], vq_out['commitment_loss'], vq_out['indices']
-            aux_losses["codebook_loss"] = codebook_loss
-            aux_losses["commitment_loss"] = commitment_loss
-            aux_losses["indices"] = vq_indices
-
-
-
-            n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
-            n_image_features = image_embeds.shape[0]
-
-
-
-             if n_image_tokens != n_image_features:
-                fast_image_embeds = torch.cat(fast_image_embeds,dim=0)
-                raise ValueError(
-                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, slow features {n_image_features - fast_image_embeds.shape[0]}, fast features {fast_image_embeds.shape[0]}"
-                )
-            mask = (input_ids == self.config.image_token_id)
-            mask_unsqueezed = mask.unsqueeze(-1)
-            mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
-            image_mask = mask_expanded.to(inputs_embeds.device)
-
-            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
-
-        # 计算 3D position_ids（对齐 origin 的 slowfast 逻辑）
-        # 当 position_ids 缺省时，使用 get_rope_index_slowfast 生成 3D 位置，并缓存 rope_deltas
-        position_ids_3d, rope_deltas = self.get_rope_index_slowfast(
-            input_ids=input_ids,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            fast_video_grid_thw=fast_video_grid_thw,
-            attention_mask=attention_mask,
-        )
-        self.rope_deltas = rope_deltas
+        else:
+            raise ValueError("position id wrong!")
 
         # Call through Qwen3Model.forward which delegates to TransformerDecoder
         logits = self.model(
-            tokens=None, mask=attention_mask, input_embeds=inputs_embeds, input_pos=position_ids_3d
+            tokens=None,
+            mask=attention_mask,
+            input_embeds=inputs_embeds,
+            input_pos=position_ids
         )
 
         # TransformerDecoder可能返回list/张量，这里取最后一个为logits
