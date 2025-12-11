@@ -21,7 +21,7 @@ VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 TEXT_ENCODER_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/text_encoder/
 TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/tokenizer/
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i_64gpu
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
