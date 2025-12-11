@@ -31,7 +31,7 @@ if str(REPO_ROOT) not in sys.path:
 # Muse imports
 from muse.models.keye_tokenizer_image import modeling_keye_origin as origin_mod
 from muse.models.keye_tokenizer.modeling import KeyeImageTokenizer as MuseKeyeImageTokenizer
-from muse.models.keye_tokenizer.image_processing_keye import KeyeVisionImageProcessor
+from muse.models.keye_tokenizer.image_processing_keye import SiglipImageProcessor
 from muse.config import KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
@@ -498,7 +498,7 @@ def prepare_tokenizer_inputs(ckpt_path: str, device: str, dtype: torch.dtype, im
     image = create_dummy_image(size=image_size)
     
     logger.info("⚙️ Loading ImageProcessor...")
-    image_processor = KeyeVisionImageProcessor.from_pretrained(ckpt_path)
+    image_processor = SiglipImageProcessor.from_pretrained(ckpt_path)
     
     logger.info("🔄 Processing Image...")
     processed = image_processor.preprocess(images=image, return_tensors="pt")
