@@ -332,7 +332,7 @@ def encode_text(
     
     # Add dimension for cross attention: [B, 1, L, D]
     text_embeds = text_embeds[:, None]
-    attention_mask = tokens.attention_mask[:, None, None]
+    attention_mask = attention_mask[:, None, None]
     
     return text_embeds, attention_mask
 
