@@ -534,11 +534,27 @@ def test_pipeline_alignment():
         logger.info("Running Muse Forward...")
         muse_out = muse_model(**inputs)
 
-    # 手动捕获 logits（TiedLinear 无法挂 hook）
-    if hasattr(origin_out, "logits"):
-        activations["origin"]["5.1 LLM Logits"] = origin_out.logits
-    if hasattr(muse_out, "logits"):
-        activations["muse"]["5.1 LLM Logits"] = muse_out.logits
+    # 手动捕获 logits（TiedLinear 无法挂 hook；Muse 返回 dict）
+    def _extract_logits(out_obj):
+        if hasattr(out_obj, "logits"):
+            return out_obj.logits
+        if isinstance(out_obj, dict):
+            return out_obj.get("logits")
+        if isinstance(out_obj, (tuple, list)) and out_obj:
+            first = out_obj[0]
+            if isinstance(first, dict):
+                return first.get("logits")
+            if isinstance(first, torch.Tensor):
+                return first
+        return None
+
+    origin_logits = _extract_logits(origin_out)
+    muse_logits = _extract_logits(muse_out)
+
+    if origin_logits is not None:
+        activations["origin"]["5.1 LLM Logits"] = origin_logits
+    if muse_logits is not None:
+        activations["muse"]["5.1 LLM Logits"] = muse_logits
 
     # --- 收集 RoPE 中间变量和输出 ---
     # Origin 模型: 从全局变量读取
