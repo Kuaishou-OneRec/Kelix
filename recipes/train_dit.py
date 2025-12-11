@@ -563,7 +563,7 @@ def train():
     text_encoder = None
 
     vae = load_vae(
-        vae_pretrained=args.vae_pretrained,
+        vae_dir=args.vae_dir,
         device=torch.cuda.current_device(),
         dtype=get_torch_dtype(args.model_dtype)
     )
