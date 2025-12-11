@@ -31,7 +31,7 @@ def test_model_training():
         "attention_function": "eager"
     }
     
-    # 创建LM Head用于训练
+    # 创建LM Head用于训练，注意维度顺序：从d_model到vocab_size
     lm_head = nn.Linear(config["d_model"], config["vocab_size"])
     
     # 2. 初始化模型，将lm_head作为参数传入
