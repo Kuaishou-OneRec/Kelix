@@ -338,8 +338,27 @@ class TwoD_RotaryEmbedding(nn.Module):
         rope_emb = rope_emb_max_grid[pids].flatten(1)
         rope_emb = rope_emb.repeat(1, 2)
         cos, sin = (rope_emb.cos(), rope_emb.sin())
+        
+        # Store rope_emb, cos, sin before chunk for debugging
+        if not hasattr(self, '_debug_rope_intermediates'):
+            self._debug_rope_intermediates = {
+                "rope_emb": None,
+                "cos_before_chunk": None,
+                "sin_before_chunk": None,
+                "cos_after_chunk": None,
+                "sin_after_chunk": None,
+            }
+        self._debug_rope_intermediates["rope_emb"] = rope_emb.detach()
+        self._debug_rope_intermediates["cos_before_chunk"] = cos.detach()
+        self._debug_rope_intermediates["sin_before_chunk"] = sin.detach()
+        
         cos = cos.chunk(2, dim=-1)[0].contiguous()
         sin = sin.chunk(2, dim=-1)[0].contiguous()
+        
+        # Store cos/sin after chunk
+        self._debug_rope_intermediates["cos_after_chunk"] = cos.detach()
+        self._debug_rope_intermediates["sin_after_chunk"] = sin.detach()
+        
         result = flash_apply_rotary_emb(
             x.float(), cos.float(), sin.float()
         ).to(dtype=x.dtype)

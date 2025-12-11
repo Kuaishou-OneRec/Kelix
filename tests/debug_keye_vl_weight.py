@@ -105,7 +105,7 @@ def _load_checkpoint_robust(path_str: str, device="cpu") -> Dict[str, torch.Tens
          return state_dict
     raise ValueError("No checkpoint found.")
 
-def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, atol=1e-3):
+def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, atol=1e-3, print_values=False):
     def unwrap(x):
         if hasattr(x, 'last_hidden_state'): return x.last_hidden_state
         if isinstance(x, (tuple, list)): return x[0]
@@ -115,15 +115,19 @@ def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, ato
             return list(x.values())[0]
         return x
 
-    t1 = unwrap(tensor_origin)
-    t2 = unwrap(tensor_muse)
+    t1_raw = unwrap(tensor_origin)
+    t2_raw = unwrap(tensor_muse)
 
-    if not isinstance(t1, torch.Tensor) or not isinstance(t2, torch.Tensor):
+    if not isinstance(t1_raw, torch.Tensor) or not isinstance(t2_raw, torch.Tensor):
         logger.warning(f"⚠️  [{name}] Skipped: Not tensors")
         return
 
-    t1 = t1.detach().float().cpu()
-    t2 = t2.detach().float().cpu()
+    # 保存原始 dtype 用于打印
+    t1_dtype = t1_raw.dtype
+    t2_dtype = t2_raw.dtype
+    
+    t1 = t1_raw.detach().float().cpu()
+    t2 = t2_raw.detach().float().cpu()
     
     if t1.shape != t2.shape:
         if t1.numel() == t2.numel(): t2 = t2.view(t1.shape)
@@ -139,6 +143,17 @@ def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, ato
     mean_diff = diff.mean().item()
     match_status = "✅ MATCH" if max_diff < atol else f"❌ MISMATCH"
     logger.info(f"{name:<45} | {match_status:<12} | Max: {max_diff:.2e} | Mean: {mean_diff:.2e}")
+    
+    if print_values:
+        # 打印 dtype 和 shape
+        logger.info(f"   -> Origin dtype: {t1_dtype}, shape: {t1_raw.shape}")
+        logger.info(f"   -> Muse   dtype: {t2_dtype}, shape: {t2_raw.shape}")
+        # 打印前 10 个值
+        t1_first10 = t1.flatten()[:10].numpy()
+        t2_first10 = t2.flatten()[:10].numpy()
+        logger.info(f"   -> Origin first 10: [{', '.join([f'{v:.6f}' for v in t1_first10])}]")
+        logger.info(f"   -> Muse   first 10: [{', '.join([f'{v:.6f}' for v in t2_first10])}]")
+    
     if max_diff >= atol:
         max_idx = torch.argmax(diff)
         logger.info(f"   -> Max Diff Index: {max_idx.item()}")
@@ -408,17 +423,40 @@ def test_pipeline_alignment():
         logger.info("Running Muse Forward...")
         muse_out = muse_model(**inputs)
 
-    # --- 收集 RoPE 后的 q、k ---
+    # --- 收集 RoPE 中间变量和输出 ---
     # Origin 模型: 从全局变量读取
+    if ORIGIN_ROPE_DEBUG["rope_emb"] is not None:
+        activations["origin"]["0.20 rope_emb"] = ORIGIN_ROPE_DEBUG["rope_emb"]
+    if ORIGIN_ROPE_DEBUG["cos_before_chunk"] is not None:
+        activations["origin"]["0.21 cos_before_chunk"] = ORIGIN_ROPE_DEBUG["cos_before_chunk"]
+    if ORIGIN_ROPE_DEBUG["sin_before_chunk"] is not None:
+        activations["origin"]["0.21 sin_before_chunk"] = ORIGIN_ROPE_DEBUG["sin_before_chunk"]
+    if ORIGIN_ROPE_DEBUG["cos_after_chunk"] is not None:
+        activations["origin"]["0.22 cos_after_chunk"] = ORIGIN_ROPE_DEBUG["cos_after_chunk"]
+    if ORIGIN_ROPE_DEBUG["sin_after_chunk"] is not None:
+        activations["origin"]["0.22 sin_after_chunk"] = ORIGIN_ROPE_DEBUG["sin_after_chunk"]
     if ORIGIN_ROPE_DEBUG["q_after_rope"] is not None:
         activations["origin"]["0.25 Q After RoPE"] = ORIGIN_ROPE_DEBUG["q_after_rope"]
     if ORIGIN_ROPE_DEBUG["k_after_rope"] is not None:
         activations["origin"]["0.25 K After RoPE"] = ORIGIN_ROPE_DEBUG["k_after_rope"]
     
-    # Muse 模型: 从 rope 模块的 _debug_rope_outputs 列表读取
-    # 在 Layer0 的 attention 中，q 和 k 分别调用 RoPE，所以列表中前两个元素分别是 q 和 k
+    # Muse 模型: 从 rope 模块读取中间变量
     if vit_backbone_muse and hasattr(vit_backbone_muse, "encoder"):
         rope_module = vit_backbone_muse.encoder.rope
+        # 读取 rope_emb, cos, sin 中间变量
+        if hasattr(rope_module, '_debug_rope_intermediates'):
+            intermediates = rope_module._debug_rope_intermediates
+            if intermediates.get("rope_emb") is not None:
+                activations["muse"]["0.20 rope_emb"] = intermediates["rope_emb"]
+            if intermediates.get("cos_before_chunk") is not None:
+                activations["muse"]["0.21 cos_before_chunk"] = intermediates["cos_before_chunk"]
+            if intermediates.get("sin_before_chunk") is not None:
+                activations["muse"]["0.21 sin_before_chunk"] = intermediates["sin_before_chunk"]
+            if intermediates.get("cos_after_chunk") is not None:
+                activations["muse"]["0.22 cos_after_chunk"] = intermediates["cos_after_chunk"]
+            if intermediates.get("sin_after_chunk") is not None:
+                activations["muse"]["0.22 sin_after_chunk"] = intermediates["sin_after_chunk"]
+        # 读取 RoPE 后的 q、k
         if hasattr(rope_module, '_debug_rope_outputs') and len(rope_module._debug_rope_outputs) >= 2:
             # 第一个是 q，第二个是 k (基于 attention.py 中的调用顺序)
             activations["muse"]["0.25 Q After RoPE"] = rope_module._debug_rope_outputs[0]
@@ -431,6 +469,11 @@ def test_pipeline_alignment():
         "0.0 ViT Embeddings Out",
         "0.1 LN1 Output",
         "0.2 Q_Proj Out",
+        "0.20 rope_emb",
+        "0.21 cos_before_chunk",
+        "0.21 sin_before_chunk",
+        "0.22 cos_after_chunk",
+        "0.22 sin_after_chunk",
         "0.25 Q After RoPE",
         "0.25 K After RoPE",
         "0.3 Attn Raw (Pre-Proj)",
@@ -443,9 +486,21 @@ def test_pipeline_alignment():
         "4.0 LLM Layer 0 Input"
     ]
     
+    # 需要详细打印值的检查点 (打印 dtype 和前 10 个值)
+    rope_detail_checkpoints = {
+        "0.20 rope_emb",
+        "0.21 cos_before_chunk",
+        "0.21 sin_before_chunk", 
+        "0.22 cos_after_chunk",
+        "0.22 sin_after_chunk",
+        "0.25 Q After RoPE",
+        "0.25 K After RoPE",
+    }
+    
     for k in checkpoints:
         if k in activations["origin"] and k in activations["muse"]:
-            compare_tensors_verbose(k, activations["origin"][k], activations["muse"][k], atol=2e-2)
+            print_values = k in rope_detail_checkpoints
+            compare_tensors_verbose(k, activations["origin"][k], activations["muse"][k], atol=2e-2, print_values=print_values)
         else:
             status_o = "Found" if k in activations["origin"] else "MISSING"
             status_m = "Found" if k in activations["muse"] else "MISSING"
