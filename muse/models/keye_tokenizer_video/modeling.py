@@ -975,7 +975,7 @@ class KeyeForConditionalGeneration(Model):
 
 
 
-             if n_image_tokens != n_image_features:
+            if n_image_tokens != n_image_features:
                 fast_image_embeds = torch.cat(fast_image_embeds,dim=0)
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, slow features {n_image_features - fast_image_embeds.shape[0]}, fast features {fast_image_embeds.shape[0]}"

@@ -2,7 +2,7 @@
 Keye tokenizer video model implementation.
 """
 
-from muse.models.keye_tokenizer_video.modeling import (
+from muse.models.keye_tokenizer_image.modeling import (
     KeyeImageTokenizer,
     KeyeForConditionalGeneration,
 )
