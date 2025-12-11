@@ -309,8 +309,10 @@ class Text2ImageDataset(DistributedDataset):
             return None
         
         images = json.loads(sample.get("images", '{}'))
+        print(images)
         if image in images:
             image = images[image]
+            print("xxxxx", image)
 
         return {
             "image": image,
@@ -333,6 +335,7 @@ class Text2ImageDataset(DistributedDataset):
         if image_data is None:
             return None
         
+        print("jjjjjj", image_data)
         image = load_image(image_data)
         if image is None:
             return None
