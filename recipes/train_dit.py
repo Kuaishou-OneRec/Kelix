@@ -280,6 +280,8 @@ def vae_encode(vae, images: torch.Tensor, sample_posterior: bool = True) -> torc
     Reference: Sana/train_scripts/train.py Lines 100-110
     """
     with torch.no_grad():
+        # Cast images to VAE dtype to avoid dtype mismatch
+        images = images.to(dtype=vae.dtype)
         posterior = vae.encode(images)
         if hasattr(posterior, 'latent_dist'):
             posterior = posterior.latent_dist
