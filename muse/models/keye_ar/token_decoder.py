@@ -324,33 +324,59 @@ class TokenDecoder(Model):
                 layer_parts = key.split(".")
                 layer_idx = layer_parts[1]
                 
-                # 4.1 处理层归一化
+                # 4.1 处理层归一化 - 修复：使用weight/bias而不是scale
                 if ".norm1.weight" in key:
-                    new_key = f"transformer.layers.{layer_idx}.sa_norm.scale"
+                    new_key = f"transformer.layers.{layer_idx}.sa_norm.weight"
+                elif ".norm1.bias" in key:
+                    new_key = f"transformer.layers.{layer_idx}.sa_norm.bias"
                 elif ".norm2.weight" in key:
-                    new_key = f"transformer.layers.{layer_idx}.mlp_norm.scale"
+                    new_key = f"transformer.layers.{layer_idx}.mlp_norm.weight"
+                elif ".norm2.bias" in key:
+                    new_key = f"transformer.layers.{layer_idx}.mlp_norm.bias"
                 
-                # 4.2 处理注意力层
-                elif ".self_attn.q_proj.weight" in key:
-                    new_key = f"transformer.layers.{layer_idx}.attn.q_proj.weight"
-                elif ".self_attn.k_proj.weight" in key:
-                    new_key = f"transformer.layers.{layer_idx}.attn.k_proj.weight"
-                elif ".self_attn.v_proj.weight" in key:
-                    new_key = f"transformer.layers.{layer_idx}.attn.v_proj.weight"
-                elif ".self_attn.out_proj.weight" in key:
+                # 4.2 处理注意力层 - 修复：拆分qkv_proj为q_proj/k_proj/v_proj
+                elif ".qkv_proj.weight" in key:
+                    # 拆分qkv_proj为q_proj, k_proj, v_proj
+                    d_model = value.shape[0]  # 获取d_model维度
+                    q_weight, k_weight, v_weight = torch.chunk(value, 3, dim=0)
+                    converted_state_dict[f"transformer.layers.{layer_idx}.attn.q_proj.weight"] = q_weight
+                    converted_state_dict[f"transformer.layers.{layer_idx}.attn.k_proj.weight"] = k_weight
+                    converted_state_dict[f"transformer.layers.{layer_idx}.attn.v_proj.weight"] = v_weight
+                    converted_count += 1
+                    continue
+                elif ".qkv_proj.bias" in key:
+                    # 拆分qkv_proj.bias为q_proj.bias, k_proj.bias, v_proj.bias
+                    d_model = value.shape[0]  # 获取d_model维度
+                    q_bias, k_bias, v_bias = torch.chunk(value, 3, dim=0)
+                    converted_state_dict[f"transformer.layers.{layer_idx}.attn.q_proj.bias"] = q_bias
+                    converted_state_dict[f"transformer.layers.{layer_idx}.attn.k_proj.bias"] = k_bias
+                    converted_state_dict[f"transformer.layers.{layer_idx}.attn.v_proj.bias"] = v_bias
+                    converted_count += 1
+                    continue
+                elif ".out_proj.weight" in key:
                     new_key = f"transformer.layers.{layer_idx}.attn.output_proj.weight"
+                elif ".out_proj.bias" in key:
+                    new_key = f"transformer.layers.{layer_idx}.attn.output_proj.bias"
                 
-                # 4.3 处理MLP层
-                elif ".mlp.fc1.weight" in key:
+                # 4.3 处理MLP层 - 修复：映射gate_proj/up_proj/down_proj到w1/w2/w3
+                elif ".mlp.gate_proj.weight" in key:
                     new_key = f"transformer.layers.{layer_idx}.mlp.w1.weight"
-                elif ".mlp.fc2.weight" in key:
+                elif ".mlp.up_proj.weight" in key:
+                    new_key = f"transformer.layers.{layer_idx}.mlp.w3.weight"
+                elif ".mlp.down_proj.weight" in key:
                     new_key = f"transformer.layers.{layer_idx}.mlp.w2.weight"
             
-            # 5. 处理最终归一化
+            # 5. 处理最终归一化 - 修复：使用weight/bias而不是scale
             elif key == "final_norm.weight":
-                new_key = "transformer.norm.scale"
+                new_key = "transformer.norm.weight"
+            elif key == "final_norm.bias":
+                new_key = "transformer.norm.bias"
             
-            # 6. 处理位置编码（原始模型有可训练的位置编码，新模型使用RoPE，不需要这些权重）
+            # 6. 处理transformer输出层
+            elif key == "output.weight":
+                new_key = "transformer.output.weight"
+            
+            # 7. 处理位置编码（原始模型有可训练的位置编码，新模型使用RoPE，不需要这些权重）
             elif key == "position_embedding.weight":
                 skipped_keys.append(key)
                 continue
