@@ -333,7 +333,7 @@ class Text2ImageDataset(DistributedDataset):
         if image_data is None:
             return None
         
-        image = self._load_image(image_data)
+        image = load_image(image_data)
         if image is None:
             return None
         
