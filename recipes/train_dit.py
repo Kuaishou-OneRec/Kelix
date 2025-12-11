@@ -402,9 +402,9 @@ def train():
         print_rank_0(f"Training Arguments:\n{args_str}")
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
         with open(os.path.join(args.output_dir,
-            f"args-{args.commit_id}-{timestamp}.json"), 'w',
-            encoding="utf-8") as f:
-        f.write(args_str + "\n")
+                f"args-{args.commit_id}-{timestamp}.json"), 'w',
+                encoding="utf-8") as f:
+            f.write(args_str + "\n")
 
     # TODO: support wandb
     tb_writer = None
