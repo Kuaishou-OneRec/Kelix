@@ -696,7 +696,9 @@ def train():
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
                     batch[k] = v.to(
-                        device=torch.cuda.current_device())
+                        device=torch.cuda.current_device(),
+                        dtype=get_torch_dtype(args.model_dtype)
+                    )
 
             scheduler.step()
 
