@@ -707,6 +707,7 @@ def train():
                 text_encoder,
                 batch["input_ids"],
                 batch.get("attention_mask"),
+                args.max_text_length,
                 torch.cuda.current_device(),
             )
 
