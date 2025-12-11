@@ -40,14 +40,12 @@ from muse.data.datasets.base import DistributedDataset, load_image
 logger = logging.getLogger(__name__)
 
 
-class ImageTextDataset(DistributedDataset):
-    """Dataset for image-text pairs with online VAE/text encoding.
+class TextToImageDataset(DistributedDataset):
+    """Dataset for text-to-image pairs.
     
     This dataset loads image-text pairs and processes them for diffusion training.
     It supports:
     - Online image loading and transformation
-    - Optional VAE encoding
-    - Optional text encoding
     - Multi-resolution support
     
     Args:
@@ -68,29 +66,14 @@ class ImageTextDataset(DistributedDataset):
         image_size: Union[int, Tuple[int, int]] = 1024,
         vae: Optional[nn.Module] = None,
         tokenizer: Optional[Any] = None,
-        text_encoder: Optional[nn.Module] = None,
         max_text_length: int = 300,
         center_crop: bool = True,
-        random_flip: bool = True,
-        image_column: str = "image",
-        text_column: str = "text",
-        latent_column: Optional[str] = None,
-        text_embed_column: Optional[str] = None,
-        sample_posterior: bool = True,
         **kwargs,
     ):
         self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
-        self.vae = vae
         self.tokenizer = tokenizer
-        self.text_encoder = text_encoder
         self.max_text_length = max_text_length
         self.center_crop = center_crop
-        self.random_flip = random_flip
-        self.image_column = image_column
-        self.text_column = text_column
-        self.latent_column = latent_column
-        self.text_embed_column = text_embed_column
-        self.sample_posterior = sample_posterior
         
         # Build transforms
         self.transform = self._build_transform()
@@ -102,12 +85,17 @@ class ImageTextDataset(DistributedDataset):
         transform_list = []
         
         if self.center_crop:
-            transform_list.append(T.CenterCrop(min(self.image_size)))
+            # 先按短边 Resize（保持宽高比），再 CenterCrop
+            target_size = min(self.image_size)
+            transform_list.extend([
+                T.Resize(target_size, interpolation=T.InterpolationMode.BICUBIC),  # 短边缩放到 target_size
+                T.CenterCrop(target_size),  # 裁剪成正方形
+            ])
         
         transform_list.extend([
             T.Resize(self.image_size, interpolation=T.InterpolationMode.BICUBIC),
             T.ToTensor(),
-            T.Normalize([0.5], [0.5]),  # Scale to [-1, 1]
+            T.Normalize([0.5], [0.5]),
         ])
         
         return T.Compose(transform_list)
@@ -138,82 +126,6 @@ class ImageTextDataset(DistributedDataset):
             logger.warning(f"Failed to load image: {e}")
             return None
     
-    def _encode_image(self, image: torch.Tensor) -> torch.Tensor:
-        """Encode image to latent space using VAE.
-        
-        Args:
-            image: Image tensor [C, H, W] or [B, C, H, W]
-        
-        Returns:
-            Latent tensor
-        """
-        if self.vae is None:
-            return image
-        
-        if image.dim() == 3:
-            image = image.unsqueeze(0)
-        
-        device = next(self.vae.parameters()).device
-        dtype = next(self.vae.parameters()).dtype
-        image = image.to(device=device, dtype=dtype)
-        
-        with torch.no_grad():
-            posterior = self.vae.encode(image)
-            if hasattr(posterior, 'latent_dist'):
-                posterior = posterior.latent_dist
-            if self.sample_posterior:
-                z = posterior.sample()
-            else:
-                z = posterior.mode()
-            z = z * self.vae.config.scaling_factor
-        
-        return z.squeeze(0).cpu()
-    
-    def _encode_text(self, text: str) -> Dict[str, torch.Tensor]:
-        """Encode text to embeddings using text encoder.
-        
-        Args:
-            text: Input text string
-        
-        Returns:
-            Dict with 'text_embeds' and 'attention_mask'
-        """
-        if self.tokenizer is None or self.text_encoder is None:
-            return {"text": text}
-        
-        device = next(self.text_encoder.parameters()).device
-        
-        # Tokenize
-        tokens = self.tokenizer(
-            text,
-            max_length=self.max_text_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
-        )
-        
-        input_ids = tokens.input_ids.to(device)
-        attention_mask = tokens.attention_mask.to(device)
-        
-        # Encode
-        with torch.no_grad():
-            text_outputs = self.text_encoder(
-                input_ids,
-                attention_mask=attention_mask,
-            )
-            # Get hidden states
-            if hasattr(text_outputs, 'last_hidden_state'):
-                text_embeds = text_outputs.last_hidden_state
-            elif isinstance(text_outputs, tuple):
-                text_embeds = text_outputs[0]
-            else:
-                text_embeds = text_outputs
-        
-        return {
-            "text_embeds": text_embeds.squeeze(0).cpu(),
-            "attention_mask": attention_mask.squeeze(0).cpu(),
-        }
-    
     def process(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
         """Process a single sample.
         
@@ -224,71 +136,111 @@ class ImageTextDataset(DistributedDataset):
             Processed sample dict or None if processing fails
         """
         result = {}
+
+        # Load and process image
+        image_data = sample["image"]
+        if image_data is None:
+            return None
         
-        # Handle pre-encoded latents
-        if self.latent_column and self.latent_column in sample:
-            latent = sample[self.latent_column]
-            if isinstance(latent, (np.ndarray, list)):
-                latent = torch.tensor(latent)
-            result["latents"] = latent
-        else:
-            # Load and process image
-            image_data = sample.get(self.image_column)
-            if image_data is None:
-                return None
-            
-            image = self._load_image(image_data)
-            if image is None:
-                return None
-            
-            # Convert to RGB
-            if image.mode != "RGB":
-                image = image.convert("RGB")
-            
-            # Apply random flip
-            if self.random_flip and random.random() < 0.5:
-                image = image.transpose(Image.FLIP_LEFT_RIGHT)
-            
-            # Apply transforms
-            image = self.transform(image)
-            
-            # Encode to latent space
-            if self.vae is not None:
-                latent = self._encode_image(image)
-                result["latents"] = latent
-            else:
-                result["image"] = image
+        image = self._load_image(image_data)
+        if image is None:
+            return None
         
-        # Handle pre-encoded text embeddings
-        if self.text_embed_column and self.text_embed_column in sample:
-            text_embed = sample[self.text_embed_column]
-            if isinstance(text_embed, (np.ndarray, list)):
-                text_embed = torch.tensor(text_embed)
-            result["text_embeds"] = text_embed
-            
-            # Get mask if available
-            mask_column = self.text_embed_column.replace("embed", "mask")
-            if mask_column in sample:
-                mask = sample[mask_column]
-                if isinstance(mask, (np.ndarray, list)):
-                    mask = torch.tensor(mask)
-                result["attention_mask"] = mask
-        else:
-            # Load and encode text
-            text = sample.get(self.text_column, "")
-            if isinstance(text, (list, tuple)):
-                text = text[0] if text else ""
-            text = str(text)
-            
-            text_result = self._encode_text(text)
-            result.update(text_result)
+        # Convert to RGB
+        if image.mode != "RGB":
+            image = image.convert("RGB")
         
-        # Add metadata
-        result["__file__"] = sample.get("__file__", "")
-        result["__index__"] = sample.get("__index__", -1)
+        # Apply transforms
+        image = self.transform(image)
+        result["image"] = image
+
+        # Tokenize text
+        text = sample["text"]
+
+
+        result["text"] = text
+        result["input_ids"] = self.tokenizer.encode(text)
+        result["attention_mask"] = [1] * len(result["input_ids"])
         
         return result
     
+      def get_content(self,
+                  sample: Dict[str, Any],
+                  key: str) -> List[Dict[str, Any]]:
+        """Get content from sample"""
+        content = sample.get(key, "[]")
+        try:
+            content = json.loads(content)
+        except (json.JSONDecodeError, TypeError) as e:
+            return []
+            return content
+
+    def get_content(self,
+                    sample: Dict[str, Any],
+                    key: str) -> List[Dict[str, Any]]:
+        """Get content from sample"""
+        content = sample.get(key, "[]")
+        try:
+            content = json.loads(content)
+        except (json.JSONDecodeError, TypeError) as e:
+            return []
+            return content
+
+    def extract_image_text(sample: Dict[str, Any]) -> Tuple[Optional[Image.Image], Optional[str]]:
+        image = sample.get("image", None)
+        text = sample.get("text", None)
+        if image and text:
+            return {
+                "image": image,
+                "text": text
+            }
+        # 需要保证messages和segments都是单轮，否则逻辑会有问题
+        messages = self.get_content(sample, "messages")
+        segments = self.get_content(sample, "segments")
+        if messages:
+            for turn in messages:
+                if turn["role"] == "user":
+                    content = turn["content"]
+                    if isinstance(content, str):
+                        text = content
+                    elif isinstance(content, list):
+                        for block in content:
+                            if block["type"] == "text":
+                                text = block["text"]
+                                break
+                elif turn["role"] == "assistant":
+                    content = turn["content"]
+                    for block in content:
+                        if block["type"] == "image":
+                            image = block["image"]
+                            break
+                        # TODO: 兼容有问题的数据格式，后续得下掉
+                        if block["type"] == "image_gen":
+                            image = block["image_gen"]
+                            break
+                else:
+                    continue
+
+        if segments:
+            for segment in segments:
+                if segment["type"] == "image":
+                    image = segment["image"]
+                    break
+                elif segment["type"] == "text":
+                    text = segment["text"]
+                    break
+                else:
+                    continue
+        return {
+            "image": image,
+            "text": text
+        }
+
+
+    def process(self, sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+        pair = self.extract_image_text(sample)
+        return self.process(pair)
+
     def collate_fn(
         self,
         batch: List[Dict[str, torch.Tensor]],
@@ -304,57 +256,8 @@ class ImageTextDataset(DistributedDataset):
         result = {}
         
         # Collate tensors
-        for key in ["latents", "image", "text_embeds", "attention_mask"]:
+        for key in ["image", "input_ids", "attention_mask"]:
             if key in batch[0]:
                 result[key] = torch.stack([s[key] for s in batch])
         
-        # Collate text strings
-        if "text" in batch[0]:
-            result["text"] = [s["text"] for s in batch]
-        
         return result
-
-
-class ImageFolderDataset(torch.utils.data.Dataset):
-    """Simple dataset for loading images from a folder.
-    
-    This is useful for inference/evaluation where you just want to
-    load images without text pairs.
-    """
-    
-    def __init__(
-        self,
-        folder: str,
-        image_size: Union[int, Tuple[int, int]] = 1024,
-        extensions: Tuple[str, ...] = (".jpg", ".jpeg", ".png", ".webp"),
-    ):
-        self.folder = folder
-        self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
-        
-        # Find all images
-        self.image_paths = []
-        for root, _, files in os.walk(folder):
-            for f in files:
-                if f.lower().endswith(extensions):
-                    self.image_paths.append(os.path.join(root, f))
-        self.image_paths.sort()
-        
-        # Build transform
-        self.transform = T.Compose([
-            T.Resize(self.image_size, interpolation=T.InterpolationMode.BICUBIC),
-            T.CenterCrop(self.image_size),
-            T.ToTensor(),
-            T.Normalize([0.5], [0.5]),
-        ])
-    
-    def __len__(self) -> int:
-        return len(self.image_paths)
-    
-    def __getitem__(self, idx: int) -> Dict[str, Any]:
-        path = self.image_paths[idx]
-        image = Image.open(path).convert("RGB")
-        image = self.transform(image)
-        return {
-            "image": image,
-            "path": path,
-        }

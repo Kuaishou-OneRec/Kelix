@@ -178,6 +178,7 @@ class TextDataset(DistributedDataset):
     else:
       return None
 
+
   def get_sample_length(self, sample: Dict[str, torch.Tensor]) -> int:
     """Get sample length"""
     if "input_ids" not in sample:

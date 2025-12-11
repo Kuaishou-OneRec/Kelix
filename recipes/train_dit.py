@@ -104,21 +104,22 @@ def get_argument_parser():
     parser.add_argument("--model-config", type=str, required=True,
                         help="The config file path of the model to train")
 
-    parser.add_argument("--sana-checkpoint", type=str, default=None,
-                        help="Path to Sana checkpoint to resume training from")
-    
-    parser.add_argument("--null-embed-path", type=str, default=None,
-                        help="Path to null embedding file for CFG")
+    parser.add_argument("--model-dir", type=str, default=None,
+                      help="The directory of the pretrained model (required for continue training).")
 
     ############ VAE args ############
-    parser.add_argument("--vae-pretrained", type=str,
+    parser.add_argument("--vae-dir", type=str,
                         default="mit-han-lab/dc-ae-f32c32-sana-1.1-diffusers",
                         help="Pretrained VAE model path")
 
     ############ Text Encoder args ############
-    parser.add_argument("--text-encoder", type=str,
+    parser.add_argument("--text-encoder-dir", type=str,
                         default="google/gemma-2-2b-it",
                         help="Text encoder model name")
+
+    parser.add_argument("--tokenizer-dir", type=str,
+                        default="google/gemma-2-2b-it",
+                        help="Tokenizer model name")
     
     parser.add_argument("--max-text-length", type=int, default=300,
                         help="Maximum text sequence length")
@@ -176,6 +177,18 @@ def get_argument_parser():
 
     parser.add_argument("--reshard-after-forward", action="store_true",
                         help="Reshard after forward (Zero3)")
+
+    parser.add_argument("--prefetch-params-in-forward", action="store_true",
+                        help="Prefetch parameters in forward pass.")
+
+    parser.add_argument("--fp32-weight", action="store_true",
+                        help="Use fp32 for model weight updating")
+
+    parser.add_argument("--fp32-reduce", action="store_true",
+                        help="Use fp32 for model gradient reduction")
+
+    parser.add_argument("--allow-random-init-params", type=str, default='',
+                        help="Parameter names to allow random initialization")
     
     parser.add_argument("--compile", action="store_true",
                         help="Compile model with torch.compile")
@@ -230,25 +243,22 @@ def get_argument_parser():
     ############ Debug Args ############
     parser.add_argument("--enable-profile", action="store_true",
                         help="Enable torch profiler")
-    
-    parser.add_argument("--skip-vae-encode", action="store_true",
-                        help="Skip VAE encoding (use pre-encoded latents)")
-    
-    parser.add_argument("--skip-text-encode", action="store_true",
-                        help="Skip text encoding (use pre-encoded embeddings)")
+
+    parser.add_argument("--overfit-batches", type=int, default=None,
+                        help="Number of batches to cache for overfitting (debug mode)")
 
     return parser
 
 
-def load_vae(vae_pretrained: str, device: torch.device, dtype: torch.dtype):
+def load_vae(vae_dir: str, device: torch.device, dtype: torch.dtype):
     """Load VAE model from diffusers.
     
     Reference: Sana/diffusion/model/builder.py
     """
     from diffusers import AutoencoderDC
     
-    print_rank_0(f"Loading VAE from {vae_pretrained}")
-    vae = AutoencoderDC.from_pretrained(vae_pretrained, torch_dtype=dtype)
+    print_rank_0(f"Loading VAE from {vae_dir}")
+    vae = AutoencoderDC.from_pretrained(vae_dir, torch_dtype=dtype)
     vae = vae.to(device).eval()
     vae.requires_grad_(False)
     
@@ -271,27 +281,23 @@ def vae_encode(vae, images: torch.Tensor, sample_posterior: bool = True) -> torc
         z = z * vae.config.scaling_factor
     return z
 
-
-def load_text_encoder(text_encoder_name: str, device: torch.device, dtype: torch.dtype):
-    """Load text encoder and tokenizer.
+def load_text_encoder(text_encoder_dir: str, device: torch.device, dtype: torch.dtype):
+    """Load text encoder.
     
     Reference: Sana/diffusion/model/builder.py Lines 53-89
     """
-    from transformers import AutoTokenizer, AutoModelForCausalLM
-    
-    print_rank_0(f"Loading text encoder from {text_encoder_name}")
-    tokenizer = AutoTokenizer.from_pretrained(text_encoder_name)
+    from transformers import AutoModelForCausalLM
     
     # Load the full model and get the decoder
-    model = AutoModelForCausalLM.from_pretrained(
-        text_encoder_name,
+    text_encoder = AutoModelForCausalLM.from_pretrained(
+        text_encoder_dir,
+        trust_remote_code=True,
         torch_dtype=dtype,
     )
-    text_encoder = model.get_decoder() if hasattr(model, 'get_decoder') else model
     text_encoder = text_encoder.to(device).eval()
     text_encoder.requires_grad_(False)
     
-    return tokenizer, text_encoder
+    return text_encoder
 
 
 def encode_text(
@@ -332,47 +338,6 @@ def encode_text(
     
     return text_embeds, attention_mask
 
-
-def load_sana_checkpoint(checkpoint_path: str, model, null_embed_path: Optional[str] = None):
-    """Load Sana checkpoint and convert to muse format.
-    
-    Reference: Sana/diffusion/utils/checkpoint.py
-    """
-    print_rank_0(f"Loading Sana checkpoint from {checkpoint_path}")
-    
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
-    
-    # Get state dict from checkpoint
-    if "state_dict" in checkpoint:
-        state_dict = checkpoint["state_dict"]
-    elif "model" in checkpoint:
-        state_dict = checkpoint["model"]
-    else:
-        state_dict = checkpoint
-    
-    # Remove 'module.' prefix if present
-    new_state_dict = {}
-    for k, v in state_dict.items():
-        if k.startswith("module."):
-            k = k[7:]
-        new_state_dict[k] = v
-    
-    # Convert using model's converter
-    converted_state_dict = model.convert_sana_state_dict(
-        new_state_dict,
-        null_embed_path=null_embed_path,
-    )
-    
-    # Load state dict
-    missing, unexpected = model.load_state_dict(converted_state_dict, strict=False)
-    if missing:
-        print_rank_0(f"Missing keys: {missing}")
-    if unexpected:
-        print_rank_0(f"Unexpected keys: {unexpected}")
-    
-    return checkpoint.get("global_step", 0)
-
-
 def _init_profiler(output_dir) -> None:
     """Initialize torch profiler."""
     if not os.path.exists(output_dir):
@@ -405,66 +370,112 @@ def train():
     arg_parser = get_argument_parser()
     args = arg_parser.parse_args()
 
-    # torch init
-    rank = int(os.environ.get("RANK", os.environ.get("OMPI_COMM_WORLD_RANK", 0)))
-    world_size = int(os.environ.get("WORLD_SIZE", os.environ.get("OMPI_COMM_WORLD_SIZE", 1)))
-    local_rank = int(os.environ.get("LOCAL_RANK", os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0)))
+    assert all([args.commit_id, args.seed, args.comment]), \
+        "Git commit, seed, and comment is required for reproducibility"
 
-    print_rank_n(f"torch init rank={rank}, local_rank={local_rank}, world_size={world_size}")
+    assert any([args.save_checkpoint_per_step, args.save_checkpoint_every_epoch]), \
+        "The checkpoint saving frequency is not set, save_checkpoint_per_step or " \
+        "save_checkpoint_every_epoch should be set."
+
+    # TODO: move to muse.training.distributed
+    rank = int(os.environ.get("OMPI_COMM_WORLD_RANK", 0))
+    world_size = int(os.environ.get("OMPI_COMM_WORLD_SIZE", 0))
+    local_rank = int(os.environ.get("OMPI_COMM_WORLD_LOCAL_RANK", 0))
+
     torch.cuda.set_device(local_rank)
-    
-    if world_size > 1:
-        torch.distributed.init_process_group(
-            rank=rank, world_size=world_size,
-            timeout=process_group_timeout
-        )
-        device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
-    else:
-        device_mesh = None
+    torch.distributed.init_process_group(
+        rank=rank, world_size=world_size,
+        timeout=process_group_timeout
+    )
+    device_mesh = init_device_mesh("cuda", mesh_shape=(dist.get_world_size(),))
 
-    # Initialize model parallel
-    initialize_model_parallel(context_parallel_size=1)
+    ### initialize model parallel group
+    initialize_model_parallel()
+    print_rank_0(f"Context parallel size: {get_context_parallel_world_size()}")
     print_rank_0(f"Data parallel size: {get_data_parallel_world_size()}")
 
     set_random_seed(args.seed)
 
-    # Create output directory
-    if rank == 0:
-        os.makedirs(args.output_dir, exist_ok=True)
+
+    if dist.get_rank() == 0:
         args_str = json.dumps(vars(args), indent=2, ensure_ascii=False)
         print_rank_0(f"Training Arguments:\n{args_str}")
         timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-        with open(os.path.join(args.output_dir, f"args-{timestamp}.json"), 'w') as f:
-            f.write(args_str + "\n")
+        with open(os.path.join(args.output_dir,
+            f"args-{args.commit_id}-{timestamp}.json"), 'w',
+            encoding="utf-8") as f:
+        f.write(args_str + "\n")
 
-    # Setup dtype
-    dtype_map = {
-        "bfloat16": torch.bfloat16,
-        "float16": torch.float16,
-        "float32": torch.float32,
-    }
-    model_dtype = dtype_map[args.model_dtype]
-    device = torch.device(f"cuda:{local_rank}")
-
-    # Load model config
-    print_rank_0(f"Loading model config from {args.model_config}")
-    model_config = load_config(args.model_config)
+    # TODO: support wandb
+    tb_writer = None
+    if dist.get_rank() == 0:
+        os.makedirs(args.output_dir, exist_ok=True)
+        tb_writer = SummaryWriter(log_dir=os.path.join(args.output_dir, "log"))
+        tb_writer.add_text("comment", args.comment, 0)
+        tb_writer.add_text("comment_id", args.commit_id, 0)
     
-    # Get model class
+    # Setup logging
+    if rank == 0:
+        stdout_logger = Logger("stdout", [StdoutBackend()])
+        csv_logger = Logger("csv", [CSVBackend(os.path.join(args.output_dir, "metrics.csv"))])
+        tb_logger = Logger("tb", [TensorBoardBackend(args.output_dir)])
+        loggers = [stdout_logger, csv_logger, tb_logger]
+    else:
+        loggers = []
+
+    metrics = initialize_metrics(
+        acc_steps=args.gradient_accumulation_steps,
+        logging_per_step=args.logging_per_step,
+        loggers=loggers
+    )
+
+    # Determine training mode and get model_class
+    if args.model_dir:
+        # Continue pretrain mode: get model_class from model_dir/config.json
+        model_config_path = Path(args.model_dir) / "config.json"
+        if not model_config_path.exists():
+        raise FileNotFoundError(
+            f"Config file not found: {model_config_path}. "
+            f"Cannot continue pretrain without config.json in {args.model_dir}"
+        )
+        model_config = load_config(model_config_path)
+    elif args.model_config:
+        # Train from scratch mode: get model_class from model_config
+        model_config = load_config(args.model_config)
+    else:
+        raise ValueError(
+            "Either --model-dir (for continue pretrain) or --model-config "
+            "(for train from scratch) must be provided.")
+    
+    model_class_name = model_config.model_class
+    # Get model class from registry
     print_rank_0(f"Available models: {list_models()}")
-    model_cls = get_model_class(model_config.model_class)
-    print_rank_0(f"Model class: {model_cls.__name__}")
+    print_rank_0(f"Loading model class: {model_class_name}")
+    
+    try:
+        model_cls = get_model_class(model_class_name)
+        print_rank_0(f"Get model class: {model_cls.__name__}")
+    except KeyError:
+        print_rank_0(
+        f"Unavailable model: {model_class_name}, " \
+        f"please choose from available models: {list_models()}")
+        return
 
-    # Load VAE and text encoder (only needed if not using pre-encoded data)
-    vae = None
-    tokenizer = None
-    text_encoder = None
+    # Load state dict and convert using model's converter (only for continue pretrain)
+    state_dict = None
     
-    if not args.skip_vae_encode:
-        vae = load_vae(args.vae_pretrained, device, model_dtype)
-    
-    if not args.skip_text_encode:
-        tokenizer, text_encoder = load_text_encoder(args.text_encoder, device, model_dtype)
+    # Load state_dict to CPU only on rank 0 to avoid CPU OOM
+    if args.model_dir:
+        # Continue pretrain: load weights from checkpoint
+        if dist.get_rank() == 0:
+        with set_default_dtype(args.model_dtype):
+            print_rank_0(f"Loading checkpoint from: {args.model_dir}")
+            state_dict = load_hf_checkpoint(args.model_dir)
+        dist.barrier()
+    else:
+        # Train from scratch: no weights to load
+        state_dict = None
+        dist.barrier()
 
     # Create model
     with set_default_dtype(args.model_dtype), torch.device("meta"):
@@ -478,46 +489,87 @@ def train():
             model, auto_wrap_policy=model.get_checkpointable_module_classes()
         )
 
-    # Shard model for distributed training
-    if device_mesh is not None:
-        shard_model(
-            model=model,
-            cpu_offload=args.cpu_offload,
-            reshard_after_forward=args.reshard_after_forward,
-            dp_mesh=device_mesh,
-        )
-        if dist.is_initialized():
-            dist.barrier()
-    
-    # Load checkpoint or initialize
-    start_step = 0
-    if args.sana_checkpoint:
-        # Load from Sana checkpoint
-        if rank == 0:
-            start_step = load_sana_checkpoint(
-                args.sana_checkpoint,
-                model,
-                args.null_embed_path,
-            )
-        if dist.is_initialized():
-            dist.barrier()
-    else:
-        # Initialize model parameters randomly
-        with Timer("Initialize model parameters"):
-            initialize_model_params(model)
+    # upcast fp32 to maintain master weight.
+    # We need to save a fp32 model weight, otherwise the precision of the optimizer 
+    # updating the weight will be reduced, affecting convergence
+    if args.fp32_weight:
+        model = model.float()
 
-    # Move model to device and set dtype
-    model = model.to(device=device, dtype=model_dtype)
+    # Shard model for distributed training
+    shard_model(
+        model=model,
+        cpu_offload=args.cpu_offload,
+        reshard_after_forward=args.reshard_after_forward,
+        dp_mesh=device_mesh,
+        fp32_weight=args.fp32_weight,
+        prefetch_params_in_forward=args.prefetch_params_in_forward,
+        fp32_reduce=args.fp32_reduce
+    )
+    dist.barrier()
+    # 需要保证每个rank都执行了参数初始化或加载
+    if args.model_dir:
+        with Timer("Load state dict"):
+        # Convert meta tensors to CUDA tensors
+        # distribute the state_dict from rank 0 to all ranks
+        load_from_full_model_state_dict(
+            model=model, full_sd=state_dict,
+            allow_random_init_params=args.allow_random_init_params
+        )
+    else:
+        # Train from scratch: initialize model parameters randomly
+        with Timer("Initialize model parameters"):
+        initialize_model_params(model)
+
+    with torch.device(torch.cuda.current_device()):
+        # Initialize RoPE, if the buffer is not in the state_dict,
+        # it still on meta device, so we need to initialize it here
+        for m in model.modules():
+        # RoPE is not covered in state dict
+        if hasattr(m, "rope_init"):
+            print_rank_0("Initialize RoPE")
+            m.rope_init()
+
+    # Check if all parameters & buffers are initialized
+    for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
+        assert tensor.device != torch.device("meta"), \
+        f"{name} not initialized, device={tensor.device}"
 
     if args.compile:
+        # Compile model for better performance
         model = torch.compile(model)
         print_rank_0("Model compiled")
 
+    if state_dict is not None:
+        # Free the state_dict to save memory
+        del state_dict
+
     # Print trainable parameters
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print_rank_0(f"Total parameters: {total_params:,}")
-    print_rank_0(f"Trainable parameters: {trainable_params:,}")
+    print_rank_0("=" * 50)
+    print_rank_0("Parameters:")
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+        print_rank_0(f"  {name}: {param.shape}")
+        else:
+        print_rank_0(f"  {name}: {param.shape} (not trainable)")
+    print_rank_0("=" * 50)
+
+    ############## Load VAE and text encoder ##############
+    # VAE & Text Encoder is not trainable
+    vae = None
+    tokenizer = None
+    text_encoder = None
+
+    vae = load_vae(
+        vae_pretrained=args.vae_pretrained,
+        device=torch.cuda.current_device(),
+        dtype=get_torch_dtype(args.model_dtype)
+    )
+    text_encoder = load_text_encoder(
+        text_encoder_dir=args.text_encoder_dir,
+        device=torch.cuda.current_device(),
+        dtype=get_torch_dtype(args.model_dtype)
+    )
+    ############## Load VAE and text encoder ##############
 
     # Create optimizer
     optimizer = torch.optim.AdamW(
@@ -562,9 +614,21 @@ def train():
         )
         print_rank_0("Checkpoint loaded successfully")
 
-    # Build dataset
-    with open(args.dataset_config, 'r') as f:
-        dataset_config = json.load(f)
+    ############## Prepare dataset config ##############
+    with open(args.dataset_config, encoding="utf-8") as f:
+        dataset_config = json.loads(f.read())
+
+    dataset = dataset_config.pop("name")
+
+    model_class_name = model_config.model_class
+    dataset_config["model_class"] = model_class_name
+    
+    if args.max_length:
+        dataset_config["max_length"] = args.max_length
+    
+    # Set tokenizer_path from model_dir if not specified
+    if not dataset_config.get("tokenizer_path") and args.tokenizer_path:
+        dataset_config["tokenizer_path"] = args.tokenizer_path
 
     print_rank_0(f"Building dataset with config: {dataset_config}")
     dataset = ImageTextDataset(
@@ -587,40 +651,50 @@ def train():
         num_workers=0,  # Workers already in DistributedDataset
         collate_fn=dataset.collate_fn if hasattr(dataset, 'collate_fn') else None,
     )
+    #####################################################
 
-    # Setup logging
-    if rank == 0:
-        stdout_logger = Logger("stdout", [StdoutBackend()])
-        csv_logger = Logger("csv", [CSVBackend(os.path.join(args.output_dir, "metrics.csv"))])
-        tb_logger = Logger("tb", [TensorBoardBackend(args.output_dir)])
-        loggers = [stdout_logger, csv_logger, tb_logger]
-    else:
-        loggers = []
-
-    metrics = initialize_metrics(
-        acc_steps=args.gradient_accumulation_steps,
-        logging_per_step=args.logging_per_step,
-        loggers=loggers
-    )
-
-    scheduler = StepScheduler(args)
+    # Training loop
+    print_rank_0("Starting training...")
+    model.train()
 
     # Setup profiler
     torch_profiler = _init_profiler(
         output_dir=os.path.join(args.output_dir, "torch_profile")
     ) if args.enable_profile else None
 
-    # Training loop
-    print_rank_0("Starting training...")
-    model.train()
-    
-    data_iter = iter(dataloader)
+    # Initialize step scheduler for training loop management
+    scheduler = StepScheduler(args)
+  
+    # Setup data iterator
+    if dataloader is not None:
+        if args.overfit_batches:
+            # Overfit debug mode: cache n batches and cycle through them
+            print_rank_0(f"=== OVERFIT DEBUG MODE: Caching {args.overfit_batches} batches ===")
+            print_rank_0(f"Checkpoint saving will be disabled in overfit mode")
+            cached_batches = []
+            temp_iter = iter(gather_by_group(dataloader, get_context_parallel_group()))
+            for i in range(args.overfit_batches):
+                try:
+                batch = next(temp_iter)
+                cached_batches.append(batch)
+                except StopIteration:
+                print_rank_0(f"Warning: Only {i} batches available, less than requested {args.overfit_batches}")
+                break
+            print_rank_0(f"Successfully cached {len(cached_batches)} batches for overfitting")
+            print_rank_0(f"Model will cycle through these batches indefinitely")
+            # Create infinite iterator that cycles through cached batches
+            data_iter = iter(itertools.cycle(cached_batches))
+        else:
+            # Normal mode: use dataloader as-is
+            data_iter = iter(gather_by_group(dataloader, get_context_parallel_group()))
+    else:
+        print_rank_0("Warning: No dataloader available. Training loop will not run.")
+        data_iter = iter([])
 
     while scheduler.global_step < args.num_training_steps:
         with contextlib.ExitStack() as ctx:
             if torch_profiler:
                 ctx.enter_context(torch_profiler)
-
             try:
                 batch = next(data_iter)
             except StopIteration:
@@ -630,7 +704,9 @@ def train():
             # Move batch to device
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
-                    batch[k] = v.to(device=device, dtype=model_dtype if v.is_floating_point() else v.dtype)
+                    batch[k] = v.to(
+                        device=device, dtype=model_dtype \
+                            if v.is_floating_point() else v.dtype)
 
             scheduler.step()
 
@@ -642,20 +718,13 @@ def train():
             else:
                 raise ValueError("No latents or images in batch")
 
-            # Get text embeddings
-            if "text_embeds" in batch:
-                text_embeds = batch["text_embeds"]
-                attention_mask = batch.get("attention_mask")
-            elif "text" in batch and tokenizer is not None and text_encoder is not None:
-                text_embeds, attention_mask = encode_text(
-                    tokenizer,
-                    text_encoder,
-                    batch["text"],
-                    args.max_text_length,
-                    device,
-                )
-            else:
-                raise ValueError("No text embeddings or text in batch")
+            text_embeds, attention_mask = encode_text(
+                tokenizer,
+                text_encoder,
+                batch["input_ids"],
+                batch.get("attention_mask"),
+                device,
+            )
 
             # Compute loss
             loss_dict = loss_fn(
@@ -704,6 +773,7 @@ def train():
             if torch_profiler:
                 torch_profiler.step()
 
+
     # Save final checkpoint
     print_rank_0("Training completed. Saving final checkpoint...")
     save_checkpoint(
@@ -713,7 +783,6 @@ def train():
         global_step=scheduler.global_step
     )
     print_rank_0("Done!")
-
 
 if __name__ == "__main__":
     train()
