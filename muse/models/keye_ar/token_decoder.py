@@ -102,18 +102,10 @@ class TokenDecoder(Model):
         if not reduce:
             self.input_linear = nn.Identity()
             self.output_linear = nn.Identity()
-            # 关键修复：当reduce=False时，需要创建一个虚拟的output_linear用于状态字典转换
-            # 但实际前向传播中不使用它，因为transformer.output已经处理了输出
-            dummy_output_linear = nn.Linear(d_model, d_model, bias=False)
-            # 设置为单位矩阵，确保前向传播不变
-            with torch.no_grad():
-                dummy_output_linear.weight.copy_(torch.eye(d_model))
-            self.dummy_output_linear = dummy_output_linear
         else:
             assert input_dim is not None, "input_dim must be provided when reduce=True"
             self.input_linear = nn.Linear(input_dim, d_model)
             self.output_linear = nn.Linear(d_model, input_dim)
-            self.dummy_output_linear = None
         
         # 创建Transformer解码器
         self.transformer = TransformerDecoder(
