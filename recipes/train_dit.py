@@ -627,8 +627,8 @@ def train():
     model_class_name = model_config.model_class
     dataset_config["model_class"] = model_class_name
     
-    if args.max_length:
-        dataset_config["max_length"] = args.max_length
+    if args.max_text_length:
+        dataset_config["max_text_length"] = args.max_text_length
     
     # Set tokenizer_path from model_dir if not specified
     if not dataset_config.get("tokenizer_path") and args.tokenizer_path:
