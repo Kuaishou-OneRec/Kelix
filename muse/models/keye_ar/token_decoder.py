@@ -45,7 +45,8 @@ class TokenDecoder(Model):
         self.reduce = reduce
         self.lm_head = lm_head
         self.infer_id_embs_fn = infer_id_embs_fn
-        
+        self.final_norm = nn.LayerNorm(d_model) # unused
+
         # 检查head_dim合法性
         head_dim = d_model // nhead
         assert head_dim * nhead == d_model, "d_model must be divisible by nhead"
@@ -386,9 +387,9 @@ class TokenDecoder(Model):
             
             # 5. 处理最终归一化
             elif key == "final_norm.weight":
-                new_key = "transformer.norm.weight"
+                new_key = "final_norm.weight"
             elif key == "final_norm.bias":
-                new_key = "transformer.norm.bias"
+                new_key = "final_norm.bias"
             
             # 6. 处理位置编码（现在模型有位置编码层，直接映射）
             elif key == "position_embedding.weight":
