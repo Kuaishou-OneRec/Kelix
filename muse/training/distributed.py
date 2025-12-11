@@ -332,7 +332,6 @@ def load_from_full_model_state_dict(model: "FSDPModule",
         assert sorted(list(meta_sharded_sd.keys())) == sorted(list(full_sd.keys())), \
             "Keys of Sharded State Dict doesn't equal to Full State Dict"
 
-    print("rank=", dist.get_rank(), "meta_sharded_sd=", meta_sharded_sd.keys())
     for param_name, sharded_meta_param in meta_sharded_sd.items():
         print_rank_0(f"param_name={param_name}\nsharded_meta_param={sharded_meta_param.shape}")
         if dist.get_rank() == 0:
@@ -349,7 +348,6 @@ def load_from_full_model_state_dict(model: "FSDPModule",
                 device="cuda",
                 dtype=sharded_meta_param.dtype,
             )
-        print(param_name, sharded_meta_param)
         
         # Check if it's a DTensor (sharded parameter) or regular Tensor (e.g., buffer)
         if isinstance(sharded_meta_param, DTensor):
