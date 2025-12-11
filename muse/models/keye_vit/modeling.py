@@ -227,7 +227,7 @@ class KeyeVisionEncoder(nn.Module):
                 attention_function=config.attention_function,
             )
             # 使用配置中的 hidden_act，默认为 gelu_pytorch_tanh（与 Origin 一致）
-            hidden_act = getattr(config, 'hidden_act', 'gelu_pytorch_tanh')
+            hidden_act = getattr(config, 'hidden_act', 'silu')
             if hidden_act == 'gelu_pytorch_tanh':
                 activation_fn = nn.GELU(approximate='tanh')
             elif hidden_act == 'silu':
