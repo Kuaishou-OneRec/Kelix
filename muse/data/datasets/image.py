@@ -34,6 +34,8 @@ import numpy as np
 from PIL import Image
 from torchvision import transforms as T
 
+from transformers import AutoTokenizer
+
 from muse.data.datasets.base import DistributedDataset, load_image
 
 
@@ -71,6 +73,7 @@ class Text2ImageDataset(DistributedDataset):
     ):
         self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
         self.tokenizer_path = tokenizer_path
+        self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
         self.max_text_length = max_text_length
         self.center_crop = center_crop
         
@@ -98,32 +101,6 @@ class Text2ImageDataset(DistributedDataset):
         ])
         
         return T.Compose(transform_list)
-    
-    # def _load_image(self, image_data: Any) -> Optional[Image.Image]:
-    #     """Load image from various formats.
-        
-    #     Args:
-    #         image_data: Image path, base64 string, or bytes
-        
-    #     Returns:
-    #         PIL Image or None if loading fails
-    #     """
-    #     try:
-    #         if isinstance(image_data, str):
-    #             return load_image(image_data)
-    #         elif isinstance(image_data, bytes):
-    #             from io import BytesIO
-    #             return Image.open(BytesIO(image_data))
-    #         elif isinstance(image_data, Image.Image):
-    #             return image_data
-    #         elif hasattr(image_data, 'tobytes'):
-    #             # numpy array
-    #             return Image.fromarray(image_data)
-    #         else:
-    #             return load_image(str(image_data))
-    #     except Exception as e:
-    #         logger.warning(f"Failed to load image: {e}")
-    #         return None
     
     def get_content(self,
                     sample: Dict[str, Any],
