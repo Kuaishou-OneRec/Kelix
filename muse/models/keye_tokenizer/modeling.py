@@ -273,7 +273,7 @@ class Projector(nn.Module):
 
             return processed_features
         print("maosiyangdebug:::",image_features.shape)
-        #assert image_features.dim() == 2
+        assert image_features.dim() == 2
         dim = image_features.shape[-1]
         hidden_states = self.pre_norm(image_features.view(-1, self.hidden_size))
         hidden_states = self.linear_1(hidden_states)
@@ -295,20 +295,6 @@ def _build_position_ids(
         pos_list.append(torch.arange(numel, device=device) % (h * w))
     return torch.cat(pos_list, dim=0)
 
-
-def split_thw(tensor: torch.Tensor) -> torch.Tensor:
-    """将 (n,3) 的 thw 展开时间维，得到 [sum(t),3]."""
-    if tensor.dim() == 1:
-        tensor = tensor.unsqueeze(0)
-    repeats = tensor[:, 0]
-    new_thw = torch.cat(
-        [
-            torch.ones(tensor.shape[0], 1, dtype=tensor.dtype, device=tensor.device),
-            tensor[:, 1:],
-        ],
-        dim=1,
-    )
-    return torch.repeat_interleave(new_thw, repeats, dim=0)
 
 
 class KeyeImageTokenizer(Model):
@@ -363,13 +349,12 @@ class KeyeImageTokenizer(Model):
         target_dtype = next(self.visual.parameters()).dtype
         pixel_values = pixel_values.type(target_dtype)
         pixel_values = pixel_values.unsqueeze(0)
-        image_grid_thw_split = split_thw(image_grid_thw.squeeze(0))
         siglip_position_ids = []
         image_grid_hws = []
         sample_indices = []
         cu_seqlens = [0]
 
-        for idx, thw in enumerate(image_grid_thw_split):
+        for idx, thw in enumerate(image_grid_thw):
             thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
             numel = np.prod(thw_tuple)
             image_grid_hws.append(thw_tuple)
@@ -390,13 +375,13 @@ class KeyeImageTokenizer(Model):
             cu_seqlens=cu_seqlens,
         )
         image_embeds = vision_outputs['last_hidden_state']
-        image_embeds = self.mlp_AR(image_embeds, image_grid_hws)
+        image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
         return image_embeds
 
     def forward(
         self,
         pixel_values: torch.Tensor,
-        image_grid_thw: torch.Tensor,
+        image_grid_thw: List[Tuple[int, int, int]]
     ) -> Dict[str, torch.Tensor]:
         """
         Args:
@@ -405,9 +390,6 @@ class KeyeImageTokenizer(Model):
         """
         # 与原版一致：输入是 4D (num_patches, C, H, W)
         # get_image_embeds 内部会 unsqueeze(0) 变成 5D
-        if pixel_values.dim() != 4:
-            raise ValueError(f"pixel_values 维度应为4 (num_patches, C, H, W)，实际 {pixel_values.shape}")
-
         image_embeds = self.get_image_embeds(pixel_values, image_grid_thw)
         image_embeds = self.pre_llm_aligner(image_embeds)
 
