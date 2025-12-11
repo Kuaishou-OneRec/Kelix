@@ -17,7 +17,7 @@ def _register_keye_tokenizer_video():
     try:
         from muse.models import register_model
         # Register the model
-        register_model("KeyeImageTokenizer")(KeyeImageTokenizer)
+        # register_model("KeyeImageTokenizer")(KeyeImageTokenizer)
         register_model("KeyeForConditionalGeneration")(KeyeForConditionalGeneration)
     except ImportError:
         # Registry not yet available during initial import
@@ -25,5 +25,5 @@ def _register_keye_tokenizer_video():
 
 _register_keye_tokenizer_video()
 
-__all__ = ["KeyeImageTokenizer", "KeyeForConditionalGeneration"]
+__all__ = [ "KeyeForConditionalGeneration"]
 
