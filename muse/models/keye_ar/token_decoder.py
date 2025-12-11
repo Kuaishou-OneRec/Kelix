@@ -475,6 +475,10 @@ class TokenDecoder(Model):
                 old_key = "lm_head.weight"
             elif key == "lm_head.bias":
                 old_key = "lm_head.bias"
+            elif key == "final_norm.weight":
+                old_key = "final_norm.weight"
+            elif key == "final_norm.bias":
+                old_key = "final_norm.bias"
             
             # 4. 处理Decoder层
             elif key.startswith("transformer.layers."):
