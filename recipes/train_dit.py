@@ -699,7 +699,7 @@ def train():
             for k, v in batch.items():
                 if isinstance(v, torch.Tensor):
                     batch[k] = v.to(
-                        device=device, dtype=model_dtype \
+                        device=torch.cuda.current_device(), dtype=model_dtype \
                             if v.is_floating_point() else v.dtype)
 
             scheduler.step()
@@ -717,7 +717,7 @@ def train():
                 text_encoder,
                 batch["input_ids"],
                 batch.get("attention_mask"),
-                device,
+                torch.cuda.current_device(),
             )
 
             # Compute loss
