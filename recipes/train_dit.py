@@ -625,8 +625,8 @@ def train():
         dataset_config["max_text_length"] = args.max_text_length
     
     # Set tokenizer_path from model_dir if not specified
-    if not dataset_config.get("tokenizer_path") and args.tokenizer_path:
-        dataset_config["tokenizer_path"] = args.tokenizer_path
+    if not dataset_config.get("tokenizer_path") and args.tokenizer_dir:
+        dataset_config["tokenizer_path"] = args.tokenizer_dir
 
     print_rank_0(f"Building dataset with config: {dataset_config}")
     dataset = Text2ImageDataset(**dataset_config)
