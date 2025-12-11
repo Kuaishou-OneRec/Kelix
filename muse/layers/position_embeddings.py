@@ -337,6 +337,8 @@ class TwoD_RotaryEmbedding(nn.Module):
         pids = torch.stack([height_ids, width_ids], dim=-1)
         rope_emb = rope_emb_max_grid[pids].flatten(1)
         rope_emb = rope_emb.repeat(1, 2)
+        # 转换为与输入 x 相同的 dtype，确保与 Origin 模型计算精度一致
+        rope_emb = rope_emb.to(dtype=x.dtype)
         cos, sin = (rope_emb.cos(), rope_emb.sin())
         
         # Store rope_emb, cos, sin before chunk for debugging
