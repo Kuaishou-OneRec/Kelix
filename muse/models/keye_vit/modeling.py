@@ -330,15 +330,15 @@ class KeyeVisionEncoder(nn.Module):
         width_position_ids = torch.concat(split_wids, dim=0)
         height_position_ids = torch.concat(split_hids, dim=0)
         # Debug: track H/W position id ranges to ensure Muse matches Origin ordering
-        try:
-            print(f"[DEBUG rope muse] height_position_ids={height_position_ids.tolist()}")
-            print(f"[DEBUG rope muse] width_position_ids ={width_position_ids.tolist()}")
-            print(
-                f"[DEBUG rope muse] hids[min,max]={height_position_ids.min().item()},{height_position_ids.max().item()} "
-                f"wids[min,max]={width_position_ids.min().item()},{width_position_ids.max().item()}"
-            )
-        except Exception as e:
-            print(f"[DEBUG rope muse] print failed: {e}")
+        # try:
+        #     print(f"[DEBUG rope muse] height_position_ids={height_position_ids.tolist()}")
+        #     print(f"[DEBUG rope muse] width_position_ids ={width_position_ids.tolist()}")
+        #     print(
+        #         f"[DEBUG rope muse] hids[min,max]={height_position_ids.min().item()},{height_position_ids.max().item()} "
+        #         f"wids[min,max]={width_position_ids.min().item()},{width_position_ids.max().item()}"
+        #     )
+        # except Exception as e:
+        #     print(f"[DEBUG rope muse] print failed: {e}")
 
 
 

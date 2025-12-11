@@ -380,25 +380,6 @@ class TwoD_RotaryEmbedding(nn.Module):
         self._debug_rope_outputs.append(result.detach())
         return result
 
-        # freqs_h = rope_emb_max_grid[height_ids]
-        # freqs_w = rope_emb_max_grid[width_ids]
-        # rope_emb_half = torch.cat([freqs_h, freqs_w], dim=-1).type_as(x)
-        
-        # cos_half = rope_emb_half.cos() 
-        # sin_half = rope_emb_half.sin()
-        # # stash for external debug comparison
-        # self.debug_cos = cos_half
-        # self.debug_sin = sin_half
-        # # Debug: only print dtype to avoid spam
-        # try:
-        #     print(f"[DEBUG rope muse] cos_half dtype={cos_half.dtype}, shape={cos_half.shape}")
-        #     print(f"[DEBUG rope muse] sin_half dtype={sin_half.dtype}, shape={sin_half.shape}")
-        # except Exception as e:
-        #     print(f"[DEBUG rope muse cos/sin print failed]: {e}")
-        # return flash_apply_rotary_emb(
-        #     x.float(), cos_half.float(), sin_half.float()
-        # ).to(dtype=x.dtype)
-            
 
 class VisionRotaryPositionalEmbeddings(nn.Module):
     """

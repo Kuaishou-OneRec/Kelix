@@ -1239,16 +1239,7 @@ class SiglipEncoder(nn.Module):
 
             pids = torch.stack([height_position_ids, width_position_ids], dim=-1)
             # Debug: track H/W position id ranges to ensure Muse & Origin share the same grid ordering
-            try:
-                print(f"[DEBUG rope origin] height_position_ids={height_position_ids.tolist()}")
-                print(f"[DEBUG rope origin] width_position_ids ={width_position_ids.tolist()}")
-                print(
-                    f"[DEBUG rope origin] hids[min,max]={height_position_ids.min().item()},{height_position_ids.max().item()} "
-                    f"wids[min,max]={width_position_ids.min().item()},{width_position_ids.max().item()} "
-                    f"use_window_attn={use_window_attn} window_size={window_size}"
-                )
-            except Exception as e:
-                print(f"[DEBUG rope origin] print failed: {e}")
+
             max_grid_size = pids.max() + 1
             rope_emb_max_grid = self.rotary_pos_emb(max_grid_size)
             # Save inv_freq, rope_emb_max_grid, pids for debugging

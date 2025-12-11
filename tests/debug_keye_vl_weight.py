@@ -513,6 +513,12 @@ def test_pipeline_alignment():
         logger.info("Running Muse Forward...")
         muse_out = muse_model(**inputs)
 
+    # 手动捕获 logits（TiedLinear 无法挂 hook）
+    if hasattr(origin_out, "logits"):
+        activations["origin"]["5.1 LLM Logits"] = origin_out.logits
+    if hasattr(muse_out, "logits"):
+        activations["muse"]["5.1 LLM Logits"] = muse_out.logits
+
     # --- 收集 RoPE 中间变量和输出 ---
     # Origin 模型: 从全局变量读取
     if ORIGIN_ROPE_DEBUG["inv_freq"] is not None:
