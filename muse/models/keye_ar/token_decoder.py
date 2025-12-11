@@ -117,7 +117,7 @@ class TokenDecoder(Model):
             num_heads=nhead,
             head_dim=head_dim,
             norm=nn.Identity(),  # 修改为Identity，直接接收normed_output
-            output=nn.Identity() if lm_head is None else lm_head
+            output=nn.Identity()
         )
     
     def forward(self, x_emb: torch.Tensor) -> torch.Tensor:
@@ -145,11 +145,11 @@ class TokenDecoder(Model):
         
         # 前向传播 - 修改为传入tokens=None，input_embeds=x_emb
         output = self.transformer(tokens=None, input_embeds=x_emb)
-        print(111, output.shape)
+
         # 输出线性层和残差连接（修复：移除条件判断，始终应用残差连接）
         output = self.output_linear(output)
         output = output + x_emb0
-        print(output.shape, self.lm_head)
+
         # 应用lm_head（如果存在）
         if self.lm_head is not None:
             output = self.lm_head(output)
