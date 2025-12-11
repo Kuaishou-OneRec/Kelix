@@ -83,9 +83,9 @@ class TokenDecoder(Model):
             
             # 创建前馈网络 - 修改为支持偏置参数
             mlp = FeedForward(
-                gate_proj=nn.Linear(d_model, dim_feedforward, bias=True),  # 修改为True
-                up_proj=nn.Linear(d_model, dim_feedforward, bias=True),   # 修改为True
-                down_proj=nn.Linear(dim_feedforward, d_model, bias=True), # 修改为True
+                gate_proj=nn.Linear(d_model, dim_feedforward, bias=False),  # 修改为True
+                up_proj=nn.Linear(d_model, dim_feedforward, bias=False),   # 修改为True
+                down_proj=nn.Linear(dim_feedforward, d_model, bias=False), # 修改为True
                 activation=nn.SiLU()
             )
             
