@@ -558,7 +558,7 @@ class LiteLA(nn.Module):
         heads: Optional[int] = None,
         heads_ratio: float = 1.0,
         dim: int = 32,
-        eps: float = 1e-15,
+        eps: float = 1e-8, # diffusers uses 1e-15
         use_bias: bool = False,
         qk_norm: bool = False,
         norm_eps: float = 1e-5,
@@ -788,7 +788,7 @@ class SanaMSBlock(nn.Module):
                 hidden_size,
                 hidden_size,
                 heads=self_num_heads,
-                eps=1e-15,
+                eps=1e-8,
                 qk_norm=qk_norm,
             )
         else:

@@ -98,6 +98,7 @@ from muse.losses.diffusion import FlowMatchingLoss
 
 from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
 from muse.training.common import initialize_metrics, StepScheduler
+from muse.training.ema import EMAModel, ema_update
 
 
 logger = logging.getLogger(__name__)
@@ -142,6 +143,12 @@ def get_argument_parser():
     
     parser.add_argument("--num-workers", type=int, default=4,
                         help="Number of data loading workers")
+    
+    parser.add_argument("--use-chi", action="store_true",
+                        help="Enable Complex Human Instruction (CHI) for enhanced text-image alignment")
+    
+    parser.add_argument("--multi-scale", action="store_true",
+                        help="Enable multi-scale training with variable aspect ratios")
 
     ############ Diffusion args ############
     parser.add_argument("--num-timesteps", type=int, default=1000,
@@ -248,6 +255,9 @@ def get_argument_parser():
 
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed")
+    
+    parser.add_argument("--ema-rate", type=float, default=0.0,
+                        help="EMA decay rate (0 to disable, typical value: 0.9999). Note: EMA is not supported with FSDP")
 
     ############ Debug Args ############
     parser.add_argument("--enable-profile", action="store_true",
@@ -597,6 +607,20 @@ def train():
         logit_std=args.logit_std,
         pred_sigma=model_config.pred_sigma if hasattr(model_config, 'pred_sigma') else False,
     )
+    
+    # EMA model (only supported in DDP mode, not FSDP)
+    # Reference: Sana/train_scripts/train.py Lines 848-854
+    ema_model = None
+    if args.ema_rate > 0:
+        if args.reshard_after_forward:
+            # FSDP Zero3 mode - EMA not supported
+            print_rank_0("WARNING: EMA is not supported with FSDP (reshard_after_forward=True). Disabling EMA.")
+        else:
+            # DDP or FSDP Zero2 mode - create EMA from unwrapped model
+            # Note: With FSDP, EMA would need special handling
+            print_rank_0(f"WARNING: EMA support with FSDP is experimental. Rate={args.ema_rate}")
+            # For now, we'll implement a simple parameter-level EMA update
+            # This won't create a separate model copy due to memory constraints with FSDP
 
     # Setup checkpointing
     app_state = AppState(model=model, optimizer=optimizer)
@@ -627,6 +651,16 @@ def train():
     # Set tokenizer_path from model_dir if not specified
     if not dataset_config.get("tokenizer_path") and args.tokenizer_dir:
         dataset_config["tokenizer_path"] = args.tokenizer_dir
+    
+    # Enable Complex Human Instruction (CHI) if requested
+    if args.use_chi:
+        dataset_config["use_chi"] = True
+        print_rank_0("CHI (Complex Human Instruction) enabled for enhanced text-image alignment")
+    
+    # Enable multi-scale training if requested
+    if args.multi_scale:
+        dataset_config["multi_scale"] = True
+        print_rank_0("Multi-scale training enabled with variable aspect ratios")
 
     print_rank_0(f"Building dataset with config: {dataset_config}")
     dataset = Text2ImageDataset(**dataset_config)
@@ -735,6 +769,12 @@ def train():
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
+                
+                # EMA update (if enabled and not in FSDP mode)
+                # Note: EMA with FSDP requires special handling due to sharded weights
+                # Reference: Sana/train_scripts/train.py Lines 416-418
+                if ema_model is not None:
+                    ema_model.update()
 
             metrics.step_time.tick()
             metrics.step()

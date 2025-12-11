@@ -37,9 +37,16 @@ from torchvision import transforms as T
 from transformers import AutoTokenizer
 
 from muse.data.datasets.base import DistributedDataset, load_image
+from muse.data.samplers import get_aspect_ratio_dict
 
 
 logger = logging.getLogger(__name__)
+
+
+def get_closest_ratio(height: int, width: int, aspect_ratios: dict) -> str:
+    """Find the closest predefined aspect ratio for given dimensions."""
+    ratio = height / width
+    return min(aspect_ratios.keys(), key=lambda r: abs(float(r) - ratio))
 
 
 class Text2ImageDataset(DistributedDataset):
@@ -49,6 +56,7 @@ class Text2ImageDataset(DistributedDataset):
     It supports:
     - Online image loading and transformation
     - Multi-resolution support
+    - Complex Human Instruction (CHI) for enhanced text-image alignment
     
     Args:
         sources: Path(s) to parquet files or directory
@@ -59,8 +67,21 @@ class Text2ImageDataset(DistributedDataset):
         max_text_length: Maximum text sequence length
         center_crop: Whether to center crop images
         random_flip: Whether to apply random horizontal flip
+        chi_prompt: Complex Human Instruction prompt lines (list of strings)
         **kwargs: Additional args passed to DistributedDataset
     """
+    
+    # Default CHI prompt from Sana paper
+    DEFAULT_CHI_PROMPT = [
+        'Given a user prompt, generate an "Enhanced prompt" that provides detailed visual descriptions suitable for image generation. Evaluate the level of detail in the user prompt:',
+        '- If the prompt is simple, focus on adding specifics about colors, shapes, sizes, textures, and spatial relationships to create vivid and concrete scenes.',
+        '- If the prompt is already detailed, refine and enhance the existing details slightly without overcomplicating.',
+        'Here are examples of how to transform or refine prompts:',
+        '- User Prompt: A cat sleeping -> Enhanced: A small, fluffy white cat curled up in a round shape, sleeping peacefully on a warm sunny windowsill, surrounded by pots of blooming red flowers.',
+        '- User Prompt: A busy city street -> Enhanced: A bustling city street scene at dusk, featuring glowing street lamps, a diverse crowd of people in colorful clothing, and a double-decker bus passing by towering glass skyscrapers.',
+        'Please generate only the enhanced description for the prompt below and avoid including any additional commentary or evaluations:',
+        'User Prompt: ',
+    ]
     
     def __init__(
         self,
@@ -69,13 +90,46 @@ class Text2ImageDataset(DistributedDataset):
         tokenizer_path: Optional[Any] = None,
         max_text_length: int = 300,
         center_crop: bool = True,
+        chi_prompt: Optional[List[str]] = None,
+        use_chi: bool = False,
+        multi_scale: bool = False,
+        clip_thr: float = 0.0,
+        clip_thr_temperature: float = 1.0,
         **kwargs,
     ):
         self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
+        self.base_image_size = image_size if isinstance(image_size, int) else image_size[0]
         self.tokenizer_path = tokenizer_path
         self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
         self.max_text_length = max_text_length
         self.center_crop = center_crop
+        
+        # CHI (Complex Human Instruction) support
+        self.use_chi = use_chi
+        if use_chi:
+            chi_lines = chi_prompt if chi_prompt else self.DEFAULT_CHI_PROMPT
+            self.chi_prompt = "\n".join(chi_lines)
+            # Compute number of system prompt tokens for token selection
+            self.num_chi_tokens = len(self.tokenizer.encode(self.chi_prompt))
+            logger.info(f"CHI enabled with {self.num_chi_tokens} system prompt tokens")
+        else:
+            self.chi_prompt = None
+            self.num_chi_tokens = 0
+        
+        # Multi-scale training support
+        self.multi_scale = multi_scale
+        if multi_scale:
+            self.aspect_ratios = get_aspect_ratio_dict(self.base_image_size)
+            logger.info(f"Multi-scale training enabled with {len(self.aspect_ratios)} aspect ratios")
+        else:
+            self.aspect_ratios = None
+        
+        # CLIP Score based caption sampling
+        # Reference: Sana/diffusion/data/datasets/sana_data.py weighted_sample_clipscore
+        self.clip_thr = clip_thr
+        self.clip_thr_temperature = clip_thr_temperature
+        if clip_thr > 0.0:
+            logger.info(f"CLIP score filtering enabled: threshold={clip_thr}, temperature={clip_thr_temperature}")
         
         # Build transforms
         self.transform = self._build_transform()
@@ -220,6 +274,53 @@ class Text2ImageDataset(DistributedDataset):
                 f"got type='{segments[1].get('type')}'"
             )
 
+    def weighted_sample_clipscore(
+        self,
+        captions: Dict[str, str],
+        clip_scores: Dict[str, float],
+    ) -> str:
+        """Sample a caption based on CLIP scores with temperature-controlled softmax.
+        
+        Reference: Sana/diffusion/data/datasets/sana_data.py weighted_sample_clipscore
+        
+        Args:
+            captions: Dict mapping caption_type to caption text
+            clip_scores: Dict mapping caption_type to CLIP score
+            
+        Returns:
+            Selected caption text
+        """
+        labels = []
+        weights = []
+        fallback_label = None
+        max_clip_score = float("-inf")
+        
+        for caption_type, caption_text in captions.items():
+            clip_score = clip_scores.get(caption_type, 0.0)
+            
+            if clip_score >= self.clip_thr:
+                labels.append(caption_text)
+                weights.append(clip_score)
+            
+            if clip_score > max_clip_score:
+                max_clip_score = clip_score
+                fallback_label = caption_text
+        
+        # Fallback to highest scoring caption if none meet threshold
+        if not labels and fallback_label:
+            return fallback_label
+        
+        # Fallback to first caption if no scores
+        if not labels:
+            return next(iter(captions.values())) if captions else ""
+        
+        # Temperature-controlled softmax sampling
+        adjusted_weights = np.array(weights) ** (1.0 / max(self.clip_thr_temperature, 0.01))
+        normalized_weights = adjusted_weights / np.sum(adjusted_weights)
+        sampled_label = random.choices(labels, weights=normalized_weights.tolist(), k=1)[0]
+        
+        return sampled_label
+
     def extract_image_text(self, sample: Dict[str, Any]) -> Dict[str, Any]:
         """Extract image and text from sample.
         
@@ -227,6 +328,7 @@ class Text2ImageDataset(DistributedDataset):
         - Direct image/text fields
         - Messages format (chat-style, single-turn only)
         - Segments format (exactly 2 segments: text + image)
+        - Multiple captions with CLIP score-based selection
         
         Args:
             sample: Raw sample dict
@@ -239,6 +341,22 @@ class Text2ImageDataset(DistributedDataset):
         """
         image = sample.get("image", None)
         text = sample.get("text", None)
+        
+        # Check for multiple captions with CLIP scores
+        captions = sample.get("captions", None)
+        clip_scores = sample.get("clip_scores", None)
+        
+        if captions and isinstance(captions, dict) and len(captions) > 1:
+            # Multiple captions available - use CLIP score based selection
+            if clip_scores and isinstance(clip_scores, dict):
+                text = self.weighted_sample_clipscore(captions, clip_scores)
+            else:
+                # No CLIP scores - random selection
+                text = random.choice(list(captions.values()))
+        elif captions and isinstance(captions, dict):
+            # Single caption in dict format
+            text = next(iter(captions.values()))
+        
         if image and text:
             return {
                 "image": image,
@@ -290,6 +408,23 @@ class Text2ImageDataset(DistributedDataset):
             "text": text
         }
 
+    def _build_multiscale_transform(self, target_size: Tuple[int, int]) -> Callable:
+        """Build transform for a specific target size in multi-scale training.
+        
+        Args:
+            target_size: Target (height, width) for this aspect ratio
+            
+        Returns:
+            Transform pipeline for this size
+        """
+        transform_list = [
+            T.Resize(target_size, interpolation=T.InterpolationMode.BICUBIC),
+            T.CenterCrop(target_size),
+            T.ToTensor(),
+            T.Normalize([0.5], [0.5]),
+        ]
+        return T.Compose(transform_list)
+    
     def _process_pair(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
         """Process a single image-text pair.
         
@@ -314,8 +449,24 @@ class Text2ImageDataset(DistributedDataset):
         if image.mode != "RGB":
             image = image.convert("RGB")
         
-        # Apply transforms
-        image = self.transform(image)
+        # Apply transforms (with multi-scale support)
+        if self.multi_scale and self.aspect_ratios:
+            # Get original image size and find closest aspect ratio
+            orig_w, orig_h = image.size
+            closest_ratio = get_closest_ratio(orig_h, orig_w, self.aspect_ratios)
+            target_h, target_w = self.aspect_ratios[closest_ratio]
+            
+            # Build and apply transform for this specific target size
+            transform = self._build_multiscale_transform((target_h, target_w))
+            image = transform(image)
+            
+            # Store aspect ratio info for potential use in collation
+            result["aspect_ratio"] = closest_ratio
+            result["target_size"] = (target_h, target_w)
+        else:
+            # Standard fixed-size transform
+            image = self.transform(image)
+        
         result["image"] = image
 
         # Tokenize text with padding
@@ -325,16 +476,37 @@ class Text2ImageDataset(DistributedDataset):
 
         result["text"] = text
         
-        # Use tokenizer with padding to get fixed-length tensors
-        tokens = self.tokenizer(
-            text,
-            max_length=self.max_text_length,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
-        )
-        result["input_ids"] = tokens.input_ids.squeeze(0)  # [L]
-        result["attention_mask"] = tokens.attention_mask.squeeze(0)  # [L]
+        if self.use_chi and self.chi_prompt:
+            # CHI tokenization: prepend system prompt and select specific tokens
+            # Reference: Sana/train_scripts/train.py Lines 362-382
+            full_prompt = self.chi_prompt + text
+            # magic number 2: [bos], [_]
+            max_length_all = self.num_chi_tokens + self.max_text_length - 2
+            
+            tokens = self.tokenizer(
+                full_prompt,
+                padding="max_length",
+                max_length=max_length_all,
+                truncation=True,
+                return_tensors="pt",
+            )
+            
+            # Select: first BOS token + last (max_text_length - 1) tokens
+            # This keeps the BOS and the user prompt tokens, discarding most of chi_prompt
+            select_index = [0] + list(range(-self.max_text_length + 1, 0))
+            result["input_ids"] = tokens.input_ids[:, select_index].squeeze(0)  # [L]
+            result["attention_mask"] = tokens.attention_mask[:, select_index].squeeze(0)  # [L]
+        else:
+            # Standard tokenization without CHI
+            tokens = self.tokenizer(
+                text,
+                max_length=self.max_text_length,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
+            )
+            result["input_ids"] = tokens.input_ids.squeeze(0)  # [L]
+            result["attention_mask"] = tokens.attention_mask.squeeze(0)  # [L]
         
         return result
 
@@ -369,11 +541,45 @@ class Text2ImageDataset(DistributedDataset):
         
         Returns:
             Collated batch dict
+            
+        Note:
+            For multi-scale training without AspectRatioBatchSampler,
+            images in a batch may have different sizes. We resize all
+            images to the first image's size for consistent batching.
         """
         result = {}
         
-        # Collate tensors
-        for key in ["image", "input_ids", "attention_mask"]:
+        if self.multi_scale and "target_size" in batch[0]:
+            # Multi-scale mode: images may have different sizes
+            # Use the first image's size as target and resize others
+            target_h, target_w = batch[0]["target_size"]
+            images = []
+            for sample in batch:
+                img = sample["image"]
+                if img.shape[-2:] != (target_h, target_w):
+                    # Resize to match first image in batch
+                    img = F.interpolate(
+                        img.unsqueeze(0),
+                        size=(target_h, target_w),
+                        mode='bilinear',
+                        align_corners=False
+                    ).squeeze(0)
+                images.append(img)
+            result["image"] = torch.stack(images)
+            
+            # Store image size info
+            result["img_hw"] = torch.tensor([[target_h, target_w]] * len(batch), dtype=torch.float32)
+            result["aspect_ratio"] = torch.tensor(
+                [[float(batch[0]["aspect_ratio"])] * len(batch)], 
+                dtype=torch.float32
+            ).T
+        else:
+            # Standard mode: all images have same size
+            if "image" in batch[0]:
+                result["image"] = torch.stack([s["image"] for s in batch])
+        
+        # Collate text tensors
+        for key in ["input_ids", "attention_mask"]:
             if key in batch[0]:
                 result[key] = torch.stack([s[key] for s in batch])
         

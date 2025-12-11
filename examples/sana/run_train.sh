@@ -123,18 +123,20 @@ nohup mpirun --allow-run-as-root \
                 --tokenizer-dir $TOKENIZER_DIR \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/sana/t2i.json \
-                --learning-rate 2e-4 \
+                --learning-rate 1e-4 \
                 --min-lr 1e-7 \
-                --weight-decay 0.1 \
+                --weight-decay 0.0 \
                 --beta1 0.9 \
-                --beta2 0.95 \
+                --beta2 0.999 \
                 --max-text-length 300 \
-                --batch-size 8 \
-                --lr-scheduler-type cosine \
-                --num-warmup-steps 1000 \
+                --batch-size 16 \
+                --lr-scheduler-type constant \
+                --num-warmup-steps 2000 \
                 --num-training-steps 100000 \
                 --save-checkpoint-per-step 1000 \
                 --logging-per-step 1 \
+                --clip-range 0.1 \
+                --use-chi \
                 --fp32-weight \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
