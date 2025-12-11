@@ -423,6 +423,8 @@ def test_pipeline_alignment():
         rms_norm_eps=raw_cfg.get("rms_norm_eps", 1e-6),
         tie_word_embeddings=raw_cfg.get("tie_word_embeddings", True),
     )
+    # 为了消除 Flash2 实现差异，强制走 eager 注意力（与 test_qwen3 对齐）
+    qwen_cfg.attention_function = "eager"
     
     outer_vcfg = raw_cfg["vision_config"]
     inner_vcfg = outer_vcfg["vision_config"]
@@ -457,6 +459,7 @@ def test_pipeline_alignment():
     )
     
     origin_cfg = origin_mod.KeyeConfig.from_pretrained(ckpt_path)
+    origin_cfg._attn_implementation = "eager"
 
     # --- Initialize Models ---
     with set_default_dtype(dtype):
