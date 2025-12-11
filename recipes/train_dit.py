@@ -394,7 +394,6 @@ def train():
 
     ### initialize model parallel group
     initialize_model_parallel()
-    print_rank_0(f"Context parallel size: {get_context_parallel_world_size()}")
     print_rank_0(f"Data parallel size: {get_data_parallel_world_size()}")
 
     set_random_seed(args.seed)
