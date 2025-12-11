@@ -248,7 +248,7 @@ class Projector(nn.Module):
 
         self.pre_norm = torch.nn.LayerNorm(self.hidden_size, eps=1e-05)
         self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
-        self.act = GELUActivation()
+        self.act = nn.GELU()
         self.linear_2 = nn.Linear(
             self.hidden_size, out_channels, bias=True
         )
