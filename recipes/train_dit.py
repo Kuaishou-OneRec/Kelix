@@ -104,6 +104,49 @@ from muse.training.ema import EMAModel, ema_update
 logger = logging.getLogger(__name__)
 
 
+def parse_config_overrides(overrides: list) -> dict:
+    """Parse config override strings into a dictionary.
+    
+    Args:
+        overrides: List of strings in format "key=value"
+        
+    Returns:
+        Dictionary of parsed overrides with appropriate types
+        
+    Example:
+        >>> parse_config_overrides(["use_pe=true", "pe_interpolation=1.0"])
+        {"use_pe": True, "pe_interpolation": 1.0}
+    """
+    result = {}
+    for override in overrides:
+        if "=" not in override:
+            raise ValueError(f"Invalid override format: {override}. Expected key=value")
+        
+        key, value = override.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        
+        # Parse value to appropriate type
+        if value.lower() == "true":
+            result[key] = True
+        elif value.lower() == "false":
+            result[key] = False
+        elif value.lower() == "none":
+            result[key] = None
+        else:
+            # Try to parse as number
+            try:
+                if "." in value:
+                    result[key] = float(value)
+                else:
+                    result[key] = int(value)
+            except ValueError:
+                # Keep as string
+                result[key] = value
+    
+    return result
+
+
 def get_argument_parser():
     parser = argparse.ArgumentParser()
 
@@ -113,6 +156,10 @@ def get_argument_parser():
 
     parser.add_argument("--model-dir", type=str, default=None,
                       help="The directory of the pretrained model (required for continue training).")
+
+    parser.add_argument("--model-config-overrides", type=str, nargs="*", default=[],
+                        help="Override model config fields. Format: key=value. "
+                             "Example: --model-config-overrides use_pe=true pe_interpolation=1.0")
 
     ############ VAE args ############
     parser.add_argument("--vae-dir", type=str,
@@ -453,6 +500,18 @@ def train():
         raise ValueError(
             "Either --model-dir (for continue pretrain) or --model-config "
             "(for train from scratch) must be provided.")
+    
+    # Apply model config overrides from command line
+    if args.model_config_overrides:
+        overrides = parse_config_overrides(args.model_config_overrides)
+        print_rank_0(f"Applying model config overrides: {overrides}")
+        for key, value in overrides.items():
+            if hasattr(model_config, key):
+                old_value = getattr(model_config, key)
+                setattr(model_config, key, value)
+                print_rank_0(f"  {key}: {old_value} -> {value}")
+            else:
+                raise ValueError(f"Unknown model config field: {key}")
     
     model_class_name = model_config.model_class
     # Get model class from registry
