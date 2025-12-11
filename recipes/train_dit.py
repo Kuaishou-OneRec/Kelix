@@ -78,8 +78,11 @@ from muse.utils.common import Timer
 from muse.training.lr_schedulers import get_scheduler
 from muse.training.activations import set_activation_checkpointing
 from muse.training.parallel import (
+    get_context_parallel_group,
+    get_context_parallel_world_size,
     get_data_parallel_rank,
     get_data_parallel_world_size,
+    get_local_sequence,
     initialize_model_parallel,
     gather_by_group
 )
