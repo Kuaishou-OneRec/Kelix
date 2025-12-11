@@ -274,7 +274,7 @@ class Projector(nn.Module):
             return processed_features
         print("maosiyangdebug:::",image_features.shape)
         assert image_features.dim() == 2
-        dim = image_features.shape[-1]
+        #dim = image_features.shape[-1]
         hidden_states = self.pre_norm(image_features.view(-1, self.hidden_size))
         hidden_states = self.linear_1(hidden_states)
         hidden_states = self.act(hidden_states)
