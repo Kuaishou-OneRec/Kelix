@@ -183,7 +183,7 @@ class SanaModel(Model):
         self.pos_embed_ms = None
         
         # Transformer blocks
-        drop_path = [x.item() for x in torch.linspace(0, config.drop_path, config.depth)]
+        drop_path = torch.linspace(0, config.drop_path, config.depth, device='cpu').tolist()
         self.blocks = nn.ModuleList([
             SanaMSBlock(
                 config.hidden_size,
