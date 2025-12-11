@@ -8,7 +8,7 @@ import logging
 
 from muse.models.base import Model
 from muse.config import Qwen3Config
-from muse.layers.position_embeddings import RotaryPositionalEmbeddings
+from muse.layers.position_embeddings import RotaryPositionalEmbeddings, MultimodalRotaryEmbedding
 from muse.layers.transformer import TransformerDecoder, TransformerSelfAttentionLayer
 from muse.layers.rms_norm import RMSNorm
 from muse.layers.linear import TiedLinear
@@ -64,8 +64,34 @@ class Qwen3Model(Model):
         num_heads = config.num_heads
         num_kv_heads = config.num_kv_heads if config.num_kv_heads else num_heads
 
-        self.rope = RotaryPositionalEmbeddings(
-            dim=head_dim, max_seq_len=config.max_seq_len, base=config.rope_base)
+        # Select RoPE implementation based on config
+        if config.use_multimodal_rope:
+            # Use 3D multimodal RoPE for vision-language models (Keye-VL style)
+            # Get mrope_section from config or rope_scaling
+            mrope_section = config.mrope_section
+            if mrope_section is None and config.rope_scaling is not None:
+                mrope_section = config.rope_scaling.get("mrope_section")
+            if mrope_section is None:
+                # Default mrope_section if not specified
+                mrope_section = [16, 24, 24]
+                logger.warning(
+                    f"use_multimodal_rope=True but mrope_section not specified. "
+                    f"Using default: {mrope_section}"
+                )
+            self.rope = MultimodalRotaryEmbedding(
+                dim=head_dim,
+                max_seq_len=config.max_seq_len,
+                base=config.rope_base,
+                mrope_section=mrope_section,
+            )
+            logger.info(
+                f"Using MultimodalRotaryEmbedding with mrope_section={mrope_section}"
+            )
+        else:
+            # Use standard 1D RoPE
+            self.rope = RotaryPositionalEmbeddings(
+                dim=head_dim, max_seq_len=config.max_seq_len, base=config.rope_base
+            )
 
         layers = nn.ModuleList()
         for _ in range(config.num_layers):

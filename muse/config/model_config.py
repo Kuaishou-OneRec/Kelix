@@ -180,6 +180,19 @@ class Qwen3Config(ModelConfig):
         default=True,
         description="Whether to use normalization in the k_proj layer"
     )
+    
+    # Multimodal RoPE (3D RoPE for vision-language models)
+    use_multimodal_rope: bool = Field(
+        default=True,
+        description="Whether to use 3D multimodal RoPE instead of standard 1D RoPE. "
+                    "Required for models like Keye-VL that use temporal/height/width position encoding."
+    )
+    mrope_section: Optional[List[int]] = Field(
+        default=None,
+        description="Multimodal RoPE section sizes for [temporal, height, width]. "
+                    "E.g., [16, 24, 24] means 16 dims for temporal, 24 for height, 24 for width. "
+                    "Only used when use_multimodal_rope=True. If None, will try to read from rope_scaling."
+    )
 
     @field_validator("num_heads")
     @classmethod

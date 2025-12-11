@@ -401,6 +401,10 @@ def test_pipeline_alignment():
     raw_cfg = _load_config_json(ckpt_path)
     
     # Muse Configs
+    # 从 rope_scaling 中提取 mrope_section
+    rope_scaling = raw_cfg.get("rope_scaling")
+    mrope_section = rope_scaling.get("mrope_section") if rope_scaling else None
+    
     qwen_cfg = Qwen3Config(
         model_class="Qwen3Model",
         vocab_size=raw_cfg["vocab_size"],
@@ -415,16 +419,17 @@ def test_pipeline_alignment():
         attention_bias=raw_cfg.get("attention_bias", False),
         rope_base=float(raw_cfg.get("rope_theta", 1_000_000)),
         rope_theta=float(raw_cfg.get("rope_theta", 1_000_000)),
-        rope_scaling=raw_cfg.get("rope_scaling"),
+        rope_scaling=rope_scaling,
         attention_function=raw_cfg.get("_attn_implementation", "flash_attention_2"),
         use_sliding_window=raw_cfg.get("use_sliding_window", False),
         sliding_window=raw_cfg.get("sliding_window"),
         norm_eps=raw_cfg.get("norm_eps", 1e-6),
         rms_norm_eps=raw_cfg.get("rms_norm_eps", 1e-6),
         tie_word_embeddings=raw_cfg.get("tie_word_embeddings", True),
+        # 3D Multimodal RoPE 配置
+        use_multimodal_rope=True,
+        mrope_section=mrope_section,
     )
-    # 为了消除 Flash2 实现差异，强制走 eager 注意力（与 test_qwen3 对齐）
-    qwen_cfg.attention_function = "eager"
     
     outer_vcfg = raw_cfg["vision_config"]
     inner_vcfg = outer_vcfg["vision_config"]
@@ -459,7 +464,6 @@ def test_pipeline_alignment():
     )
     
     origin_cfg = origin_mod.KeyeConfig.from_pretrained(ckpt_path)
-    origin_cfg._attn_implementation = "eager"
 
     # --- Initialize Models ---
     with set_default_dtype(dtype):
