@@ -2,7 +2,7 @@
   "name": "Text2ImageDataset",
   "sources": "/llm_reco/vlm/datahub/datasets/Ketu_Generation/2.0.1/index/parquet.json",
   "num_workers": 8,
-  "image_size": 512,
+  "image_size": 1024,
   "max_length": 300,
   "center_crop": true,
   "packing": false
