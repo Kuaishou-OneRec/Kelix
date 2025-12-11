@@ -16,17 +16,67 @@ from PIL import Image
 from muse.data.datasets.image import Text2ImageDataset
 
 
+class MockTokenizerOutput:
+    """Mock output from tokenizer __call__"""
+    def __init__(self, input_ids, attention_mask):
+        self.input_ids = input_ids
+        self.attention_mask = attention_mask
+
+
 class MockTokenizer:
-    """Mock tokenizer for testing"""
-    def __init__(self):
+    """Mock tokenizer for testing, compatible with HuggingFace tokenizer interface"""
+    def __init__(self, max_length=300):
         self.pad_token_id = 0
-    
+        self.default_max_length = max_length
+
     def encode(self, text):
         """Simple encode: return list of integers based on text length"""
         if not text:
             return []
         # Simple encoding: each character maps to an integer
         return [ord(c) % 100 for c in text[:10]]
+
+    def __call__(self, text, max_length=None, padding=None, truncation=True, return_tensors=None):
+        """Tokenizer call interface compatible with HuggingFace tokenizers.
+        
+        Args:
+            text: Input text to tokenize
+            max_length: Maximum sequence length
+            padding: Padding strategy ("max_length" for fixed length padding)
+            truncation: Whether to truncate
+            return_tensors: Return format ("pt" for PyTorch tensors)
+        
+        Returns:
+            MockTokenizerOutput with input_ids and attention_mask
+        """
+        if max_length is None:
+            max_length = self.default_max_length
+            
+        # Encode text
+        tokens = self.encode(text)
+        
+        # Truncate if needed
+        if truncation and len(tokens) > max_length:
+            tokens = tokens[:max_length]
+        
+        # Create attention mask (1 for real tokens)
+        attention_mask = [1] * len(tokens)
+        
+        # Pad if needed
+        if padding == "max_length":
+            pad_length = max_length - len(tokens)
+            tokens = tokens + [self.pad_token_id] * pad_length
+            attention_mask = attention_mask + [0] * pad_length
+        
+        # Convert to tensors if requested
+        if return_tensors == "pt":
+            input_ids = torch.tensor([tokens])  # [1, L]
+            attention_mask = torch.tensor([attention_mask])  # [1, L]
+        else:
+            input_ids = tokens
+            attention_mask = attention_mask
+        
+        return MockTokenizerOutput(input_ids, attention_mask)
 
 
 def create_test_image(width=100, height=100, color='red', mode='RGB'):
@@ -776,12 +826,14 @@ class TestProcessPair:
     def test_process_pair_basic(self, tmp_path):
         """Test basic processing of image-text pair"""
         parquet_path = create_test_parquet(tmp_path)
-        tokenizer = MockTokenizer()
+        max_text_length = 20
+        tokenizer = MockTokenizer(max_length=max_text_length)
         
         dataset = Text2ImageDataset(
             sources=[parquet_path],
             image_size=64,
             tokenizer=tokenizer,
+            max_text_length=max_text_length,
             num_workers=1
         )
         
@@ -798,8 +850,14 @@ class TestProcessPair:
         assert isinstance(result["image"], torch.Tensor)
         assert result["image"].shape == (3, 64, 64)
         assert result["text"] == "A test caption"
-        assert len(result["input_ids"]) > 0
-        assert len(result["attention_mask"]) == len(result["input_ids"])
+        # Check input_ids and attention_mask are tensors with fixed length
+        assert isinstance(result["input_ids"], torch.Tensor)
+        assert isinstance(result["attention_mask"], torch.Tensor)
+        assert result["input_ids"].shape == (max_text_length,)
+        assert result["attention_mask"].shape == (max_text_length,)
+        # Check attention_mask has 1s for real tokens and 0s for padding
+        assert result["attention_mask"].sum() > 0  # Some real tokens
+        assert (result["attention_mask"] <= 1).all()  # All values are 0 or 1
 
     def test_process_pair_image_none(self, tmp_path):
         """Test processing returns None when image is None"""

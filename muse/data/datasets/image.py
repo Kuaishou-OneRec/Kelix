@@ -64,7 +64,6 @@ class Text2ImageDataset(DistributedDataset):
         self,
         sources: Union[List[str], str],
         image_size: Union[int, Tuple[int, int]] = 1024,
-        vae: Optional[nn.Module] = None,
         tokenizer: Optional[Any] = None,
         max_text_length: int = 300,
         center_crop: bool = True,
@@ -339,14 +338,23 @@ class Text2ImageDataset(DistributedDataset):
         image = self.transform(image)
         result["image"] = image
 
-        # Tokenize text
+        # Tokenize text with padding
         text = sample.get("text")
         if text is None:
             return None
 
         result["text"] = text
-        result["input_ids"] = self.tokenizer.encode(text)
-        result["attention_mask"] = [1] * len(result["input_ids"])
+        
+        # Use tokenizer with padding to get fixed-length tensors
+        tokens = self.tokenizer(
+            text,
+            max_length=self.max_text_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="pt",
+        )
+        result["input_ids"] = tokens.input_ids.squeeze(0)  # [L]
+        result["attention_mask"] = tokens.attention_mask.squeeze(0)  # [L]
         
         return result
 
