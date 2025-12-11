@@ -145,7 +145,7 @@ class TokenDecoder(Model):
         
         # 前向传播 - 修改为传入tokens=None，input_embeds=x_emb
         output = self.transformer(tokens=None, input_embeds=x_emb)
-        
+        print(111, output.shape)
         # 输出线性层和残差连接（修复：移除条件判断，始终应用残差连接）
         output = self.output_linear(output)
         output = output + x_emb0
