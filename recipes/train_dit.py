@@ -277,18 +277,20 @@ def load_vae(vae_dir: str, device: torch.device, dtype: torch.dtype):
 def vae_encode(vae, images: torch.Tensor, sample_posterior: bool = True) -> torch.Tensor:
     """Encode images to latent space.
     
-    Reference: Sana/train_scripts/train.py Lines 100-110
+    Reference: Sana/diffusion/model/builder.py vae_encode for AutoencoderDC
     """
     with torch.no_grad():
-        # Cast images to VAE dtype to avoid dtype mismatch
-        images = images.to(dtype=vae.dtype)
-        posterior = vae.encode(images)
-        if hasattr(posterior, 'latent_dist'):
-            posterior = posterior.latent_dist
-        if sample_posterior:
-            z = posterior.sample()
+        # VAE runs in float32 for precision, images should already be float32
+        output = vae.encode(images)
+        # AutoencoderDC returns tuple, get first element
+        if isinstance(output, tuple):
+            z = output[0]
+        elif hasattr(output, 'latent_dist'):
+            # For other VAEs with latent_dist
+            posterior = output.latent_dist
+            z = posterior.sample() if sample_posterior else posterior.mode()
         else:
-            z = posterior.mode()
+            z = output
         z = z * vae.config.scaling_factor
     return z
 
@@ -569,10 +571,11 @@ def train():
     tokenizer = None
     text_encoder = None
 
+    # VAE uses float32 for better precision (matching original Sana)
     vae = load_vae(
         vae_dir=args.vae_dir,
         device=torch.cuda.current_device(),
-        dtype=get_torch_dtype(args.model_dtype)
+        dtype=torch.float32
     )
     text_encoder = load_text_encoder(
         text_encoder_dir=args.text_encoder_dir,
