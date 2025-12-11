@@ -497,6 +497,37 @@ class TestValidateMessages:
         # Should not raise
         dataset._validate_messages(messages)
 
+    def test_validate_messages_with_system(self, tmp_path):
+        """Test validation passes for messages with system role (system is skipped)"""
+        parquet_path = create_test_parquet(tmp_path)
+        tokenizer = MockTokenizer()
+        
+        dataset = Text2ImageDataset(
+            sources=[parquet_path],
+            tokenizer=tokenizer,
+            num_workers=1
+        )
+        
+        # With system message at the beginning
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Generate an image"},
+            {"role": "assistant", "content": [{"type": "image", "image": "data"}]}
+        ]
+        
+        # Should not raise - system message is skipped
+        dataset._validate_messages(messages)
+        
+        # With system message in different position
+        messages = [
+            {"role": "user", "content": "Generate an image"},
+            {"role": "system", "content": "System prompt"},
+            {"role": "assistant", "content": [{"type": "image", "image": "data"}]}
+        ]
+        
+        # Should not raise
+        dataset._validate_messages(messages)
+
     def test_validate_messages_invalid_count(self, tmp_path):
         """Test validation fails for wrong message count"""
         parquet_path = create_test_parquet(tmp_path)
@@ -510,16 +541,16 @@ class TestValidateMessages:
         
         # Too few messages
         messages = [{"role": "user", "content": "Hello"}]
-        with pytest.raises(ValueError, match="exactly 2 messages"):
+        with pytest.raises(ValueError, match="exactly 2 non-system messages"):
             dataset._validate_messages(messages)
         
-        # Too many messages
+        # Too many non-system messages
         messages = [
             {"role": "user", "content": "Hello"},
             {"role": "assistant", "content": [{"type": "image", "image": "data"}]},
             {"role": "user", "content": "More"}
         ]
-        with pytest.raises(ValueError, match="exactly 2 messages"):
+        with pytest.raises(ValueError, match="exactly 2 non-system messages"):
             dataset._validate_messages(messages)
 
     def test_validate_messages_missing_user(self, tmp_path):

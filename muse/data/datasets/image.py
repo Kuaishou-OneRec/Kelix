@@ -148,7 +148,8 @@ class Text2ImageDataset(DistributedDataset):
     def _validate_messages(self, messages: List[Dict[str, Any]]) -> None:
         """Validate messages format.
         
-        Messages must be single-turn: exactly 2 messages (1 user + 1 assistant).
+        Messages must be single-turn: exactly 2 non-system messages (1 user + 1 assistant).
+        System messages are allowed and will be skipped during validation and processing.
         - User message content: str or list with exactly 1 text block
         - Assistant message content: list with exactly 1 image/image_gen block
         
@@ -158,16 +159,19 @@ class Text2ImageDataset(DistributedDataset):
         Raises:
             ValueError: If messages format is invalid
         """
-        if len(messages) != 2:
+        # Filter out system messages for validation
+        non_system_messages = [m for m in messages if m.get("role") != "system"]
+        
+        if len(non_system_messages) != 2:
             raise ValueError(
-                f"Messages must have exactly 2 messages (1 user + 1 assistant), "
-                f"got {len(messages)}"
+                f"Messages must have exactly 2 non-system messages (1 user + 1 assistant), "
+                f"got {len(non_system_messages)}"
             )
         
         user_msg = None
         assistant_msg = None
         
-        for msg in messages:
+        for msg in non_system_messages:
             role = msg.get("role")
             if role == "user":
                 user_msg = msg
