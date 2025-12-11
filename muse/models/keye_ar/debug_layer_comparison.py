@@ -201,14 +201,14 @@ def debug_convert_hf_state_dict():
     test_input = torch.randint(0, vocab_size, (batch_size, seq_len))
     
     print("\n=== 开始调试前向传播 ===")
-    # 执行前向传播
+    # 执行前向传播 - 使用forward_with_tokens方法
     print("执行原始模型前向传播...")
     with torch.no_grad():
-        ori_output = ori_model(test_input)
+        ori_output = ori_model.forward_with_tokens(test_input)
     
     print("执行新模型前向传播...")
     with torch.no_grad():
-        new_output = new_model(test_input)
+        new_output = new_model.forward_with_tokens(test_input)
     
     # 比较最终输出
     print("\n=== 最终输出比较 ===")
