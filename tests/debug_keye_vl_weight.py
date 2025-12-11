@@ -257,8 +257,10 @@ def register_detailed_hooks(model, name_prefix):
 
     if decoder_norm:
         decoder_norm.register_forward_hook(make_hook(name_prefix, "5.0 LLM Final Hidden"))
-    if decoder_output_proj:
+    if decoder_output_proj and hasattr(decoder_output_proj, "register_forward_hook"):
         decoder_output_proj.register_forward_hook(make_hook(name_prefix, "5.1 LLM Logits"))
+    else:
+        logger.warning(f"⚠️  {name_prefix}: Skip logits hook (module not hookable)")
 
     return llm_layer_count
 
