@@ -306,9 +306,9 @@ def load_text_encoder(text_encoder_dir: str, device: torch.device, dtype: torch.
 
 
 def encode_text(
-    tokenizer,
     text_encoder,
-    texts: list,
+    input_ids: torch.Tensor,
+    attention_mask: torch.Tensor,
     max_length: int,
     device: torch.device,
 ) -> tuple:
@@ -316,18 +316,11 @@ def encode_text(
     
     Reference: Sana/train_scripts/train.py Lines 300-310
     """
-    tokens = tokenizer(
-        texts,
-        max_length=max_length,
-        padding="max_length",
-        truncation=True,
-        return_tensors="pt",
-    ).to(device)
     
     with torch.no_grad():
         outputs = text_encoder(
-            tokens.input_ids,
-            attention_mask=tokens.attention_mask,
+            input_ids,
+            attention_mask=attention_mask,
         )
         # Get hidden states
         if hasattr(outputs, 'last_hidden_state'):
@@ -711,7 +704,6 @@ def train():
                 raise ValueError("No latents or images in batch")
 
             text_embeds, attention_mask = encode_text(
-                tokenizer,
                 text_encoder,
                 batch["input_ids"],
                 batch.get("attention_mask"),
