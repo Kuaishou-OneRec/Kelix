@@ -697,7 +697,7 @@ def train():
                 if isinstance(v, torch.Tensor):
                     batch[k] = v.to(
                         device=torch.cuda.current_device(),
-                        dtype=get_torch_dtype(args.model_dtype)
+                        dtype=get_torch_dtype(args.model_dtype) if v.is_floating_point() else None
                     )
 
             scheduler.step()
