@@ -130,8 +130,9 @@ class FlowMatchingScheduler:
             noise = torch.randn_like(x_start)
         
         # Get alpha and sigma for each timestep
-        alphas = self.alphas.to(x_start.device)[t]
-        sigmas = self.sigmas.to(x_start.device)[t]
+        # Cast to input dtype to avoid dtype mismatch with FSDP mixed precision
+        alphas = self.alphas.to(device=x_start.device, dtype=x_start.dtype)[t]
+        sigmas = self.sigmas.to(device=x_start.device, dtype=x_start.dtype)[t]
         
         # Reshape for broadcasting
         while alphas.dim() < x_start.dim():
