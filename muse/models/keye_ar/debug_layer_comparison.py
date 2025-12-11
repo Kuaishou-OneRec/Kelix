@@ -22,44 +22,44 @@ class LayerComparisonDebugger:
         
         # 原始模型hooks
         self.ori_model.token_embedding.register_forward_hook(
-            lambda module, input, output: self.ori_outputs.update({"ori_token_embedding": input[0]})
+            lambda module, input, output: self.ori_outputs.update({"token_embedding": output})
         )
         self.ori_model.position_embedding.register_forward_hook(
-            lambda module, input, output: self.ori_outputs.update({"ori_position_embedding": output})
+            lambda module, input, output: self.ori_outputs.update({"position_embedding": output})
         )
         self.ori_model.input_linear.register_forward_hook(
-            lambda module, input, output: self.ori_outputs.update({"ori_input_linear": output})
+            lambda module, input, output: self.ori_outputs.update({"input_linear": output})
         )
         
         # 注册原始模型的transformer层hooks
         for i, layer in enumerate(self.ori_model.layers):
             layer.register_forward_hook(
-                lambda module, input, output, idx=i: self.ori_outputs.update({f"ori_layer_{idx}": output})
+                lambda module, input, output, idx=i: self.ori_outputs.update({f"layer_{idx}": output})
             )
         
         self.ori_model.output_linear.register_forward_hook(
-            lambda module, input, output: self.ori_outputs.update({"ori_output_linear": output})
+            lambda module, input, output: self.ori_outputs.update({"output_linear": output})
         )
         
         # 新模型hooks
         self.new_model.token_embedding.register_forward_hook(
-            lambda module, input, output: self.new_outputs.update({"new_token_embedding": input[0]})
+            lambda module, input, output: self.new_outputs.update({"token_embedding": output})
         )
         self.new_model.position_embedding.register_forward_hook(
-            lambda module, input, output: self.new_outputs.update({"new_position_embedding": output})
+            lambda module, input, output: self.new_outputs.update({"position_embedding": output})
         )
         self.new_model.input_linear.register_forward_hook(
-            lambda module, input, output: self.new_outputs.update({"new_input_linear": output})
+            lambda module, input, output: self.new_outputs.update({"input_linear": output})
         )
         
         # 注册新模型的transformer层hooks
         for i, layer in enumerate(self.new_model.transformer.layers):
             layer.register_forward_hook(
-                lambda module, input, output, idx=i: self.new_outputs.update({f"new_transformer_layer_{idx}": output})
+                lambda module, input, output, idx=i: self.new_outputs.update({f"layer_{idx}": output})
             )
         
         self.new_model.output_linear.register_forward_hook(
-            lambda module, input, output: self.new_outputs.update({"new_output_linear": output})
+            lambda module, input, output: self.new_outputs.update({"output_linear": output})
         )
     
     def compare_outputs(self) -> Dict[str, Dict[str, Any]]:
@@ -115,25 +115,52 @@ class LayerComparisonDebugger:
         results = self.compare_outputs()
         
         print("\n=== 各层输出比较 ===")
-        for layer_name, result in results.items():
-            print(f"{layer_name}:")
-            print(f"  原始模型形状: {result['ori_shape']}")
-            print(f"  新模型形状: {result['new_shape']}")
-            
-            if isinstance(result['max_diff'], (int, float)):
-                print(f"  最大差异: {result['max_diff']:.6f}")
-                print(f"  平均差异: {result['mean_diff']:.6f}")
-                if result['max_diff'] > 1e-5:  # 如果差异较大
-                    print("  ⚠️  差异较大!")
-                print(f"  原始模型前5个值: {result['ori_values']}")
-                print(f"  新模型前5个值: {result['new_values']}")
-            else:
-                print(f"  {result['max_diff']}")
-                if result['ori_shape'] != "N/A":
-                    print(f"  原始模型输出形状: {result['ori_shape']}")
+        # 按照特定顺序排序显示
+        layer_order = [
+            "token_embedding",
+            "position_embedding", 
+            "input_linear",
+            "layer_0",
+            "layer_1",
+            "output_linear"
+        ]
+        
+        # 先显示按顺序排列的层
+        for layer_name in layer_order:
+            if layer_name in results:
+                result = results[layer_name]
+                print(f"{layer_name}:")
+                print(f"  原始模型形状: {result['ori_shape']}")
+                print(f"  新模型形状: {result['new_shape']}")
+                
+                if isinstance(result['max_diff'], (int, float)):
+                    print(f"  最大差异: {result['max_diff']:.6f}")
+                    print(f"  平均差异: {result['mean_diff']:.6f}")
+                    if result['max_diff'] > 1e-5:  # 如果差异较大
+                        print("  ⚠️  差异较大!")
+                    print(f"  原始模型前5个值: {result['ori_values']}")
+                    print(f"  新模型前5个值: {result['new_values']}")
                 else:
-                    print(f"  新模型输出形状: {result['new_shape']}")
-            print()
+                    print(f"  {result['max_diff']}")
+                print()
+        
+        # 显示其他层
+        for layer_name, result in results.items():
+            if layer_name not in layer_order:
+                print(f"{layer_name}:")
+                print(f"  原始模型形状: {result['ori_shape']}")
+                print(f"  新模型形状: {result['new_shape']}")
+                
+                if isinstance(result['max_diff'], (int, float)):
+                    print(f"  最大差异: {result['max_diff']:.6f}")
+                    print(f"  平均差异: {result['mean_diff']:.6f}")
+                    if result['max_diff'] > 1e-5:  # 如果差异较大
+                        print("  ⚠️  差异较大!")
+                    print(f"  原始模型前5个值: {result['ori_values']}")
+                    print(f"  新模型前5个值: {result['new_values']}")
+                else:
+                    print(f"  {result['max_diff']}")
+                print()
 
 def debug_convert_hf_state_dict():
     """调试状态字典转换过程"""
