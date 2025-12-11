@@ -689,6 +689,7 @@ class CaptionEmbedder(nn.Module):
         else:
             drop_ids = force_drop_ids == 1
         caption = torch.where(drop_ids[:, None, None, None], y_embedding, caption)
+        print("y_embedding: ", y_embedding.dtype, "caption: ", caption.dtype)
         return caption
     
     def forward(
