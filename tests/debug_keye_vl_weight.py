@@ -238,6 +238,49 @@ def register_detailed_hooks(model, name_prefix):
                 make_hook(name_prefix, f"4.{idx:02d} LLM Layer {idx} Input", capture_input=True)
             )
             layer.register_forward_hook(make_hook(name_prefix, f"4.{idx:02d} LLM Layer {idx} Output"))
+            
+            # 为 Layer 0 添加细粒度 hook
+            if idx == 0:
+                if name_prefix == "origin":
+                    # Origin: KeyeDecoderLayer 结构
+                    layer.input_layernorm.register_forward_hook(
+                        make_hook(name_prefix, "4.00a LLM L0 InputLN"))
+                    layer.self_attn.q_proj.register_forward_hook(
+                        make_hook(name_prefix, "4.00b LLM L0 Q_Proj"))
+                    layer.self_attn.k_proj.register_forward_hook(
+                        make_hook(name_prefix, "4.00c LLM L0 K_Proj"))
+                    layer.self_attn.v_proj.register_forward_hook(
+                        make_hook(name_prefix, "4.00d LLM L0 V_Proj"))
+                    layer.self_attn.o_proj.register_forward_hook(
+                        make_hook(name_prefix, "4.00e LLM L0 Attn Out"))
+                    layer.post_attention_layernorm.register_forward_hook(
+                        make_hook(name_prefix, "4.00f LLM L0 PostAttnLN"))
+                    layer.mlp.gate_proj.register_forward_hook(
+                        make_hook(name_prefix, "4.00g LLM L0 MLP Gate"))
+                    layer.mlp.up_proj.register_forward_hook(
+                        make_hook(name_prefix, "4.00h LLM L0 MLP Up"))
+                    layer.mlp.down_proj.register_forward_hook(
+                        make_hook(name_prefix, "4.00i LLM L0 MLP Down"))
+                elif name_prefix == "muse":
+                    # Muse: TransformerSelfAttentionLayer 结构
+                    layer.sa_norm.register_forward_hook(
+                        make_hook(name_prefix, "4.00a LLM L0 InputLN"))
+                    layer.attn.q_proj.register_forward_hook(
+                        make_hook(name_prefix, "4.00b LLM L0 Q_Proj"))
+                    layer.attn.k_proj.register_forward_hook(
+                        make_hook(name_prefix, "4.00c LLM L0 K_Proj"))
+                    layer.attn.v_proj.register_forward_hook(
+                        make_hook(name_prefix, "4.00d LLM L0 V_Proj"))
+                    layer.attn.output_proj.register_forward_hook(
+                        make_hook(name_prefix, "4.00e LLM L0 Attn Out"))
+                    layer.mlp_norm.register_forward_hook(
+                        make_hook(name_prefix, "4.00f LLM L0 PostAttnLN"))
+                    layer.mlp.w1.register_forward_hook(
+                        make_hook(name_prefix, "4.00g LLM L0 MLP Gate"))
+                    layer.mlp.w3.register_forward_hook(
+                        make_hook(name_prefix, "4.00h LLM L0 MLP Up"))
+                    layer.mlp.w2.register_forward_hook(
+                        make_hook(name_prefix, "4.00i LLM L0 MLP Down"))
 
     # Final LLM states (pre-head and logits)
     decoder = None
@@ -549,6 +592,19 @@ def test_pipeline_alignment():
 
     for i in range(max_llm_layers):
         checkpoints.append(f"4.{i:02d} LLM Layer {i} Input")
+        # Layer 0 细粒度检查点
+        if i == 0:
+            checkpoints.extend([
+                "4.00a LLM L0 InputLN",
+                "4.00b LLM L0 Q_Proj",
+                "4.00c LLM L0 K_Proj",
+                "4.00d LLM L0 V_Proj",
+                "4.00e LLM L0 Attn Out",
+                "4.00f LLM L0 PostAttnLN",
+                "4.00g LLM L0 MLP Gate",
+                "4.00h LLM L0 MLP Up",
+                "4.00i LLM L0 MLP Down",
+            ])
         checkpoints.append(f"4.{i:02d} LLM Layer {i} Output")
 
     checkpoints.extend([
