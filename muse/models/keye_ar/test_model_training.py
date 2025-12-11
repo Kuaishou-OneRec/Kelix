@@ -46,9 +46,9 @@ def test_model_training():
         attention_function=config["attention_function"]
     )
     
-    # 添加LM Head用于训练
-    lm_head = nn.Linear(config["d_model"], config["vocab_size"])
-    model.lm_head = lm_head
+    # 注意：对于reduce=False模式，模型的forward方法已经包含了lm_head的处理
+    # 如果model.lm_head不为None，forward方法会自动应用它
+    # 因此我们不需要在测试中再次应用lm_head
     
     # 3. 创建优化器和损失函数
     print("\n创建优化器和损失函数...")
@@ -75,8 +75,12 @@ def test_model_training():
         target_ids = train_data[:, 1:]  # 所有token除了第一个（预测下一个token）
         
         # 前向传播
-        outputs = model.forward_with_tokens(input_ids)
-        logits = model.lm_head(outputs) if model.lm_head is not None else outputs
+        # 对于reduce=False模式，forward_with_tokens的输出已经是最终的logits
+        logits = model.forward_with_tokens(input_ids)
+        
+        # 确保logits的形状正确
+        # logits应该已经是(Batch, Seq_Len, vocab_size)
+        assert logits.shape[-1] == config["vocab_size"], f"logits最后一维应该是{config['vocab_size']}，但实际是{logits.shape[-1]}"
         
         # 计算损失
         loss = criterion(
