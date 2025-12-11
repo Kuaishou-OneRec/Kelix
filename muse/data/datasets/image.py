@@ -307,12 +307,6 @@ class Text2ImageDataset(DistributedDataset):
         
         if image is None or text is None:
             return None
-        
-        images = json.loads(sample.get("images", '{}'))
-        print(images)
-        if image in images:
-            image = images[image]
-            print("xxxxx", image)
 
         return {
             "image": image,
@@ -335,7 +329,6 @@ class Text2ImageDataset(DistributedDataset):
         if image_data is None:
             return None
         
-        print("jjjjjj", image_data)
         image = load_image(image_data)
         if image is None:
             return None
@@ -380,7 +373,12 @@ class Text2ImageDataset(DistributedDataset):
             Processed sample dict or None if processing fails
         """
         pair = self.extract_image_text(sample)
-        return self._process_pair(pair)
+        if pair:
+            images = json.loads(sample.get("images", '{}'))
+            if pair["image"] in images:
+                pair["image"] = images[image]
+            return self._process_pair(pair)
+        return None
 
     def collate_fn(
         self,
