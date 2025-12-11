@@ -274,7 +274,9 @@ class SanaModel(Model):
         x = x.to(self.dtype)
         # Match official: timestep.long().to(torch.float32)
         timestep = timestep.long().to(torch.float32)
+        print(self.dtype)
         y = y.to(self.dtype)
+        print("y: ", y.dtype)
         
         # Get spatial dimensions
         self.h, self.w = x.shape[-2] // self.patch_size, x.shape[-1] // self.patch_size
