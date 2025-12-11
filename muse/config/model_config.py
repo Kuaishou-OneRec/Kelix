@@ -235,7 +235,7 @@ class SiglipVisionConfig(ModelConfig):
     num_attention_heads: int = Field(default=16, description="Attention heads.")
     intermediate_size: int = Field(default=4304, description="MLP hidden dimension.")
     hidden_act: str = Field(
-        default="gelu_pytorch_tanh",
+        default="silu",
         description="Activation function used in the vision MLP (e.g., gelu_pytorch_tanh, silu, gelu)."
     )
     max_seq_len: int = Field(
@@ -282,7 +282,7 @@ class KeyeVisionConfig(ModelConfig):
     num_attention_heads: int = Field(default=16, description="Attention heads.")
     intermediate_size: int = Field(default=4304, description="MLP hidden dimension.")
     hidden_act: str = Field(
-        default="gelu_pytorch_tanh",
+        default="silu",
         description="Activation function used in the vision MLP (e.g., gelu_pytorch_tanh, silu, gelu)."
     )
     max_seq_len: int = Field(
