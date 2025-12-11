@@ -102,10 +102,18 @@ class TokenDecoder(Model):
         if not reduce:
             self.input_linear = nn.Identity()
             self.output_linear = nn.Identity()
+            # 关键修复：当reduce=False时，需要创建一个虚拟的output_linear用于状态字典转换
+            # 但实际前向传播中不使用它，因为transformer.output已经处理了输出
+            dummy_output_linear = nn.Linear(d_model, d_model, bias=False)
+            # 设置为单位矩阵，确保前向传播不变
+            with torch.no_grad():
+                dummy_output_linear.weight.copy_(torch.eye(d_model))
+            self.dummy_output_linear = dummy_output_linear
         else:
             assert input_dim is not None, "input_dim must be provided when reduce=True"
             self.input_linear = nn.Linear(input_dim, d_model)
             self.output_linear = nn.Linear(d_model, input_dim)
+            self.dummy_output_linear = None
         
         # 创建Transformer解码器
         self.transformer = TransformerDecoder(
@@ -291,6 +299,9 @@ class TokenDecoder(Model):
         converted_count = 0
         total_count = len(state_dict)
         
+        # 检测是否为reduce=False的情况
+        reduce_mode = any("output_linear.weight" in key for key in state_dict.keys())
+        
         for key, value in state_dict.items():
             new_key = None
             
@@ -384,6 +395,15 @@ class TokenDecoder(Model):
                 # 其他键跳过
                 skipped_keys.append(key)
         
+        # 关键修复：如果reduce=False，需要为transformer.output.weight创建一个单位矩阵
+        if not reduce_mode and "transformer.output.weight" not in converted_state_dict:
+            # 从token_embedding.weight获取d_model维度
+            d_model = state_dict["token_embedding.weight"].shape[1]
+            # 创建单位矩阵作为transformer.output.weight
+            identity_matrix = torch.eye(d_model)
+            converted_state_dict["transformer.output.weight"] = identity_matrix
+            print(f"  为reduce=False模式创建单位矩阵transformer.output.weight，维度: {d_model}")
+        
         # 打印转换统计信息
         print(f"转换状态字典统计:")
         print(f"  总键数: {total_count}")
@@ -393,6 +413,7 @@ class TokenDecoder(Model):
             print(f"  跳过的键: {skipped_keys}")
         
         return converted_state_dict
+    
 
 def test_generate_with_correct_embedding_dim():
     # 配置参数
