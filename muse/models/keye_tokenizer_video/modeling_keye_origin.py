@@ -1571,6 +1571,9 @@ class KeyePatchMerger(nn.Module):
         return x
 
 
+# Global storage for debugging RoPE outputs
+_DEBUG_ROPE_OUTPUTS = {"q_after_rope": None, "k_after_rope": None}
+
 def apply_rotary_pos_emb_flashatt(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -1578,6 +1581,9 @@ def apply_rotary_pos_emb_flashatt(
     sin = sin.chunk(2, dim=-1)[0].contiguous()
     q_embed = apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
     k_embed = apply_rotary_emb(k.float(), cos.float(), sin.float()).type_as(k)
+    # Store for debugging
+    _DEBUG_ROPE_OUTPUTS["q_after_rope"] = q_embed.detach()
+    _DEBUG_ROPE_OUTPUTS["k_after_rope"] = k_embed.detach()
     return q_embed, k_embed
 
 

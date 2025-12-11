@@ -26,6 +26,9 @@ from muse.models.keye_vit.image_processing_keye import KeyeVisionImageProcessor
 from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
+# 导入 Origin 模型的 RoPE debug 变量
+from muse.models.keye_tokenizer_video.modeling_keye_origin import _DEBUG_ROPE_OUTPUTS as ORIGIN_ROPE_DEBUG
+
 # === 导入 Processor 相关 ===
 from transformers import AutoTokenizer
 # 假设 KeyeProcessor 在 muse.models.keye.modular_Keye，如果不是请修改路径
@@ -390,11 +393,36 @@ def test_pipeline_alignment():
     
     origin_inputs = {k: v for k, v in inputs.items() if k != "vision_token_mask"}
     
+    # 清空 Muse 模型 RoPE 调试输出
+    vit_backbone_muse = None
+    if hasattr(muse_model, "visual_tokenizer") and hasattr(muse_model.visual_tokenizer, "visual"):
+        vit_backbone_muse = muse_model.visual_tokenizer.visual
+    if vit_backbone_muse and hasattr(vit_backbone_muse, "encoder"):
+        rope_module = vit_backbone_muse.encoder.rope
+        if hasattr(rope_module, '_debug_rope_outputs'):
+            rope_module._debug_rope_outputs = []
+
     with torch.no_grad():
         logger.info("Running Origin Forward...")
         origin_out = origin_model(**origin_inputs)
         logger.info("Running Muse Forward...")
         muse_out = muse_model(**inputs)
+
+    # --- 收集 RoPE 后的 q、k ---
+    # Origin 模型: 从全局变量读取
+    if ORIGIN_ROPE_DEBUG["q_after_rope"] is not None:
+        activations["origin"]["0.25 Q After RoPE"] = ORIGIN_ROPE_DEBUG["q_after_rope"]
+    if ORIGIN_ROPE_DEBUG["k_after_rope"] is not None:
+        activations["origin"]["0.25 K After RoPE"] = ORIGIN_ROPE_DEBUG["k_after_rope"]
+    
+    # Muse 模型: 从 rope 模块的 _debug_rope_outputs 列表读取
+    # 在 Layer0 的 attention 中，q 和 k 分别调用 RoPE，所以列表中前两个元素分别是 q 和 k
+    if vit_backbone_muse and hasattr(vit_backbone_muse, "encoder"):
+        rope_module = vit_backbone_muse.encoder.rope
+        if hasattr(rope_module, '_debug_rope_outputs') and len(rope_module._debug_rope_outputs) >= 2:
+            # 第一个是 q，第二个是 k (基于 attention.py 中的调用顺序)
+            activations["muse"]["0.25 Q After RoPE"] = rope_module._debug_rope_outputs[0]
+            activations["muse"]["0.25 K After RoPE"] = rope_module._debug_rope_outputs[1]
 
     # --- Analysis ---
     log_separator("Deep Dive Analysis")
@@ -403,6 +431,8 @@ def test_pipeline_alignment():
         "0.0 ViT Embeddings Out",
         "0.1 LN1 Output",
         "0.2 Q_Proj Out",
+        "0.25 Q After RoPE",
+        "0.25 K After RoPE",
         "0.3 Attn Raw (Pre-Proj)",
         "0.4 Attn Out (Post-Proj)",
         "0.6 MLP Hidden (fc1)",

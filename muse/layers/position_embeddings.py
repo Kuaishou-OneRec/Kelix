@@ -340,9 +340,14 @@ class TwoD_RotaryEmbedding(nn.Module):
         cos, sin = (rope_emb.cos(), rope_emb.sin())
         cos = cos.chunk(2, dim=-1)[0].contiguous()
         sin = sin.chunk(2, dim=-1)[0].contiguous()
-        return flash_apply_rotary_emb(
+        result = flash_apply_rotary_emb(
             x.float(), cos.float(), sin.float()
         ).to(dtype=x.dtype)
+        # Store for debugging - track via a module-level list
+        if not hasattr(self, '_debug_rope_outputs'):
+            self._debug_rope_outputs = []
+        self._debug_rope_outputs.append(result.detach())
+        return result
 
         # freqs_h = rope_emb_max_grid[height_ids]
         # freqs_w = rope_emb_max_grid[width_ids]
