@@ -81,6 +81,7 @@ from muse.training.parallel import (
     get_data_parallel_rank,
     get_data_parallel_world_size,
     initialize_model_parallel,
+    gather_by_group
 )
 from muse.utils.common import (
     set_random_seed, 
