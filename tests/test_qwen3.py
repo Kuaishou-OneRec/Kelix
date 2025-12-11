@@ -381,10 +381,10 @@ def test_qwen3_logits_align_with_hf_checkpoint():
             buffer.data = buffer.data.to(dtype=dtype)
     
     # Ensure eager attention is used
-    hf_model.config._attn_implementation = "flash_attention_2"
+    hf_model.config._attn_implementation = "eager"
     
     # Ensure Muse model uses eager attention
-    muse_config.attention_function = "flash_attention_2"
+    muse_config.attention_function = "eager"
     
     muse_model.eval()
     hf_model.eval()
@@ -555,12 +555,11 @@ def test_checkpint():
             checkpoint_dir, attention_function="flash_attention_2")
     
     # load the tokenizer and the model
-    tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_dir, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(hf_checkpoint_dir)
     hf_model = AutoModelForCausalLM.from_pretrained(
         hf_checkpoint_dir,
         torch_dtype=torch.bfloat16,
-        device_map="auto",
-        trust_remote_code=True,
+        device_map="auto"
     )
 
     # prepare the model input
