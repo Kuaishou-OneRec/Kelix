@@ -1251,6 +1251,10 @@ class SiglipEncoder(nn.Module):
                 print(f"[DEBUG rope origin] print failed: {e}")
             max_grid_size = pids.max() + 1
             rope_emb_max_grid = self.rotary_pos_emb(max_grid_size)
+            # Save inv_freq, rope_emb_max_grid, pids for debugging
+            _DEBUG_ROPE_OUTPUTS["inv_freq"] = self.rotary_pos_emb.inv_freq.detach()
+            _DEBUG_ROPE_OUTPUTS["rope_emb_max_grid"] = rope_emb_max_grid.detach()
+            _DEBUG_ROPE_OUTPUTS["pids"] = pids.detach()
             rope_emb = rope_emb_max_grid[pids].flatten(1)
             rope_emb = rope_emb.repeat(1, 2)
             # Save rope_emb before cos/sin for debugging
@@ -1575,6 +1579,9 @@ class KeyePatchMerger(nn.Module):
 
 # Global storage for debugging RoPE outputs
 _DEBUG_ROPE_OUTPUTS = {
+    "inv_freq": None,
+    "rope_emb_max_grid": None,
+    "pids": None,
     "rope_emb": None,
     "q_after_rope": None, 
     "k_after_rope": None,

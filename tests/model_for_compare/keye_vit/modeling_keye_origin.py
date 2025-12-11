@@ -1236,6 +1236,8 @@ class SiglipEncoder(nn.Module):
             rope_emb_max_grid = self.rotary_pos_emb(max_grid_size)
             rope_emb = rope_emb_max_grid[pids].flatten(1)
             rope_emb = rope_emb.repeat(1, 2)
+            # Save rope_emb before cos/sin for debugging
+            _DEBUG_ROPE_OUTPUTS["rope_emb"] = rope_emb.detach()
             rope_emb = (rope_emb.cos(), rope_emb.sin())
         else:
 
@@ -1528,13 +1530,30 @@ class Qwen3RMSNorm(nn.Module):
 
 
 # Global storage for debugging RoPE outputs
-_DEBUG_ROPE_OUTPUTS = {"q_after_rope": None, "k_after_rope": None}
+_DEBUG_ROPE_OUTPUTS = {
+    "rope_emb": None,
+    "q_after_rope": None, 
+    "k_after_rope": None,
+    "cos_before_chunk": None,
+    "sin_before_chunk": None,
+    "cos_after_chunk": None,
+    "sin_after_chunk": None,
+}
 
 def apply_rotary_pos_emb_flashatt(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    # Store cos/sin before chunk
+    _DEBUG_ROPE_OUTPUTS["cos_before_chunk"] = cos.detach()
+    _DEBUG_ROPE_OUTPUTS["sin_before_chunk"] = sin.detach()
+    
     cos = cos.chunk(2, dim=-1)[0].contiguous()
     sin = sin.chunk(2, dim=-1)[0].contiguous()
+    
+    # Store cos/sin after chunk
+    _DEBUG_ROPE_OUTPUTS["cos_after_chunk"] = cos.detach()
+    _DEBUG_ROPE_OUTPUTS["sin_after_chunk"] = sin.detach()
+    
     q_embed = apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
     k_embed = apply_rotary_emb(k.float(), cos.float(), sin.float()).type_as(k)
     # Store for debugging

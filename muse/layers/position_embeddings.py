@@ -344,12 +344,18 @@ class TwoD_RotaryEmbedding(nn.Module):
         # Store rope_emb, cos, sin before chunk for debugging
         if not hasattr(self, '_debug_rope_intermediates'):
             self._debug_rope_intermediates = {
+                "inv_freq": None,
+                "rope_emb_max_grid": None,
+                "pids": None,
                 "rope_emb": None,
                 "cos_before_chunk": None,
                 "sin_before_chunk": None,
                 "cos_after_chunk": None,
                 "sin_after_chunk": None,
             }
+        self._debug_rope_intermediates["inv_freq"] = self.inv_freq.detach()
+        self._debug_rope_intermediates["rope_emb_max_grid"] = rope_emb_max_grid.detach()
+        self._debug_rope_intermediates["pids"] = pids.detach()
         self._debug_rope_intermediates["rope_emb"] = rope_emb.detach()
         self._debug_rope_intermediates["cos_before_chunk"] = cos.detach()
         self._debug_rope_intermediates["sin_before_chunk"] = sin.detach()

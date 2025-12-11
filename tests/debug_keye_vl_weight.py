@@ -425,6 +425,12 @@ def test_pipeline_alignment():
 
     # --- 收集 RoPE 中间变量和输出 ---
     # Origin 模型: 从全局变量读取
+    if ORIGIN_ROPE_DEBUG["inv_freq"] is not None:
+        activations["origin"]["0.18 inv_freq"] = ORIGIN_ROPE_DEBUG["inv_freq"]
+    if ORIGIN_ROPE_DEBUG["rope_emb_max_grid"] is not None:
+        activations["origin"]["0.19 rope_emb_max_grid"] = ORIGIN_ROPE_DEBUG["rope_emb_max_grid"]
+    if ORIGIN_ROPE_DEBUG["pids"] is not None:
+        activations["origin"]["0.19 pids"] = ORIGIN_ROPE_DEBUG["pids"]
     if ORIGIN_ROPE_DEBUG["rope_emb"] is not None:
         activations["origin"]["0.20 rope_emb"] = ORIGIN_ROPE_DEBUG["rope_emb"]
     if ORIGIN_ROPE_DEBUG["cos_before_chunk"] is not None:
@@ -443,9 +449,15 @@ def test_pipeline_alignment():
     # Muse 模型: 从 rope 模块读取中间变量
     if vit_backbone_muse and hasattr(vit_backbone_muse, "encoder"):
         rope_module = vit_backbone_muse.encoder.rope
-        # 读取 rope_emb, cos, sin 中间变量
+        # 读取 inv_freq, rope_emb_max_grid, pids, rope_emb, cos, sin 中间变量
         if hasattr(rope_module, '_debug_rope_intermediates'):
             intermediates = rope_module._debug_rope_intermediates
+            if intermediates.get("inv_freq") is not None:
+                activations["muse"]["0.18 inv_freq"] = intermediates["inv_freq"]
+            if intermediates.get("rope_emb_max_grid") is not None:
+                activations["muse"]["0.19 rope_emb_max_grid"] = intermediates["rope_emb_max_grid"]
+            if intermediates.get("pids") is not None:
+                activations["muse"]["0.19 pids"] = intermediates["pids"]
             if intermediates.get("rope_emb") is not None:
                 activations["muse"]["0.20 rope_emb"] = intermediates["rope_emb"]
             if intermediates.get("cos_before_chunk") is not None:
@@ -469,6 +481,9 @@ def test_pipeline_alignment():
         "0.0 ViT Embeddings Out",
         "0.1 LN1 Output",
         "0.2 Q_Proj Out",
+        "0.18 inv_freq",
+        "0.19 rope_emb_max_grid",
+        "0.19 pids",
         "0.20 rope_emb",
         "0.21 cos_before_chunk",
         "0.21 sin_before_chunk",
@@ -488,6 +503,9 @@ def test_pipeline_alignment():
     
     # 需要详细打印值的检查点 (打印 dtype 和前 10 个值)
     rope_detail_checkpoints = {
+        "0.18 inv_freq",
+        "0.19 rope_emb_max_grid",
+        "0.19 pids",
         "0.20 rope_emb",
         "0.21 cos_before_chunk",
         "0.21 sin_before_chunk", 

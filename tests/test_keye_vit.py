@@ -55,6 +55,7 @@ _ensure_origin_ready()
 # Import the Reference Implementation (Origin)
 # Assuming this file exists in your path as per previous debug sessions
 from tests.model_for_compare.keye_vit import modeling_keye_origin as keye_origin
+from tests.model_for_compare.keye_vit.modeling_keye_origin import _DEBUG_ROPE_OUTPUTS as ORIGIN_ROPE_DEBUG
 OriginKeyeVisionModel = keye_origin.SiglipVisionModel 
 
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
@@ -551,6 +552,13 @@ def _run_keye_vision_layer0_step_by_step():
     position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
     cu_seqlens = torch.tensor([0, seq_len], dtype=torch.int32, device=device)
 
+    # 清空 Muse 模型 RoPE 调试输出
+    rope_module = muse_model.encoder.rope
+    if hasattr(rope_module, '_debug_rope_outputs'):
+        rope_module._debug_rope_outputs = []
+    if hasattr(rope_module, '_debug_rope_intermediates'):
+        rope_module._debug_rope_intermediates = {}
+
     log_header("Running Inference")
     with torch.no_grad():
         origin_model(
@@ -571,8 +579,50 @@ def _run_keye_vision_layer0_step_by_step():
             has_learnable_position_embedding=True,
         )
 
+    # --- 收集 RoPE 中间变量 ---
+    # Origin 模型: 从全局变量读取
+    if ORIGIN_ROPE_DEBUG["rope_emb"] is not None:
+        activations["origin"]["0.20 rope_emb"] = ORIGIN_ROPE_DEBUG["rope_emb"]
+    if ORIGIN_ROPE_DEBUG["cos_before_chunk"] is not None:
+        activations["origin"]["0.21 cos_before_chunk"] = ORIGIN_ROPE_DEBUG["cos_before_chunk"]
+    if ORIGIN_ROPE_DEBUG["sin_before_chunk"] is not None:
+        activations["origin"]["0.21 sin_before_chunk"] = ORIGIN_ROPE_DEBUG["sin_before_chunk"]
+    if ORIGIN_ROPE_DEBUG["cos_after_chunk"] is not None:
+        activations["origin"]["0.22 cos_after_chunk"] = ORIGIN_ROPE_DEBUG["cos_after_chunk"]
+    if ORIGIN_ROPE_DEBUG["sin_after_chunk"] is not None:
+        activations["origin"]["0.22 sin_after_chunk"] = ORIGIN_ROPE_DEBUG["sin_after_chunk"]
+    if ORIGIN_ROPE_DEBUG["q_after_rope"] is not None:
+        activations["origin"]["0.25 Q After RoPE"] = ORIGIN_ROPE_DEBUG["q_after_rope"]
+    if ORIGIN_ROPE_DEBUG["k_after_rope"] is not None:
+        activations["origin"]["0.25 K After RoPE"] = ORIGIN_ROPE_DEBUG["k_after_rope"]
+    
+    # Muse 模型: 从 rope 模块读取中间变量
+    if hasattr(rope_module, '_debug_rope_intermediates'):
+        intermediates = rope_module._debug_rope_intermediates
+        if intermediates.get("rope_emb") is not None:
+            activations["muse"]["0.20 rope_emb"] = intermediates["rope_emb"]
+        if intermediates.get("cos_before_chunk") is not None:
+            activations["muse"]["0.21 cos_before_chunk"] = intermediates["cos_before_chunk"]
+        if intermediates.get("sin_before_chunk") is not None:
+            activations["muse"]["0.21 sin_before_chunk"] = intermediates["sin_before_chunk"]
+        if intermediates.get("cos_after_chunk") is not None:
+            activations["muse"]["0.22 cos_after_chunk"] = intermediates["cos_after_chunk"]
+        if intermediates.get("sin_after_chunk") is not None:
+            activations["muse"]["0.22 sin_after_chunk"] = intermediates["sin_after_chunk"]
+    # 读取 RoPE 后的 q、k
+    if hasattr(rope_module, '_debug_rope_outputs') and len(rope_module._debug_rope_outputs) >= 2:
+        activations["muse"]["0.25 Q After RoPE"] = rope_module._debug_rope_outputs[0]
+        activations["muse"]["0.25 K After RoPE"] = rope_module._debug_rope_outputs[1]
+
     log_header("Layer 0 Internal Tensor Diff Analysis")
     keys = [
+        "0.20 rope_emb",
+        "0.21 cos_before_chunk",
+        "0.21 sin_before_chunk",
+        "0.22 cos_after_chunk",
+        "0.22 sin_after_chunk",
+        "0.25 Q After RoPE",
+        "0.25 K After RoPE",
         "1. LN1 Output",
         "2. Q_Proj Out",
         "2. K_Proj Out",
