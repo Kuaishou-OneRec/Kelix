@@ -524,10 +524,10 @@ def train():
         # Initialize RoPE, if the buffer is not in the state_dict,
         # it still on meta device, so we need to initialize it here
         for m in model.modules():
-        # RoPE is not covered in state dict
-        if hasattr(m, "rope_init"):
-            print_rank_0("Initialize RoPE")
-            m.rope_init()
+            # RoPE is not covered in state dict
+            if hasattr(m, "rope_init"):
+                print_rank_0("Initialize RoPE")
+                m.rope_init()
 
     # Check if all parameters & buffers are initialized
     for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
