@@ -324,7 +324,7 @@ def _run_keye_vision_align_with_hf_checkpoint():
     if len(unexpected) > 0:
         print(f"Origin Model Unexpected: {unexpected[:5]}...")
 
-    origin_model.to(device)
+    origin_model.to(device, dtype)
     origin_model.eval()
 
     # === 3. Initialize Muse Model ===
@@ -344,7 +344,7 @@ def _run_keye_vision_align_with_hf_checkpoint():
     if m_missing: print(f"Muse Missing: {m_missing}")
     if m_unexpected: print(f"Muse Unexpected: {m_unexpected}")
 
-    muse_model.to(device)
+    muse_model.to(device, dtype)
     muse_model.eval()
 
     # === 5. Weight Verification ===
@@ -488,8 +488,8 @@ def _run_keye_vision_layer0_step_by_step():
     muse_model.load_state_dict(muse_state, strict=False)
     origin_model.load_state_dict(origin_load_dict, strict=False)
 
-    origin_model.to(device)
-    muse_model.to(device)
+    origin_model.to(device, dtype)
+    muse_model.to(device, dtype)
 
     activations = {"origin": {}, "muse": {}}
 
