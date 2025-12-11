@@ -179,6 +179,7 @@ def make_hook(model_name, layer_name, capture_input=False, key=None):
 
 def register_detailed_hooks(model, name_prefix):
     logger.info(f"Registering DETAILED hooks for {name_prefix}...")
+    llm_layer_count = 0
     
     vit_backbone = None
     if hasattr(model, "visual_tokenizer") and hasattr(model.visual_tokenizer, "visual"):
@@ -231,7 +232,35 @@ def register_detailed_hooks(model, name_prefix):
     elif hasattr(model, "text_model") and hasattr(model.text_model, "model"):
         llm_layers = model.text_model.model.layers
     if llm_layers:
-        llm_layers[0].register_forward_hook(make_hook(name_prefix, "4.0 LLM Layer 0 Input", capture_input=True))
+        llm_layer_count = len(llm_layers)
+        for idx, layer in enumerate(llm_layers):
+            layer.register_forward_hook(
+                make_hook(name_prefix, f"4.{idx:02d} LLM Layer {idx} Input", capture_input=True)
+            )
+            layer.register_forward_hook(make_hook(name_prefix, f"4.{idx:02d} LLM Layer {idx} Output"))
+
+    # Final LLM states (pre-head and logits)
+    decoder = None
+    if hasattr(model, "model"):
+        decoder = model.model
+        if hasattr(decoder, "model"):
+            decoder = decoder.model
+    elif hasattr(model, "text_model") and hasattr(model.text_model, "model"):
+        decoder = model.text_model.model
+
+    decoder_norm = decoder.norm if decoder and hasattr(decoder, "norm") else None
+    decoder_output_proj = None
+    if hasattr(model, "lm_head"):
+        decoder_output_proj = model.lm_head
+    elif decoder and hasattr(decoder, "output"):
+        decoder_output_proj = decoder.output
+
+    if decoder_norm:
+        decoder_norm.register_forward_hook(make_hook(name_prefix, "5.0 LLM Final Hidden"))
+    if decoder_output_proj:
+        decoder_output_proj.register_forward_hook(make_hook(name_prefix, "5.1 LLM Logits"))
+
+    return llm_layer_count
 
 # =========================================================================
 # Input Preparation (KeyeProcessor Logic)
@@ -409,8 +438,9 @@ def test_pipeline_alignment():
     muse_model.to(device)
 
     # --- Hooks ---
-    register_detailed_hooks(origin_model, "origin")
-    register_detailed_hooks(muse_model, "muse")
+    origin_llm_layers = register_detailed_hooks(origin_model, "origin")
+    muse_llm_layers = register_detailed_hooks(muse_model, "muse")
+    max_llm_layers = max(origin_llm_layers, muse_llm_layers)
 
     # --- Inputs (Via Real Processor) ---
     log_separator("Running Processor Pipeline")
@@ -513,8 +543,16 @@ def test_pipeline_alignment():
         "1.0 ViT Final Output",
         "2.0 Projector Output",
         "3.0 VQ[0] Output",
-        "4.0 LLM Layer 0 Input"
     ]
+
+    for i in range(max_llm_layers):
+        checkpoints.append(f"4.{i:02d} LLM Layer {i} Input")
+        checkpoints.append(f"4.{i:02d} LLM Layer {i} Output")
+
+    checkpoints.extend([
+        "5.0 LLM Final Hidden",
+        "5.1 LLM Logits",
+    ])
     
     # 需要详细打印值的检查点 (打印 dtype 和前 10 个值)
     rope_detail_checkpoints = {
