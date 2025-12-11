@@ -86,6 +86,31 @@ def _get_cosine_schedule_with_warmup_lr_lambda(
         factor = factor * (1 - min_lr_rate) + min_lr_rate
         return max(0, factor)
 
+def _get_constant_schedule_with_warmup_lr_lambda(
+        current_step: int, *,
+        num_warmup_steps: int) -> float:
+    """
+    Compute learning rate multiplier for constant schedule with warmup.
+    
+    This is an internal helper function that implements the learning rate
+    schedule logic. It returns a multiplier (0.0 to 1.0) that will be applied
+    to the base learning rate.
+    
+    Schedule phases:
+    1. Warmup phase (0 to num_warmup_steps): Linear increase from 0 to 1
+    2. Constant phase (after num_warmup_steps): LR = 1.0
+    
+    Args:
+        current_step (int): Current training step
+        num_warmup_steps (int): Number of warmup steps
+        
+    Returns:
+        float: Learning rate multiplier in range [0.0, 1.0]
+    """
+    if current_step < num_warmup_steps:
+        return float(current_step) / float(max(1, num_warmup_steps))
+    return 1.0
+
 def get_cosine_scheduler(
     optimizer: Optimizer,
     num_warmup_steps: int,
@@ -137,6 +162,30 @@ def get_cosine_scheduler(
 
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
+def get_constant_scheduler(
+    optimizer: Optimizer,
+    num_warmup_steps: int = 0,
+    last_epoch: int = -1,
+    **kwargs) -> LambdaLR:
+    """
+    Create a learning rate schedule that linearly increases the learning rate from
+    0.0 to lr over ``num_warmup_steps``, then keeps it constant.
+
+    Args:
+        optimizer (torch.optim.Optimizer): The optimizer for which to
+            schedule the learning rate.
+        num_warmup_steps (int): The number of steps for the warmup phase. Defaults to 0.
+        last_epoch (int): The index of the last epoch when resuming training. Defaults to -1
+
+    Returns:
+        torch.optim.lr_scheduler.LambdaLR with the appropriate schedule.
+    """
+    lr_lambda = partial(
+        _get_constant_schedule_with_warmup_lr_lambda,
+        num_warmup_steps=num_warmup_steps,
+    )
+    return LambdaLR(optimizer, lr_lambda, last_epoch)
+
 def get_scheduler(
     name: str,
     optimizer: Optimizer,
@@ -148,9 +197,10 @@ def get_scheduler(
     
     Currently supports:
     - "cosine": Cosine annealing with warmup
+    - "constant": Constant learning rate with optional warmup
     
     Args:
-        name (str): Name of the scheduler ("cosine")
+        name (str): Name of the scheduler ("cosine", "constant")
         optimizer (Optimizer): PyTorch optimizer to schedule
         num_warmup_steps (int, optional): Number of warmup steps
         num_training_steps (int, optional): Total training steps
@@ -177,6 +227,12 @@ def get_scheduler(
             optimizer=optimizer,
             num_warmup_steps=num_warmup_steps,
             num_training_steps=num_training_steps,
+            **kwargs
+        )
+    elif name == "constant":
+        return get_constant_scheduler(
+            optimizer=optimizer,
+            num_warmup_steps=num_warmup_steps or 0,
             **kwargs
         )
     else:
