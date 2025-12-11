@@ -222,8 +222,14 @@ def register_detailed_hooks(model, name_prefix):
             vt.quantizer[0].register_forward_hook(make_hook(name_prefix, "3.0 VQ[0] Output", key="z_q"))
 
     llm_layers = None
-    if hasattr(model, "model") and hasattr(model.model, "layers"): llm_layers = model.model.layers
-    elif hasattr(model, "text_model") and hasattr(model.text_model, "model"): llm_layers = model.text_model.model.layers
+    # Qwen3: KeyeForConditionalGeneration.model -> Qwen3Model -> .model (TransformerDecoder) -> .layers
+    if hasattr(model, "model") and hasattr(model.model, "layers"):
+        llm_layers = model.model.layers
+    elif hasattr(model, "model") and hasattr(model.model, "model") and hasattr(model.model.model, "layers"):
+        # Fallback: some wrappers nest another `.model`
+        llm_layers = model.model.model.layers
+    elif hasattr(model, "text_model") and hasattr(model.text_model, "model"):
+        llm_layers = model.text_model.model.layers
     if llm_layers:
         llm_layers[0].register_forward_hook(make_hook(name_prefix, "4.0 LLM Layer 0 Input", capture_input=True))
 
