@@ -123,7 +123,7 @@ class TokenDecoder(Model):
             num_heads=nhead,
             head_dim=head_dim,
             norm=Fp32LayerNorm(d_model, eps=1e-5),
-            output=nn.Linear(d_model, vocab_size, bias=False) if lm_head is None else lm_head
+            output=nn.Identity() if lm_head is None else lm_head
         )
     
     def forward(self, x_emb: torch.Tensor) -> torch.Tensor:
@@ -147,7 +147,7 @@ class TokenDecoder(Model):
         # 前向传播
         output = self.transformer(input_embeds=x_emb)
         
-        # 输出线性层和残差连接
+        # 输出线性层和残差连接（只有当lm_head为None时才应用）
         if self.lm_head is None:
             output = self.output_linear(output)
             output = output + x_emb0
@@ -319,8 +319,15 @@ class TokenDecoder(Model):
             elif key == "input_linear.bias":
                 new_key = "input_linear.bias"
             elif key == "output_linear.weight":
-                # 关键修复：原始模型的output_linear.weight对应新模型的transformer.output.weight
-                new_key = "transformer.output.weight"
+                # 关键修复：当lm_head为None且reduce=False时，原始模型output_linear是Identity
+                # 新模型transformer.output也是Identity，不需要映射
+                if not reduce_mode:
+                    # 跳过这个键，因为新模型不需要它
+                    skipped_keys.append(key)
+                    continue
+                else:
+                    # reduce=True时，映射到output_linear.weight
+                    new_key = "output_linear.weight"
             elif key == "output_linear.bias":
                 new_key = "output_linear.bias"
             
@@ -395,14 +402,19 @@ class TokenDecoder(Model):
                 # 其他键跳过
                 skipped_keys.append(key)
         
-        # 关键修复：如果reduce=False，需要为transformer.output.weight创建一个单位矩阵
+        # 关键修复：当reduce=False且lm_head为None时，不需要创建transformer.output.weight
+        # 因为transformer.output是nn.Identity()
         if not reduce_mode and "transformer.output.weight" not in converted_state_dict:
-            # 从token_embedding.weight获取d_model维度
-            d_model = state_dict["token_embedding.weight"].shape[1]
-            # 创建单位矩阵作为transformer.output.weight
-            identity_matrix = torch.eye(d_model)
-            converted_state_dict["transformer.output.weight"] = identity_matrix
-            print(f"  为reduce=False模式创建单位矩阵transformer.output.weight，维度: {d_model}")
+            # 只有当原始模型有lm_head时，才需要创建transformer.output.weight
+            if "lm_head.weight" in state_dict:
+                # 从token_embedding.weight获取d_model维度
+                d_model = state_dict["token_embedding.weight"].shape[1]
+                # 创建单位矩阵作为transformer.output.weight
+                identity_matrix = torch.eye(d_model)
+                converted_state_dict["transformer.output.weight"] = identity_matrix
+                print(f"  为reduce=False模式创建单位矩阵transformer.output.weight，维度: {d_model}")
+            else:
+                print(f"  reduce=False且lm_head=None，transformer.output使用Identity，无需权重")
         
         # 打印转换统计信息
         print(f"转换状态字典统计:")
