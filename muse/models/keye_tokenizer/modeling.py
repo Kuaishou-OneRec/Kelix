@@ -390,7 +390,7 @@ class KeyeImageTokenizer(Model):
             cu_seqlens=cu_seqlens,
         )
         image_embeds = vision_outputs['last_hidden_state']
-        image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
+        image_embeds = self.mlp_AR(image_embeds, image_grid_hws)
         return image_embeds
 
     def forward(
