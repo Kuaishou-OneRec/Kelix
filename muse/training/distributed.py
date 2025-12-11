@@ -349,7 +349,7 @@ def load_from_full_model_state_dict(model: "FSDPModule",
                 device="cuda",
                 dtype=sharded_meta_param.dtype,
             )
-
+        print(param_name, sharded_meta_param)
         mesh = sharded_meta_param.device_mesh
 
         dist.broadcast(full_tensor, src=0, group=mesh.get_group(0))
