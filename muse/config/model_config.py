@@ -257,10 +257,6 @@ class SiglipVisionConfig(ModelConfig):
         default="flash_attention_2",
         description="Attention backend implementation.",
     )
-    _attn_implementation: Literal["eager", "flash_attention_2", "sdpa"] = Field(
-        default="flash_attention_2",
-        description="Attention backend implementation."
-    )
     output_attentions: bool = Field(
         default=False,
         description="Whether the encoder returns attention probabilities.",
