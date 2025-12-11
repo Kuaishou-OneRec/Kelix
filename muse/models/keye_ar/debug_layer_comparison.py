@@ -1,264 +1,226 @@
 import torch
 import torch.nn as nn
-import sys
-import os
-
-# 添加项目根目录到Python路径
-sys.path.append(os.path.abspath(os.path.dirname(__file__)))
-
-# 导入两个模型类
-from muse.models.keye_ar.token_decoder_ori import PureDecoderTransformer
-from muse.models.keye_ar.token_decoder import TokenDecoder
-
+from typing import Dict, Any, Tuple
+from token_decoder_ori import PureDecoderTransformer
+from token_decoder import TokenDecoder
 
 class LayerComparisonDebugger:
-    def __init__(self, ori_model, new_model):
+    def __init__(self, ori_model: PureDecoderTransformer, new_model: TokenDecoder):
         self.ori_model = ori_model
         self.new_model = new_model
         self.ori_outputs = {}
         self.new_outputs = {}
-        self.hooks = []
         
-    def register_hooks(self):
-        """注册forward hooks来捕获每层的输出"""
-        # 清除之前的hooks和outputs
-        self.clear_hooks()
+        # 注册hook以捕获各层输出
+        self._register_hooks()
+    
+    def _register_hooks(self):
+        """注册forward hooks以捕获各层输出"""
+        # 清空之前的记录
         self.ori_outputs.clear()
         self.new_outputs.clear()
         
-        # 为原始模型注册hooks
-        self._register_model_hooks(self.ori_model, "ori", self.ori_outputs)
+        # 原始模型hooks
+        self.ori_model.token_embedding.register_forward_hook(
+            lambda module, input, output: self.ori_outputs.update({"ori_token_embedding": input[0]})
+        )
+        self.ori_model.position_embedding.register_forward_hook(
+            lambda module, input, output: self.ori_outputs.update({"ori_position_embedding": output})
+        )
+        self.ori_model.input_linear.register_forward_hook(
+            lambda module, input, output: self.ori_outputs.update({"ori_input_linear": output})
+        )
         
-        # 为新模型注册hooks
-        self._register_model_hooks(self.new_model, "new", self.new_outputs)
+        # 注册原始模型的transformer层hooks
+        for i, layer in enumerate(self.ori_model.layers):
+            layer.register_forward_hook(
+                lambda module, input, output, idx=i: self.ori_outputs.update({f"ori_layer_{idx}": output})
+            )
         
-    def _register_model_hooks(self, model, prefix, output_dict):
-        """为模型注册hooks"""
-        # 注册token embedding层的hook
-        if hasattr(model, 'token_embedding'):
-            hook = model.token_embedding.register_forward_hook(
-                lambda module, input, output: output_dict.update({f"{prefix}_token_embedding": output.clone()})
-            )
-            self.hooks.append(hook)
-            
-        # 注册position embedding层的hook
-        if hasattr(model, 'position_embedding'):
-            hook = model.position_embedding.register_forward_hook(
-                lambda module, input, output: output_dict.update({f"{prefix}_position_embedding": output.clone()})
-            )
-            self.hooks.append(hook)
-            
-        # 注册input_linear层的hook
-        if hasattr(model, 'input_linear'):
-            hook = model.input_linear.register_forward_hook(
-                lambda module, input, output: output_dict.update({f"{prefix}_input_linear": output.clone()})
-            )
-            self.hooks.append(hook)
-            
-        # 注册各层decoder的hooks
-        if hasattr(model, 'layers'):
-            for i, layer in enumerate(model.layers):
-                hook = layer.register_forward_hook(
-                    lambda module, input, output, idx=i: output_dict.update({f"{prefix}_layer_{idx}": output.clone()})
-                )
-                self.hooks.append(hook)
-                
-        # 注册final_norm层的hook（如果是原始模型）
-        if hasattr(model, 'final_norm'):
-            hook = model.final_norm.register_forward_hook(
-                lambda module, input, output: output_dict.update({f"{prefix}_final_norm": output.clone()})
-            )
-            self.hooks.append(hook)
-            
-        # 注册output_linear层的hook
-        if hasattr(model, 'output_linear'):
-            hook = model.output_linear.register_forward_hook(
-                lambda module, input, output: output_dict.update({f"{prefix}_output_linear": output.clone()})
-            )
-            self.hooks.append(hook)
-            
-        # 注册lm_head层的hook（如果存在）
-        if hasattr(model, 'lm_head') and model.lm_head is not None:
-            hook = model.lm_head.register_forward_hook(
-                lambda module, input, output: output_dict.update({f"{prefix}_lm_head": output.clone()})
-            )
-            self.hooks.append(hook)
-            
-        # 对于新模型，还需要注册transformer内部层的hooks
-        if hasattr(model, 'transformer') and hasattr(model.transformer, 'layers'):
-            for i, layer in enumerate(model.transformer.layers):
-                hook = layer.register_forward_hook(
-                    lambda module, input, output, idx=i: output_dict.update({f"{prefix}_transformer_layer_{idx}": output.clone()})
-                )
-                self.hooks.append(hook)
-                
-    def clear_hooks(self):
-        """清除所有hooks"""
-        for hook in self.hooks:
-            hook.remove()
-        self.hooks.clear()
+        self.ori_model.output_linear.register_forward_hook(
+            lambda module, input, output: self.ori_outputs.update({"ori_output_linear": output})
+        )
         
-    def compare_outputs(self):
-        """比较两个模型各层的输出"""
-        print("\n=== 各层输出比较 ===")
+        # 新模型hooks
+        self.new_model.token_embedding.register_forward_hook(
+            lambda module, input, output: self.new_outputs.update({"new_token_embedding": input[0]})
+        )
+        self.new_model.position_embedding.register_forward_hook(
+            lambda module, input, output: self.new_outputs.update({"new_position_embedding": output})
+        )
+        self.new_model.input_linear.register_forward_hook(
+            lambda module, input, output: self.new_outputs.update({"new_input_linear": output})
+        )
         
-        # 获取所有层名
-        all_keys = set(self.ori_outputs.keys()) | set(self.new_outputs.keys())
+        # 注册新模型的transformer层hooks
+        for i, layer in enumerate(self.new_model.transformer.layers):
+            layer.register_forward_hook(
+                lambda module, input, output, idx=i: self.new_outputs.update({f"new_transformer_layer_{idx}": output})
+            )
         
-        for key in sorted(all_keys):
-            # 移除前缀以进行比较
-            ori_key = key.replace("new_", "ori_")
-            new_key = key.replace("ori_", "new_")
+        self.new_model.output_linear.register_forward_hook(
+            lambda module, input, output: self.new_outputs.update({"new_output_linear": output})
+        )
+    
+    def compare_outputs(self) -> Dict[str, Dict[str, Any]]:
+        """比较各层输出并返回差异分析"""
+        comparison_results = {}
+        
+        # 收集所有层名称
+        all_layers = set(self.ori_outputs.keys()) | set(self.new_outputs.keys())
+        
+        for layer_name in all_layers:
+            result = {
+                "ori_shape": None,
+                "new_shape": None,
+                "max_diff": None,
+                "mean_diff": None,
+                "ori_values": None,
+                "new_values": None
+            }
             
-            if ori_key in self.ori_outputs and new_key in self.new_outputs:
-                ori_output = self.ori_outputs[ori_key]
-                new_output = self.new_outputs[new_key]
+            ori_output = self.ori_outputs.get(layer_name)
+            new_output = self.new_outputs.get(layer_name)
+            
+            if ori_output is not None and new_output is not None:
+                # 两模型都有的层
+                result["ori_shape"] = ori_output.shape
+                result["new_shape"] = new_output.shape
                 
                 # 计算差异
                 diff = torch.abs(ori_output - new_output)
-                max_diff = torch.max(diff).item()
-                mean_diff = torch.mean(diff).item()
+                result["max_diff"] = diff.max().item()
+                result["mean_diff"] = diff.mean().item()
                 
-                print(f"{key}:")
-                print(f"  形状: {ori_output.shape}")
-                print(f"  最大差异: {max_diff:.6f}")
-                print(f"  平均差异: {mean_diff:.6f}")
-                
-                # 如果差异较大，打印详细信息
-                if max_diff > 1e-5:
-                    print(f"  ⚠️  差异较大!")
-                    
-                    # 打印前几个元素的值
-                    flat_ori = ori_output.flatten()
-                    flat_new = new_output.flatten()
-                    print(f"  原始模型前5个值: {[f'{x:.6f}' for x in flat_ori[:5].tolist()]}")
-                    print(f"  新模型前5个值: {[f'{x:.6f}' for x in flat_new[:5].tolist()]}")
+                # 显示前5个值用于调试
+                result["ori_values"] = [f"{v:.6f}" for v in ori_output.flatten()[:5].tolist()]
+                result["new_values"] = [f"{v:.6f}" for v in new_output.flatten()[:5].tolist()]
+            elif ori_output is not None:
+                # 只在原始模型中存在的层
+                result["ori_shape"] = ori_output.shape
+                result["new_shape"] = "N/A"
+                result["max_diff"] = "Only in original model"
             else:
-                print(f"{key}: 只在一个模型中存在")
-                if ori_key in self.ori_outputs:
-                    print(f"  原始模型输出形状: {self.ori_outputs[ori_key].shape}")
-                if new_key in self.new_outputs:
-                    print(f"  新模型输出形状: {self.new_outputs[new_key].shape}")
-                    
-    def debug_forward_pass(self, input_embeddings):
-        """执行前向传播并比较各层输出"""
-        print("\n=== 开始调试前向传播 ===")
+                # 只在新模型中存在的层
+                result["ori_shape"] = "N/A"
+                result["new_shape"] = new_output.shape
+                result["max_diff"] = "Only in new model"
+            
+            comparison_results[layer_name] = result
         
-        # 注册hooks
-        self.register_hooks()
+        return comparison_results
+    
+    def print_comparison(self):
+        """打印比较结果"""
+        results = self.compare_outputs()
         
-        # 设置为评估模式
-        self.ori_model.eval()
-        self.new_model.eval()
-        
-        # 禁用梯度计算
-        with torch.no_grad():
-            print("执行原始模型前向传播...")
-            ori_output = self.ori_model(input_embeddings)
+        print("\n=== 各层输出比较 ===")
+        for layer_name, result in results.items():
+            print(f"{layer_name}:")
+            print(f"  原始模型形状: {result['ori_shape']}")
+            print(f"  新模型形状: {result['new_shape']}")
             
-            print("执行新模型前向传播...")
-            new_output = self.new_model(input_embeddings)
-            
-            # 比较最终输出
-            diff = torch.abs(ori_output - new_output)
-            max_diff = torch.max(diff).item()
-            mean_diff = torch.mean(diff).item()
-            
-            print(f"\n=== 最终输出比较 ===")
-            print(f"原始模型输出形状: {ori_output.shape}")
-            print(f"新模型输出形状: {new_output.shape}")
-            print(f"输出最大差异: {max_diff:.6f}")
-            print(f"输出平均差异: {mean_diff:.6f}")
-            
-            # 比较各层输出
-            self.compare_outputs()
-            
-        # 清除hooks
-        self.clear_hooks()
-
+            if isinstance(result['max_diff'], (int, float)):
+                print(f"  最大差异: {result['max_diff']:.6f}")
+                print(f"  平均差异: {result['mean_diff']:.6f}")
+                if result['max_diff'] > 1e-5:  # 如果差异较大
+                    print("  ⚠️  差异较大!")
+                print(f"  原始模型前5个值: {result['ori_values']}")
+                print(f"  新模型前5个值: {result['new_values']}")
+            else:
+                print(f"  {result['max_diff']}")
+                if result['ori_shape'] != "N/A":
+                    print(f"  原始模型输出形状: {result['ori_shape']}")
+                else:
+                    print(f"  新模型输出形状: {result['new_shape']}")
+            print()
 
 def debug_convert_hf_state_dict():
-    """
-    调试convert_hf_state_dict函数的正确性
-    """
-    print("开始调试convert_hf_state_dict函数...")
+    """调试状态字典转换过程"""
+    # 配置参数（与test_convert_hf_state_dict.py保持一致）
+    vocab_size = 1000
+    max_length = 30
+    d_model = 128
+    eos_token = 999
+    nhead = 4
+    num_layers = 2
+    dim_feedforward = 512
+    reduce = False  # 关键参数
     
-    # 1. 设置相同的配置参数
-    config = {
-        "vocab_size": 1000,
-        "max_length": 30,
-        "d_model": 128,
-        "eos_token": 999,
-        "nhead": 4,
-        "num_layers": 2,
-        "dim_feedforward": 512,
-        "use_gradient_checkpointing": False,
-        "reduce": False,
-        "attention_function": "eager"  # 新模型使用eager attention，对应原始模型的use_flash_attn=False
-    }
+    print(f"配置参数: d_model={d_model}, nhead={nhead}, num_layers={num_layers}, reduce={reduce}")
     
-    # 2. 初始化原始模型和新模型
-    print("\n初始化模型...")
+    # 必须手动创建token_embedding以在两个模型间共享
+    token_embedding = nn.Embedding(vocab_size, d_model)
     
-    # 创建共享的token embedding
-    token_embedding = nn.Embedding(config["vocab_size"], config["d_model"])
-    
-    # 初始化原始模型 (PureDecoderTransformer)
+    # 创建原始模型
     ori_model = PureDecoderTransformer(
-        vocab_size=config["vocab_size"],
-        max_length=config["max_length"],
-        d_model=config["d_model"],
-        eos_token=config["eos_token"],
-        nhead=config["nhead"],
-        num_layers=config["num_layers"],
-        dim_feedforward=config["dim_feedforward"],
-        token_embedding=token_embedding,
-        use_flash_attn=False,  # 使用eager attention以匹配新模型
-        use_gradient_checkpointing=config["use_gradient_checkpointing"],
-        reduce=config["reduce"],
-        lm_head=None  # 不使用lm_head以简化测试
+        vocab_size=vocab_size,
+        max_length=max_length,
+        d_model=d_model,
+        eos_token=eos_token,
+        nhead=nhead,
+        num_layers=num_layers,
+        dim_feedforward=dim_feedforward,
+        token_embedding=token_embedding,  # 共享token_embedding
+        use_flash_attn=False,
+        use_gradient_checkpointing=False,
+        reduce=reduce
     )
     
-    # 初始化新模型 (TokenDecoder)
+    # 创建新模型
     new_model = TokenDecoder(
-        vocab_size=config["vocab_size"],
-        max_length=config["max_length"],
-        d_model=config["d_model"],
-        eos_token=config["eos_token"],
-        nhead=config["nhead"],
-        num_layers=config["num_layers"],
-        dim_feedforward=config["dim_feedforward"],
-        token_embedding=token_embedding,
-        use_gradient_checkpointing=config["use_gradient_checkpointing"],
-        reduce=config["reduce"],
-        attention_function=config["attention_function"]
+        vocab_size=vocab_size,
+        max_length=max_length,
+        d_model=d_model,
+        eos_token=eos_token,
+        nhead=nhead,
+        num_layers=num_layers,
+        dim_feedforward=dim_feedforward,
+        token_embedding=token_embedding,  # 共享token_embedding
+        reduce=reduce
     )
     
-    # 3. 转换状态字典
-    print("\n转换状态字典...")
+    # 获取原始模型状态字典
     ori_state_dict = ori_model.state_dict()
     print(f"原始模型状态字典键数: {len(ori_state_dict)}")
     
-    # 使用新模型的convert_hf_state_dict方法转换状态字典
-    converted_state_dict = TokenDecoder.convert_hf_state_dict(ori_state_dict)
+    # 转换状态字典
+    converted_state_dict = TokenDecoder.convert_hf_state_dict(ori_state_dict, reduce_mode=reduce)
     print(f"转换后模型状态字典键数: {len(converted_state_dict)}")
     
-    # 4. 将转换后的状态字典加载到新模型中
+    # 加载转换后的状态字典到新模型
     print("\n加载转换后的状态字典到新模型...")
-    new_model.load_state_dict(converted_state_dict)
+    new_model.load_state_dict(converted_state_dict, strict=False)
     
-    # 5. 创建调试器并执行调试
+    # 创建调试器
     print("\n创建调试器...")
     debugger = LayerComparisonDebugger(ori_model, new_model)
     
-    # 创建测试输入
-    batch_size = 2
-    seq_len = 5
-    input_embeddings = torch.randn(batch_size, seq_len, config["d_model"])
+    # 准备测试输入
+    batch_size, seq_len = 2, 5
+    test_input = torch.randint(0, vocab_size, (batch_size, seq_len))
     
-    # 执行调试前向传播
-    debugger.debug_forward_pass(input_embeddings)
-
+    print("\n=== 开始调试前向传播 ===")
+    # 执行前向传播
+    print("执行原始模型前向传播...")
+    with torch.no_grad():
+        ori_output = ori_model(test_input)
+    
+    print("执行新模型前向传播...")
+    with torch.no_grad():
+        new_output = new_model(test_input)
+    
+    # 比较最终输出
+    print("\n=== 最终输出比较 ===")
+    print(f"原始模型输出形状: {ori_output.shape}")
+    print(f"新模型输出形状: {new_output.shape}")
+    
+    diff = torch.abs(ori_output - new_output)
+    print(f"输出最大差异: {diff.max().item():.6f}")
+    print(f"输出平均差异: {diff.mean().item():.6f}")
+    
+    # 打印详细比较
+    debugger.print_comparison()
 
 if __name__ == "__main__":
     debug_convert_hf_state_dict()
