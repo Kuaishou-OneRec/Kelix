@@ -3803,7 +3803,7 @@ class Projector(nn.Module):
                 image_features: torch.Tensor,
                 image_grid_thw: List[Tuple[int, int, int]]) -> torch.Tensor:
         m1, m2 = self.merge_kernel_size
-        print('maosiyangdebug:::origin',image_features.shape)
+
         if isinstance(image_features, (list, tuple)):
             processed_features = list()
             for image_feature, image_grid in zip(image_features, image_grid_thw):
