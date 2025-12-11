@@ -293,12 +293,12 @@ def load_text_encoder(text_encoder_dir: str, device: torch.device, dtype: torch.
     """
     from transformers import AutoModelForCausalLM
     
-    # Load the full model and get the decoder
+    # Load the full model and get the decoder (matching original Sana)
     text_encoder = AutoModelForCausalLM.from_pretrained(
         text_encoder_dir,
         trust_remote_code=True,
         torch_dtype=dtype,
-    )
+    ).get_decoder()
     text_encoder = text_encoder.to(device).eval()
     text_encoder.requires_grad_(False)
     
