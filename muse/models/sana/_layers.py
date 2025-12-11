@@ -190,6 +190,7 @@ class Mlp(nn.Module):
         self.drop2 = nn.Dropout(drop)
     
     def forward(self, x: torch.Tensor, HW: Optional[Tuple[int, int]] = None) -> torch.Tensor:
+        print(self.fc1.weight.dtype, self.fc1.bias.dtype, x.dtype)
         x = self.fc1(x)
         x = self.act(x)
         x = self.drop1(x)
