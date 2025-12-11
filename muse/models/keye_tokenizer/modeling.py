@@ -272,7 +272,7 @@ class Projector(nn.Module):
             processed_features = torch.concat(processed_features, dim=0)
 
             return processed_features
-
+        print("maosiyangdebug:::",image_features.shape)
         assert image_features.dim() == 2
         dim = image_features.shape[-1]
         hidden_states = self.pre_norm(image_features.view(-1, self.hidden_size))
