@@ -381,10 +381,10 @@ def test_qwen3_logits_align_with_hf_checkpoint():
             buffer.data = buffer.data.to(dtype=dtype)
     
     # Ensure eager attention is used
-    hf_model.config._attn_implementation = "eager"
+    hf_model.config._attn_implementation = "flash_attention_2"
     
     # Ensure Muse model uses eager attention
-    muse_config.attention_function = "eager"
+    muse_config.attention_function = "flash_attention_2"
     
     muse_model.eval()
     hf_model.eval()
