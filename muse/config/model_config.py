@@ -281,6 +281,10 @@ class KeyeVisionConfig(ModelConfig):
     num_hidden_layers: int = Field(default=27, description="Number of encoder blocks.")
     num_attention_heads: int = Field(default=16, description="Attention heads.")
     intermediate_size: int = Field(default=4304, description="MLP hidden dimension.")
+    hidden_act: str = Field(
+        default="gelu_pytorch_tanh",
+        description="Activation function used in the vision MLP (e.g., gelu_pytorch_tanh, silu, gelu)."
+    )
     max_seq_len: int = Field(
         default=4096,
         description="Maximum sequence length for attention. Typically (image_size/patch_size)^2.",

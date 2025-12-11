@@ -342,6 +342,7 @@ def test_pipeline_alignment():
         rope_base=float(raw_cfg.get("rope_theta", 1_000_000)),
         rope_theta=float(raw_cfg.get("rope_theta", 1_000_000)),
         rope_scaling=raw_cfg.get("rope_scaling"),
+        attn_implementation=raw_cfg.get("_attn_implementation", "flash_attention_2"),
         attention_function=raw_cfg.get("_attn_implementation", "flash_attention_2"),
         use_sliding_window=raw_cfg.get("use_sliding_window", False),
         sliding_window=raw_cfg.get("sliding_window"),
@@ -366,7 +367,8 @@ def test_pipeline_alignment():
         rope_theta=inner_vcfg.get("rope_theta", 10000.0),
         use_qk_norm=inner_vcfg.get("use_qk_norm", False),
         qk_norm_eps=inner_vcfg.get("qk_norm_eps", 1e-6),
-        attention_function=raw_cfg.get("_attn_implementation", "flash_attention_2"),
+        attn_implementation=inner_vcfg.get("_attn_implementation", raw_cfg.get("_attn_implementation", "flash_attention_2")),
+        attention_function=inner_vcfg.get("attention_function", inner_vcfg.get("_attn_implementation", raw_cfg.get("_attn_implementation", "flash_attention_2"))),
     )
     
     tokenizer_cfg = KeyeTokenizerConfig(
