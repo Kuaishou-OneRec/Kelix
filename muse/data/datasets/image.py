@@ -65,13 +65,13 @@ class Text2ImageDataset(DistributedDataset):
         sources: Union[List[str], str],
         image_size: Union[int, Tuple[int, int]] = 1024,
         tokenizer_path: Optional[Any] = None,
-        max_length: int = 300,
+        max_text_length: int = 300,
         center_crop: bool = True,
         **kwargs,
     ):
         self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
         self.tokenizer_path = tokenizer_path
-        self.max_length = max_length
+        self.max_text_length = max_text_length
         self.center_crop = center_crop
         
         # Build transforms
@@ -348,7 +348,7 @@ class Text2ImageDataset(DistributedDataset):
         # Use tokenizer with padding to get fixed-length tensors
         tokens = self.tokenizer(
             text,
-            max_length=self.max_length,
+            max_length=self.max_text_length,
             padding="max_length",
             truncation=True,
             return_tensors="pt",

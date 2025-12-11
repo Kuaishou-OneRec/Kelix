@@ -87,7 +87,7 @@ from muse.utils.common import (
     to_cuda,
     dist_reduce_dict
 )
-from muse.data.datasets import ImageTextDataset
+from muse.data.datasets import Text2ImageDataset
 from muse.losses.diffusion import FlowMatchingLoss
 
 from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
@@ -631,27 +631,13 @@ def train():
         dataset_config["tokenizer_path"] = args.tokenizer_path
 
     print_rank_0(f"Building dataset with config: {dataset_config}")
-    dataset = ImageTextDataset(
-        sources=dataset_config.get("sources", dataset_config.get("data_path")),
-        image_size=args.image_size,
-        vae=vae if not args.skip_vae_encode else None,
-        tokenizer=tokenizer if not args.skip_text_encode else None,
-        text_encoder=text_encoder if not args.skip_text_encode else None,
-        max_text_length=args.max_text_length,
-        rank=get_data_parallel_rank(),
-        world_size=get_data_parallel_world_size(),
-        num_workers=args.num_workers,
-        seed=args.seed,
-        **{k: v for k, v in dataset_config.items() if k not in ["sources", "data_path", "name"]}
-    )
-
+    dataset = Text2ImageDataset(**dataset_config)
     dataloader = DataLoader(
         dataset,
         batch_size=args.batch_size,
-        num_workers=0,  # Workers already in DistributedDataset
-        collate_fn=dataset.collate_fn if hasattr(dataset, 'collate_fn') else None,
+        num_workers=0,
+        collate_fn=dataset.collate_fn
     )
-    #####################################################
 
     # Training loop
     print_rank_0("Starting training...")
