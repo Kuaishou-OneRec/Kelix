@@ -274,9 +274,7 @@ class SanaModel(Model):
         x = x.to(self.dtype)
         # Match official: timestep.long().to(torch.float32)
         timestep = timestep.long().to(torch.float32)
-        print(self.dtype)
         y = y.to(self.dtype)
-        print("y: ", y.dtype)
         
         # Get spatial dimensions
         self.h, self.w = x.shape[-2] // self.patch_size, x.shape[-1] // self.patch_size
@@ -307,7 +305,6 @@ class SanaModel(Model):
         t0 = self.t_block(t)  # [N, 6*D]
         
         # Caption embedding
-        print("before y: ", y.dtype)
         y = self.y_embedder(y, self.training, mask=mask)  # [N, 1, L, D] or [N, L, D]
         if self.y_norm:
             y = self.attention_y_norm(y)
