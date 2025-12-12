@@ -595,8 +595,8 @@ class Text2ImageMultiScaleDatasetWrapper(IterableDataset):
         self.drop_last = drop_last
         
         logger.info(
-            f"StreamingBucketDataset initialized with batch_size={batch_size}, "
-            f"{len(aspect_ratios)} aspect ratios, drop_last={drop_last}"
+            f"Text2ImageMultiScaleDataset initialized with batch_size={batch_size}, "
+            f"{len(self.aspect_ratios)} aspect ratios, drop_last={drop_last}"
         )
     
     def __iter__(self) -> Iterator[List[Dict]]:
