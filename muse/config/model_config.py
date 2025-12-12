@@ -237,7 +237,7 @@ class SiglipVisionConfig(ModelConfig):
     """Configuration for the SigLIP vision transformer encoder."""
 
     model_class: str = Field(
-        default="SiglipVisionTransformer",
+        default="KeyeVisionModel",
         description="Model class name used for registry lookup.",
     )
     image_size: int = Field(default=384, description="Input image resolution.")
@@ -284,7 +284,7 @@ class KeyeVisionConfig(ModelConfig):
     """Configuration for the SigLIP vision transformer encoder."""
 
     model_class: str = Field(
-        default="SiglipVisionTransformer",
+        default="KeyeVisionModel",
         description="Model class name used for registry lookup.",
     )
     image_size: int = Field(default=384, description="Input image resolution.")

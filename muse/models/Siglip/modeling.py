@@ -418,7 +418,7 @@ class SiglipEncoder(nn.Module):
 
 
 
-class SiglipVisionTransformer(Model):
+class SiglipVisionModel(Model):
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)
         self.config = config
@@ -680,6 +680,4 @@ class SiglipVisionTransformer(Model):
         return encoder_outputs
 
 
-# Alias for backward compatibility and registry
-SiglipVisionModel = SiglipVisionTransformer
 

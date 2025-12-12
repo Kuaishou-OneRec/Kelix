@@ -23,8 +23,8 @@ if str(REPO_ROOT) not in sys.path:
 
 # Muse imports
 from muse.config.model_config import KeyeVisionConfig
-from muse.models.keye_vit import KeyeVisionTransformer as MuseKeyeVisionModel
-from muse.models.keye_vit.image_processing_keye import KeyeVisionImageProcessor
+from muse.models.keye_vit import KeyeVisionModel as MuseKeyeVisionModel
+from tests.models.keye_vit.image_processing_keye import KeyeVisionImageProcessor
 from muse.training.common import set_default_dtype
 
 # === Mock/Import HF Configs to support Origin Model loading ===
@@ -44,7 +44,7 @@ class HFKeyeConfig(PretrainedConfig):
 
 def _ensure_origin_ready():
     # Helper to inject config classes so Origin model can import them
-    mod = "tests.model_for_compare.keye_vit.configuration_keye"
+    mod = "tests.models.keye_vit.configuration_keye"
     if mod not in sys.modules:
         c = types.ModuleType(mod)
         c.KeyeConfig = HFKeyeConfig
@@ -54,8 +54,8 @@ def _ensure_origin_ready():
 _ensure_origin_ready()
 # Import the Reference Implementation (Origin)
 # Assuming this file exists in your path as per previous debug sessions
-from tests.model_for_compare.keye_vit import modeling_keye_origin as keye_origin
-from tests.model_for_compare.keye_vit.modeling_keye_origin import _DEBUG_ROPE_OUTPUTS as ORIGIN_ROPE_DEBUG
+from tests.models.keye_vit import modeling_keye_origin as keye_origin
+from tests.models.keye_vit.modeling_keye_origin import _DEBUG_ROPE_OUTPUTS as ORIGIN_ROPE_DEBUG
 OriginKeyeVisionModel = keye_origin.SiglipVisionModel 
 
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)

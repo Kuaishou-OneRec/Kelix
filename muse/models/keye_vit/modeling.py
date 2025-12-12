@@ -12,7 +12,7 @@ from muse.models.keye_vit._layers import (
     KeyeMLP,
 )
 from muse.layers.attention import MultiHeadAttention
-from muse.layers.position_embeddings import TwoD_RotaryEmbedding
+from muse.layers.position_embeddings import Roraty2DPositionalEmbeddings
 from muse.layers.transformer import TransformerSelfAttentionLayer
 from muse.layers.rms_norm import RMSNorm
 from muse.models.base import Model
@@ -195,7 +195,7 @@ class KeyeVisionEncoder(nn.Module):
         num_heads = config.num_attention_heads
         head_dim = embed_dim // num_heads
         num_kv_heads = num_heads
-        self.rope = TwoD_RotaryEmbedding(head_dim, max_grid_size=4096, base=config.rope_theta)
+        self.rope = Roraty2DPositionalEmbeddings(head_dim, max_grid_size=4096, base=config.rope_theta)
 
         attn_dropout = getattr(config, "attention_dropout", 0.0)
         intermediate_dim = getattr(config, "intermediate_size", embed_dim * 4)
@@ -365,7 +365,7 @@ class KeyeVisionEncoder(nn.Module):
 
 
 
-class KeyeVisionTransformer(Model):
+class KeyeVisionModel(Model):
     def __init__(self, config: KeyeVisionConfig):
         super().__init__(config)
         self.config = config
@@ -628,8 +628,4 @@ class KeyeVisionTransformer(Model):
         hidden_states = self.ln_post(hidden_states) 
         encoder_outputs["last_hidden_state"] = hidden_states
         return encoder_outputs
-
-
-# Alias for backward compatibility and registry
-KeyeVisionModel = KeyeVisionTransformer
 

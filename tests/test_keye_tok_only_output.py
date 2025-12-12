@@ -30,9 +30,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Muse imports
-from tests.model_for_compare.keye_vl_tokenizer_image import modeling_keye_origin as origin_mod
+from tests.models.keye_vl_tokenizer_image import modeling_keye_origin as origin_mod
 from muse.models.keye_tokenizer.modeling import KeyeImageTokenizer as MuseKeyeImageTokenizer
-from muse.models.keye_tokenizer.image_processing_keye import SiglipImageProcessor
+from tests.models.keye_vl_tokenizer_image.image_processing_keye import SiglipImageProcessor
 from muse.config import KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 

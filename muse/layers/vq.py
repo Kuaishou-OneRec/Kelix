@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
+# TODO: 移除无用的逻辑和代码
 class VectorQuantizer(nn.Module):
     """
     Vector Quantization Layer with support for both argmin and softmax sampling
