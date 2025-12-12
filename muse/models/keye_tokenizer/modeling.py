@@ -191,4 +191,4 @@ class KeyeImageTokenizer(Model):
         return self.visual.encoder.layers
 
     def get_checkpointable_module_classes(self):
-        return {TransformerSelfAttentionLayer}
+        return self.visual.get_checkpointable_module_classes()
