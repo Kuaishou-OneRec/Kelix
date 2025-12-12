@@ -37,7 +37,7 @@ from torchvision import transforms as T
 from transformers import AutoTokenizer
 
 from muse.data.datasets.base import DistributedDataset, load_image
-from muse.data.utils import get_aspect_ratio_dict
+from muse.data.utils import get_aspect_ratio_dict, get_closest_ratio
 
 from torch.utils.data import IterableDataset
 
