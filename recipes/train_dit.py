@@ -93,7 +93,7 @@ from muse.utils.common import (
     to_cuda,
     dist_reduce_dict
 )
-from muse.data.datasets import Text2ImageDataset
+from muse.data.datasets import Text2ImageDataset, Text2ImageMultiScaleDatasetWrapper
 from muse.losses.diffusion import FlowMatchingLoss
 
 from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
@@ -938,12 +938,26 @@ def train():
 
     print_rank_0(f"Building dataset with config: {dataset_config}")
     dataset = Text2ImageDataset(**dataset_config)
-    dataloader = DataLoader(
-        dataset,
-        batch_size=args.batch_size,
-        num_workers=0,
-        collate_fn=dataset.collate_fn
-    )
+    collate_fn = dataset.collate_fn
+    if args.multi_scale:
+        dataset = Text2ImageMultiScaleDatasetWrapper(
+            dataset=dataset,
+            batch_size=args.batch_size,
+            aspect_ratios=get_aspect_ratio_dict(args.image_size),
+        )
+        dataloader = DataLoader(
+            dataset,
+            batch_size=1,
+            num_workers=args.num_workers,
+            collate_fn=lambda x: dataset.collate_fn(x[0])
+        )
+    else:
+        dataloader = DataLoader(
+            dataset,
+            batch_size=args.batch_size,
+            num_workers=args.num_workers,
+            collate_fn=dataset.collate_fn
+        )
 
     # Training loop
     print_rank_0("Starting training...")

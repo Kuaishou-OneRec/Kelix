@@ -37,16 +37,10 @@ from torchvision import transforms as T
 from transformers import AutoTokenizer
 
 from muse.data.datasets.base import DistributedDataset, load_image
-from muse.data.samplers import get_aspect_ratio_dict
+from muse.data.utils import get_aspect_ratio_dict
 
 
 logger = logging.getLogger(__name__)
-
-
-def get_closest_ratio(height: int, width: int, aspect_ratios: dict) -> str:
-    """Find the closest predefined aspect ratio for given dimensions."""
-    ratio = height / width
-    return min(aspect_ratios.keys(), key=lambda r: abs(float(r) - ratio))
 
 
 class Text2ImageDataset(DistributedDataset):
@@ -527,6 +521,12 @@ class Text2ImageDataset(DistributedDataset):
             image = pair["image"]
             if image in images:
                 pair["image"] = images[image]
+            
+            metadata = json.loads(sample.get("metadata", '{}'))
+            images_info = metadata.get("images", {})
+            if image in images_info:
+                pair["height"] = images_info[image]["height"]
+                pair["width"] = images_info[image]["width"]
             return self._process_pair(pair)
         return None
 
@@ -548,39 +548,83 @@ class Text2ImageDataset(DistributedDataset):
             images to the first image's size for consistent batching.
         """
         result = {}
-        
-        if self.multi_scale and "target_size" in batch[0]:
-            # Multi-scale mode: images may have different sizes
-            # Use the first image's size as target and resize others
-            target_h, target_w = batch[0]["target_size"]
-            images = []
-            for sample in batch:
-                img = sample["image"]
-                if img.shape[-2:] != (target_h, target_w):
-                    # Resize to match first image in batch
-                    img = F.interpolate(
-                        img.unsqueeze(0),
-                        size=(target_h, target_w),
-                        mode='bilinear',
-                        align_corners=False
-                    ).squeeze(0)
-                images.append(img)
-            result["image"] = torch.stack(images)
-            
-            # Store image size info
-            result["img_hw"] = torch.tensor([[target_h, target_w]] * len(batch), dtype=torch.float32)
-            result["aspect_ratio"] = torch.tensor(
-                [[float(batch[0]["aspect_ratio"])] * len(batch)], 
-                dtype=torch.float32
-            ).T
-        else:
-            # Standard mode: all images have same size
-            if "image" in batch[0]:
-                result["image"] = torch.stack([s["image"] for s in batch])
-        
+        # Standard mode: all images have same size
+        if "image" in batch[0]:
+            result["image"] = torch.stack([s["image"] for s in batch])
         # Collate text tensors
         for key in ["input_ids", "attention_mask"]:
             if key in batch[0]:
                 result[key] = torch.stack([s[key] for s in batch])
         
         return result
+
+class Text2ImageMultiScaleDatasetWrapper(IterableDataset):
+    """Text2Image multi-scale dataset wrapper.
+    
+    Wraps a Text2ImageDataset and groups samples by aspect ratio into buckets.
+    Args:
+        dataset: The Text2ImageDataset to wrap.
+    Example:
+        >>> dataset = Text2ImageDataset(sources=..., multi_scale=True)
+        >>> bucket_dataset = Text2ImageMultiScaleDatasetWrapper(
+        ...     dataset=dataset,
+        ...     batch_size=16,
+        ...     aspect_ratios=get_aspect_ratio_dict(1024),
+        ... )
+        >>> dataloader = DataLoader(
+        ...     bucket_dataset,
+        ...     batch_size=1,
+        ...     collate_fn=lambda x: dataset.collate_fn(x[0]),
+        ... )
+    """
+    
+    def __init__(
+        self,
+        dataset: IterableDataset,
+        batch_size: int,
+        aspect_ratios: Dict[str, tuple],
+        bucket_key: str = "aspect_ratio",
+        drop_last: bool = False,
+    ):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.aspect_ratios = aspect_ratios
+        self.bucket_key = bucket_key
+        self.drop_last = drop_last
+        
+        logger.info(
+            f"StreamingBucketDataset initialized with batch_size={batch_size}, "
+            f"{len(aspect_ratios)} aspect ratios, drop_last={drop_last}"
+        )
+    
+    def __iter__(self) -> Iterator[List[Dict]]:
+        """Iterate and yield batches grouped by aspect ratio."""
+        # Create a bucket for each aspect ratio
+        buckets: Dict[str, List] = {ratio: [] for ratio in self.aspect_ratios.keys()}
+        
+        for sample in self.dataset:
+            # Get the sample's aspect ratio
+            ratio = sample.get(self.bucket_key)
+            if ratio is None or ratio not in buckets:
+                # Default to square if ratio not found
+                ratio = "1.0"
+            
+            # Add sample to the corresponding bucket
+            buckets[ratio].append(sample)
+            
+            # Yield batch when bucket is full
+            if len(buckets[ratio]) >= self.batch_size:
+                yield buckets[ratio][:self.batch_size]
+                buckets[ratio] = buckets[ratio][self.batch_size:]
+        
+        # Handle remaining samples after iteration ends
+        if not self.drop_last:
+            for ratio, bucket in buckets.items():
+                # Yield any complete batches remaining
+                while len(bucket) >= self.batch_size:
+                    yield bucket[:self.batch_size]
+                    bucket = bucket[self.batch_size:]
+                # Yield incomplete batch if any samples remain
+                if bucket:
+                    yield bucket
+
