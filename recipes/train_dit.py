@@ -46,6 +46,7 @@ from pathlib import Path
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torch.distributed.device_mesh import init_device_mesh, DeviceMesh
+from torch.profiler import record_function
 
 torch.autograd.set_detect_anomaly(True)
 gc.disable()
@@ -598,17 +599,20 @@ def evaluate_fid(
     return fid_score
 
 
-def _init_profiler(output_dir) -> None:
-    """Initialize torch profiler."""
-    if not os.path.exists(output_dir):
-        if dist.get_rank() == 0:
-            os.makedirs(output_dir, exist_ok=True)
-
-    def trace_handler(prof):
-        prof.export_chrome_trace(
-            os.path.join(
-                output_dir, str(prof.step_num) + f"_w{dist.get_rank()}" + ".json")
-        )
+def _init_profiler(output_dir, with_stack=False) -> None:
+    """Initialize torch profiler with TensorBoard support.
+    
+    Args:
+        output_dir: Directory to save profiler output
+        with_stack: Whether to record Python call stacks (slower but more detailed)
+    
+    Returns:
+        Configured torch profiler instance
+    """
+    profile_dir = os.path.join(output_dir, "torch_profile")
+    if dist.get_rank() == 0:
+        os.makedirs(profile_dir, exist_ok=True)
+    dist.barrier()  # Ensure directory is created before other ranks proceed
 
     torch_profiler = torch.profiler.profile(
         activities=[
@@ -616,12 +620,15 @@ def _init_profiler(output_dir) -> None:
             torch.profiler.ProfilerActivity.CUDA,
         ],
         schedule=torch.profiler.schedule(
-            wait=50,
-            warmup=1,
-            active=10,
+            wait=5,       # Skip first 5 steps (initial warmup)
+            warmup=2,     # 2 steps for profiler warmup
+            active=10,    # Record 10 steps
             repeat=1,
         ),
-        on_trace_ready=trace_handler,
+        on_trace_ready=torch.profiler.tensorboard_trace_handler(profile_dir),
+        record_shapes=True,
+        profile_memory=True,
+        with_stack=with_stack,
     )
     return torch_profiler
 
@@ -991,7 +998,7 @@ def train():
 
     # Setup profiler
     torch_profiler = _init_profiler(
-        output_dir=os.path.join(args.output_dir, "torch_profile")
+        output_dir=args.output_dir
     ) if args.enable_profile else None
 
     # Initialize step scheduler for training loop management
@@ -1027,37 +1034,44 @@ def train():
         with contextlib.ExitStack() as ctx:
             if torch_profiler:
                 ctx.enter_context(torch_profiler)
-            try:
-                batch = next(data_iter)
-            except StopIteration:
-                data_iter = iter(dataloader)
-                batch = next(data_iter)
+            
+            # 1. DataLoader
+            with record_function("DataLoader"):
+                try:
+                    batch = next(data_iter)
+                except StopIteration:
+                    data_iter = iter(dataloader)
+                    batch = next(data_iter)
 
-            # Move batch to device
-            for k, v in batch.items():
-                if isinstance(v, torch.Tensor):
-                    batch[k] = v.to(
-                        device=torch.cuda.current_device(),
-                        dtype=get_torch_dtype(args.model_dtype) if v.is_floating_point() else None
-                    )
+            # 2. Data Transfer to GPU
+            with record_function("DataTransfer"):
+                for k, v in batch.items():
+                    if isinstance(v, torch.Tensor):
+                        batch[k] = v.to(
+                            device=torch.cuda.current_device(),
+                            dtype=get_torch_dtype(args.model_dtype) if v.is_floating_point() else None
+                        )
 
             scheduler.step()
 
-            # Get latents (either pre-encoded or encode on-the-fly)
-            if "latents" in batch:
-                latents = batch["latents"]
-            elif "image" in batch and vae is not None:
-                latents = vae_encode(vae, batch["image"])
-            else:
-                raise ValueError("No latents or images in batch")
+            # 3. VAE Encode (get latents)
+            with record_function("VAE_Encode"):
+                if "latents" in batch:
+                    latents = batch["latents"]
+                elif "image" in batch and vae is not None:
+                    latents = vae_encode(vae, batch["image"])
+                else:
+                    raise ValueError("No latents or images in batch")
 
-            text_embeds, attention_mask = encode_text(
-                text_encoder,
-                batch["input_ids"],
-                batch.get("attention_mask"),
-                args.max_text_length,
-                torch.cuda.current_device(),
-            )
+            # 4. Text Encoder
+            with record_function("TextEncoder"):
+                text_embeds, attention_mask = encode_text(
+                    text_encoder,
+                    batch["input_ids"],
+                    batch.get("attention_mask"),
+                    args.max_text_length,
+                    torch.cuda.current_device(),
+                )
 
             # #region agent log - 假设C: 验证数据是否不同
             import json as _json_debug
@@ -1068,14 +1082,15 @@ def train():
                 open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"C","location":"train_dit.py:before_loss","message":"batch data check","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"latent_sum":_latent_hash,"batch_size":latents.shape[0]},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
             # #endregion
 
-            # Compute loss
-            loss_dict = loss_fn(
-                model=model,
-                x_start=latents,
-                y=text_embeds,
-                mask=attention_mask,
-            )
-            loss = loss_dict["loss"]
+            # 5. Forward + Loss Computation
+            with record_function("Forward_Loss"):
+                loss_dict = loss_fn(
+                    model=model,
+                    x_start=latents,
+                    y=text_embeds,
+                    mask=attention_mask,
+                )
+                loss = loss_dict["loss"]
             
             # #region agent log - 假设B: 验证Loss是否是每个rank独立的local loss
             import json as _json_debug
@@ -1087,8 +1102,9 @@ def train():
 
             metrics.loss.append(loss.detach().item())
 
-            # Backward pass
-            loss.backward()
+            # 6. Backward Pass
+            with record_function("Backward"):
+                loss.backward()
             
             # #region agent log - 假设A: 验证梯度同步
             if scheduler.global_step <= 3:
@@ -1101,11 +1117,15 @@ def train():
                 open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"A","location":"train_dit.py:after_backward","message":"local gradient sample","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"sample_grad_sum":_sample_grad},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
             # #endregion
 
-            clip_grad_by_value(model, args.clip_range)
+            # 7. Gradient Clipping
+            with record_function("GradClip"):
+                clip_grad_by_value(model, args.clip_range)
 
             # Update optimizer at gradient accumulation boundaries
             if scheduler.is_gradient_accumulation_boundary():
-                grad_norm = compute_fsdp_zero2_grad_norm(model)
+                # 8. Gradient Norm Computation
+                with record_function("GradNorm"):
+                    grad_norm = compute_fsdp_zero2_grad_norm(model)
                 metrics.grad_norm.append(grad_norm)
                 learning_rate = lr_scheduler.get_last_lr()[0]
                 metrics.learning_rate.append(learning_rate)
@@ -1115,15 +1135,18 @@ def train():
                     open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"A","location":"train_dit.py:after_grad_norm","message":"grad norm per rank","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"grad_norm":grad_norm},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
                 # #endregion
 
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
+                # 9. Optimizer Step
+                with record_function("OptimizerStep"):
+                    optimizer.step()
+                    lr_scheduler.step()
+                    optimizer.zero_grad()
                 
                 # EMA update (if enabled and not in FSDP mode)
                 # Note: EMA with FSDP requires special handling due to sharded weights
                 # Reference: Sana/train_scripts/train.py Lines 416-418
                 if ema_model is not None:
-                    ema_model.update()
+                    with record_function("EMA_Update"):
+                        ema_model.update()
 
             metrics.step_time.tick()
             metrics.step()
