@@ -106,7 +106,7 @@ def dcp_to_torch_save(dcp_checkpoint_dir: Union[str, os.PathLike],
 def convert(
     checkpoint_dir,
     output_dir,
-    source_dir = "/llm_reco_ssd/zhouyang12/models/Qwen2-VL-7B-Instruct/"
+    source_dir
 ):
   """
   convert比较通用
@@ -123,8 +123,9 @@ def convert(
       if not os.path.isfile(os.path.join(source_dir, fn)): continue
       shutil.copy(os.path.join(source_dir, fn), os.path.join(output_dir, fn))
 
-def main():
+if __name__ == '__main__':
   import sys
   checkpoint_dir = sys.argv[1]
-  output_dir = checkpoint_dir.rstrip("/") + "converted"
-  convert(checkpoint_dir, output_dir)
+  source_dir = sys.argv[2]
+  output_dir = checkpoint_dir.rstrip("/") + "/converted"
+  convert(checkpoint_dir, output_dir, source_dir)
