@@ -29,14 +29,14 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Muse imports
-from muse.tests.model_for_compare.keye_vl_tokenizer_image import modeling_keye_origin as origin_mod
+from tests.model_for_compare.keye_vl_tokenizer_image import modeling_keye_origin as origin_mod
 from muse.models.keye_tokenizer.modeling import KeyeImageTokenizer as MuseKeyeImageTokenizer
 from muse.models.keye_tokenizer.image_processing_keye import SiglipImageProcessor
 from muse.config import KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
 # Import Origin RoPE debug variables
-from muse.tests.model_for_compare.keye_vl_tokenizer_image import _DEBUG_VIT_ROPE_OUTPUTS as ORIGIN_VIT_ROPE_DEBUG
+from tests.model_for_compare.keye_vl_tokenizer_image import _DEBUG_VIT_ROPE_OUTPUTS as ORIGIN_VIT_ROPE_DEBUG
 
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
