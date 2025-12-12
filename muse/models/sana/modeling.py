@@ -317,26 +317,53 @@ class SanaModel(Model):
         except ImportError:
             pass
         
-        # Process mask and y for cross-attention (matching official exactly)
-        if mask is not None:
-            mask = mask.to(torch.int16)
-            if mask.shape[0] != y.shape[0]:
-                mask = mask.repeat(y.shape[0] // mask.shape[0], 1)
-            mask = mask.squeeze(1).squeeze(1) if mask.ndim > 2 else mask
-            if _xformers_available:
-                # Pack y based on mask for xformers
-                y = y.squeeze(1) if y.ndim == 4 else y
-                y = y.masked_select(mask.unsqueeze(-1) != 0).view(1, -1, x.shape[-1])
-                y_lens = mask.sum(dim=1).tolist()
-            else:
-                y_lens = mask  # For non-xformers, pass mask as-is
-                y = y.squeeze(1) if y.ndim == 4 else y
-        elif _xformers_available:
-            y_lens = [y.shape[2]] * y.shape[0] if y.ndim == 4 else [y.shape[1]] * y.shape[0]
-            y = y.squeeze(1) if y.ndim == 4 else y
+        # ============================================================
+        # OPTIMIZED VERSION: Use fixed length to avoid CPU-GPU sync
+        # Assumes all text sequences are padded to the same length
+        # ============================================================
+        y = y.squeeze(1) if y.ndim == 4 else y
+        seq_len = y.shape[1]
+        
+        if _xformers_available:
+            # Pack y into single batch for xformers (all sequences have same length)
             y = y.view(1, -1, x.shape[-1])
+            # Use fixed length for all sequences - avoids mask.sum().tolist() sync
+            y_lens = [seq_len] * bs
         else:
-            raise ValueError("xformers is required for Sana cross-attention without mask")
+            # For non-xformers, pass mask as-is
+            if mask is not None:
+                mask = mask.to(torch.int16)
+                if mask.shape[0] != bs:
+                    mask = mask.repeat(bs // mask.shape[0], 1)
+                mask = mask.squeeze(1).squeeze(1) if mask.ndim > 2 else mask
+                y_lens = mask
+            else:
+                raise ValueError("xformers is required for Sana cross-attention without mask")
+        
+        # ============================================================
+        # ORIGINAL VERSION (with CPU-GPU sync): Uncomment below and 
+        # comment out the OPTIMIZED VERSION above to restore
+        # ============================================================
+        # # Process mask and y for cross-attention (matching official exactly)
+        # if mask is not None:
+        #     mask = mask.to(torch.int16)
+        #     if mask.shape[0] != y.shape[0]:
+        #         mask = mask.repeat(y.shape[0] // mask.shape[0], 1)
+        #     mask = mask.squeeze(1).squeeze(1) if mask.ndim > 2 else mask
+        #     if _xformers_available:
+        #         # Pack y based on mask for xformers
+        #         y = y.squeeze(1) if y.ndim == 4 else y
+        #         y = y.masked_select(mask.unsqueeze(-1) != 0).view(1, -1, x.shape[-1])
+        #         y_lens = mask.sum(dim=1).tolist()  # <-- This causes CPU-GPU sync!
+        #     else:
+        #         y_lens = mask  # For non-xformers, pass mask as-is
+        #         y = y.squeeze(1) if y.ndim == 4 else y
+        # elif _xformers_available:
+        #     y_lens = [y.shape[2]] * y.shape[0] if y.ndim == 4 else [y.shape[1]] * y.shape[0]
+        #     y = y.squeeze(1) if y.ndim == 4 else y
+        #     y = y.view(1, -1, x.shape[-1])
+        # else:
+        #     raise ValueError("xformers is required for Sana cross-attention without mask")
         
         # Transformer blocks
         for block in self.blocks:
