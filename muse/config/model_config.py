@@ -231,8 +231,14 @@ class Qwen3Config(ModelConfig):
                 f"num_kv_heads ({values.num_kv_heads})"
             )
 
-        # Relax embed_dim vs num_heads * head_dim to support checkpoints where head_dim is overridden
-        # and q_proj out_dim != embed_dim (e.g., Keye).
+
+        expected_embed_dim = values.num_heads * values.head_dim
+        if values.embed_dim != expected_embed_dim:
+            raise ValueError(
+                f"embed_dim ({values.embed_dim}) must equal "
+                f"num_heads ({values.num_heads}) * head_dim ({values.head_dim}) "
+                f"= {expected_embed_dim}"
+            )
         return values
 
 
