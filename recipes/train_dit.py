@@ -1100,7 +1100,9 @@ def train():
                 open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"B","location":"train_dit.py:before_metrics_append","message":"local loss per rank","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"local_loss":_local_loss},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
             # #endregion
 
-            metrics.loss.append(loss.detach().item())
+            # Pass detached tensor directly - .item() will be called in metrics.step()
+            # to avoid CPU-GPU sync during the training hot path
+            metrics.loss.append(loss.detach())
 
             # 6. Backward Pass
             with record_function("Backward"):
