@@ -954,6 +954,15 @@ def train():
         dataset_config["world_size"] = dist.get_world_size()
         print_rank_0(f"Dataset sharding: rank={dataset_config['rank']}, world_size={dataset_config['world_size']}")
     
+    # #region agent log - 验证训练配置
+    import json as _json_debug
+    _log_path = "/Users/zhouyang12/code/muse/.cursor/debug.log"
+    if dist.is_initialized() and dist.get_rank() == 0:
+        _dp_world_size = get_data_parallel_world_size()
+        _effective_batch = args.batch_size * _dp_world_size
+        open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"config","location":"train_dit.py:before_dataset_init","message":"training config (rank0 only)","data":{"world_size":dist.get_world_size(),"dp_world_size":_dp_world_size,"batch_size":args.batch_size,"effective_batch":_effective_batch,"learning_rate":args.learning_rate,"warmup_steps":args.num_warmup_steps},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
+    # #endregion
+
     print_rank_0(f"Building dataset with config: {dataset_config}")
     dataset = Text2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
@@ -1050,6 +1059,15 @@ def train():
                 torch.cuda.current_device(),
             )
 
+            # #region agent log - 假设C: 验证数据是否不同
+            import json as _json_debug
+            _log_path = "/Users/zhouyang12/code/muse/.cursor/debug.log"
+            if scheduler.global_step <= 2:
+                # 用latents的hash来验证每个rank的数据是否不同
+                _latent_hash = float(latents.sum().item())
+                open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"C","location":"train_dit.py:before_loss","message":"batch data check","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"latent_sum":_latent_hash,"batch_size":latents.shape[0]},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
+            # #endregion
+
             # Compute loss
             loss_dict = loss_fn(
                 model=model,
@@ -1059,17 +1077,30 @@ def train():
             )
             loss = loss_dict["loss"]
             
-            # #region agent log
+            # #region agent log - 假设B: 验证Loss是否是每个rank独立的local loss
             import json as _json_debug
-            if scheduler.global_step < 10:
-                _rank = dist.get_rank()
-                open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log','a').write(_json_debug.dumps({"hypothesisId":"C","location":"train_dit.py:training_loop","message":"loss per rank","data":{"rank":_rank,"step":scheduler.global_step,"loss":loss.detach().item()},"timestamp":__import__('time').time(),"sessionId":"debug-session","runId":"post-fix"})+'\n')
+            _log_path = "/Users/zhouyang12/code/muse/.cursor/debug.log"
+            if scheduler.global_step <= 3:
+                _local_loss = loss.detach().item()
+                open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"B","location":"train_dit.py:before_metrics_append","message":"local loss per rank","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"local_loss":_local_loss},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
             # #endregion
 
             metrics.loss.append(loss.detach().item())
 
             # Backward pass
             loss.backward()
+            
+            # #region agent log - 假设A: 验证梯度同步
+            if scheduler.global_step <= 3:
+                # 获取一个参数的本地梯度用于验证
+                _sample_grad = None
+                for _p in model.parameters():
+                    if _p.grad is not None:
+                        _sample_grad = _p.grad.to_local().sum().item()
+                        break
+                open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"A","location":"train_dit.py:after_backward","message":"local gradient sample","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"sample_grad_sum":_sample_grad},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
+            # #endregion
+
             clip_grad_by_value(model, args.clip_range)
 
             # Update optimizer at gradient accumulation boundaries
@@ -1078,6 +1109,12 @@ def train():
                 metrics.grad_norm.append(grad_norm)
                 learning_rate = lr_scheduler.get_last_lr()[0]
                 metrics.learning_rate.append(learning_rate)
+                
+                # #region agent log - 验证梯度范数是否在各rank相同
+                if scheduler.global_step <= 3:
+                    open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"A","location":"train_dit.py:after_grad_norm","message":"grad norm per rank","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"grad_norm":grad_norm},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
+                # #endregion
+
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()

@@ -262,14 +262,6 @@ class FlowMatchingLoss(nn.Module):
         if noise is None:
             noise = torch.randn_like(x_start)
         
-        # #region agent log
-        import json as _json_debug, torch.distributed as _dist_debug
-        if _dist_debug.is_initialized():
-            _rank = _dist_debug.get_rank()
-            _noise_hash = float(noise.sum().item())
-            _ts_hash = timesteps.tolist()[:3] if len(timesteps) > 3 else timesteps.tolist()
-            open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log','a').write(_json_debug.dumps({"hypothesisId":"A,B","location":"diffusion.py:forward","message":"noise and timesteps check","data":{"rank":_rank,"noise_sum":_noise_hash,"timesteps_first3":_ts_hash,"batch_size":batch_size},"timestamp":__import__('time').time(),"sessionId":"debug-session","runId":"post-fix"})+'\n')
-        # #endregion
         
         # Get noisy input
         x_t = self.scheduler.q_sample(x_start, timesteps, noise)
