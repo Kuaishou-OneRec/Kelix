@@ -398,7 +398,7 @@ def encode_text(
     Reference: Sana/train_scripts/train.py Lines 300-310
     """
     
-    # #region agent log - 假设C,E: 检查模型参数和输入是否在同一设备/dtype
+    # #region agent log - 假设C,E,F,G: 检查模型参数、buffer和输入状态
     import json as _json_perf
     _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/perf_debug.log"
     if _debug_step <= 2 and _debug_step >= 0:
@@ -408,15 +408,38 @@ def encode_text(
         _model_info = {"device": str(_first_param.device), "dtype": str(_first_param.dtype)}
         _input_info = {"device": str(input_ids.device), "dtype": str(input_ids.dtype)}
         _mask_info = {"device": str(attention_mask.device), "dtype": str(attention_mask.dtype)} if attention_mask is not None else None
-        open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"CE","location":"encode_text:entry","message":"model vs input device/dtype","data":{"step":_debug_step,"model_param":_model_info,"input_ids":_input_info,"attention_mask":_mask_info},"timestamp":_time_perf.time(),"sessionId":"perf-debug"})+'\n')
+        # 假设G: 检查所有 buffer 的设备
+        _buffer_info = []
+        for _bname, _buf in text_encoder.named_buffers():
+            if _buf.device.type == "cpu":
+                _buffer_info.append({"name": _bname, "device": str(_buf.device), "dtype": str(_buf.dtype), "shape": list(_buf.shape)})
+        open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"CEFG","location":"encode_text:entry","message":"model state check","data":{"step":_debug_step,"model_param":_model_info,"input_ids":_input_info,"attention_mask":_mask_info,"cpu_buffers":_buffer_info[:5]},"timestamp":_time_perf.time(),"sessionId":"perf-debug"})+'\n')
         _t0 = _time_perf.time()
     # #endregion
     
     with torch.no_grad():
+        # #region agent log - 假设F: 检查是否需要预处理 attention_mask
+        if _debug_step <= 2 and _debug_step >= 0:
+            # 检查 attention_mask 是否需要转换为 4D causal mask
+            _mask_dim = attention_mask.dim() if attention_mask is not None else None
+            _mask_dtype_before = str(attention_mask.dtype) if attention_mask is not None else None
+            open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"F","location":"encode_text:before_forward","message":"attention_mask state before forward","data":{"step":_debug_step,"mask_dim":_mask_dim,"mask_dtype":_mask_dtype_before},"timestamp":_time_perf.time(),"sessionId":"perf-debug"})+'\n')
+            torch.cuda.synchronize()
+            _t_forward_start = _time_perf.time()
+        # #endregion
+        
         outputs = text_encoder(
             input_ids,
             attention_mask=attention_mask,
         )
+        
+        # #region agent log - 假设F: 检查 forward 调用后的时间（不含后处理）
+        if _debug_step <= 2 and _debug_step >= 0:
+            torch.cuda.synchronize()
+            _t_forward_end = _time_perf.time()
+            open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"F","location":"encode_text:after_model_forward","message":"pure model forward time","data":{"step":_debug_step,"forward_only_ms":(_t_forward_end-_t_forward_start)*1000},"timestamp":_time_perf.time(),"sessionId":"perf-debug"})+'\n')
+        # #endregion
+        
         # Get hidden states
         if hasattr(outputs, 'last_hidden_state'):
             text_embeds = outputs.last_hidden_state
@@ -890,13 +913,18 @@ def train():
         dtype=get_torch_dtype(args.model_dtype)
     )
     
-    # #region agent log - 检查text_encoder加载后的状态
+    # #region agent log - 检查text_encoder加载后的状态（包括所有buffer）
     import json as _json_perf
     _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/perf_debug.log"
     if dist.get_rank() == 0:
         _te_param = next(text_encoder.parameters())
         _te_info = {"device": str(_te_param.device), "dtype": str(_te_param.dtype), "model_dtype_arg": args.model_dtype}
-        open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"C","location":"train_dit.py:after_load_text_encoder","message":"text encoder loaded state","data":_te_info,"timestamp":__import__('time').time(),"sessionId":"perf-debug"})+'\n')
+        # 检查所有 buffer 的设备和 dtype
+        _all_buffers = []
+        for _bname, _buf in text_encoder.named_buffers():
+            _all_buffers.append({"name": _bname, "device": str(_buf.device), "dtype": str(_buf.dtype), "shape": list(_buf.shape)})
+        _cpu_buffers = [b for b in _all_buffers if "cpu" in b["device"]]
+        open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"G","location":"train_dit.py:after_load_text_encoder","message":"text encoder state with buffers","data":{"param_info":_te_info,"total_buffers":len(_all_buffers),"cpu_buffers":_cpu_buffers,"all_buffer_names":[b["name"] for b in _all_buffers]},"timestamp":__import__('time').time(),"sessionId":"perf-debug"})+'\n')
     # #endregion
     
     # Load tokenizer for FID evaluation (if enabled)
