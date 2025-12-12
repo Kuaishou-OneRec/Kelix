@@ -321,7 +321,7 @@ class DistributedDataset(IterableDataset):
 
       # #region agent log - 假设C: 验证数据分片
       import json as _json_debug
-      _log_path = "/Users/zhouyang12/code/muse/.cursor/debug.log"
+      _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log"
       # 只在worker_id=0时记录，减少日志量
       if worker_id == 0:
           _first_files = files_for_this_worker[:3] if len(files_for_this_worker) >= 3 else files_for_this_worker

@@ -956,7 +956,7 @@ def train():
     
     # #region agent log - 验证训练配置
     import json as _json_debug
-    _log_path = "/Users/zhouyang12/code/muse/.cursor/debug.log"
+    _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log"
     if dist.is_initialized() and dist.get_rank() == 0:
         _dp_world_size = get_data_parallel_world_size()
         _effective_batch = args.batch_size * _dp_world_size
@@ -1061,7 +1061,7 @@ def train():
 
             # #region agent log - 假设C: 验证数据是否不同
             import json as _json_debug
-            _log_path = "/Users/zhouyang12/code/muse/.cursor/debug.log"
+            _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log"
             if scheduler.global_step <= 2:
                 # 用latents的hash来验证每个rank的数据是否不同
                 _latent_hash = float(latents.sum().item())
@@ -1079,7 +1079,7 @@ def train():
             
             # #region agent log - 假设B: 验证Loss是否是每个rank独立的local loss
             import json as _json_debug
-            _log_path = "/Users/zhouyang12/code/muse/.cursor/debug.log"
+            _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log"
             if scheduler.global_step <= 3:
                 _local_loss = loss.detach().item()
                 open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"B","location":"train_dit.py:before_metrics_append","message":"local loss per rank","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"local_loss":_local_loss},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
