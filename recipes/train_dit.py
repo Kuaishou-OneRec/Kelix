@@ -955,14 +955,14 @@ def train():
             dataset,
             batch_size=1,
             num_workers=args.num_workers,
-            collate_fn=lambda x: dataset.collate_fn(x[0])
+            collate_fn=lambda x: collate_fn(x[0])
         )
     else:
         dataloader = DataLoader(
             dataset,
             batch_size=args.batch_size,
             num_workers=args.num_workers,
-            collate_fn=dataset.collate_fn
+            collate_fn=collate_fn
         )
 
     # Training loop
