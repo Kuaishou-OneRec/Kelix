@@ -65,8 +65,7 @@ class Qwen3Model(Model):
         num_kv_heads = config.num_kv_heads if config.num_kv_heads else num_heads
 
         self.rope = RotaryPositionalEmbeddings(
-            dim=head_dim, max_seq_len=config.max_seq_len, base=config.rope_base
-        )
+            dim=head_dim, max_seq_len=config.max_seq_len, base=config.rope_base)
 
         layers = nn.ModuleList()
         for _ in range(config.num_layers):
