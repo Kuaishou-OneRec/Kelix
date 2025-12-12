@@ -215,8 +215,11 @@ class Qwen3Config(ModelConfig):
             embed_dim = info.data["embed_dim"]
             num_heads = info.data["num_heads"]
             expected_embed_dim = num_heads * v
-            # Some checkpoints (e.g., Keye) use head_dim overriding embed_dim/num_heads,
-            # allowing q_proj out_dim != embed_dim. Skip strict check here.
+            if embed_dim != expected_embed_dim:
+                raise ValueError(
+                    f"embed_dim ({embed_dim}) must equal "
+                    f"num_heads ({num_heads}) * head_dim ({v}) = {expected_embed_dim}"
+                )
         return v
 
     @model_validator(mode="after")
