@@ -653,8 +653,12 @@ def train():
     initialize_model_parallel()
     print_rank_0(f"Data parallel size: {get_data_parallel_world_size()}")
 
-    # Use same seed for model initialization (ensures identical initial weights across ranks)
-    set_random_seed(args.seed)
+    # Use rank-specific seed for training
+    # This ensures different noise/timesteps across ranks while maintaining reproducibility
+    # Model weights are loaded from checkpoint, not randomly initialized, so this is safe
+    training_seed = args.seed + rank
+    set_random_seed(training_seed)
+    print_rank_0(f"Random seed: base={args.seed}, training_seed={training_seed} (rank={rank})")
 
 
     if dist.get_rank() == 0:
