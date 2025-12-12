@@ -944,6 +944,9 @@ def train():
         print_rank_0("Multi-scale training enabled with variable aspect ratios")
 
     print_rank_0(f"Building dataset with config: {dataset_config}")
+    # #region agent log
+    import json as _json_debug; open('/Users/zhouyang12/code/muse/.cursor/debug.log','a').write(_json_debug.dumps({"hypothesisId":"A,C","location":"train_dit.py:947","message":"dataset_config before Text2ImageDataset init","data":{"has_rank":"rank" in dataset_config,"has_world_size":"world_size" in dataset_config,"config_keys":list(dataset_config.keys())},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
+    # #endregion
     dataset = Text2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
     if args.multi_scale:
