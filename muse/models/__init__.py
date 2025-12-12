@@ -79,7 +79,6 @@ def list_models() -> List[str]:
 # Import model modules to trigger registration
 from muse.models import qwen3  # noqa: E402, F401
 
-
 # Export public API
 __all__ = [
     "Model",
@@ -88,4 +87,5 @@ __all__ = [
     "get_model_class",
     "list_models",
 ]
+
 

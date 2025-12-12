@@ -1,0 +1,683 @@
+from typing import Dict, List, Optional, Tuple, Union, Callable
+import math
+import logging
+
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.init as init
+
+from muse.config.model_config import SiglipVisionConfig
+from muse.models.Siglip._layers import (
+    SiglipMLP,
+)
+from muse.layers.attention import MultiHeadAttention
+from muse.layers.transformer import TransformerSelfAttentionLayer
+from muse.layers.rms_norm import RMSNorm
+from muse.models.base import Model
+import torch.nn.functional as F
+
+# Import will be done when muse.models is imported, avoiding circular import
+# The actual registration happens in __init__.py after import
+
+logger = logging.getLogger(__name__)
+
+
+def lecun_normal_(tensor: torch.Tensor) -> None:
+    """LeCun normal initialization.
+    
+    LeCun normal initialization: std = sqrt(1 / fan_in)
+    This is similar to Kaiming normal but uses fan_in instead of fan_out.
+    
+    For Linear layers: fan_in = in_features
+    For Conv2d layers: fan_in = in_channels * kernel_size[0] * kernel_size[1]
+    """
+    if tensor.dim() < 2:
+        # For 1D tensors (bias, etc.), use a small std
+        std = 0.01
+    elif tensor.dim() == 2:
+        # Linear layer: (out_features, in_features)
+        fan_in = tensor.size(1)
+        std = math.sqrt(1.0 / fan_in)
+    else:
+        # Convolutional layer: (out_channels, in_channels, kernel_h, kernel_w, ...)
+        # fan_in = in_channels * product of kernel sizes
+        fan_in = tensor.size(1)
+        for s in tensor.size()[2:]:
+            fan_in *= s
+        std = math.sqrt(1.0 / fan_in)
+    init.normal_(tensor, mean=0.0, std=std)
+
+
+def default_flax_embed_init(tensor: torch.Tensor) -> None:
+    """Default Flax embedding initialization.
+    
+    Uses normal distribution with std = 1.0
+    """
+    init.normal_(tensor, mean=0.0, std=1.0)
+
+
+
+class SiglipVisionEmbeddings(nn.Module):
+    def __init__(self, config: SiglipVisionConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+        self.has_learnable_position_embedding = config.has_learnable_position_embedding if hasattr(config, "has_learnable_position_embedding") else False
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            padding="valid",
+        )
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches
+        self.position_embedding_size = int(self.num_patches**0.5)
+        self.cache_position_embedding = dict()
+        self.cache_position_count = dict()
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int, is_after_patchify: bool = False) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and no class embeddings.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+        num_positions = self.position_embedding.weight.shape[0]
+        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
+
+        dim = embeddings.shape[-1]
+
+        if is_after_patchify:
+            new_height = height
+            new_width = width
+        else:
+            new_height = height // self.patch_size
+            new_width = width // self.patch_size
+
+        sqrt_num_positions = int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bilinear",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return patch_pos_embed
+
+
+    @staticmethod
+    def resize_positional_embeddings(
+        positional_embeddings: torch.Tensor,
+        spatial_shapes: torch.LongTensor,
+        max_length: int,
+    ) -> torch.Tensor:
+        """
+        Resize positional embeddings to image-specific size and pad to a fixed size.
+
+        Args:
+            positional_embeddings (`torch.Tensor`):
+                Position embeddings of shape (height, width, embed_dim)
+            spatial_shapes (`torch.LongTensor`):
+                Spatial shapes of shape (batch_size, 2) to resize the positional embeddings to
+            max_length (`int`):
+                Maximum length of the positional embeddings to pad resized positional embeddings to
+
+        Returns:
+            `torch.Tensor`: Embeddings of shape (batch_size, max_length, embed_dim)
+        """
+        batch_size = spatial_shapes.shape[0]
+        embed_dim = positional_embeddings.shape[-1]
+        source_dtype = positional_embeddings.dtype
+
+        resulted_positional_embeddings = torch.empty(
+            (batch_size, max_length, embed_dim),
+            device=positional_embeddings.device,
+            dtype=source_dtype,
+        )
+
+        # (height, width, embed_dim) -> (1, embed_dim, height, width) for interpolation
+        positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
+
+        # Upcast to float32 on CPU because antialias is not supported for bfloat16/float16 on CPU
+        if positional_embeddings.device.type == "cpu":
+            positional_embeddings = positional_embeddings.to(torch.float32)
+
+        for i in range(batch_size):
+            # (1, dim, height, width) -> (1, dim, target_height, target_width)
+            height, width = spatial_shapes[i]
+            print('maosiyang_resize_positional_embeddings:::',height, width)
+            resized_embeddings = F.interpolate(
+                positional_embeddings,
+                size=(height, width),
+                mode="bilinear",
+                align_corners=False,
+                antialias=True,
+            )
+
+            # (1, dim, target_height, target_width) -> (target_height * target_width, dim)
+            resized_embeddings = resized_embeddings.reshape(embed_dim, height * width).transpose(0, 1)
+
+            # Cast to original dtype
+            resized_embeddings = resized_embeddings.to(source_dtype)
+
+            resulted_positional_embeddings[i, : height * width] = resized_embeddings
+            resulted_positional_embeddings[i, height * width :] = resized_embeddings[0]
+
+        return resulted_positional_embeddings
+
+
+    @staticmethod
+    def flatten_list(image_grid_thw):
+        tmp_image_grid_thw = list()
+        for image_grid in image_grid_thw:
+            if isinstance(image_grid, list):
+                tmp_image_grid_thw.extend(image_grid)
+            else:
+                tmp_image_grid_thw.append(image_grid)
+        return tmp_image_grid_thw
+    def forward(
+        self, 
+        pixel_values: torch.FloatTensor, 
+        position_ids: Optional[torch.Tensor] = None,
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
+        interpolate_pos_encoding=False,
+        has_learnable_position_embedding=True
+    ) -> torch.Tensor:
+        
+        # 1. 卷积切块 (Patchify)
+        # 输入: [Batch, 3, H, W]
+        # 输出: [Batch, EmbedDim, GridH, GridW]
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
+        
+        batch_size, embed_dim, grid_h, grid_w = patch_embeds.shape
+        
+        # 2. 拉平维度 (Flatten) - 修复 4D vs 3D 报错的关键
+        # [Batch, EmbedDim, GridH, GridW] -> [Batch, EmbedDim, NumPatches] -> [Batch, NumPatches, EmbedDim]
+        patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
+        
+        # 3. 准备 spatial_shapes
+        # 如果没有传入 grid 信息，根据当前的卷积输出自动推断 (标准 ViT 模式)
+        if image_grid_thw is None:
+            # 自动生成: [(H_grid, W_grid), (H_grid, W_grid), ...]
+            spatial_shapes = torch.tensor(
+                [[grid_h, grid_w]] * batch_size, 
+                dtype=torch.long, 
+                device=pixel_values.device
+            )
+        else:
+            # 从参数解析 (Muse/NaViT 模式)
+            shapes_list = []
+            for thw_tuple in image_grid_thw:
+                # thw_tuple 是 (t, h, w)，我们只需要 (h, w)
+                if isinstance(thw_tuple, list):
+                    # 处理可能的嵌套 list
+                    shapes_list.append((thw_tuple[0][1], thw_tuple[0][2]))
+                else:
+                    shapes_list.append((thw_tuple[1], thw_tuple[2]))
+            spatial_shapes = torch.tensor(shapes_list, dtype=torch.long, device=pixel_values.device)
+
+        # 4. 调整位置编码大小
+        # 注意：这里需要先把 Embedding 权重变成方形 [H_base, W_base, Dim] 以便插值
+        # 假设 self.num_patches 是正方形 (384/14)**2
+        sqrt_pos = int(self.num_positions**0.5) 
+        positional_embeddings = self.position_embedding.weight.reshape(
+            sqrt_pos, sqrt_pos, embed_dim
+        )
+        
+        # 修复关键点：max_length 应该是 patch_embeds 的长度 (729)，而不是通道数 (3)
+        resized_positional_embeddings = self.resize_positional_embeddings(
+            positional_embeddings, 
+            spatial_shapes, 
+            max_length=patch_embeds.shape[1]  # <--- 修正这里
+        )
+
+        # 5. 相加
+        # [B, N, D] + [B, N, D]
+        embeddings = patch_embeds + resized_positional_embeddings
+        
+        return embeddings
+
+
+class SiglipEncoder(nn.Module):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`SiglipEncoderLayer`].
+
+    Args:
+        config: SiglipVisionConfig
+    """
+
+    def __init__(self, config: SiglipVisionConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+        num_heads = config.num_attention_heads
+        head_dim = embed_dim // num_heads
+        num_kv_heads = num_heads
+
+        attn_dropout = getattr(config, "attention_dropout", 0.0)
+        intermediate_dim = getattr(config, "intermediate_size", embed_dim * 4)
+        use_qk_norm = getattr(config, "use_qk_norm", False)
+        qk_norm_eps = getattr(config, "qk_norm_eps", 1e-6)
+        norm_eps = getattr(config, "layer_norm_eps", 1e-6)
+        max_seq_len = getattr(config, "max_seq_len", 4096)
+
+        layers = nn.ModuleList()
+        for _ in range(config.num_hidden_layers):
+            q_norm = RMSNorm(dim=head_dim, eps=qk_norm_eps) if use_qk_norm else None
+            k_norm = RMSNorm(dim=head_dim, eps=qk_norm_eps) if use_qk_norm else None
+            self_attn = MultiHeadAttention(
+                embed_dim=embed_dim,
+                num_heads=num_heads,
+                num_kv_heads=num_kv_heads,
+                head_dim=head_dim,
+                q_proj=nn.Linear(embed_dim, num_heads * head_dim, bias=True),
+                k_proj=nn.Linear(embed_dim, num_kv_heads * head_dim, bias=True),
+                v_proj=nn.Linear(embed_dim, num_kv_heads * head_dim, bias=True),
+                output_proj=nn.Linear(num_heads * head_dim, embed_dim, bias=True),
+                pos_embeddings=None,
+                q_norm=q_norm,
+                k_norm=k_norm,
+                kv_cache=None,
+                max_seq_len=max_seq_len,
+                is_causal=False,
+                attn_dropout=attn_dropout,
+                attention_function=config.attention_function,
+            )
+            mlp = SiglipMLP(dim=embed_dim, hidden_dim=intermediate_dim)
+            layer = TransformerSelfAttentionLayer(
+                attn=self_attn,
+                mlp=mlp,
+                sa_norm=nn.LayerNorm(normalized_shape=embed_dim, eps=norm_eps),
+                mlp_norm=nn.LayerNorm(normalized_shape=embed_dim, eps=norm_eps),
+            )
+            layers.append(layer)
+        self.layers = layers
+
+
+
+    @staticmethod
+    def flatten_list(image_grid_thw):
+        tmp_image_grid_thw = list()
+        for image_grid in image_grid_thw:
+            if isinstance(image_grid, list):
+                tmp_image_grid_thw.extend(image_grid)
+            else:
+                tmp_image_grid_thw.append(image_grid)
+        return tmp_image_grid_thw
+
+    # Ignore copy
+    # @can_return_tuple
+    def forward(
+        self,
+        inputs_embeds,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        image_grid_thw: Optional[
+            List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]
+        ] = None,
+    ) -> Dict[str, Optional[torch.Tensor]]:
+        r"""
+        Args:
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        """
+
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else self.config.output_attentions
+        )
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else self.config.output_hidden_states
+        )
+
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        device = inputs_embeds.device
+        hidden_states = inputs_embeds
+        attention_mask = (
+            attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
+        )
+        attn_kwargs = {}
+        if cu_seqlens is not None:
+            attn_kwargs["cu_seqlens"] = cu_seqlens
+
+
+        flatten_image_grid_thw = self.flatten_list(image_grid_thw)
+        split_hids = list()
+        split_wids = list()
+        for t,h,w in flatten_image_grid_thw:
+            image_pids = torch.arange(t * h * w, device = device) % (h * w)
+            sample_hids = image_pids // w
+            sample_wids = image_pids % w
+            split_hids.append(sample_hids)
+            split_wids.append(sample_wids)
+        width_position_ids = torch.concat(split_wids, dim=0)
+        height_position_ids = torch.concat(split_hids, dim=0)
+
+
+
+        for encoder_layer in self.layers:
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states,)
+
+            layer_kwargs = {"mask": attention_mask, **attn_kwargs}
+            layer_kwargs["input_pos"] = {"height": height_position_ids, "width": width_position_ids}
+
+            hidden_states = encoder_layer(hidden_states, **layer_kwargs)
+
+            if output_attentions:
+                all_attentions = all_attentions + (None,)
+
+        if output_hidden_states:
+            encoder_states = encoder_states + (hidden_states,)
+
+        return {
+            "last_hidden_state": hidden_states,
+            "hidden_states": encoder_states,
+            "attentions": all_attentions,
+        }
+
+
+
+class SiglipVisionModel(Model):
+    def __init__(self, config: SiglipVisionConfig):
+        super().__init__(config)
+        self.config = config
+        self.embeddings = SiglipVisionEmbeddings(config)
+        self.encoder = SiglipEncoder(config)
+        self.ln_post = nn.LayerNorm(
+            normalized_shape=config.hidden_size, eps=config.layer_norm_eps
+        )
+
+
+    def get_initializer(self, name: str) -> Callable[[torch.Tensor], None]:
+        """Return an initializer function for the given parameter name.
+        
+        This function implements Keye-VL-1_5 style initialization:
+        - Attention modules (Qwen3Attention): xavier_uniform_ for weights, zeros_ for bias
+        - MLP modules (FeedForward): xavier_uniform_ for weights, normal_(std=1e-6) for bias
+        - Linear/Conv2d layers: lecun_normal_ for weights, zeros_ for bias
+        - Embedding layers: default_flax_embed_init (normal with std=1.0)
+        - LayerNorm/RMSNorm: weight=1, bias=0
+        
+        Reference: https://huggingface.co/Kwai-Keye/Keye-VL-1_5-8B/blob/main/modeling_keye_vl_1_5.py
+        
+        Args:
+            name: Parameter name (e.g., "model.layers.0.attn.q_proj.weight")
+            
+        Returns:
+            A callable function that takes a tensor and initializes it
+        """
+        # Find the module corresponding to this parameter name
+        # Remove the parameter suffix (e.g., ".weight", ".bias", ".scale")
+        module_name = name.rsplit(".", 1)[0]
+        param_suffix = name.rsplit(".", 1)[1] if "." in name else ""
+        
+        # Get the module and its parent
+        module = None
+        parent_module = None
+        for mod_name, mod in self.named_modules():
+            if mod_name == module_name:
+                module = mod
+                # Get parent module name
+                if "." in mod_name:
+                    parent_name = ".".join(mod_name.rsplit(".", 1)[:-1])
+                    for p_name, p_mod in self.named_modules():
+                        if p_name == parent_name:
+                            parent_module = p_mod
+                            break
+                break
+        
+        if module is None:
+            parts = module_name.split(".")
+            try:
+                current = self
+                for part in parts:
+                    current = getattr(current, part)
+                if isinstance(current, TiedLinear):
+                    module = current.tied_module
+                else:
+                    module = current if isinstance(current, nn.Module) else None
+            except AttributeError:
+                module = None
+        
+        if module is None:
+            return lecun_normal_
+        
+        is_attention = isinstance(parent_module, MultiHeadAttention)
+        
+        is_mlp = isinstance(parent_module, FeedForward)
+
+        if isinstance(module, nn.Linear):
+            def linear_init(tensor: torch.Tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    if is_attention:
+                        init.xavier_uniform_(tensor)
+                    elif is_mlp:
+                        init.xavier_uniform_(tensor)
+                    else:
+                        lecun_normal_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    if is_mlp:
+                        init.normal_(tensor, mean=0.0, std=1e-6)
+                    else:
+                        init.zeros_(tensor)
+            return linear_init
+            
+        elif isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d, 
+                                  nn.ConvTranspose1d, nn.ConvTranspose2d)):
+            def conv_init(tensor: torch.Tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    lecun_normal_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    init.zeros_(tensor)
+            return conv_init
+            
+        elif isinstance(module, nn.Embedding):
+            # TODO: use better embedding initialization
+            def embedding_init(tensor: torch.Tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    # Use default_flax_embed_init (normal with std=1.0)
+                    default_flax_embed_init(tensor)
+            return embedding_init
+            
+        elif isinstance(module, nn.MultiheadAttention):
+            def mha_init(tensor: torch.Tensor):
+                if param_suffix == "weight" and tensor is not None:
+                    init.xavier_uniform_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    init.zeros_(tensor)
+            return mha_init
+            
+        elif (isinstance(module, (nn.GroupNorm, nn.BatchNorm1d, nn.BatchNorm2d, nn.BatchNorm3d))
+              or "LayerNorm" in module.__class__.__name__
+              or "RMSNorm" in module.__class__.__name__
+              or isinstance(module, RMSNorm)):
+            def norm_init(tensor: torch.Tensor):
+                if param_suffix in ["weight", "scale"] and tensor is not None:
+                    init.ones_(tensor)
+                elif param_suffix == "bias" and tensor is not None:
+                    init.zeros_(tensor)
+            return norm_init
+        
+        # Default: lecun_normal initialization
+        return lecun_normal_
+    def convert_hf_state_dict(self,
+                              hf_state_dict: Dict[str, torch.Tensor],
+                              **kwargs) -> Dict[str, torch.Tensor]:
+        """Convert a Hugging Face state dictionary to a model state dictionary."""
+        converted_state_dict = {}
+        skipped_keys = []
+        
+        # [关键修复] 使用循环剥离前缀，解决 double prefix (siglip.vision_model.vision_model...) 问题
+        prefixes_to_strip = ["siglip.", "vision_model."]
+        
+        for hf_key, tensor in hf_state_dict.items():
+            rel_key = hf_key
+            
+            # 只要以指定前缀开头，就一直剥离，直到干净为止
+            modified = True
+            while modified:
+                modified = False
+                for prefix in prefixes_to_strip:
+                    if rel_key.startswith(prefix):
+                        rel_key = rel_key[len(prefix):]
+                        modified = True
+                        break 
+            
+            # 下面的映射逻辑保持不变
+            
+            # Skip pooling head
+            if rel_key.startswith("head."):
+                skipped_keys.append(hf_key)
+                continue
+            
+            # Handle embeddings
+            if rel_key.startswith("embeddings."):
+                converted_state_dict[rel_key] = tensor
+                continue
+            
+            # Handle post_layernorm -> ln_post
+            if rel_key.startswith("post_layernorm."):
+                suffix = rel_key.replace("post_layernorm.", "")
+                converted_key = f"ln_post.{suffix}"
+                converted_state_dict[converted_key] = tensor
+                continue
+            
+            # Handle encoder layers
+            if rel_key.startswith("encoder.layers."):
+                parts = rel_key.split(".", 3)
+                if len(parts) < 4:
+                    skipped_keys.append(hf_key)
+                    continue
+                
+                layer_idx = parts[2]
+                rest_key = parts[3]
+                
+                if rest_key.startswith("layer_norm1."):
+                    suffix = rest_key.replace("layer_norm1.", "")
+                    converted_key = f"encoder.layers.{layer_idx}.sa_norm.{suffix}"
+                    converted_state_dict[converted_key] = tensor
+                    continue
+                
+                if rest_key.startswith("layer_norm2."):
+                    suffix = rest_key.replace("layer_norm2.", "")
+                    converted_key = f"encoder.layers.{layer_idx}.mlp_norm.{suffix}"
+                    converted_state_dict[converted_key] = tensor
+                    continue
+                
+                if rest_key.startswith("self_attn."):
+                    attn_key = rest_key.replace("self_attn.", "attn.")
+                    attn_key = attn_key.replace("out_proj.", "output_proj.")
+                    converted_key = f"encoder.layers.{layer_idx}.{attn_key}"
+                    converted_state_dict[converted_key] = tensor
+                    continue
+                
+                if rest_key.startswith("mlp."):
+                    # 替换 fc1 为 w1, fc2 为 w2
+                    new_key_suffix = rest_key.replace("fc1", "w1").replace("fc2", "w2")
+                    converted_key = f"encoder.layers.{layer_idx}.{new_key_suffix}"
+                    converted_state_dict[converted_key] = tensor
+                    continue
+            
+            skipped_keys.append(hf_key)
+        
+        if skipped_keys:
+            logger.warning(f"Skipped {len(skipped_keys)} keys. First few: {skipped_keys[:5]}")
+        
+        logger.info(f"Converted {len(converted_state_dict)} keys from {len(hf_state_dict)} Hugging Face keys")
+        
+        return converted_state_dict
+
+    def get_layers_to_shard(self):
+        # Return the ModuleList directly - it's iterable and supports reversed()
+        # fully_shard will be applied to each individual layer, not the ModuleList itself
+        return self.encoder.layers
+
+    def get_checkpointable_module_classes(self):
+        return {TransformerSelfAttentionLayer}
+
+
+    def forward(self, 
+        pixel_values: torch.FloatTensor,
+        position_ids: Optional[torch.Tensor] = None, 
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None, 
+        interpolate_pos_encoding: bool = True, 
+        attention_mask: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        has_learnable_position_embedding: bool = False
+    ) -> Dict[str, torch.Tensor]:
+        
+
+        if image_grid_thw is None and pixel_values.dim() == 4:
+            batch_size, _, height, width = pixel_values.shape
+            patch_size = self.config.patch_size
+            h_grid = height // patch_size
+            w_grid = width // patch_size
+            # 构造标准的 (t, h, w)，对于单图输入 t=1
+            image_grid_thw = [(1, h_grid, w_grid)] * batch_size
+
+        # 1. 计算 Embeddings (传入统一的 grid)
+        embeddings = self.embeddings(
+            pixel_values=pixel_values,
+            position_ids=position_ids,
+            image_grid_thw=image_grid_thw,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            has_learnable_position_embedding=has_learnable_position_embedding,
+        )
+
+        # 2. Encoder 前向 (传入统一的 grid，这对 RoPE 至关重要)
+        encoder_outputs = self.encoder(
+            embeddings,
+            attention_mask=attention_mask,
+            cu_seqlens=cu_seqlens,
+            image_grid_thw=image_grid_thw, # <--- 必须传，不能为 None
+        )
+
+        hidden_states = encoder_outputs["last_hidden_state"]
+        hidden_states = self.ln_post(hidden_states) 
+        encoder_outputs["last_hidden_state"] = hidden_states
+        
+        return encoder_outputs
+
+
+

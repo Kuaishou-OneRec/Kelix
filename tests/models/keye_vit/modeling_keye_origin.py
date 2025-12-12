@@ -1,0 +1,1563 @@
+
+#
+# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
+# and OPT implementations in this library. It has been modified from its
+# original forms to accommodate minor architectural differences compared
+# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+import math
+import numpy as np
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple, Union
+import torch.distributed as dist
+
+
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.nn import CrossEntropyLoss
+
+from transformers.activations import ACT2FN
+from transformers.cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from transformers.generation import GenerationMixin
+from transformers.modeling_attn_mask_utils import AttentionMaskConverter
+from transformers.modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from transformers.modeling_utils import PreTrainedModel, sdpa_attention_forward
+from transformers.activations import GELUActivation, ACT2FN, PytorchGELUTanh
+from transformers.utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    # can_return_tuple,
+    is_flash_attn_2_available,
+    logging,
+    replace_return_docstrings,
+    torch_int,
+    is_flash_attn_greater_or_equal_2_10
+)
+from .configuration_keye import KeyeConfig, KeyeVisionConfig
+
+
+import warnings
+from typing import Any, Callable, Optional, Tuple, Union, List
+from torch import nn
+from torch.nn.init import _calculate_fan_in_and_fan_out
+
+from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from transformers.modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+
+
+
+assert is_flash_attn_2_available()
+if is_flash_attn_2_available():
+    from flash_attn import flash_attn_varlen_func
+    from flash_attn.layers.rotary import apply_rotary_emb
+    from transformers.modeling_flash_attention_utils import _flash_attention_forward
+else:
+    flash_attn_varlen_func = None
+    apply_rotary_emb = None
+
+
+
+
+try:
+    import os
+    if os.environ.get("nosp", None): 
+        print("find env nosp")
+        def x(): return 0
+        dist.get_rank = x
+        raise
+
+    from recovlm.training import parallel as mpu
+    from recovlm.training.parallel import get_sequence_parallel_group, \
+    get_sequence_parallel_world_size, \
+    get_local_sequence_boundary, \
+    get_local_sequence
+
+except:
+    _SEQUENCE_PARALLEL_GROUP = None
+    _SEQUENCE_PARALLEL_GROUP_GLOO = None
+    _DATA_PARALLEL_GROUP = None
+
+    def get_sequence_parallel_group(backend="nccl"):
+        """Get the sequence parallel group the caller rank belongs to."""
+        if backend == "nccl":
+            return _SEQUENCE_PARALLEL_GROUP
+        elif backend == "gloo":
+            return _SEQUENCE_PARALLEL_GROUP_GLOO
+        else:
+            raise NotImplementedError(f"Unsupport sequence parallel backend: {backend}")
+
+    def get_sequence_parallel_world_size():
+        return 1
+        """Get the sequence parallel world size."""
+        try: return dist.get_world_size(group=get_sequence_parallel_group())
+        except: return 1
+
+    def get_sequence_parallel_rank():
+        """Get the sequence parallel rank."""
+        return dist.get_rank(group=get_sequence_parallel_group())
+
+    def get_local_sequence_boundary(seq_len):
+        sp_size = get_sequence_parallel_world_size()
+        sp_rank = get_sequence_parallel_rank()
+        local_seqlen = seq_len // sp_size
+        start, end = sp_rank * local_seqlen, (sp_rank + 1) * local_seqlen
+        return start, end
+
+    def get_local_sequence(sequence: torch.Tensor, seq_idx: int = 1):
+        if get_sequence_parallel_world_size() > 1:
+            seq_len = sequence.shape[seq_idx]
+            start, end = get_local_sequence_boundary(seq_len)
+            # Create a slice object for the specified dimension
+            slices = [slice(None)] * sequence.dim()
+            slices[seq_idx] = slice(start, end)
+            # Use the slice object to index the tensor
+            local_sequence = sequence[tuple(slices)]
+
+            return local_sequence
+        return sequence
+
+    def get_data_parallel_group():
+        return _DATA_PARALLEL_GROUP
+
+    def get_data_parallel_rank():
+        return dist.get_rank(group=get_data_parallel_group())
+
+    def get_data_parallel_world_size():
+        return dist.get_world_size(group=get_data_parallel_group())
+
+
+
+
+def all_to_all_4D(
+    input: torch.tensor, scatter_idx: int = 2, gather_idx: int = 1, group=None, use_sync: bool = False
+) -> torch.tensor:
+    """
+    all-to-all for QKV
+
+    Args:
+        input (torch.tensor): a tensor sharded along dim scatter dim
+        scatter_idx (int): default 1
+        gather_idx (int): default 2
+        group : torch process group
+        use_sync (bool): whether to synchronize after all-to-all
+
+    Returns:
+        torch.tensor: resharded tensor (bs, seqlen/P, hc, hs)
+    """
+
+    seq_world_size = dist.get_world_size(group)
+
+    if scatter_idx == 2 and gather_idx == 1:
+        # input (torch.tensor): a tensor sharded along dim 1 (bs, seqlen/P, hc, hs) output: (bs, seqlen, hc/P, hs)
+        bs, shard_seqlen, hc, hs = input.shape
+        seqlen = shard_seqlen * seq_world_size
+        shard_hc = hc // seq_world_size
+
+        # transpose groups of heads with the seq-len parallel dimension, so that we can scatter them!
+        # (bs, seqlen/P, hc, hs) -reshape-> (bs, seq_len/P, P, hc/P, hs) -transpose(0,2)-> (P, seq_len/P, bs, hc/P, hs)
+        input_t = (
+            input.reshape(bs, shard_seqlen, seq_world_size, shard_hc, hs)
+            .transpose(0, 2)
+            .contiguous()
+        )
+
+        output = torch.empty_like(input_t)
+        # https://pytorch.org/docs/stable/distributed.html#torch.distributed.all_to_all_single
+        # (P, seq_len/P, bs, hc/P, hs) scatter seqlen -all2all-> (P, seq_len/P, bs, hc/P, hs) scatter head
+
+        if seq_world_size > 1:
+            dist.all_to_all_single(output, input_t, group=group)
+            if use_sync:
+                torch.cuda.synchronize()
+        else:
+            output = input_t
+        # if scattering the seq-dim, transpose the heads back to the original dimension
+        output = output.reshape(seqlen, bs, shard_hc, hs)
+
+        # (seq_len, bs, hc/P, hs) -reshape-> (bs, seq_len, hc/P, hs)
+        output = output.transpose(0, 1).contiguous().reshape(bs, seqlen, shard_hc, hs)
+
+        return output
+
+    elif scatter_idx == 1 and gather_idx == 2:
+        # input (torch.tensor): a tensor sharded along dim 1 (bs, seqlen, hc/P, hs) output: (bs, seqlen/P, hc, hs)
+        bs, seqlen, shard_hc, hs = input.shape
+        hc = shard_hc * seq_world_size
+        shard_seqlen = seqlen // seq_world_size
+        seq_world_size = dist.get_world_size(group)
+
+        # transpose groups of heads with the seq-len parallel dimension, so that we can scatter them!
+        # (bs, seqlen, hc/P, hs) -reshape-> (bs, P, seq_len/P, hc/P, hs) -transpose(0, 3)-> (hc/P, P, seqlen/P, bs, hs) -transpose(0, 1) -> (P, hc/P, seqlen/P, bs, hs)
+        input_t = (
+            input.reshape(bs, seq_world_size, shard_seqlen, shard_hc, hs)
+            .transpose(0, 3)
+            .transpose(0, 1)
+            .contiguous()
+            .reshape(seq_world_size, shard_hc, shard_seqlen, bs, hs)
+        )
+
+        output = torch.empty_like(input_t)
+        # https://pytorch.org/docs/stable/distributed.html#torch.distributed.all_to_all_single
+        # (P, bs x hc/P, seqlen/P, hs) scatter seqlen -all2all-> (P, bs x seq_len/P, hc/P, hs) scatter head
+        if seq_world_size > 1:
+            dist.all_to_all_single(output, input_t, group=group)
+            if use_sync:
+                torch.cuda.synchronize()
+        else:
+            output = input_t
+
+        # if scattering the seq-dim, transpose the heads back to the original dimension
+        output = output.reshape(hc, shard_seqlen, bs, hs)
+
+        # (hc, seqlen/N, bs, hs) -tranpose(0,2)-> (bs, seqlen/N, hc, hs)
+        output = output.transpose(0, 2).contiguous().reshape(bs, shard_seqlen, hc, hs)
+
+        return output
+    else:
+        raise RuntimeError("scatter_idx must be 1 or 2 and gather_idx must be 1 or 2")
+
+class SeqAllToAll4D(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx: Any,
+        group: dist.ProcessGroup,
+        input: torch.Tensor,
+        scatter_idx: int,
+        gather_idx: int,
+        use_sync: bool = False,
+    ) -> torch.Tensor:
+
+        ctx.group = group
+        ctx.scatter_idx = scatter_idx
+        ctx.gather_idx = gather_idx
+        ctx.use_sync = use_sync
+        return all_to_all_4D(input, scatter_idx, gather_idx, group=group, use_sync=use_sync)
+
+    @staticmethod
+    def backward(ctx: Any, *grad_output: torch.Tensor) -> Tuple[None, torch.Tensor, None, None]:
+        return (
+            None,
+            SeqAllToAll4D.apply(
+                ctx.group, *grad_output, ctx.gather_idx, ctx.scatter_idx, ctx.use_sync
+            ),
+            None,
+            None,
+            None,
+        )
+
+def all_gather(
+    input_tensor: torch.tensor,
+    group: dist.ProcessGroup = None,
+    gather_idx: int = 0,
+    use_sync: bool = False) -> torch.tensor:
+    """
+    all-gather for Sequence
+
+    Args:
+        inputs (torch.tensor): a tensor to gather, with shape (bs, seqlen/P, h)
+        group : torch process group
+        use_sync (bool): whether to synchronize after all-gather
+
+    Returns:
+        torch.tensor: gathered tensor (bs, seqlen, h)
+    """
+
+    seq_world_size = dist.get_world_size(group)
+
+    if seq_world_size > 1:
+        output = [torch.empty_like(input_tensor) for _ in range(seq_world_size)]
+        dist.all_gather(
+            tensor_list=output, tensor=input_tensor.contiguous(), group=group)
+        if use_sync:
+            torch.cuda.synchronize()
+
+        return torch.cat(output, dim=gather_idx)
+    else:
+        return input_tensor
+
+def shard(input_tensor, group, shard_idx):
+    world_size = dist.get_world_size(group)
+    if world_size > 1:
+        rank = dist.get_rank(group)
+        local_tensor = torch.chunk(
+            input_tensor, world_size, dim=shard_idx)[rank]
+        return local_tensor
+    return input_tensor
+
+class AllGather(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx: Any,
+                inputs: torch.Tensor,
+                group: dist.ProcessGroup,
+                gather_idx: int = 0,
+                use_sync: bool = False) -> torch.Tensor:
+        ctx.group = group
+        ctx.gather_idx = gather_idx
+        ctx.use_sync = use_sync
+        return all_gather(
+            inputs, group=group, gather_idx=gather_idx,
+            use_sync=use_sync)
+
+    @staticmethod
+    def backward(ctx: Any,
+                 *grad_output: torch.Tensor
+        ) -> Tuple[None, torch.Tensor, None, None]:
+        return (
+            shard(
+                *grad_output,
+                ctx.group,
+                ctx.gather_idx
+            ),
+            None,
+            None,
+            None,
+        )
+
+class UlyssesAttention(torch.nn.Module):
+    """UlyssesAttention, current support FA2 with packing only.
+
+        scatter_idx (int): scatter_idx for all2all comm
+        gather_idx (int): gather_idx for all2all comm
+    """
+
+    def __init__(
+        self,
+        scatter_idx: int = 2,
+        gather_idx: int = 1) -> None:
+
+        super(UlyssesAttention, self).__init__()
+        self.spg = get_sequence_parallel_group()
+        self.scatter_idx = scatter_idx
+        self.gather_idx = gather_idx
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        **kwargs
+    ) -> torch.Tensor:
+
+        # (b, N/P, h, d) -> (b, N, h/P, d)
+        q = SeqAllToAll4D.apply(self.spg, query, self.scatter_idx, self.gather_idx)
+        k = SeqAllToAll4D.apply(self.spg, key, self.scatter_idx, self.gather_idx)
+        v = SeqAllToAll4D.apply(self.spg, value, self.scatter_idx, self.gather_idx)
+        # print_rank_0(kwargs)
+        dropout_p = kwargs.get("dropout_p", 0.0)
+        causal = kwargs.get("causal", False)
+        sliding_window = kwargs.get("sliding_window", -1)
+        
+        cu_seqlens = kwargs.get("cu_seqlens")
+        max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+
+        cu_seqlens = cu_seqlens.to(torch.int32)
+
+        attn_output = flash_attn_varlen_func(
+            q.squeeze(0),
+            k.squeeze(0),
+            v.squeeze(0),
+            cu_seqlens,
+            cu_seqlens,
+            max_seqlen,
+            max_seqlen,
+            dropout_p=dropout_p,
+            window_size=(sliding_window, sliding_window),
+            causal=causal
+        )
+
+        output = SeqAllToAll4D.apply(
+            self.spg, attn_output.unsqueeze(0), self.gather_idx, self.scatter_idx
+        )
+        return output
+
+
+logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "KeyeConfig"
+
+
+class Qwen3VisionPatchEmbed(nn.Module):
+    def __init__(
+        self,
+        patch_size: int = 14,
+        temporal_patch_size: int = 2,
+        in_channels: int = 3,
+        embed_dim: int = 1152,
+    ) -> None:
+        super().__init__()
+        self.patch_size = patch_size
+        self.temporal_patch_size = temporal_patch_size
+        self.in_channels = in_channels
+        self.embed_dim = embed_dim
+
+        kernel_size = [temporal_patch_size, patch_size, patch_size]
+        self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        target_dtype = self.proj.weight.dtype
+        hidden_states = hidden_states.view(
+            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
+        )
+        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
+        return hidden_states
+
+
+def _trunc_normal_(tensor, mean, std, a, b):
+    # Cut & paste from PyTorch official master until it's in a few official releases - RW
+    # Method based on https://people.sc.fsu.edu/~jburkardt/presentations/truncated_normal.pdf
+    def norm_cdf(x):
+        # Computes standard normal cumulative distribution function
+        return (1.0 + math.erf(x / math.sqrt(2.0))) / 2.0
+
+    if (mean < a - 2 * std) or (mean > b + 2 * std):
+        warnings.warn(
+            "mean is more than 2 std from [a, b] in nn.init.trunc_normal_. "
+            "The distribution of values may be incorrect.",
+            stacklevel=2,
+        )
+
+    # Values are generated by using a truncated uniform distribution and
+    # then using the inverse CDF for the normal distribution.
+    # Get upper and lower cdf values
+    l = norm_cdf((a - mean) / std)
+    u = norm_cdf((b - mean) / std)
+
+    # Uniformly fill tensor with values from [l, u], then translate to
+    # [2l-1, 2u-1].
+    tensor.uniform_(2 * l - 1, 2 * u - 1)
+
+    # Use inverse cdf transform for normal distribution to get truncated
+    # standard normal
+    tensor.erfinv_()
+
+    # Transform to proper mean, std
+    tensor.mul_(std * math.sqrt(2.0))
+    tensor.add_(mean)
+
+    # Clamp to ensure it's in the proper range
+    tensor.clamp_(min=a, max=b)
+
+
+def trunc_normal_tf_(
+    tensor: torch.Tensor, mean: float = 0.0, std: float = 1.0, a: float = -2.0, b: float = 2.0
+) -> torch.Tensor:
+    """Fills the input Tensor with values drawn from a truncated
+    normal distribution. The values are effectively drawn from the
+    normal distribution :math:`\\mathcal{N}(\text{mean}, \text{std}^2)`
+    with values outside :math:`[a, b]` redrawn until they are within
+    the bounds. The method used for generating the random values works
+    best when :math:`a \\leq \text{mean} \\leq b`.
+
+    NOTE: this 'tf' variant behaves closer to Tensorflow / JAX impl where the
+    bounds [a, b] are applied when sampling the normal distribution with mean=0, std=1.0
+    and the result is subsequently scaled and shifted by the mean and std args.
+
+    Args:
+        tensor: an n-dimensional `torch.Tensor`
+        mean: the mean of the normal distribution
+        std: the standard deviation of the normal distribution
+        a: the minimum cutoff value
+        b: the maximum cutoff value
+    """
+    with torch.no_grad():
+        _trunc_normal_(tensor, 0, 1.0, a, b)
+        tensor.mul_(std).add_(mean)
+
+
+def variance_scaling_(tensor, scale=1.0, mode="fan_in", distribution="normal"):
+    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
+    if mode == "fan_in":
+        denom = fan_in
+    elif mode == "fan_out":
+        denom = fan_out
+    elif mode == "fan_avg":
+        denom = (fan_in + fan_out) / 2
+
+    variance = scale / denom
+
+    if distribution == "truncated_normal":
+        # constant is stddev of standard normal truncated to (-2, 2)
+        trunc_normal_tf_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
+    elif distribution == "normal":
+        with torch.no_grad():
+            tensor.normal_(std=math.sqrt(variance))
+    elif distribution == "uniform":
+        bound = math.sqrt(3 * variance)
+        with torch.no_grad():
+            tensor.uniform_(-bound, bound)
+    else:
+        raise ValueError(f"invalid distribution {distribution}")
+
+
+def lecun_normal_(tensor):
+    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
+
+
+def default_flax_embed_init(tensor):
+    variance_scaling_(tensor, mode="fan_in", distribution="normal")
+
+
+@dataclass
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionModelOutput with CLIP->Siglip
+class SiglipVisionModelOutput(ModelOutput):
+    """
+    Base class for vision model's outputs that also contains image embeddings of the pooling of the last hidden states.
+
+    Args:
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+            The image embeddings obtained by applying the projection layer to the pooler_output.
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    image_embeds: Optional[torch.FloatTensor] = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
+
+class SigLIPRotaryEmbedding(nn.Module):
+    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+        super().__init__()
+        self.dim = dim
+        self.theta = theta
+        self.rope_init()
+
+    def rope_init(self):
+        inv_freq = 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, seqlen: int) -> torch.Tensor:
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        return freqs
+
+
+
+class SiglipVisionEmbeddings(nn.Module):
+    def __init__(self, config: KeyeVisionConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+        self.has_learnable_position_embedding = config.has_learnable_position_embedding if hasattr(config, "has_learnable_position_embedding") else False
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            padding="valid",
+        )
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches
+        self.cache_position_embedding = dict()
+        self.cache_position_count = dict()
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.packing_position_embedding = nn.Embedding(32768, self.embed_dim)
+
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int, is_after_patchify: bool = False) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and no class embeddings.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+        num_positions = self.position_embedding.weight.shape[0]
+        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
+
+        dim = embeddings.shape[-1]
+
+        if is_after_patchify:
+            new_height = height
+            new_width = width
+        else:
+            new_height = height // self.patch_size
+            new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bilinear",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return patch_pos_embed
+
+    @staticmethod
+    def flatten_list(image_grid_thw):
+        tmp_image_grid_thw = list()
+        for image_grid in image_grid_thw:
+            if isinstance(image_grid, list):
+                tmp_image_grid_thw.extend(image_grid)
+            else:
+                tmp_image_grid_thw.append(image_grid)
+        return tmp_image_grid_thw
+
+    def fetch_position_embedding_lfu_cache(self, embeddings, h, w, max_cache=20):
+        grid = (h, w)
+        if grid in self.cache_position_embedding:
+            self.cache_position_count[grid] += 1
+            return self.cache_position_embedding[grid]
+        
+        if len(self.cache_position_embedding) >= max_cache:
+            min_hit_grid = min(self.cache_position_count, key=self.cache_position_count.get)
+            self.cache_position_count.pop(min_hit_grid)
+            self.cache_position_embedding.pop(min_hit_grid)
+        
+        position_embedding = self.interpolate_pos_encoding(embeddings, h, w, True)
+        self.cache_position_count[grid] = 1
+        self.cache_position_embedding[grid] = position_embedding
+        return position_embedding
+
+    def forward(
+        self, 
+        pixel_values: torch.FloatTensor, 
+        position_ids: Optional[torch.Tensor] = None,
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
+        interpolate_pos_encoding=False,
+        has_learnable_position_embedding=False
+    ) -> torch.Tensor:
+        has_learnable_position_embedding = self.has_learnable_position_embedding
+        if pixel_values.dim() == 5:
+            assert position_ids is not None
+            from einops import rearrange
+            batch_size, squence_len, channel, height, width = pixel_values.shape
+            target_dtype = self.patch_embedding.weight.dtype
+            pixel_values = rearrange(pixel_values, "b l c h w -> (b l) c h w")
+            patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+            embeddings = patch_embeds.flatten(-2).squeeze(-1)
+            embeddings = rearrange(embeddings, "(b l) d -> b l d", b=batch_size, l=squence_len)
+
+            # todo: not dubug
+            if has_learnable_position_embedding:
+                if interpolate_pos_encoding and image_grid_thw is not None:
+                    flatten_image_grid_thw = self.flatten_list(image_grid_thw)
+                    assert batch_size == 1
+                    start = 0
+                    image_embedding_list = list()
+                    assert sum([np.prod(x) for x in flatten_image_grid_thw]) == embeddings.shape[1], (flatten_image_grid_thw, embeddings.shape)
+                    embeddings = embeddings.squeeze(0)
+                    tmp_embeddings = list()
+                    for image_grid in image_grid_thw:
+                        t, h, w = image_grid
+                        end = start + t * h * w
+                        image_embeddings = embeddings[start: end, :]
+                        position_embedding = self.interpolate_pos_encoding(image_embeddings, h, w, True).squeeze(0).repeat(
+                            t, 1)
+                        image_embeddings = image_embeddings + position_embedding
+                        tmp_embeddings.append(image_embeddings)
+                        start = end
+                    embeddings = torch.concat(tmp_embeddings, dim=0).unsqueeze(0)
+                else:
+                    embeddings = embeddings + self.packing_position_embedding(position_ids)
+            return embeddings
+        else:
+            raise NotImplementedError(str(pixel_values.shape))
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class SiglipAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config: KeyeVisionConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self._dist_attn = UlyssesAttention(scatter_idx=2, gather_idx=1)
+        use_qk_norm = getattr(config, "use_qk_norm", False)
+        qk_norm_eps = getattr(config, "qk_norm_eps", 1e-6)
+        if use_qk_norm:
+            self.q_norm = Qwen3RMSNorm(self.head_dim, qk_norm_eps)
+            self.k_norm = Qwen3RMSNorm(self.head_dim, qk_norm_eps)
+
+        else:
+            self.q_norm = None
+            self.k_norm = None
+        self.config._attn_implementation = 'flash_attention_2'
+        if self.config._attn_implementation != 'flash_attention_2':
+            print(f"SiglipAttention flash_attention_2 is not set!!!!!! Get {self.config._attn_implementation}")
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        rope_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        
+        """Input shape: Batch x Time x Channel"""
+        use_flash_attn = (cu_seqlens is not None) and self.config._attn_implementation == "flash_attention_2"
+
+        batch_size, seq_length, embed_dim = hidden_states.shape
+
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
+
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim)
+
+
+        if self.q_norm is not None and self.k_norm is not None:
+            queries = self.q_norm(queries)
+            keys = self.k_norm(keys)
+
+        if rope_emb is None:
+            queries = queries.transpose(1, 2)
+            keys = keys.transpose(1, 2)
+            values = values.transpose(1, 2)
+        else:
+            #assert cu_seqlens is not None, "Rope support flash attn only."
+            cos, sin = rope_emb
+            queries, keys = apply_rotary_pos_emb_flashatt(queries, keys, cos, sin)
+            queries = queries.transpose(1, 2)
+            keys = keys.transpose(1, 2)
+            values = values.transpose(1, 2)
+
+        if not use_flash_attn:
+            attention_interface: Callable = eager_attention_forward
+            if self.config._attn_implementation != "eager":
+                if self.config._attn_implementation == "sdpa" and output_attentions:
+                    logger.warning_once(
+                        "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                        'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                    )
+                elif self.config._attn_implementation == "sdpa":
+                    attention_interface = sdpa_attention_forward
+
+            attn_output, attn_weights = attention_interface(
+                self,
+                queries,
+                keys,
+                values,
+                attention_mask,
+                is_causal=self.is_causal,
+                scaling=self.scale,
+                dropout=0.0 if not self.training else self.dropout,
+            )
+            attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        else:
+            #assert batch_size == 1, hidden_states.shape
+            queries = queries.transpose(1, 2).squeeze(0)
+            keys = keys.transpose(1, 2).squeeze(0)
+            values = values.transpose(1, 2).squeeze(0)
+
+            from flash_attn import flash_attn_func, flash_attn_varlen_func
+            max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+            max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+
+            if get_sequence_parallel_world_size() > 1:
+                attn_output = self._dist_attn(
+                    query=queries.unsqueeze(0),
+                    key=keys.unsqueeze(0),
+                    value=values.unsqueeze(0),
+                    cu_seqlens=cu_seqlens,
+                    causal=self.is_causal,
+                    dropout=0.0 if not self.training else self.dropout,
+                ).reshape(seq_length, -1)
+                attn_output = attn_output[None]
+                # attn_output = attn_output.flatten(-2).unsqueeze(0)
+                attn_weights = None
+            else:
+                if max_seqlen_q is None:
+                    max_seqlen_q = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                if max_seqlen_k is None:
+                    max_seqlen_k = (cu_seqlens[1:] - cu_seqlens[:-1]).max().item()
+                attn_output = flash_attn_varlen_func(
+                    queries,
+                    keys,
+                    values,
+                    cu_seqlens,
+                    cu_seqlens,
+                    max_seqlen_q,
+                    max_seqlen_k,
+                    causal=False,
+                    softmax_scale=self.scale,
+                )
+                attn_output = attn_output.flatten(-2).unsqueeze(0)
+                attn_weights = None
+
+        attn_output = self.out_proj(attn_output)
+
+        if not output_attentions:
+            attn_weights = None
+
+        return attn_output, attn_weights
+
+
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Siglip
+class SiglipMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN['silu']
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class SiglipEncoderLayer(nn.Module):
+    def __init__(self, config: Union[KeyeVisionConfig]):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.self_attn = SiglipAttention(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = SiglipMLP(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        output_attentions: Optional[bool] = False,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        rope_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        # cu_seqlens = None,
+    ) -> Tuple[torch.FloatTensor]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`):
+                Input to the layer of shape `(batch, seq_len, embed_dim)`.
+            attention_mask (`torch.FloatTensor`):
+                Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
+            output_attentions (`bool`, *optional*, defaults to `False`):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            cu_seqlens=cu_seqlens,
+            rope_emb=rope_emb,
+            # cu_seqlens=cu_seqlens
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
+
+
+class SiglipPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = KeyeConfig
+    base_model_prefix = "siglip"
+    supports_gradient_checkpointing = True
+
+    _no_split_modules = [
+        "SiglipTextEmbeddings",
+        "SiglipVisionEmbeddings",
+        "SiglipEncoderLayer",
+        "SiglipMultiheadAttentionPoolingHead",
+    ]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, SiglipVisionEmbeddings):
+            width = (
+                self.config.vision_config.hidden_size
+                if isinstance(self.config, KeyeConfig)
+                else self.config.hidden_size
+            )
+            nn.init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+        elif isinstance(module, nn.Embedding):
+            default_flax_embed_init(module.weight)
+        elif isinstance(module, SiglipAttention):
+            nn.init.xavier_uniform_(module.q_proj.weight)
+            nn.init.xavier_uniform_(module.k_proj.weight)
+            nn.init.xavier_uniform_(module.v_proj.weight)
+            nn.init.xavier_uniform_(module.out_proj.weight)
+            nn.init.zeros_(module.q_proj.bias)
+            nn.init.zeros_(module.k_proj.bias)
+            nn.init.zeros_(module.v_proj.bias)
+            nn.init.zeros_(module.out_proj.bias)
+        elif isinstance(module, SiglipMLP):
+            nn.init.xavier_uniform_(module.fc1.weight)
+            nn.init.xavier_uniform_(module.fc2.weight)
+            nn.init.normal_(module.fc1.bias, std=1e-6)
+            nn.init.normal_(module.fc2.bias, std=1e-6)
+        elif isinstance(module, SiglipMultiheadAttentionPoolingHead):
+            nn.init.xavier_uniform_(module.probe.data)
+            nn.init.xavier_uniform_(module.attention.in_proj_weight.data)
+            nn.init.zeros_(module.attention.in_proj_bias.data)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            lecun_normal_(module.weight)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+
+SIGLIP_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`KeyeConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+SIGLIP_TEXT_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+SIGLIP_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate the pre-trained position encodings.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+SIGLIP_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the contrastive loss.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate the pre-trained position encodings.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->Siglip
+class SiglipEncoder(nn.Module):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`SiglipEncoderLayer`].
+
+    Args:
+        config: KeyeConfig
+    """
+
+    def __init__(self, config: KeyeConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+        num_heads = config.num_attention_heads
+        head_dim = embed_dim // num_heads
+        self.layers = nn.ModuleList([SiglipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.rotary_pos_emb = SigLIPRotaryEmbedding(head_dim // 2, 
+            config.rope_theta if hasattr(config, "rope_theta") else 10000
+        )
+        self.gradient_checkpointing = False
+
+    @staticmethod
+    def flatten_list(image_grid_thw):
+        tmp_image_grid_thw = list()
+        for image_grid in image_grid_thw:
+            if isinstance(image_grid, list):
+                tmp_image_grid_thw.extend(image_grid)
+            else:
+                tmp_image_grid_thw.append(image_grid)
+        return tmp_image_grid_thw
+
+    def build_window_index(self, image_grid, window_size, device):
+        from einops import rearrange
+        window_indices = list()
+        pad_values = -100
+        start_window_index = 0
+        cu_seqlens_within_windows = list()
+
+        for t, h, w in image_grid:
+            window_index = torch.arange(t * h * w, device=device).reshape(t, h, w)
+            pad_h = (-h) % window_size
+            pad_w = (-w) % window_size
+            assert pad_h >= 0 and pad_w >= 0, (pad_h, pad_w)
+            window_index = F.pad(window_index, (0, pad_w, 0, pad_h), value=pad_values)
+            window_index = rearrange(window_index, "t (h p1) (w p2) -> t (h w) (p1 p2)", p1=window_size, p2=window_size)
+            window_seqlens = (window_index != pad_values).long().sum(-1).reshape(-1)
+            window_index = window_index.reshape(-1)
+            window_index = window_index[window_index != pad_values]
+            window_indices.append(window_index + start_window_index)
+            cu_seqlens_within_windows.append(window_seqlens.cumsum(0) + start_window_index)
+            start_window_index += t * h * w
+        window_indices = torch.concat(window_indices, dim=0)
+        cu_seqlens_within_windows = torch.concat(cu_seqlens_within_windows, dim=0)
+        cu_seqlens_within_windows = F.pad(cu_seqlens_within_windows, (1, 0), value=0).to(torch.int32)
+        return window_indices, cu_seqlens_within_windows
+
+    # Ignore copy
+    # @can_return_tuple
+    def forward(
+        self,
+        inputs_embeds,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
+        height_position_ids: Optional[torch.Tensor] = None,
+        width_position_ids: Optional[torch.Tensor] = None,
+        use_rope: Optional[bool] = False,
+        window_size: Optional[bool] = -1,
+        vision_or_text: str = "vision",
+        # cu_seqlens: Optional[List[torch.Tensor]] = None,
+    ) -> BaseModelOutput:
+        r"""
+        Args:
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        """
+        
+        vision_or_text = "vision"
+
+        use_window_attn = (window_size > 0 and vision_or_text == "vision")
+        use_rope = (use_rope is True) and (vision_or_text == "vision")
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        device = inputs_embeds.device
+        hidden_states = inputs_embeds
+        attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
+        if use_rope is True:
+            flatten_image_grid_thw = self.flatten_list(image_grid_thw)
+            # assert sum([np.prod(x) for x in flatten_image_grid_thw]) == hidden_states.shape[1], (flatten_image_grid_thw, hidden_states.shape)
+
+            if width_position_ids is None or height_position_ids is None:
+                split_hids = list()
+                split_wids = list()
+                for t, h, w in flatten_image_grid_thw:
+                    image_pids = torch.arange(t * h * w, device=device) % (h * w)
+                    sample_hids = image_pids // w
+                    sample_wids = image_pids % w
+                    split_hids.append(sample_hids)
+                    split_wids.append(sample_wids)
+                width_position_ids = torch.concat(split_wids, dim=0)
+                height_position_ids = torch.concat(split_hids, dim=0)
+            
+            window_indices, cu_seqlens_within_windows = None, None
+
+            if use_window_attn:
+                window_indices, cu_seqlens_within_windows = self.build_window_index(flatten_image_grid_thw, window_size, device)
+                reversed_window_indices = window_indices.argsort()
+                height_position_ids = height_position_ids[window_indices]
+                width_position_ids = width_position_ids[window_indices]
+
+            pids = torch.stack([height_position_ids, width_position_ids], dim=-1)
+            max_grid_size = pids.max() + 1
+            rope_emb_max_grid = self.rotary_pos_emb(max_grid_size)
+            rope_emb = rope_emb_max_grid[pids].flatten(1)
+            rope_emb = rope_emb.repeat(1, 2)
+            # Save rope_emb before cos/sin for debugging
+            _DEBUG_ROPE_OUTPUTS["rope_emb"] = rope_emb.detach()
+            rope_emb = (rope_emb.cos(), rope_emb.sin())
+        else:
+
+            rope_emb = None
+            window_indices, cu_seqlens_within_windows = None, None
+            
+            if use_window_attn:
+                flatten_image_grid_thw = self.flatten_list(image_grid_thw)
+
+                window_indices, cu_seqlens_within_windows = self.build_window_index(flatten_image_grid_thw, window_size, device)
+                reversed_window_indices = window_indices.argsort()
+        
+        if use_window_attn:
+            assert cu_seqlens_within_windows is not None
+            attn_cu_seqlens = cu_seqlens_within_windows
+            hidden_states = hidden_states[:, window_indices, :]
+        else:
+            attn_cu_seqlens = cu_seqlens
+
+        assert hidden_states.shape[1] % get_sequence_parallel_world_size() == 0, \
+            f"Sequence length should be dividable by sp_world_size={get_sequence_parallel_world_size()}, hidden_states={hidden_states.shape}"
+
+        attention_mask = attention_mask.to(inputs_embeds.dtype) if attention_mask is not None else None
+        # hidden_states = get_local_sequence(hidden_states, seq_idx=1)
+
+        if get_sequence_parallel_world_size() > 1:
+            start, end = get_local_sequence_boundary(hidden_states.shape[1])
+            sin, cos = rope_emb
+            rope_emb = (sin[start:end, :], cos[start:end, :])
+            hidden_states = hidden_states[:, start:end, :]
+
+        for i, encoder_layer in enumerate( self.layers):
+            if output_hidden_states:
+                encoder_states = encoder_states + ((hidden_states[:, reversed_window_indices, :],) if use_window_attn else (hidden_states, ))
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
+                    hidden_states,
+                    attention_mask,
+                    output_attentions,
+                    attn_cu_seqlens,
+                    rope_emb,
+                )
+            else:
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    output_attentions=output_attentions,
+                    cu_seqlens=attn_cu_seqlens,
+                    rope_emb=rope_emb,
+                )
+
+            hidden_states = layer_outputs[0]
+
+            if output_attentions:
+                all_attentions = all_attentions + (layer_outputs[1],)
+
+        if use_window_attn:
+            hidden_states = hidden_states[:, reversed_window_indices, :]
+
+        if output_hidden_states:
+            encoder_states = encoder_states + (hidden_states,)
+
+        if get_sequence_parallel_world_size() > 1:
+            hidden_states = mpu.AllGather.apply(
+                hidden_states,
+                get_sequence_parallel_group(),
+                1
+            )
+
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
+        )
+
+
+class SiglipVisionTransformer(nn.Module):
+    def __init__(self, config: KeyeVisionConfig):
+        super().__init__()
+        self.config = config
+        embed_dim = config.hidden_size
+
+        self.embeddings = SiglipVisionEmbeddings(config)
+        self.encoder = SiglipEncoder(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
+        if self.use_head:
+            self.head = SiglipMultiheadAttentionPoolingHead(config)
+
+    # @can_return_tuple
+    @add_start_docstrings_to_model_forward(SIGLIP_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=KeyeVisionConfig)
+    def forward(
+        self,
+        pixel_values,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
+        attention_mask: Optional[torch.Tensor] = None,
+        sample_indices: Optional[torch.Tensor] = None,
+        image_indices: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        height_position_ids: Optional[torch.Tensor] = None,
+        width_position_ids: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        padding_mask: Optional[torch.Tensor] = None,
+        vision_return_embed_list: Optional[bool] = False,
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
+        return_pooler_output: Optional[bool] = True,
+        use_rope: Optional[bool] = False,
+        window_size: Optional[bool] = -1,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        Returns:
+
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        hidden_states = self.embeddings(
+            pixel_values, 
+            interpolate_pos_encoding=interpolate_pos_encoding, 
+            position_ids=position_ids,
+            image_grid_thw=image_grid_thw
+        )
+        # 
+        # cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+        #     dim=0,
+        #     # Select dtype based on the following factors:
+        #     #  - FA2 requires that cu_seqlens_q must have dtype int32
+        #     #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+        #     # See https://github.com/huggingface/transformers/pull/34852 for more information
+        #     dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+        # )
+        # cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            attention_mask=attention_mask,
+            cu_seqlens=cu_seqlens,
+            image_grid_thw=image_grid_thw,
+            use_rope=use_rope,
+            height_position_ids=height_position_ids,
+            width_position_ids=width_position_ids,
+            window_size=window_size,
+            vision_or_text="vision",
+        )
+
+        last_hidden_state = encoder_outputs.last_hidden_state
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
+        sample_hidden_state = list()
+        # assert cu_seqlens is not None
+        if cu_seqlens is not None:
+            for i in range(cu_seqlens.shape[0] - 1):
+                start = cu_seqlens[i]
+                end = cu_seqlens[i + 1]
+                tensor = last_hidden_state[:, start: end, :].squeeze(0)
+                sample_hidden_state.append(tensor)
+        else:
+            sample_hidden_state = [last_hidden_state]
+        return BaseModelOutputWithPooling(
+            last_hidden_state=sample_hidden_state,
+            pooler_output=None,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
+
+
+class SiglipMultiheadAttentionPoolingHead(nn.Module):
+    """Multihead Attention Pooling."""
+
+    def __init__(self, config: KeyeVisionConfig):
+        super().__init__()
+
+        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = SiglipMLP(config)
+
+    def forward(self, hidden_state, key_padding_mask=None):
+        batch_size = hidden_state.shape[0]
+        probe = self.probe.repeat(batch_size, 1, 1)
+
+        hidden_state = self.attention(probe, hidden_state, hidden_state, key_padding_mask=key_padding_mask)[0]
+
+        residual = hidden_state
+        hidden_state = self.layernorm(hidden_state)
+        hidden_state = residual + self.mlp(hidden_state)
+
+        return hidden_state[:, 0]
+
+
+@add_start_docstrings(
+    """The vision model from SigLIP without any head or projection on top.""",
+    SIGLIP_START_DOCSTRING,
+)
+class SiglipVisionModel(SiglipPreTrainedModel):
+    config_class = KeyeVisionConfig
+    main_input_name = "pixel_values"
+
+    def __init__(self, config: KeyeVisionConfig):
+        super().__init__(config)
+
+        self.vision_model = SiglipVisionTransformer(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    # @can_return_tuple
+    @add_start_docstrings_to_model_forward(SIGLIP_VISION_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=KeyeVisionConfig)
+    def forward(
+        self,
+        pixel_values,
+        sample_indices: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
+        position_ids: Optional[torch.Tensor] = None,
+        vision_return_embed_list: Optional[bool] = False,
+        image_grid_thw: Optional[List[Union[Tuple[int, int, int], List[Tuple[int, int, int]]]]] = None,
+        cu_seqlens: Optional[List[torch.Tensor]] = None,
+        return_pooler_output: Optional[bool] = True,
+        use_rope: Optional[bool] = False,
+        window_size: Optional[bool] = -1,
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, SiglipVisionModel
+
+        >>> model = SiglipVisionModel.from_pretrained("google/siglip-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/siglip-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled features
+        ```"""
+        return self.vision_model(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            position_ids=position_ids,
+            vision_return_embed_list=vision_return_embed_list,
+            image_grid_thw=image_grid_thw,
+            sample_indices=sample_indices,
+            cu_seqlens=cu_seqlens,
+            return_pooler_output=return_pooler_output,
+            use_rope=use_rope,
+            window_size=window_size,
+        )
+
+class Qwen3RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        Qwen3RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
+
+# Global storage for debugging RoPE outputs
+_DEBUG_ROPE_OUTPUTS = {
+    "rope_emb": None,
+    "q_after_rope": None, 
+    "k_after_rope": None,
+    "cos_before_chunk": None,
+    "sin_before_chunk": None,
+    "cos_after_chunk": None,
+    "sin_after_chunk": None,
+}
+
+def apply_rotary_pos_emb_flashatt(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    # Store cos/sin before chunk
+    _DEBUG_ROPE_OUTPUTS["cos_before_chunk"] = cos.detach()
+    _DEBUG_ROPE_OUTPUTS["sin_before_chunk"] = sin.detach()
+    
+    cos = cos.chunk(2, dim=-1)[0].contiguous()
+    sin = sin.chunk(2, dim=-1)[0].contiguous()
+    
+    # Store cos/sin after chunk
+    _DEBUG_ROPE_OUTPUTS["cos_after_chunk"] = cos.detach()
+    _DEBUG_ROPE_OUTPUTS["sin_after_chunk"] = sin.detach()
+    
+    q_embed = apply_rotary_emb(q.float(), cos.float(), sin.float()).type_as(q)
+    k_embed = apply_rotary_emb(k.float(), cos.float(), sin.float()).type_as(k)
+    # Store for debugging
+    _DEBUG_ROPE_OUTPUTS["q_after_rope"] = q_embed.detach()
+    _DEBUG_ROPE_OUTPUTS["k_after_rope"] = k_embed.detach()
+    return q_embed, k_embed
+

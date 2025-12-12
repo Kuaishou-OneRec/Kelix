@@ -44,7 +44,7 @@ from typing import Any, Optional
 
 import torch
 from torch import nn
-
+from flash_attn.layers.rotary import apply_rotary_emb as flash_apply_rotary_emb
 
 class LlamaRotaryPositionalEmbeddings(nn.Module):
     """
@@ -292,6 +292,52 @@ class RotaryPositionalEmbeddings(nn.Module):
         x_out = (x * cos) + (x_rotated * sin)
 
         return x_out
+
+
+class Roraty2DPositionalEmbeddings(nn.Module):
+
+    def __init__(self, head_dim: int, *, max_grid_size: int = 4096, base: int = 10000) -> None:
+        super().__init__()
+        self.dim = head_dim // 2
+        self.base = base
+        
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        # self.register_buffer("freqs_cache", torch.empty(0), persistent=False)
+
+    def calculate_freqs(self, seqlen: int, dtype: torch.dtype = None) -> torch.Tensor:
+        # 使用传入的 dtype，确保与模型精度一致
+        target_dtype = dtype if dtype is not None else self.inv_freq.dtype
+        inv_freq = self.inv_freq.to(dtype=target_dtype)
+        seq = torch.arange(seqlen, device=inv_freq.device, dtype=target_dtype)
+        freqs = torch.outer(seq, inv_freq)
+        return freqs
+
+    def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
+        if input_pos is None:
+            return x
+        
+        if isinstance(input_pos, dict):
+            height_ids = input_pos["height"]
+            width_ids = input_pos["width"]
+        else:
+            height_ids, width_ids = input_pos
+        max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
+        rope_emb_max_grid = self.calculate_freqs(max_pos, dtype=x.dtype)
+        pids = torch.stack([height_ids, width_ids], dim=-1)
+        rope_emb = rope_emb_max_grid[pids].flatten(1)
+        rope_emb = rope_emb.repeat(1, 2)
+        # rope_emb 已经是 x.dtype（从 calculate_freqs 传入），无需再转换
+        cos, sin = (rope_emb.cos(), rope_emb.sin())
+        
+        
+        cos = cos.chunk(2, dim=-1)[0].contiguous()
+        sin = sin.chunk(2, dim=-1)[0].contiguous()
+        
+        result = flash_apply_rotary_emb(
+            x.float(), cos.float(), sin.float()
+        ).to(dtype=x.dtype)
+        return result
 
 
 class VisionRotaryPositionalEmbeddings(nn.Module):
