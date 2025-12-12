@@ -365,21 +365,7 @@ def extract_and_save_tokenizer_weights(
     
     logger.info(f"Extracted {len(origin_tokenizer_state_dict)} keys for visual_tokenizer")
     
-    # 2. Convert Origin keys to Muse format
-    # Origin KeyeImageTokenizer structure:
-    #   - visual -> SiglipVisionModel -> vision_model (embeddings, encoder, post_layernorm)
-    #   - mlp_AR -> Projector
-    #   - pre_llm_aligner -> Linear or Identity
-    #   - encoder -> Linear
-    #   - quantizer -> ModuleList of VectorQuantizer
-    #
-    # Muse KeyeImageTokenizer structure:
-    #   - visual -> KeyeVisionTransformer (embeddings, encoder, ln_post)
-    #   - mlp_AR -> Projector
-    #   - pre_llm_aligner -> Linear or Identity
-    #   - encoder -> Linear
-    #   - quantizer -> ModuleList of VectorQuantizer
-    
+
     muse_state_dict = {}
     for k, v in origin_tokenizer_state_dict.items():
         new_k = k

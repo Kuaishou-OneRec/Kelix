@@ -1251,6 +1251,9 @@ class SiglipEncoder(nn.Module):
             # Save rope_emb before cos/sin for debugging
             _DEBUG_VIT_ROPE_OUTPUTS["rope_emb"] = rope_emb.detach()
             rope_emb = (rope_emb.cos(), rope_emb.sin())
+            # Save cos/sin for debugging
+            _DEBUG_VIT_ROPE_OUTPUTS["cos_after_chunk"] = rope_emb[0].detach()
+            _DEBUG_VIT_ROPE_OUTPUTS["sin_after_chunk"] = rope_emb[1].detach()
             # stash for external debug comparison
             self.debug_rope = rope_emb
             if not getattr(self, "_debug_rope_logged", False):
