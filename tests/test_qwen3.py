@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
-from muse.config import Qwen3Config 
+from muse.config import Qwen3Config
 from muse.models.qwen3 import Qwen3Model
 from muse.training.common import set_default_dtype
 

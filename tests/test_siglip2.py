@@ -16,8 +16,8 @@ from PIL import Image
 from transformers import AutoImageProcessor, SiglipVisionModel as HFSiglipVisionModel
 from muse.config import SiglipVisionConfig
 
-# 假设 Muse 的 SiglipVisionTransformer 路径如下，请根据实际情况调整
-from muse.models.Siglip import SiglipVisionTransformer as SiglipVisionModel
+# 假设 Muse 的 SiglipVisionModel 路径如下，请根据实际情况调整
+from muse.models.Siglip import SiglipVisionModel 
 from muse.training.common import set_default_dtype
 
 # 配置简单的日志格式
@@ -57,7 +57,7 @@ def _build_siglip_config(hf_cfg: Dict[str, Any]) -> SiglipVisionConfig:
     default_max_seq_len = (image_size // patch_size) ** 2
     
     return SiglipVisionConfig(
-        model_class="SiglipVisionTransformer",
+        model_class="SiglipVisionModel",
         image_size=image_size,
         patch_size=patch_size,
         num_channels=hf_cfg.get("num_channels", 3),

@@ -1,11 +1,12 @@
 """
 Integration test to ensure Muse KeyeImageTokenizer matches Origin KeyeImageTokenizer implementation.
+Focuses on final outputs only, without intermediate RoPE debugging.
 
 This script:
 1. Loads a Keye-VL checkpoint
 2. Extracts the visual_tokenizer (KeyeImageTokenizer) weights and saves to local path
 3. Loads the saved weights into Muse KeyeImageTokenizer (keye_tok)
-4. Compares forward pass outputs on a fake image with origin model
+4. Compares forward pass final outputs on a fake image with origin model
 """
 
 import os
@@ -29,14 +30,13 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Muse imports
-from tests.model_for_compare.keye_vl_tokenizer_image import modeling_keye_origin as origin_mod
+from tests.models.keye_vl_tokenizer_image import modeling_keye_origin as origin_mod
 from muse.models.keye_tokenizer.modeling import KeyeImageTokenizer as MuseKeyeImageTokenizer
-from muse.models.keye_tokenizer.image_processing_keye import SiglipImageProcessor
+from tests.models.keye_vl_tokenizer_image.image_processing_keye import SiglipImageProcessor
 from muse.config import KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
-# Import Origin RoPE debug variables
-from tests.model_for_compare.keye_vl_tokenizer_image.modeling_keye_origin import _DEBUG_VIT_ROPE_OUTPUTS as ORIGIN_VIT_ROPE_DEBUG
+# No RoPE debug imports needed for final output test
 
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
@@ -578,18 +578,7 @@ def _run_keye_tokenizer_alignment():
     pixel_values = inputs["pixel_values"]
     image_grid_thw = inputs["image_grid_thw"]
 
-    # Clear RoPE debug outputs
-    for key in ORIGIN_VIT_ROPE_DEBUG.keys():
-        ORIGIN_VIT_ROPE_DEBUG[key] = None
-    
-    # Clear Muse RoPE debug if available
-    if hasattr(muse_tokenizer.visual.encoder, 'rope'):
-        rope_module = muse_tokenizer.visual.encoder.rope
-        if hasattr(rope_module, '_debug_rope_outputs'):
-            rope_module._debug_rope_outputs = []
-        if hasattr(rope_module, '_debug_rope_intermediates'):
-            for k in rope_module._debug_rope_intermediates.keys():
-                rope_module._debug_rope_intermediates[k] = None
+    # No RoPE debug outputs to clear for final output test
 
     # === 7. Forward Pass ===
     log_separator("Running Forward Pass")
@@ -615,25 +604,7 @@ def _run_keye_tokenizer_alignment():
     activations["muse"]["Final indices"] = muse_output["indices"]
     activations["muse"]["Final x (image_embeds)"] = muse_output["x"]
 
-    # Collect RoPE intermediates
-    if ORIGIN_VIT_ROPE_DEBUG.get("rope_emb") is not None:
-        activations["origin"]["ViT RoPE rope_emb"] = ORIGIN_VIT_ROPE_DEBUG["rope_emb"]
-    if ORIGIN_VIT_ROPE_DEBUG.get("cos_after_chunk") is not None:
-        activations["origin"]["ViT RoPE cos"] = ORIGIN_VIT_ROPE_DEBUG["cos_after_chunk"]
-    if ORIGIN_VIT_ROPE_DEBUG.get("sin_after_chunk") is not None:
-        activations["origin"]["ViT RoPE sin"] = ORIGIN_VIT_ROPE_DEBUG["sin_after_chunk"]
-    
-    # Muse RoPE intermediates
-    if hasattr(muse_tokenizer.visual.encoder, 'rope'):
-        rope_module = muse_tokenizer.visual.encoder.rope
-        if hasattr(rope_module, '_debug_rope_intermediates'):
-            intermediates = rope_module._debug_rope_intermediates
-            if intermediates.get("rope_emb") is not None:
-                activations["muse"]["ViT RoPE rope_emb"] = intermediates["rope_emb"]
-            if intermediates.get("cos_after_chunk") is not None:
-                activations["muse"]["ViT RoPE cos"] = intermediates["cos_after_chunk"]
-            if intermediates.get("sin_after_chunk") is not None:
-                activations["muse"]["ViT RoPE sin"] = intermediates["sin_after_chunk"]
+    # No RoPE intermediate debugging needed for final output test
 
     # === 8. Analysis ===
     log_separator("Deep Dive Analysis - Tokenizer Components")
@@ -644,9 +615,6 @@ def _run_keye_tokenizer_alignment():
         "0.2 Q_Proj Out",
         "0.2 K_Proj Out",
         "0.2 V_Proj Out",
-        "ViT RoPE rope_emb",
-        "ViT RoPE cos",
-        "ViT RoPE sin",
         "0.3 Attn Raw (Pre-Proj)",
         "0.4 Attn Out (Post-Proj)",
         "0.6 MLP Hidden (fc1)",
@@ -672,18 +640,12 @@ def _run_keye_tokenizer_alignment():
         "Final x (image_embeds)",
     ])
 
-    rope_detail_checkpoints = {
-        "ViT RoPE rope_emb",
-        "ViT RoPE cos",
-        "ViT RoPE sin",
-    }
-
     all_matches = True
     for k in comparison_keys:
         if k in activations["origin"] and k in activations["muse"]:
-            print_values = k in rope_detail_checkpoints or "Final" in k
+            print_values = "Final" in k
             is_match, max_diff = compare_tensors_verbose(
-                k, activations["origin"][k], activations["muse"][k], 
+                k, activations["origin"][k], activations["muse"][k],
                 atol=2e-2, print_values=print_values
             )
             if not is_match:

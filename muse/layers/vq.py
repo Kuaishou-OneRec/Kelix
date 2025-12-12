@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
+# TODO: 移除无用的逻辑和代码
 class VectorQuantizer(nn.Module):
     """
     Vector Quantization Layer with support for both argmin and softmax sampling
@@ -22,7 +22,7 @@ class VectorQuantizer(nn.Module):
                 
                 ):
         super(VectorQuantizer, self).__init__()
-        print(f"[DEBUG] VectorQuantizer.__init__: sampling_mode={sampling_mode}, temperature={temperature}, split_voc={split_voc}, add_voc_reducer={add_voc_reducer}, split_voc_index={split_voc_index}")
+        print(f"[INFO] VectorQuantizer.__init__: sampling_mode={sampling_mode}, temperature={temperature}, split_voc={split_voc}, add_voc_reducer={add_voc_reducer}, split_voc_index={split_voc_index}")
         self.embedding_dim = embedding_dim
         self.num_embeddings = num_embeddings
         self.sampling_mode = sampling_mode  # "argmin" or "softmax"

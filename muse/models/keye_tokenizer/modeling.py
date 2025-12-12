@@ -12,7 +12,7 @@ from einops import rearrange
 from muse.models.base import Model
 from muse.config import  KeyeVisionConfig
 from muse.config.model_config import ModelConfig, KeyeTokenizerConfig
-from muse.models.keye_vit.modeling import KeyeVisionTransformer
+from muse.models.keye_vit.modeling import KeyeVisionModel
 from muse.layers.vq import VectorQuantizer
 from muse.models.keye_tokenizer._layers import Projector
 # Import will be done when muse.models is imported, avoiding circular import
@@ -64,7 +64,7 @@ class KeyeImageTokenizer(Model):
         super().__init__(config)
         self.config: KeyeTokenizerConfig = config
         self.n_q_tokens = config.n_q_tokens
-        self.visual = KeyeVisionTransformer(config.vision_config)
+        self.visual = KeyeVisionModel(config.vision_config)
         self.mlp_AR = Projector(config.vision_config.hidden_size, config.llm_hidden_size)
 
         self.pre_llm_align = getattr(config, "pre_llm_align", False)
