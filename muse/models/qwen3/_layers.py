@@ -289,3 +289,203 @@ class Qwen3Attention(nn.Module):
         # reshape the output to be the same shape as the input
         output = output.contiguous().view(b, s_x, -1)
         return self.output_proj(output)
+
+
+
+
+class MultimodalRotaryEmbedding(nn.Module):
+    """
+    3D Multimodal Rotary Position Embedding for vision-language models (Keye/Qwen2-VL style).
+    
+    This implements the multimodal RoPE where position_ids has 3 components:
+    temporal, height, and width. The embedding is split into sections and
+    different position indices are applied to different sections.
+    
+    Reference: https://qwenlm.github.io/blog/qwen2-vl/
+    
+    The key insight is that for multimodal inputs:
+    - Visual tokens have 3D positions (temporal, height, width)
+    - Text tokens have 1D positions (same value repeated for all 3 dimensions)
+    - The head_dim is split into sections, each section using a different position dimension
+    
+    Args:
+        dim (int): Embedding dimension (head_dim)
+        max_seq_len (int): Maximum sequence length
+        base (float): RoPE base frequency (theta)
+        mrope_section (List[int]): Section sizes for [temporal, height, width].
+            E.g., [16, 24, 24] means 16 dims for temporal, 24 for height, 24 for width.
+            Note: sum(mrope_section) should equal dim // 2
+    """
+    
+    def __init__(
+        self,
+        dim: int,
+        max_seq_len: int = 32768,
+        base: float = 1_000_000.0,
+        mrope_section: Optional[list] = None,
+    ) -> None:
+        super().__init__()
+        self.dim = dim
+        self.max_seq_len = max_seq_len
+        self.base = base
+        # Default mrope_section if not provided
+        self.mrope_section = mrope_section or [16, 24, 24]
+        self.rope_init()
+    
+    def rope_init(self):
+        """Initialize inverse frequency buffer."""
+        inv_freq = 1.0 / (
+            self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim)
+        )
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+    
+    @staticmethod
+    def rotate_half(x: torch.Tensor) -> torch.Tensor:
+        """Rotates half the hidden dims of the input.
+        
+        Args:
+            x: Input tensor with shape [..., head_dim]
+            
+        Returns:
+            Rotated tensor with same shape
+        """
+        x1 = x[..., : x.shape[-1] // 2]
+        x2 = x[..., x.shape[-1] // 2 :]
+        return torch.cat((-x2, x1), dim=-1)
+    
+    def forward(
+        self,
+        x: torch.Tensor,
+        *,
+        input_pos: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Apply multimodal 3D rotary position embedding.
+        
+        Args:
+            x: Input tensor with shape [batch_size, seq_len, num_heads, head_dim]
+            input_pos: Position indices with shape [3, batch_size, seq_len]
+                       where 3 represents (temporal, height, width).
+                       For text-only inputs, all 3 dimensions should have the same values.
+                       If None, returns x unchanged (no RoPE applied).
+        
+        Returns:
+            Tensor with rotary position embedding applied, same shape as input
+        """
+        if input_pos is None:
+            return x
+        
+        # x shape: [batch_size, seq_len, num_heads, head_dim]
+        # input_pos shape: [3, batch_size, seq_len]
+        position_ids = input_pos
+        
+        # Core RoPE block. Keye has different position ids for 3 dimensions
+        # So we expand the inv_freq to shape (3, ...)
+        # inv_freq shape: [dim // 2]
+        # Expand to: [3, batch_size, dim // 2, 1]
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(
+            3, position_ids.shape[1], -1, 1
+        )
+        
+        # position_ids shape: [3, batch_size, seq_len]
+        # Expand to: [3, batch_size, 1, seq_len]
+        position_ids_expanded = position_ids[:, :, None, :].float()
+        
+        # Force float32 for precision
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        
+        with torch.autocast(device_type=device_type, enabled=False):
+            # Compute frequencies: [3, batch_size, dim // 2, seq_len]
+            # Then transpose to: [3, batch_size, seq_len, dim // 2]
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            
+            # Concatenate to get full embedding: [3, batch_size, seq_len, dim]
+            emb = torch.cat((freqs, freqs), dim=-1)
+            
+            # Compute cos and sin: [3, batch_size, seq_len, dim]
+            cos = emb.cos()
+            sin = emb.sin()
+        
+        # Apply multimodal section splitting
+        # mrope_section * 2 for cos/sin concatenation
+        # e.g., [16, 24, 24] -> [16, 24, 24, 16, 24, 24]
+        mrope_section_doubled = self.mrope_section * 2
+        
+        # Split cos/sin by sections: each is [3, batch_size, seq_len, section_size]
+        cos_sections = cos.split(mrope_section_doubled, dim=-1)
+        sin_sections = sin.split(mrope_section_doubled, dim=-1)
+        
+        # Debug store (raw cos/sin before section selection)
+        if not hasattr(self, "_debug_rope_intermediates"):
+            self._debug_rope_intermediates = {
+                "inv_freq": None,
+                "position_ids": None,
+                "cos_before_split": None,
+                "sin_before_split": None,
+                "cos_after_split": None,
+                "sin_after_split": None,
+                "mrope_section": None,
+            }
+        self._debug_rope_intermediates["inv_freq"] = self.inv_freq.to(dtype=x.dtype).detach()
+        self._debug_rope_intermediates["position_ids"] = position_ids.detach()
+        self._debug_rope_intermediates["cos_before_split"] = cos.detach()
+        self._debug_rope_intermediates["sin_before_split"] = sin.detach()
+        self._debug_rope_intermediates["mrope_section"] = torch.tensor(
+            self.mrope_section, device=x.device
+        )
+
+        # Select appropriate dimension for each section (cycling through 0, 1, 2)
+        # section[i % 3] selects temporal(0), height(1), or width(2)
+        # Result shape: [batch_size, seq_len, dim]
+        cos_combined = torch.cat(
+            [section[i % 3] for i, section in enumerate(cos_sections)],
+            dim=-1
+        )
+        sin_combined = torch.cat(
+            [section[i % 3] for i, section in enumerate(sin_sections)],
+            dim=-1
+        )
+
+        # Store combined cos/sin (after section selection)
+        self._debug_rope_intermediates["cos_after_split"] = cos_combined.detach()
+        self._debug_rope_intermediates["sin_after_split"] = sin_combined.detach()
+        
+        # Add head dimension for broadcasting: [batch_size, seq_len, 1, dim]
+        cos_combined = cos_combined.unsqueeze(2).to(dtype=x.dtype)
+        sin_combined = sin_combined.unsqueeze(2).to(dtype=x.dtype)
+        
+        # Apply RoPE: x_embed = (x * cos) + (rotate_half(x) * sin)
+        x_rotated = self.rotate_half(x)
+        x_out = (x * cos_combined) + (x_rotated * sin_combined)
+
+        # Store outputs for debugging
+        if not hasattr(self, "_debug_rope_outputs"):
+            self._debug_rope_outputs = []
+        self._debug_rope_outputs.append(x_out.detach())
+        
+        return x_out
+    
+    def apply_rotary_pos_emb_qk(
+        self,
+        q: torch.Tensor,
+        k: torch.Tensor,
+        input_pos: Optional[torch.Tensor] = None,
+    ) -> tuple:
+        """
+        Apply multimodal 3D rotary position embedding to both query and key tensors.
+        
+        This is a convenience method that applies the same position embedding to both
+        q and k tensors, which is the common use case in attention.
+        
+        Args:
+            q: Query tensor with shape [batch_size, seq_len, num_heads, head_dim]
+            k: Key tensor with shape [batch_size, seq_len, num_kv_heads, head_dim]
+            input_pos: Position indices with shape [3, batch_size, seq_len]
+        
+        Returns:
+            Tuple of (q_embed, k_embed) with rotary position embedding applied
+        """
+        q_embed = self.forward(q, input_pos=input_pos)
+        k_embed = self.forward(k, input_pos=input_pos)
+        return q_embed, k_embed
