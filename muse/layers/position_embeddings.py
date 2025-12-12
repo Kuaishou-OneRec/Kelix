@@ -503,12 +503,6 @@ class TwoD_RotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         # self.register_buffer("freqs_cache", torch.empty(0), persistent=False)
 
-    # def build_freq_cache(self, seqlen: int):
-    #     dtype = self.inv_freq.dtype
-    #     device = self.inv_freq.device
-    #     seq = torch.arange(seqlen, device=device, dtype=dtype)
-    #     freqs = torch.outer(seq, self.inv_freq)
-    #     self.register_buffer("freqs_cache", freqs, persistent=False)
     def calculate_freqs(self, seqlen: int, dtype: torch.dtype = None) -> torch.Tensor:
         # 使用传入的 dtype，确保与模型精度一致
         target_dtype = dtype if dtype is not None else self.inv_freq.dtype
@@ -516,9 +510,6 @@ class TwoD_RotaryEmbedding(nn.Module):
         seq = torch.arange(seqlen, device=inv_freq.device, dtype=target_dtype)
         freqs = torch.outer(seq, inv_freq)
         return freqs
-
-
-
 
     def forward(self, x: torch.Tensor, *, input_pos=None, **_) -> torch.Tensor:
         if input_pos is None:
@@ -530,52 +521,20 @@ class TwoD_RotaryEmbedding(nn.Module):
         else:
             height_ids, width_ids = input_pos
         max_pos = max(height_ids.max().item(), width_ids.max().item()) + 1
-        # if self.freqs_cache.numel() == 0 or max_pos > self.freqs_cache.shape[0]:
-        #     self.build_freq_cache(max_pos + 128)
-        # 传入 x 的 dtype，确保整个 RoPE 计算在相同精度下进行
         rope_emb_max_grid = self.calculate_freqs(max_pos, dtype=x.dtype)
-
-
         pids = torch.stack([height_ids, width_ids], dim=-1)
         rope_emb = rope_emb_max_grid[pids].flatten(1)
         rope_emb = rope_emb.repeat(1, 2)
         # rope_emb 已经是 x.dtype（从 calculate_freqs 传入），无需再转换
         cos, sin = (rope_emb.cos(), rope_emb.sin())
         
-        # Store rope_emb, cos, sin before chunk for debugging
-        if not hasattr(self, '_debug_rope_intermediates'):
-            self._debug_rope_intermediates = {
-                "inv_freq": None,
-                "rope_emb_max_grid": None,
-                "pids": None,
-                "rope_emb": None,
-                "cos_before_chunk": None,
-                "sin_before_chunk": None,
-                "cos_after_chunk": None,
-                "sin_after_chunk": None,
-            }
-        # 保存转换后的 inv_freq（与 x.dtype 一致）
-        self._debug_rope_intermediates["inv_freq"] = self.inv_freq.to(dtype=x.dtype).detach()
-        self._debug_rope_intermediates["rope_emb_max_grid"] = rope_emb_max_grid.detach()
-        self._debug_rope_intermediates["pids"] = pids.detach()
-        self._debug_rope_intermediates["rope_emb"] = rope_emb.detach()
-        self._debug_rope_intermediates["cos_before_chunk"] = cos.detach()
-        self._debug_rope_intermediates["sin_before_chunk"] = sin.detach()
         
         cos = cos.chunk(2, dim=-1)[0].contiguous()
         sin = sin.chunk(2, dim=-1)[0].contiguous()
         
-        # Store cos/sin after chunk
-        self._debug_rope_intermediates["cos_after_chunk"] = cos.detach()
-        self._debug_rope_intermediates["sin_after_chunk"] = sin.detach()
-        
         result = flash_apply_rotary_emb(
             x.float(), cos.float(), sin.float()
         ).to(dtype=x.dtype)
-        # Store for debugging - track via a module-level list
-        if not hasattr(self, '_debug_rope_outputs'):
-            self._debug_rope_outputs = []
-        self._debug_rope_outputs.append(result.detach())
         return result
 
 

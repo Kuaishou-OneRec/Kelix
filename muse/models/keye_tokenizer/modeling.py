@@ -13,7 +13,8 @@ from muse.models.base import Model
 from muse.config import  KeyeVisionConfig
 from muse.config.model_config import ModelConfig, KeyeTokenizerConfig
 from muse.models.keye_vit.modeling import KeyeVisionTransformer
-
+from muse.layers.vq import VectorQuantizer
+from muse.models.keye_tokenizer._layers import Projector
 # Import will be done when muse.models is imported, avoiding circular import
 # The actual registration happens in __init__.py after import
 
@@ -54,261 +55,6 @@ def default_flax_embed_init(tensor: torch.Tensor) -> None:
     init.normal_(tensor, mean=0.0, std=1.0)
 
 
-class VectorQuantizer(nn.Module):
-    """
-    Vector Quantization Layer with support for both argmin and softmax sampling.
-    Note: 不依赖 Model 基类（无 config），避免初始化报错。
-    """
-    def __init__(
-        self,
-        num_embeddings: int,
-        embedding_dim: int,
-        init_embedding_dim: int,
-        sampling_mode: str = "argmin",
-        norm_type: str = "LayerNorm",
-        temperature: float = 1.0,
-        temperature_decay: float = 0.999,
-        min_temperature: float = 0.1,
-        split_voc: int = 1,  # 分割成几个词表
-        split_voc_index: int = 0,
-        add_voc_reducer: bool = False,  # 是否添加一个voc reducer
-    ):
-        super().__init__()
-        print(f"[DEBUG] VectorQuantizer.__init__: sampling_mode={sampling_mode}, temperature={temperature}, split_voc={split_voc}, add_voc_reducer={add_voc_reducer}, split_voc_index={split_voc_index}")
-        self.embedding_dim = embedding_dim
-        self.num_embeddings = num_embeddings
-        self.sampling_mode = sampling_mode  # "argmin" or "softmax"
-        self.split_voc_index = split_voc_index
-        self.temperature = temperature
-        self.temperature_decay = temperature_decay
-        self.min_temperature = min_temperature
-        self.split_voc = split_voc
-        self.add_voc_reducer = add_voc_reducer
-        self.split_voc_size = self.num_embeddings // self.split_voc
-        
-        # Initialize the codebook
-        self.embedding = nn.Embedding(num_embeddings, init_embedding_dim)
-
-        for p in self.embedding.parameters():
-            p.requires_grad = False
-
-        if add_voc_reducer:
-            print(f"add_voc_reducer shape={self.num_embeddings, self.split_voc_size}")
-            self.voc_reducer = nn.Parameter(torch.randn(self.num_embeddings, self.split_voc_size) * 0.01)
-            self.slice_indices = slice(0, num_embeddings)
-        else:
-            if split_voc > 1:
-                self.slice_indices = slice(num_embeddings // split_voc * self.split_voc_index, num_embeddings // split_voc * (self.split_voc_index + 1))
-                print(f"self.slice_indices={self.slice_indices}")
-            else:
-                self.slice_indices = slice(0, num_embeddings)
-
-        self.embedding_proj = nn.Linear(init_embedding_dim, embedding_dim)
-
-        # Initialize current temperature (not as buffer to avoid loading issues)
-        self._current_temperature = temperature
-
-        def make_norm():
-            # return lambda x: torch.norm(x, p=2, dim=-1)
-            if norm_type == 'LayerNorm':
-                return nn.LayerNorm(embedding_dim) # lzx norm
-            elif norm_type == 'l2':
-                return lambda x: torch.norm(x, p=2, dim=-1)
-            elif norm_type is None:
-                return nn.Identity()
-            else:
-                raise f"{norm_type} not support."
-        
-        self.q_norm = make_norm()
-        self.z_norm = make_norm()
-
-    def train_code_book(self):
-        print(f"train code book embeddings.")
-        for p in self.embedding.parameters():
-            p.requires_grad = True
-    @property
-    def current_temperature(self):
-        """Get current temperature as a tensor on the correct device"""
-        device = self.embedding.weight.device
-        return torch.tensor(self._current_temperature, device=device, dtype=torch.float32)
-        
-    def _get_indices_argmin(self, distances):
-        """Traditional argmin selection"""
-        return torch.argmin(distances, dim=1)
-    
-    def _get_indices_softmax(self, distances):
-        """Softmax sampling with temperature"""
-        # Convert distances to similarities (negative distances)
-        # Shape: (batch_size, num_embeddings)
-        similarities = -distances
-        
-        # Apply temperature scaling
-        logits = similarities / self.current_temperature
-        
-        # Compute probabilities
-        probs = F.softmax(logits, dim=1)
-        
-        # Sample from the distribution
-        # if self.training:
-        # During training, use sampling for diversity
-        # Note: self.training is automatically set by parent model's .train()/.eval()
-        indices = torch.multinomial(probs, num_samples=1).squeeze(1)
-        # else:
-        #     # During inference, use deterministic selection (argmax)
-        #     # Note: self.training is automatically set by parent model's .train()/.eval()
-        #     indices = torch.argmax(probs, dim=1)
-            
-        return indices, probs
-    
-    def update_temperature(self):
-        """Update temperature with decay (call this once per training step)"""
-        # Always update temperature when called (we only call this during training)
-        # Removed self.training check as it may not be reliable in FSDP environment
-        new_temp = max(
-            self._current_temperature * self.temperature_decay, 
-            self.min_temperature
-        )
-        self._current_temperature = new_temp
-    
-    def forward(self, z_e: torch.Tensor):
-        """
-        Args:
-            z_e(torch.Tensor): (batch_size, embedding_dim), the encoded features
-        Returns:
-            z_q(torch.Tensor): (batch_size, embedding_dim), the quantized features
-            codebook_loss(torch.Tensor): (float), the codebook loss, push codebook embedding e close to z_e
-            commitment_loss(torch.Tensor): (float), the commitment loss, push z_e close to e
-            indices(torch.Tensor): (batch_size,), the indices of the quantized features
-            sampling_probs(torch.Tensor, optional): (batch_size, num_embeddings), sampling probabilities (only for softmax mode)
-        """
-        # Compute distances between z_e and all codebook vectors
-        # Shape: (batch_size, num_embeddings)
-        z_e = self.z_norm(z_e)
-
-        if self.add_voc_reducer:
-            embedding = self.voc_reducer.T @ self.embedding.weight[self.slice_indices]
-        else:
-            embedding = self.embedding.weight[self.slice_indices]
-
-        quant_codebook = self.embedding_proj(embedding)
-        quant_codebook = self.q_norm(quant_codebook)
-
-        distances = torch.cdist(z_e, quant_codebook, p=2).pow(2)
-        
-        # Select indices based on sampling mode
-        sampling_probs = None
-        if self.sampling_mode == "argmin":
-            # print("[DEBUG] Using argmin selection")
-            indices = self._get_indices_argmin(distances)
-        elif self.sampling_mode == "softmax":
-            # print("[DEBUG] Using softmax sampling")
-            indices, sampling_probs = self._get_indices_softmax(distances)
-        else:
-            raise ValueError(f"Unknown sampling_mode: {self.sampling_mode}")
-        
-        # Get the selected embeddings
-        e = quant_codebook[indices]
-
-        encode_length = z_e.shape[0] # torch.Size([6857, 128])
-        loss_mask = torch.cat([torch.ones(encode_length-1), torch.zeros(1)]).to(z_e)[:,None]
-        # Compute losses
-        # codebook loss: push codebook embedding e close to z_e
-        # codebook_loss = F.mse_loss(z_e.detach(), e)
-        codebook_loss = F.mse_loss(z_e.detach() * loss_mask, e * loss_mask)
-        # commitment loss: push z_e close to e  
-        commitment_loss = F.mse_loss(z_e * loss_mask, e.detach() * loss_mask)
-        
-        z_q = z_e + (e - z_e).detach()
-        
-        result = {
-            "z_q": z_q,
-            "codebook_loss": codebook_loss,
-            "commitment_loss": commitment_loss,
-            "indices": indices,
-        }
-        
-        # Add sampling probabilities for softmax mode
-        if sampling_probs is not None:
-            result["sampling_probs"] = sampling_probs
-            
-        return result
-
-class Projector(nn.Module):
-
-    def __init__(self,
-                 in_channels: int,
-                 out_channels: int,
-                 merge_kernel_size: Tuple[int, int] = (2, 2)):
-        super().__init__()
-        self.merge_kernel_size = merge_kernel_size
-
-        self.hidden_size = (
-            in_channels * self.merge_kernel_size[0] * self.merge_kernel_size[1]
-        )
-
-        self.pre_norm = torch.nn.LayerNorm(self.hidden_size, eps=1e-05)
-        self.linear_1 = nn.Linear(self.hidden_size, self.hidden_size, bias=True)
-        self.act = GELUActivation()
-        self.linear_2 = nn.Linear(
-            self.hidden_size, out_channels, bias=True
-        )
-
-    def forward(self,
-                image_features: torch.Tensor,
-                image_grid_thw: List[Tuple[int, int, int]]) -> torch.Tensor:
-        m1, m2 = self.merge_kernel_size
-
-        if isinstance(image_features, (list, tuple)):
-            processed_features = list()
-            for image_feature, image_grid in zip(image_features, image_grid_thw):
-                t, h, w = image_grid
-                from einops import rearrange
-                image_feature = rearrange(image_feature, "(t h p1 w p2) d -> (t h w) (p1 p2 d)", t=t, h=h // m1, p1=m1, w=w // m2, p2=m2)
-                image_feature = self.pre_norm(image_feature)
-                hidden_states = self.linear_1(image_feature)
-                hidden_states = self.act(hidden_states)
-                hidden_states = self.linear_2(hidden_states)
-                processed_features.append(hidden_states)
-            processed_features = torch.concat(processed_features, dim=0)
-
-            return processed_features
-
-        assert image_features.dim() == 2
-        dim = image_features.shape[-1]
-        hidden_states = self.pre_norm(image_features.view(-1, self.hidden_size))
-        hidden_states = self.linear_1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-
-        return hidden_states
-
-
-
-
-def _build_position_ids(
-    image_grid_thw: List[Tuple[int, int, int]], device: torch.device
-) -> torch.Tensor:
-    """根据(t,h,w)构造扁平的position ids (长度=sum(t*h*w))."""
-    pos_list = []
-    for t, h, w in image_grid_thw:
-        numel = int(t * h * w)
-        pos_list.append(torch.arange(numel, device=device) % (h * w))
-    return torch.cat(pos_list, dim=0)
-
-
-def split_thw(tensor: torch.Tensor) -> torch.Tensor:
-    """将 (n,3) 的 thw 展开时间维，得到 [sum(t),3]."""
-    if tensor.dim() == 1:
-        tensor = tensor.unsqueeze(0)
-    repeats = tensor[:, 0]
-    new_thw = torch.cat(
-        [
-            torch.ones(tensor.shape[0], 1, dtype=tensor.dtype, device=tensor.device),
-            tensor[:, 1:],
-        ],
-        dim=1,
-    )
-    return torch.repeat_interleave(new_thw, repeats, dim=0)
 
 
 class KeyeImageTokenizer(Model):
@@ -363,13 +109,12 @@ class KeyeImageTokenizer(Model):
         target_dtype = next(self.visual.parameters()).dtype
         pixel_values = pixel_values.type(target_dtype)
         pixel_values = pixel_values.unsqueeze(0)
-        image_grid_thw_split = split_thw(image_grid_thw.squeeze(0))
         siglip_position_ids = []
         image_grid_hws = []
         sample_indices = []
         cu_seqlens = [0]
 
-        for idx, thw in enumerate(image_grid_thw_split):
+        for idx, thw in enumerate(image_grid_thw):
             thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
             numel = np.prod(thw_tuple)
             image_grid_hws.append(thw_tuple)
@@ -390,13 +135,26 @@ class KeyeImageTokenizer(Model):
             cu_seqlens=cu_seqlens,
         )
         image_embeds = vision_outputs['last_hidden_state']
-        image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
+        
+        # Convert tensor to list of tensors (one per image) to match origin model behavior
+        # image_embeds: [1, total_seq, hidden] or [total_seq, hidden] -> list of [seq_i, hidden]
+        if image_embeds.dim() == 3:
+            image_embeds = image_embeds.squeeze(0)  # [total_seq, hidden]
+        
+        # Split by cu_seqlens to get list of embeddings
+        image_embeds_list = []
+        for i in range(len(cu_seqlens) - 1):
+            start_idx = cu_seqlens[i]
+            end_idx = cu_seqlens[i + 1]
+            image_embeds_list.append(image_embeds[start_idx:end_idx])
+        
+        image_embeds = self.mlp_AR(image_embeds_list, image_grid_hws)
         return image_embeds
 
     def forward(
         self,
         pixel_values: torch.Tensor,
-        image_grid_thw: torch.Tensor,
+        image_grid_thw: List[Tuple[int, int, int]]
     ) -> Dict[str, torch.Tensor]:
         """
         Args:
@@ -405,9 +163,6 @@ class KeyeImageTokenizer(Model):
         """
         # 与原版一致：输入是 4D (num_patches, C, H, W)
         # get_image_embeds 内部会 unsqueeze(0) 变成 5D
-        if pixel_values.dim() != 4:
-            raise ValueError(f"pixel_values 维度应为4 (num_patches, C, H, W)，实际 {pixel_values.shape}")
-
         image_embeds = self.get_image_embeds(pixel_values, image_grid_thw)
         image_embeds = self.pre_llm_aligner(image_embeds)
 
