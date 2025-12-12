@@ -39,6 +39,8 @@ from transformers import AutoTokenizer
 from muse.data.datasets.base import DistributedDataset, load_image
 from muse.data.utils import get_aspect_ratio_dict
 
+from torch.utils.data import IterableDataset
+
 
 logger = logging.getLogger(__name__)
 
