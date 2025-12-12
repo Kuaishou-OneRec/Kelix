@@ -949,8 +949,7 @@ def train():
     if args.multi_scale:
         dataset = Text2ImageMultiScaleDatasetWrapper(
             dataset=dataset,
-            batch_size=args.batch_size,
-            aspect_ratios=get_aspect_ratio_dict(args.image_size),
+            batch_size=args.batch_size
         )
         dataloader = DataLoader(
             dataset,

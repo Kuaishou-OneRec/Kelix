@@ -584,13 +584,13 @@ class Text2ImageMultiScaleDatasetWrapper(IterableDataset):
         self,
         dataset: IterableDataset,
         batch_size: int,
-        aspect_ratios: Dict[str, tuple],
         bucket_key: str = "aspect_ratio",
         drop_last: bool = False,
     ):
         self.dataset = dataset
         self.batch_size = batch_size
-        self.aspect_ratios = aspect_ratios
+        self.aspect_ratios = dataset.aspect_ratios
+        assert self.aspect_ratios is not None, "`aspect_ratios` is None in dataset"
         self.bucket_key = bucket_key
         self.drop_last = drop_last
         
