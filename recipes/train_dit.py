@@ -391,11 +391,26 @@ def encode_text(
     attention_mask: torch.Tensor,
     max_length: int,
     device: torch.device,
+    _debug_step: int = -1,  # for debugging
 ) -> tuple:
     """Encode text to embeddings.
     
     Reference: Sana/train_scripts/train.py Lines 300-310
     """
+    
+    # #region agent log - 假设C,E: 检查模型参数和输入是否在同一设备/dtype
+    import json as _json_perf
+    _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/perf_debug.log"
+    if _debug_step <= 2 and _debug_step >= 0:
+        import time as _time_perf
+        # 获取模型第一个参数的设备和dtype
+        _first_param = next(text_encoder.parameters())
+        _model_info = {"device": str(_first_param.device), "dtype": str(_first_param.dtype)}
+        _input_info = {"device": str(input_ids.device), "dtype": str(input_ids.dtype)}
+        _mask_info = {"device": str(attention_mask.device), "dtype": str(attention_mask.dtype)} if attention_mask is not None else None
+        open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"CE","location":"encode_text:entry","message":"model vs input device/dtype","data":{"step":_debug_step,"model_param":_model_info,"input_ids":_input_info,"attention_mask":_mask_info},"timestamp":_time_perf.time(),"sessionId":"perf-debug"})+'\n')
+        _t0 = _time_perf.time()
+    # #endregion
     
     with torch.no_grad():
         outputs = text_encoder(
@@ -409,6 +424,14 @@ def encode_text(
             text_embeds = outputs[0]
         else:
             text_embeds = outputs
+    
+    # #region agent log - 假设E: 检查forward耗时
+    if _debug_step <= 2 and _debug_step >= 0:
+        torch.cuda.synchronize()  # 确保GPU操作完成以获得准确时间
+        _t1 = _time_perf.time()
+        _output_info = {"device": str(text_embeds.device), "dtype": str(text_embeds.dtype), "shape": list(text_embeds.shape)}
+        open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"E","location":"encode_text:after_forward","message":"forward time and output info","data":{"step":_debug_step,"forward_time_ms":(_t1-_t0)*1000,"output":_output_info},"timestamp":_time_perf.time(),"sessionId":"perf-debug"})+'\n')
+    # #endregion
     
     # Add dimension for cross attention: [B, 1, L, D]
     text_embeds = text_embeds[:, None]
@@ -852,11 +875,29 @@ def train():
         device=torch.cuda.current_device(),
         dtype=get_torch_dtype(args.model_dtype)
     )
+    
+    # #region agent log - 检查VAE加载后的状态
+    import json as _json_perf
+    _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/perf_debug.log"
+    if dist.get_rank() == 0:
+        _vae_param = next(vae.parameters())
+        _vae_info = {"device": str(_vae_param.device), "dtype": str(_vae_param.dtype)}
+        open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"VAE","location":"train_dit.py:after_load_vae","message":"VAE loaded state","data":_vae_info,"timestamp":__import__('time').time(),"sessionId":"perf-debug"})+'\n')
+    # #endregion
     text_encoder = load_text_encoder(
         text_encoder_dir=args.text_encoder_dir,
         device=torch.cuda.current_device(),
         dtype=get_torch_dtype(args.model_dtype)
     )
+    
+    # #region agent log - 检查text_encoder加载后的状态
+    import json as _json_perf
+    _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/perf_debug.log"
+    if dist.get_rank() == 0:
+        _te_param = next(text_encoder.parameters())
+        _te_info = {"device": str(_te_param.device), "dtype": str(_te_param.dtype), "model_dtype_arg": args.model_dtype}
+        open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"C","location":"train_dit.py:after_load_text_encoder","message":"text encoder loaded state","data":_te_info,"timestamp":__import__('time').time(),"sessionId":"perf-debug"})+'\n')
+    # #endregion
     
     # Load tokenizer for FID evaluation (if enabled)
     if args.eval_fid_every_step > 0:
@@ -1043,6 +1084,17 @@ def train():
                     data_iter = iter(dataloader)
                     batch = next(data_iter)
 
+            # #region agent log - 检查DataLoader返回的原始数据
+            import json as _json_perf
+            _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/perf_debug.log"
+            if scheduler.global_step <= 2 and dist.get_rank() == 0:
+                _batch_info = {}
+                for _k, _v in batch.items():
+                    if isinstance(_v, torch.Tensor):
+                        _batch_info[_k] = {"device": str(_v.device), "dtype": str(_v.dtype), "shape": list(_v.shape)}
+                open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"DataLoader","location":"train_dit.py:after_dataloader","message":"raw batch from dataloader","data":{"step":scheduler.global_step,"batch":_batch_info},"timestamp":__import__('time').time(),"sessionId":"perf-debug"})+'\n')
+            # #endregion
+
             # 2. Data Transfer to GPU
             with record_function("DataTransfer"):
                 for k, v in batch.items():
@@ -1063,6 +1115,17 @@ def train():
                 else:
                     raise ValueError("No latents or images in batch")
 
+            # #region agent log - 假设A,B,D: 检查 TextEncoder 输入的设备和dtype
+            import json as _json_perf
+            _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/perf_debug.log"
+            if scheduler.global_step <= 2:
+                _input_ids = batch["input_ids"]
+                _attn_mask = batch.get("attention_mask")
+                _input_info = {"device": str(_input_ids.device), "dtype": str(_input_ids.dtype), "shape": list(_input_ids.shape)}
+                _mask_info = {"device": str(_attn_mask.device), "dtype": str(_attn_mask.dtype), "shape": list(_attn_mask.shape)} if _attn_mask is not None else None
+                open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"ABD","location":"train_dit.py:before_text_encoder","message":"input tensors info","data":{"step":scheduler.global_step,"input_ids":_input_info,"attention_mask":_mask_info},"timestamp":__import__('time').time(),"sessionId":"perf-debug"})+'\n')
+            # #endregion
+
             # 4. Text Encoder
             with record_function("TextEncoder"):
                 text_embeds, attention_mask = encode_text(
@@ -1071,6 +1134,7 @@ def train():
                     batch.get("attention_mask"),
                     args.max_text_length,
                     torch.cuda.current_device(),
+                    _debug_step=scheduler.global_step,
                 )
 
             # #region agent log - 假设C: 验证数据是否不同
