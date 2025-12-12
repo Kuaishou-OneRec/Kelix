@@ -950,9 +950,6 @@ def train():
         print_rank_0(f"Dataset sharding: rank={dataset_config['rank']}, world_size={dataset_config['world_size']}")
     
     print_rank_0(f"Building dataset with config: {dataset_config}")
-    # #region agent log
-    import json as _json_debug; open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log','a').write(_json_debug.dumps({"hypothesisId":"A,C","location":"train_dit.py:947","message":"dataset_config before Text2ImageDataset init","data":{"has_rank":"rank" in dataset_config,"has_world_size":"world_size" in dataset_config,"config_keys":list(dataset_config.keys()),"rank":dataset_config.get("rank",-1),"world_size":dataset_config.get("world_size",-1)},"timestamp":__import__('time').time(),"sessionId":"debug-session","runId":"post-fix"})+'\n')
-    # #endregion
     dataset = Text2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
     if args.multi_scale:
