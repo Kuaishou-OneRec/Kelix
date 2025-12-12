@@ -1,5 +1,7 @@
 # Predefined aspect ratios for different resolutions
 # Reference: Sana/diffusion/data/datasets/utils.py
+from typing import Dict
+
 ASPECT_RATIO_512 = {
     '0.25': (256, 1024), '0.26': (256, 992), '0.27': (256, 960), '0.28': (256, 928),
     '0.32': (288, 896), '0.33': (288, 864), '0.35': (288, 832), '0.4': (320, 800),
