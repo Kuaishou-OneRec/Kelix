@@ -36,7 +36,7 @@ from muse.config import KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
 # Import Origin RoPE debug variables
-from tests.model_for_compare.keye_vl_tokenizer_image import _DEBUG_VIT_ROPE_OUTPUTS as ORIGIN_VIT_ROPE_DEBUG
+from tests.model_for_compare.keye_vl_tokenizer_image.modeling_keye_origin import _DEBUG_VIT_ROPE_OUTPUTS as ORIGIN_VIT_ROPE_DEBUG
 
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
