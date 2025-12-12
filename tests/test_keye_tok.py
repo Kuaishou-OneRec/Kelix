@@ -636,10 +636,6 @@ def _run_keye_tokenizer_alignment():
         activations["origin"]["ViT RoPE cos"] = ORIGIN_VIT_ROPE_DEBUG["cos_after_chunk"]
     if ORIGIN_VIT_ROPE_DEBUG.get("sin_after_chunk") is not None:
         activations["origin"]["ViT RoPE sin"] = ORIGIN_VIT_ROPE_DEBUG["sin_after_chunk"]
-    if ORIGIN_VIT_ROPE_DEBUG.get("q_after_rope") is not None:
-        activations["origin"]["ViT Q After RoPE"] = ORIGIN_VIT_ROPE_DEBUG["q_after_rope"]
-    if ORIGIN_VIT_ROPE_DEBUG.get("k_after_rope") is not None:
-        activations["origin"]["ViT K After RoPE"] = ORIGIN_VIT_ROPE_DEBUG["k_after_rope"]
     
     # Muse RoPE intermediates
     if hasattr(muse_tokenizer.visual.encoder, 'rope'):
@@ -652,9 +648,6 @@ def _run_keye_tokenizer_alignment():
                 activations["muse"]["ViT RoPE cos"] = intermediates["cos_after_chunk"]
             if intermediates.get("sin_after_chunk") is not None:
                 activations["muse"]["ViT RoPE sin"] = intermediates["sin_after_chunk"]
-        if hasattr(rope_module, '_debug_rope_outputs') and len(rope_module._debug_rope_outputs) >= 2:
-            activations["muse"]["ViT Q After RoPE"] = rope_module._debug_rope_outputs[0]
-            activations["muse"]["ViT K After RoPE"] = rope_module._debug_rope_outputs[1]
 
     # === 8. Analysis ===
     log_separator("Deep Dive Analysis - Tokenizer Components")
@@ -668,8 +661,6 @@ def _run_keye_tokenizer_alignment():
         "ViT RoPE rope_emb",
         "ViT RoPE cos",
         "ViT RoPE sin",
-        "ViT Q After RoPE",
-        "ViT K After RoPE",
         "0.3 Attn Raw (Pre-Proj)",
         "0.4 Attn Out (Post-Proj)",
         "0.6 MLP Hidden (fc1)",
@@ -699,8 +690,6 @@ def _run_keye_tokenizer_alignment():
         "ViT RoPE rope_emb",
         "ViT RoPE cos",
         "ViT RoPE sin",
-        "ViT Q After RoPE",
-        "ViT K After RoPE",
     }
 
     all_matches = True
