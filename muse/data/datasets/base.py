@@ -196,7 +196,7 @@ class DistributedDataset(IterableDataset):
     self.num_workers = num_workers
     self.seed = seed
     # #region agent log
-    import json as _json_debug; open('/Users/zhouyang12/code/muse/.cursor/debug.log','a').write(_json_debug.dumps({"hypothesisId":"A,B","location":"base.py:DistributedDataset.__init__","message":"DistributedDataset init params","data":{"rank":rank,"world_size":world_size,"num_workers":num_workers,"actual_dist_rank":__import__('torch').distributed.get_rank() if __import__('torch').distributed.is_initialized() else -1,"actual_dist_world_size":__import__('torch').distributed.get_world_size() if __import__('torch').distributed.is_initialized() else -1},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
+    import json as _json_debug, os as _os_debug; open(_os_debug.path.join(_os_debug.path.dirname(_os_debug.path.dirname(_os_debug.path.dirname(_os_debug.path.dirname(__file__)))),'debug.log'),'a').write(_json_debug.dumps({"hypothesisId":"A,B","location":"base.py:DistributedDataset.__init__","message":"DistributedDataset init params","data":{"rank":rank,"world_size":world_size,"num_workers":num_workers,"actual_dist_rank":__import__('torch').distributed.get_rank() if __import__('torch').distributed.is_initialized() else -1,"actual_dist_world_size":__import__('torch').distributed.get_world_size() if __import__('torch').distributed.is_initialized() else -1},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
     # #endregion
     self.shuffle_buffer_size = shuffle_buffer_size
     self.enable_checkpointing = enable_checkpointing
@@ -221,7 +221,7 @@ class DistributedDataset(IterableDataset):
     self._actual_shard_by = shard_by
 
     # #region agent log
-    import json as _json_debug; open('/Users/zhouyang12/code/muse/.cursor/debug.log','a').write(_json_debug.dumps({"hypothesisId":"D,E","location":"base.py:DistributedDataset.__init__:before_build","message":"checking data parallel group state","data":{"data_parallel_group_is_none":_DATA_PARALLEL_GROUP is None,"dist_initialized":__import__('torch').distributed.is_initialized() if hasattr(__import__('torch').distributed,'is_initialized') else False},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
+    import json as _json_debug, os as _os_debug; open(_os_debug.path.join(_os_debug.path.dirname(_os_debug.path.dirname(_os_debug.path.dirname(_os_debug.path.dirname(__file__)))),'debug.log'),'a').write(_json_debug.dumps({"hypothesisId":"D,E","location":"base.py:DistributedDataset.__init__:before_build","message":"checking data parallel group state","data":{"data_parallel_group_is_none":_DATA_PARALLEL_GROUP is None,"dist_initialized":__import__('torch').distributed.is_initialized() if hasattr(__import__('torch').distributed,'is_initialized') else False},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
     # #endregion
     self.dataset = self._build()
 
@@ -325,7 +325,7 @@ class DistributedDataset(IterableDataset):
       # Distribute files by global worker index
       files_for_this_worker = self._files[global_worker_id::total_workers]
       # #region agent log
-      import json as _json_debug; open('/Users/zhouyang12/code/muse/.cursor/debug.log','a').write(_json_debug.dumps({"hypothesisId":"B","location":"base.py:_get_reader_iter","message":"file sharding calculation","data":{"self_rank":self.rank,"self_world_size":self.world_size,"worker_id":worker_id,"global_worker_id":global_worker_id,"total_workers":total_workers,"num_files_for_worker":len(files_for_this_worker),"first_3_files":files_for_this_worker[:3] if files_for_this_worker else [],"actual_dist_rank":__import__('torch').distributed.get_rank() if __import__('torch').distributed.is_initialized() else -1},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
+      import json as _json_debug, os as _os_debug; open(_os_debug.path.join(_os_debug.path.dirname(_os_debug.path.dirname(_os_debug.path.dirname(_os_debug.path.dirname(__file__)))),'debug.log'),'a').write(_json_debug.dumps({"hypothesisId":"B","location":"base.py:_get_reader_iter","message":"file sharding calculation","data":{"self_rank":self.rank,"self_world_size":self.world_size,"worker_id":worker_id,"global_worker_id":global_worker_id,"total_workers":total_workers,"num_files_for_worker":len(files_for_this_worker),"first_3_files":files_for_this_worker[:3] if files_for_this_worker else [],"actual_dist_rank":__import__('torch').distributed.get_rank() if __import__('torch').distributed.is_initialized() else -1},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
       # #endregion
 
       print(
