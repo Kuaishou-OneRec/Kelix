@@ -46,6 +46,7 @@ def compute_density_for_timestep_sampling(
     logit_mean: float = 0.0,
     logit_std: float = 1.0,
     mode_scale: Optional[float] = None,
+    generator: Optional[torch.Generator] = None,
 ) -> torch.Tensor:
     """Compute density for sampling timesteps during training.
     
@@ -57,20 +58,21 @@ def compute_density_for_timestep_sampling(
         logit_mean: Mean for logit-normal distribution
         logit_std: Std for logit-normal distribution
         mode_scale: Scale for mode weighting
+        generator: Optional random generator for reproducibility
     
     Returns:
         Tensor of shape [batch_size] with values in [0, 1]
     """
     if weighting_scheme == "logit_normal":
         # SD3-style logit-normal sampling
-        u = torch.normal(mean=logit_mean, std=logit_std, size=(batch_size,), device="cpu")
+        u = torch.empty(batch_size, device="cpu").normal_(mean=logit_mean, std=logit_std, generator=generator)
         u = torch.nn.functional.sigmoid(u)
     elif weighting_scheme == "mode":
-        u = torch.rand(size=(batch_size,), device="cpu")
+        u = torch.rand(size=(batch_size,), device="cpu", generator=generator)
         u = 1 - u - mode_scale * (torch.cos(math.pi * u / 2) ** 2 - 1 + u)
     else:
         # Uniform sampling
-        u = torch.rand(size=(batch_size,), device="cpu")
+        u = torch.rand(size=(batch_size,), device="cpu", generator=generator)
     return u
 
 
@@ -207,11 +209,19 @@ class FlowMatchingLoss(nn.Module):
         Returns:
             Timestep indices [batch_size,]
         """
+        # Use rank-specific generator for timestep sampling
+        import torch.distributed as dist
+        generator = None
+        if dist.is_initialized():
+            generator = torch.Generator(device="cpu")
+            generator.manual_seed(torch.initial_seed() + dist.get_rank())
+        
         u = compute_density_for_timestep_sampling(
             self.weighting_scheme,
             batch_size,
             self.logit_mean,
             self.logit_std,
+            generator=generator,
         )
         timesteps = (u * self.num_timesteps).long().to(device)
         # Clamp to valid range
@@ -249,12 +259,24 @@ class FlowMatchingLoss(nn.Module):
         device = x_start.device
         
         # Sample timesteps if not provided
+        # Use rank-specific generator for timestep sampling to ensure diversity across ranks
         if timesteps is None:
             timesteps = self.sample_timesteps(batch_size, device)
         
-        # Sample noise
+        # Sample noise with rank-specific randomness
+        # This ensures each rank uses different noise even with same global seed
         if noise is None:
-            noise = torch.randn_like(x_start)
+            # Create rank-specific noise by XORing with rank to ensure different noise across ranks
+            import torch.distributed as dist
+            if dist.is_initialized():
+                # Use a local generator seeded with global random state + rank
+                # This maintains reproducibility while ensuring different noise per rank
+                local_generator = torch.Generator(device=x_start.device)
+                # Combine current random state with rank for unique per-rank noise
+                local_generator.manual_seed(torch.initial_seed() + dist.get_rank())
+                noise = torch.randn(x_start.shape, generator=local_generator, device=x_start.device, dtype=x_start.dtype)
+            else:
+                noise = torch.randn_like(x_start)
         
         # #region agent log
         import json as _json_debug, torch.distributed as _dist_debug
@@ -262,7 +284,7 @@ class FlowMatchingLoss(nn.Module):
             _rank = _dist_debug.get_rank()
             _noise_hash = float(noise.sum().item())
             _ts_hash = timesteps.tolist()[:3] if len(timesteps) > 3 else timesteps.tolist()
-            open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log','a').write(_json_debug.dumps({"hypothesisId":"A,B","location":"diffusion.py:forward","message":"noise and timesteps check","data":{"rank":_rank,"noise_sum":_noise_hash,"timesteps_first3":_ts_hash,"batch_size":batch_size},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
+            open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log','a').write(_json_debug.dumps({"hypothesisId":"A,B","location":"diffusion.py:forward","message":"noise and timesteps check","data":{"rank":_rank,"noise_sum":_noise_hash,"timesteps_first3":_ts_hash,"batch_size":batch_size},"timestamp":__import__('time').time(),"sessionId":"debug-session","runId":"post-fix"})+'\n')
         # #endregion
         
         # Get noisy input

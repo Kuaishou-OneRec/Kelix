@@ -653,6 +653,7 @@ def train():
     initialize_model_parallel()
     print_rank_0(f"Data parallel size: {get_data_parallel_world_size()}")
 
+    # Use same seed for model initialization (ensures identical initial weights across ranks)
     set_random_seed(args.seed)
 
 
@@ -1058,7 +1059,7 @@ def train():
             import json as _json_debug
             if scheduler.global_step < 10:
                 _rank = dist.get_rank()
-                open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log','a').write(_json_debug.dumps({"hypothesisId":"C","location":"train_dit.py:training_loop","message":"loss per rank","data":{"rank":_rank,"step":scheduler.global_step,"loss":loss.detach().item()},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
+                open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log','a').write(_json_debug.dumps({"hypothesisId":"C","location":"train_dit.py:training_loop","message":"loss per rank","data":{"rank":_rank,"step":scheduler.global_step,"loss":loss.detach().item()},"timestamp":__import__('time').time(),"sessionId":"debug-session","runId":"post-fix"})+'\n')
             # #endregion
 
             metrics.loss.append(loss.detach().item())
