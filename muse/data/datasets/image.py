@@ -21,7 +21,7 @@ Image-Text Dataset for Diffusion Training.
 This module implements datasets for text-to-image diffusion model training.
 """
 
-from typing import Dict, Any, Optional, Union, List, Tuple, Callable
+from typing import Dict, Any, Optional, Union, List, Tuple, Callable, Iterator
 import os
 import random
 import json
