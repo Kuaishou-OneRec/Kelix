@@ -57,18 +57,6 @@ def default_flax_embed_init(tensor: torch.Tensor) -> None:
 
 
 
-def _build_position_ids(
-    image_grid_thw: List[Tuple[int, int, int]], device: torch.device
-) -> torch.Tensor:
-    """根据(t,h,w)构造扁平的position ids (长度=sum(t*h*w))."""
-    pos_list = []
-    for t, h, w in image_grid_thw:
-        numel = int(t * h * w)
-        pos_list.append(torch.arange(numel, device=device) % (h * w))
-    return torch.cat(pos_list, dim=0)
-
-
-
 class KeyeImageTokenizer(Model):
     """使用Keye ViT + VQ 的视觉Tokenizer（无Transformers依赖）。"""
 
