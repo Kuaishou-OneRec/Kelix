@@ -919,12 +919,19 @@ def train():
     model_class_name = model_config.model_class
     dataset_config["model_class"] = model_class_name
     
+    ## Overwrite dataset config
     if args.max_text_length:
         dataset_config["max_text_length"] = args.max_text_length
+        print_rank_0(f"Set max_text_length of dataset to: {args.max_text_length}")
+    
+    if args.image_size:
+        dataset_config["image_size"] = args.image_size
+        print_rank_0(f"Set image_size of dataset to: {args.image_size}")
     
     # Set tokenizer_path from model_dir if not specified
     if not dataset_config.get("tokenizer_path") and args.tokenizer_dir:
         dataset_config["tokenizer_path"] = args.tokenizer_dir
+        print_rank_0(f"Set tokenizer_path of dataset to: {args.tokenizer_dir}")
     
     # Enable Complex Human Instruction (CHI) if requested
     if args.use_chi:
@@ -970,7 +977,7 @@ def train():
 
     # Initialize step scheduler for training loop management
     scheduler = StepScheduler(args)
-  
+
     # Setup data iterator
     if dataloader is not None:
         if args.overfit_batches:
