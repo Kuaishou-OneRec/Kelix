@@ -262,6 +262,13 @@ class FlowMatchingLoss(nn.Module):
         if noise is None:
             noise = torch.randn_like(x_start)
         
+        # #region agent log - 监控 sigma schedule
+        import json as _json, os as _os; _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_debug/muse/debug.log"
+        if _os.environ.get("OMPI_COMM_WORLD_RANK", "0") == "0":
+            _sigmas_at_t = self.scheduler.sigmas[timesteps].tolist()
+            _alphas_at_t = self.scheduler.alphas[timesteps].tolist()
+            with open(_log_path, "a") as _f: _f.write(_json.dumps({"hypothesisId": "F", "location": "diffusion.py:forward", "message": "sigma_schedule_check", "data": {"timesteps": timesteps.tolist(), "sigmas_at_t": _sigmas_at_t, "alphas_at_t": _alphas_at_t, "sigmas_range": [float(self.scheduler.sigmas[0]), float(self.scheduler.sigmas[-1])]}, "timestamp": __import__("time").time()}) + "\n")
+        # #endregion
         
         # Get noisy input
         x_t = self.scheduler.q_sample(x_start, timesteps, noise)

@@ -859,6 +859,14 @@ def train():
                 )
                 loss = loss_dict["loss"]
 
+            # #region agent log - 监控 loss 和输入数据
+            import json as _json3; _log_path3 = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_debug/muse/debug.log"
+            if dist.get_rank() == 0:
+                _latents_sum = latents.sum().item()
+                _is_training = model.training
+                with open(_log_path3, "a") as _f: _f.write(_json3.dumps({"hypothesisId": "D,E", "location": "train_dit.py:after_forward", "message": "forward_info", "data": {"step": scheduler.global_step, "loss": float(loss.item()), "latents_sum": _latents_sum, "model_training": _is_training}, "timestamp": time.time()}) + "\n")
+            # #endregion
+
             # Pass detached tensor directly - .item() will be called in metrics.step()
             # to avoid CPU-GPU sync during the training hot path
             metrics.loss.append(loss.detach())
@@ -882,9 +890,32 @@ def train():
 
                 # 9. Optimizer Step
                 with record_function("OptimizerStep"):
+                    # #region agent log - 权重更新前的快照
+                    import json as _json; _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_debug/muse/debug.log"
+                    if dist.get_rank() == 0:
+                        _first_param = None
+                        for _n, _p in model.named_parameters():
+                            if _p.requires_grad:
+                                _first_param = (_n, _p.data.to_local().flatten()[:5].tolist(), _p.grad.to_local().flatten()[:5].tolist() if _p.grad is not None else None)
+                                break
+                        _lr = optimizer.param_groups[0]['lr']
+                        with open(_log_path, "a") as _f: _f.write(_json.dumps({"hypothesisId": "A,B,C", "location": "train_dit.py:before_optim_step", "message": "pre_step", "data": {"step": scheduler.global_step, "lr": _lr, "first_param_name": _first_param[0] if _first_param else None, "first_param_weight": _first_param[1] if _first_param else None, "first_param_grad": _first_param[2] if _first_param else None}, "timestamp": time.time()}) + "\n")
+                    # #endregion
+                    
                     optimizer.step()
                     lr_scheduler.step()
                     optimizer.zero_grad()
+                    
+                    # #region agent log - 权重更新后的快照
+                    if dist.get_rank() == 0:
+                        _first_param_after = None
+                        for _n, _p in model.named_parameters():
+                            if _p.requires_grad:
+                                _first_param_after = (_n, _p.data.to_local().flatten()[:5].tolist())
+                                break
+                        _lr_after = optimizer.param_groups[0]['lr']
+                        with open(_log_path, "a") as _f: _f.write(_json.dumps({"hypothesisId": "A,B,C", "location": "train_dit.py:after_optim_step", "message": "post_step", "data": {"step": scheduler.global_step, "lr_after": _lr_after, "first_param_name": _first_param_after[0] if _first_param_after else None, "first_param_weight_after": _first_param_after[1] if _first_param_after else None}, "timestamp": time.time()}) + "\n")
+                    # #endregion
                 
                 # EMA update (if enabled and not in FSDP mode)
                 # Note: EMA with FSDP requires special handling due to sharded weights
