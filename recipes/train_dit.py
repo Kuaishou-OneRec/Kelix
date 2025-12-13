@@ -391,55 +391,17 @@ def encode_text(
     attention_mask: torch.Tensor,
     max_length: int,
     device: torch.device,
-    _debug_step: int = -1,  # for debugging
 ) -> tuple:
     """Encode text to embeddings.
     
     Reference: Sana/train_scripts/train.py Lines 300-310
     """
     
-    # #region agent log - 假设C,E,F,G: 检查模型参数、buffer和输入状态
-    import json as _json_perf
-    _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/perf_debug.log"
-    if _debug_step <= 2 and _debug_step >= 0:
-        import time as _time_perf
-        # 获取模型第一个参数的设备和dtype
-        _first_param = next(text_encoder.parameters())
-        _model_info = {"device": str(_first_param.device), "dtype": str(_first_param.dtype)}
-        _input_info = {"device": str(input_ids.device), "dtype": str(input_ids.dtype)}
-        _mask_info = {"device": str(attention_mask.device), "dtype": str(attention_mask.dtype)} if attention_mask is not None else None
-        # 假设G: 检查所有 buffer 的设备
-        _buffer_info = []
-        for _bname, _buf in text_encoder.named_buffers():
-            if _buf.device.type == "cpu":
-                _buffer_info.append({"name": _bname, "device": str(_buf.device), "dtype": str(_buf.dtype), "shape": list(_buf.shape)})
-        open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"CEFG","location":"encode_text:entry","message":"model state check","data":{"step":_debug_step,"model_param":_model_info,"input_ids":_input_info,"attention_mask":_mask_info,"cpu_buffers":_buffer_info[:5]},"timestamp":_time_perf.time(),"sessionId":"perf-debug"})+'\n')
-        _t0 = _time_perf.time()
-    # #endregion
-    
     with torch.no_grad():
-        # #region agent log - 假设F: 检查是否需要预处理 attention_mask
-        if _debug_step <= 2 and _debug_step >= 0:
-            # 检查 attention_mask 是否需要转换为 4D causal mask
-            _mask_dim = attention_mask.dim() if attention_mask is not None else None
-            _mask_dtype_before = str(attention_mask.dtype) if attention_mask is not None else None
-            open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"F","location":"encode_text:before_forward","message":"attention_mask state before forward","data":{"step":_debug_step,"mask_dim":_mask_dim,"mask_dtype":_mask_dtype_before},"timestamp":_time_perf.time(),"sessionId":"perf-debug"})+'\n')
-            torch.cuda.synchronize()
-            _t_forward_start = _time_perf.time()
-        # #endregion
-        
         outputs = text_encoder(
             input_ids,
             attention_mask=attention_mask,
         )
-        
-        # #region agent log - 假设F: 检查 forward 调用后的时间（不含后处理）
-        if _debug_step <= 2 and _debug_step >= 0:
-            torch.cuda.synchronize()
-            _t_forward_end = _time_perf.time()
-            open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"F","location":"encode_text:after_model_forward","message":"pure model forward time","data":{"step":_debug_step,"forward_only_ms":(_t_forward_end-_t_forward_start)*1000},"timestamp":_time_perf.time(),"sessionId":"perf-debug"})+'\n')
-        # #endregion
-        
         # Get hidden states
         if hasattr(outputs, 'last_hidden_state'):
             text_embeds = outputs.last_hidden_state
@@ -447,14 +409,6 @@ def encode_text(
             text_embeds = outputs[0]
         else:
             text_embeds = outputs
-    
-    # #region agent log - 假设E: 检查forward耗时
-    if _debug_step <= 2 and _debug_step >= 0:
-        torch.cuda.synchronize()  # 确保GPU操作完成以获得准确时间
-        _t1 = _time_perf.time()
-        _output_info = {"device": str(text_embeds.device), "dtype": str(text_embeds.dtype), "shape": list(text_embeds.shape)}
-        open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"E","location":"encode_text:after_forward","message":"forward time and output info","data":{"step":_debug_step,"forward_time_ms":(_t1-_t0)*1000,"output":_output_info},"timestamp":_time_perf.time(),"sessionId":"perf-debug"})+'\n')
-    # #endregion
     
     # Add dimension for cross attention: [B, 1, L, D]
     text_embeds = text_embeds[:, None]
@@ -898,34 +852,11 @@ def train():
         device=torch.cuda.current_device(),
         dtype=get_torch_dtype(args.model_dtype)
     )
-    
-    # #region agent log - 检查VAE加载后的状态
-    import json as _json_perf
-    _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/perf_debug.log"
-    if dist.get_rank() == 0:
-        _vae_param = next(vae.parameters())
-        _vae_info = {"device": str(_vae_param.device), "dtype": str(_vae_param.dtype)}
-        open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"VAE","location":"train_dit.py:after_load_vae","message":"VAE loaded state","data":_vae_info,"timestamp":__import__('time').time(),"sessionId":"perf-debug"})+'\n')
-    # #endregion
     text_encoder = load_text_encoder(
         text_encoder_dir=args.text_encoder_dir,
         device=torch.cuda.current_device(),
         dtype=get_torch_dtype(args.model_dtype)
     )
-    
-    # #region agent log - 检查text_encoder加载后的状态（包括所有buffer）
-    import json as _json_perf
-    _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/perf_debug.log"
-    if dist.get_rank() == 0:
-        _te_param = next(text_encoder.parameters())
-        _te_info = {"device": str(_te_param.device), "dtype": str(_te_param.dtype), "model_dtype_arg": args.model_dtype}
-        # 检查所有 buffer 的设备和 dtype
-        _all_buffers = []
-        for _bname, _buf in text_encoder.named_buffers():
-            _all_buffers.append({"name": _bname, "device": str(_buf.device), "dtype": str(_buf.dtype), "shape": list(_buf.shape)})
-        _cpu_buffers = [b for b in _all_buffers if "cpu" in b["device"]]
-        open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"G","location":"train_dit.py:after_load_text_encoder","message":"text encoder state with buffers","data":{"param_info":_te_info,"total_buffers":len(_all_buffers),"cpu_buffers":_cpu_buffers,"all_buffer_names":[b["name"] for b in _all_buffers]},"timestamp":__import__('time').time(),"sessionId":"perf-debug"})+'\n')
-    # #endregion
     
     # Load tokenizer for FID evaluation (if enabled)
     if args.eval_fid_every_step > 0:
@@ -1029,15 +960,6 @@ def train():
         dataset_config["rank"] = dist.get_rank()
         dataset_config["world_size"] = dist.get_world_size()
         print_rank_0(f"Dataset sharding: rank={dataset_config['rank']}, world_size={dataset_config['world_size']}")
-    
-    # #region agent log - 验证训练配置
-    import json as _json_debug
-    _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log"
-    if dist.is_initialized() and dist.get_rank() == 0:
-        _dp_world_size = get_data_parallel_world_size()
-        _effective_batch = args.batch_size * _dp_world_size
-        open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"config","location":"train_dit.py:before_dataset_init","message":"training config (rank0 only)","data":{"world_size":dist.get_world_size(),"dp_world_size":_dp_world_size,"batch_size":args.batch_size,"effective_batch":_effective_batch,"learning_rate":args.learning_rate,"warmup_steps":args.num_warmup_steps},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
-    # #endregion
 
     print_rank_0(f"Building dataset with config: {dataset_config}")
     dataset = Text2ImageDataset(**dataset_config)
@@ -1112,17 +1034,6 @@ def train():
                     data_iter = iter(dataloader)
                     batch = next(data_iter)
 
-            # #region agent log - 检查DataLoader返回的原始数据
-            import json as _json_perf
-            _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/perf_debug.log"
-            if scheduler.global_step <= 2 and dist.get_rank() == 0:
-                _batch_info = {}
-                for _k, _v in batch.items():
-                    if isinstance(_v, torch.Tensor):
-                        _batch_info[_k] = {"device": str(_v.device), "dtype": str(_v.dtype), "shape": list(_v.shape)}
-                open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"DataLoader","location":"train_dit.py:after_dataloader","message":"raw batch from dataloader","data":{"step":scheduler.global_step,"batch":_batch_info},"timestamp":__import__('time').time(),"sessionId":"perf-debug"})+'\n')
-            # #endregion
-
             # 2. Data Transfer to GPU
             with record_function("DataTransfer"):
                 for k, v in batch.items():
@@ -1143,17 +1054,6 @@ def train():
                 else:
                     raise ValueError("No latents or images in batch")
 
-            # #region agent log - 假设A,B,D: 检查 TextEncoder 输入的设备和dtype
-            import json as _json_perf
-            _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/perf_debug.log"
-            if scheduler.global_step <= 2:
-                _input_ids = batch["input_ids"]
-                _attn_mask = batch.get("attention_mask")
-                _input_info = {"device": str(_input_ids.device), "dtype": str(_input_ids.dtype), "shape": list(_input_ids.shape)}
-                _mask_info = {"device": str(_attn_mask.device), "dtype": str(_attn_mask.dtype), "shape": list(_attn_mask.shape)} if _attn_mask is not None else None
-                open(_log_path,'a').write(_json_perf.dumps({"hypothesisId":"ABD","location":"train_dit.py:before_text_encoder","message":"input tensors info","data":{"step":scheduler.global_step,"input_ids":_input_info,"attention_mask":_mask_info},"timestamp":__import__('time').time(),"sessionId":"perf-debug"})+'\n')
-            # #endregion
-
             # 4. Text Encoder
             with record_function("TextEncoder"):
                 text_embeds, attention_mask = encode_text(
@@ -1162,17 +1062,7 @@ def train():
                     batch.get("attention_mask"),
                     args.max_text_length,
                     torch.cuda.current_device(),
-                    _debug_step=scheduler.global_step,
                 )
-
-            # #region agent log - 假设C: 验证数据是否不同
-            import json as _json_debug
-            _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log"
-            if scheduler.global_step <= 2:
-                # 用latents的hash来验证每个rank的数据是否不同
-                _latent_hash = float(latents.sum().item())
-                open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"C","location":"train_dit.py:before_loss","message":"batch data check","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"latent_sum":_latent_hash,"batch_size":latents.shape[0]},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
-            # #endregion
 
             # 5. Forward + Loss Computation
             with record_function("Forward_Loss"):
@@ -1183,14 +1073,6 @@ def train():
                     mask=attention_mask,
                 )
                 loss = loss_dict["loss"]
-            
-            # #region agent log - 假设B: 验证Loss是否是每个rank独立的local loss
-            import json as _json_debug
-            _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log"
-            if scheduler.global_step <= 3:
-                _local_loss = loss.detach().item()
-                open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"B","location":"train_dit.py:before_metrics_append","message":"local loss per rank","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"local_loss":_local_loss},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
-            # #endregion
 
             # Pass detached tensor directly - .item() will be called in metrics.step()
             # to avoid CPU-GPU sync during the training hot path
@@ -1199,17 +1081,6 @@ def train():
             # 6. Backward Pass
             with record_function("Backward"):
                 loss.backward()
-            
-            # #region agent log - 假设A: 验证梯度同步
-            if scheduler.global_step <= 3:
-                # 获取一个参数的本地梯度用于验证
-                _sample_grad = None
-                for _p in model.parameters():
-                    if _p.grad is not None:
-                        _sample_grad = _p.grad.to_local().sum().item()
-                        break
-                open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"A","location":"train_dit.py:after_backward","message":"local gradient sample","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"sample_grad_sum":_sample_grad},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
-            # #endregion
 
             # 7. Gradient Clipping
             with record_function("GradClip"):
@@ -1223,11 +1094,6 @@ def train():
                 metrics.grad_norm.append(grad_norm)
                 learning_rate = lr_scheduler.get_last_lr()[0]
                 metrics.learning_rate.append(learning_rate)
-                
-                # #region agent log - 验证梯度范数是否在各rank相同
-                if scheduler.global_step <= 3:
-                    open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"A","location":"train_dit.py:after_grad_norm","message":"grad norm per rank","data":{"rank":dist.get_rank(),"step":scheduler.global_step,"grad_norm":grad_norm},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
-                # #endregion
 
                 # 9. Optimizer Step
                 with record_function("OptimizerStep"):
