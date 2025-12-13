@@ -107,12 +107,18 @@ class FlowMatchingScheduler:
         betas = np.linspace(1.0, 0.001, num_timesteps)
         sigmas = 1.0 - betas  # sigmas: 0 -> 0.999
         
-        # Apply flow shift
+        # Apply flow shift to sigmas (for q_sample interpolation)
         if flow_shift != 1.0:
             sigmas = flow_shift * sigmas / (1 + (flow_shift - 1) * sigmas)
         
         self.sigmas = torch.from_numpy(sigmas).float()
         self.alphas = 1.0 - self.sigmas
+        
+        # Build timestep_map for model input (following Sana's SpacedDiffusion._wrap_model)
+        # The model expects timestep values mapped by: timestep_map[t] = sigmas[t] * num_timesteps
+        # This is crucial for correct timestep embedding behavior!
+        # Reference: Sana/diffusion/model/respace.py Lines 444-445, 497-498
+        self.timestep_map = torch.from_numpy(sigmas * num_timesteps).float()
     
     def q_sample(
         self,
@@ -266,23 +272,26 @@ class FlowMatchingLoss(nn.Module):
         if noise is None:
             noise = torch.randn_like(x_start)
         
-        # #region agent log - 监控 sigma schedule
-        import json as _json, os as _os; _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_debug/muse/debug.log"
-        if _os.environ.get("OMPI_COMM_WORLD_RANK", "0") == "0":
-            _t_cpu = timesteps.cpu()
-            _sigmas_at_t = self.scheduler.sigmas[_t_cpu].tolist()
-            _alphas_at_t = self.scheduler.alphas[_t_cpu].tolist()
-            with open(_log_path, "a") as _f: _f.write(_json.dumps({"hypothesisId": "F", "location": "diffusion.py:forward", "message": "sigma_schedule_check", "data": {"timesteps": _t_cpu.tolist(), "sigmas_at_t": _sigmas_at_t, "alphas_at_t": _alphas_at_t, "sigmas_range": [float(self.scheduler.sigmas[0]), float(self.scheduler.sigmas[-1])]}, "timestamp": __import__("time").time()}) + "\n")
-        # #endregion
-        
         # Get noisy input
         x_t = self.scheduler.q_sample(x_start, timesteps, noise)
         
         # Get velocity target
         target = self.scheduler.get_velocity_target(x_start, noise)
         
-        # Model prediction
-        model_output = model(x_t, timesteps, y, mask=mask, **model_kwargs)
+        # Map timesteps for model input (following Sana's _WrappedModel)
+        # The model expects mapped timesteps, not raw indices!
+        # Reference: Sana/diffusion/model/respace.py Lines 497-498
+        model_timesteps = self.scheduler.timestep_map.to(device=device, dtype=x_start.dtype)[timesteps]
+        
+        # #region agent log - 监控 timestep mapping
+        import json as _json, os as _os; _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_debug/muse/debug.log"
+        if _os.environ.get("OMPI_COMM_WORLD_RANK", "0") == "0":
+            _t_cpu = timesteps.cpu()
+            with open(_log_path, "a") as _f: _f.write(_json.dumps({"hypothesisId": "G", "location": "diffusion.py:forward", "message": "timestep_mapping", "data": {"raw_timesteps": _t_cpu.tolist()[:5], "mapped_timesteps": model_timesteps.cpu().tolist()[:5], "timestep_map_range": [float(self.scheduler.timestep_map[0]), float(self.scheduler.timestep_map[-1])]}, "timestamp": __import__("time").time()}) + "\n")
+        # #endregion
+        
+        # Model prediction (use mapped timesteps!)
+        model_output = model(x_t, model_timesteps, y, mask=mask, **model_kwargs)
         
         # Handle sigma prediction
         if self.pred_sigma:
