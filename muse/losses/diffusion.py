@@ -100,8 +100,12 @@ class FlowMatchingScheduler:
         self.flow_shift = flow_shift
         
         # Build sigma schedule for flow matching
-        # sigmas go from 1 to 0 (noise to clean)
-        sigmas = np.linspace(1.0, 0.001, num_timesteps)
+        # Following Sana's linear_flow schedule:
+        # betas go from 1.0 to 0.001, sigmas = 1 - betas
+        # So sigmas go from 0 to 0.999 (clean to noise)
+        # t=0 -> sigma=0 (clean image), t=999 -> sigma≈1 (pure noise)
+        betas = np.linspace(1.0, 0.001, num_timesteps)
+        sigmas = 1.0 - betas  # sigmas: 0 -> 0.999
         
         # Apply flow shift
         if flow_shift != 1.0:
