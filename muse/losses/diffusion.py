@@ -272,6 +272,16 @@ class FlowMatchingLoss(nn.Module):
         if noise is None:
             noise = torch.randn_like(x_start)
         
+        # #region agent log - DEBUG: 固定 timestep 和 noise 来测试 overfit
+        # 注意：这会让模型只学习一个固定的 (timestep, noise) 组合
+        # 如果 overfit 成功，loss 应该能降到接近 0
+        import os as _os_fix
+        if _os_fix.environ.get("FIX_TIMESTEP_NOISE", "0") == "1":
+            timesteps = torch.full((batch_size,), 500, device=device, dtype=torch.long)  # 固定 timestep=500
+            torch.manual_seed(42)  # 固定 noise seed
+            noise = torch.randn_like(x_start)
+        # #endregion
+        
         # Get noisy input
         x_t = self.scheduler.q_sample(x_start, timesteps, noise)
         
