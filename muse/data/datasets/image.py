@@ -329,7 +329,13 @@ class Text2ImageDataset(DistributedDataset):
                             image = block["image"]
                             break
                         if block["type"] == "image_gen":
-                            image = block["image_gen"]
+                            # 兼容错误的格式，后面记得修复
+                            # Gen_BLIP3o-Pretrain-Long-Caption/0.0.1
+                            # type=image_gen, image: 
+                            if "image" in block:
+                                image = block["image"]
+                            elif "image_gen" in block:
+                                image = block["image_gen"]
                             break
 
         if segments:

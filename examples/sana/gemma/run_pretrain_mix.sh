@@ -32,8 +32,8 @@ nnode=$(wc -l < /etc/mpi/hostfile_seq)
 # 注意修改实验内容备注
 comment="sana_t2i_pretrain_mix"
 
-git add --all
-git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
+# git add --all
+# git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
 git_hash=$(git rev-parse --short HEAD)
 
 set -x
