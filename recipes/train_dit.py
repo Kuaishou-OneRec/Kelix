@@ -447,7 +447,8 @@ def log_validation(
         device: Target device
         dtype: Data type
     """
-    from muse.inference.sana import encode_prompts, generate_with_dpm_solver
+    from muse.inference.sana import encode_prompts, generate_with_euler
+    from diffusers import FlowMatchEulerDiscreteScheduler
     
     print_rank_0(f"Running validation at step {step}...")
     
@@ -456,6 +457,10 @@ def log_validation(
     model.eval()
     
     try:
+        # Create Euler scheduler
+        scheduler = FlowMatchEulerDiscreteScheduler(shift=flow_shift)
+        scheduler.set_timesteps(num_steps)
+        
         # Encode negative prompt for CFG (empty string)
         uncond_embeds, uncond_mask = encode_prompts(
             tokenizer, text_encoder, [""], max_text_length, device
@@ -471,17 +476,16 @@ def log_validation(
                 tokenizer, text_encoder, [prompt], max_text_length, device
             )
             
-            # Generate image
-            images = generate_with_dpm_solver(
+            # Generate image using Euler scheduler
+            images = generate_with_euler(
                 model=model,
                 vae=vae,
+                scheduler=scheduler,
                 text_embeds=text_embeds.to(dtype),
                 attention_mask=attention_mask,
                 uncond_embeds=uncond_embeds.to(dtype),
                 uncond_mask=uncond_mask,
                 cfg_scale=cfg_scale,
-                num_steps=num_steps,
-                flow_shift=flow_shift,
                 image_size=image_size,
                 latent_channels=latent_channels,
                 vae_downsample=vae_downsample,
