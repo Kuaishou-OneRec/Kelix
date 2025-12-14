@@ -122,7 +122,7 @@ nohup mpirun --allow-run-as-root \
                 --text-encoder-dir $TEXT_ENCODER_DIR \
                 --tokenizer-dir $TOKENIZER_DIR \
                 --output-dir $OUTPUT_DIR \
-                --dataset-config examples/sana/t2i.json \
+                --dataset-config examples/sana/blio3o-60k.json \
                 --learning-rate 2e-5 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
