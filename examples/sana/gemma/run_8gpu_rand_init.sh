@@ -21,7 +21,7 @@ VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 TEXT_ENCODER_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/text_encoder/
 TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/tokenizer/
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i_64gpu_fix
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i_rand_init_8gpu
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
@@ -30,7 +30,7 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="sana_t2i_ketu"
+comment="sana_t2i_ketu_8gpu_rand_init"
 
 git add --all
 git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -131,15 +131,18 @@ nohup mpirun --allow-run-as-root \
                 --max-text-length 300 \
                 --batch-size 24 \
                 --lr-scheduler-type constant \
-                --num-warmup-steps 2000 \
+                --num-warmup-steps 100 \
                 --num-training-steps 100000 \
                 --save-checkpoint-per-step 1000 \
                 --logging-per-step 5 \
                 --clip-range 0.1 \
-                --use-chi \
                 --fp32-weight \
+                --fp32-reduce \
+                --visualize \
+                --eval-sampling-steps 30 \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
+                --enable-profile \
                 --comment '$comment' \
                 --commit-id $git_hash" > $OUTPUT_DIR/stdout.log 2>$OUTPUT_DIR/stderr.log &
