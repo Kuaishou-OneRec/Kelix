@@ -321,8 +321,9 @@ def get_argument_parser():
                             "A photo of two apple, one red and one green",
                             "A photo of a table with a laptop and a cup of coffee on the left",
                             "一只透明的狗",
-                            "A blackboard with a word 'Hello' written on it",
+                            "A blackboard with a word 'Hello, I'm your father' written on it",
                             "纸上写着一个数学公式，内容是：$P(x|y) = \\frac{P(y|x)P(x)}{P(y)}$",
+                            "一个美味的蛋糕，上面写着“生日快乐”",
                         ],
                         help="Prompts for validation image generation")
     
