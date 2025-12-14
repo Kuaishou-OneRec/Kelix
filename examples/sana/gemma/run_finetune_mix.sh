@@ -122,7 +122,7 @@ nohup mpirun --allow-run-as-root \
                 --text-encoder-dir $TEXT_ENCODER_DIR \
                 --tokenizer-dir $TOKENIZER_DIR \
                 --output-dir $OUTPUT_DIR \
-                --dataset-config examples/sana/finetune-0.0.0.json \
+                --dataset-config examples/sana/finetune-mix.json \
                 --learning-rate 2e-5 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
