@@ -940,6 +940,49 @@ def train():
         print_rank_0("Warning: No dataloader available. Training loop will not run.")
         data_iter = iter([])
 
+    # Step 0 visualization: show model state before any optimization
+    if args.visualize:
+        from torch.distributed.checkpoint.state_dict import get_model_state_dict, StateDictOptions
+        
+        print_rank_0("Running step 0 visualization (before training)...")
+        state_dict = get_model_state_dict(
+            model,
+            options=StateDictOptions(
+                full_state_dict=True,
+                cpu_offload=True,
+            )
+        )
+        
+        if dist.get_rank() == 0 and model_for_vis is not None:
+            torch.cuda.empty_cache()
+            gc.collect()
+            
+            model_for_vis.load_state_dict(state_dict)
+            model_for_vis.to(torch.cuda.current_device())
+            model_for_vis.to(get_torch_dtype(args.model_dtype))
+            
+            log_validation(
+                model=model_for_vis,
+                vae=vae,
+                text_encoder=text_encoder,
+                tokenizer=tokenizer_for_vis,
+                tb_writer=tb_writer,
+                step=0,  # Step 0 indicates before training
+                validation_prompts=args.validation_prompts,
+                image_size=args.image_size,
+                max_text_length=args.max_text_length,
+                cfg_scale=args.cfg_scale,
+                num_steps=args.num_sampling_steps,
+                flow_shift=args.flow_shift,
+                device=torch.cuda.current_device(),
+                dtype=get_torch_dtype(args.model_dtype),
+            )
+            
+            model_for_vis.cpu()
+            torch.cuda.empty_cache()
+        
+        dist.barrier()
+
     while scheduler.global_step < args.num_training_steps:
         with contextlib.ExitStack() as ctx:
             if torch_profiler:
@@ -1047,18 +1090,21 @@ def train():
                         global_step=scheduler.global_step
                     )
 
-            # Visualization: generate sample images at step 0 and every N steps
+            # Visualization: generate sample images every N steps
+            # (Step 0 visualization is done before the training loop)
             if args.visualize:
-                should_visualize = (scheduler.global_step == 1) or \
-                                   (scheduler.global_step % args.eval_sampling_steps == 0)
+                should_visualize = (scheduler.global_step % args.eval_sampling_steps == 0)
                 if should_visualize:
-                    from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-                    from torch.distributed.fsdp import FullStateDictConfig, StateDictType
+                    from torch.distributed.checkpoint.state_dict import get_model_state_dict, StateDictOptions
                     
                     # Collect full state dict from FSDP model (all ranks participate)
-                    save_policy = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
-                    with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT, save_policy):
-                        state_dict = model.state_dict()
+                    state_dict = get_model_state_dict(
+                        model,
+                        options=StateDictOptions(
+                            full_state_dict=True,
+                            cpu_offload=True,
+                        )
+                    )
                     
                     # Only rank 0 does the actual visualization
                     if dist.get_rank() == 0 and model_for_vis is not None:
