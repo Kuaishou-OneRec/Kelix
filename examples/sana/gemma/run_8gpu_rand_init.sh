@@ -117,7 +117,6 @@ nohup mpirun --allow-run-as-root \
         -x https_proxy=\
         with_nccl_local_env \
         bash -c "python3 recipes/train_dit.py \
-                --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
                 --text-encoder-dir $TEXT_ENCODER_DIR \
                 --tokenizer-dir $TOKENIZER_DIR \
