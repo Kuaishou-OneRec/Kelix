@@ -16,27 +16,21 @@
 # SPDX-License-Identifier: Apache-2.0
 
 """
-Inference utilities for Muse models.
+Sana inference utilities.
 
-This module provides sampling and inference tools including:
-- Flow-DPM-Solver for accelerated sampling of Flow Matching models
-- Sana-specific sampling utilities
+This module provides sampling and inference tools for Sana models.
 """
 
-from muse.inference.flow_dpm_solver import (
-    DPM_Solver,
-    NoiseScheduleFlow,
-    create_flow_dpm_solver,
-    model_wrapper,
+from muse.inference.sana.sampling import (
+    decode_latents,
+    encode_prompts,
+    generate_with_dpm_solver,
+    generate_with_euler,
 )
 
-# Import sana submodule for convenient access
-from muse.inference import sana
-
 __all__ = [
-    "DPM_Solver",
-    "NoiseScheduleFlow",
-    "create_flow_dpm_solver",
-    "model_wrapper",
-    "sana",
+    "encode_prompts",
+    "decode_latents",
+    "generate_with_dpm_solver",
+    "generate_with_euler",
 ]

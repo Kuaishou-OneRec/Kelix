@@ -271,17 +271,7 @@ class FlowMatchingLoss(nn.Module):
         # rank-specific random seed at training start: seed = base_seed + rank
         if noise is None:
             noise = torch.randn_like(x_start)
-        
-        # #region agent log - DEBUG: 固定 timestep 和 noise 来测试 overfit
-        # 注意：这会让模型只学习一个固定的 (timestep, noise) 组合
-        # 如果 overfit 成功，loss 应该能降到接近 0
-        import os as _os_fix
-        if _os_fix.environ.get("FIX_TIMESTEP_NOISE", "0") == "1":
-            timesteps = torch.full((batch_size,), 500, device=device, dtype=torch.long)  # 固定 timestep=500
-            torch.manual_seed(42)  # 固定 noise seed
-            noise = torch.randn_like(x_start)
-        # #endregion
-        
+
         # Get noisy input
         x_t = self.scheduler.q_sample(x_start, timesteps, noise)
         
@@ -293,25 +283,12 @@ class FlowMatchingLoss(nn.Module):
         # Reference: Sana/diffusion/model/respace.py Lines 497-498
         model_timesteps = self.scheduler.timestep_map.to(device=device, dtype=x_start.dtype)[timesteps]
         
-        # #region agent log - 监控 timestep mapping 和模型配置
-        import json as _json, os as _os; _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_debug/muse/debug.log"
-        if _os.environ.get("OMPI_COMM_WORLD_RANK", "0") == "0":
-            _t_cpu = timesteps.cpu()
-            with open(_log_path, "a") as _f: _f.write(_json.dumps({"hypothesisId": "H", "location": "diffusion.py:forward", "message": "config_check", "data": {"raw_timesteps": _t_cpu.tolist()[:3], "mapped_timesteps": model_timesteps.cpu().tolist()[:3], "timestep_map_range": [float(self.scheduler.timestep_map[0]), float(self.scheduler.timestep_map[-1])], "pred_sigma": self.pred_sigma, "flow_shift": self.scheduler.flow_shift, "x_start_shape": list(x_start.shape), "noise_shape": list(noise.shape)}, "timestamp": __import__("time").time()}) + "\n")
-        # #endregion
-        
         # Model prediction (use mapped timesteps!)
         model_output = model(x_t, model_timesteps, y, mask=mask, **model_kwargs)
         
         # Handle sigma prediction
         if self.pred_sigma:
             model_output, model_var = model_output.chunk(2, dim=1)
-        
-        # #region agent log - 验证 shape 对齐
-        import json as _json2, os as _os2; _log_path2 = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_debug/muse/debug.log"
-        if _os2.environ.get("OMPI_COMM_WORLD_RANK", "0") == "0":
-            with open(_log_path2, "a") as _f2: _f2.write(_json2.dumps({"hypothesisId": "I", "location": "diffusion.py:loss", "message": "shape_check", "data": {"target_shape": list(target.shape), "model_output_shape": list(model_output.shape), "shapes_match": list(target.shape) == list(model_output.shape)}, "timestamp": __import__("time").time()}) + "\n")
-        # #endregion
         
         # Compute MSE loss
         loss = (target - model_output) ** 2

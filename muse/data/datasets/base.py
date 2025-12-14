@@ -319,15 +319,6 @@ class DistributedDataset(IterableDataset):
       # Distribute files by global worker index
       files_for_this_worker = self._files[global_worker_id::total_workers]
 
-      # #region agent log - 假设C: 验证数据分片
-      import json as _json_debug
-      _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log"
-      # 只在worker_id=0时记录，减少日志量
-      if worker_id == 0:
-          _first_files = files_for_this_worker[:3] if len(files_for_this_worker) >= 3 else files_for_this_worker
-          open(_log_path,'a').write(_json_debug.dumps({"hypothesisId":"C","location":"base.py:_get_reader_iter","message":"file sharding per rank","data":{"rank":self.rank,"world_size":self.world_size,"global_worker_id":global_worker_id,"total_workers":total_workers,"total_files":len(self._files),"files_for_this_rank_worker0":len(files_for_this_worker),"first_3_files":_first_files},"timestamp":__import__('time').time(),"sessionId":"debug-session"})+'\n')
-      # #endregion
-
       print(
         f"  Worker[rank={self.rank}, worker={worker_id}, global={global_worker_id}] "
         f"processing {len(files_for_this_worker)} files")

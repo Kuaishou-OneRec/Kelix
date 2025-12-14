@@ -131,13 +131,14 @@ nohup mpirun --allow-run-as-root \
                 --max-text-length 300 \
                 --batch-size 32 \
                 --lr-scheduler-type constant \
-                --num-warmup-steps 2000 \
+                --num-warmup-steps 100 \
                 --num-training-steps 100000 \
                 --save-checkpoint-per-step 1000 \
                 --logging-per-step 5 \
                 --clip-range 0.1 \
-                --overfit-batches 1 \
                 --fp32-weight \
+                --fp32-reduce \
+                --visualize \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \

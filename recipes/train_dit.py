@@ -307,6 +307,23 @@ def get_argument_parser():
     parser.add_argument("--ema-rate", type=float, default=0.0,
                         help="EMA decay rate (0 to disable, typical value: 0.9999). Note: EMA is not supported with FSDP")
 
+    ############ Visualization Args ############
+    parser.add_argument("--visualize", action="store_true",
+                        help="Enable visualization during training (generates sample images)")
+    
+    parser.add_argument("--eval-sampling-steps", type=int, default=500,
+                        help="Generate validation images every N steps")
+    
+    parser.add_argument("--validation-prompts", type=str, nargs="+",
+                        default=["A cat sitting on a couch", "A beautiful sunset over the ocean"],
+                        help="Prompts for validation image generation")
+    
+    parser.add_argument("--cfg-scale", type=float, default=4.5,
+                        help="CFG scale for validation sampling")
+    
+    parser.add_argument("--num-sampling-steps", type=int, default=20,
+                        help="Number of sampling steps for validation")
+
     ############ Debug Args ############
     parser.add_argument("--enable-profile", action="store_true",
                         help="Enable torch profiler")
@@ -332,7 +349,7 @@ def load_vae(vae_dir: str, device: torch.device, dtype: torch.dtype):
     return vae
 
 
-def vae_encode(vae, images: torch.Tensor, sample_posterior: bool = True) -> torch.Tensor:
+def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
     """Encode images to latent space.
     
     Reference: Sana/diffusion/model/builder.py vae_encode for AutoencoderDC
@@ -393,6 +410,102 @@ def encode_text(
     attention_mask = attention_mask[:, None, None]
     
     return text_embeds, attention_mask
+
+
+@torch.no_grad()
+def log_validation(
+    model: nn.Module,
+    vae: nn.Module,
+    text_encoder: nn.Module,
+    tokenizer,
+    tb_writer,
+    step: int,
+    validation_prompts: list,
+    image_size: int = 1024,
+    max_text_length: int = 300,
+    cfg_scale: float = 4.5,
+    num_steps: int = 20,
+    flow_shift: float = 3.0,
+    device: torch.device = None,
+    dtype: torch.dtype = None,
+):
+    """Generate validation images and log to TensorBoard.
+    
+    Args:
+        model: Sana model (should be a non-FSDP instance for inference)
+        vae: VAE decoder
+        text_encoder: Text encoder model
+        tokenizer: Tokenizer instance
+        tb_writer: TensorBoard SummaryWriter
+        step: Current training step
+        validation_prompts: List of prompts to generate images for
+        image_size: Output image size
+        max_text_length: Maximum text sequence length
+        cfg_scale: Classifier-free guidance scale
+        num_steps: Number of sampling steps
+        flow_shift: Flow shift parameter
+        device: Target device
+        dtype: Data type
+    """
+    from muse.inference.sana import encode_prompts, generate_with_dpm_solver
+    
+    print_rank_0(f"Running validation at step {step}...")
+    
+    # Switch to eval mode
+    was_training = model.training
+    model.eval()
+    
+    try:
+        # Encode negative prompt for CFG (empty string)
+        uncond_embeds, uncond_mask = encode_prompts(
+            tokenizer, text_encoder, [""], max_text_length, device
+        )
+        
+        # Get model config
+        latent_channels = model.config.in_channels if hasattr(model, 'config') else 32
+        vae_downsample = model.config.vae_downsample_rate if hasattr(model, 'config') else 32
+        
+        for i, prompt in enumerate(validation_prompts):
+            # Encode prompt
+            text_embeds, attention_mask = encode_prompts(
+                tokenizer, text_encoder, [prompt], max_text_length, device
+            )
+            
+            # Generate image
+            images = generate_with_dpm_solver(
+                model=model,
+                vae=vae,
+                text_embeds=text_embeds.to(dtype),
+                attention_mask=attention_mask,
+                uncond_embeds=uncond_embeds.to(dtype),
+                uncond_mask=uncond_mask,
+                cfg_scale=cfg_scale,
+                num_steps=num_steps,
+                flow_shift=flow_shift,
+                image_size=image_size,
+                latent_channels=latent_channels,
+                vae_downsample=vae_downsample,
+                device=device,
+                dtype=dtype,
+                seed=42 + i,  # Different seed for each prompt
+                return_pil=False,  # Return tensor for TensorBoard
+            )
+            
+            # Log to TensorBoard
+            # images is tensor [B, C, H, W] in [0, 1] range
+            tag = f"validation/{prompt[:50]}"  # Truncate long prompts
+            tb_writer.add_images(tag, images, step, dataformats='NCHW')
+            print_rank_0(f"  Generated image for: '{prompt[:50]}...'")
+        
+        print_rank_0(f"Validation complete at step {step}")
+        
+    finally:
+        # Restore training mode
+        if was_training:
+            model.train()
+        
+        # Clear CUDA cache
+        torch.cuda.empty_cache()
 
 
 def _init_profiler(output_dir, with_stack=False) -> None:
@@ -768,6 +881,27 @@ def train():
             collate_fn=collate_fn
         )
 
+    # Setup visualization model (for FSDP mode)
+    # In FSDP mode, we need a separate model instance for inference
+    # because the training model has sharded weights
+    model_for_vis = None
+    tokenizer_for_vis = None
+    if args.visualize and dist.get_rank() == 0:
+        from copy import deepcopy
+        from transformers import AutoTokenizer
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+        from torch.distributed.fsdp import FullStateDictConfig, StateDictType
+        
+        # Load tokenizer for visualization
+        tokenizer_for_vis = AutoTokenizer.from_pretrained(args.tokenizer_dir)
+        print_rank_0(f"Loaded tokenizer for visualization from {args.tokenizer_dir}")
+        
+        # Create a separate model instance for visualization (on CPU to save memory)
+        # We'll load weights from FSDP model when needed
+        with set_default_dtype(args.model_dtype), torch.device("cpu"):
+            model_for_vis = model_cls(model_config)
+        print_rank_0("Created model instance for visualization (on CPU)")
+
     # Training loop
     print_rank_0("Starting training...")
     model.train()
@@ -859,13 +993,6 @@ def train():
                 )
                 loss = loss_dict["loss"]
 
-            # #region agent log - 监控 loss 和输入数据
-            import json as _json3; _log_path3 = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_debug/muse/debug.log"
-            if dist.get_rank() == 0:
-                _latents_sum = latents.sum().item()
-                _is_training = model.training
-                with open(_log_path3, "a") as _f: _f.write(_json3.dumps({"hypothesisId": "D,E", "location": "train_dit.py:after_forward", "message": "forward_info", "data": {"step": scheduler.global_step, "loss": float(loss.item()), "latents_sum": _latents_sum, "model_training": _is_training}, "timestamp": time.time()}) + "\n")
-            # #endregion
 
             # Pass detached tensor directly - .item() will be called in metrics.step()
             # to avoid CPU-GPU sync during the training hot path
@@ -890,32 +1017,9 @@ def train():
 
                 # 9. Optimizer Step
                 with record_function("OptimizerStep"):
-                    # #region agent log - 权重更新前的快照
-                    import json as _json; _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_debug/muse/debug.log"
-                    if dist.get_rank() == 0:
-                        _first_param = None
-                        for _n, _p in model.named_parameters():
-                            if _p.requires_grad:
-                                _first_param = (_n, _p.data.to_local().flatten()[:5].tolist(), _p.grad.to_local().flatten()[:5].tolist() if _p.grad is not None else None)
-                                break
-                        _lr = optimizer.param_groups[0]['lr']
-                        with open(_log_path, "a") as _f: _f.write(_json.dumps({"hypothesisId": "A,B,C", "location": "train_dit.py:before_optim_step", "message": "pre_step", "data": {"step": scheduler.global_step, "lr": _lr, "first_param_name": _first_param[0] if _first_param else None, "first_param_weight": _first_param[1] if _first_param else None, "first_param_grad": _first_param[2] if _first_param else None}, "timestamp": time.time()}) + "\n")
-                    # #endregion
-                    
                     optimizer.step()
                     lr_scheduler.step()
                     optimizer.zero_grad()
-                    
-                    # #region agent log - 权重更新后的快照
-                    if dist.get_rank() == 0:
-                        _first_param_after = None
-                        for _n, _p in model.named_parameters():
-                            if _p.requires_grad:
-                                _first_param_after = (_n, _p.data.to_local().flatten()[:5].tolist())
-                                break
-                        _lr_after = optimizer.param_groups[0]['lr']
-                        with open(_log_path, "a") as _f: _f.write(_json.dumps({"hypothesisId": "A,B,C", "location": "train_dit.py:after_optim_step", "message": "post_step", "data": {"step": scheduler.global_step, "lr_after": _lr_after, "first_param_name": _first_param_after[0] if _first_param_after else None, "first_param_weight_after": _first_param_after[1] if _first_param_after else None}, "timestamp": time.time()}) + "\n")
-                    # #endregion
                 
                 # EMA update (if enabled and not in FSDP mode)
                 # Note: EMA with FSDP requires special handling due to sharded weights
@@ -942,6 +1046,54 @@ def train():
                         checkpoint_dir=args.output_dir,
                         global_step=scheduler.global_step
                     )
+
+            # Visualization: generate sample images at step 0 and every N steps
+            if args.visualize:
+                should_visualize = (scheduler.global_step == 1) or \
+                                   (scheduler.global_step % args.eval_sampling_steps == 0)
+                if should_visualize:
+                    from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+                    from torch.distributed.fsdp import FullStateDictConfig, StateDictType
+                    
+                    # Collect full state dict from FSDP model (all ranks participate)
+                    save_policy = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+                    with FSDP.state_dict_type(model, StateDictType.FULL_STATE_DICT, save_policy):
+                        state_dict = model.state_dict()
+                    
+                    # Only rank 0 does the actual visualization
+                    if dist.get_rank() == 0 and model_for_vis is not None:
+                        torch.cuda.empty_cache()
+                        gc.collect()
+                        
+                        # Load weights to visualization model and move to GPU
+                        model_for_vis.load_state_dict(state_dict)
+                        model_for_vis.to(torch.cuda.current_device())
+                        model_for_vis.to(get_torch_dtype(args.model_dtype))
+                        
+                        # Run validation
+                        log_validation(
+                            model=model_for_vis,
+                            vae=vae,
+                            text_encoder=text_encoder,
+                            tokenizer=tokenizer_for_vis,
+                            tb_writer=tb_writer,
+                            step=scheduler.global_step,
+                            validation_prompts=args.validation_prompts,
+                            image_size=args.image_size,
+                            max_text_length=args.max_text_length,
+                            cfg_scale=args.cfg_scale,
+                            num_steps=args.num_sampling_steps,
+                            flow_shift=args.flow_shift,
+                            device=torch.cuda.current_device(),
+                            dtype=get_torch_dtype(args.model_dtype),
+                        )
+                        
+                        # Move model back to CPU to save memory
+                        model_for_vis.cpu()
+                        torch.cuda.empty_cache()
+                    
+                    # Sync all ranks before continuing
+                    dist.barrier()
 
             if torch_profiler:
                 torch_profiler.step()

@@ -41,6 +41,8 @@ from muse.data.utils import get_aspect_ratio_dict, get_closest_ratio
 
 from torch.utils.data import IterableDataset
 
+from muse.utils.common import print_rank_0
+
 
 logger = logging.getLogger(__name__)
 
@@ -89,14 +91,15 @@ class Text2ImageDataset(DistributedDataset):
         chi_prompt: Optional[List[str]] = None,
         use_chi: bool = False,
         multi_scale: bool = False,
-        clip_thr: float = 0.0,
-        clip_thr_temperature: float = 1.0,
+        padding_side: str = "right",
         **kwargs,
     ):
         self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
         self.base_image_size = image_size if isinstance(image_size, int) else image_size[0]
         self.tokenizer_path = tokenizer_path
         self.tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
+        self.tokenizer.padding_side = padding_side
+        print_rank_0(f"Tokenizer padding side: {self.tokenizer.padding_side}")
         self.max_text_length = max_text_length
         self.center_crop = center_crop
         
@@ -119,13 +122,6 @@ class Text2ImageDataset(DistributedDataset):
             logger.info(f"Multi-scale training enabled with {len(self.aspect_ratios)} aspect ratios")
         else:
             self.aspect_ratios = None
-        
-        # CLIP Score based caption sampling
-        # Reference: Sana/diffusion/data/datasets/sana_data.py weighted_sample_clipscore
-        self.clip_thr = clip_thr
-        self.clip_thr_temperature = clip_thr_temperature
-        if clip_thr > 0.0:
-            logger.info(f"CLIP score filtering enabled: threshold={clip_thr}, temperature={clip_thr_temperature}")
         
         # Build transforms
         self.transform = self._build_transform()
@@ -270,53 +266,6 @@ class Text2ImageDataset(DistributedDataset):
                 f"got type='{segments[1].get('type')}'"
             )
 
-    def weighted_sample_clipscore(
-        self,
-        captions: Dict[str, str],
-        clip_scores: Dict[str, float],
-    ) -> str:
-        """Sample a caption based on CLIP scores with temperature-controlled softmax.
-        
-        Reference: Sana/diffusion/data/datasets/sana_data.py weighted_sample_clipscore
-        
-        Args:
-            captions: Dict mapping caption_type to caption text
-            clip_scores: Dict mapping caption_type to CLIP score
-            
-        Returns:
-            Selected caption text
-        """
-        labels = []
-        weights = []
-        fallback_label = None
-        max_clip_score = float("-inf")
-        
-        for caption_type, caption_text in captions.items():
-            clip_score = clip_scores.get(caption_type, 0.0)
-            
-            if clip_score >= self.clip_thr:
-                labels.append(caption_text)
-                weights.append(clip_score)
-            
-            if clip_score > max_clip_score:
-                max_clip_score = clip_score
-                fallback_label = caption_text
-        
-        # Fallback to highest scoring caption if none meet threshold
-        if not labels and fallback_label:
-            return fallback_label
-        
-        # Fallback to first caption if no scores
-        if not labels:
-            return next(iter(captions.values())) if captions else ""
-        
-        # Temperature-controlled softmax sampling
-        adjusted_weights = np.array(weights) ** (1.0 / max(self.clip_thr_temperature, 0.01))
-        normalized_weights = adjusted_weights / np.sum(adjusted_weights)
-        sampled_label = random.choices(labels, weights=normalized_weights.tolist(), k=1)[0]
-        
-        return sampled_label
-
     def extract_image_text(self, sample: Dict[str, Any]) -> Dict[str, Any]:
         """Extract image and text from sample.
         
@@ -324,7 +273,7 @@ class Text2ImageDataset(DistributedDataset):
         - Direct image/text fields
         - Messages format (chat-style, single-turn only)
         - Segments format (exactly 2 segments: text + image)
-        - Multiple captions with CLIP score-based selection
+        - Multiple captions with random selection
         
         Args:
             sample: Raw sample dict
@@ -338,17 +287,12 @@ class Text2ImageDataset(DistributedDataset):
         image = sample.get("image", None)
         text = sample.get("text", None)
         
-        # Check for multiple captions with CLIP scores
+        # Check for multiple captions
         captions = sample.get("captions", None)
-        clip_scores = sample.get("clip_scores", None)
-        
+
         if captions and isinstance(captions, dict) and len(captions) > 1:
-            # Multiple captions available - use CLIP score based selection
-            if clip_scores and isinstance(clip_scores, dict):
-                text = self.weighted_sample_clipscore(captions, clip_scores)
-            else:
-                # No CLIP scores - random selection
-                text = random.choice(list(captions.values()))
+            # Multiple captions - random selection
+            text = random.choice(list(captions.values()))
         elif captions and isinstance(captions, dict):
             # Single caption in dict format
             text = next(iter(captions.values()))

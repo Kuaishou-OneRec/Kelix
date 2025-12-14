@@ -58,6 +58,12 @@ from typing import Optional
 import torch
 from PIL import Image
 
+from muse.inference.sana import (
+    encode_prompts,
+    generate_with_dpm_solver,
+    generate_with_euler,
+)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -345,261 +351,6 @@ def load_scheduler(scheduler_path: Optional[str], num_steps: int):
     return scheduler
 
 
-def encode_prompts(
-    tokenizer,
-    text_encoder,
-    prompts: list,
-    max_length: int,
-    device: torch.device,
-):
-    """Encode text prompts to embeddings.
-    
-    Args:
-        tokenizer: Tokenizer instance
-        text_encoder: Text encoder model
-        prompts: List of text prompts
-        max_length: Maximum sequence length
-        device: Target device
-    
-    Returns:
-        Tuple of (text_embeds, attention_mask)
-    """
-    # Tokenize
-    tokens = tokenizer(
-        prompts,
-        max_length=max_length,
-        padding="max_length",
-        truncation=True,
-        return_tensors="pt",
-    )
-    
-    input_ids = tokens.input_ids.to(device)
-    attention_mask = tokens.attention_mask.to(device)
-    
-    # Encode
-    with torch.no_grad():
-        outputs = text_encoder(
-            input_ids,
-            attention_mask=attention_mask,
-        )
-        
-        # Get hidden states
-        if hasattr(outputs, 'last_hidden_state'):
-            text_embeds = outputs.last_hidden_state
-        elif isinstance(outputs, tuple):
-            text_embeds = outputs[0]
-        else:
-            text_embeds = outputs
-    
-    # Add dimension for cross attention: [B, 1, L, D]
-    text_embeds = text_embeds[:, None]
-    attention_mask = attention_mask[:, None, None]
-    
-    return text_embeds, attention_mask
-
-
-@torch.no_grad()
-def generate_with_dpm_solver(
-    model,
-    vae,
-    text_embeds: torch.Tensor,
-    attention_mask: torch.Tensor,
-    uncond_embeds: Optional[torch.Tensor] = None,
-    uncond_mask: Optional[torch.Tensor] = None,
-    cfg_scale: float = 4.5,
-    num_steps: int = 20,
-    flow_shift: float = 3.0,
-    image_size: int = 1024,
-    latent_channels: int = 32,
-    vae_downsample: int = 32,
-    device: torch.device = None,
-    dtype: torch.dtype = None,
-    seed: int = 42,
-):
-    """Generate images using Flow-DPM-Solver (faster sampling).
-    
-    Args:
-        model: Sana model
-        vae: VAE decoder
-        text_embeds: Conditional text embeddings [B, 1, L, D]
-        attention_mask: Text attention mask [B, 1, 1, L]
-        uncond_embeds: Unconditional embeddings for CFG
-        uncond_mask: Unconditional attention mask
-        cfg_scale: Classifier-free guidance scale
-        num_steps: Number of sampling steps
-        flow_shift: Flow shift parameter
-        image_size: Output image size
-        latent_channels: Number of latent channels
-        vae_downsample: VAE downsampling factor
-        device: Target device
-        dtype: Data type
-        seed: Random seed
-    
-    Returns:
-        List of PIL images
-    """
-    from muse.inference import create_flow_dpm_solver
-    
-    batch_size = text_embeds.shape[0]
-    latent_size = image_size // vae_downsample
-    
-    # Set random seed
-    generator = torch.Generator(device=device).manual_seed(seed)
-    
-    # Initialize latents with random noise
-    latents = torch.randn(
-        (batch_size, latent_channels, latent_size, latent_size),
-        generator=generator,
-        device=device,
-        dtype=dtype,
-    )
-    
-    # Prepare model function that accepts (x, t, cond, mask) 
-    def model_fn(x, t, cond, mask=None):
-        return model.forward_with_dpmsolver(x, t, cond, mask=mask)
-    
-    # Prepare condition and uncondition for DPM-Solver
-    # DPM-Solver handles CFG internally
-    condition = text_embeds
-    uncondition = uncond_embeds if uncond_embeds is not None else torch.zeros_like(text_embeds)
-    
-    # Create model kwargs with attention mask
-    model_kwargs = {"mask": attention_mask}
-    
-    # Create DPM-Solver
-    logger.info(f"Using DPM-Solver with {num_steps} steps, flow_shift={flow_shift}")
-    solver = create_flow_dpm_solver(
-        model_fn,
-        condition=condition,
-        uncondition=uncondition,
-        cfg_scale=cfg_scale,
-        model_kwargs=model_kwargs,
-    )
-    
-    # Sample
-    latents = solver.sample(
-        latents,
-        steps=num_steps,
-        flow_shift=flow_shift,
-        order=2,
-        skip_type="time_uniform_flow",
-        method="multistep",
-        lower_order_final=True,
-    )
-    
-    # Decode latents to images
-    logger.info("Decoding latents to images...")
-    
-    # Apply inverse scaling factor
-    if hasattr(vae, 'config') and hasattr(vae.config, 'scaling_factor'):
-        latents = latents / vae.config.scaling_factor
-    
-    images = vae.decode(latents).sample
-    
-    # Convert to PIL images
-    images = (images / 2 + 0.5).clamp(0, 1)
-    images = images.cpu().permute(0, 2, 3, 1).float().numpy()
-    images = (images * 255).round().astype("uint8")
-    pil_images = [Image.fromarray(img) for img in images]
-    
-    return pil_images
-
-
-@torch.no_grad()
-def generate_with_euler(
-    model,
-    vae,
-    scheduler,
-    text_embeds: torch.Tensor,
-    attention_mask: torch.Tensor,
-    uncond_embeds: Optional[torch.Tensor] = None,
-    uncond_mask: Optional[torch.Tensor] = None,
-    cfg_scale: float = 4.5,
-    image_size: int = 1024,
-    latent_channels: int = 32,
-    vae_downsample: int = 32,
-    device: torch.device = None,
-    dtype: torch.dtype = None,
-    seed: int = 42,
-):
-    """Generate images using Euler scheduler (from diffusers)."""
-    batch_size = text_embeds.shape[0]
-    latent_size = image_size // vae_downsample
-    
-    # Set random seed
-    generator = torch.Generator(device=device).manual_seed(seed)
-    
-    # Initialize latents with random noise
-    latents = torch.randn(
-        (batch_size, latent_channels, latent_size, latent_size),
-        generator=generator,
-        device=device,
-        dtype=dtype,
-    )
-    
-    # Scale initial noise by scheduler (if applicable)
-    if hasattr(scheduler, 'init_noise_sigma'):
-        latents = latents * scheduler.init_noise_sigma
-    
-    # Prepare CFG: concat conditional and unconditional
-    do_cfg = cfg_scale > 1.0 and uncond_embeds is not None
-    if do_cfg:
-        text_embeds_cfg = torch.cat([uncond_embeds, text_embeds], dim=0)
-        attention_mask_cfg = torch.cat([uncond_mask, attention_mask], dim=0) if attention_mask is not None else None
-    else:
-        text_embeds_cfg = text_embeds
-        attention_mask_cfg = attention_mask
-    
-    # Sampling loop
-    logger.info(f"Starting Euler sampling with {len(scheduler.timesteps)} steps...")
-    for i, t in enumerate(scheduler.timesteps):
-        # Expand latents for CFG
-        latent_model_input = torch.cat([latents] * 2) if do_cfg else latents
-        
-        # Scale latents (some schedulers require this)
-        if hasattr(scheduler, 'scale_model_input'):
-            latent_model_input = scheduler.scale_model_input(latent_model_input, t)
-        
-        # Prepare timestep
-        timestep = torch.tensor([t] * latent_model_input.shape[0], device=device, dtype=dtype)
-        
-        # Model prediction (velocity)
-        noise_pred = model.forward_with_dpmsolver(
-            latent_model_input,
-            timestep,
-            text_embeds_cfg,
-            mask=attention_mask_cfg,
-        )
-        
-        # Apply CFG
-        if do_cfg:
-            noise_pred_uncond, noise_pred_cond = noise_pred.chunk(2)
-            noise_pred = noise_pred_uncond + cfg_scale * (noise_pred_cond - noise_pred_uncond)
-        
-        # Scheduler step
-        latents = scheduler.step(noise_pred, t, latents).prev_sample
-        
-        if (i + 1) % 5 == 0 or i == len(scheduler.timesteps) - 1:
-            logger.info(f"Step {i + 1}/{len(scheduler.timesteps)}")
-    
-    # Decode latents to images
-    logger.info("Decoding latents to images...")
-    
-    # Apply inverse scaling factor
-    if hasattr(vae, 'config') and hasattr(vae.config, 'scaling_factor'):
-        latents = latents / vae.config.scaling_factor
-    
-    images = vae.decode(latents).sample
-    
-    # Convert to PIL images
-    images = (images / 2 + 0.5).clamp(0, 1)
-    images = images.cpu().permute(0, 2, 3, 1).float().numpy()
-    images = (images * 255).round().astype("uint8")
-    pil_images = [Image.fromarray(img) for img in images]
-    
-    return pil_images
-
-
 def main():
     args = get_args()
     
@@ -629,22 +380,10 @@ def main():
     
     # Encode prompts
     logger.info(f"Prompt: {args.prompt}")
-    DEFAULT_CHI_PROMPT = [
-        'Given a user prompt, generate an "Enhanced prompt" that provides detailed visual descriptions suitable for image generation. Evaluate the level of detail in the user prompt:',
-        '- If the prompt is simple, focus on adding specifics about colors, shapes, sizes, textures, and spatial relationships to create vivid and concrete scenes.',
-        '- If the prompt is already detailed, refine and enhance the existing details slightly without overcomplicating.',
-        'Here are examples of how to transform or refine prompts:',
-        '- User Prompt: A cat sleeping -> Enhanced: A small, fluffy white cat curled up in a round shape, sleeping peacefully on a warm sunny windowsill, surrounded by pots of blooming red flowers.',
-        '- User Prompt: A busy city street -> Enhanced: A bustling city street scene at dusk, featuring glowing street lamps, a diverse crowd of people in colorful clothing, and a double-decker bus passing by towering glass skyscrapers.',
-        'Please generate only the enhanced description for the prompt below and avoid including any additional commentary or evaluations:',
-        'User Prompt: ',
-    ]
-
-    prompt = "\n".join(DEFAULT_CHI_PROMPT) + args.prompt
     text_embeds, attention_mask = encode_prompts(
         tokenizer,
         text_encoder,
-        [prompt],
+        [args.prompt],
         args.max_text_length,
         device,
     )
