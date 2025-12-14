@@ -231,6 +231,7 @@ def generate_with_euler(
     uncond_embeds: Optional[torch.Tensor] = None,
     uncond_mask: Optional[torch.Tensor] = None,
     cfg_scale: float = 4.5,
+    num_steps: int = 20,
     image_size: int = 1024,
     latent_channels: int = 32,
     vae_downsample: int = 32,
@@ -244,12 +245,13 @@ def generate_with_euler(
     Args:
         model: Sana model
         vae: VAE decoder
-        scheduler: Diffusers scheduler instance
+        scheduler: Diffusers scheduler instance (FlowMatchEulerDiscreteScheduler)
         text_embeds: Conditional text embeddings [B, 1, L, D]
         attention_mask: Text attention mask [B, 1, 1, L]
         uncond_embeds: Unconditional embeddings for CFG
         uncond_mask: Unconditional attention mask
         cfg_scale: Classifier-free guidance scale
+        num_steps: Number of sampling steps
         image_size: Output image size
         latent_channels: Number of latent channels
         vae_downsample: VAE downsampling factor
@@ -261,6 +263,8 @@ def generate_with_euler(
     Returns:
         List of PIL images or tensor
     """
+    from diffusers.pipelines.stable_diffusion_3.pipeline_stable_diffusion_3 import retrieve_timesteps
+    
     batch_size = text_embeds.shape[0]
     latent_size = image_size // vae_downsample
     
@@ -274,6 +278,9 @@ def generate_with_euler(
         device=device,
         dtype=dtype,
     )
+    
+    # Get timesteps using retrieve_timesteps (same as Sana)
+    timesteps, num_inference_steps = retrieve_timesteps(scheduler, num_steps, device, None)
     
     # Scale initial noise by scheduler (if applicable)
     if hasattr(scheduler, 'init_noise_sigma'):
@@ -289,8 +296,8 @@ def generate_with_euler(
         attention_mask_cfg = attention_mask
     
     # Sampling loop
-    logger.info(f"Starting Euler sampling with {len(scheduler.timesteps)} steps...")
-    for i, t in enumerate(scheduler.timesteps):
+    logger.info(f"Starting Euler sampling with {num_inference_steps} steps...")
+    for i, t in enumerate(timesteps):
         # Expand latents for CFG
         latent_model_input = torch.cat([latents] * 2) if do_cfg else latents
         
@@ -298,8 +305,8 @@ def generate_with_euler(
         if hasattr(scheduler, 'scale_model_input'):
             latent_model_input = scheduler.scale_model_input(latent_model_input, t)
         
-        # Prepare timestep
-        timestep = torch.tensor([t] * latent_model_input.shape[0], device=device, dtype=dtype)
+        # Prepare timestep - use t.expand() as in Sana
+        timestep = t.expand(latent_model_input.shape[0])
         
         # Model prediction (velocity)
         noise_pred = model.forward_with_dpmsolver(
@@ -315,10 +322,14 @@ def generate_with_euler(
             noise_pred = noise_pred_uncond + cfg_scale * (noise_pred_cond - noise_pred_uncond)
         
         # Scheduler step
-        latents = scheduler.step(noise_pred, t, latents).prev_sample
+        latents_dtype = latents.dtype
+        latents = scheduler.step(noise_pred, t, latents, return_dict=False)[0]
+        # Ensure dtype consistency
+        if latents.dtype != latents_dtype:
+            latents = latents.to(latents_dtype)
         
-        if (i + 1) % 5 == 0 or i == len(scheduler.timesteps) - 1:
-            logger.info(f"Step {i + 1}/{len(scheduler.timesteps)}")
+        if (i + 1) % 5 == 0 or i == num_inference_steps - 1:
+            logger.info(f"Step {i + 1}/{num_inference_steps}")
     
     # Decode latents to images
     logger.info("Decoding latents to images...")

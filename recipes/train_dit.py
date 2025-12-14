@@ -459,7 +459,6 @@ def log_validation(
     try:
         # Create Euler scheduler
         scheduler = FlowMatchEulerDiscreteScheduler(shift=flow_shift)
-        scheduler.set_timesteps(num_steps)
         
         # Encode negative prompt for CFG (empty string)
         uncond_embeds, uncond_mask = encode_prompts(
@@ -486,6 +485,7 @@ def log_validation(
                 uncond_embeds=uncond_embeds.to(dtype),
                 uncond_mask=uncond_mask,
                 cfg_scale=cfg_scale,
+                num_steps=num_steps,
                 image_size=image_size,
                 latent_channels=latent_channels,
                 vae_downsample=vae_downsample,
