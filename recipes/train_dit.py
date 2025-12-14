@@ -315,7 +315,15 @@ def get_argument_parser():
                         help="Generate validation images every N steps")
     
     parser.add_argument("--validation-prompts", type=str, nargs="+",
-                        default=["A cat sitting on a couch", "A beautiful sunset over the ocean"],
+                        default=[
+                            "A cat sitting on a couch",
+                            "A beautiful sunset over the ocean",
+                            "A photo of two apple, one red and one green",
+                            "A photo of a table with a laptop and a cup of coffee on the left",
+                            "一只透明的狗",
+                            "A blackboard with a word 'Hello' written on it",
+                            "纸上写着一个数学公式，内容是：$P(x|y) = \\frac{P(y|x)P(x)}{P(y)}$",
+                        ],
                         help="Prompts for validation image generation")
     
     parser.add_argument("--cfg-scale", type=float, default=4.5,
