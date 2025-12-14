@@ -139,6 +139,7 @@ nohup mpirun --allow-run-as-root \
                 --fp32-weight \
                 --fp32-reduce \
                 --visualize \
+                --eval-sampling-steps 30 \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
