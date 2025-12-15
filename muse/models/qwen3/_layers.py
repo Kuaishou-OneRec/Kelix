@@ -381,11 +381,16 @@ class MultimodalRotaryEmbedding(nn.Module):
         batch_size, seq_len = x.shape[0], x.shape[1]
 
         # Handle different input_pos formats
+        print(f"[Muse MultimodalRoPE DEBUG] inv_freq shape={self.inv_freq.shape}")
+        print(f"[Muse MultimodalRoPE DEBUG] inv_freq first 10: {self.inv_freq[:10].tolist()}")
         if input_pos.dim() == 2:  # [batch_size, seq_len] -> expand to 3D
             # For 1D position ids, use same values for all 3 dimensions
+            print(f"[Muse MultimodalRoPE DEBUG] input_pos before expand: shape={input_pos.shape}, sample={input_pos[:, :10]}")
             position_ids = input_pos.unsqueeze(0).expand(3, -1, -1)  # [3, batch_size, seq_len]
+            print(f"[Muse MultimodalRoPE DEBUG] position_ids after expand: shape={position_ids.shape}, sample={position_ids[:, :, :10]}")
         elif input_pos.dim() == 3 and input_pos.shape[0] == 3:  # [3, batch_size, seq_len]
             position_ids = input_pos
+            print(f"[Muse MultimodalRoPE DEBUG] position_ids (3D input): shape={position_ids.shape}, sample={position_ids[:, :, :10]}")
         else:
             raise ValueError(f"Unsupported input_pos shape: {input_pos.shape}. Expected [batch_size, seq_len] or [3, batch_size, seq_len]")
         
@@ -448,6 +453,8 @@ class MultimodalRotaryEmbedding(nn.Module):
         self._debug_rope_intermediates["mrope_section"] = torch.tensor(
             self.mrope_section, device=x.device
         )
+        print(f"[Muse MultimodalRoPE DEBUG] cos before chunk shape={cos.shape}")
+        print(f"[Muse MultimodalRoPE DEBUG] cos sample first 10: {cos[0, 0, 0, :10].tolist() if cos.dim() >= 4 else cos.flatten()[:10].tolist()}")
 
         # Select appropriate dimension for each section (cycling through 0, 1, 2)
         # section[i % 3] selects temporal(0), height(1), or width(2)
