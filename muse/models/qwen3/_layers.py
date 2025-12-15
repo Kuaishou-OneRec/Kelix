@@ -294,29 +294,6 @@ class Qwen3Attention(nn.Module):
 
 
 class MultimodalRotaryEmbedding(nn.Module):
-    """
-    3D Multimodal Rotary Position Embedding for vision-language models (Keye/Qwen2-VL style).
-    
-    This implements the multimodal RoPE where position_ids has 3 components:
-    temporal, height, and width. The embedding is split into sections and
-    different position indices are applied to different sections.
-    
-    Reference: https://qwenlm.github.io/blog/qwen2-vl/
-    
-    The key insight is that for multimodal inputs:
-    - Visual tokens have 3D positions (temporal, height, width)
-    - Text tokens have 1D positions (same value repeated for all 3 dimensions)
-    - The head_dim is split into sections, each section using a different position dimension
-    
-    Args:
-        dim (int): Embedding dimension (head_dim)
-        max_seq_len (int): Maximum sequence length
-        base (float): RoPE base frequency (theta)
-        mrope_section (List[int]): Section sizes for [temporal, height, width].
-            E.g., [16, 24, 24] means 16 dims for temporal, 24 for height, 24 for width.
-            Note: sum(mrope_section) should equal dim // 2
-    """
-    
     def __init__(
         self,
         dim: int,
@@ -325,6 +302,8 @@ class MultimodalRotaryEmbedding(nn.Module):
         mrope_section: Optional[list] = None,
     ) -> None:
         super().__init__()
+        self.max_seq_len_cached = max_seq_len
+        self.original_max_seq_len = max_seq_len
         self.dim = dim
         self.max_seq_len = max_seq_len
         self.base = base
@@ -338,6 +317,8 @@ class MultimodalRotaryEmbedding(nn.Module):
             self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim)
         )
         self.register_buffer("inv_freq", inv_freq, persistent=False)
+        # For default rope type, attention_scaling is 1.0
+        self.attention_scaling = 1.0
     
     @staticmethod
     def rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -361,23 +342,31 @@ class MultimodalRotaryEmbedding(nn.Module):
     ) -> torch.Tensor:
         """
         Apply multimodal 3D rotary position embedding.
-        
+
         Args:
             x: Input tensor with shape [batch_size, seq_len, num_heads, head_dim]
-            input_pos: Position indices with shape [3, batch_size, seq_len]
-                       where 3 represents (temporal, height, width).
-                       For text-only inputs, all 3 dimensions should have the same values.
+            input_pos: Position indices. Can be:
+                       - [batch_size, seq_len]: Standard 1D position ids, will be expanded to 3D
+                       - [3, batch_size, seq_len]: 3D multimodal position ids where 3 represents (temporal, height, width)
                        If None, returns x unchanged (no RoPE applied).
-        
+
         Returns:
             Tensor with rotary position embedding applied, same shape as input
         """
         if input_pos is None:
             return x
-        
+
         # x shape: [batch_size, seq_len, num_heads, head_dim]
-        # input_pos shape: [3, batch_size, seq_len]
-        position_ids = input_pos
+        batch_size, seq_len = x.shape[0], x.shape[1]
+
+        # Handle different input_pos formats
+        if input_pos.dim() == 2:  # [batch_size, seq_len] -> expand to 3D
+            # For 1D position ids, use same values for all 3 dimensions
+            position_ids = input_pos.unsqueeze(0).expand(3, -1, -1)  # [3, batch_size, seq_len]
+        elif input_pos.dim() == 3 and input_pos.shape[0] == 3:  # [3, batch_size, seq_len]
+            position_ids = input_pos
+        else:
+            raise ValueError(f"Unsupported input_pos shape: {input_pos.shape}. Expected [batch_size, seq_len] or [3, batch_size, seq_len]")
         
         # Core RoPE block. Keye has different position ids for 3 dimensions
         # So we expand the inv_freq to shape (3, ...)
@@ -406,7 +395,13 @@ class MultimodalRotaryEmbedding(nn.Module):
             # Compute cos and sin: [3, batch_size, seq_len, dim]
             cos = emb.cos()
             sin = emb.sin()
-        
+
+        # Apply attention scaling (for compatibility with advanced RoPE types)
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+        cos = cos.to(dtype=x.dtype)
+        sin = sin.to(dtype=x.dtype)
+
         # Apply multimodal section splitting
         # mrope_section * 2 for cos/sin concatenation
         # e.g., [16, 24, 24] -> [16, 24, 24, 16, 24, 24]
@@ -416,21 +411,25 @@ class MultimodalRotaryEmbedding(nn.Module):
         cos_sections = cos.split(mrope_section_doubled, dim=-1)
         sin_sections = sin.split(mrope_section_doubled, dim=-1)
         
-        # Debug store (raw cos/sin before section selection)
+        # Debug store (raw cos/sin before chunk)
+        # 注意：Origin 在 apply_multimodal_rotary_pos_emb 中存储的 cos/sin 已经是 bfloat16
+        # 所以这里也需要先转换 dtype 再存储，保持一致
         if not hasattr(self, "_debug_rope_intermediates"):
             self._debug_rope_intermediates = {
                 "inv_freq": None,
                 "position_ids": None,
-                "cos_before_split": None,
-                "sin_before_split": None,
-                "cos_after_split": None,
-                "sin_after_split": None,
+                "cos_before_chunk": None,
+                "sin_before_chunk": None,
+                "cos_after_chunk": None,
+                "sin_after_chunk": None,
                 "mrope_section": None,
             }
         self._debug_rope_intermediates["inv_freq"] = self.inv_freq.to(dtype=x.dtype).detach()
         self._debug_rope_intermediates["position_ids"] = position_ids.detach()
-        self._debug_rope_intermediates["cos_before_split"] = cos.detach()
-        self._debug_rope_intermediates["sin_before_split"] = sin.detach()
+        # Origin 存储的 cos/sin 是 bfloat16（因为在 KeyeRotaryEmbedding.forward 返回时已转换）
+        # 所以这里也需要先转换为 x.dtype 再存储
+        self._debug_rope_intermediates["cos_before_chunk"] = cos.detach()
+        self._debug_rope_intermediates["sin_before_chunk"] = sin.detach()
         self._debug_rope_intermediates["mrope_section"] = torch.tensor(
             self.mrope_section, device=x.device
         )
@@ -447,10 +446,13 @@ class MultimodalRotaryEmbedding(nn.Module):
             dim=-1
         )
 
-        # Store combined cos/sin (after section selection)
-        self._debug_rope_intermediates["cos_after_split"] = cos_combined.detach()
-        self._debug_rope_intermediates["sin_after_split"] = sin_combined.detach()
-        
+        # Store combined cos/sin (after chunk) 
+        # Origin 存储的 shape 是 [1, 1, 209, 128]，但这是因为 Origin 的 q/k 是 [b, h, s, d]
+        # Muse 的 q/k 是 [b, s, h, d]，所以 unsqueeze 位置不同
+        # 为了对比，我们存储 unsqueeze 到 dim=1 的版本，与 Origin 保持一致
+        self._debug_rope_intermediates["cos_after_chunk"] = cos_combined.unsqueeze(1).to(dtype=x.dtype).detach()
+        self._debug_rope_intermediates["sin_after_chunk"] = sin_combined.unsqueeze(1).to(dtype=x.dtype).detach()
+
         # Add head dimension for broadcasting: [batch_size, seq_len, 1, dim]
         cos_combined = cos_combined.unsqueeze(2).to(dtype=x.dtype)
         sin_combined = sin_combined.unsqueeze(2).to(dtype=x.dtype)

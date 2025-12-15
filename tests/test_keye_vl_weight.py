@@ -21,24 +21,24 @@ from PIL import Image
 
 # === 导入 Muse 模型 ===
 from muse.models.keye_tokenizer_end2end_image import modeling as muse_mod
-from tests.models.keye_tokenizer_image.modeling_keye_origin import KeyeTokenizerEnd2EndImage as origin_mod
-from tests.models.keye_tokenizer_image.image_processing_keye import KeyeVisionImageProcessor
+from tests.models.keye_vl_tokenizer_image import modeling_keye_origin as origin_mod
+from tests.models.keye_vl_tokenizer_image.image_processing_keye import SiglipImageProcessor
 from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
 # 导入 Origin 模型的 RoPE debug 变量
-from tests.models.keye_tokenizer_image.modeling_keye_origin import _DEBUG_ROPE_OUTPUTS as ORIGIN_ROPE_DEBUG
+from tests.models.keye_vl_tokenizer_image.modeling_keye_origin import _DEBUG_ROPE_OUTPUTS as ORIGIN_ROPE_DEBUG
 
 # === 导入 Processor 相关 ===
 from transformers import AutoTokenizer
 # 假设 KeyeProcessor 在 muse.models.keye.modular_Keye，如果不是请修改路径
 # 或者将 KeyeProcessor 类定义直接粘贴在脚本上方
 try:
-    from muse.models.keye_tokenizer_image.processing_keye import KeyeProcessor
+    from tests.models.keye_vl_tokenizer_image.processing_keye import KeyeProcessor
 except ImportError:
     # 如果找不到路径，请将你刚才发的 KeyeProcessor 代码保存为 modular_Keye.py 并放在同级目录
     sys.path.append(os.getcwd())
-    from muse.models.keye_tokenizer_image.processing_keye import KeyeProcessor
+    from tests.models.keye_vl_tokenizer_image.processing_keye import KeyeProcessor
 
 # 配置日志
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
@@ -323,7 +323,7 @@ def prepare_inputs_via_processor(ckpt_path: str, device: str, dtype: torch.dtype
     # 1. 加载 Tokenizer 和 ImageProcessor
     logger.info("⚙️ Loading Tokenizer & ImageProcessor...")
     tokenizer = AutoTokenizer.from_pretrained(ckpt_path, trust_remote_code=True)
-    image_processor = KeyeVisionImageProcessor.from_pretrained(ckpt_path)
+    image_processor = SiglipImageProcessor.from_pretrained(ckpt_path)
     
     # 2. 初始化 KeyeProcessor
     logger.info("🧠 Initializing KeyeProcessor...")
@@ -468,7 +468,7 @@ def test_pipeline_alignment():
     # --- Initialize Models ---
     with set_default_dtype(dtype):
         logger.info("Initializing Muse Model...")
-        muse_model = muse_mod.KeyeForConditionalGeneration(
+        muse_model = muse_mod.KeyeTokenizerEnd2EndImage(
             qwen_config=qwen_cfg,
             vision_config=vision_cfg,
             tokenizer_config=tokenizer_cfg,
@@ -487,7 +487,7 @@ def test_pipeline_alignment():
     muse_model.load_state_dict(muse_state, strict=False)
 
     origin_model.to(device)
-    muse_model.to(device)
+    muse_model.to(device, dtype)  # 确保 Muse 模型也转换为 bfloat16，与 Origin 保持一致
 
     # --- Hooks ---
     origin_llm_layers = register_detailed_hooks(origin_model, "origin")
@@ -631,14 +631,14 @@ def test_pipeline_alignment():
                 activations["muse"]["4.R inv_freq"] = intermediates["inv_freq"]
             if intermediates.get("position_ids") is not None:
                 activations["muse"]["4.R position_ids"] = intermediates["position_ids"]
-            if intermediates.get("cos_before_split") is not None:
-                activations["muse"]["4.R cos_before_split"] = intermediates["cos_before_split"]
-            if intermediates.get("sin_before_split") is not None:
-                activations["muse"]["4.R sin_before_split"] = intermediates["sin_before_split"]
-            if intermediates.get("cos_after_split") is not None:
-                activations["muse"]["4.R cos_after_split"] = intermediates["cos_after_split"]
-            if intermediates.get("sin_after_split") is not None:
-                activations["muse"]["4.R sin_after_split"] = intermediates["sin_after_split"]
+            if intermediates.get("cos_before_chunk") is not None:
+                activations["muse"]["4.R cos_before_chunk"] = intermediates["cos_before_chunk"]
+            if intermediates.get("sin_before_chunk") is not None:
+                activations["muse"]["4.R sin_before_chunk"] = intermediates["sin_before_chunk"]
+            if intermediates.get("cos_after_chunk") is not None:
+                activations["muse"]["4.R cos_after_chunk"] = intermediates["cos_after_chunk"]
+            if intermediates.get("sin_after_chunk") is not None:
+                activations["muse"]["4.R sin_after_chunk"] = intermediates["sin_after_chunk"]
             if intermediates.get("mrope_section") is not None:
                 activations["muse"]["4.R mrope_section"] = intermediates["mrope_section"]
         if hasattr(muse_llm_rope, "_debug_rope_outputs") and len(muse_llm_rope._debug_rope_outputs) >= 2:
@@ -652,16 +652,17 @@ def test_pipeline_alignment():
         "0.0 ViT Embeddings Out",
         "0.1 LN1 Output",
         "0.2 Q_Proj Out",
-        "0.18 inv_freq",
-        "0.19 rope_emb_max_grid",
-        "0.19 pids",
-        "0.20 rope_emb",
-        "0.21 cos_before_chunk",
-        "0.21 sin_before_chunk",
-        "0.22 cos_after_chunk",
-        "0.22 sin_after_chunk",
-        "0.25 Q After RoPE",
-        "0.25 K After RoPE",
+        # ViT RoPE checkpoints (Muse only, Origin doesn't have debug info)
+        # "0.18 inv_freq",
+        # "0.19 rope_emb_max_grid",
+        # "0.19 pids",
+        # "0.20 rope_emb",
+        # "0.21 cos_before_chunk",
+        # "0.21 sin_before_chunk",
+        # "0.22 cos_after_chunk",
+        # "0.22 sin_after_chunk",
+        # "0.25 Q After RoPE",
+        # "0.25 K After RoPE",
         # LLM RoPE checkpoints
         "4.R inv_freq",
         "4.R position_ids",
@@ -669,10 +670,6 @@ def test_pipeline_alignment():
         "4.R sin_before_chunk",
         "4.R cos_after_chunk",
         "4.R sin_after_chunk",
-        "4.R cos_before_split",
-        "4.R sin_before_split",
-        "4.R cos_after_split",
-        "4.R sin_after_split",
         "4.R mrope_section",
         "4.R Q After RoPE",
         "4.R K After RoPE",
@@ -709,16 +706,6 @@ def test_pipeline_alignment():
     
     # 需要详细打印值的检查点 (打印 dtype 和前 10 个值)
     rope_detail_checkpoints = {
-        "0.18 inv_freq",
-        "0.19 rope_emb_max_grid",
-        "0.19 pids",
-        "0.20 rope_emb",
-        "0.21 cos_before_chunk",
-        "0.21 sin_before_chunk", 
-        "0.22 cos_after_chunk",
-        "0.22 sin_after_chunk",
-        "0.25 Q After RoPE",
-        "0.25 K After RoPE",
         # LLM RoPE detailed
         "4.R inv_freq",
         "4.R position_ids",
@@ -726,10 +713,6 @@ def test_pipeline_alignment():
         "4.R sin_before_chunk",
         "4.R cos_after_chunk",
         "4.R sin_after_chunk",
-        "4.R cos_before_split",
-        "4.R sin_before_split",
-        "4.R cos_after_split",
-        "4.R sin_after_split",
         "4.R Q After RoPE",
         "4.R K After RoPE",
     }

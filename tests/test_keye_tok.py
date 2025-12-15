@@ -36,6 +36,8 @@ from tests.models.keye_vl_tokenizer_image.image_processing_keye import SiglipIma
 from muse.config import KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
+from PIL import Image, ImageDraw
+
 # No RoPE debug imports needed for final output test
 
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
@@ -43,7 +45,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CKPT = os.environ.get(
     "KEYE_VL_CHECKPOINT",
-    "/mmu_mllm_hdd_2/maosiyang/output/Keye/vq_end2end_video/discrete/run_exp0.0.1_stage1_baseline/step16000/global_step16000/converted"
+    "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.6.6109_stage3/step9500/global_step9500/converted/"
 )
 
 # Path to save extracted tokenizer weights
@@ -129,11 +131,31 @@ def _load_checkpoint_robust(path_str: str, device="cpu") -> Dict[str, torch.Tens
     raise ValueError("No checkpoint found.")
 
 
-def create_dummy_image(size: int = 384) -> Image.Image:
-    """Create a deterministic random image for testing."""
-    rng = np.random.default_rng(seed=42)
-    data = rng.integers(0, 255, (size, size, 3), dtype=np.uint8)
-    return Image.fromarray(data)
+
+def create_dummy_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(255, 255, 255), outline_width=5):
+    """
+    生成一个包含一个圆的 PIL Image 对象，用于测试。
+    
+    :param size: 图像的大小，默认为 (64, 64)
+    :param fill_color: 圆的填充颜色，默认为黑色 (0, 0, 0)
+    :param outline_color: 圆的轮廓颜色，默认为白色 (255, 255, 255)
+    :param outline_width: 圆的轮廓宽度，默认为 5
+    :return: 生成的 PIL Image 对象
+    """
+    # 创建一个新的图像对象
+    image = Image.new('RGB', size, color=(255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    # 计算圆的坐标（图像中心为圆心）
+    x_center, y_center = size[0] // 2, size[1] // 2
+    radius = min(size[0], size[1]) // 2
+    # 绘制圆
+    draw.ellipse([x_center - radius, y_center - radius, x_center + radius, y_center + radius],
+                 fill=fill_color,
+                 outline=outline_color,
+                 width=outline_width)
+    return image
+
+
 
 
 def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, atol=1e-3, print_values=False):
@@ -197,7 +219,7 @@ def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, ato
     diff = (t1 - t2).abs()
     max_diff = diff.max().item()
     mean_diff = diff.mean().item()
-    match_status = "✅ MATCH" if max_diff < atol else "❌ MISMATCH"
+    match_status = "✅ MATCH" if max_diff <= atol else "❌ MISMATCH"
     logger.info(f"{name:<45} | {match_status:<12} | Max: {max_diff:.2e} | Mean: {mean_diff:.2e}")
     
     if print_values:
@@ -481,7 +503,7 @@ def prepare_tokenizer_inputs(ckpt_path: str, device: str, dtype: torch.dtype, im
     Returns pixel_values and image_grid_thw for tokenizer forward pass.
     """
     logger.info("🎨 Generating Random Image...")
-    image = create_dummy_image(size=image_size)
+    image = create_dummy_image()
     
     logger.info("⚙️ Loading ImageProcessor...")
     image_processor = SiglipImageProcessor.from_pretrained(ckpt_path)
@@ -533,31 +555,24 @@ def _run_keye_tokenizer_alignment():
         full_state_dict, save_path, raw_cfg
     )
     
-    # === 3. Initialize Origin KeyeImageTokenizer ===
+    # === 3. Initialize Origin KeyeImageTokenizer (via KeyeForConditionalGeneration) ===
     log_separator("Initializing Origin KeyeImageTokenizer")
-    origin_tokenizer_config = origin_mod.KeyeImageTokenizerConfig.from_pretrained(checkpoint_path)
-    with set_default_dtype(dtype):
-        origin_tokenizer = origin_mod.KeyeImageTokenizer(
-            origin_tokenizer_config,
-            vq_sampling_mode="argmin",
-        ).to(device, dtype)
-    origin_tokenizer.eval()
-    logger.info(f"Origin tokenizer n_q_tokens: {origin_tokenizer.n_q_tokens}")
-
-    # Load weights into Origin tokenizer
-    origin_state_dict = {}
-    for k, v in full_state_dict.items():
-        if k.startswith("visual_tokenizer."):
-            new_k = k[len("visual_tokenizer."):]
-            origin_state_dict[new_k] = v
     
-    missing_o, unexpected_o = origin_tokenizer.load_state_dict(origin_state_dict, strict=False)
-    if missing_o:
-        logger.warning(f"Origin tokenizer missing keys: {len(missing_o)} keys")
-        for k in missing_o[:5]:
-            logger.warning(f"  - {k}")
-    if unexpected_o:
-        logger.warning(f"Origin tokenizer unexpected keys: {len(unexpected_o)} keys")
+    # Load full HF model to get visual_tokenizer - same way as in three-way comparison
+    logger.info("Loading KeyeForConditionalGeneration to extract visual_tokenizer...")
+    origin_full_model = origin_mod.KeyeForConditionalGeneration.from_pretrained(
+        checkpoint_path,
+        _attn_implementation="flash_attention_2",
+        torch_dtype=torch.float16,
+        low_cpu_mem_usage=True
+    )
+    origin_full_model = origin_full_model.to(device).to(torch.bfloat16)
+    origin_full_model.eval()
+    
+    # Use the visual_tokenizer from the full model
+    origin_tokenizer = origin_full_model.visual_tokenizer
+    logger.info(f"Origin tokenizer n_q_tokens: {origin_tokenizer.n_q_tokens}")
+    logger.info(f"Origin tokenizer dtype: {next(origin_tokenizer.parameters()).dtype}")
 
     # === 4. Load Muse KeyeImageTokenizer from saved weights ===
     log_separator("Loading Muse KeyeImageTokenizer from Saved Weights")
@@ -582,12 +597,40 @@ def _run_keye_tokenizer_alignment():
 
     # === 7. Forward Pass ===
     log_separator("Running Forward Pass")
+    vocab_size = raw_cfg.get("vocab_size", 151936)  # Qwen3 默认 vocab_size
+    
     with torch.no_grad():
         logger.info("Running Origin KeyeImageTokenizer Forward...")
         origin_output = origin_tokenizer(pixel_values, image_grid_thw)
         
         logger.info("Running Muse KeyeImageTokenizer Forward...")
         muse_output = muse_tokenizer(pixel_values, image_grid_thw)
+        
+        # === Compare forward_image_tokens indices ===
+        logger.info("\n--- Comparing forward_image_tokens indices ---")
+        
+        # Origin: 手动计算 aligned indices (模拟 KeyeForConditionalGeneration.forward_image_tokens)
+        origin_indices_raw = torch.stack([x_i for x_i in origin_output['indices']], dim=0).T
+        n_q_tokens = tokenizer_cfg.n_q_tokens
+        codebook_size = tokenizer_cfg.codebook_size
+        codebook_offsets = torch.arange(n_q_tokens, device=device)[None] * codebook_size // n_q_tokens
+        origin_aligned_indices = vocab_size + origin_indices_raw + codebook_offsets
+        
+        # Muse: 使用 forward_image_tokens 方法
+        muse_aligned_indices = muse_tokenizer.forward_image_tokens(pixel_values, image_grid_thw, vocab_size)
+        
+        logger.info(f"Origin aligned_indices shape: {origin_aligned_indices.shape}")
+        logger.info(f"Muse aligned_indices shape: {muse_aligned_indices.shape}")
+        
+        # 对比
+        indices_match = torch.equal(origin_aligned_indices, muse_aligned_indices)
+        if indices_match:
+            logger.info("✅ forward_image_tokens indices: EXACT MATCH")
+        else:
+            diff_count = (origin_aligned_indices != muse_aligned_indices).sum().item()
+            logger.info(f"❌ forward_image_tokens indices: MISMATCH ({diff_count} / {origin_aligned_indices.numel()} differ)")
+            logger.info(f"   Origin first 10: {origin_aligned_indices.flatten()[:10].tolist()}")
+            logger.info(f"   Muse first 10: {muse_aligned_indices.flatten()[:10].tolist()}")
 
     # Store final outputs in activations for comparison
     activations["origin"]["Final z_q"] = origin_output["z_q"]
@@ -656,7 +699,302 @@ def _run_keye_tokenizer_alignment():
             if status_o != "MISSING" or status_m != "MISSING":
                 logger.warning(f"⚠️  Missing hook data for {k} (Origin={status_o}, Muse={status_m})")
 
-    # === 9. Final Result ===
+    # === 9. Test forward_image_tokens ===
+    log_separator("Testing forward_image_tokens")
+    
+    # 模拟 VLM 模型的 vocab_size（与 origin 模型对齐）
+    # 从 config 中获取或使用默认值
+    vocab_size = raw_cfg.get("vocab_size", 151936)  # Qwen3 默认 vocab_size
+    logger.info(f"Using vocab_size: {vocab_size}")
+    
+    with torch.no_grad():
+        # Origin 模型的 forward_image_tokens 逻辑（在 KeyeForConditionalGeneration 中）
+        # 这里手动实现同样的逻辑
+        logger.info("Computing Origin forward_image_tokens...")
+        origin_vq_out = origin_tokenizer(pixel_values, image_grid_thw)
+        origin_indices = torch.stack([x_i for x_i in origin_vq_out['indices']], dim=0).T
+        n_q_tokens_origin = tokenizer_cfg.n_q_tokens
+        codebook_size_origin = tokenizer_cfg.codebook_size
+        device = next(iter(origin_tokenizer.parameters())).device
+        codebook_offsets_origin = torch.arange(n_q_tokens_origin, device=device)[None] * codebook_size_origin // n_q_tokens_origin
+        origin_aligned_indices = vocab_size + origin_indices + codebook_offsets_origin
+        
+        # Muse 模型的 forward_image_tokens
+        logger.info("Computing Muse forward_image_tokens...")
+        muse_aligned_indices = muse_tokenizer.forward_image_tokens(pixel_values, image_grid_thw, vocab_size)
+    
+    logger.info(f"Origin aligned_indices shape: {origin_aligned_indices.shape}")
+    logger.info(f"Muse aligned_indices shape: {muse_aligned_indices.shape}")
+    
+    # 对比 forward_image_tokens 输出
+    forward_image_tokens_match, max_diff = compare_tensors_verbose(
+        "forward_image_tokens", origin_aligned_indices, muse_aligned_indices,
+        atol=0, print_values=True  # indices 应该完全匹配
+    )
+    
+    if forward_image_tokens_match:
+        logger.info("✅ forward_image_tokens outputs match exactly!")
+    else:
+        all_matches = False
+        logger.info("❌ forward_image_tokens outputs differ!")
+        # 打印更多调试信息
+        diff_mask = origin_aligned_indices != muse_aligned_indices
+        num_diff = diff_mask.sum().item()
+        logger.info(f"   -> Number of different indices: {num_diff} / {origin_aligned_indices.numel()}")
+        if num_diff > 0 and num_diff <= 20:
+            diff_positions = torch.where(diff_mask)
+            for i in range(min(num_diff, 10)):
+                pos = tuple(d[i].item() for d in diff_positions)
+                logger.info(f"   -> Position {pos}: Origin={origin_aligned_indices[pos].item()}, Muse={muse_aligned_indices[pos].item()}")
+
+    # === 10. Three-way comparison: HF Model vs Debug PT vs Muse Model ===
+    log_separator("Three-way Comparison: HF Model vs Debug PT vs Muse Model")
+    
+    debug_pt_path = Path(checkpoint_path) / "debug" / "vq_outputs.pt"
+    
+    # Try to import HF model (recovlm)
+    hf_model = None
+    hf_processor = None
+    try:
+        from tests.models.keye_vl_tokenizer_image.modeling_keye_origin import KeyeForConditionalGeneration
+        from tests.models.keye_vl_tokenizer_image.keye_vl_utils import process_vision_info
+        from transformers import AutoProcessor
+        
+        logger.info("Loading HF KeyeForConditionalGeneration model...")
+        hf_model = KeyeForConditionalGeneration.from_pretrained(
+            checkpoint_path,
+            _attn_implementation="flash_attention_2",
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True
+        )
+        hf_model = hf_model.to(device).to(torch.bfloat16)
+        hf_model.eval()
+        logger.info(f"HF model loaded, dtype: {next(hf_model.parameters()).dtype}")
+        
+        hf_processor = AutoProcessor.from_pretrained(checkpoint_path, trust_remote_code=True)
+        logger.info("HF processor loaded")
+        
+    except ImportError as e:
+        logger.warning(f"⚠️  Could not import recovlm: {e}")
+        logger.info("Skipping HF model comparison, will only compare Debug PT vs Muse")
+    except Exception as e:
+        logger.warning(f"⚠️  Error loading HF model: {e}")
+        logger.info("Skipping HF model comparison, will only compare Debug PT vs Muse")
+    
+    if debug_pt_path.exists():
+        logger.info(f"\nLoading debug outputs from: {debug_pt_path}")
+        debug_outputs = torch.load(debug_pt_path, map_location=device)
+        
+        logger.info(f"Debug outputs keys: {list(debug_outputs.keys())}")
+        
+        # Use pixel_values and image_grid_thw from debug file as input
+        debug_pixel_values_orig_dtype = debug_outputs["pixel_values"].dtype
+        debug_pixel_values = debug_outputs["pixel_values"].to(device)
+        debug_image_grid_thw = debug_outputs["image_grid_thw"].to(device)
+        
+        logger.info(f"Debug pixel_values shape: {debug_pixel_values.shape}")
+        logger.info(f"Debug pixel_values dtype (original): {debug_pixel_values_orig_dtype}")
+        logger.info(f"Debug image_grid_thw: {debug_image_grid_thw.tolist()}")
+        
+        # Print dtypes of all debug outputs
+        logger.info("\nDebug outputs dtypes:")
+        for k, v in debug_outputs.items():
+            if isinstance(v, torch.Tensor):
+                logger.info(f"   {k}: {v.dtype}, shape: {v.shape}")
+            elif isinstance(v, list) and v and isinstance(v[0], torch.Tensor):
+                logger.info(f"   {k}: list of {len(v)} tensors, first dtype: {v[0].dtype}")
+        
+        # ===== Run HF Model (if available) =====
+        hf_output = None
+        if hf_model is not None:
+            log_separator("Running HF Model with Debug Inputs")
+            
+            # Convert pixel_values to match HF model dtype
+            hf_dtype = next(hf_model.parameters()).dtype
+            hf_pixel_values = debug_pixel_values.to(dtype=hf_dtype)
+            
+            logger.info(f"HF model dtype: {hf_dtype}")
+            logger.info(f"HF pixel_values dtype: {hf_pixel_values.dtype}")
+            
+            with torch.no_grad():
+                # HF model's visual_tokenizer forward
+                hf_output = hf_model.visual_tokenizer(hf_pixel_values, debug_image_grid_thw)
+            
+            logger.info("HF model forward complete")
+            logger.info(f"HF output keys: {list(hf_output.keys())}")
+        
+        # ===== Run Muse Model =====
+        log_separator("Running Muse Model with Debug Inputs")
+        
+        muse_weight_dtype = next(muse_tokenizer.parameters()).dtype
+        logger.info(f"Muse tokenizer weight dtype: {muse_weight_dtype}")
+        
+        muse_pixel_values = debug_pixel_values.to(dtype=muse_weight_dtype)
+        logger.info(f"Muse pixel_values dtype: {muse_pixel_values.dtype}")
+        
+        with torch.no_grad():
+            muse_debug_output = muse_tokenizer(muse_pixel_values, debug_image_grid_thw)
+        
+        logger.info("Muse model forward complete")
+        
+        # ===== Three-way Comparison =====
+        log_separator("Comparison Results")
+        
+        comparison_keys = [
+            ("image_embeds", "x", "x"),        # (debug_key, hf_key, muse_key)
+            ("z_e", "z_e", "z_e"),
+            ("z_q", "z_q", "z_q"),
+            ("codebook_loss", "codebook_loss", "codebook_loss"),
+            ("commitment_loss", "commitment_loss", "commitment_loss"),
+            ("indices", "indices", "indices"),
+        ]
+        
+        debug_vs_hf_match = True
+        debug_vs_muse_match = True
+        hf_vs_muse_match = True
+        
+        for debug_key, hf_key, muse_key in comparison_keys:
+            logger.info(f"\n=== Comparing: {debug_key} ===")
+            
+            # Get values
+            debug_val = debug_outputs.get(debug_key)
+            hf_val = hf_output.get(hf_key) if hf_output else None
+            muse_val = muse_debug_output.get(muse_key)
+            
+            # Handle indices specially (list of tensors -> stacked tensor)
+            if debug_key == "indices":
+                if isinstance(debug_val, list):
+                    debug_val = torch.stack(debug_val, dim=0)
+                if hf_val is not None and isinstance(hf_val, list):
+                    hf_val = torch.stack(hf_val, dim=0)
+                if isinstance(muse_val, list):
+                    muse_val = torch.stack(muse_val, dim=0)
+                    
+                if debug_val is not None:
+                    logger.info(f"   Debug indices shape: {debug_val.shape}")
+                if hf_val is not None:
+                    logger.info(f"   HF indices shape: {hf_val.shape}")
+                if muse_val is not None:
+                    logger.info(f"   Muse indices shape: {muse_val.shape}")
+            
+            # Determine tolerance
+            if debug_key in ["codebook_loss", "commitment_loss"]:
+                atol = 1e-2
+            elif debug_key == "indices":
+                atol = 0
+            else:
+                atol = 2e-2
+            
+            # Compare: Debug PT vs HF Model
+            if hf_val is not None and debug_val is not None:
+                is_match, _ = compare_tensors_verbose(
+                    f"Debug PT vs HF: {debug_key}",
+                    debug_val, hf_val,
+                    atol=atol, print_values=True
+                )
+                if not is_match:
+                    debug_vs_hf_match = False
+            
+            # Compare: Debug PT vs Muse Model
+            if debug_val is not None and muse_val is not None:
+                is_match, _ = compare_tensors_verbose(
+                    f"Debug PT vs Muse: {debug_key}",
+                    debug_val, muse_val,
+                    atol=atol, print_values=True
+                )
+                if not is_match:
+                    debug_vs_muse_match = False
+                    all_matches = False
+            
+            # Compare: HF Model vs Muse Model
+            if hf_val is not None and muse_val is not None:
+                is_match, _ = compare_tensors_verbose(
+                    f"HF vs Muse: {debug_key}",
+                    hf_val, muse_val,
+                    atol=atol, print_values=True
+                )
+                if not is_match:
+                    hf_vs_muse_match = False
+        
+        # ===== Additional Verification: Run Origin Tokenizer with Debug Inputs =====
+        log_separator("Verification: Origin Tokenizer with Debug Inputs")
+        
+        origin_pixel_values = debug_pixel_values.to(dtype=next(origin_tokenizer.parameters()).dtype)
+        logger.info(f"Origin tokenizer dtype: {next(origin_tokenizer.parameters()).dtype}")
+        logger.info(f"Origin pixel_values dtype: {origin_pixel_values.dtype}")
+        
+        with torch.no_grad():
+            origin_debug_output = origin_tokenizer(origin_pixel_values, debug_image_grid_thw)
+        
+        logger.info("Origin tokenizer forward complete")
+        
+        # Compare Origin output with Debug PT
+        logger.info("\n=== Comparing Origin Tokenizer output with Debug PT ===")
+        origin_indices = origin_debug_output.get("indices")
+        if isinstance(origin_indices, list):
+            origin_indices = torch.stack(origin_indices, dim=0)
+        
+        debug_indices = debug_outputs.get("indices")
+        if isinstance(debug_indices, list):
+            debug_indices = torch.stack(debug_indices, dim=0)
+        
+        logger.info(f"Origin indices shape: {origin_indices.shape}")
+        logger.info(f"Debug PT indices shape: {debug_indices.shape}")
+        logger.info(f"Origin indices first 10: {origin_indices.flatten()[:10].tolist()}")
+        logger.info(f"Debug PT indices first 10: {debug_indices.flatten()[:10].tolist()}")
+        
+        origin_vs_debug_match = torch.equal(origin_indices, debug_indices)
+        logger.info(f"\nOrigin vs Debug PT indices: {'✅ EXACT MATCH' if origin_vs_debug_match else '❌ MISMATCH'}")
+        
+        if not origin_vs_debug_match:
+            logger.warning("⚠️  This confirms: Debug PT outputs were NOT generated from the saved pixel_values!")
+            logger.warning("⚠️  The debug PT file may be corrupted or from a different input/run.")
+        
+        # Also compare HF vs Origin to verify they match
+        if hf_output is not None:
+            hf_indices = hf_output.get("indices")
+            if isinstance(hf_indices, list):
+                hf_indices = torch.stack(hf_indices, dim=0)
+            
+            hf_vs_origin_match = torch.equal(hf_indices, origin_indices)
+            logger.info(f"HF vs Origin indices: {'✅ EXACT MATCH' if hf_vs_origin_match else '❌ MISMATCH'}")
+            
+            muse_indices = muse_debug_output.get("indices")
+            if isinstance(muse_indices, list):
+                muse_indices = torch.stack(muse_indices, dim=0)
+            
+            origin_vs_muse_match = torch.equal(origin_indices, muse_indices)
+            logger.info(f"Origin vs Muse indices: {'✅ EXACT MATCH' if origin_vs_muse_match else '❌ MISMATCH'}")
+        
+        # Summary
+        log_separator("Three-way Comparison Summary")
+        if hf_output is not None:
+            logger.info(f"Debug PT vs HF Model:   {'✅ MATCH' if debug_vs_hf_match else '❌ MISMATCH'}")
+        logger.info(f"Debug PT vs Muse Model: {'✅ MATCH' if debug_vs_muse_match else '❌ MISMATCH'}")
+        if hf_output is not None:
+            logger.info(f"HF Model vs Muse Model: {'✅ MATCH' if hf_vs_muse_match else '❌ MISMATCH'}")
+        
+        logger.info("")
+        logger.info("=== Key Findings ===")
+        if hf_output is not None and hf_vs_origin_match and origin_vs_muse_match:
+            logger.info("✅ HF, Origin, and Muse all produce IDENTICAL outputs with same inputs!")
+            logger.info("   → Muse implementation is CORRECT")
+            if not origin_vs_debug_match:
+                logger.info("❌ But Debug PT file is INCONSISTENT (saved outputs don't match saved inputs)")
+                logger.info("   → Debug PT file needs to be regenerated")
+        
+        # Cleanup HF model to free memory
+        if hf_model is not None:
+            del hf_model
+            del hf_processor
+            torch.cuda.empty_cache()
+            logger.info("\nCleaned up HF model from memory")
+        
+    else:
+        logger.warning(f"⚠️  Debug file not found: {debug_pt_path}")
+        logger.info("Skipping three-way comparison test.")
+
+    # === 11. Final Result ===
     log_separator("Test Result")
     if all_matches:
         logger.info("✅✅✅ SUCCESS: All KeyeImageTokenizer outputs match within tolerance!")

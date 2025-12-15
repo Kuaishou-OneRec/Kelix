@@ -297,6 +297,43 @@ class KeyeTokenizerEnd2EndImage(Model):
         return self.model
 
 
+
+    def generate_positional_id(self,thw):
+        """
+        将3x1xL的张量转换为1D positional_id矩阵
+        
+        参数:
+            thw: 形状为(3, 1, L)的PyTorch张量
+        
+        返回:
+            positional_id: 形状为(L,)的1D张量，包含连续的序列编号
+        """
+        # 检查输入形状是否正确
+        assert thw.shape[0] == 3 and thw.shape[1] == 1, "输入必须是3x1xL的张量"
+        
+        # 取出第一位置并flatten
+        seq = thw[0, 0, :].flatten()  # 形状变为(L,)
+        
+        # 识别子序列边界（假设以0为新子序列的开始）
+        subsequence_starts = torch.where(seq == 0)[0].tolist()
+        L = seq.numel()
+        positional_id = torch.zeros_like(seq, dtype=torch.long)
+        
+        # 处理每个子序列
+        for i, start in enumerate(subsequence_starts):
+            # 确定当前子序列的结束位置
+            if i < len(subsequence_starts) - 1:
+                end = subsequence_starts[i + 1]
+            else:
+                end = L
+            
+            # 为当前子序列生成连续编号
+            subsequence_length = end - start
+            positional_id[start:end] = torch.arange(subsequence_length, dtype=torch.long)
+        
+        return positional_id
+
+
     def get_rope_index_slowfast(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -358,11 +395,6 @@ class KeyeTokenizerEnd2EndImage(Model):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-        spatial_merge_size = self.config.vision_config.spatial_merge_size
-        image_token_id = self.config.image_token_id
-        video_token_id = self.config.video_token_id
-        fast_video_token_id = self.config.fast_video_token_id
-        vision_start_token_id = self.config.vision_start_token_id
         mrope_position_deltas = []
         if attention_mask is not None:
             position_ids = attention_mask.long().cumsum(-1) - 1
@@ -436,7 +468,7 @@ class KeyeTokenizerEnd2EndImage(Model):
 
 
 
-            n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
+            n_image_tokens = (input_ids == self.image_token_id).sum().item()
             n_image_features = image_embeds.shape[0]
 
 
@@ -446,7 +478,7 @@ class KeyeTokenizerEnd2EndImage(Model):
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, slow features {n_image_features - fast_image_embeds.shape[0]}, fast features {fast_image_embeds.shape[0]}"
                 )
-            mask = (input_ids == self.config.image_token_id)
+            mask = (input_ids == self.image_token_id)
             mask_unsqueezed = mask.unsqueeze(-1)
             mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
             image_mask = mask_expanded.to(inputs_embeds.device)
@@ -459,27 +491,18 @@ class KeyeTokenizerEnd2EndImage(Model):
 
 
         #maosiyang: for debug infer
-        if position_id is None:
-            position_id , _ = self.get_rope_index_slowfast(
+        if position_ids is None:
+            position_ids_3d, _ = self.get_rope_index_slowfast(
                 input_ids=input_ids,
                 image_grid_thw=image_grid_thw,
                 video_grid_thw=video_grid_thw,
                 fast_video_grid_thw=fast_video_grid_thw,
                 attention_mask=attention_mask,
             )
-
-        if position_ids.ndim == 3 and position_ids.shape[0] == 3:
-            position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+            position_ids = self.generate_positional_id(position_ids_3d).to(position_ids_3d)[None, :] # 1 x l, 这个是用来计算rope的东西
         else:
             raise ValueError("position id wrong!")
 
-        if self.use_multimodal_rope:
-            if position_ids.dim()==2:
-                #from inside old qwen 3, using 3d rope
-                position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
-
-        else:
-            raise ValueError("position id wrong!")
 
         # Call through Qwen3Model.forward which delegates to TransformerDecoder
         logits = self.model(

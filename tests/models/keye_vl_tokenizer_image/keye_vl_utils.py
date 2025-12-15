@@ -35,7 +35,7 @@ IMAGE_FACTOR = 28
 # min tokens per image
 MIN_TOKENS = 4
 # max tokens per image
-MAX_TOKENS = 20160
+MAX_TOKENS = 20480
 MIN_PIXELS = MIN_TOKENS * IMAGE_FACTOR * IMAGE_FACTOR # 4 * 28 * 28 = 3,136
 MAX_PIXELS = MAX_TOKENS * IMAGE_FACTOR * IMAGE_FACTOR # 20480 * 28 * 28 = 16,056,320
 MAX_RATIO = 200
@@ -49,11 +49,9 @@ VIDEO_MIN_PIXELS = VIDEO_MIN_TOKENS * IMAGE_FACTOR * IMAGE_FACTOR # 32 * 28 * 28
 # max pixels per video frame
 VIDEO_MAX_PIXELS = VIDEO_MAX_TOKENS * IMAGE_FACTOR * IMAGE_FACTOR # 768 * 28 * 28 = 602,112
 # max total pixels per video
-VIDEO_TOTAL_PIXELS = 66560 * IMAGE_FACTOR * IMAGE_FACTOR # 66,560 * 28 * 28 = 52,183,040
+VIDEO_TOTAL_PIXELS = 65536 * IMAGE_FACTOR * IMAGE_FACTOR # 65,536 * 28 * 28 = 51,380,224
 # default fps
 FPS = 2.0
-# group size along time: enforce every 2 frames as a group
-FRAME_FACTOR = 2
 
 FAST_TOKEN_RATIO = 0.3
 
@@ -186,24 +184,9 @@ def smart_nframes(
     # 计算每帧使用最少token的情况下，能吃多少帧，这个是用来兜底的
     # 是否允许用户低于这个限制？
     # print("cjx smart nfram debug VIDEO_TOTAL_PIXELS token num in llm side is {}".format(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS)//28//28))
-    max_frames_by_pixels = int(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS) / ele.get("min_pixels", VIDEO_MIN_PIXELS))
+    max_frames = int(ele.get("video_total_pixels", VIDEO_TOTAL_PIXELS) / ele.get("min_pixels", VIDEO_MIN_PIXELS))
     fps_nframes = int(total_frames / video_fps * fps) # 换算为秒数，之后计算希望抽多少帧
-    
-    # 考虑用户配置的 max_frames 参数
-    if "max_frames" in ele:
-        max_frames = min(ele["max_frames"], max_frames_by_pixels)
-    else:
-        max_frames = max_frames_by_pixels
-    
     nframes = min(fps_nframes, max_frames)
-    # 强制“每两帧一组”：尽量返回偶数帧（当且仅当存在≥2帧时）
-    if nframes >= FRAME_FACTOR and (nframes % FRAME_FACTOR != 0):
-        nframes -= 1  # 向下取偶，避免超过 max_frames/pixels 约束
-    # 最小下限：如果视频本身只有1帧，则保留1；否则至少返回2帧
-    if total_frames >= FRAME_FACTOR:
-        nframes = max(nframes, FRAME_FACTOR)
-    else:
-        nframes = min(nframes, total_frames)
     return nframes
 
 
@@ -312,13 +295,6 @@ def _read_video_torchvision_slowfast(
     selected_indices = torch.linspace(0, total_frames - 1, total_nframes_number).round().long()
     selected_time_position = total_frames_time_position[selected_indices]
     selected_frames = video[selected_indices]
-    # 如果只有1帧，复制一帧，保证偶数帧
-    if selected_frames.size(0) % FRAME_FACTOR != 0:
-        pad = FRAME_FACTOR - (selected_frames.size(0) % FRAME_FACTOR)
-        last_frame = selected_frames[-1:].repeat(pad, 1, 1, 1)
-        selected_frames = torch.cat([selected_frames, last_frame], dim=0)
-        last_ts = selected_time_position[-1:]
-        selected_time_position = torch.cat([selected_time_position, last_ts.repeat(pad)], dim=0)
 
     ##### extract key frames start ######
     # Step#1，对选中的图，假设都为slow，先resize到28*28的倍数，但是会先在256视图下去进行比较
@@ -339,7 +315,7 @@ def _read_video_torchvision_slowfast(
     ).float()
     
     # Step#2 对选中的图，筛选出其中关键帧部分，其余为fast
-    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames_allslow(selected_frames, selected_frames_extract)
+    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames, selected_frames_extract)
     ##### extract key frames start ######
 
     return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order
@@ -499,18 +475,6 @@ def extract_slow_fast_frames(selected_frames, selected_frames_extract):
     return slow_frames, fast_frames, slow_fast_order.tolist()
 
 
-def extract_slow_fast_frames_allslow(selected_frames, selected_frames_extract):
-    # 将所有帧都视为 slow 帧，fast 为空（形状为 0 的张量以兼容后续判断）
-    num_frames = selected_frames.size(0)
-    slow_mask = torch.ones(size=(num_frames, ), dtype=torch.bool)
-
-    slow_frames = selected_frames[slow_mask]
-    fast_frames = selected_frames[~slow_mask]  # 形状为 (0, C, H, W)
-
-    slow_fast_order = torch.zeros(size=(num_frames, ), dtype=torch.long)
-
-    return slow_frames, fast_frames, slow_fast_order.tolist()
-
 def _read_video_decord_slowfast(
         ele: dict,
 ) -> torch.Tensor:
@@ -548,13 +512,6 @@ def _read_video_decord_slowfast(
     selected_frames = vr.get_batch(selected_indices.tolist()).asnumpy()
     selected_frames = torch.tensor(selected_frames).permute(0, 3, 1, 2)
     selected_time_position = total_frames_time_position[selected_indices]
-    # 如果只有1帧，复制一帧，保证偶数帧
-    if selected_frames.size(0) % FRAME_FACTOR != 0:
-        pad = FRAME_FACTOR - (selected_frames.size(0) % FRAME_FACTOR)
-        last_frame = selected_frames[-1:].repeat(pad, 1, 1, 1)
-        selected_frames = torch.cat([selected_frames, last_frame], dim=0)
-        last_ts = selected_time_position[-1:]
-        selected_time_position = torch.cat([selected_time_position, last_ts.repeat(pad)], dim=0)
 
     ##### extract key frames start ######
     # Step#1，对选中的图，假设都为slow，先resize到28*28的倍数，但是会先在256视图下去进行比较
@@ -575,7 +532,7 @@ def _read_video_decord_slowfast(
     ).float()
     
     # Step#2 对选中的图，筛选出其中关键帧部分，其余为fast
-    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames_allslow(selected_frames, selected_frames_extract)
+    slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(selected_frames, selected_frames_extract)
     ##### extract key frames start ######
 
     return slow_frames, fast_frames, selected_time_position.tolist(), slow_fast_order
@@ -612,9 +569,9 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
             slow_frames, fast_frames, time_position, slow_fast_order = VIDEO_READER_BACKENDS[video_reader_backend](ele)
         except Exception as e:
             print(e)
-            print(f"bad processing with video_reader_backend={video_reader_backend}, ele={ele}, fall back to _read_video_torchvision_slowfast")
-            slow_frames, fast_frames, time_position, slow_fast_order = _read_video_torchvision_slowfast(ele)
-            print(f"ele={ele}, fall back to _read_video_torchvision_slowfast and successfully decode")
+            print(f"bad processing with video_reader_backend={video_reader_backend}, ele={ele}")
+            raise e
+
     else:
         assert isinstance(ele["video"], (list, tuple))
         process_info = ele.copy()
@@ -630,16 +587,11 @@ def fetch_video(ele: dict, image_factor: int = IMAGE_FACTOR, slowfast: bool = Tr
                     fetch_image({"image": video_element, **process_info}, size_factor=image_factor, is_video = True)
                 )
         total_frames = len(images)
-        # 保证帧数为偶数：若为奇数或仅有1帧，复制末帧至偶数
-        if total_frames % FRAME_FACTOR != 0:
-            pad = FRAME_FACTOR - (total_frames % FRAME_FACTOR)
-            images.extend([images[-1]] * pad)
-            total_frames = len(images)
         
         tensor_images = [torch.from_numpy(np.array(pil_image)).permute(2, 0, 1) for pil_image in images]
         tensor_images = torch.stack(tensor_images, dim=0)
 
-        slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames_allslow(tensor_images, tensor_images.clone())
+        slow_frames, fast_frames, slow_fast_order = extract_slow_fast_frames(tensor_images, tensor_images.clone())
         time_position = None
     
     ### 计算slow fast的token量 begin ###
@@ -786,7 +738,7 @@ def process_vision_info(
     return image_inputs, video_inputs
 
 
-def test1():
+if __name__ == "__main__":
     block = {
         "type": "video",
         "video": "/llm_reco/luoxinchen/dataset/InHouse/Photo/20250215/480p_60s_4fps_0215_0316/5438/155507845438.mp4",
@@ -795,22 +747,3 @@ def test1():
     for _ in range(10):
         fetch_video(block)
     print(time.time() - start)
-
-
-def test2():
-    from recovlm.utils.ds_utils import print_input_info
-    ele={'type': 'video', 'video': '/mmu_mllm_hdd_2/compress_video_path/zhouyang12/downlaod/youtube/data19/ytb/task2_batch4_part106/video/oP6PR4KfH0A.mkv', 'video_total_pixels': 3880000, 'min_pixels': 37632, 'max_pixels': 602112, 'fps': 2.0, 'min_frames': 2, 'max_frames': 40}
-    # slowfast_decord
-    # ele = {'type': 'video', 'video': '/mmu_mllm_hdd_2/compress_video_path/luoxinchen/dataset/LLaVA-Video-178K/1_2_m_youtube_v0_1/liwei_youtube_videos/videos/hdvila/RmkLa7AIfSU.mkv', 'video_total_pixels': 3880000, 'min_pixels': 37632, 'max_pixels': 602112, 'fps': 2.0, 'min_frames': 2, 'max_frames': 40}
-    res1 = _read_video_torchvision_slowfast(ele)
-    res2 = _read_video_decord_slowfast(ele)
-    print_input_info(
-        {
-            # "res1": res1,
-            "res2": res2
-        }
-    )
-
-
-if __name__ == "__main__":
-    test2()
