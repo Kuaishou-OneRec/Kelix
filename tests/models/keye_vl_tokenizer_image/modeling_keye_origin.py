@@ -1867,6 +1867,10 @@ class KeyeRotaryEmbedding(nn.Module):
         if "dynamic" in self.rope_type:
             self._dynamic_frequency_update(position_ids, device=x.device)
 
+        # Debug: store inv_freq and position_ids for comparison
+        _DEBUG_ROPE_OUTPUTS["inv_freq"] = self.inv_freq.detach()
+        _DEBUG_ROPE_OUTPUTS["position_ids"] = position_ids.detach()
+
         # Core RoPE block. In contrast to other models, Keye has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
@@ -2597,9 +2601,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.dim() == 2:
-            print(f"[Origin KeyeModel DEBUG] position_ids before expand: shape={position_ids.shape}, sample={position_ids[:, :10]}")
             position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
-            print(f"[Origin KeyeModel DEBUG] position_ids after expand: shape={position_ids.shape}, sample={position_ids[:, :, :10]}")
 
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
@@ -2607,12 +2609,8 @@ class Qwen3Model(Qwen3PreTrainedModel):
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
-        print(f"[Origin KeyeModel DEBUG] rotary_emb inv_freq shape={self.rotary_emb.inv_freq.shape}")
-        print(f"[Origin KeyeModel DEBUG] rotary_emb inv_freq first 10: {self.rotary_emb.inv_freq[:10].tolist()}")
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
         cos, sin = position_embeddings
-        print(f"[Origin KeyeModel DEBUG] rotary_emb output cos shape={cos.shape}, sin shape={sin.shape}")
-        print(f"[Origin KeyeModel DEBUG] cos sample first 10: {cos[0, 0, 0, :10].tolist() if cos.dim() >= 4 else cos.flatten()[:10].tolist()}")
 
         # shard hidden_states & position_embeddings for sequence parallel
         if get_sequence_parallel_world_size() > 1:
@@ -3566,22 +3564,10 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     attention_mask,
                 )
                 self.rope_deltas = rope_deltas
-                print(f"[Origin DEBUG] position_3d_ids shape: {position_3d_ids.shape}")
-                print(f"[Origin DEBUG] position_3d_ids sample: {position_3d_ids[:, :2, :10] if position_3d_ids.shape[0] >= 3 else position_3d_ids}")
                 position_ids = generate_positional_id(position_3d_ids).to(position_3d_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
-                print(f"[Origin DEBUG] position_ids after generate_positional_id shape: {position_ids.shape}")
-                print(f"[Origin DEBUG] position_ids sample: {position_ids[:, :10]}")
-                print(f"[Origin DEBUG] Final position_ids to model shape: {position_ids.shape}")
-                print(f"[Origin DEBUG] Final position_ids to model sample: {position_ids[:, :10]}")
         elif position_ids.ndim == 3 and position_ids.shape[0] == 3:
             # 训练走这个分支
-            print(f"[Origin DEBUG] Training: input position_ids shape: {position_ids.shape}")
-            print(f"[Origin DEBUG] Training: input position_ids sample: {position_ids[:, :2, :10]}")
             position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
-            print(f"[Origin DEBUG] Training: position_ids after generate_positional_id shape: {position_ids.shape}")
-            print(f"[Origin DEBUG] Training: position_ids sample: {position_ids[:, :10]}")
-            print(f"[Origin DEBUG] Training: Final position_ids to model shape: {position_ids.shape}")
-            print(f"[Origin DEBUG] Training: Final position_ids to model sample: {position_ids[:, :10]}")
         # print(f"position_id{position_ids.shape}s={position_ids}")
         
         # else:

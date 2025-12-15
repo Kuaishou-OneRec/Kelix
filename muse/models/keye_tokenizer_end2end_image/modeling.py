@@ -499,13 +499,7 @@ class KeyeTokenizerEnd2EndImage(Model):
                 fast_video_grid_thw=fast_video_grid_thw,
                 attention_mask=attention_mask,
             )
-            print(f"[Muse DEBUG] position_ids_3d shape: {position_ids_3d.shape}")
-            print(f"[Muse DEBUG] position_ids_3d sample: {position_ids_3d[:, :2, :10] if position_ids_3d.shape[0] >= 3 else position_ids_3d}")
             position_ids = self.generate_positional_id(position_ids_3d).to(position_ids_3d)[None, :] # 1 x l, 这个是用来计算rope的东西
-            print(f"[Muse DEBUG] position_ids after generate_positional_id shape: {position_ids.shape}")
-            print(f"[Muse DEBUG] position_ids sample: {position_ids[:, :10]}")
-            print(f"[Muse DEBUG] Final position_ids to model shape: {position_ids.shape}")
-            print(f"[Muse DEBUG] Final position_ids to model sample: {position_ids[:, :10]}")
         else:
             raise ValueError("position id wrong!")
 
