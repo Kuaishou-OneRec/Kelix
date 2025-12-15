@@ -106,14 +106,12 @@ def generate_circle_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(
 
 
 def test_image_generation_cust():
-    messages = [
-           
-        {
+    messages = [{
         "role": "user",
         "content": [
             {"type": "image", "image": generate_circle_image()}
             {"type": "text", "text": " What's in the image?"},
-        ],
+        ]
     }]
     inputs = process_message(messages)
     outputs = model(**inputs)
