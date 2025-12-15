@@ -22,6 +22,7 @@ class VectorQuantizer(nn.Module):
                 
                 ):
         super(VectorQuantizer, self).__init__()
+        # TODO: remove unused code
         print(f"[INFO] VectorQuantizer.__init__: sampling_mode={sampling_mode}, temperature={temperature}, split_voc={split_voc}, add_voc_reducer={add_voc_reducer}, split_voc_index={split_voc_index}")
         self.embedding_dim = embedding_dim
         self.num_embeddings = num_embeddings
@@ -37,6 +38,7 @@ class VectorQuantizer(nn.Module):
         # Initialize the codebook
         self.embedding = nn.Embedding(num_embeddings, init_embedding_dim)
 
+        # Embedding table before simvq, it will not be updated
         for p in self.embedding.parameters():
             p.requires_grad = False
 
@@ -74,6 +76,7 @@ class VectorQuantizer(nn.Module):
         print(f"train code book embeddings.")
         for p in self.embedding.parameters():
             p.requires_grad = True
+
     @property
     def current_temperature(self):
         """Get current temperature as a tensor on the correct device"""
@@ -83,7 +86,7 @@ class VectorQuantizer(nn.Module):
     def _get_indices_argmin(self, distances):
         """Traditional argmin selection"""
         return torch.argmin(distances, dim=1)
-    
+
     def _get_indices_softmax(self, distances):
         """Softmax sampling with temperature"""
         # Convert distances to similarities (negative distances)
@@ -107,7 +110,7 @@ class VectorQuantizer(nn.Module):
         #     indices = torch.argmax(probs, dim=1)
             
         return indices, probs
-    
+
     def update_temperature(self):
         """Update temperature with decay (call this once per training step)"""
         # Always update temperature when called (we only call this during training)
