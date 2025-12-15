@@ -21,24 +21,24 @@ from PIL import Image
 
 # === 导入 Muse 模型 ===
 from muse.models.keye_tokenizer_end2end_image import modeling as muse_mod
-from tests.models.keye_tokenizer_image.modeling_keye_origin import KeyeTokenizerEnd2EndImage as origin_mod
-from tests.models.keye_tokenizer_image.image_processing_keye import KeyeVisionImageProcessor
+from tests.models.keye_vl_tokenizer_image.modeling_keye_origin import KeyeForConditionalGeneration as origin_mod
+from tests.models.keye_vl_tokenizer_image.image_processing_keye import KeyeVisionImageProcessor
 from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
 # 导入 Origin 模型的 RoPE debug 变量
-from tests.models.keye_tokenizer_image.modeling_keye_origin import _DEBUG_ROPE_OUTPUTS as ORIGIN_ROPE_DEBUG
+from tests.models.keye_vl_tokenizer_image.modeling_keye_origin import _DEBUG_ROPE_OUTPUTS as ORIGIN_ROPE_DEBUG
 
 # === 导入 Processor 相关 ===
 from transformers import AutoTokenizer
 # 假设 KeyeProcessor 在 muse.models.keye.modular_Keye，如果不是请修改路径
 # 或者将 KeyeProcessor 类定义直接粘贴在脚本上方
 try:
-    from muse.models.keye_tokenizer_image.processing_keye import KeyeProcessor
+    from tests.models.keye_vl_tokenizer_image.processing_keye import KeyeProcessor
 except ImportError:
     # 如果找不到路径，请将你刚才发的 KeyeProcessor 代码保存为 modular_Keye.py 并放在同级目录
     sys.path.append(os.getcwd())
-    from muse.models.keye_tokenizer_image.processing_keye import KeyeProcessor
+    from tests.models.keye_vl_tokenizer_image.processing_keye import KeyeProcessor
 
 # 配置日志
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
