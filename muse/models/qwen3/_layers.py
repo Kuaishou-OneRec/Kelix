@@ -294,29 +294,6 @@ class Qwen3Attention(nn.Module):
 
 
 class MultimodalRotaryEmbedding(nn.Module):
-    """
-    3D Multimodal Rotary Position Embedding for vision-language models (Keye/Qwen2-VL style).
-    
-    This implements the multimodal RoPE where position_ids has 3 components:
-    temporal, height, and width. The embedding is split into sections and
-    different position indices are applied to different sections.
-    
-    Reference: https://qwenlm.github.io/blog/qwen2-vl/
-    
-    The key insight is that for multimodal inputs:
-    - Visual tokens have 3D positions (temporal, height, width)
-    - Text tokens have 1D positions (same value repeated for all 3 dimensions)
-    - The head_dim is split into sections, each section using a different position dimension
-    
-    Args:
-        dim (int): Embedding dimension (head_dim)
-        max_seq_len (int): Maximum sequence length
-        base (float): RoPE base frequency (theta)
-        mrope_section (List[int]): Section sizes for [temporal, height, width].
-            E.g., [16, 24, 24] means 16 dims for temporal, 24 for height, 24 for width.
-            Note: sum(mrope_section) should equal dim // 2
-    """
-    
     def __init__(
         self,
         dim: int,
@@ -325,6 +302,8 @@ class MultimodalRotaryEmbedding(nn.Module):
         mrope_section: Optional[list] = None,
     ) -> None:
         super().__init__()
+        self.max_seq_len_cached = max_seq_len
+        self.original_max_seq_len = max_seq_len
         self.dim = dim
         self.max_seq_len = max_seq_len
         self.base = base

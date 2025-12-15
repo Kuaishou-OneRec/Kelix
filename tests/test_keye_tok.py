@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_CKPT = os.environ.get(
     "KEYE_VL_CHECKPOINT",
-    "/mmu_mllm_hdd_2/maosiyang/output/Keye/vq_end2end_video/discrete/run_exp0.0.1_stage1_baseline/step16000/global_step16000/converted"
+    "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.6.6109_stage3/step9500/global_step9500/converted/"
 )
 
 # Path to save extracted tokenizer weights
@@ -129,11 +129,31 @@ def _load_checkpoint_robust(path_str: str, device="cpu") -> Dict[str, torch.Tens
     raise ValueError("No checkpoint found.")
 
 
-def create_dummy_image(size: int = 384) -> Image.Image:
-    """Create a deterministic random image for testing."""
-    rng = np.random.default_rng(seed=42)
-    data = rng.integers(0, 255, (size, size, 3), dtype=np.uint8)
-    return Image.fromarray(data)
+
+def create_dummy_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(255, 255, 255), outline_width=5):
+    """
+    生成一个包含一个圆的 PIL Image 对象，用于测试。
+    
+    :param size: 图像的大小，默认为 (64, 64)
+    :param fill_color: 圆的填充颜色，默认为黑色 (0, 0, 0)
+    :param outline_color: 圆的轮廓颜色，默认为白色 (255, 255, 255)
+    :param outline_width: 圆的轮廓宽度，默认为 5
+    :return: 生成的 PIL Image 对象
+    """
+    # 创建一个新的图像对象
+    image = Image.new('RGB', size, color=(255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    # 计算圆的坐标（图像中心为圆心）
+    x_center, y_center = size[0] // 2, size[1] // 2
+    radius = min(size[0], size[1]) // 2
+    # 绘制圆
+    draw.ellipse([x_center - radius, y_center - radius, x_center + radius, y_center + radius],
+                 fill=fill_color,
+                 outline=outline_color,
+                 width=outline_width)
+    return image
+
+
 
 
 def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, atol=1e-3, print_values=False):
@@ -656,7 +676,55 @@ def _run_keye_tokenizer_alignment():
             if status_o != "MISSING" or status_m != "MISSING":
                 logger.warning(f"⚠️  Missing hook data for {k} (Origin={status_o}, Muse={status_m})")
 
-    # === 9. Final Result ===
+    # === 9. Test forward_image_tokens ===
+    log_separator("Testing forward_image_tokens")
+    
+    # 模拟 VLM 模型的 vocab_size（与 origin 模型对齐）
+    # 从 config 中获取或使用默认值
+    vocab_size = raw_cfg.get("vocab_size", 151936)  # Qwen3 默认 vocab_size
+    logger.info(f"Using vocab_size: {vocab_size}")
+    
+    with torch.no_grad():
+        # Origin 模型的 forward_image_tokens 逻辑（在 KeyeForConditionalGeneration 中）
+        # 这里手动实现同样的逻辑
+        logger.info("Computing Origin forward_image_tokens...")
+        origin_vq_out = origin_tokenizer(pixel_values, image_grid_thw)
+        origin_indices = torch.stack([x_i for x_i in origin_vq_out['indices']], dim=0).T
+        n_q_tokens_origin = tokenizer_cfg.n_q_tokens
+        codebook_size_origin = tokenizer_cfg.codebook_size
+        device = next(iter(origin_tokenizer.parameters())).device
+        codebook_offsets_origin = torch.arange(n_q_tokens_origin, device=device)[None] * codebook_size_origin // n_q_tokens_origin
+        origin_aligned_indices = vocab_size + origin_indices + codebook_offsets_origin
+        
+        # Muse 模型的 forward_image_tokens
+        logger.info("Computing Muse forward_image_tokens...")
+        muse_aligned_indices = muse_tokenizer.forward_image_tokens(pixel_values, image_grid_thw, vocab_size)
+    
+    logger.info(f"Origin aligned_indices shape: {origin_aligned_indices.shape}")
+    logger.info(f"Muse aligned_indices shape: {muse_aligned_indices.shape}")
+    
+    # 对比 forward_image_tokens 输出
+    forward_image_tokens_match, max_diff = compare_tensors_verbose(
+        "forward_image_tokens", origin_aligned_indices, muse_aligned_indices,
+        atol=0, print_values=True  # indices 应该完全匹配
+    )
+    
+    if forward_image_tokens_match:
+        logger.info("✅ forward_image_tokens outputs match exactly!")
+    else:
+        all_matches = False
+        logger.info("❌ forward_image_tokens outputs differ!")
+        # 打印更多调试信息
+        diff_mask = origin_aligned_indices != muse_aligned_indices
+        num_diff = diff_mask.sum().item()
+        logger.info(f"   -> Number of different indices: {num_diff} / {origin_aligned_indices.numel()}")
+        if num_diff > 0 and num_diff <= 20:
+            diff_positions = torch.where(diff_mask)
+            for i in range(min(num_diff, 10)):
+                pos = tuple(d[i].item() for d in diff_positions)
+                logger.info(f"   -> Position {pos}: Origin={origin_aligned_indices[pos].item()}, Muse={muse_aligned_indices[pos].item()}")
+
+    # === 10. Final Result ===
     log_separator("Test Result")
     if all_matches:
         logger.info("✅✅✅ SUCCESS: All KeyeImageTokenizer outputs match within tolerance!")

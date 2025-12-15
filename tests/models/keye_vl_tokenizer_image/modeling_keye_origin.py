@@ -3421,6 +3421,17 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     dtype=input_ids.dtype,
                 )
             return position_ids, mrope_position_deltas
+    def forward_image_tokens(
+            self,
+            pixel_values,
+            image_grid_thw,
+            **kwargs
+            ):
+        vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
+        indices = torch.stack([x_i for x_i in vq_out['indices']], 0).T 
+        aligned_indices = self.vocab_size + indices + torch.arange(self.config.vision_config.n_q_tokens).\
+            to(next(iter(self.parameters())).device)[None] * self.config.vision_config.codebook_size // self.config.vision_config.n_q_tokens
+        return aligned_indices
 
     @replace_return_docstrings(output_type=KeyeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
