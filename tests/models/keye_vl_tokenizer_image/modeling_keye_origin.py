@@ -3490,7 +3490,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         reconstruction_loss_dict = {}
         if inputs_embeds is None:
             inputs_embeds = self.model.embed_tokens(input_ids)
-            from .investigations import compute_row_stats_str
             if pixel_values is not None:
                 vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
                 
