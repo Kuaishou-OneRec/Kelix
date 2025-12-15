@@ -436,7 +436,7 @@ class KeyeTokenizerEnd2EndImage(Model):
 
 
 
-            n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
+            n_image_tokens = (input_ids == self.image_token_id).sum().item()
             n_image_features = image_embeds.shape[0]
 
 
@@ -446,7 +446,7 @@ class KeyeTokenizerEnd2EndImage(Model):
                 raise ValueError(
                     f"Image features and image tokens do not match: tokens: {n_image_tokens}, slow features {n_image_features - fast_image_embeds.shape[0]}, fast features {fast_image_embeds.shape[0]}"
                 )
-            mask = (input_ids == self.config.image_token_id)
+            mask = (input_ids == self.image_token_id)
             mask_unsqueezed = mask.unsqueeze(-1)
             mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
             image_mask = mask_expanded.to(inputs_embeds.device)
