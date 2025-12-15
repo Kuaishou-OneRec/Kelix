@@ -130,7 +130,16 @@ def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, ato
     t2 = t2_raw.detach().float().cpu()
     
     if t1.shape != t2.shape:
-        if t1.numel() == t2.numel(): t2 = t2.view(t1.shape)
+        # 处理 [b, h, s, d] vs [b, s, h, d] 的情况（RoPE 输出格式差异）
+        # 如果两个 tensor 的 dim 相同且只是中间两个维度交换，使用 transpose
+        if t1.dim() == 4 and t2.dim() == 4 and t1.numel() == t2.numel():
+            # 检查是否是 [b, h, s, d] vs [b, s, h, d] 的情况
+            if t1.shape[0] == t2.shape[0] and t1.shape[3] == t2.shape[3]:
+                if t1.shape[1] == t2.shape[2] and t1.shape[2] == t2.shape[1]:
+                    # t2 是 [b, s, h, d]，需要 transpose(1, 2) 变成 [b, h, s, d]
+                    t2 = t2.transpose(1, 2)
+        elif t1.numel() == t2.numel():
+            t2 = t2.view(t1.shape)
         elif t1.dim() == 3 and t2.dim() == 2 and t1.shape[1:] == t2.shape: t1 = t1.squeeze(0)
         elif t2.dim() == 3 and t1.dim() == 2 and t2.shape[1:] == t1.shape: t2 = t2.squeeze(0)
     

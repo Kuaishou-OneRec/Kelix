@@ -462,9 +462,11 @@ class MultimodalRotaryEmbedding(nn.Module):
         x_out = (x * cos_combined) + (x_rotated * sin_combined)
 
         # Store outputs for debugging
+        # Transpose to match Origin's [batch, heads, seq_len, head_dim] format
+        # Muse uses [batch, seq_len, heads, head_dim], so we need transpose(1, 2)
         if not hasattr(self, "_debug_rope_outputs"):
             self._debug_rope_outputs = []
-        self._debug_rope_outputs.append(x_out.detach())
+        self._debug_rope_outputs.append(x_out.transpose(1, 2).detach())
         
         return x_out
     
