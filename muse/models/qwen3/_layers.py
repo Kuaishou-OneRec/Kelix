@@ -405,11 +405,11 @@ class MultimodalRotaryEmbedding(nn.Module):
         # Apply multimodal section splitting
         # mrope_section * 2 for cos/sin concatenation
         # e.g., [16, 24, 24] -> [16, 24, 24, 16, 24, 24]
-        mrope_section_doubled = self.mrope_section * 2
+        mrope_section = self.mrope_section * 2
         
         # Split cos/sin by sections: each is [3, batch_size, seq_len, section_size]
-        cos_sections = cos.split(mrope_section_doubled, dim=-1)
-        sin_sections = sin.split(mrope_section_doubled, dim=-1)
+        cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(1)
+        sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(1)
         
         # Debug store (raw cos/sin before chunk)
         # 注意：Origin 在 apply_multimodal_rotary_pos_emb 中存储的 cos/sin 已经是 bfloat16
@@ -437,14 +437,7 @@ class MultimodalRotaryEmbedding(nn.Module):
         # Select appropriate dimension for each section (cycling through 0, 1, 2)
         # section[i % 3] selects temporal(0), height(1), or width(2)
         # Result shape: [batch_size, seq_len, dim]
-        cos_combined = torch.cat(
-            [section[i % 3] for i, section in enumerate(cos_sections)],
-            dim=-1
-        )
-        sin_combined = torch.cat(
-            [section[i % 3] for i, section in enumerate(sin_sections)],
-            dim=-1
-        )
+
 
         # Store combined cos/sin (after chunk) 
         # Origin 存储的 shape 是 [1, 1, 209, 128]，但这是因为 Origin 的 q/k 是 [b, h, s, d]
@@ -454,12 +447,10 @@ class MultimodalRotaryEmbedding(nn.Module):
         self._debug_rope_intermediates["sin_after_chunk"] = sin_combined.unsqueeze(1).to(dtype=x.dtype).detach()
 
         # Add head dimension for broadcasting: [batch_size, seq_len, 1, dim]
-        cos_combined = cos_combined.unsqueeze(2).to(dtype=x.dtype)
-        sin_combined = sin_combined.unsqueeze(2).to(dtype=x.dtype)
         
         # Apply RoPE: x_embed = (x * cos) + (rotate_half(x) * sin)
         x_rotated = self.rotate_half(x)
-        x_out = (x * cos_combined) + (x_rotated * sin_combined)
+        x_out = (x * cos) + (x_rotated * sin)
 
         # Store outputs for debugging
         # Transpose to match Origin's [batch, heads, seq_len, head_dim] format
