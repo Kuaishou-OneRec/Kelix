@@ -501,7 +501,7 @@ def prepare_tokenizer_inputs(ckpt_path: str, device: str, dtype: torch.dtype, im
     Returns pixel_values and image_grid_thw for tokenizer forward pass.
     """
     logger.info("🎨 Generating Random Image...")
-    image = create_dummy_image(size=image_size)
+    image = create_dummy_image()
     
     logger.info("⚙️ Loading ImageProcessor...")
     image_processor = SiglipImageProcessor.from_pretrained(ckpt_path)
