@@ -3,7 +3,6 @@ from pathlib import Path
 import json
 import argparse
 import torch
-from PIL import Image, ImageDraw
 from muse.config import KeyeVisionConfig, KeyeTokenizerConfig
 from muse.models.keye_tokenizer import KeyeImageTokenizer
 from muse.training.common import set_default_dtype

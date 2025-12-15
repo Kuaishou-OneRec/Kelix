@@ -2,6 +2,7 @@ import torch
 
 from muse.models.keye_tokenizer import KeyeImageTokenizer
 from muse.training.common import set_default_dtype
+from PIL import Image, ImageDraw
 from transformers import AutoProcessor
 from keye_vl_utils import process_vision_info
 
@@ -13,13 +14,13 @@ def generate_circle_image(
         outline_color=(255, 255, 255),
         outline_width=5):
     """
-    生成一个包含一个圆的 PIL Image 对象，用于测试。
+    Generate a PIL Image object containing a circle for testing.
     
-    :param size: 图像的大小，默认为 (64, 64)
-    :param fill_color: 圆的填充颜色，默认为黑色 (0, 0, 0)
-    :param outline_color: 圆的轮廓颜色，默认为白色 (255, 255, 255)
-    :param outline_width: 圆的轮廓宽度，默认为 5
-    :return: 生成的 PIL Image 对象
+    :param size: Size of the image, defaults to (100, 100)
+    :param fill_color: Fill color of the circle, defaults to black (0, 0, 0)
+    :param outline_color: Outline color of the circle, defaults to white (255, 255, 255)
+    :param outline_width: Outline width of the circle, defaults to 5
+    :return: Generated PIL Image object
     """
     # 创建一个新的图像对象
     image = Image.new('RGB', size, color=(255, 255, 255))
@@ -40,7 +41,7 @@ def test_forward():
         tokenizer = KeyeImageTokenizer.from_pretrained(MODEL_PATH)
 
     processor = AutoProcessor.from_pretrained(
-        "/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer",
+        MODEL_PATH,
         trust_remote_code=True
     )
 
@@ -96,4 +97,4 @@ def test_forward():
         [152707, 167053, 174112, 182049, 187728, 195874, 201204, 214532],
         [153068, 162232, 171391, 178561, 192513, 195874, 204058, 210162]]
     ).to("cuda")
-    torch.testing.assert_allclose(aligned_indices, answer)
+    torch.testing.assert_close(aligned_indices, answer)
