@@ -130,7 +130,7 @@ nohup mpirun --allow-run-as-root \
                 --beta1 0.9 \
                 --beta2 0.999 \
                 --max-text-length 300 \
-                --batch-size 384 \
+                --batch-size 256 \
                 --lr-scheduler-type constant \
                 --num-warmup-steps 2000 \
                 --num-training-steps 100000 \
