@@ -4,7 +4,7 @@ import json
 import argparse
 import torch
 from muse.config import KeyeVisionConfig, KeyeTokenizerConfig
-from muse.models.keye_vl_tokenizer_image import MuseKeyeImageTokenizer
+from muse.models.keye_tokenizer import KeyeImageTokenizer as MuseKeyeImageTokenizer
 from muse.training.common import set_default_dtype
 
 def _build_muse_tokenizer_config(hf_config: Dict[str, Any]) -> KeyeTokenizerConfig:

@@ -726,7 +726,90 @@ def _run_keye_tokenizer_alignment():
                 pos = tuple(d[i].item() for d in diff_positions)
                 logger.info(f"   -> Position {pos}: Origin={origin_aligned_indices[pos].item()}, Muse={muse_aligned_indices[pos].item()}")
 
-    # === 10. Final Result ===
+    # === 10. Test against pre-saved debug outputs ===
+    log_separator("Testing against Pre-saved Debug Outputs")
+    
+    debug_pt_path = Path(checkpoint_path) / "debug" / "vq_outputs.pt"
+    if debug_pt_path.exists():
+        logger.info(f"Loading debug outputs from: {debug_pt_path}")
+        debug_outputs = torch.load(debug_pt_path, map_location=device)
+        
+        logger.info(f"Debug outputs keys: {list(debug_outputs.keys())}")
+        
+        # Use pixel_values and image_grid_thw from debug file as input
+        debug_pixel_values = debug_outputs["pixel_values"].to(device, dtype=dtype)
+        debug_image_grid_thw = debug_outputs["image_grid_thw"].to(device)
+        
+        logger.info(f"Debug pixel_values shape: {debug_pixel_values.shape}")
+        logger.info(f"Debug image_grid_thw: {debug_image_grid_thw.tolist()}")
+        
+        # Run Muse tokenizer with debug inputs
+        with torch.no_grad():
+            logger.info("Running Muse KeyeImageTokenizer with debug inputs...")
+            muse_debug_output = muse_tokenizer(debug_pixel_values, debug_image_grid_thw)
+        
+        # Compare outputs
+        debug_comparison_keys = [
+            ("image_embeds", "x"),           # debug key -> muse output key
+            ("z_e", "z_e"),
+            ("z_q", "z_q"),
+            ("codebook_loss", "codebook_loss"),
+            ("commitment_loss", "commitment_loss"),
+            ("indices", "indices"),
+        ]
+        
+        logger.info("\n--- Comparing Muse outputs with debug file ---")
+        debug_all_match = True
+        
+        for debug_key, muse_key in debug_comparison_keys:
+            if debug_key not in debug_outputs:
+                logger.warning(f"⚠️  Debug key '{debug_key}' not found in debug file")
+                continue
+            if muse_key not in muse_debug_output:
+                logger.warning(f"⚠️  Muse key '{muse_key}' not found in muse output")
+                continue
+            
+            debug_val = debug_outputs[debug_key]
+            muse_val = muse_debug_output[muse_key]
+            
+            # Handle indices specially (list of tensors)
+            if debug_key == "indices":
+                if isinstance(muse_val, list):
+                    # Stack muse indices like origin does
+                    muse_val = torch.stack(muse_val, dim=0)
+                if isinstance(debug_val, list):
+                    debug_val = torch.stack(debug_val, dim=0)
+                
+                logger.info(f"Debug indices shape: {debug_val.shape}")
+                logger.info(f"Muse indices shape: {muse_val.shape}")
+            
+            # Use appropriate tolerance
+            if debug_key in ["codebook_loss", "commitment_loss"]:
+                atol = 1e-2
+            elif debug_key == "indices":
+                atol = 0  # indices should match exactly
+            else:
+                atol = 2e-2
+            
+            is_match, max_diff = compare_tensors_verbose(
+                f"Debug vs Muse: {debug_key}",
+                debug_val, muse_val,
+                atol=atol, print_values=True
+            )
+            
+            if not is_match:
+                debug_all_match = False
+                all_matches = False
+        
+        if debug_all_match:
+            logger.info("✅ All Muse outputs match debug file within tolerance!")
+        else:
+            logger.info("❌ Some Muse outputs differ from debug file!")
+    else:
+        logger.warning(f"⚠️  Debug file not found: {debug_pt_path}")
+        logger.info("Skipping debug comparison test.")
+
+    # === 11. Final Result ===
     log_separator("Test Result")
     if all_matches:
         logger.info("✅✅✅ SUCCESS: All KeyeImageTokenizer outputs match within tolerance!")
