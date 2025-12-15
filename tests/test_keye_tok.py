@@ -735,8 +735,8 @@ def _run_keye_tokenizer_alignment():
     hf_model = None
     hf_processor = None
     try:
-        from recovlm.models.tokenizer_end2end_mt_1drope_v2.modeling_keye import KeyeForConditionalGeneration
-        from recovlm.models.tokenizer_end2end_mt_1drope_v2.keye_vl_utils import process_vision_info
+        from tests.models.keye_vl_tokenizer_image.modeling_keye_origin import KeyeForConditionalGeneration
+        from tests.models.keye_vl_tokenizer_image.keye_vl_utils import process_vision_info
         from transformers import AutoProcessor
         
         logger.info("Loading HF KeyeForConditionalGeneration model...")

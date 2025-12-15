@@ -32,8 +32,6 @@ import torch.distributed as dist
 
 import torch.nn.functional as F
 
-
-from einops import rearrange
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -155,7 +153,7 @@ except:
     def get_data_parallel_world_size():
         return dist.get_world_size(group=get_data_parallel_group())
 
-
+layer_outputs = []
 
 
 def all_to_all_4D(
@@ -781,7 +779,8 @@ class SiglipAttention(nn.Module):
         keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim)
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim)
 
-
+        queries_ = queries
+        keys_ = keys
         if self.q_norm is not None and self.k_norm is not None:
             queries = self.q_norm(queries)
             keys = self.k_norm(keys)
@@ -861,7 +860,22 @@ class SiglipAttention(nn.Module):
                 attn_output = attn_output.flatten(-2).unsqueeze(0)
                 attn_weights = None
 
+        attn_output_before_out_proj = attn_output
         attn_output = self.out_proj(attn_output)
+
+        layer_outputs.append(
+            {
+                "input:hidden_states": hidden_states,
+                "input:rope_emb": rope_emb,
+                "attn_output_before_out_proj": attn_output_before_out_proj,
+                "attn_output_after_out_proj": attn_output,
+                "after_apply_rope_queries": queries,
+                "after_apply_rope_keys": keys,
+                "values": values,
+                "before_apply_rope_queries_": queries_,
+                "before_apply_rope_qkeys_": keys_,
+            }
+        )
 
         if not output_attentions:
             attn_weights = None
@@ -2227,14 +2241,11 @@ class KeyeFlashAttention2(KeyeAttention):
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
         cos, sin = position_embeddings
-        # print("apply_multimodal_rotary_pos_embapply_multimodal_rotary_pos_emb111111")
-        # print(query_states, key_states, cos, sin)
 
         query_states, key_states = apply_multimodal_rotary_pos_emb(
             query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
         )
-        # print("apply_multimodal_rotary_pos_embapply_multimodal_rotary_pos_emb22222")
-        # print(query_states, key_states)
+
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -2620,8 +2631,8 @@ class Qwen3Model(Qwen3PreTrainedModel):
             position_embeddings = (sin[..., start:end, :], cos[..., start:end, :])
             hidden_states = hidden_states[:, start:end, :]
 
-        # print(f"inputs_embeds{inputs_embeds.shape}={inputs_embeds}")
-        # print(f"position_ids{position_ids.shape}: {position_ids}")
+        #print(f"inputs_embeds{inputs_embeds.shape}={inputs_embeds}")
+        #print(f"position_ids{position_ids.shape}: {position_ids}")
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
@@ -3421,6 +3432,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     dtype=input_ids.dtype,
                 )
             return position_ids, mrope_position_deltas
+
     def forward_image_tokens(
             self,
             pixel_values,
@@ -3432,7 +3444,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         aligned_indices = self.vocab_size + indices + torch.arange(self.config.vision_config.n_q_tokens).\
             to(next(iter(self.parameters())).device)[None] * self.config.vision_config.codebook_size // self.config.vision_config.n_q_tokens
         return aligned_indices
-
+    
     @replace_return_docstrings(output_type=KeyeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -3579,6 +3591,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         elif position_ids.ndim == 3 and position_ids.shape[0] == 3:
             # 训练走这个分支
             position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+            # print(f"position_ids00000", position_ids.shape)
         # print(f"position_id{position_ids.shape}s={position_ids}")
         
         # else:
