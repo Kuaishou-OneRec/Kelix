@@ -260,6 +260,11 @@ def register_detailed_hooks(model, name_prefix):
                         make_hook(name_prefix, "4.00c LLM L0 K_Proj"))
                     layer.self_attn.v_proj.register_forward_hook(
                         make_hook(name_prefix, "4.00d LLM L0 V_Proj"))
+                    # QK-norm outputs (before RoPE)
+                    layer.self_attn.q_norm.register_forward_hook(
+                        make_hook(name_prefix, "4.00b2 LLM L0 Q_Norm"))
+                    layer.self_attn.k_norm.register_forward_hook(
+                        make_hook(name_prefix, "4.00c2 LLM L0 K_Norm"))
                     layer.self_attn.o_proj.register_forward_hook(
                         make_hook(name_prefix, "4.00e LLM L0 Attn Out"))
                     layer.post_attention_layernorm.register_forward_hook(
@@ -280,6 +285,11 @@ def register_detailed_hooks(model, name_prefix):
                         make_hook(name_prefix, "4.00c LLM L0 K_Proj"))
                     layer.attn.v_proj.register_forward_hook(
                         make_hook(name_prefix, "4.00d LLM L0 V_Proj"))
+                    # QK-norm outputs (before RoPE)
+                    layer.attn.q_norm.register_forward_hook(
+                        make_hook(name_prefix, "4.00b2 LLM L0 Q_Norm"))
+                    layer.attn.k_norm.register_forward_hook(
+                        make_hook(name_prefix, "4.00c2 LLM L0 K_Norm"))
                     layer.attn.output_proj.register_forward_hook(
                         make_hook(name_prefix, "4.00e LLM L0 Attn Out"))
                     layer.mlp_norm.register_forward_hook(
@@ -698,7 +708,9 @@ def test_pipeline_alignment():
             checkpoints.extend([
                 "4.00a LLM L0 InputLN",
                 "4.00b LLM L0 Q_Proj",
+                "4.00b2 LLM L0 Q_Norm",
                 "4.00c LLM L0 K_Proj",
+                "4.00c2 LLM L0 K_Norm",
                 "4.00d LLM L0 V_Proj",
                 "4.00e LLM L0 Attn Out",
                 "4.00f LLM L0 PostAttnLN",
