@@ -109,7 +109,7 @@ def test_image_generation_cust():
     messages = [{
         "role": "user",
         "content": [
-            {"type": "image", "image": generate_circle_image()}
+            {"type": "image", "image": generate_circle_image()},
             {"type": "text", "text": " What's in the image?"},
         ]
     }]
