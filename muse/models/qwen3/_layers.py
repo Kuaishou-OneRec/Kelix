@@ -443,8 +443,8 @@ class MultimodalRotaryEmbedding(nn.Module):
         # Origin 存储的 shape 是 [1, 1, 209, 128]，但这是因为 Origin 的 q/k 是 [b, h, s, d]
         # Muse 的 q/k 是 [b, s, h, d]，所以 unsqueeze 位置不同
         # 为了对比，我们存储 unsqueeze 到 dim=1 的版本，与 Origin 保持一致
-        self._debug_rope_intermediates["cos_after_chunk"] = cos_combined.unsqueeze(1).to(dtype=x.dtype).detach()
-        self._debug_rope_intermediates["sin_after_chunk"] = sin_combined.unsqueeze(1).to(dtype=x.dtype).detach()
+        self._debug_rope_intermediates["cos_after_chunk"] = cos.detach()
+        self._debug_rope_intermediates["sin_after_chunk"] = sin.detach()
 
         # Add head dimension for broadcasting: [batch_size, seq_len, 1, dim]
         
