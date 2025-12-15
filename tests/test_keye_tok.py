@@ -895,6 +895,56 @@ def _run_keye_tokenizer_alignment():
                 if not is_match:
                     hf_vs_muse_match = False
         
+        # ===== Additional Verification: Run Origin Tokenizer with Debug Inputs =====
+        log_separator("Verification: Origin Tokenizer with Debug Inputs")
+        
+        origin_pixel_values = debug_pixel_values.to(dtype=next(origin_tokenizer.parameters()).dtype)
+        logger.info(f"Origin tokenizer dtype: {next(origin_tokenizer.parameters()).dtype}")
+        logger.info(f"Origin pixel_values dtype: {origin_pixel_values.dtype}")
+        
+        with torch.no_grad():
+            origin_debug_output = origin_tokenizer(origin_pixel_values, debug_image_grid_thw)
+        
+        logger.info("Origin tokenizer forward complete")
+        
+        # Compare Origin output with Debug PT
+        logger.info("\n=== Comparing Origin Tokenizer output with Debug PT ===")
+        origin_indices = origin_debug_output.get("indices")
+        if isinstance(origin_indices, list):
+            origin_indices = torch.stack(origin_indices, dim=0)
+        
+        debug_indices = debug_outputs.get("indices")
+        if isinstance(debug_indices, list):
+            debug_indices = torch.stack(debug_indices, dim=0)
+        
+        logger.info(f"Origin indices shape: {origin_indices.shape}")
+        logger.info(f"Debug PT indices shape: {debug_indices.shape}")
+        logger.info(f"Origin indices first 10: {origin_indices.flatten()[:10].tolist()}")
+        logger.info(f"Debug PT indices first 10: {debug_indices.flatten()[:10].tolist()}")
+        
+        origin_vs_debug_match = torch.equal(origin_indices, debug_indices)
+        logger.info(f"\nOrigin vs Debug PT indices: {'✅ EXACT MATCH' if origin_vs_debug_match else '❌ MISMATCH'}")
+        
+        if not origin_vs_debug_match:
+            logger.warning("⚠️  This confirms: Debug PT outputs were NOT generated from the saved pixel_values!")
+            logger.warning("⚠️  The debug PT file may be corrupted or from a different input/run.")
+        
+        # Also compare HF vs Origin to verify they match
+        if hf_output is not None:
+            hf_indices = hf_output.get("indices")
+            if isinstance(hf_indices, list):
+                hf_indices = torch.stack(hf_indices, dim=0)
+            
+            hf_vs_origin_match = torch.equal(hf_indices, origin_indices)
+            logger.info(f"HF vs Origin indices: {'✅ EXACT MATCH' if hf_vs_origin_match else '❌ MISMATCH'}")
+            
+            muse_indices = muse_debug_output.get("indices")
+            if isinstance(muse_indices, list):
+                muse_indices = torch.stack(muse_indices, dim=0)
+            
+            origin_vs_muse_match = torch.equal(origin_indices, muse_indices)
+            logger.info(f"Origin vs Muse indices: {'✅ EXACT MATCH' if origin_vs_muse_match else '❌ MISMATCH'}")
+        
         # Summary
         log_separator("Three-way Comparison Summary")
         if hf_output is not None:
@@ -902,6 +952,15 @@ def _run_keye_tokenizer_alignment():
         logger.info(f"Debug PT vs Muse Model: {'✅ MATCH' if debug_vs_muse_match else '❌ MISMATCH'}")
         if hf_output is not None:
             logger.info(f"HF Model vs Muse Model: {'✅ MATCH' if hf_vs_muse_match else '❌ MISMATCH'}")
+        
+        logger.info("")
+        logger.info("=== Key Findings ===")
+        if hf_output is not None and hf_vs_origin_match and origin_vs_muse_match:
+            logger.info("✅ HF, Origin, and Muse all produce IDENTICAL outputs with same inputs!")
+            logger.info("   → Muse implementation is CORRECT")
+            if not origin_vs_debug_match:
+                logger.info("❌ But Debug PT file is INCONSISTENT (saved outputs don't match saved inputs)")
+                logger.info("   → Debug PT file needs to be regenerated")
         
         # Cleanup HF model to free memory
         if hf_model is not None:
