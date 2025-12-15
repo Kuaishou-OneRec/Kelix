@@ -219,7 +219,7 @@ def compare_tensors_verbose(name: str, tensor_origin: Any, tensor_muse: Any, ato
     diff = (t1 - t2).abs()
     max_diff = diff.max().item()
     mean_diff = diff.mean().item()
-    match_status = "✅ MATCH" if max_diff < atol else "❌ MISMATCH"
+    match_status = "✅ MATCH" if max_diff <= atol else "❌ MISMATCH"
     logger.info(f"{name:<45} | {match_status:<12} | Max: {max_diff:.2e} | Mean: {mean_diff:.2e}")
     
     if print_values:
