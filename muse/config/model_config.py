@@ -42,7 +42,7 @@ Example:
 
 """Model configuration classes."""
 
-from typing import Optional, Literal, List
+from typing import Optional, Literal, List, Tuple
 from pydantic import Field, field_validator, model_validator
 
 from muse.config.base import BaseConfig
@@ -360,3 +360,155 @@ class KeyeTokenizerConfig(ModelConfig):
     vq_temperature_decay: float = Field(default=0.999, description="温度衰减")
     vq_min_temperature: float = Field(default=0.1, description="最低温度")
     pre_llm_align: bool = Field(default=False, description="是否先线性对齐到LLM维度")
+
+class SanaConfig(ModelConfig):
+    """Configuration for Sana DiT model architecture.
+    
+    Sana is a diffusion transformer for text-to-image generation using
+    Flow Matching with linear attention support.
+    
+    Reference: https://github.com/NVlabs/Sana
+    """
+    
+    # Image/Latent dimensions
+    input_size: int = Field(
+        default=32,
+        description="Input latent size (e.g., 32 for 1024px with 32x downsample)"
+    )
+    patch_size: int = Field(
+        default=1,
+        description="Patch size for patch embedding"
+    )
+    in_channels: int = Field(
+        default=32,
+        description="Number of input channels (VAE latent channels)"
+    )
+    
+    # Architecture dimensions
+    hidden_size: int = Field(
+        default=2240,
+        description="Hidden dimension size"
+    )
+    depth: int = Field(
+        default=20,
+        description="Number of transformer blocks"
+    )
+    num_heads: int = Field(
+        default=20,
+        description="Number of attention heads"
+    )
+    mlp_ratio: float = Field(
+        default=2.5,
+        description="MLP hidden dimension ratio"
+    )
+    
+    # Text encoder configuration
+    caption_channels: int = Field(
+        default=2304,
+        description="Text embedding dimension from text encoder"
+    )
+    model_max_length: int = Field(
+        default=300,
+        description="Maximum text sequence length"
+    )
+    
+    # Attention configuration
+    attn_type: Literal["flash", "linear"] = Field(
+        default="linear",
+        description="Self-attention type: 'flash' for flash attention, 'linear' for LiteLA"
+    )
+    cross_attn_type: Literal["flash", "linear"] = Field(
+        default="flash",
+        description="Cross-attention type"
+    )
+    linear_head_dim: int = Field(
+        default=32,
+        description="Head dimension for linear attention"
+    )
+    qk_norm: bool = Field(
+        default=False,
+        description="Whether to use QK normalization in self-attention"
+    )
+    cross_norm: bool = Field(
+        default=False,
+        description="Whether to use QK normalization in cross-attention"
+    )
+    
+    # FFN configuration
+    ffn_type: Literal["mlp", "glumbconv"] = Field(
+        default="glumbconv",
+        description="FFN type: 'mlp' for standard MLP, 'glumbconv' for GLU MBConv"
+    )
+    mlp_acts: Tuple[str, str, Optional[str]] = Field(
+        default=("silu", "silu", None),
+        description="Activation functions for GLUMBConv"
+    )
+    
+    # Output configuration
+    pred_sigma: bool = Field(
+        default=False,
+        description="Whether to predict sigma (variance)"
+    )
+    learn_sigma: bool = Field(
+        default=False,
+        description="Whether to learn sigma"
+    )
+    
+    # Position embedding
+    use_pe: bool = Field(
+        default=False,
+        description="Whether to use positional embedding"
+    )
+    pe_interpolation: float = Field(
+        default=1.0,
+        description="Position embedding interpolation factor"
+    )
+    
+    # Normalization
+    y_norm: bool = Field(
+        default=True,
+        description="Whether to normalize text embeddings"
+    )
+    y_norm_scale_factor: float = Field(
+        default=0.01,
+        description="Scale factor for y normalization"
+    )
+    norm_eps: float = Field(
+        default=1e-5,
+        description="Normalization epsilon"
+    )
+    
+    # Training
+    class_dropout_prob: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Classifier-free guidance dropout probability"
+    )
+    drop_path: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Drop path rate for stochastic depth"
+    )
+    
+    # VAE configuration
+    vae_type: str = Field(
+        default="AutoencoderDC",
+        description="VAE model type"
+    )
+    vae_pretrained: str = Field(
+        default="mit-han-lab/dc-ae-f32c32-sana-1.1-diffusers",
+        description="Pretrained VAE model path"
+    )
+    vae_downsample_rate: int = Field(
+        default=32,
+        description="VAE spatial downsample rate"
+    )
+    
+    # Text encoder configuration
+    text_encoder_name: str = Field(
+        default="google/gemma-2-2b-it",
+        description="Text encoder model name"
+    )
+
