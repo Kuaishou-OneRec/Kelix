@@ -604,12 +604,40 @@ def _run_keye_tokenizer_alignment():
 
     # === 7. Forward Pass ===
     log_separator("Running Forward Pass")
+    vocab_size = raw_cfg.get("vocab_size", 151936)  # Qwen3 默认 vocab_size
+    
     with torch.no_grad():
         logger.info("Running Origin KeyeImageTokenizer Forward...")
         origin_output = origin_tokenizer(pixel_values, image_grid_thw)
         
         logger.info("Running Muse KeyeImageTokenizer Forward...")
         muse_output = muse_tokenizer(pixel_values, image_grid_thw)
+        
+        # === Compare forward_image_tokens indices ===
+        logger.info("\n--- Comparing forward_image_tokens indices ---")
+        
+        # Origin: 手动计算 aligned indices (模拟 KeyeForConditionalGeneration.forward_image_tokens)
+        origin_indices_raw = torch.stack([x_i for x_i in origin_output['indices']], dim=0).T
+        n_q_tokens = tokenizer_cfg.n_q_tokens
+        codebook_size = tokenizer_cfg.codebook_size
+        codebook_offsets = torch.arange(n_q_tokens, device=device)[None] * codebook_size // n_q_tokens
+        origin_aligned_indices = vocab_size + origin_indices_raw + codebook_offsets
+        
+        # Muse: 使用 forward_image_tokens 方法
+        muse_aligned_indices = muse_tokenizer.forward_image_tokens(pixel_values, image_grid_thw, vocab_size)
+        
+        logger.info(f"Origin aligned_indices shape: {origin_aligned_indices.shape}")
+        logger.info(f"Muse aligned_indices shape: {muse_aligned_indices.shape}")
+        
+        # 对比
+        indices_match = torch.equal(origin_aligned_indices, muse_aligned_indices)
+        if indices_match:
+            logger.info("✅ forward_image_tokens indices: EXACT MATCH")
+        else:
+            diff_count = (origin_aligned_indices != muse_aligned_indices).sum().item()
+            logger.info(f"❌ forward_image_tokens indices: MISMATCH ({diff_count} / {origin_aligned_indices.numel()} differ)")
+            logger.info(f"   Origin first 10: {origin_aligned_indices.flatten()[:10].tolist()}")
+            logger.info(f"   Muse first 10: {muse_aligned_indices.flatten()[:10].tolist()}")
 
     # Store final outputs in activations for comparison
     activations["origin"]["Final z_q"] = origin_output["z_q"]
