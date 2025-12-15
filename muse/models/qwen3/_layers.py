@@ -420,6 +420,8 @@ class MultimodalRotaryEmbedding(nn.Module):
         # Apply attention scaling (for compatibility with advanced RoPE types)
         cos = cos * self.attention_scaling
         sin = sin * self.attention_scaling
+        cos = cos.to(dtype=x.dtype)
+        sin = sin.to(dtype=x.dtype)
 
         # Apply multimodal section splitting
         # mrope_section * 2 for cos/sin concatenation
@@ -447,8 +449,8 @@ class MultimodalRotaryEmbedding(nn.Module):
         self._debug_rope_intermediates["position_ids"] = position_ids.detach()
         # Origin 存储的 cos/sin 是 bfloat16（因为在 KeyeRotaryEmbedding.forward 返回时已转换）
         # 所以这里也需要先转换为 x.dtype 再存储
-        self._debug_rope_intermediates["cos_before_chunk"] = cos.to(dtype=x.dtype).detach()
-        self._debug_rope_intermediates["sin_before_chunk"] = sin.to(dtype=x.dtype).detach()
+        self._debug_rope_intermediates["cos_before_chunk"] = cos.detach()
+        self._debug_rope_intermediates["sin_before_chunk"] = sin.detach()
         self._debug_rope_intermediates["mrope_section"] = torch.tensor(
             self.mrope_section, device=x.device
         )
