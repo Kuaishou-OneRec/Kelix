@@ -468,7 +468,7 @@ def test_pipeline_alignment():
     # --- Initialize Models ---
     with set_default_dtype(dtype):
         logger.info("Initializing Muse Model...")
-        muse_model = muse_mod.KeyeForConditionalGeneration(
+        muse_model = muse_mod.KeyeTokenizerEnd2EndImage(
             qwen_config=qwen_cfg,
             vision_config=vision_cfg,
             tokenizer_config=tokenizer_cfg,
