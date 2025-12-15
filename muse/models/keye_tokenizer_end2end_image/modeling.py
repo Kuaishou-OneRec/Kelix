@@ -509,8 +509,6 @@ class KeyeTokenizerEnd2EndImage(Model):
         else:
             raise ValueError("position id wrong!")
 
-        else:
-            raise ValueError("position id wrong!")
 
         # Call through Qwen3Model.forward which delegates to TransformerDecoder
         logits = self.model(
