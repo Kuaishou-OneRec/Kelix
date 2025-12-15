@@ -487,7 +487,7 @@ def test_pipeline_alignment():
     muse_model.load_state_dict(muse_state, strict=False)
 
     origin_model.to(device)
-    muse_model.to(device)
+    muse_model.to(device, dtype)  # 确保 Muse 模型也转换为 bfloat16，与 Origin 保持一致
 
     # --- Hooks ---
     origin_llm_layers = register_detailed_hooks(origin_model, "origin")
