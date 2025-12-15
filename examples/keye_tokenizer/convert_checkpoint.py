@@ -1,11 +1,13 @@
-from typing import Dict, Any
+from typing import Dict, Any, Tuple
 from pathlib import Path
 import json
 import argparse
 import torch
+from PIL import Image, ImageDraw
 from muse.config import KeyeVisionConfig, KeyeTokenizerConfig
-from muse.models.keye_vl_tokenizer_image import MuseKeyeImageTokenizer
+from muse.models.keye_tokenizer import KeyeImageTokenizer
 from muse.training.common import set_default_dtype
+from muse.training.checkpoint import load_hf_checkpoint
 
 def _build_muse_tokenizer_config(hf_config: Dict[str, Any]) -> KeyeTokenizerConfig:
     """Build Muse KeyeTokenizerConfig from raw config dictionary."""
@@ -25,7 +27,7 @@ def _build_muse_tokenizer_config(hf_config: Dict[str, Any]) -> KeyeTokenizerConf
         rope_theta=inner_vcfg.get("rope_theta", 10000.0),
         use_qk_norm=inner_vcfg.get("use_qk_norm", False),
         qk_norm_eps=inner_vcfg.get("qk_norm_eps", 1e-6),
-        attention_function=raw_cfg.get("_attn_implementation", "flash_attention_2"),
+        attention_function=hf_config.get("_attn_implementation", "flash_attention_2"),
     )
     
     tokenizer_cfg = KeyeTokenizerConfig(
@@ -45,23 +47,19 @@ def _build_muse_tokenizer_config(hf_config: Dict[str, Any]) -> KeyeTokenizerConf
     )
     return tokenizer_cfg
 
-def extract_and_save_tokenizer_weights(
-    full_state_dict: Dict[str, torch.Tensor],
-    save_path: str,
-    raw_cfg: Dict[str, Any],
-) -> Dict[str, torch.Tensor]:
+def convert_hf_checkpoint(hf_state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     """
     Extract visual_tokenizer weights from full Keye-VL checkpoint,
     convert to Muse format, and save to local path.
     
     Returns the converted Muse-style state dict.
     """
-    save_dir = Path(save_path)
-    save_dir.mkdir(parents=True, exist_ok=True)
+    # save_dir = Path(save_path)
+    # save_dir.mkdir(parents=True, exist_ok=True)
     
     # 1. Extract visual_tokenizer.* keys from full state dict
     origin_tokenizer_state_dict = {}
-    for k, v in full_state_dict.items():
+    for k, v in hf_state_dict.items():
         if k.startswith("visual_tokenizer."):
             new_k = k[len("visual_tokenizer."):]
             origin_tokenizer_state_dict[new_k] = v
@@ -91,24 +89,6 @@ def extract_and_save_tokenizer_weights(
         
         muse_state_dict[new_k] = v
     
-    
-    # 3. Save the converted weights
-    weights_path = save_dir / "pytorch_model.bin"
-    torch.save(muse_state_dict, weights_path)
-    
-    # 4. Save the config as JSON
-    config_path = save_dir / "config.json"
-    tokenizer_cfg = _build_muse_tokenizer_config(raw_cfg)
-    with open(config_path, "w") as f:
-        json.dump(tokenizer_cfg.dict(), f, indent=2)
-    
-    # 5. Copy preprocessor_config.json if exists in original checkpoint
-    original_ckpt_dir = Path(DEFAULT_CKPT)
-    preprocessor_config_src = original_ckpt_dir / "preprocessor_config.json"
-    if preprocessor_config_src.exists():
-        import shutil
-        shutil.copy(preprocessor_config_src, save_dir / "preprocessor_config.json")
-    
     return muse_state_dict
 
 
@@ -116,7 +96,7 @@ def load_muse_tokenizer_from_saved(
     save_path: str,
     device: str,
     dtype: torch.dtype,
-) -> Tuple[MuseKeyeImageTokenizer, KeyeTokenizerConfig]:
+) -> Tuple[KeyeImageTokenizer, KeyeTokenizerConfig]:
     """
     Load Muse KeyeImageTokenizer from saved weights.
     """
@@ -174,17 +154,138 @@ def load_muse_tokenizer_from_saved(
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--hf-dir", type=str, required=True)
-    parser.add_argument("--outpur-dir", type=str, required=True)
+    parser.add_argument("--output-dir", type=str, required=True)
     parser.add_argument("--processor-dir", type=str, required=True)
     parser.add_argument("--dtype", type=str, default="bfloat16",
                         choices=["bfloat16", "float16", "float32"])
     return parser.parse_args()
 
-    muse_config = _build_muse_tokenizer_config(Path(args.hf_dir) / "config.json")
-    print(muse_config)
-
 def main():
     args = get_args()
+    hf_config_path = Path(args.hf_dir) / "config.json"
+    with open(hf_config_path) as f:
+        hf_config = json.loads(f.read())
+    config = _build_muse_tokenizer_config(hf_config)
+    hf_state_dict = load_hf_checkpoint(args.hf_dir)
+    state_dict = convert_hf_checkpoint(hf_state_dict)
+
+    with set_default_dtype(args.dtype), torch.device("cpu"):
+        tokenizer = KeyeImageTokenizer(config)
+
+    missing, unexpected = tokenizer.load_state_dict(state_dict, strict=False)
+    if missing:
+        print(f"Tokenizer missing keys: {len(missing)}")
+        for k in missing[:10]:
+            print(f"  - {k}")
+    if unexpected:
+        print(f"Tokenizer unexpected keys: {len(unexpected)}")
+        for k in unexpected[:10]:
+            print(f"  - {k}")
+    
+    tokenizer.save_pretrained(args.output_dir)
+
+def generate_circle_image(
+        size=(100, 100),
+        fill_color=(0, 0, 0),
+        outline_color=(255, 255, 255),
+        outline_width=5):
+    """
+    生成一个包含一个圆的 PIL Image 对象，用于测试。
+    
+    :param size: 图像的大小，默认为 (64, 64)
+    :param fill_color: 圆的填充颜色，默认为黑色 (0, 0, 0)
+    :param outline_color: 圆的轮廓颜色，默认为白色 (255, 255, 255)
+    :param outline_width: 圆的轮廓宽度，默认为 5
+    :return: 生成的 PIL Image 对象
+    """
+    # 创建一个新的图像对象
+    image = Image.new('RGB', size, color=(255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    # 计算圆的坐标（图像中心为圆心）
+    x_center, y_center = size[0] // 2, size[1] // 2
+    radius = min(size[0], size[1]) // 2
+    # 绘制圆
+    draw.ellipse([x_center - radius, y_center - radius, x_center + radius, y_center + radius],
+                 fill=fill_color,
+                 outline=outline_color,
+                 width=outline_width)
+    return image
+
+
+def process_message(messages, device):
+    return inputs
+
+def test_demo():
+    with set_default_dtype("bfloat16"), torch.device("cuda"):
+        tokenizer = KeyeImageTokenizer.from_pretrained(
+            "/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/"
+        )
+    
+    
+    from transformers import AutoProcessor
+    from keye_vl_utils import process_vision_info
+    processor = AutoProcessor.from_pretrained(
+        "/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer",
+        trust_remote_code=True
+    )
+
+    messages = [{
+        "role": "user",
+        "content": [
+            {"type": "image", "image": generate_circle_image()},
+        ],
+    }]
+    text = processor.apply_chat_template(
+        messages, 
+        tokenize=False, 
+        add_generation_prompt=True  # 开启生成提示
+    )
+
+    image_inputs, _, _ = process_vision_info(messages)
+
+    # 构建原始输入（纯有效Token，无任何Pad）
+    inputs = processor(
+        text=[text],
+        images=image_inputs,
+        padding=False,  # 强制关闭Pad，确保原始输入无多余Token
+        truncation=False,
+        return_tensors="pt",
+    ).to("cuda")
+
+    print(inputs.keys())
+
+    import numpy as np
+    dumps = torch.load("/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.6.6109_stage3/step9500/global_step9500/converted/debug/test_run_outputs.pt")
+    vq_dumps = torch.load("/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.6.6109_stage3/step9500/global_step9500/converted/debug/vq_outputs.pt")
+
+    print(vq_dumps.keys())
+
+    print(dumps["inputs"]["data"].keys())
+
+    np.testing.assert_allclose(inputs["pixel_values"].cpu().numpy(), dumps["inputs"]["data"]["pixel_values"])
+    np.testing.assert_allclose(inputs["image_grid_thw"].cpu().numpy(), dumps["inputs"]["data"]["image_grid_thw"])
+
+
+    with torch.no_grad():
+        vq_out = tokenizer(pixel_values=inputs["pixel_values"], image_grid_thw=inputs["image_grid_thw"])
+    
+    for k, v in vq_out.items():
+        # if k in ["z_q", "z_e", "indices"]:
+        #     continue
+        if not k == "z_e":
+            continue
+        if not isinstance(v, torch.Tensor):
+            for i, item in enumerate(v):
+                print(type(vq_dumps[k][i]))
+                torch.testing.assert_close(item.cpu(), vq_dumps[k][i])
+        else:
+            torch.testing.assert_close(v.cpu(), vq_dumps[k])
+
+    indices = torch.stack([x_i for x_i in vq_out['indices']], 0).T 
+    aligned_indices = 151936 + indices + torch.arange(8).\
+        to("cuda")[None] * tokenizer.config.codebook_size // 8
+
+    print(aligned_indices)
 
 if __name__ == "__main__":
-    main()
+    test_demo()
