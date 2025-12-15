@@ -358,11 +358,6 @@ class KeyeTokenizerEnd2EndImage(Model):
             position_ids (`torch.LongTensor` of shape `(3, batch_size, sequence_length)`)
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
-        spatial_merge_size = self.config.vision_config.spatial_merge_size
-        image_token_id = self.config.image_token_id
-        video_token_id = self.config.video_token_id
-        fast_video_token_id = self.config.fast_video_token_id
-        vision_start_token_id = self.config.vision_start_token_id
         mrope_position_deltas = []
         if attention_mask is not None:
             position_ids = attention_mask.long().cumsum(-1) - 1
@@ -459,8 +454,8 @@ class KeyeTokenizerEnd2EndImage(Model):
 
 
         #maosiyang: for debug infer
-        if position_id is None:
-            position_id , _ = self.get_rope_index_slowfast(
+        if position_ids is None:
+            position_ids , _ = self.get_rope_index_slowfast(
                 input_ids=input_ids,
                 image_grid_thw=image_grid_thw,
                 video_grid_thw=video_grid_thw,
