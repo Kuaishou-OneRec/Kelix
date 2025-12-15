@@ -408,8 +408,13 @@ class MultimodalRotaryEmbedding(nn.Module):
         mrope_section = self.mrope_section * 2
         
         # Split cos/sin by sections: each is [3, batch_size, seq_len, section_size]
-        cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(1)
-        sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(1)
+        # After cat, shape is [batch_size, seq_len, head_dim]
+        # 
+        # IMPORTANT: Origin uses unsqueeze(1) because q/k is [batch, heads, seq_len, head_dim]
+        # But Muse uses [batch, seq_len, heads, head_dim], so we need unsqueeze(2)
+        # to broadcast correctly: [batch, seq_len, 1, head_dim]
+        cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(2)
+        sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(2)
         
         # Debug store (raw cos/sin before chunk)
         # 注意：Origin 在 apply_multimodal_rotary_pos_emb 中存储的 cos/sin 已经是 bfloat16
@@ -426,25 +431,22 @@ class MultimodalRotaryEmbedding(nn.Module):
             }
         self._debug_rope_intermediates["inv_freq"] = self.inv_freq.to(dtype=x.dtype).detach()
         self._debug_rope_intermediates["position_ids"] = position_ids.detach()
-        # Origin 存储的 cos/sin 是 bfloat16（因为在 KeyeRotaryEmbedding.forward 返回时已转换）
-        # 所以这里也需要先转换为 x.dtype 再存储
-        self._debug_rope_intermediates["cos_before_chunk"] = cos.detach()
-        self._debug_rope_intermediates["sin_before_chunk"] = sin.detach()
+        
+        # For debug comparison with Origin:
+        # - Muse cos/sin shape after cat: [batch, seq_len, 1, head_dim] (unsqueeze(2))
+        # - Origin cos/sin shape: [batch, 1, seq_len, head_dim] (unsqueeze(1))
+        # To compare, we need to transpose cos/sin from Muse format to Origin format
+        # [batch, seq_len, 1, head_dim] -> transpose(1,2) -> [batch, 1, seq_len, head_dim]
+        self._debug_rope_intermediates["cos_before_chunk"] = cos.transpose(1, 2).detach()
+        self._debug_rope_intermediates["sin_before_chunk"] = sin.transpose(1, 2).detach()
         self._debug_rope_intermediates["mrope_section"] = torch.tensor(
             self.mrope_section, device=x.device
         )
 
-        # Select appropriate dimension for each section (cycling through 0, 1, 2)
-        # section[i % 3] selects temporal(0), height(1), or width(2)
-        # Result shape: [batch_size, seq_len, dim]
-
-
         # Store combined cos/sin (after chunk) 
-        # Origin 存储的 shape 是 [1, 1, 209, 128]，但这是因为 Origin 的 q/k 是 [b, h, s, d]
-        # Muse 的 q/k 是 [b, s, h, d]，所以 unsqueeze 位置不同
-        # 为了对比，我们存储 unsqueeze 到 dim=1 的版本，与 Origin 保持一致
-        self._debug_rope_intermediates["cos_after_chunk"] = cos.detach()
-        self._debug_rope_intermediates["sin_after_chunk"] = sin.detach()
+        # Convert from Muse format [batch, seq_len, 1, head_dim] to Origin format [batch, 1, seq_len, head_dim]
+        self._debug_rope_intermediates["cos_after_chunk"] = cos.transpose(1, 2).detach()
+        self._debug_rope_intermediates["sin_after_chunk"] = sin.transpose(1, 2).detach()
 
         # Add head dimension for broadcasting: [batch_size, seq_len, 1, dim]
         
