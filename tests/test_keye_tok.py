@@ -36,6 +36,8 @@ from tests.models.keye_vl_tokenizer_image.image_processing_keye import SiglipIma
 from muse.config import KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
+from PIL import Image, ImageDraw
+
 # No RoPE debug imports needed for final output test
 
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
