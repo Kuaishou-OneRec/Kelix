@@ -22,7 +22,7 @@ from PIL import Image
 # === 导入 Muse 模型 ===
 from muse.models.keye_tokenizer_end2end_image import modeling as muse_mod
 from tests.models.keye_vl_tokenizer_image.modeling_keye_origin import KeyeForConditionalGeneration as origin_mod
-from tests.models.keye_vl_tokenizer_image.image_processing_keye import KeyeVisionImageProcessor
+from tests.models.keye_vl_tokenizer_image.image_processing_keye import SiglipImageProcessor
 from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
