@@ -8,8 +8,7 @@ import logging
 
 from muse.models.base import Model
 from muse.config import Qwen3Config
-from muse.layers.position_embeddings import RotaryPositionalEmbeddings
-from muse.models.qwen3._layers import MultimodalRotaryEmbedding
+from muse.layers.position_embeddings import RotaryPositionalEmbeddings, MultimodalRotaryEmbedding
 from muse.layers.transformer import TransformerDecoder, TransformerSelfAttentionLayer
 from muse.layers.rms_norm import RMSNorm
 from muse.layers.linear import TiedLinear

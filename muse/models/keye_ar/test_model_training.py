@@ -8,7 +8,7 @@ import os
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 # 导入新模型类
-from muse.models.keye_ar.token_decoder import TokenDecoder
+from muse.models.keye_ar.unified_token_decoder import TokenDecoder
 
 
 def test_model_training():

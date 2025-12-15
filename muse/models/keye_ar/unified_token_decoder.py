@@ -11,7 +11,7 @@ from muse.layers.layer_norm import Fp32LayerNorm
 from muse.layers.position_embeddings import LlamaRotaryPositionalEmbeddings
 
 
-class TokenDecoder(Model):
+class UnifiedTokenDecoder(Model):
     def __init__(self, 
                  vocab_size: int,
                  max_length: int,

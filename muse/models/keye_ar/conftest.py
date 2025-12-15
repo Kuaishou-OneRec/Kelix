@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 # 导入模型类
 from muse.models.keye_ar.token_decoder_ori import PureDecoderTransformer
-from muse.models.keye_ar.token_decoder import TokenDecoder
+from muse.models.keye_ar.unified_token_decoder import TokenDecoder
 
 @pytest.fixture
 def base_config():
