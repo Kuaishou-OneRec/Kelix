@@ -729,6 +729,8 @@ def _run_keye_tokenizer_alignment():
         # Muse 模型的 forward_image_tokens
         logger.info("Computing Muse forward_image_tokens...")
         muse_aligned_indices = muse_tokenizer.forward_image_tokens(pixel_values, image_grid_thw, vocab_size)
+        print(muse_aligned_indices)
+
     
     logger.info(f"Origin aligned_indices shape: {origin_aligned_indices.shape}")
     logger.info(f"Muse aligned_indices shape: {muse_aligned_indices.shape}")
