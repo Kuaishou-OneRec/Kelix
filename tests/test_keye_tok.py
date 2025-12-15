@@ -555,24 +555,31 @@ def _run_keye_tokenizer_alignment():
         full_state_dict, save_path, raw_cfg
     )
     
-    # === 3. Initialize Origin KeyeImageTokenizer (via KeyeForConditionalGeneration) ===
+    # === 3. Initialize Origin KeyeImageTokenizer ===
     log_separator("Initializing Origin KeyeImageTokenizer")
-    
-    # Load full HF model to get visual_tokenizer - same way as in three-way comparison
-    logger.info("Loading KeyeForConditionalGeneration to extract visual_tokenizer...")
-    origin_full_model = origin_mod.KeyeForConditionalGeneration.from_pretrained(
-        checkpoint_path,
-        _attn_implementation="flash_attention_2",
-        torch_dtype=torch.float16,
-        low_cpu_mem_usage=True
-    )
-    origin_full_model = origin_full_model.to(device).to(torch.bfloat16)
-    origin_full_model.eval()
-    
-    # Use the visual_tokenizer from the full model
-    origin_tokenizer = origin_full_model.visual_tokenizer
+    origin_tokenizer_config = origin_mod.KeyeImageTokenizerConfig.from_pretrained(checkpoint_path)
+    with set_default_dtype(dtype):
+        origin_tokenizer = origin_mod.KeyeImageTokenizer(
+            origin_tokenizer_config,
+            vq_sampling_mode="argmin",
+        ).to(device, dtype)
+    origin_tokenizer.eval()
     logger.info(f"Origin tokenizer n_q_tokens: {origin_tokenizer.n_q_tokens}")
-    logger.info(f"Origin tokenizer dtype: {next(origin_tokenizer.parameters()).dtype}")
+
+    # Load weights into Origin tokenizer
+    origin_state_dict = {}
+    for k, v in full_state_dict.items():
+        if k.startswith("visual_tokenizer."):
+            new_k = k[len("visual_tokenizer."):]
+            origin_state_dict[new_k] = v
+    
+    missing_o, unexpected_o = origin_tokenizer.load_state_dict(origin_state_dict, strict=False)
+    if missing_o:
+        logger.warning(f"Origin tokenizer missing keys: {len(missing_o)} keys")
+        for k in missing_o[:5]:
+            logger.warning(f"  - {k}")
+    if unexpected_o:
+        logger.warning(f"Origin tokenizer unexpected keys: {len(unexpected_o)} keys")
 
     # === 4. Load Muse KeyeImageTokenizer from saved weights ===
     log_separator("Loading Muse KeyeImageTokenizer from Saved Weights")
