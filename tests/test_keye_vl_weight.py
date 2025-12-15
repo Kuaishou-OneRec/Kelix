@@ -631,14 +631,14 @@ def test_pipeline_alignment():
                 activations["muse"]["4.R inv_freq"] = intermediates["inv_freq"]
             if intermediates.get("position_ids") is not None:
                 activations["muse"]["4.R position_ids"] = intermediates["position_ids"]
-            if intermediates.get("cos_before_split") is not None:
-                activations["muse"]["4.R cos_before_split"] = intermediates["cos_before_split"]
-            if intermediates.get("sin_before_split") is not None:
-                activations["muse"]["4.R sin_before_split"] = intermediates["sin_before_split"]
-            if intermediates.get("cos_after_split") is not None:
-                activations["muse"]["4.R cos_after_split"] = intermediates["cos_after_split"]
-            if intermediates.get("sin_after_split") is not None:
-                activations["muse"]["4.R sin_after_split"] = intermediates["sin_after_split"]
+            if intermediates.get("cos_before_chunk") is not None:
+                activations["muse"]["4.R cos_before_chunk"] = intermediates["cos_before_chunk"]
+            if intermediates.get("sin_before_chunk") is not None:
+                activations["muse"]["4.R sin_before_chunk"] = intermediates["sin_before_chunk"]
+            if intermediates.get("cos_after_chunk") is not None:
+                activations["muse"]["4.R cos_after_chunk"] = intermediates["cos_after_chunk"]
+            if intermediates.get("sin_after_chunk") is not None:
+                activations["muse"]["4.R sin_after_chunk"] = intermediates["sin_after_chunk"]
             if intermediates.get("mrope_section") is not None:
                 activations["muse"]["4.R mrope_section"] = intermediates["mrope_section"]
         if hasattr(muse_llm_rope, "_debug_rope_outputs") and len(muse_llm_rope._debug_rope_outputs) >= 2:
@@ -652,16 +652,17 @@ def test_pipeline_alignment():
         "0.0 ViT Embeddings Out",
         "0.1 LN1 Output",
         "0.2 Q_Proj Out",
-        "0.18 inv_freq",
-        "0.19 rope_emb_max_grid",
-        "0.19 pids",
-        "0.20 rope_emb",
-        "0.21 cos_before_chunk",
-        "0.21 sin_before_chunk",
-        "0.22 cos_after_chunk",
-        "0.22 sin_after_chunk",
-        "0.25 Q After RoPE",
-        "0.25 K After RoPE",
+        # ViT RoPE checkpoints (Muse only, Origin doesn't have debug info)
+        # "0.18 inv_freq",
+        # "0.19 rope_emb_max_grid",
+        # "0.19 pids",
+        # "0.20 rope_emb",
+        # "0.21 cos_before_chunk",
+        # "0.21 sin_before_chunk",
+        # "0.22 cos_after_chunk",
+        # "0.22 sin_after_chunk",
+        # "0.25 Q After RoPE",
+        # "0.25 K After RoPE",
         # LLM RoPE checkpoints
         "4.R inv_freq",
         "4.R position_ids",
@@ -669,10 +670,6 @@ def test_pipeline_alignment():
         "4.R sin_before_chunk",
         "4.R cos_after_chunk",
         "4.R sin_after_chunk",
-        "4.R cos_before_split",
-        "4.R sin_before_split",
-        "4.R cos_after_split",
-        "4.R sin_after_split",
         "4.R mrope_section",
         "4.R Q After RoPE",
         "4.R K After RoPE",
@@ -709,16 +706,6 @@ def test_pipeline_alignment():
     
     # 需要详细打印值的检查点 (打印 dtype 和前 10 个值)
     rope_detail_checkpoints = {
-        "0.18 inv_freq",
-        "0.19 rope_emb_max_grid",
-        "0.19 pids",
-        "0.20 rope_emb",
-        "0.21 cos_before_chunk",
-        "0.21 sin_before_chunk", 
-        "0.22 cos_after_chunk",
-        "0.22 sin_after_chunk",
-        "0.25 Q After RoPE",
-        "0.25 K After RoPE",
         # LLM RoPE detailed
         "4.R inv_freq",
         "4.R position_ids",
@@ -726,10 +713,6 @@ def test_pipeline_alignment():
         "4.R sin_before_chunk",
         "4.R cos_after_chunk",
         "4.R sin_after_chunk",
-        "4.R cos_before_split",
-        "4.R sin_before_split",
-        "4.R cos_after_split",
-        "4.R sin_after_split",
         "4.R Q After RoPE",
         "4.R K After RoPE",
     }

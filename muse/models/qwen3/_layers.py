@@ -363,23 +363,31 @@ class MultimodalRotaryEmbedding(nn.Module):
     ) -> torch.Tensor:
         """
         Apply multimodal 3D rotary position embedding.
-        
+
         Args:
             x: Input tensor with shape [batch_size, seq_len, num_heads, head_dim]
-            input_pos: Position indices with shape [3, batch_size, seq_len]
-                       where 3 represents (temporal, height, width).
-                       For text-only inputs, all 3 dimensions should have the same values.
+            input_pos: Position indices. Can be:
+                       - [batch_size, seq_len]: Standard 1D position ids, will be expanded to 3D
+                       - [3, batch_size, seq_len]: 3D multimodal position ids where 3 represents (temporal, height, width)
                        If None, returns x unchanged (no RoPE applied).
-        
+
         Returns:
             Tensor with rotary position embedding applied, same shape as input
         """
         if input_pos is None:
             return x
-        
+
         # x shape: [batch_size, seq_len, num_heads, head_dim]
-        # input_pos shape: [3, batch_size, seq_len]
-        position_ids = input_pos
+        batch_size, seq_len = x.shape[0], x.shape[1]
+
+        # Handle different input_pos formats
+        if input_pos.dim() == 2:  # [batch_size, seq_len] -> expand to 3D
+            # For 1D position ids, use same values for all 3 dimensions
+            position_ids = input_pos.unsqueeze(0).expand(3, -1, -1)  # [3, batch_size, seq_len]
+        elif input_pos.dim() == 3 and input_pos.shape[0] == 3:  # [3, batch_size, seq_len]
+            position_ids = input_pos
+        else:
+            raise ValueError(f"Unsupported input_pos shape: {input_pos.shape}. Expected [batch_size, seq_len] or [3, batch_size, seq_len]")
         
         # Core RoPE block. Keye has different position ids for 3 dimensions
         # So we expand the inv_freq to shape (3, ...)

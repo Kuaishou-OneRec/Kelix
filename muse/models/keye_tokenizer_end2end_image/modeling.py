@@ -491,22 +491,23 @@ class KeyeTokenizerEnd2EndImage(Model):
 
 
         #maosiyang: for debug infer
-        if position_ids is None and self.use_multimodal_rope:
-            position_ids , _ = self.get_rope_index_slowfast(
+        if position_ids is None:
+            position_ids_3d, _ = self.get_rope_index_slowfast(
                 input_ids=input_ids,
                 image_grid_thw=image_grid_thw,
                 video_grid_thw=video_grid_thw,
                 fast_video_grid_thw=fast_video_grid_thw,
                 attention_mask=attention_mask,
             )
-            position_ids = self.generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+            print(f"[Muse DEBUG] position_ids_3d shape: {position_ids_3d.shape}")
+            print(f"[Muse DEBUG] position_ids_3d sample: {position_ids_3d[:, :2, :10] if position_ids_3d.shape[0] >= 3 else position_ids_3d}")
+            position_ids = self.generate_positional_id(position_ids_3d).to(position_ids_3d)[None, :] # 1 x l, 这个是用来计算rope的东西
+            print(f"[Muse DEBUG] position_ids after generate_positional_id shape: {position_ids.shape}")
+            print(f"[Muse DEBUG] position_ids sample: {position_ids[:, :10]}")
+            print(f"[Muse DEBUG] Final position_ids to model shape: {position_ids.shape}")
+            print(f"[Muse DEBUG] Final position_ids to model sample: {position_ids[:, :10]}")
         else:
             raise ValueError("position id wrong!")
-
-        if self.use_multimodal_rope:
-            if position_ids.dim()==2:
-                #from inside old qwen 3, using 3d rope
-                position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
         else:
             raise ValueError("position id wrong!")

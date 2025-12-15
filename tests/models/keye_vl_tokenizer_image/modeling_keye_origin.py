@@ -3559,11 +3559,22 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
                     attention_mask,
                 )
                 self.rope_deltas = rope_deltas
+                print(f"[Origin DEBUG] position_3d_ids shape: {position_3d_ids.shape}")
+                print(f"[Origin DEBUG] position_3d_ids sample: {position_3d_ids[:, :2, :10] if position_3d_ids.shape[0] >= 3 else position_3d_ids}")
                 position_ids = generate_positional_id(position_3d_ids).to(position_3d_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
+                print(f"[Origin DEBUG] position_ids after generate_positional_id shape: {position_ids.shape}")
+                print(f"[Origin DEBUG] position_ids sample: {position_ids[:, :10]}")
+                print(f"[Origin DEBUG] Final position_ids to model shape: {position_ids.shape}")
+                print(f"[Origin DEBUG] Final position_ids to model sample: {position_ids[:, :10]}")
         elif position_ids.ndim == 3 and position_ids.shape[0] == 3:
             # 训练走这个分支
+            print(f"[Origin DEBUG] Training: input position_ids shape: {position_ids.shape}")
+            print(f"[Origin DEBUG] Training: input position_ids sample: {position_ids[:, :2, :10]}")
             position_ids = generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
-            # print(f"position_ids00000", position_ids.shape)
+            print(f"[Origin DEBUG] Training: position_ids after generate_positional_id shape: {position_ids.shape}")
+            print(f"[Origin DEBUG] Training: position_ids sample: {position_ids[:, :10]}")
+            print(f"[Origin DEBUG] Training: Final position_ids to model shape: {position_ids.shape}")
+            print(f"[Origin DEBUG] Training: Final position_ids to model sample: {position_ids[:, :10]}")
         # print(f"position_id{position_ids.shape}s={position_ids}")
         
         # else:
