@@ -23,7 +23,7 @@ the condition is from KeyeImageTokenizer.
 
 """
 
-from typing import Dict, Any, Union, Optional
+from typing import Dict, Any, Union, Optional, List
 import os
 import torch
 import datetime
@@ -165,17 +165,13 @@ def get_argument_parser():
                         default="mit-han-lab/dc-ae-f32c32-sana-1.1-diffusers",
                         help="Pretrained VAE model path")
 
-    ############ Text Encoder args ############
-    parser.add_argument("--text-encoder-dir", type=str,
-                        default="google/gemma-2-2b-it",
-                        help="Text encoder model name")
-
-    parser.add_argument("--tokenizer-dir", type=str,
-                        default="google/gemma-2-2b-it",
-                        help="Tokenizer model name")
+    ############ Image Tokenizer args ############
+    parser.add_argument("--image-tokenizer-dir", type=str,
+                        default=None,
+                        help="Image tokenizer model name")
     
-    parser.add_argument("--max-text-length", type=int, default=300,
-                        help="Maximum text sequence length")
+    parser.add_argument("--max-condition-length", type=int, default=324,
+                        help="Maximum condition sequence length")
 
     ############ Dataset args ############
     parser.add_argument("--dataset-config", type=str, required=True,
@@ -298,29 +294,8 @@ def get_argument_parser():
 
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed")
-    
-    parser.add_argument("--ema-rate", type=float, default=0.0,
-                        help="EMA decay rate (0 to disable, typical value: 0.9999). Note: EMA is not supported with FSDP")
 
     ############ Visualization Args ############
-    parser.add_argument("--visualize", action="store_true",
-                        help="Enable visualization during training (generates sample images)")
-    
-    parser.add_argument("--eval-sampling-steps", type=int, default=500,
-                        help="Generate validation images every N steps")
-    
-    parser.add_argument("--validation-prompts", type=str, nargs="+",
-                        default=[
-                            "A cat sitting on a couch",
-                            "A beautiful sunset over the ocean",
-                            "A photo of two apple, one red and one green",
-                            "A photo of a table with a laptop and a cup of coffee on the left",
-                            "一只透明的狗",
-                            "A blackboard with a word 'Hello, I'm your father' written on it",
-                            "纸上写着一个数学公式，内容是：$P(x|y) = \\frac{P(y|x)P(x)}{P(y)}$",
-                            "一个美味的蛋糕，上面写着“生日快乐”",
-                        ],
-                        help="Prompts for validation image generation")
     
     parser.add_argument("--cfg-scale", type=float, default=4.5,
                         help="CFG scale for validation sampling")
@@ -364,179 +339,71 @@ def vae_encode(vae, images: torch.Tensor) -> torch.Tensor:
         z = z * vae.config.scaling_factor
     return z
 
-# def load_text_encoder(text_encoder_dir: str, device: torch.device, dtype: torch.dtype):
-#     """Load text encoder.
-    
-#     Reference: Sana/diffusion/model/builder.py Lines 53-89
-#     """
-#     from transformers import AutoModelForCausalLM
-    
-#     # Load the full model and get the decoder (matching original Sana)
-#     text_encoder = AutoModelForCausalLM.from_pretrained(
-#         text_encoder_dir,
-#         trust_remote_code=True,
-#         torch_dtype=dtype,
-#     ).get_decoder()
-#     text_encoder = text_encoder.to(device).eval()
-#     text_encoder.requires_grad_(False)
-    
-#     return text_encoder
-
-
-# def encode_text(
-#     text_encoder,
-#     input_ids: torch.Tensor,
-#     attention_mask: torch.Tensor,
-#     max_length: int,
-#     device: torch.device,
-# ) -> tuple:
-#     """Encode text to embeddings.
-    
-#     Reference: Sana/train_scripts/train.py Lines 300-310
-#     """
-    
-#     with torch.no_grad():
-#         outputs = text_encoder(
-#             input_ids,
-#             attention_mask=attention_mask,
-#         )
-#         # Get hidden states
-#         if hasattr(outputs, 'last_hidden_state'):
-#             text_embeds = outputs.last_hidden_state
-#         elif isinstance(outputs, tuple):
-#             text_embeds = outputs[0]
-#         else:
-#             text_embeds = outputs
-    
-#     # Add dimension for cross attention: [B, 1, L, D]
-#     text_embeds = text_embeds[:, None]
-#     attention_mask = attention_mask[:, None, None]
-    
-#     return text_embeds, attention_mask
-
-def load_image_processor_and_tokenizer(tokenizer_dir: str, device: torch.device, dtype: torch.dtype):
+def load_image_tokenizer(tokenizer_dir: str, device: torch.device, dtype: torch.dtype):
     from muse.models.keye_tokenizer import KeyeImageTokenizer
     with set_default_dtype(dtype), torch.device(device):
         tokenizer = KeyeImageTokenizer.from_pretrained(tokenizer_dir).eval()
         tokenizer.requires_grad_(False)
 
-    processor = AutoProcessor.from_pretrained(
-        tokenizer_dir,
-        trust_remote_code=True
-    )
+    return tokenizer
 
-    return processor, tokenizer
-
-def tokenize_images(processor, tokenizer, images: torch.Tensor) -> torch.Tensor:
+def tokenize_images(tokenizer,
+                    pixel_values: torch.Tensor,
+                    image_grid_thw: torch.Tensor,
+                    batch_size: int,
+                    max_condition_length: int) -> torch.Tensor:
     """Tokenize images.
     
     Args:
-        processor: Image processor
-        tokenizer: Tokenizer
-        images: Images to tokenize
+        tokenizer: Image tokenizer
+        pixel_values: Pixel values tensor [num_total_patches, ...]
+        image_grid_thw: Grid info tensor [B, 3] where each row is (t, h, w)
+        batch_size: Batch size
+        max_condition_length: Maximum condition sequence length for padding
+    
+    Returns:
+        fused_embeddings: [B, max_condition_length, embed_dim]
+        attention_mask: [B, 1, 1, max_condition_length]
     """
-    pass
+    with torch.no_grad():
+        # List of tensor: [num_total_patches, embed_dim]
+        embeddings: List[torch.Tensor] = tokenizer(
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_thw
+        )["z_q"]
+        
+        # Sum embeddings across all codebooks
+        fused_embeddings = torch.sum(torch.stack(embeddings, dim=1), dim=1)
+        _, embed_dim = fused_embeddings.shape
+        
+        # Split by image_grid_thw and pad to max_condition_length
+        # image_grid_thw: [B, 3] where each row is (t, h, w)
+        lengths = (image_grid_thw[:, 1] * image_grid_thw[:, 2]).tolist()  # h * w for each image
+        
+        # Split fused_embeddings according to lengths
+        split_embeddings = torch.split(fused_embeddings, lengths, dim=0)
+        
+        # Pad each to max_condition_length and stack
+        padded = []
+        for emb in split_embeddings:
+            seq_len = emb.shape[0]
+            if seq_len < max_condition_length:
+                padding = torch.zeros(max_condition_length - seq_len, embed_dim, 
+                                      device=emb.device, dtype=emb.dtype)
+                emb = torch.cat([emb, padding], dim=0)
+            else:
+                emb = emb[:max_condition_length]
+            padded.append(emb)
+        
+        fused_embeddings = torch.stack(padded, dim=0)  # [B, max_condition_length, embed_dim]
 
+    # Create attention mask based on actual lengths
+    attention_mask = torch.zeros(batch_size, max_condition_length, device=fused_embeddings.device)
+    for i, length in enumerate(lengths):
+        attention_mask[i, :min(length, max_condition_length)] = 1
+    attention_mask = attention_mask[:, None, None, :]  # [B, 1, 1, max_condition_length]
 
-@torch.no_grad()
-def log_validation(
-    model: nn.Module,
-    vae: nn.Module,
-    text_encoder: nn.Module,
-    tokenizer,
-    tb_writer,
-    step: int,
-    validation_prompts: list,
-    image_size: int = 1024,
-    max_text_length: int = 300,
-    cfg_scale: float = 4.5,
-    num_steps: int = 20,
-    flow_shift: float = 3.0,
-    device: torch.device = None,
-    dtype: torch.dtype = None,
-):
-    """Generate validation images and log to TensorBoard.
-    
-    Args:
-        model: Sana model (should be a non-FSDP instance for inference)
-        vae: VAE decoder
-        text_encoder: Text encoder model
-        tokenizer: Tokenizer instance
-        tb_writer: TensorBoard SummaryWriter
-        step: Current training step
-        validation_prompts: List of prompts to generate images for
-        image_size: Output image size
-        max_text_length: Maximum text sequence length
-        cfg_scale: Classifier-free guidance scale
-        num_steps: Number of sampling steps
-        flow_shift: Flow shift parameter
-        device: Target device
-        dtype: Data type
-    """
-    from muse.inference.sana import encode_prompts, generate_with_euler
-    from diffusers import FlowMatchEulerDiscreteScheduler
-    
-    print_rank_0(f"Running validation at step {step}...")
-    
-    # Switch to eval mode
-    was_training = model.training
-    model.eval()
-    
-    try:
-        # Create Euler scheduler
-        scheduler = FlowMatchEulerDiscreteScheduler(shift=flow_shift)
-        
-        # Encode negative prompt for CFG (empty string)
-        uncond_embeds, uncond_mask = encode_prompts(
-            tokenizer, text_encoder, [""], max_text_length, device
-        )
-        
-        # Get model config
-        latent_channels = model.config.in_channels if hasattr(model, 'config') else 32
-        vae_downsample = model.config.vae_downsample_rate if hasattr(model, 'config') else 32
-        
-        for i, prompt in enumerate(validation_prompts):
-            # Encode prompt
-            text_embeds, attention_mask = encode_prompts(
-                tokenizer, text_encoder, [prompt], max_text_length, device
-            )
-            
-            # Generate image using Euler scheduler
-            images = generate_with_euler(
-                model=model,
-                vae=vae,
-                scheduler=scheduler,
-                text_embeds=text_embeds.to(dtype),
-                attention_mask=attention_mask,
-                uncond_embeds=uncond_embeds.to(dtype),
-                uncond_mask=uncond_mask,
-                cfg_scale=cfg_scale,
-                num_steps=num_steps,
-                image_size=image_size,
-                latent_channels=latent_channels,
-                vae_downsample=vae_downsample,
-                device=device,
-                dtype=dtype,
-                seed=42 + i,  # Different seed for each prompt
-                return_pil=False,  # Return tensor for TensorBoard
-            )
-            
-            # Log to TensorBoard
-            # images is tensor [B, C, H, W] in [0, 1] range
-            tag = f"validation/{prompt[:50]}"  # Truncate long prompts
-            tb_writer.add_images(tag, images, step, dataformats='NCHW')
-            print_rank_0(f"  Generated image for: '{prompt[:50]}...'")
-        
-        print_rank_0(f"Validation complete at step {step}")
-        
-    finally:
-        # Restore training mode
-        if was_training:
-            model.train()
-        
-        # Clear CUDA cache
-        torch.cuda.empty_cache()
-
+    return fused_embeddings, attention_mask
 
 def _init_profiler(output_dir, with_stack=False) -> None:
     """Initialize torch profiler with TensorBoard support.
@@ -658,6 +525,7 @@ def train():
             "(for train from scratch) must be provided.")
     
     # Apply model config overrides from command line
+    # caption_channels = 128
     if args.model_config_overrides:
         overrides = parse_config_overrides(args.model_config_overrides)
         print_rank_0(f"Applying model config overrides: {overrides}")
@@ -786,12 +654,12 @@ def train():
         device=torch.cuda.current_device(),
         dtype=get_torch_dtype(args.model_dtype)
     )
-    text_encoder = load_text_encoder(
-        text_encoder_dir=args.text_encoder_dir,
+    image_tokenizer = load_image_tokenizer(
+        tokenizer_dir=args.tokenizer_dir,
         device=torch.cuda.current_device(),
-        dtype=get_torch_dtype(args.model_dtype)
+        dtype=args.model_dtype
     )
-    ############## Load VAE and text encoder ##############
+    ############## Load VAE and tokenizer ##############
 
     # Create optimizer
     optimizer = torch.optim.AdamW(
@@ -821,20 +689,6 @@ def train():
         logit_std=args.logit_std,
         pred_sigma=model_config.pred_sigma if hasattr(model_config, 'pred_sigma') else False,
     )
-    
-    # EMA model (only supported in DDP mode, not FSDP)
-    # Reference: Sana/train_scripts/train.py Lines 848-854
-    ema_model = None
-    if args.ema_rate > 0:
-        if args.reshard_after_forward:
-            # FSDP Zero3 mode - EMA not supported
-            print_rank_0("WARNING: EMA is not supported with FSDP (reshard_after_forward=True). Disabling EMA.")
-        else:
-            # DDP or FSDP Zero2 mode - create EMA from unwrapped model
-            # Note: With FSDP, EMA would need special handling
-            print_rank_0(f"WARNING: EMA support with FSDP is experimental. Rate={args.ema_rate}")
-            # For now, we'll implement a simple parameter-level EMA update
-            # This won't create a separate model copy due to memory constraints with FSDP
 
     # Setup checkpointing
     app_state = AppState(model=model, optimizer=optimizer)
@@ -860,10 +714,6 @@ def train():
     dataset_config["model_class"] = model_class_name
     
     ## Overwrite dataset config
-    if args.max_text_length:
-        dataset_config["max_text_length"] = args.max_text_length
-        print_rank_0(f"Set max_text_length of dataset to: {args.max_text_length}")
-    
     if args.image_size:
         dataset_config["image_size"] = args.image_size
         print_rank_0(f"Set image_size of dataset to: {args.image_size}")
@@ -910,27 +760,6 @@ def train():
             num_workers=args.num_workers,
             collate_fn=collate_fn
         )
-
-    # Setup visualization model (for FSDP mode)
-    # In FSDP mode, we need a separate model instance for inference
-    # because the training model has sharded weights
-    model_for_vis = None
-    tokenizer_for_vis = None
-    if args.visualize and dist.get_rank() == 0:
-        from copy import deepcopy
-        from transformers import AutoTokenizer
-        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-        from torch.distributed.fsdp import FullStateDictConfig, StateDictType
-        
-        # Load tokenizer for visualization
-        tokenizer_for_vis = AutoTokenizer.from_pretrained(args.tokenizer_dir)
-        print_rank_0(f"Loaded tokenizer for visualization from {args.tokenizer_dir}")
-        
-        # Create a separate model instance for visualization (on CPU to save memory)
-        # We'll load weights from FSDP model when needed
-        with set_default_dtype(args.model_dtype), torch.device("cpu"):
-            model_for_vis = model_cls(model_config)
-        print_rank_0("Created model instance for visualization (on CPU)")
 
     # Training loop
     print_rank_0("Starting training...")
@@ -983,34 +812,6 @@ def train():
             )
         )
         
-        if dist.get_rank() == 0 and model_for_vis is not None:
-            torch.cuda.empty_cache()
-            gc.collect()
-            
-            model_for_vis.load_state_dict(state_dict)
-            model_for_vis.to(torch.cuda.current_device())
-            model_for_vis.to(get_torch_dtype(args.model_dtype))
-            
-            log_validation(
-                model=model_for_vis,
-                vae=vae,
-                text_encoder=text_encoder,
-                tokenizer=tokenizer_for_vis,
-                tb_writer=tb_writer,
-                step=0,  # Step 0 indicates before training
-                validation_prompts=args.validation_prompts,
-                image_size=args.image_size,
-                max_text_length=args.max_text_length,
-                cfg_scale=args.cfg_scale,
-                num_steps=args.num_sampling_steps,
-                flow_shift=args.flow_shift,
-                device=torch.cuda.current_device(),
-                dtype=get_torch_dtype(args.model_dtype),
-            )
-            
-            model_for_vis.cpu()
-            torch.cuda.empty_cache()
-        
         dist.barrier()
 
     while scheduler.global_step < args.num_training_steps:
@@ -1048,12 +849,12 @@ def train():
 
             # 4. Text Encoder
             with record_function("TextEncoder"):
-                text_embeds, attention_mask = encode_text(
-                    text_encoder,
-                    batch["input_ids"],
-                    batch.get("attention_mask"),
-                    args.max_text_length,
-                    torch.cuda.current_device(),
+                text_embeds, attention_mask = tokenize_images(
+                    image_tokenizer,
+                    batch["pixel_values"],
+                    batch["image_grid_thw"],
+                    args.batch_size,
+                    args.max_condition_length,
                 )
 
             # 5. Forward + Loss Computation
@@ -1065,7 +866,6 @@ def train():
                     mask=attention_mask,
                 )
                 loss = loss_dict["loss"]
-
 
             # Pass detached tensor directly - .item() will be called in metrics.step()
             # to avoid CPU-GPU sync during the training hot path
@@ -1093,13 +893,6 @@ def train():
                     optimizer.step()
                     lr_scheduler.step()
                     optimizer.zero_grad()
-                
-                # EMA update (if enabled and not in FSDP mode)
-                # Note: EMA with FSDP requires special handling due to sharded weights
-                # Reference: Sana/train_scripts/train.py Lines 416-418
-                if ema_model is not None:
-                    with record_function("EMA_Update"):
-                        ema_model.update()
 
             metrics.step_time.tick()
             metrics.step()
@@ -1119,57 +912,6 @@ def train():
                         checkpoint_dir=args.output_dir,
                         global_step=scheduler.global_step
                     )
-
-            # Visualization: generate sample images every N steps
-            # (Step 0 visualization is done before the training loop)
-            if args.visualize:
-                should_visualize = (scheduler.global_step % args.eval_sampling_steps == 0)
-                if should_visualize:
-                    from torch.distributed.checkpoint.state_dict import get_model_state_dict, StateDictOptions
-                    
-                    # Collect full state dict from FSDP model (all ranks participate)
-                    state_dict = get_model_state_dict(
-                        model,
-                        options=StateDictOptions(
-                            full_state_dict=True,
-                            cpu_offload=True,
-                        )
-                    )
-                    
-                    # Only rank 0 does the actual visualization
-                    if dist.get_rank() == 0 and model_for_vis is not None:
-                        torch.cuda.empty_cache()
-                        gc.collect()
-                        
-                        # Load weights to visualization model and move to GPU
-                        model_for_vis.load_state_dict(state_dict)
-                        model_for_vis.to(torch.cuda.current_device())
-                        model_for_vis.to(get_torch_dtype(args.model_dtype))
-                        
-                        # Run validation
-                        log_validation(
-                            model=model_for_vis,
-                            vae=vae,
-                            text_encoder=text_encoder,
-                            tokenizer=tokenizer_for_vis,
-                            tb_writer=tb_writer,
-                            step=scheduler.global_step,
-                            validation_prompts=args.validation_prompts,
-                            image_size=args.image_size,
-                            max_text_length=args.max_text_length,
-                            cfg_scale=args.cfg_scale,
-                            num_steps=args.num_sampling_steps,
-                            flow_shift=args.flow_shift,
-                            device=torch.cuda.current_device(),
-                            dtype=get_torch_dtype(args.model_dtype),
-                        )
-                        
-                        # Move model back to CPU to save memory
-                        model_for_vis.cpu()
-                        torch.cuda.empty_cache()
-                    
-                    # Sync all ranks before continuing
-                    dist.barrier()
 
             if torch_profiler:
                 torch_profiler.step()

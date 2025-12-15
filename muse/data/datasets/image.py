@@ -34,7 +34,9 @@ import numpy as np
 from PIL import Image
 from torchvision import transforms as T
 
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, AutoProcessor
+from keye_vl_utils import process_vision_info
+
 
 from muse.data.datasets.base import DistributedDataset, load_image
 from muse.data.utils import get_aspect_ratio_dict, get_closest_ratio
@@ -509,16 +511,430 @@ class Text2ImageDataset(DistributedDataset):
                 result[key] = torch.stack([s[key] for s in batch])
         
         return result
-
-class Text2ImageMultiScaleDatasetWrapper(IterableDataset):
-    """Text2Image multi-scale dataset wrapper.
+class Token2ImageDataset(DistributedDataset):
+    """Dataset for visual token-to-image pairs.
     
-    Wraps a Text2ImageDataset and groups samples by aspect ratio into buckets.
+    This dataset loads image dataset and processes them for diffusion training.
+    It supports:
+    - Online image loading and transformation
+    - Multi-resolution support
+    
     Args:
-        dataset: The Text2ImageDataset to wrap.
+        sources: Path(s) to parquet files or directory
+        image_size: Target image size (int or tuple)
+        tokenizer_path: Path to tokenizer
+        max_condition_length: Maximum condition sequence length
+        **kwargs: Additional args passed to DistributedDataset
+    """
+    
+    def __init__(
+        self,
+        sources: Union[List[str], str],
+        image_size: Union[int, Tuple[int, int]] = 1024,
+        processor_path: Optional[Any] = None,
+        max_condition_length: int = 384,
+        center_crop: bool = True,
+        multi_scale: bool = False,
+        **kwargs,
+    ):
+        self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
+        self.base_image_size = image_size if isinstance(image_size, int) else image_size[0]
+        self.processor_path = processor_path
+        self.processor = AutoProcessor.from_pretrained(self.processor_path)
+        self.max_condition_length = max_condition_length
+        self.center_crop = center_crop
+        
+        # Multi-scale training support
+        self.multi_scale = multi_scale
+        if multi_scale:
+            self.aspect_ratios = get_aspect_ratio_dict(self.base_image_size)
+            logger.info(f"Multi-scale training enabled with {len(self.aspect_ratios)} aspect ratios")
+        else:
+            self.aspect_ratios = None
+        
+        # Build transforms
+        self.transform = self._build_transform()
+        
+        super().__init__(sources, **kwargs)
+    
+    def _build_transform(self) -> Callable:
+        """Build image transformation pipeline."""
+        transform_list = []
+        
+        if self.center_crop:
+            # 先按短边 Resize（保持宽高比），再 CenterCrop
+            target_size = min(self.image_size)
+            transform_list.extend([
+                T.Resize(target_size, interpolation=T.InterpolationMode.BICUBIC),  # 短边缩放到 target_size
+                T.CenterCrop(target_size),  # 裁剪成正方形
+            ])
+        
+        transform_list.extend([
+            T.Resize(self.image_size, interpolation=T.InterpolationMode.BICUBIC),
+            T.ToTensor(),
+            T.Normalize([0.5], [0.5]),
+        ])
+        
+        return T.Compose(transform_list)
+    
+    def get_content(self,
+                    sample: Dict[str, Any],
+                    key: str) -> List[Dict[str, Any]]:
+        """Get content from sample.
+        
+        Args:
+            sample: Sample dict
+            key: Key to get content from
+            
+        Returns:
+            Parsed JSON content or empty list if parsing fails
+        """
+        content = sample.get(key, "[]")
+        try:
+            content = json.loads(content)
+            return content
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def _validate_messages(self, messages: List[Dict[str, Any]]) -> None:
+        """Validate messages format.
+        
+        Messages must be single-turn: exactly 2 non-system messages (1 user + 1 assistant).
+        System messages are allowed and will be skipped during validation and processing.
+        - User message content: str or list with exactly 1 text block
+        - Assistant message content: list with exactly 1 image/image_gen block
+        
+        Args:
+            messages: List of message dicts
+            
+        Raises:
+            ValueError: If messages format is invalid
+        """
+        # Filter out system messages for validation
+        non_system_messages = [m for m in messages if m.get("role") != "system"]
+        
+        if len(non_system_messages) != 2:
+            raise ValueError(
+                f"Messages must have exactly 2 non-system messages (1 user + 1 assistant), "
+                f"got {len(non_system_messages)}"
+            )
+        
+        user_msg = None
+        assistant_msg = None
+        
+        for msg in non_system_messages:
+            role = msg.get("role")
+            if role == "user":
+                user_msg = msg
+            elif role == "assistant":
+                assistant_msg = msg
+        
+        if user_msg is None:
+            raise ValueError("Messages must contain exactly 1 user message")
+        if assistant_msg is None:
+            raise ValueError("Messages must contain exactly 1 assistant message")
+        
+        # Validate user message content
+        user_content = user_msg.get("content")
+        if isinstance(user_content, list):
+            text_blocks = [b for b in user_content if b.get("type") == "text"]
+            if len(text_blocks) != 1:
+                raise ValueError(
+                    f"User message must contain exactly 1 text block, "
+                    f"got {len(text_blocks)}"
+                )
+        elif not isinstance(user_content, str):
+            raise ValueError(
+                f"User message content must be str or list, got {type(user_content)}"
+            )
+        
+        # Validate assistant message content
+        assistant_content = assistant_msg.get("content")
+        if not isinstance(assistant_content, list):
+            raise ValueError(
+                f"Assistant message content must be list, got {type(assistant_content)}"
+            )
+        
+        image_blocks = [
+            b for b in assistant_content 
+            if b.get("type") in ("image", "image_gen")
+        ]
+        if len(image_blocks) != 1:
+            raise ValueError(
+                f"Assistant message must contain exactly 1 image block, "
+                f"got {len(image_blocks)}"
+            )
+
+    def _validate_segments(self, segments: List[Dict[str, Any]]) -> None:
+        """Validate segments format.
+        
+        Segments must have exactly 2 items:
+        - First segment: type="text"
+        - Second segment: type="image"
+        
+        Args:
+            segments: List of segment dicts
+            
+        Raises:
+            ValueError: If segments format is invalid
+        """
+        if len(segments) != 2:
+            raise ValueError(
+                f"Segments must have exactly 2 items, got {len(segments)}"
+            )
+        
+        if segments[0].get("type") != "text":
+            raise ValueError(
+                f"First segment must be type='text', "
+                f"got type='{segments[0].get('type')}'"
+            )
+        
+        if segments[1].get("type") != "image":
+            raise ValueError(
+                f"Second segment must be type='image', "
+                f"got type='{segments[1].get('type')}'"
+            )
+
+    def extract_image_text(self, sample: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract image and text from sample.
+        
+        Supports multiple formats:
+        - Direct image/text fields
+        - Messages format (chat-style, single-turn only)
+        - Segments format (exactly 2 segments: text + image)
+        - Multiple captions with random selection
+        
+        Args:
+            sample: Raw sample dict
+            
+        Returns:
+            Dict with 'image' and 'text' keys
+            
+        Raises:
+            ValueError: If messages or segments format is invalid
+        """
+        image = sample.get("image", None)
+        text = sample.get("text", None)
+        
+        # Check for multiple captions
+        captions = sample.get("captions", None)
+
+        if captions and isinstance(captions, dict) and len(captions) > 1:
+            # Multiple captions - random selection
+            text = random.choice(list(captions.values()))
+        elif captions and isinstance(captions, dict):
+            # Single caption in dict format
+            text = next(iter(captions.values()))
+        
+        if image and text:
+            return {
+                "image": image,
+                "text": text
+            }
+        
+        messages = self.get_content(sample, "messages")
+        segments = self.get_content(sample, "segments")
+        
+        if messages:
+            # Validate messages format
+            self._validate_messages(messages)
+            
+            for turn in messages:
+                if turn["role"] == "user":
+                    content = turn["content"]
+                    if isinstance(content, str):
+                        text = content
+                    elif isinstance(content, list):
+                        # Already validated: exactly 1 text block
+                        for block in content:
+                            if block["type"] == "text":
+                                text = block["text"]
+                                break
+                elif turn["role"] == "assistant":
+                    content = turn["content"]
+                    # Already validated: exactly 1 image block
+                    for block in content:
+                        if block["type"] == "image":
+                            image = block["image"]
+                            break
+                        if block["type"] == "image_gen":
+                            # 兼容错误的格式，后面记得修复
+                            # Gen_BLIP3o-Pretrain-Long-Caption/0.0.1
+                            # type=image_gen, image: 
+                            if "image" in block:
+                                image = block["image"]
+                            elif "image_gen" in block:
+                                image = block["image_gen"]
+                            break
+
+        if segments:
+            # Validate segments format
+            self._validate_segments(segments)
+            
+            # First segment is text, second is image (validated)
+            text = segments[0]["text"]
+            image = segments[1]["image"]
+        
+        if image is None or text is None:
+            return None
+
+        return {
+            "image": image,
+            "text": text
+        }
+
+    def _build_multiscale_transform(self, target_size: Tuple[int, int]) -> Callable:
+        """Build transform for a specific target size in multi-scale training.
+        
+        Args:
+            target_size: Target (height, width) for this aspect ratio
+            
+        Returns:
+            Transform pipeline for this size
+        """
+        transform_list = [
+            T.Resize(target_size, interpolation=T.InterpolationMode.BICUBIC),
+            T.CenterCrop(target_size),
+            T.ToTensor(),
+            T.Normalize([0.5], [0.5]),
+        ]
+        return T.Compose(transform_list)
+    
+    def _process_pair(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
+        """Process a single image-text pair.
+        
+        Args:
+            sample: Sample dict with 'image' and 'text' keys
+        
+        Returns:
+            Processed sample dict or None if processing fails
+        """
+        result = {}
+
+        # Load and process image
+        image_data = sample.get("image")
+        if image_data is None:
+            return None
+        
+        image = load_image(image_data)
+        if image is None:
+            return None
+        
+        # Convert to RGB
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        
+        # Apply transforms (with multi-scale support)
+        if self.multi_scale and self.aspect_ratios:
+            # Get original image size and find closest aspect ratio
+            orig_w, orig_h = image.size
+            closest_ratio = get_closest_ratio(orig_h, orig_w, self.aspect_ratios)
+            target_h, target_w = self.aspect_ratios[closest_ratio]
+            # Build and apply transform for this specific target size
+            transform = self._build_multiscale_transform((target_h, target_w))
+            target_image = transform(image)
+            
+            # Store aspect ratio info for potential use in collation
+            result["aspect_ratio"] = closest_ratio
+            result["target_size"] = (target_h, target_w)
+        else:
+            target_h, target_w = self.image_size
+            target_image = self.transform(image)
+
+        
+        result["image"] = target_image
+        
+        fake_message = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image": image,
+                        "min_pixels": 4 * 28 * 28,
+                        "max_pixels": self.max_condition_length * 28 * 28
+                    }
+                ]
+            }
+        ]
+
+        text = self.processor.apply_chat_template(
+            fake_message, 
+            tokenize=False
+        )
+
+        image_inputs, _, _ = process_vision_info(fake_message)
+
+        inputs = self.processor(
+            text=[text],
+            images=image_inputs,
+            padding=False,
+            truncation=False,
+            return_tensors="pt",
+        )
+
+        return {
+            "pixel_values": inputs["pixel_values"],
+            "image_grid_thw": inputs["image_grid_thw"]
+        }
+
+    def process(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
+        """Process a single sample.
+        
+        Extracts image-text pair from sample and processes it.
+        
+        Args:
+            sample: Raw sample dict from parquet
+        
+        Returns:
+            Processed sample dict or None if processing fails
+        """
+        pair = self.extract_image_text(sample)
+        if pair:
+            images = json.loads(sample.get("images", '{}'))
+            image = pair["image"]
+            if image in images:
+                pair["image"] = images[image]
+            
+            return self._process_pair(pair)
+        return None
+
+    def collate_fn(
+        self,
+        batch: List[Dict[str, torch.Tensor]],
+    ) -> Dict[str, torch.Tensor]:
+        """Collate batch samples.
+        
+        Args:
+            batch: List of processed samples
+        
+        Returns:
+            Collated batch dict
+            
+        Note:
+            For multi-scale training without AspectRatioBatchSampler,
+            images in a batch may have different sizes. We resize all
+            images to the first image's size for consistent batching.
+        """
+        result = {}
+        # Standard mode: all images have same size
+
+        # Concatenate pixel_values: [s, d] -> [S, d] where S is sum of all s
+        result["pixel_values"] = torch.concat([s["pixel_values"] for s in batch], dim=0)
+        result["image_grid_thw"] = torch.concat([s["image_grid_thw"] for s in batch], dim=0)
+        result["image"] = torch.stack([s["image"] for s in batch])
+
+        return result
+
+class MultiScaleDatasetWrapper(IterableDataset):
+    """Multi-scale dataset wrapper.
+    
+    Wraps a X2ImageDataset and groups samples by aspect ratio into buckets.
+    Args:
+        dataset: The X2ImageDataset to wrap.
     Example:
-        >>> dataset = Text2ImageDataset(sources=..., multi_scale=True)
-        >>> bucket_dataset = Text2ImageMultiScaleDatasetWrapper(
+        >>> dataset = X2ImageDataset(sources=..., multi_scale=True)
+        >>> bucket_dataset = MultiScaleDatasetWrapper(
         ...     dataset=dataset,
         ...     batch_size=16,
         ...     aspect_ratios=get_aspect_ratio_dict(1024),
@@ -552,7 +968,8 @@ class Text2ImageMultiScaleDatasetWrapper(IterableDataset):
     def __iter__(self) -> Iterator[List[Dict]]:
         """Iterate and yield batches grouped by aspect ratio."""
         # Create a bucket for each aspect ratio
-        buckets: Dict[str, List] = {ratio: [] for ratio in self.aspect_ratios.keys()}
+        buckets: Dict[str, List] = {
+            ratio: [] for ratio in self.aspect_ratios.keys()}
         
         for sample in self.dataset:
             # Get the sample's aspect ratio
@@ -579,4 +996,3 @@ class Text2ImageMultiScaleDatasetWrapper(IterableDataset):
                 # Yield incomplete batch if any samples remain
                 if bucket:
                     yield bucket
-
