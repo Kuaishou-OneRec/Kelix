@@ -252,40 +252,41 @@ def test_demo():
         return_tensors="pt",
     ).to("cuda")
 
-    print(inputs.keys())
+    dumps = torch.load("/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.6.6109_stage3/step9500/global_step9500/converted/debug_new/vq_outputs.pt")
+    dumps2 = torch.load("/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.6.6109_stage3/step9500/global_step9500/converted/debug_new/test_run_outputs.pt")
 
-    import numpy as np
-    dumps = torch.load("/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.6.6109_stage3/step9500/global_step9500/converted/debug/test_run_outputs.pt")
-    vq_dumps = torch.load("/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.6.6109_stage3/step9500/global_step9500/converted/debug/vq_outputs.pt")
-
-    print(vq_dumps.keys())
-
-    print(dumps["inputs"]["data"].keys())
-
-    np.testing.assert_allclose(inputs["pixel_values"].cpu().numpy(), dumps["inputs"]["data"]["pixel_values"])
-    np.testing.assert_allclose(inputs["image_grid_thw"].cpu().numpy(), dumps["inputs"]["data"]["image_grid_thw"])
-
+    torch.testing.assert_allclose(inputs["pixel_values"].cpu(), dumps["pixel_values"])
+    torch.testing.assert_allclose(inputs["image_grid_thw"].cpu(), dumps["image_grid_thw"])
 
     with torch.no_grad():
         vq_out = tokenizer(pixel_values=inputs["pixel_values"], image_grid_thw=inputs["image_grid_thw"])
     
-    for k, v in vq_out.items():
-        # if k in ["z_q", "z_e", "indices"]:
-        #     continue
-        if not k == "z_e":
-            continue
-        if not isinstance(v, torch.Tensor):
-            for i, item in enumerate(v):
-                print(type(vq_dumps[k][i]))
-                torch.testing.assert_close(item.cpu(), vq_dumps[k][i])
-        else:
-            torch.testing.assert_close(v.cpu(), vq_dumps[k])
+    # print(dumps.keys())
+    torch.testing.assert_allclose(vq_out["x"].cpu(), dumps["image_embeds"])
 
     indices = torch.stack([x_i for x_i in vq_out['indices']], 0).T 
     aligned_indices = 151936 + indices + torch.arange(8).\
         to("cuda")[None] * tokenizer.config.codebook_size // 8
 
-    print(aligned_indices)
+    answer = torch.LongTensor(
+        [[157696, 161428, 172176, 176543, 191772, 198720, 201995, 209754],
+        [155872, 161428, 172475, 178883, 189182, 195380, 203676, 215606],
+        [152707, 162232, 170817, 177567, 190989, 194128, 203905, 211502],
+        [155872, 161428, 169345, 181246, 186400, 193588, 203676, 210683],
+        [156170, 164215, 175621, 180185, 192150, 197081, 208022, 216938],
+        [153068, 160320, 172737, 178954, 185988, 198887, 203676, 212428],
+        [152707, 167798, 174112, 182049, 187728, 193269, 206012, 214532],
+        [156614, 166166, 172568, 184363, 189079, 199763, 207621, 212810],
+        [152707, 160713, 172989, 181146, 192749, 195380, 207734, 215305],
+        [159674, 166192, 171391, 181686, 190231, 195874, 203905, 215606],
+        [152707, 161925, 174112, 182049, 190989, 195761, 201154, 214532],
+        [156614, 167079, 172568, 182049, 185202, 195874, 206012, 214334],
+        [156614, 160645, 175321, 181067, 189079, 199763, 202266, 212062],
+        [153068, 160645, 172568, 178561, 187447, 199763, 207621, 214334],
+        [152707, 167053, 174112, 182049, 187728, 195874, 201204, 214532],
+        [153068, 162232, 171391, 178561, 192513, 195874, 204058, 210162]]
+    ).to("cuda")
+    torch.testing.assert_allclose(aligned_indices, answer)
 
 if __name__ == "__main__":
     test_demo()
