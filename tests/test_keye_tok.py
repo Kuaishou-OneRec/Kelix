@@ -726,88 +726,193 @@ def _run_keye_tokenizer_alignment():
                 pos = tuple(d[i].item() for d in diff_positions)
                 logger.info(f"   -> Position {pos}: Origin={origin_aligned_indices[pos].item()}, Muse={muse_aligned_indices[pos].item()}")
 
-    # === 10. Test against pre-saved debug outputs ===
-    log_separator("Testing against Pre-saved Debug Outputs")
+    # === 10. Three-way comparison: HF Model vs Debug PT vs Muse Model ===
+    log_separator("Three-way Comparison: HF Model vs Debug PT vs Muse Model")
     
     debug_pt_path = Path(checkpoint_path) / "debug" / "vq_outputs.pt"
+    
+    # Try to import HF model (recovlm)
+    hf_model = None
+    hf_processor = None
+    try:
+        from recovlm.models.tokenizer_end2end_mt_1drope_v2.modeling_keye import KeyeForConditionalGeneration
+        from recovlm.models.tokenizer_end2end_mt_1drope_v2.keye_vl_utils import process_vision_info
+        from transformers import AutoProcessor
+        
+        logger.info("Loading HF KeyeForConditionalGeneration model...")
+        hf_model = KeyeForConditionalGeneration.from_pretrained(
+            checkpoint_path,
+            _attn_implementation="flash_attention_2",
+            torch_dtype=torch.float16,
+            low_cpu_mem_usage=True
+        )
+        hf_model = hf_model.to(device).to(torch.bfloat16)
+        hf_model.eval()
+        logger.info(f"HF model loaded, dtype: {next(hf_model.parameters()).dtype}")
+        
+        hf_processor = AutoProcessor.from_pretrained(checkpoint_path, trust_remote_code=True)
+        logger.info("HF processor loaded")
+        
+    except ImportError as e:
+        logger.warning(f"⚠️  Could not import recovlm: {e}")
+        logger.info("Skipping HF model comparison, will only compare Debug PT vs Muse")
+    except Exception as e:
+        logger.warning(f"⚠️  Error loading HF model: {e}")
+        logger.info("Skipping HF model comparison, will only compare Debug PT vs Muse")
+    
     if debug_pt_path.exists():
-        logger.info(f"Loading debug outputs from: {debug_pt_path}")
+        logger.info(f"\nLoading debug outputs from: {debug_pt_path}")
         debug_outputs = torch.load(debug_pt_path, map_location=device)
         
         logger.info(f"Debug outputs keys: {list(debug_outputs.keys())}")
         
         # Use pixel_values and image_grid_thw from debug file as input
-        debug_pixel_values = debug_outputs["pixel_values"].to(device, dtype=dtype)
+        debug_pixel_values_orig_dtype = debug_outputs["pixel_values"].dtype
+        debug_pixel_values = debug_outputs["pixel_values"].to(device)
         debug_image_grid_thw = debug_outputs["image_grid_thw"].to(device)
         
         logger.info(f"Debug pixel_values shape: {debug_pixel_values.shape}")
+        logger.info(f"Debug pixel_values dtype (original): {debug_pixel_values_orig_dtype}")
         logger.info(f"Debug image_grid_thw: {debug_image_grid_thw.tolist()}")
         
-        # Run Muse tokenizer with debug inputs
-        with torch.no_grad():
-            logger.info("Running Muse KeyeImageTokenizer with debug inputs...")
-            muse_debug_output = muse_tokenizer(debug_pixel_values, debug_image_grid_thw)
+        # Print dtypes of all debug outputs
+        logger.info("\nDebug outputs dtypes:")
+        for k, v in debug_outputs.items():
+            if isinstance(v, torch.Tensor):
+                logger.info(f"   {k}: {v.dtype}, shape: {v.shape}")
+            elif isinstance(v, list) and v and isinstance(v[0], torch.Tensor):
+                logger.info(f"   {k}: list of {len(v)} tensors, first dtype: {v[0].dtype}")
         
-        # Compare outputs
-        debug_comparison_keys = [
-            ("image_embeds", "x"),           # debug key -> muse output key
-            ("z_e", "z_e"),
-            ("z_q", "z_q"),
-            ("codebook_loss", "codebook_loss"),
-            ("commitment_loss", "commitment_loss"),
-            ("indices", "indices"),
+        # ===== Run HF Model (if available) =====
+        hf_output = None
+        if hf_model is not None:
+            log_separator("Running HF Model with Debug Inputs")
+            
+            # Convert pixel_values to match HF model dtype
+            hf_dtype = next(hf_model.parameters()).dtype
+            hf_pixel_values = debug_pixel_values.to(dtype=hf_dtype)
+            
+            logger.info(f"HF model dtype: {hf_dtype}")
+            logger.info(f"HF pixel_values dtype: {hf_pixel_values.dtype}")
+            
+            with torch.no_grad():
+                # HF model's visual_tokenizer forward
+                hf_output = hf_model.visual_tokenizer(hf_pixel_values, debug_image_grid_thw)
+            
+            logger.info("HF model forward complete")
+            logger.info(f"HF output keys: {list(hf_output.keys())}")
+        
+        # ===== Run Muse Model =====
+        log_separator("Running Muse Model with Debug Inputs")
+        
+        muse_weight_dtype = next(muse_tokenizer.parameters()).dtype
+        logger.info(f"Muse tokenizer weight dtype: {muse_weight_dtype}")
+        
+        muse_pixel_values = debug_pixel_values.to(dtype=muse_weight_dtype)
+        logger.info(f"Muse pixel_values dtype: {muse_pixel_values.dtype}")
+        
+        with torch.no_grad():
+            muse_debug_output = muse_tokenizer(muse_pixel_values, debug_image_grid_thw)
+        
+        logger.info("Muse model forward complete")
+        
+        # ===== Three-way Comparison =====
+        log_separator("Comparison Results")
+        
+        comparison_keys = [
+            ("image_embeds", "x", "x"),        # (debug_key, hf_key, muse_key)
+            ("z_e", "z_e", "z_e"),
+            ("z_q", "z_q", "z_q"),
+            ("codebook_loss", "codebook_loss", "codebook_loss"),
+            ("commitment_loss", "commitment_loss", "commitment_loss"),
+            ("indices", "indices", "indices"),
         ]
         
-        logger.info("\n--- Comparing Muse outputs with debug file ---")
-        debug_all_match = True
+        debug_vs_hf_match = True
+        debug_vs_muse_match = True
+        hf_vs_muse_match = True
         
-        for debug_key, muse_key in debug_comparison_keys:
-            if debug_key not in debug_outputs:
-                logger.warning(f"⚠️  Debug key '{debug_key}' not found in debug file")
-                continue
-            if muse_key not in muse_debug_output:
-                logger.warning(f"⚠️  Muse key '{muse_key}' not found in muse output")
-                continue
+        for debug_key, hf_key, muse_key in comparison_keys:
+            logger.info(f"\n=== Comparing: {debug_key} ===")
             
-            debug_val = debug_outputs[debug_key]
-            muse_val = muse_debug_output[muse_key]
+            # Get values
+            debug_val = debug_outputs.get(debug_key)
+            hf_val = hf_output.get(hf_key) if hf_output else None
+            muse_val = muse_debug_output.get(muse_key)
             
-            # Handle indices specially (list of tensors)
+            # Handle indices specially (list of tensors -> stacked tensor)
             if debug_key == "indices":
-                if isinstance(muse_val, list):
-                    # Stack muse indices like origin does
-                    muse_val = torch.stack(muse_val, dim=0)
                 if isinstance(debug_val, list):
                     debug_val = torch.stack(debug_val, dim=0)
-                
-                logger.info(f"Debug indices shape: {debug_val.shape}")
-                logger.info(f"Muse indices shape: {muse_val.shape}")
+                if hf_val is not None and isinstance(hf_val, list):
+                    hf_val = torch.stack(hf_val, dim=0)
+                if isinstance(muse_val, list):
+                    muse_val = torch.stack(muse_val, dim=0)
+                    
+                if debug_val is not None:
+                    logger.info(f"   Debug indices shape: {debug_val.shape}")
+                if hf_val is not None:
+                    logger.info(f"   HF indices shape: {hf_val.shape}")
+                if muse_val is not None:
+                    logger.info(f"   Muse indices shape: {muse_val.shape}")
             
-            # Use appropriate tolerance
+            # Determine tolerance
             if debug_key in ["codebook_loss", "commitment_loss"]:
                 atol = 1e-2
             elif debug_key == "indices":
-                atol = 0  # indices should match exactly
+                atol = 0
             else:
                 atol = 2e-2
             
-            is_match, max_diff = compare_tensors_verbose(
-                f"Debug vs Muse: {debug_key}",
-                debug_val, muse_val,
-                atol=atol, print_values=True
-            )
+            # Compare: Debug PT vs HF Model
+            if hf_val is not None and debug_val is not None:
+                is_match, _ = compare_tensors_verbose(
+                    f"Debug PT vs HF: {debug_key}",
+                    debug_val, hf_val,
+                    atol=atol, print_values=True
+                )
+                if not is_match:
+                    debug_vs_hf_match = False
             
-            if not is_match:
-                debug_all_match = False
-                all_matches = False
+            # Compare: Debug PT vs Muse Model
+            if debug_val is not None and muse_val is not None:
+                is_match, _ = compare_tensors_verbose(
+                    f"Debug PT vs Muse: {debug_key}",
+                    debug_val, muse_val,
+                    atol=atol, print_values=True
+                )
+                if not is_match:
+                    debug_vs_muse_match = False
+                    all_matches = False
+            
+            # Compare: HF Model vs Muse Model
+            if hf_val is not None and muse_val is not None:
+                is_match, _ = compare_tensors_verbose(
+                    f"HF vs Muse: {debug_key}",
+                    hf_val, muse_val,
+                    atol=atol, print_values=True
+                )
+                if not is_match:
+                    hf_vs_muse_match = False
         
-        if debug_all_match:
-            logger.info("✅ All Muse outputs match debug file within tolerance!")
-        else:
-            logger.info("❌ Some Muse outputs differ from debug file!")
+        # Summary
+        log_separator("Three-way Comparison Summary")
+        if hf_output is not None:
+            logger.info(f"Debug PT vs HF Model:   {'✅ MATCH' if debug_vs_hf_match else '❌ MISMATCH'}")
+        logger.info(f"Debug PT vs Muse Model: {'✅ MATCH' if debug_vs_muse_match else '❌ MISMATCH'}")
+        if hf_output is not None:
+            logger.info(f"HF Model vs Muse Model: {'✅ MATCH' if hf_vs_muse_match else '❌ MISMATCH'}")
+        
+        # Cleanup HF model to free memory
+        if hf_model is not None:
+            del hf_model
+            del hf_processor
+            torch.cuda.empty_cache()
+            logger.info("\nCleaned up HF model from memory")
+        
     else:
         logger.warning(f"⚠️  Debug file not found: {debug_pt_path}")
-        logger.info("Skipping debug comparison test.")
+        logger.info("Skipping three-way comparison test.")
 
     # === 11. Final Result ===
     log_separator("Test Result")
