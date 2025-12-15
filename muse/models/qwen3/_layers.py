@@ -338,6 +338,8 @@ class MultimodalRotaryEmbedding(nn.Module):
             self.base ** (torch.arange(0, self.dim, 2, dtype=torch.float) / self.dim)
         )
         self.register_buffer("inv_freq", inv_freq, persistent=False)
+        # For default rope type, attention_scaling is 1.0
+        self.attention_scaling = 1.0
     
     @staticmethod
     def rotate_half(x: torch.Tensor) -> torch.Tensor:
@@ -406,7 +408,11 @@ class MultimodalRotaryEmbedding(nn.Module):
             # Compute cos and sin: [3, batch_size, seq_len, dim]
             cos = emb.cos()
             sin = emb.sin()
-        
+
+        # Apply attention scaling (for compatibility with advanced RoPE types)
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
         # Apply multimodal section splitting
         # mrope_section * 2 for cos/sin concatenation
         # e.g., [16, 24, 24] -> [16, 24, 24, 16, 24, 24]
@@ -416,21 +422,21 @@ class MultimodalRotaryEmbedding(nn.Module):
         cos_sections = cos.split(mrope_section_doubled, dim=-1)
         sin_sections = sin.split(mrope_section_doubled, dim=-1)
         
-        # Debug store (raw cos/sin before section selection)
+        # Debug store (raw cos/sin before chunk)
         if not hasattr(self, "_debug_rope_intermediates"):
             self._debug_rope_intermediates = {
                 "inv_freq": None,
                 "position_ids": None,
-                "cos_before_split": None,
-                "sin_before_split": None,
-                "cos_after_split": None,
-                "sin_after_split": None,
+                "cos_before_chunk": None,
+                "sin_before_chunk": None,
+                "cos_after_chunk": None,
+                "sin_after_chunk": None,
                 "mrope_section": None,
             }
         self._debug_rope_intermediates["inv_freq"] = self.inv_freq.to(dtype=x.dtype).detach()
         self._debug_rope_intermediates["position_ids"] = position_ids.detach()
-        self._debug_rope_intermediates["cos_before_split"] = cos.detach()
-        self._debug_rope_intermediates["sin_before_split"] = sin.detach()
+        self._debug_rope_intermediates["cos_before_chunk"] = cos.detach()
+        self._debug_rope_intermediates["sin_before_chunk"] = sin.detach()
         self._debug_rope_intermediates["mrope_section"] = torch.tensor(
             self.mrope_section, device=x.device
         )
@@ -447,9 +453,9 @@ class MultimodalRotaryEmbedding(nn.Module):
             dim=-1
         )
 
-        # Store combined cos/sin (after section selection)
-        self._debug_rope_intermediates["cos_after_split"] = cos_combined.detach()
-        self._debug_rope_intermediates["sin_after_split"] = sin_combined.detach()
+        # Store combined cos/sin (after chunk)
+        self._debug_rope_intermediates["cos_after_chunk"] = cos_combined.detach()
+        self._debug_rope_intermediates["sin_after_chunk"] = sin_combined.detach()
         
         # Add head dimension for broadcasting: [batch_size, seq_len, 1, dim]
         cos_combined = cos_combined.unsqueeze(2).to(dtype=x.dtype)

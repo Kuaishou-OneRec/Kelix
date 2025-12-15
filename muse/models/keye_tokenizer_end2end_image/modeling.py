@@ -491,7 +491,7 @@ class KeyeTokenizerEnd2EndImage(Model):
 
 
         #maosiyang: for debug infer
-        if position_ids is None:
+        if position_ids is None and self.use_multimodal_rope:
             position_ids , _ = self.get_rope_index_slowfast(
                 input_ids=input_ids,
                 image_grid_thw=image_grid_thw,
@@ -499,8 +499,6 @@ class KeyeTokenizerEnd2EndImage(Model):
                 fast_video_grid_thw=fast_video_grid_thw,
                 attention_mask=attention_mask,
             )
-
-        if position_ids.ndim == 3 and position_ids.shape[0] == 3:
             position_ids = self.generate_positional_id(position_ids).to(position_ids)[None, :] # 1 x l, 这个是用来计算rope的东西
         else:
             raise ValueError("position id wrong!")
