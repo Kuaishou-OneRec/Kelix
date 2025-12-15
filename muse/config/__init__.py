@@ -22,6 +22,7 @@ Example usage:
 """
 
 from muse.config.base import BaseConfig, get_config, load_config
+<<<<<<< HEAD
 from muse.config.model_config import (
     ModelConfig,
     Qwen3Config,
@@ -29,6 +30,9 @@ from muse.config.model_config import (
     KeyeVisionConfig,
     KeyeTokenizerConfig,
 )
+=======
+from muse.config.model_config import ModelConfig, Qwen3Config, SanaConfig
+>>>>>>> 721e57f6 (add sana config)
 from muse.config.dataset_config import DatasetConfig
 from muse.config.training_config import (
     TrainingConfig,
@@ -57,6 +61,8 @@ __all__ = [
     "SiglipVisionConfig",
     "KeyeVisionConfig",
     "KeyeTokenizerConfig",
+    "SanaConfig",
+    
     # Dataset config
     "DatasetConfig",
     
