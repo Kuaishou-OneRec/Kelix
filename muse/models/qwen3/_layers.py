@@ -431,6 +431,8 @@ class MultimodalRotaryEmbedding(nn.Module):
         sin_sections = sin.split(mrope_section_doubled, dim=-1)
         
         # Debug store (raw cos/sin before chunk)
+        # 注意：Origin 在 apply_multimodal_rotary_pos_emb 中存储的 cos/sin 已经是 bfloat16
+        # 所以这里也需要先转换 dtype 再存储，保持一致
         if not hasattr(self, "_debug_rope_intermediates"):
             self._debug_rope_intermediates = {
                 "inv_freq": None,
@@ -443,8 +445,10 @@ class MultimodalRotaryEmbedding(nn.Module):
             }
         self._debug_rope_intermediates["inv_freq"] = self.inv_freq.to(dtype=x.dtype).detach()
         self._debug_rope_intermediates["position_ids"] = position_ids.detach()
-        self._debug_rope_intermediates["cos_before_chunk"] = cos.detach()
-        self._debug_rope_intermediates["sin_before_chunk"] = sin.detach()
+        # Origin 存储的 cos/sin 是 bfloat16（因为在 KeyeRotaryEmbedding.forward 返回时已转换）
+        # 所以这里也需要先转换为 x.dtype 再存储
+        self._debug_rope_intermediates["cos_before_chunk"] = cos.to(dtype=x.dtype).detach()
+        self._debug_rope_intermediates["sin_before_chunk"] = sin.to(dtype=x.dtype).detach()
         self._debug_rope_intermediates["mrope_section"] = torch.tensor(
             self.mrope_section, device=x.device
         )
@@ -461,10 +465,13 @@ class MultimodalRotaryEmbedding(nn.Module):
             dim=-1
         )
 
-        # Store combined cos/sin (after chunk)
-        self._debug_rope_intermediates["cos_after_chunk"] = cos_combined.detach()
-        self._debug_rope_intermediates["sin_after_chunk"] = sin_combined.detach()
-        
+        # Store combined cos/sin (after chunk) 
+        # Origin 存储的 shape 是 [1, 1, 209, 128]，但这是因为 Origin 的 q/k 是 [b, h, s, d]
+        # Muse 的 q/k 是 [b, s, h, d]，所以 unsqueeze 位置不同
+        # 为了对比，我们存储 unsqueeze 到 dim=1 的版本，与 Origin 保持一致
+        self._debug_rope_intermediates["cos_after_chunk"] = cos_combined.unsqueeze(1).to(dtype=x.dtype).detach()
+        self._debug_rope_intermediates["sin_after_chunk"] = sin_combined.unsqueeze(1).to(dtype=x.dtype).detach()
+
         # Add head dimension for broadcasting: [batch_size, seq_len, 1, dim]
         cos_combined = cos_combined.unsqueeze(2).to(dtype=x.dtype)
         sin_combined = sin_combined.unsqueeze(2).to(dtype=x.dtype)
