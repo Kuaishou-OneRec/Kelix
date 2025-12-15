@@ -34,7 +34,7 @@ from transformers import AutoTokenizer
 # 假设 KeyeProcessor 在 muse.models.keye.modular_Keye，如果不是请修改路径
 # 或者将 KeyeProcessor 类定义直接粘贴在脚本上方
 try:
-    from tests.models.keye_vl_tokenizer_image.processing_keye import SiglipImageProcessor
+    from tests.models.keye_vl_tokenizer_image.processing_keye import KeyeProcessor
 except ImportError:
     # 如果找不到路径，请将你刚才发的 KeyeProcessor 代码保存为 modular_Keye.py 并放在同级目录
     sys.path.append(os.getcwd())
@@ -323,7 +323,7 @@ def prepare_inputs_via_processor(ckpt_path: str, device: str, dtype: torch.dtype
     # 1. 加载 Tokenizer 和 ImageProcessor
     logger.info("⚙️ Loading Tokenizer & ImageProcessor...")
     tokenizer = AutoTokenizer.from_pretrained(ckpt_path, trust_remote_code=True)
-    image_processor = KeyeVisionImageProcessor.from_pretrained(ckpt_path)
+    image_processor = SiglipImageProcessor.from_pretrained(ckpt_path)
     
     # 2. 初始化 KeyeProcessor
     logger.info("🧠 Initializing KeyeProcessor...")
