@@ -544,8 +544,9 @@ def test_pipeline_alignment():
     if hasattr(origin_mod.KeyeFlashAttention2, '_debug_attn_call_count'):
         origin_mod.KeyeFlashAttention2._debug_attn_call_count = 0
     # 重置 Muse 的 attention debug 计数器
-    if hasattr(muse_model, "model") and hasattr(muse_model.model, "layers"):
-        for layer in muse_model.model.layers:
+    # 路径: muse_model.model (Qwen3Model) -> .model (TransformerDecoder) -> .layers
+    if hasattr(muse_model, "model") and hasattr(muse_model.model, "model") and hasattr(muse_model.model.model, "layers"):
+        for layer in muse_model.model.model.layers:
             if hasattr(layer.attn, '_debug_attn_call_count'):
                 layer.attn._debug_attn_call_count = 0
             if hasattr(layer.attn, '_debug_attn_inputs'):
@@ -704,9 +705,10 @@ def test_pipeline_alignment():
     if origin_mod._DEBUG_ROPE_OUTPUTS.get("v_before_attn") is not None:
         activations["origin"]["v_before_attn"] = origin_mod._DEBUG_ROPE_OUTPUTS["v_before_attn"]
     # Muse: 从 LLM Layer 0 的 attention 模块获取
+    # 路径: muse_model.model (Qwen3Model) -> .model (TransformerDecoder) -> .layers[0].attn
     llm_layer0_attn = None
-    if hasattr(muse_model, "model") and hasattr(muse_model.model, "layers"):
-        llm_layer0_attn = muse_model.model.layers[0].attn
+    if hasattr(muse_model, "model") and hasattr(muse_model.model, "model") and hasattr(muse_model.model.model, "layers"):
+        llm_layer0_attn = muse_model.model.model.layers[0].attn
     if llm_layer0_attn and hasattr(llm_layer0_attn, "_debug_attn_inputs"):
         if llm_layer0_attn._debug_attn_inputs.get("q_before_attn") is not None:
             activations["muse"]["q_before_attn"] = llm_layer0_attn._debug_attn_inputs["q_before_attn"]
