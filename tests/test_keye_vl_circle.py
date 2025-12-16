@@ -1,8 +1,8 @@
 """
-Keye-VL Pipeline: Muse Model Inference Only
-===========================================
-Input: Generated Circle Image
-Output: Muse Model Logits
+Keye-VL Pipeline: Muse Model Inference Only (Aligned with Origin Input)
+=======================================================================
+Input: 100x100 Generated Circle Image (No Text Prompt)
+Output: Muse Model Logits (saved to muse_logits.pt)
 """
 
 import os
@@ -26,30 +26,29 @@ from muse.training.common import set_default_dtype
 from transformers import AutoTokenizer, AutoProcessor
 from tests.models.keye_vl_tokenizer_image.image_processing_keye import SiglipImageProcessor
 
-# 假设 KeyeProcessor 在 tests 目录下，如果路径不同请调整
 try:
     from tests.models.keye_vl_tokenizer_image.processing_keye import KeyeProcessor
 except ImportError:
     sys.path.append(os.getcwd())
     from tests.models.keye_vl_tokenizer_image.processing_keye import KeyeProcessor
 
-# 配置日志
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
 
-# CKPT 路径
 DEFAULT_CKPT = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.6.6109_stage3/step9500/global_step9500/converted/"
 
 # =========================================================================
-# Helper Functions
+# Helper Functions (严格对齐 Origin)
 # =========================================================================
 
-def generate_circle_image(size=(384, 384), fill_color=(0, 0, 0), outline_color=(255, 255, 255), outline_width=5):
-    """生成一个包含圆形的测试图片"""
+def generate_circle_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(255, 255, 255), outline_width=5):
+    """
+    与 Origin 代码完全一致的生成函数
+    """
     image = Image.new('RGB', size, color=(255, 255, 255))
     draw = ImageDraw.Draw(image)
     x_center, y_center = size[0] // 2, size[1] // 2
-    radius = min(size[0], size[1]) // 2 - outline_width
+    radius = min(size[0], size[1]) // 2
     draw.ellipse([x_center - radius, y_center - radius, x_center + radius, y_center + radius],
                  fill=fill_color,
                  outline=outline_color,
@@ -71,7 +70,6 @@ def _load_checkpoint_robust(path_str: str, device="cpu") -> Dict[str, torch.Tens
         state_dict = torch.load(path, map_location=device)
         return state_dict.get("module", state_dict)
     
-    # 文件夹加载逻辑 (SafeTensors / Bin / PT)
     state_dict = {}
     st_files = sorted(glob.glob(str(path / "*.safetensors")))
     if st_files:
@@ -89,36 +87,31 @@ def _load_checkpoint_robust(path_str: str, device="cpu") -> Dict[str, torch.Tens
             if "module" in part: part = part["module"]
             state_dict.update(part)
         return state_dict
-        
-    pt_files = sorted(glob.glob(str(path / "*.pt")))
-    if pt_files:
-         for f in pt_files:
-            part = torch.load(f, map_location=device)
-            if "module" in part: part = part["module"]
-            state_dict.update(part)
-         return state_dict
-    raise ValueError(f"No checkpoint found in {path}")
+    return state_dict
 
 # =========================================================================
-# Input Preparation
+# Input Preparation (Aligned with Origin process_message)
 # =========================================================================
 
 def prepare_inputs(ckpt_path: str, device: str, dtype: torch.dtype):
-    """生成圆形图片并通过 Processor 处理为模型输入"""
+    """
+    严格模拟 process_message 的逻辑
+    """
     logger.info("⚙️ Loading Tokenizer & ImageProcessor...")
     tokenizer = AutoTokenizer.from_pretrained(ckpt_path, trust_remote_code=True)
     image_processor = SiglipImageProcessor.from_pretrained(ckpt_path)
     processor = KeyeProcessor(image_processor=image_processor, tokenizer=tokenizer)
 
-    logger.info("🎨 Generating Circle Image...")
-    image = generate_circle_image(size=(384, 384))
+    # [Align] 使用 100x100
+    logger.info("🎨 Generating Circle Image (100x100)...")
+    image = generate_circle_image(size=(100, 100)) 
     
+    # [Align] 只有图片，没有文本
     messages = [
         {
             "role": "user",
             "content": [
                 {"type": "image", "image": image},
-                {"type": "text", "text": "Describe this image."}, 
             ],
         }
     ]
@@ -129,21 +122,22 @@ def prepare_inputs(ckpt_path: str, device: str, dtype: torch.dtype):
         tokenize=False, 
         add_generation_prompt=True
     )
+    logger.info(f"   -> Text Prompt: {repr(text)}")
     
-    # 提取图片对象
-    image_inputs = [image] # 简单起见直接使用上面生成的对象，如果是多图需从 messages 解析
+    # 手动提取图片 (Origin 代码用了 process_vision_info，这里手动做等价操作)
+    image_inputs = [image]
 
     logger.info("🔄 Running Processor...")
+    # [Align] 参数与 Origin 完全一致：padding=False, truncation=False
     inputs = processor(
         text=[text],
         images=image_inputs,
         videos=None,
-        padding=False, # 强制关闭 Padding
+        padding=False, 
         truncation=False,
         return_tensors="pt",
     )
 
-    # 转移到 Device
     model_inputs = {
         "input_ids": inputs["input_ids"].to(device),
         "attention_mask": inputs["attention_mask"].to(device),
@@ -151,11 +145,16 @@ def prepare_inputs(ckpt_path: str, device: str, dtype: torch.dtype):
         "image_grid_thw": inputs["image_grid_thw"].to(device)
     }
     
-    # 如果 Processor 返回 [1, num_patches, ...]，去掉 batch 维以匹配模型输入预期
+    # [Muse Specific] Muse Model 期望 pixel_values 是 [N, C, H, W]
+    # Origin Model 的 forward_image_tokens 可能内部处理了 batch 维，
+    # 但 Muse 需要我们这里手动去掉 batch 维 (如果 batch size=1)
     if model_inputs["pixel_values"].dim() == 5 and model_inputs["pixel_values"].shape[0] == 1:
         model_inputs["pixel_values"] = model_inputs["pixel_values"].squeeze(0)
 
     logger.info(f"   -> Input IDs Shape: {model_inputs['input_ids'].shape}")
+    logger.info(f"   -> Pixel Values Shape: {model_inputs['pixel_values'].shape}")
+    logger.info(f"   -> Image Grid: {model_inputs['image_grid_thw'].tolist()}")
+    
     return model_inputs
 
 # =========================================================================
@@ -170,7 +169,6 @@ def run_muse_inference():
     logger.info(f"Loading Config from: {ckpt_path}")
     raw_cfg = _load_config_json(ckpt_path)
     
-    # --- 构建 Muse Configs ---
     rope_scaling = raw_cfg.get("rope_scaling")
     mrope_section = rope_scaling.get("mrope_section") if rope_scaling else None
     
@@ -217,8 +215,7 @@ def run_muse_inference():
         qk_norm_eps=inner_vcfg.get("qk_norm_eps", 1e-6),
         attention_function=raw_cfg.get("_attn_implementation", "flash_attention_2"),
     )
-    
-    # [FIX] 手动强制设置 _attn_implementation 避免 SiglipAttention 报错
+    # [FIX] 强制设置 _attn_implementation
     vision_cfg._attn_implementation = "flash_attention_2"
 
     tokenizer_cfg = KeyeTokenizerConfig(
@@ -234,7 +231,6 @@ def run_muse_inference():
         vq_sampling_mode="argmin",
     )
 
-    # --- 初始化 Muse 模型 ---
     with set_default_dtype(dtype):
         logger.info("🚀 Initializing Muse Model...")
         muse_model = muse_mod.KeyeTokenizerEnd2EndImage(
@@ -245,48 +241,37 @@ def run_muse_inference():
             pool="sum"
         ).to(device)
 
-    # --- 加载权重 ---
     logger.info("📥 Loading Weights...")
     state_dict = _load_checkpoint_robust(ckpt_path, device="cpu")
-    # 转换 HF 权重到 Muse 格式
     muse_state = muse_model.convert_hf_state_dict(state_dict, tie_word_embeddings=qwen_cfg.tie_word_embeddings)
     muse_model.load_state_dict(muse_state, strict=False)
     muse_model.to(device, dtype)
     muse_model.eval()
 
-    # --- 准备输入 ---
     inputs = prepare_inputs(ckpt_path, device, dtype)
 
-    # --- 前向传播 ---
     logger.info("🔥 Running Muse Forward...")
     with torch.no_grad():
         outputs = muse_model(**inputs)
 
-# --- 提取 Logits ---
-    # Muse 的输出可能是 dict 或 object，这里做兼容处理
+    # --- 提取 Logits 并保存 ---
     if isinstance(outputs, dict):
         logits = outputs.get("logits")
     elif hasattr(outputs, "logits"):
         logits = outputs.logits
     else:
-        # 如果 outputs 是 tuple，通常 logits 是第一个元素
         logits = outputs[0]
 
     if logits is not None:
         logger.info(f"\n✅ Muse Logits Obtained!")
         logger.info(f"   Shape: {logits.shape}")
-        logger.info(f"   Dtype: {logits.dtype}")
         
         # 打印部分值供检查
         first_token_logits = logits[0, 0, :5].float().cpu().numpy()
-        last_token_logits = logits[0, -1, :5].float().cpu().numpy()
         logger.info(f"   First token logits (top 5 dims): {first_token_logits}")
-        logger.info(f"   Last token logits  (top 5 dims): {last_token_logits}")
 
-        # === [新增] 保存 Logits 到 .pt 文件 ===
-        save_path = "/llm_reco/maosiyang/muse_logits.pt"
+        save_path = "muse_logits.pt"
         logger.info(f"💾 Saving logits to {save_path}...")
-        # detach并转到cpu保存，方便后续加载查看
         torch.save(logits.detach().cpu(), save_path)
         logger.info("✅ Save Completed.")
     else:
