@@ -966,6 +966,15 @@ def train():
             trust_remote_code=True
         )
         print_rank_0(f"Loaded processor for visualization from {args.image_tokenizer_dir}")
+
+    # Setup visualization model (for FSDP mode)
+    # In FSDP mode, we need a separate model instance for inference
+    # because the training model has sharded weights
+    model_for_vis = None
+    if args.visualize_dir and dist.get_rank() == 0:
+        with set_default_dtype(args.model_dtype), torch.device("cpu"):
+            model_for_vis = model_cls(model_config)
+        print_rank_0("Created model instance for visualization (on CPU)")
     ############## Load VAE and tokenizer ##############
 
     # Create optimizer
@@ -1102,32 +1111,56 @@ def train():
         data_iter = iter([])
 
     # Step 0 visualization: show model state before any optimization
-    if args.visualize_dir and dist.get_rank() == 0:
-        print_rank_0("Running step 0 visualization (before training)...")
-        model.eval()
-        with Timer("visualization step 0"):
-            visualize_reconstruction(
-                model=model,
-                vae=vae,
-                image_tokenizer=image_tokenizer,
-                processor=vis_processor,
-                image_dir=args.visualize_dir,
-                output_dir=args.output_dir,
-                global_step=0,
-                cfg_scale=args.cfg_scale,
-                num_sampling_steps=args.num_sampling_steps,
-                flow_shift=args.flow_shift,
-                max_condition_length=args.max_condition_length,
-                image_size=args.image_size,
-                device=torch.cuda.current_device(),
-                dtype=get_torch_dtype(args.model_dtype),
-                tb_writer=tb_writer,
-                num_images=args.num_vis_images,
-            )
-        model.train()
-
     if args.visualize_dir:
-        dist.barrier()  # Sync all ranks after step 0 visualization
+        from torch.distributed.checkpoint.state_dict import get_model_state_dict, StateDictOptions
+        
+        print_rank_0("Running step 0 visualization (before training)...")
+        # Collect full state dict from FSDP model (all ranks participate)
+        state_dict = get_model_state_dict(
+            model,
+            options=StateDictOptions(
+                full_state_dict=True,
+                cpu_offload=True,
+            )
+        )
+        
+        # Only rank 0 does the actual visualization
+        if dist.get_rank() == 0 and model_for_vis is not None:
+            torch.cuda.empty_cache()
+            gc.collect()
+            
+            # Load weights to visualization model and move to GPU
+            model_for_vis.load_state_dict(state_dict)
+            model_for_vis.to(torch.cuda.current_device())
+            model_for_vis.to(get_torch_dtype(args.model_dtype))
+            model_for_vis.eval()
+            
+            with Timer("visualization step 0"):
+                visualize_reconstruction(
+                    model=model_for_vis,
+                    vae=vae,
+                    image_tokenizer=image_tokenizer,
+                    processor=vis_processor,
+                    image_dir=args.visualize_dir,
+                    output_dir=args.output_dir,
+                    global_step=0,
+                    cfg_scale=args.cfg_scale,
+                    num_sampling_steps=args.num_sampling_steps,
+                    flow_shift=args.flow_shift,
+                    max_condition_length=args.max_condition_length,
+                    image_size=args.image_size,
+                    device=torch.cuda.current_device(),
+                    dtype=get_torch_dtype(args.model_dtype),
+                    tb_writer=tb_writer,
+                    num_images=args.num_vis_images,
+                )
+            
+            # Move model back to CPU to save memory
+            model_for_vis.cpu()
+            torch.cuda.empty_cache()
+        
+        # Sync all ranks after step 0 visualization
+        dist.barrier()
 
     while scheduler.global_step < args.num_training_steps:
         with contextlib.ExitStack() as ctx:
@@ -1228,33 +1261,59 @@ def train():
                         global_step=scheduler.global_step
                     )
 
-            # Visualization (only on rank 0)
+            # Visualization: generate sample images every N steps
+            # All ranks participate in get_model_state_dict, only rank 0 does visualization
             if (args.visualize_dir and 
                 scheduler.global_step > 0 and 
-                scheduler.global_step % args.visualize_per_step == 0 and
-                dist.get_rank() == 0):
-                model.eval()
-                with Timer("visualization"):
-                    visualize_reconstruction(
-                        model=model,
-                        vae=vae,
-                        image_tokenizer=image_tokenizer,
-                        processor=vis_processor,
-                        image_dir=args.visualize_dir,
-                        output_dir=args.output_dir,
-                        global_step=scheduler.global_step,
-                        cfg_scale=args.cfg_scale,
-                        num_sampling_steps=args.num_sampling_steps,
-                        flow_shift=args.flow_shift,
-                        max_condition_length=args.max_condition_length,
-                        image_size=args.image_size,
-                        device=torch.cuda.current_device(),
-                        dtype=get_torch_dtype(args.model_dtype),
-                        tb_writer=tb_writer,
-                        num_images=args.num_vis_images,
+                scheduler.global_step % args.visualize_per_step == 0):
+                from torch.distributed.checkpoint.state_dict import get_model_state_dict, StateDictOptions
+                
+                # Collect full state dict from FSDP model (all ranks participate)
+                state_dict = get_model_state_dict(
+                    model,
+                    options=StateDictOptions(
+                        full_state_dict=True,
+                        cpu_offload=True,
                     )
-                model.train()
-                dist.barrier()  # Sync after visualization
+                )
+                
+                # Only rank 0 does the actual visualization
+                if dist.get_rank() == 0 and model_for_vis is not None:
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                    
+                    # Load weights to visualization model and move to GPU
+                    model_for_vis.load_state_dict(state_dict)
+                    model_for_vis.to(torch.cuda.current_device())
+                    model_for_vis.to(get_torch_dtype(args.model_dtype))
+                    model_for_vis.eval()
+                    
+                    with Timer("visualization"):
+                        visualize_reconstruction(
+                            model=model_for_vis,
+                            vae=vae,
+                            image_tokenizer=image_tokenizer,
+                            processor=vis_processor,
+                            image_dir=args.visualize_dir,
+                            output_dir=args.output_dir,
+                            global_step=scheduler.global_step,
+                            cfg_scale=args.cfg_scale,
+                            num_sampling_steps=args.num_sampling_steps,
+                            flow_shift=args.flow_shift,
+                            max_condition_length=args.max_condition_length,
+                            image_size=args.image_size,
+                            device=torch.cuda.current_device(),
+                            dtype=get_torch_dtype(args.model_dtype),
+                            tb_writer=tb_writer,
+                            num_images=args.num_vis_images,
+                        )
+                    
+                    # Move model back to CPU to save memory
+                    model_for_vis.cpu()
+                    torch.cuda.empty_cache()
+                
+                # Sync all ranks after visualization
+                dist.barrier()
 
             if torch_profiler:
                 torch_profiler.step()

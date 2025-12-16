@@ -118,7 +118,7 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "python3 recipes/train_sana_ae.py \
                 --visualize-dir $VISUALIZE_DIR \
-                --visualize-per-step 1000 \
+                --visualize-per-step 30 \
                 --num-vis-images 10 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
