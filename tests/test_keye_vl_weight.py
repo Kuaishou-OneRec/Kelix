@@ -613,6 +613,15 @@ def test_pipeline_alignment():
         activations["origin"]["4.R Q After RoPE"] = origin_mod._DEBUG_ROPE_OUTPUTS["q_after_rope"]
     if origin_mod._DEBUG_ROPE_OUTPUTS.get("k_after_rope") is not None:
         activations["origin"]["4.R K After RoPE"] = origin_mod._DEBUG_ROPE_OUTPUTS["k_after_rope"]
+    # maosiyang debug keys for Origin
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("maosiyang:q_before_rope") is not None:
+        activations["origin"]["maosiyang:q_before_rope"] = origin_mod._DEBUG_ROPE_OUTPUTS["maosiyang:q_before_rope"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("maosiyang:k_before_rope") is not None:
+        activations["origin"]["maosiyang:k_before_rope"] = origin_mod._DEBUG_ROPE_OUTPUTS["maosiyang:k_before_rope"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("maosiyang:q_after_rope") is not None:
+        activations["origin"]["maosiyang:q_after_rope"] = origin_mod._DEBUG_ROPE_OUTPUTS["maosiyang:q_after_rope"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("maosiyang:k_after_rope") is not None:
+        activations["origin"]["maosiyang:k_after_rope"] = origin_mod._DEBUG_ROPE_OUTPUTS["maosiyang:k_after_rope"]
 
     # Muse 模型: 从 rope 模块读取中间变量
     if vit_backbone_muse and hasattr(vit_backbone_muse, "encoder"):
@@ -660,6 +669,15 @@ def test_pipeline_alignment():
                 activations["muse"]["4.R sin_after_chunk"] = intermediates["sin_after_chunk"]
             if intermediates.get("mrope_section") is not None:
                 activations["muse"]["4.R mrope_section"] = intermediates["mrope_section"]
+            # maosiyang debug keys for Muse
+            if intermediates.get("maosiyang:q_before_rope") is not None:
+                activations["muse"]["maosiyang:q_before_rope"] = intermediates["maosiyang:q_before_rope"]
+            if intermediates.get("maosiyang:k_before_rope") is not None:
+                activations["muse"]["maosiyang:k_before_rope"] = intermediates["maosiyang:k_before_rope"]
+            if intermediates.get("maosiyang:q_after_rope") is not None:
+                activations["muse"]["maosiyang:q_after_rope"] = intermediates["maosiyang:q_after_rope"]
+            if intermediates.get("maosiyang:k_after_rope") is not None:
+                activations["muse"]["maosiyang:k_after_rope"] = intermediates["maosiyang:k_after_rope"]
         if hasattr(muse_llm_rope, "_debug_rope_outputs") and len(muse_llm_rope._debug_rope_outputs) >= 2:
             activations["muse"]["4.R Q After RoPE"] = muse_llm_rope._debug_rope_outputs[0]
             activations["muse"]["4.R K After RoPE"] = muse_llm_rope._debug_rope_outputs[1]
