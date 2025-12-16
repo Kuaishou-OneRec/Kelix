@@ -1102,19 +1102,32 @@ def train():
         data_iter = iter([])
 
     # Step 0 visualization: show model state before any optimization
-    if args.visualize_dir:
-        from torch.distributed.checkpoint.state_dict import get_model_state_dict, StateDictOptions
-        
+    if args.visualize_dir and dist.get_rank() == 0:
         print_rank_0("Running step 0 visualization (before training)...")
-        state_dict = get_model_state_dict(
-            model,
-            options=StateDictOptions(
-                full_state_dict=True,
-                cpu_offload=True,
+        model.eval()
+        with Timer("visualization step 0"):
+            visualize_reconstruction(
+                model=model,
+                vae=vae,
+                image_tokenizer=image_tokenizer,
+                processor=vis_processor,
+                image_dir=args.visualize_dir,
+                output_dir=args.output_dir,
+                global_step=0,
+                cfg_scale=args.cfg_scale,
+                num_sampling_steps=args.num_sampling_steps,
+                flow_shift=args.flow_shift,
+                max_condition_length=args.max_condition_length,
+                image_size=args.image_size,
+                device=torch.cuda.current_device(),
+                dtype=get_torch_dtype(args.model_dtype),
+                tb_writer=tb_writer,
+                num_images=args.num_vis_images,
             )
-        )
-        
-        dist.barrier()
+        model.train()
+
+    if args.visualize_dir:
+        dist.barrier()  # Sync all ranks after step 0 visualization
 
     while scheduler.global_step < args.num_training_steps:
         with contextlib.ExitStack() as ctx:
