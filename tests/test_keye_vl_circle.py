@@ -3,6 +3,7 @@ Keye-VL Pipeline: Muse vs Origin Model Comparison
 ==================================================
 Input: 100x100 Generated Circle Image (No Text Prompt)
 Output: Compare Muse and Origin Model Logits
+        And save them to /llm_reco/maosiyang/
 """
 
 import os
@@ -447,13 +448,18 @@ def run_comparison():
     save_dir = Path("/llm_reco/maosiyang/")
     save_dir.mkdir(parents=True, exist_ok=True)
     
+    # [FIX] Save individual logits files as well
+    torch.save(muse_logits.detach().cpu(), save_dir / "muse_model_logits.pt")
+    torch.save(origin_logits.detach().cpu(), save_dir / "origin_model_logits.pt")
+    
+    # Save dictionary
     torch.save({
         "muse_logits": muse_logits.detach().cpu(),
         "origin_logits": origin_logits.detach().cpu(),
         "comparison": comparison_results,
     }, save_dir / "comparison_results.pt")
     
-    logger.info(f"\n💾 Results saved to {save_dir / 'comparison_results.pt'}")
+    logger.info(f"\n💾 Results saved to {save_dir}")
     logger.info("\n✅ Comparison Completed!")
 
 if __name__ == "__main__":
