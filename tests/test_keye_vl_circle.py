@@ -270,7 +270,7 @@ def run_muse_inference():
         first_token_logits = logits[0, 0, :5].float().cpu().numpy()
         logger.info(f"   First token logits (top 5 dims): {first_token_logits}")
 
-        save_path = "muse_logits.pt"
+        save_path = "/llm_reco/maosiyang/muse_logits.pt"
         logger.info(f"💾 Saving logits to {save_path}...")
         torch.save(logits.detach().cpu(), save_path)
         logger.info("✅ Save Completed.")
