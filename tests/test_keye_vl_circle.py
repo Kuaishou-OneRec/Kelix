@@ -17,7 +17,7 @@ from typing import Dict, Any, List
 import torch
 import numpy as np
 import torch.nn as nn
-from PIL import Image
+from PIL import Image,ImageDraw
 
 # === 导入 Muse 模型 ===
 from muse.models.keye_tokenizer_end2end_image import modeling as muse_mod
@@ -49,6 +49,26 @@ DEFAULT_CKPT = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vq_end2end_1105/run_exp1.
 # =========================================================================
 # Helper Functions (保持不变)
 # =========================================================================
+
+def generate_circle_image(size=(384, 384), fill_color=(0, 0, 0), outline_color=(255, 255, 255), outline_width=5):
+    """
+    生成一个包含一个圆的 PIL Image 对象，用于测试。
+    注意：默认尺寸改为 384x384 以匹配常见的 ViT 输入，避免太小被 resize 导致失真，
+    虽然 Qwen2-VL 支持任意分辨率，但大一点比较好观察。
+    """
+    # 创建一个新的图像对象
+    image = Image.new('RGB', size, color=(255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    # 计算圆的坐标（图像中心为圆心）
+    x_center, y_center = size[0] // 2, size[1] // 2
+    radius = min(size[0], size[1]) // 2 - outline_width  # 稍微减小半径防止切边
+    # 绘制圆
+    draw.ellipse([x_center - radius, y_center - radius, x_center + radius, y_center + radius],
+                 fill=fill_color,
+                 outline=outline_color,
+                 width=outline_width)
+    return image
+
 
 def format_tensor_val(t: Any, n: int = 5) -> str:
     if not isinstance(t, torch.Tensor): return str(type(t))
@@ -329,16 +349,10 @@ def register_detailed_hooks(model, name_prefix):
 # =========================================================================
 # Input Preparation (KeyeProcessor Logic)
 # =========================================================================
-
 def prepare_inputs_via_processor(ckpt_path: str, device: str, dtype: torch.dtype):
     """
-    Creates inputs using a random image and KeyeProcessor.
-    This mimics the real inference pipeline: ChatML -> Processor -> Model Input.
+    Creates inputs using the generated circle image and chat template logic.
     """
-    logger.info("🎨 Generating Random Image (384x384)...")
-    # 生成随机图片
-    image = Image.fromarray(np.random.randint(0, 255, (384, 384, 3), dtype=np.uint8))
-    
     # 1. 加载 Tokenizer 和 ImageProcessor
     logger.info("⚙️ Loading Tokenizer & ImageProcessor...")
     tokenizer = AutoTokenizer.from_pretrained(ckpt_path, trust_remote_code=True)
@@ -347,26 +361,54 @@ def prepare_inputs_via_processor(ckpt_path: str, device: str, dtype: torch.dtype
     # 2. 初始化 KeyeProcessor
     logger.info("🧠 Initializing KeyeProcessor...")
     processor = KeyeProcessor(image_processor=image_processor, tokenizer=tokenizer)
+
+    # 3. 生成图片
+    logger.info("🎨 Generating Circle Image...")
+    image = generate_circle_image(size=(384, 384)) # 建议使用 384 或更大，适配 Patch
     
-    # 确认 image token
-    image_token = getattr(tokenizer, "image_token", "<|image_pad|>")
-    logger.info(f"   -> Using Image Token: {image_token}")
+    # 4. 构建 Messages (模拟你的输入结构)
+    # 注意：通常 Keye/Qwen 需要文本指令，这里我补上一个简单的 "Describe this." 
+    # 如果你的模型支持纯图片输入，可以去掉 text 部分
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": image},
+                {"type": "text", "text": "Describe this image."}, 
+            ],
+        }
+    ]
 
-    # 3. 构造 ChatML 格式输入
-    # KeyeProcessor 会自动扫描文本中的 image_token，并将其展开为对应 Patch 数量的 token
-    prompt = f"<|im_start|>user\n{image_token}\nDescribe this noise.<|im_end|>\n<|im_start|>assistant\n"
-    logger.info(f"   -> Raw Prompt: {repr(prompt)}")
+    # 5. 处理 Chat Template (对应你的 process_message 逻辑)
+    logger.info("📝 Applying Chat Template...")
+    text = processor.apply_chat_template(
+        messages, 
+        tokenize=False, 
+        add_generation_prompt=True
+    )
+    logger.info(f"   -> Template Output: {repr(text)}")
 
-    # 4. 调用 Processor 处理
-    # return_tensors='pt' 会返回 BatchFeature，包含 input_ids, pixel_values, image_grid_thw 等
+    # 6. 提取图片对象 (替代 process_vision_info)
+    # 从 messages 中提取所有 image 对象
+    image_inputs = []
+    for msg in messages:
+        if "content" in msg:
+            for content_item in msg["content"]:
+                if content_item.get("type") == "image":
+                    image_inputs.append(content_item["image"])
+    
+    # 7. 调用 Processor 生成 Tensor
     logger.info("🔄 Running Processor...")
     inputs = processor(
-        text=[prompt], 
-        images=image, 
-        return_tensors="pt"
+        text=[text],
+        images=image_inputs,
+        videos=None, # 假设没有视频
+        padding=False, # 你的要求
+        truncation=False, # 你的要求
+        return_tensors="pt",
     )
 
-    # 5. 转移到 Device 并转换格式
+    # 8. 转移到 Device 并处理格式
     logger.info("📦 Preparing Model Inputs...")
     
     # 获取数据
@@ -375,28 +417,26 @@ def prepare_inputs_via_processor(ckpt_path: str, device: str, dtype: torch.dtype
     pixel_values = inputs["pixel_values"].to(device, dtype=dtype)
     image_grid_thw = inputs["image_grid_thw"].to(device)
     
-    # 计算 vision_token_mask (用于 Muse 模型内部)
-    # Processor 已经将 <|image_pad|> 替换成了多个 image_token_id
-    image_token_id = tokenizer.convert_tokens_to_ids(image_token)
+    # --- 必须保留：计算 vision_token_mask 用于后续测试逻辑 ---
+    # 查找 image token id，通常是 tokenizer.image_token_id 或者特定字符
+    if hasattr(tokenizer, "image_token_id"):
+        image_token_id = tokenizer.image_token_id
+    elif hasattr(tokenizer, "image_token"):
+        image_token_id = tokenizer.convert_tokens_to_ids(tokenizer.image_token)
+    else:
+        # Fallback: Qwen 通常使用 <|image_pad|> (151655)
+        image_token_id = 151655 
+        
     vision_token_mask = (input_ids == image_token_id)
     
-    # 打印一些统计信息用于确认
+    # 打印统计信息
     num_img_tokens = vision_token_mask.sum().item()
-    grid_size = image_grid_thw[0].prod().item()
-    # 考虑 merge_size (默认2)
-    merge_size = image_processor.merge_size
-    expected_tokens = grid_size // (merge_size * merge_size)
-    
     logger.info(f"   -> Input IDs Shape: {input_ids.shape}")
     logger.info(f"   -> Pixel Values Shape: {pixel_values.shape}")
     logger.info(f"   -> Image Grid: {image_grid_thw.tolist()}")
-    logger.info(f"   -> Actual Image Tokens in Sequence: {num_img_tokens}")
-    logger.info(f"   -> Expected Tokens (Grid/Merge^2): {expected_tokens}")
-    
-    if num_img_tokens != expected_tokens:
-        logger.warning(f"⚠️ Token mismatch! Processor produced {num_img_tokens}, expected {expected_tokens} based on grid.")
+    logger.info(f"   -> Image Tokens Count: {num_img_tokens}")
 
-    # 模型期望输入为 [num_patches, C, H, W]，若 Processor 返回 [1, num_patches, C, H, W] 则去掉批维
+    # 处理 Batch 维度: 如果 Processor 返回 [1, num_patches, ...]，去掉 batch 维
     if pixel_values.dim() == 5 and pixel_values.shape[0] == 1:
         pixel_values = pixel_values.squeeze(0)
 
