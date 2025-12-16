@@ -561,6 +561,10 @@ class KeyeFlashAttention2(nn.Module):
             k = SeqAllToAll4D.apply(cpg, k, 2, 1)
             v = SeqAllToAll4D.apply(cpg, v, 2, 1)
 
+        # If mask is all ones (equivalent to no mask), treat it as None for causal attention
+        if mask is not None and mask.all():
+            mask = None  #same as _update_causal_mask in origin
+        
         is_causal_flag = self.kv_cache is None and mask is None and self.is_causal
         
         # Debug: print attention parameters
@@ -575,7 +579,7 @@ class KeyeFlashAttention2(nn.Module):
             v=v,
             mask=mask,
             attention_dropout=self.attn_dropout,
-            is_causal=self.kv_cache is None and mask is None and self.is_causal,
+            is_causal=is_causal_flag,
             training=self.training,
             **kwargs,
         )
