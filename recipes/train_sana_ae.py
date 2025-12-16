@@ -92,7 +92,13 @@ from muse.utils.common import (
     to_cuda,
     dist_reduce_dict
 )
-from muse.data.datasets import Text2ImageDataset, Text2ImageMultiScaleDatasetWrapper
+
+from muse.data.datasets import Text2ImageDataset
+try:
+    from muse.data.datasets import Text2ImageMultiScaleDatasetWrapper
+except ImportError:
+    class Text2ImageMultiScaleDatasetWrapper:
+        pass
 from muse.losses.diffusion import FlowMatchingLoss
 
 from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
