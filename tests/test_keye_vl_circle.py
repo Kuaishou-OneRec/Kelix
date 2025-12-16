@@ -1,11 +1,15 @@
 """
-Keye-VL Pipeline: Muse Model Inference Only (Aligned with Origin Input)
-=======================================================================
+Keye-VL Pipeline: Muse vs Origin Model Comparison
+==================================================
 Input: 100x100 Generated Circle Image (No Text Prompt)
-Output: Muse Model Logits (saved to muse_logits.pt)
+Output: Compare Muse and Origin Model Logits
 """
 
 import os
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ["TORCH_USE_CUDA_DSA"] = "1"
+os.environ["nosp"] = 'true'  # Disable sequence parallel for Origin model
+
 import sys
 import logging
 import glob
@@ -22,15 +26,20 @@ from muse.models.keye_tokenizer_end2end_image import modeling as muse_mod
 from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
 from muse.training.common import set_default_dtype
 
+# === 导入 Origin 模型 ===
+from tests.models.tokenizer_end2end_mt_1drope_v2.configuration_keye import KeyeConfig
+from tests.models.tokenizer_end2end_mt_1drope_v2.modeling_keye import KeyeForConditionalGeneration
+
 # === 导入 Processor 相关 ===
 from transformers import AutoTokenizer, AutoProcessor
-from tests.models.keye_vl_tokenizer_image.image_processing_keye import SiglipImageProcessor
 
 try:
     from tests.models.keye_vl_tokenizer_image.processing_keye import KeyeProcessor
+    from tests.models.tokenizer_end2end_mt_1drope_v2.keye_vl_utils import process_vision_info
 except ImportError:
     sys.path.append(os.getcwd())
     from tests.models.keye_vl_tokenizer_image.processing_keye import KeyeProcessor
+    from tests.models.tokenizer_end2end_mt_1drope_v2.keye_vl_utils import process_vision_info
 
 logging.basicConfig(format="%(message)s", level=logging.INFO, stream=sys.stdout)
 logger = logging.getLogger(__name__)
@@ -93,9 +102,9 @@ def _load_checkpoint_robust(path_str: str, device="cpu") -> Dict[str, torch.Tens
 # Input Preparation (Aligned with Origin process_message)
 # =========================================================================
 
-def prepare_inputs(ckpt_path: str, device: str, dtype: torch.dtype):
+def prepare_inputs_common(ckpt_path: str, device: str, dtype: torch.dtype):
     """
-    严格模拟 process_message 的逻辑
+    准备通用输入（供两个模型共享）
     """
     logger.info("⚙️ Loading Tokenizer & ImageProcessor...")
     processor = AutoProcessor.from_pretrained(ckpt_path, trust_remote_code=True)
@@ -122,7 +131,7 @@ def prepare_inputs(ckpt_path: str, device: str, dtype: torch.dtype):
     )
     logger.info(f"   -> Text Prompt: {repr(text)}")
     
-    # 手动提取图片 (Origin 代码用了 process_vision_info，这里手动做等价操作)
+    # 手动提取图片
     image_inputs = [image]
 
     logger.info("🔄 Running Processor...")
@@ -136,6 +145,12 @@ def prepare_inputs(ckpt_path: str, device: str, dtype: torch.dtype):
         return_tensors="pt",
     )
 
+    return inputs, processor
+
+def prepare_inputs_for_muse(inputs, device: str, dtype: torch.dtype):
+    """
+    为 Muse 模型准备输入
+    """
     model_inputs = {
         "input_ids": inputs["input_ids"].to(device),
         "attention_mask": inputs["attention_mask"].to(device),
@@ -144,28 +159,43 @@ def prepare_inputs(ckpt_path: str, device: str, dtype: torch.dtype):
     }
     
     # [Muse Specific] Muse Model 期望 pixel_values 是 [N, C, H, W]
-    # Origin Model 的 forward_image_tokens 可能内部处理了 batch 维，
-    # 但 Muse 需要我们这里手动去掉 batch 维 (如果 batch size=1)
     if model_inputs["pixel_values"].dim() == 5 and model_inputs["pixel_values"].shape[0] == 1:
         model_inputs["pixel_values"] = model_inputs["pixel_values"].squeeze(0)
 
-    logger.info(f"   -> Input IDs Shape: {model_inputs['input_ids'].shape}")
-    logger.info(f"   -> Pixel Values Shape: {model_inputs['pixel_values'].shape}")
-    logger.info(f"   -> Image Grid: {model_inputs['image_grid_thw'].tolist()}")
+    logger.info(f"   [Muse] Input IDs Shape: {model_inputs['input_ids'].shape}")
+    logger.info(f"   [Muse] Pixel Values Shape: {model_inputs['pixel_values'].shape}")
+    logger.info(f"   [Muse] Image Grid: {model_inputs['image_grid_thw'].tolist()}")
+    
+    return model_inputs
+
+def prepare_inputs_for_origin(inputs, device: str, dtype: torch.dtype):
+    """
+    为 Origin 模型准备输入
+    """
+    model_inputs = {
+        "input_ids": inputs["input_ids"].to(device),
+        "attention_mask": inputs["attention_mask"].to(device),
+        "pixel_values": inputs["pixel_values"].to(device, dtype=dtype),
+        "image_grid_thw": inputs["image_grid_thw"].to(device)
+    }
+
+    logger.info(f"   [Origin] Input IDs Shape: {model_inputs['input_ids'].shape}")
+    logger.info(f"   [Origin] Pixel Values Shape: {model_inputs['pixel_values'].shape}")
+    logger.info(f"   [Origin] Image Grid: {model_inputs['image_grid_thw'].tolist()}")
     
     return model_inputs
 
 # =========================================================================
-# Main Execution
+# Model Loading Functions
 # =========================================================================
 
-def run_muse_inference():
-    ckpt_path = DEFAULT_CKPT
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    dtype = torch.bfloat16 
-    
-    logger.info(f"Loading Config from: {ckpt_path}")
-    raw_cfg = _load_config_json(ckpt_path)
+def load_muse_model(ckpt_path: str, raw_cfg: Dict, device: str, dtype: torch.dtype):
+    """
+    加载 Muse 模型
+    """
+    logger.info("\n" + "="*60)
+    logger.info("🚀 Loading Muse Model...")
+    logger.info("="*60)
     
     rope_scaling = raw_cfg.get("rope_scaling")
     mrope_section = rope_scaling.get("mrope_section") if rope_scaling else None
@@ -213,7 +243,6 @@ def run_muse_inference():
         qk_norm_eps=inner_vcfg.get("qk_norm_eps", 1e-6),
         attention_function=raw_cfg.get("_attn_implementation", "flash_attention_2"),
     )
-    # [FIX] 强制设置 _attn_implementation
     vision_cfg._attn_implementation = "flash_attention_2"
 
     tokenizer_cfg = KeyeTokenizerConfig(
@@ -230,7 +259,6 @@ def run_muse_inference():
     )
 
     with set_default_dtype(dtype):
-        logger.info("🚀 Initializing Muse Model...")
         muse_model = muse_mod.KeyeTokenizerEnd2EndImage(
             qwen_config=qwen_cfg,
             vision_config=vision_cfg,
@@ -239,41 +267,191 @@ def run_muse_inference():
             pool="sum"
         ).to(device)
 
-    logger.info("📥 Loading Weights...")
+    logger.info("📥 Loading Muse Weights...")
     state_dict = _load_checkpoint_robust(ckpt_path, device="cpu")
     muse_state = muse_model.convert_hf_state_dict(state_dict, tie_word_embeddings=qwen_cfg.tie_word_embeddings)
     muse_model.load_state_dict(muse_state, strict=False)
     muse_model.to(device, dtype)
     muse_model.eval()
+    
+    logger.info("✅ Muse Model Loaded.")
+    return muse_model
 
-    inputs = prepare_inputs(ckpt_path, device, dtype)
+def load_origin_model(ckpt_path: str, device: str, dtype: torch.dtype):
+    """
+    加载 Origin 模型 (KeyeForConditionalGeneration)
+    """
+    logger.info("\n" + "="*60)
+    logger.info("🚀 Loading Origin Model (KeyeForConditionalGeneration)...")
+    logger.info("="*60)
+    
+    # 先用 from_pretrained 获取 config
+    origin_model = KeyeForConditionalGeneration.from_pretrained(
+        ckpt_path, 
+        _attn_implementation="flash_attention_2", 
+        torch_dtype=dtype, 
+        low_cpu_mem_usage=True
+    )
+    
+    # 重新初始化模型（与 test_run.py 保持一致）
+    origin_model = KeyeForConditionalGeneration(origin_model.config)
+    origin_model._attn_implementation = "flash_attention_2"
+    origin_model = origin_model.to(device).to(dtype)
+    
+    # 加载权重
+    logger.info("📥 Loading Origin Weights...")
+    state_dict = _load_checkpoint_robust(ckpt_path, device="cpu")
+    origin_model.load_state_dict(state_dict, strict=True)
+    origin_model.eval()
+    
+    logger.info("✅ Origin Model Loaded.")
+    return origin_model
 
-    logger.info("🔥 Running Muse Forward...")
+# =========================================================================
+# Comparison Functions
+# =========================================================================
+
+def compare_logits(muse_logits: torch.Tensor, origin_logits: torch.Tensor):
+    """
+    对比两个模型的 logits
+    """
+    logger.info("\n" + "="*60)
+    logger.info("📊 Comparing Logits...")
+    logger.info("="*60)
+    
+    logger.info(f"   Muse Logits Shape:   {muse_logits.shape}")
+    logger.info(f"   Origin Logits Shape: {origin_logits.shape}")
+    
+    # 确保形状一致
+    if muse_logits.shape != origin_logits.shape:
+        logger.warning(f"⚠️ Shape mismatch! Cannot compare directly.")
+        return
+    
+    # 转换为 float32 进行比较
+    muse_f32 = muse_logits.float()
+    origin_f32 = origin_logits.float()
+    
+    # 计算差异
+    diff = muse_f32 - origin_f32
+    abs_diff = diff.abs()
+    
+    # 统计信息
+    max_abs_diff = abs_diff.max().item()
+    mean_abs_diff = abs_diff.mean().item()
+    
+    # 相对误差 (避免除零)
+    eps = 1e-8
+    rel_diff = abs_diff / (origin_f32.abs() + eps)
+    max_rel_diff = rel_diff.max().item()
+    mean_rel_diff = rel_diff.mean().item()
+    
+    # Cosine Similarity (展平后计算)
+    muse_flat = muse_f32.view(-1)
+    origin_flat = origin_f32.view(-1)
+    cos_sim = torch.nn.functional.cosine_similarity(
+        muse_flat.unsqueeze(0), origin_flat.unsqueeze(0)
+    ).item()
+    
+    logger.info(f"\n📈 Comparison Results:")
+    logger.info(f"   Max Absolute Diff:  {max_abs_diff:.6e}")
+    logger.info(f"   Mean Absolute Diff: {mean_abs_diff:.6e}")
+    logger.info(f"   Max Relative Diff:  {max_rel_diff:.6e}")
+    logger.info(f"   Mean Relative Diff: {mean_rel_diff:.6e}")
+    logger.info(f"   Cosine Similarity:  {cos_sim:.8f}")
+    
+    # 判断是否对齐
+    if cos_sim > 0.99 and max_abs_diff < 1e-2:
+        logger.info("\n✅ Models are well aligned! (cosine > 0.99, max_diff < 1e-2)")
+    elif cos_sim > 0.95:
+        logger.info("\n⚠️ Models are roughly aligned. (cosine > 0.95)")
+    else:
+        logger.info("\n❌ Models have significant differences. (cosine <= 0.95)")
+    
+    # 打印第一个 token 的 logits 对比
+    logger.info(f"\n🔍 First Token Logits (top 10 dims):")
+    logger.info(f"   Muse:   {muse_logits[0, 0, :10].float().cpu().numpy()}")
+    logger.info(f"   Origin: {origin_logits[0, 0, :10].float().cpu().numpy()}")
+    
+    # 打印最后一个 token 的 logits 对比
+    logger.info(f"\n🔍 Last Token Logits (top 10 dims):")
+    logger.info(f"   Muse:   {muse_logits[0, -1, :10].float().cpu().numpy()}")
+    logger.info(f"   Origin: {origin_logits[0, -1, :10].float().cpu().numpy()}")
+    
+    return {
+        "max_abs_diff": max_abs_diff,
+        "mean_abs_diff": mean_abs_diff,
+        "max_rel_diff": max_rel_diff,
+        "mean_rel_diff": mean_rel_diff,
+        "cosine_similarity": cos_sim,
+    }
+
+# =========================================================================
+# Main Execution
+# =========================================================================
+
+def run_comparison():
+    ckpt_path = DEFAULT_CKPT
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    dtype = torch.bfloat16 
+    
+    logger.info(f"🔧 Device: {device}, Dtype: {dtype}")
+    logger.info(f"📂 Checkpoint: {ckpt_path}")
+    
+    # 加载配置
+    raw_cfg = _load_config_json(ckpt_path)
+    
+    # 准备通用输入
+    inputs, processor = prepare_inputs_common(ckpt_path, device, dtype)
+    
+    # ========== Muse Model ==========
+    muse_model = load_muse_model(ckpt_path, raw_cfg, device, dtype)
+    muse_inputs = prepare_inputs_for_muse(inputs, device, dtype)
+    
+    logger.info("\n🔥 Running Muse Forward...")
     with torch.no_grad():
-        outputs = muse_model(**inputs)
-
-    # --- 提取 Logits 并保存 ---
-    if isinstance(outputs, dict):
-        logits = outputs.get("logits")
-    elif hasattr(outputs, "logits"):
-        logits = outputs.logits
+        muse_outputs = muse_model(**muse_inputs)
+    
+    if isinstance(muse_outputs, dict):
+        muse_logits = muse_outputs.get("logits")
+    elif hasattr(muse_outputs, "logits"):
+        muse_logits = muse_outputs.logits
     else:
-        logits = outputs[0]
-
-    if logits is not None:
-        logger.info(f"\n✅ Muse Logits Obtained!")
-        logger.info(f"   Shape: {logits.shape}")
-        
-        # 打印部分值供检查
-        first_token_logits = logits[0, 0, :5].float().cpu().numpy()
-        logger.info(f"   First token logits (top 5 dims): {first_token_logits}")
-
-        save_path = "/llm_reco/maosiyang/muse_logits.pt"
-        logger.info(f"💾 Saving logits to {save_path}...")
-        torch.save(logits.detach().cpu(), save_path)
-        logger.info("✅ Save Completed.")
+        muse_logits = muse_outputs[0]
+    
+    logger.info(f"   Muse Logits Shape: {muse_logits.shape}")
+    
+    # ========== Origin Model ==========
+    origin_model = load_origin_model(ckpt_path, device, dtype)
+    origin_inputs = prepare_inputs_for_origin(inputs, device, dtype)
+    
+    logger.info("\n🔥 Running Origin Forward...")
+    with torch.no_grad():
+        origin_outputs = origin_model(**origin_inputs)
+    
+    if isinstance(origin_outputs, dict):
+        origin_logits = origin_outputs.get("logits")
+    elif hasattr(origin_outputs, "logits"):
+        origin_logits = origin_outputs.logits
     else:
-        logger.error("❌ Failed to extract logits from model output.")
+        origin_logits = origin_outputs[0]
+    
+    logger.info(f"   Origin Logits Shape: {origin_logits.shape}")
+    
+    # ========== Compare ==========
+    comparison_results = compare_logits(muse_logits, origin_logits)
+    
+    # ========== Save Results ==========
+    save_dir = Path("/llm_reco/maosiyang/")
+    save_dir.mkdir(parents=True, exist_ok=True)
+    
+    torch.save({
+        "muse_logits": muse_logits.detach().cpu(),
+        "origin_logits": origin_logits.detach().cpu(),
+        "comparison": comparison_results,
+    }, save_dir / "comparison_results.pt")
+    
+    logger.info(f"\n💾 Results saved to {save_dir / 'comparison_results.pt'}")
+    logger.info("\n✅ Comparison Completed!")
 
 if __name__ == "__main__":
-    run_muse_inference()
+    run_comparison()
