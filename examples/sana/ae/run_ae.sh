@@ -19,10 +19,13 @@ MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/
 MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/config.json
 VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
-
 OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/t2i_ae
+VISUALIZE_DIR=${OUTPUT_DIR}/visualize
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
+mkdir -p $VISUALIZE_DIR
+
+
 
 mkdir -p /tmp/_wids_cache
 

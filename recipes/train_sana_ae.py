@@ -97,8 +97,8 @@ from muse.data.datasets import Text2ImageDataset
 try:
     from muse.data.datasets import Text2ImageMultiScaleDatasetWrapper
 except ImportError:
-    class Text2ImageMultiScaleDatasetWrapper:
-        pass
+    Text2ImageDataset = Text2ImageMultiScaleDatasetWrapper
+
 from muse.losses.diffusion import FlowMatchingLoss
 
 from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
