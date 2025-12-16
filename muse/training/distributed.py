@@ -356,7 +356,11 @@ def load_from_full_model_state_dict(model: "FSDPModule",
 
         # Handle shape mismatches
         for k, mismatch_info in shape_mismatches.items():
-            if allow_random_init_params is not None and k in allow_random_init_params:
+            # Check if handled by allow_random_init_params or skip_load_params
+            in_allow_random = allow_random_init_params is not None and k in allow_random_init_params
+            in_skip_load = skip_load_params and any(pattern in k for pattern in skip_load_params)
+            
+            if in_allow_random or in_skip_load:
                 model_shape = mismatch_info['model_shape']
                 sd_shape = mismatch_info['state_dict_shape']
                 
@@ -365,8 +369,9 @@ def load_from_full_model_state_dict(model: "FSDPModule",
                 model.get_initializer(k)(full_sd[k])
                 full_sd[k] = full_sd[k].to(device0)
                 
+                reason = "skip_load_params" if in_skip_load else "allow_random_init_params"
                 print_rank_0(
-                    f"Shape mismatch, random init: k={k}\n"
+                    f"Shape mismatch, random init ({reason}): k={k}\n"
                     f"  model_shape: {model_shape}\n"
                     f"  state_dict_shape: {sd_shape}\n"
                     f"  new tensor shape: {full_sd[k].shape}"
@@ -374,19 +379,27 @@ def load_from_full_model_state_dict(model: "FSDPModule",
             else:
                 # Log warning for unhandled mismatches
                 print_rank_0(
-                    f"WARNING: Shape mismatch (not in allow_random_init_params): k={k}\n"
+                    f"WARNING: Shape mismatch (not handled): k={k}\n"
                     f"  model_shape: {mismatch_info['model_shape']}\n"
                     f"  state_dict_shape: {mismatch_info['state_dict_shape']}"
                 )
 
         # Check for unhandled shape mismatches (shape mismatches will cause errors)
+        # Exclude params that are in allow_random_init_params or match skip_load_params patterns
+        def is_handled(k):
+            if allow_random_init_params and k in allow_random_init_params:
+                return True
+            if skip_load_params and any(pattern in k for pattern in skip_load_params):
+                return True
+            return False
+        
         unhandled_shape_mismatches = {
             k: v for k, v in shape_mismatches.items()
-            if allow_random_init_params is None or k not in allow_random_init_params
+            if not is_handled(k)
         }
         assert len(unhandled_shape_mismatches) == 0, \
             f"Unhandled shape mismatches found. Add these params to allow_random_init_params " \
-            f"to randomly initialize them:\n{format_dict_or_list(unhandled_shape_mismatches)}"
+            f"or skip_load_params to randomly initialize them:\n{format_dict_or_list(unhandled_shape_mismatches)}"
 
         assert len(meta_sharded_sd) == len(full_sd), \
             f"Sharded State Dict doesn't equal to Full State Dict, " \
