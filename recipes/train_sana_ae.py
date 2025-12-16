@@ -97,7 +97,7 @@ from muse.data.datasets import Text2ImageDataset
 try:
     from muse.data.datasets import Text2ImageMultiScaleDatasetWrapper
 except ImportError:
-    Text2ImageDataset = Text2ImageMultiScaleDatasetWrapper
+    Text2ImageMultiScaleDatasetWrapper = Text2ImageDataset
 
 from muse.losses.diffusion import FlowMatchingLoss
 
