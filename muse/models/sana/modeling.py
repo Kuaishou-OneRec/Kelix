@@ -305,7 +305,9 @@ class SanaModel(Model):
         t0 = self.t_block(t)  # [N, 6*D]
         
         # Caption embedding
+        print("before shape of y: {}".format(y.shape))
         y = self.y_embedder(y, self.training, mask=mask)  # [N, 1, L, D] or [N, L, D]
+        print("shape of y: {}".format(y.shape))
         if self.y_norm:
             y = self.attention_y_norm(y)
         

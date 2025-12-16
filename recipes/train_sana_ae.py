@@ -1151,7 +1151,7 @@ def train():
 
             # 4. Text Encoder
             with record_function("TextEncoder"):
-                text_embeds, attention_mask = tokenize_images(
+                token_embeds, attention_mask = tokenize_images(
                     image_tokenizer,
                     batch["pixel_values"],
                     batch["image_grid_thw"],
@@ -1161,10 +1161,12 @@ def train():
 
             # 5. Forward + Loss Computation
             with record_function("Forward_Loss"):
+                print("latents: {}".format(latents.shape))
+                print("y: {}".format(token_embeds.shape))
                 loss_dict = loss_fn(
                     model=model,
                     x_start=latents,
-                    y=text_embeds,
+                    y=token_embeds,
                     mask=attention_mask,
                 )
                 loss = loss_dict["loss"]
