@@ -78,24 +78,27 @@ def _load_checkpoint_robust(path_str: str, device="cpu") -> Dict[str, torch.Tens
     if path.is_file():
         state_dict = torch.load(path, map_location=device)
         return state_dict.get("module", state_dict)
-    
+
     state_dict = {}
-    st_files = sorted(glob.glob(str(path / "*.safetensors")))
-    if st_files:
-        from safetensors.torch import safe_open
-        for f in st_files:
-            with safe_open(f, framework="pt", device=device) as open_f:
-                for k in open_f.keys(): state_dict[k] = open_f.get_tensor(k)
-        return state_dict
-    
-    bin_files = sorted(glob.glob(str(path / "*.bin")))
-    if bin_files:
-        for f in bin_files:
-            if any(x in f for x in ["training_args", "optimizer", "scheduler"]): continue
-            part = torch.load(f, map_location=device)
-            if "module" in part: part = part["module"]
-            state_dict.update(part)
-        return state_dict
+    import tqdm
+    from safetensors.torch import load_file
+
+    # 优先处理 safetensors 文件
+    print(f"Loading weights from {path_str}...")
+    for f in tqdm.tqdm(os.listdir(path_str)):
+        if f.endswith(".safetensors"):
+            state_dict.update(load_file(os.path.join(path_str, f)))
+
+    # 如果没有 safetensors 文件，回退到 bin 文件
+    if not state_dict:
+        bin_files = sorted(glob.glob(str(path / "*.bin")))
+        if bin_files:
+            for f in bin_files:
+                if any(x in f for x in ["training_args", "optimizer", "scheduler"]): continue
+                part = torch.load(f, map_location=device)
+                if "module" in part: part = part["module"]
+                state_dict.update(part)
+
     return state_dict
 
 # =========================================================================
