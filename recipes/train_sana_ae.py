@@ -889,6 +889,8 @@ def train():
     if args.fp32_weight:
         model = model.float()
 
+    print_rank_0(f"Sharding model for distributed training: {model}")
+
     # Shard model for distributed training
     shard_model(
         model=model,
