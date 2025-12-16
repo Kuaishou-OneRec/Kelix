@@ -304,6 +304,17 @@ def load_from_full_model_state_dict(model: "FSDPModule",
             k:(v.shape, v.device, v.dtype) for k, v in full_sd.items() if k in extra_full_ds
         }
 
+        # Detect shape mismatches for keys that exist in both
+        shape_mismatches = {}
+        for k in set(meta_sharded_sd.keys()) & set(full_sd.keys()):
+            model_shape = meta_sharded_sd[k].shape
+            sd_shape = full_sd[k].shape
+            if model_shape != sd_shape:
+                shape_mismatches[k] = {
+                    'model_shape': model_shape,
+                    'state_dict_shape': sd_shape
+                }
+
         full_sd_info = {
             k: (v.shape, v.device, v.dtype)
             for k, v in full_sd.items()
@@ -319,12 +330,46 @@ def load_from_full_model_state_dict(model: "FSDPModule",
         device0 = full_sd[list(full_sd)[0]]
         for k in extra_meta_sharded_sd:
             if allow_random_init_params is not None and k in allow_random_init_params:
-                full_sd[k] = torch.rand(extra_meta_sharded_sd[k][0]) * 0.1
+                full_sd[k] = torch.empty(extra_meta_sharded_sd[k][0])
                 model.get_initializer(k)(full_sd[k])
                 full_sd[k] = full_sd[k].to(device0)
                 print_rank_0(
                     f"random init k={k}, {extra_meta_sharded_sd[k]}\n, "
                     f"meta_sharded_sd={meta_sharded_sd[k]} \nfull={full_sd[k]}")
+
+        # Handle shape mismatches
+        for k, mismatch_info in shape_mismatches.items():
+            if allow_random_init_params is not None and k in allow_random_init_params:
+                model_shape = mismatch_info['model_shape']
+                sd_shape = mismatch_info['state_dict_shape']
+                
+                # Initialize with model's expected shape
+                full_sd[k] = torch.empty(model_shape)
+                model.get_initializer(k)(full_sd[k])
+                full_sd[k] = full_sd[k].to(device0)
+                
+                print_rank_0(
+                    f"Shape mismatch, random init: k={k}\n"
+                    f"  model_shape: {model_shape}\n"
+                    f"  state_dict_shape: {sd_shape}\n"
+                    f"  new tensor shape: {full_sd[k].shape}"
+                )
+            else:
+                # Log warning for unhandled mismatches
+                print_rank_0(
+                    f"WARNING: Shape mismatch (not in allow_random_init_params): k={k}\n"
+                    f"  model_shape: {mismatch_info['model_shape']}\n"
+                    f"  state_dict_shape: {mismatch_info['state_dict_shape']}"
+                )
+
+        # Check for unhandled shape mismatches (shape mismatches will cause errors)
+        unhandled_shape_mismatches = {
+            k: v for k, v in shape_mismatches.items()
+            if allow_random_init_params is None or k not in allow_random_init_params
+        }
+        assert len(unhandled_shape_mismatches) == 0, \
+            f"Unhandled shape mismatches found. Add these params to allow_random_init_params " \
+            f"to randomly initialize them:\n{format_dict_or_list(unhandled_shape_mismatches)}"
 
         assert len(meta_sharded_sd) == len(full_sd), \
             f"Sharded State Dict doesn't equal to Full State Dict, " \
