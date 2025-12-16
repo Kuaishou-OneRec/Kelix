@@ -533,6 +533,12 @@ class KeyeFlashAttention2(nn.Module):
             k = k.unsqueeze(2).expand(expand_shape).flatten(1, 2)
             v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
 
+        # Transpose back to [b, s, n_h, h_d] for Flash Attention
+        # (Flash Attention expects [batch, seq_len, num_heads, head_dim])
+        q = q.transpose(1, 2)
+        k = k.transpose(1, 2)
+        v = v.transpose(1, 2)
+
         if get_context_parallel_world_size() > 1:
             cpg = get_context_parallel_group()
             # If context parallel is enabled, the input is sharded along
