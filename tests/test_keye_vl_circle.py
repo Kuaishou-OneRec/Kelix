@@ -98,9 +98,7 @@ def prepare_inputs(ckpt_path: str, device: str, dtype: torch.dtype):
     严格模拟 process_message 的逻辑
     """
     logger.info("⚙️ Loading Tokenizer & ImageProcessor...")
-    tokenizer = AutoTokenizer.from_pretrained(ckpt_path, trust_remote_code=True)
-    image_processor = SiglipImageProcessor.from_pretrained(ckpt_path)
-    processor = KeyeProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    processor = AutoProcessor.from_pretrained(ckpt_path, trust_remote_code=True)
 
     # [Align] 使用 100x100
     logger.info("🎨 Generating Circle Image (100x100)...")
