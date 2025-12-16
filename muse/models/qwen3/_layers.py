@@ -347,7 +347,7 @@ class KeyeFlashAttention2(nn.Module):
         max_seq_len: int = 4096,
         is_causal: bool = True,
         attn_dropout: float = 0.0,
-        attention_function: Literal["eager", "flash_attention_2"] = "eager",
+        attention_function: Literal["eager", "flash_attention_2"] = "flash_attention_2",
     ) -> None:
         super().__init__()
         if num_heads % num_kv_heads != 0:
@@ -387,6 +387,7 @@ class KeyeFlashAttention2(nn.Module):
         self.pos_embeddings = pos_embeddings
 
         self._attention_function = get_attention_function(attention_function)
+        print("maosiyangdebug::::",self._attention_function)
 
         # this flag indicates whether to update the kv-cache during forward
         # passes. when disabled, we can have the cache setup but still
