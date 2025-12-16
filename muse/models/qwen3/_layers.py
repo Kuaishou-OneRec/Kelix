@@ -616,7 +616,8 @@ class MultimodalRotaryEmbedding(nn.Module):
         Apply multimodal 3D rotary position embedding.
 
         Args:
-            x: Input tensor with shape [batch_size, seq_len, num_heads, head_dim]
+            x: Input tensor with shape [batch_size, num_heads, seq_len, head_dim]
+               (matches Origin model's format after transpose in attention)
             input_pos: Position indices. Can be:
                        - [batch_size, seq_len]: Standard 1D position ids, will be expanded to 3D
                        - [3, batch_size, seq_len]: 3D multimodal position ids where 3 represents (temporal, height, width)
@@ -628,8 +629,9 @@ class MultimodalRotaryEmbedding(nn.Module):
         if input_pos is None:
             return x
         self.inv_freq.to(dtype=x.dtype)
-        # x shape: [batch_size, seq_len, num_heads, head_dim]
-        batch_size, seq_len = x.shape[0], x.shape[1]
+        # x shape: [batch_size, num_heads, seq_len, head_dim]
+        batch_size = x.shape[0]
+        seq_len = x.shape[2]  # seq_len is dim 2 after transpose
 
         # Handle different input_pos formats
         if input_pos.dim() == 2:  # [batch_size, seq_len] -> expand to 3D
@@ -685,10 +687,13 @@ class MultimodalRotaryEmbedding(nn.Module):
         self._debug_rope_intermediates["cos_before_chunk"] = cos.detach()
         self._debug_rope_intermediates["sin_before_chunk"] = sin.detach()
 
-        # Apply multimodal section splitting
+        # Apply multimodal section splitting (same as Origin's apply_multimodal_rotary_pos_emb)
         # mrope_section * 2 for cos/sin concatenation
         # e.g., [16, 24, 24] -> [16, 24, 24, 16, 24, 24]
         mrope_section = self.mrope_section * 2
+        # After split and concat: [batch, seq_len, head_dim]
+        # unsqueeze(1) gives: [batch, 1, seq_len, head_dim]
+        # This broadcasts correctly with x: [batch, num_heads, seq_len, head_dim]
         cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(1)
         sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(1)
         
@@ -699,23 +704,22 @@ class MultimodalRotaryEmbedding(nn.Module):
             self.mrope_section, device=x.device
         )
 
-        # Store combined cos/sin (after chunk) 
-        # Convert from Muse format [batch, seq_len, 1, head_dim] to Origin format [batch, 1, seq_len, head_dim]
+        # Store combined cos/sin (after chunk)
+        # cos/sin shape: [batch, 1, seq_len, head_dim]
         self._debug_rope_intermediates["cos_after_chunk"] = cos.detach()
         self._debug_rope_intermediates["sin_after_chunk"] = sin.detach()
 
-        # Add head dimension for broadcasting: [batch_size, seq_len, 1, dim]
-        
         # Apply RoPE: x_embed = (x * cos) + (rotate_half(x) * sin)
+        # x shape: [batch, num_heads, seq_len, head_dim]
+        # cos/sin shape: [batch, 1, seq_len, head_dim] -> broadcasts to [batch, num_heads, seq_len, head_dim]
         x_rotated = self.rotate_half(x)
         x_out = (x * cos) + (x_rotated * sin)
 
         # Store outputs for debugging
-        # Transpose to match Origin's [batch, heads, seq_len, head_dim] format
-        # Muse uses [batch, seq_len, heads, head_dim], so we need transpose(1, 2)
+        # x_out is already in [batch, heads, seq_len, head_dim] format (same as Origin)
         if not hasattr(self, "_debug_rope_outputs"):
             self._debug_rope_outputs = []
-        self._debug_rope_outputs.append(x_out.transpose(1, 2).detach())
+        self._debug_rope_outputs.append(x_out.detach())
         
         return x_out
     
@@ -732,8 +736,8 @@ class MultimodalRotaryEmbedding(nn.Module):
         q and k tensors, which is the common use case in attention.
         
         Args:
-            q: Query tensor with shape [batch_size, seq_len, num_heads, head_dim]
-            k: Key tensor with shape [batch_size, seq_len, num_kv_heads, head_dim]
+            q: Query tensor with shape [batch_size, num_heads, seq_len, head_dim]
+            k: Key tensor with shape [batch_size, num_kv_heads, seq_len, head_dim]
             input_pos: Position indices with shape [3, batch_size, seq_len]
         
         Returns:
