@@ -704,6 +704,12 @@ def test_pipeline_alignment():
         activations["origin"]["k_before_attn"] = origin_mod._DEBUG_ROPE_OUTPUTS["k_before_attn"]
     if origin_mod._DEBUG_ROPE_OUTPUTS.get("v_before_attn") is not None:
         activations["origin"]["v_before_attn"] = origin_mod._DEBUG_ROPE_OUTPUTS["v_before_attn"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("attn_output_raw") is not None:
+        activations["origin"]["attn_output_raw"] = origin_mod._DEBUG_ROPE_OUTPUTS["attn_output_raw"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("attn_output_reshaped") is not None:
+        activations["origin"]["attn_output_reshaped"] = origin_mod._DEBUG_ROPE_OUTPUTS["attn_output_reshaped"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("attn_output_proj") is not None:
+        activations["origin"]["attn_output_proj"] = origin_mod._DEBUG_ROPE_OUTPUTS["attn_output_proj"]
     # Muse: 从 LLM Layer 0 的 attention 模块获取
     # 路径: muse_model.model (Qwen3Model) -> .model (TransformerDecoder) -> .layers[0].attn
     llm_layer0_attn = None
@@ -716,6 +722,12 @@ def test_pipeline_alignment():
             activations["muse"]["k_before_attn"] = llm_layer0_attn._debug_attn_inputs["k_before_attn"]
         if llm_layer0_attn._debug_attn_inputs.get("v_before_attn") is not None:
             activations["muse"]["v_before_attn"] = llm_layer0_attn._debug_attn_inputs["v_before_attn"]
+        if llm_layer0_attn._debug_attn_inputs.get("attn_output_raw") is not None:
+            activations["muse"]["attn_output_raw"] = llm_layer0_attn._debug_attn_inputs["attn_output_raw"]
+        if llm_layer0_attn._debug_attn_inputs.get("attn_output_reshaped") is not None:
+            activations["muse"]["attn_output_reshaped"] = llm_layer0_attn._debug_attn_inputs["attn_output_reshaped"]
+        if llm_layer0_attn._debug_attn_inputs.get("attn_output_proj") is not None:
+            activations["muse"]["attn_output_proj"] = llm_layer0_attn._debug_attn_inputs["attn_output_proj"]
 
     # --- Analysis ---
     log_separator("Deep Dive Analysis")
@@ -753,6 +765,10 @@ def test_pipeline_alignment():
         "q_before_attn",
         "k_before_attn",
         "v_before_attn",
+        # Attention outputs (debug points)
+        "attn_output_raw",
+        "attn_output_reshaped",
+        "attn_output_proj",
         "0.3 Attn Raw (Pre-Proj)",
         "0.4 Attn Out (Post-Proj)",
         "0.6 MLP Hidden (fc1)",

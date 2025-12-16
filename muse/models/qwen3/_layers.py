@@ -544,11 +544,11 @@ class KeyeFlashAttention2(nn.Module):
             self._debug_attn_inputs = {}
         if not hasattr(self, "_debug_attn_call_count"):
             self._debug_attn_call_count = 0
-        if self._debug_attn_call_count == 0:
+        is_first_call = self._debug_attn_call_count == 0
+        if is_first_call:
             self._debug_attn_inputs["q_before_attn"] = q.detach()
             self._debug_attn_inputs["k_before_attn"] = k.detach()
             self._debug_attn_inputs["v_before_attn"] = v.detach()
-        self._debug_attn_call_count += 1
 
         if get_context_parallel_world_size() > 1:
             cpg = get_context_parallel_group()
@@ -570,13 +570,30 @@ class KeyeFlashAttention2(nn.Module):
             training=self.training,
             **kwargs,
         )
+        
+        # Debug: output after attention function
+        if is_first_call:
+            self._debug_attn_inputs["attn_output_raw"] = output.detach().clone()
+        
         if get_context_parallel_world_size() > 1:
             cpg = get_context_parallel_group()
             # output: [b, s_x * P, n_h // P, h_d] -> [b, s_x, n_h, h_d]
             output = SeqAllToAll4D.apply(cpg, output, 1, 2)
         # reshape the output to be the same shape as the input
         output = output.contiguous().view(b, s_x, -1)
-        return self.output_proj(output)
+        
+        # Debug: output after contiguous view
+        if is_first_call:
+            self._debug_attn_inputs["attn_output_reshaped"] = output.detach().clone()
+        
+        final_output = self.output_proj(output)
+        
+        # Debug: output after output_proj
+        if is_first_call:
+            self._debug_attn_inputs["attn_output_proj"] = final_output.detach().clone()
+        
+        self._debug_attn_call_count += 1
+        return final_output
 
 
 

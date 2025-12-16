@@ -2315,11 +2315,11 @@ class KeyeFlashAttention2(KeyeAttention):
         # Debug: store attention inputs for Layer 0 only
         if not hasattr(KeyeFlashAttention2, "_debug_attn_call_count"):
             KeyeFlashAttention2._debug_attn_call_count = 0
-        if KeyeFlashAttention2._debug_attn_call_count == 0:
+        is_first_call = KeyeFlashAttention2._debug_attn_call_count == 0
+        if is_first_call:
             _DEBUG_ROPE_OUTPUTS["q_before_attn"] = query_states.detach()
             _DEBUG_ROPE_OUTPUTS["k_before_attn"] = key_states.detach()
             _DEBUG_ROPE_OUTPUTS["v_before_attn"] = value_states.detach()
-        KeyeFlashAttention2._debug_attn_call_count += 1
 
         if (
             sliding_window == -1
@@ -2372,9 +2372,23 @@ class KeyeFlashAttention2(KeyeAttention):
                     use_top_left_mask=self._flash_attn_uses_top_left_mask,
                 )
 
+        # Debug: output after attention function (raw)
+        if is_first_call:
+            _DEBUG_ROPE_OUTPUTS["attn_output_raw"] = attn_output.detach().clone()
+
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
 
+        # Debug: output after reshape
+        if is_first_call:
+            _DEBUG_ROPE_OUTPUTS["attn_output_reshaped"] = attn_output.detach().clone()
+
         attn_output = self.o_proj(attn_output)
+        
+        # Debug: output after o_proj
+        if is_first_call:
+            _DEBUG_ROPE_OUTPUTS["attn_output_proj"] = attn_output.detach().clone()
+        
+        KeyeFlashAttention2._debug_attn_call_count += 1
 
         if not output_attentions:
             attn_weights = None
