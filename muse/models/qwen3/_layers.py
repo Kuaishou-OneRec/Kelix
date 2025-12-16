@@ -561,6 +561,14 @@ class KeyeFlashAttention2(nn.Module):
             k = SeqAllToAll4D.apply(cpg, k, 2, 1)
             v = SeqAllToAll4D.apply(cpg, v, 2, 1)
 
+        is_causal_flag = self.kv_cache is None and mask is None and self.is_causal
+        
+        # Debug: print attention parameters
+        if is_first_call:
+            print(f"[Muse] attn params: is_causal={is_causal_flag}, attn_dropout={self.attn_dropout}, training={self.training}")
+            print(f"[Muse] q shape: {q.shape}, k shape: {k.shape}, v shape: {v.shape}")
+            print(f"[Muse] mask: {mask}")
+
         output = self._attention_function(
             q=q,
             k=k,

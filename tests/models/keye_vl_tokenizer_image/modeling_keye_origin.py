@@ -2360,7 +2360,12 @@ class KeyeFlashAttention2(KeyeAttention):
                     causal=self.is_causal
                 )
             else:
-                print("maosiyanghere!!!!!!!!")
+                # Debug: print attention parameters
+                if is_first_call:
+                    print(f"[Origin] attn params: is_causal={self.is_causal}, dropout={dropout_rate}, sliding_window={sliding_window}")
+                    print(f"[Origin] q shape: {query_states.shape}, k shape: {key_states.shape}, v shape: {value_states.shape}")
+                    print(f"[Origin] attention_mask: {attention_mask}, use_top_left_mask: {self._flash_attn_uses_top_left_mask}")
+                
                 attn_output = _flash_attention_forward(
                     query_states,
                     key_states,
