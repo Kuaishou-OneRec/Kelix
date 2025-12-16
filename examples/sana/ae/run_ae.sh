@@ -125,6 +125,7 @@ nohup mpirun --allow-run-as-root \
                 --image-tokenizer-dir $IMAGE_TOKENIZER_DIR \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
+                --allow-random-init-params "y_embedder.y_proj.fc1.weight,y_embedder.y_embedding"
                 --dataset-config examples/sana/pretrain-mix.json \
                 --learning-rate 1e-4 \
                 --min-lr 1e-7 \
