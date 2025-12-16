@@ -271,6 +271,7 @@ class SanaModel(Model):
         Reference: Sana/diffusion/model/nets/sana_multi_scale.py Lines 314-383
         """
         bs = x.shape[0]
+        print(f"inputs x: {x.shape}")
         x = x.to(self.dtype)
         # Match official: timestep.long().to(torch.float32)
         timestep = timestep.long().to(torch.float32)
