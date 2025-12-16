@@ -126,7 +126,7 @@ nohup mpirun --allow-run-as-root \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
                 --allow-random-init-params "y_embedder.y_proj.fc1.weight,y_embedder.y_embedding" \
-                --dataset-config examples/sana/pretrain-mix.json \
+                --dataset-config examples/sana/ae-mix.json \
                 --learning-rate 1e-4 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \

@@ -92,7 +92,7 @@ from muse.utils.common import (
     to_cuda,
     dist_reduce_dict
 )
-from muse.data.datasets import Text2ImageDataset, MultiScaleDatasetWrapper
+from muse.data.datasets import Token2ImageDataset, MultiScaleDatasetWrapper
 from muse.losses.diffusion import FlowMatchingLoss
 
 from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
@@ -387,7 +387,8 @@ def tokenize_images(tokenizer,
         
         # Split by image_grid_thw and pad to max_condition_length
         # image_grid_thw: [B, 3] where each row is (t, h, w)
-        lengths = (image_grid_thw[:, 1] * image_grid_thw[:, 2]).tolist()  # h * w for each image
+        # 4=merge_length
+        lengths = (image_grid_thw[:, 1] * image_grid_thw[:, 2] // 4).tolist()  # h * w for each image
         
         # Split fused_embeddings according to lengths
         split_embeddings = torch.split(fused_embeddings, lengths, dim=0)
@@ -1025,14 +1026,9 @@ def train():
         print_rank_0(f"Set image_size of dataset to: {args.image_size}")
     
     # Set tokenizer_path from model_dir if not specified
-    if not dataset_config.get("tokenizer_path") and args.tokenizer_dir:
-        dataset_config["tokenizer_path"] = args.tokenizer_dir
-        print_rank_0(f"Set tokenizer_path of dataset to: {args.tokenizer_dir}")
-    
-    # Enable Complex Human Instruction (CHI) if requested
-    if args.use_chi:
-        dataset_config["use_chi"] = True
-        print_rank_0("CHI (Complex Human Instruction) enabled for enhanced text-image alignment")
+    if not dataset_config.get("processor_path") and args.image_tokenizer_dir:
+        dataset_config["processor_path"] = args.image_tokenizer_dir
+        print_rank_0(f"Set tokenizer_path of dataset to: {args.image_tokenizer_dir}")
     
     # Enable multi-scale training if requested
     if args.multi_scale:
@@ -1046,7 +1042,7 @@ def train():
         print_rank_0(f"Dataset sharding: rank={dataset_config['rank']}, world_size={dataset_config['world_size']}")
 
     print_rank_0(f"Building dataset with config: {dataset_config}")
-    dataset = Text2ImageDataset(**dataset_config)
+    dataset = Token2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
     if args.multi_scale:
         dataset = MultiScaleDatasetWrapper(
@@ -1106,7 +1102,7 @@ def train():
         data_iter = iter([])
 
     # Step 0 visualization: show model state before any optimization
-    if args.visualize:
+    if args.visualize_dir:
         from torch.distributed.checkpoint.state_dict import get_model_state_dict, StateDictOptions
         
         print_rank_0("Running step 0 visualization (before training)...")
