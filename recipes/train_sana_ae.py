@@ -413,7 +413,7 @@ def tokenize_images(tokenizer,
         attention_mask[i, :min(length, max_condition_length)] = 1
     attention_mask = attention_mask[:, None, None, :]  # [B, 1, 1, max_condition_length]
 
-    return fused_embeddings.unsqueeze(1), attention_mask
+    return fused_embeddings, attention_mask
 
 
 def load_visualization_images(
@@ -1210,7 +1210,7 @@ def train():
                 loss_dict = loss_fn(
                     model=model,
                     x_start=latents,
-                    y=token_embeds,
+                    y=token_embeds.unsqueeze(1),
                     mask=attention_mask,
                 )
                 loss = loss_dict["loss"]
