@@ -18,10 +18,9 @@ script_name=$(basename "$0" .sh)
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/
 MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/config.json
 VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
-TEXT_ENCODER_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/text_encoder/
-TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/tokenizer/
+IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i_pretrain_mix_256px
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i_ae
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
@@ -117,6 +116,9 @@ nohup mpirun --allow-run-as-root \
         -x https_proxy=\
         with_nccl_local_env \
         bash -c "python3 recipes/train_sana_ae.py \
+                --visualize-dir $VISUALIZE_DIR \
+                --visualize-per-step 1000 \
+                --num-vis-images 10 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
                 --image-tokenizer-dir $IMAGE_TOKENIZER_DIR \

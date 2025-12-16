@@ -302,6 +302,15 @@ def get_argument_parser():
     
     parser.add_argument("--num-sampling-steps", type=int, default=20,
                         help="Number of sampling steps for validation")
+    
+    parser.add_argument("--visualize-dir", type=str, default=None,
+                        help="Directory containing images for reconstruction visualization")
+    
+    parser.add_argument("--visualize-per-step", type=int, default=1000,
+                        help="Visualize reconstruction every N steps")
+    
+    parser.add_argument("--num-vis-images", type=int, default=None,
+                        help="Max number of images to visualize (default: all)")
 
     ############ Debug Args ############
     parser.add_argument("--enable-profile", action="store_true",
@@ -404,6 +413,295 @@ def tokenize_images(tokenizer,
     attention_mask = attention_mask[:, None, None, :]  # [B, 1, 1, max_condition_length]
 
     return fused_embeddings, attention_mask
+
+
+def load_visualization_images(
+    image_dir: str,
+    processor,
+    image_size: int,
+    max_condition_length: int,
+    device: torch.device,
+    dtype: torch.dtype,
+    num_images: Optional[int] = None
+) -> tuple:
+    """Load and preprocess images from a directory for visualization.
+    
+    Args:
+        image_dir: Directory containing images (jpg, png, jpeg)
+        processor: AutoProcessor instance for image preprocessing
+        image_size: Target image size
+        max_condition_length: Maximum condition sequence length for image tokenizer
+        device: Target device
+        dtype: Target dtype
+        num_images: Maximum number of images to load (None for all)
+    
+    Returns:
+        Tuple of (original_images, pixel_values, image_grid_thw, vae_input_images)
+        - original_images: List of PIL images (for visualization)
+        - pixel_values: Tensor for image tokenizer
+        - image_grid_thw: Grid info tensor for image tokenizer
+        - vae_input_images: Tensor for VAE encoding [B, C, H, W] in [-1, 1]
+    """
+    from PIL import Image
+    from torchvision import transforms
+    
+    # Find all image files
+    image_extensions = {'.jpg', '.jpeg', '.png', '.webp'}
+    image_files = []
+    for f in sorted(os.listdir(image_dir)):
+        if Path(f).suffix.lower() in image_extensions:
+            image_files.append(os.path.join(image_dir, f))
+    
+    if num_images is not None:
+        image_files = image_files[:num_images]
+    
+    if not image_files:
+        print_rank_0(f"Warning: No images found in {image_dir}")
+        return None, None, None, None
+    
+    print_rank_0(f"Loading {len(image_files)} images from {image_dir}")
+    
+    # Load images
+    original_images = []
+    for img_path in image_files:
+        img = Image.open(img_path).convert('RGB')
+        # Resize to target size
+        img = img.resize((image_size, image_size), Image.Resampling.LANCZOS)
+        original_images.append(img)
+    
+    # Prepare messages format for processor (keye_vl_utils format)
+    fake_messages = [{
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "image": img,
+                "min_pixels": 4 * 28 * 28,
+                "max_pixels": max_condition_length * 28 * 28
+            } for img in original_images],
+    }]
+    text = processor.apply_chat_template(
+        fake_messages,
+        tokenize=False
+    )
+    # Process using keye_vl_utils
+    image_inputs, _, _ = process_vision_info(fake_messages)
+    
+    # Use processor to get pixel_values and image_grid_thw
+    inputs = processor(
+        text=text,
+        images=image_inputs,
+        padding=False,
+        truncation=False,
+        return_tensors="pt",
+    )
+    
+    pixel_values = inputs["pixel_values"].to(device=device, dtype=dtype)
+    image_grid_thw = inputs["image_grid_thw"].to(device=device)
+    
+    # Prepare images for VAE (normalize to [-1, 1])
+    vae_transform = transforms.Compose([
+        transforms.ToTensor(),  # [0, 1]
+        transforms.Normalize([0.5], [0.5]),  # [-1, 1]
+    ])
+    vae_input_images = torch.stack([vae_transform(img) for img in original_images])
+    vae_input_images = vae_input_images.to(device=device, dtype=dtype)
+    
+    return original_images, pixel_values, image_grid_thw, vae_input_images
+
+
+@torch.no_grad()
+def visualize_reconstruction(
+    model,
+    vae,
+    image_tokenizer,
+    processor,
+    image_dir: str,
+    output_dir: str,
+    global_step: int,
+    cfg_scale: float,
+    num_sampling_steps: int,
+    flow_shift: float,
+    max_condition_length: int,
+    image_size: int,
+    device: torch.device,
+    dtype: torch.dtype,
+    tb_writer=None,
+    num_images: Optional[int] = None,
+):
+    """Visualize DiT reconstruction results.
+    
+    Creates comparison images showing: Original | VAE Reconstruction | DiT Reconstruction
+    
+    Args:
+        model: DiT model
+        vae: VAE model
+        image_tokenizer: Image tokenizer
+        processor: AutoProcessor for image preprocessing
+        image_dir: Directory containing source images
+        output_dir: Directory to save visualization results
+        global_step: Current training step
+        cfg_scale: CFG scale for sampling
+        num_sampling_steps: Number of Euler sampling steps
+        flow_shift: Flow shift parameter
+        max_condition_length: Maximum condition sequence length
+        image_size: Image size
+        device: Device to run on
+        dtype: Data type
+        tb_writer: TensorBoard SummaryWriter (optional)
+        num_images: Maximum number of images to visualize
+    """
+    from PIL import Image
+    from diffusers import FlowMatchEulerDiscreteScheduler
+    
+    print_rank_0(f"[Step {global_step}] Running visualization...")
+    
+    # Load and preprocess images
+    result = load_visualization_images(
+        image_dir=image_dir,
+        processor=processor,
+        image_size=image_size,
+        max_condition_length=max_condition_length,
+        device=device,
+        dtype=dtype,
+        num_images=num_images,
+    )
+    
+    if result[0] is None:
+        print_rank_0("No images to visualize, skipping...")
+        return
+    
+    original_images, pixel_values, image_grid_thw, vae_input_images = result
+    batch_size = len(original_images)
+    
+    # 1. VAE Reconstruction: encode -> decode
+    print_rank_0("  VAE encoding...")
+    latents = vae_encode(vae, vae_input_images)
+    latent_channels = latents.shape[1]
+    latent_size = latents.shape[2]
+    
+    print_rank_0("  VAE decoding (reconstruction)...")
+    vae_recon_latents = latents / vae.config.scaling_factor
+    vae_recon_images = vae.decode(vae_recon_latents).sample
+    vae_recon_images = (vae_recon_images / 2 + 0.5).clamp(0, 1)
+    
+    # 2. Get condition embeddings from image tokenizer
+    print_rank_0("  Getting condition embeddings...")
+    cond_embeds, cond_mask = tokenize_images(
+        tokenizer=image_tokenizer,
+        pixel_values=pixel_values,
+        image_grid_thw=image_grid_thw,
+        batch_size=batch_size,
+        max_condition_length=max_condition_length,
+    )
+    
+    # Prepare unconditional embeddings using model's null embedding for CFG
+    # Get the null embedding from model's y_embedder
+    null_embed = model.y_embedder.y_embedding  # [token_num, caption_channels]
+    # Truncate/pad to max_condition_length and expand to batch
+    seq_len = min(null_embed.shape[0], max_condition_length)
+    uncond_embeds = null_embed[:seq_len, :].unsqueeze(0).expand(batch_size, -1, -1)  # [B, seq_len, C]
+    # Pad to max_condition_length if needed
+    if seq_len < max_condition_length:
+        padding = torch.zeros(
+            batch_size, max_condition_length - seq_len, uncond_embeds.shape[-1],
+            device=device, dtype=dtype
+        )
+        uncond_embeds = torch.cat([uncond_embeds, padding], dim=1)
+    uncond_embeds = uncond_embeds.to(device=device, dtype=dtype)
+    # Mask: mark the valid part of null embedding as 1
+    uncond_mask = torch.zeros(batch_size, max_condition_length, device=device)
+    uncond_mask[:, :seq_len] = 1
+    uncond_mask = uncond_mask[:, None, None, :]  # [B, 1, 1, L]
+    
+    # 3. DiT sampling with Euler scheduler
+    print_rank_0(f"  Euler sampling ({num_sampling_steps} steps, cfg={cfg_scale})...")
+    
+    # Create Euler scheduler
+    scheduler = FlowMatchEulerDiscreteScheduler(shift=flow_shift)
+    scheduler.set_timesteps(num_sampling_steps, device=device)
+    
+    # Initialize with random noise
+    generator = torch.Generator(device=device).manual_seed(42)
+    dit_latents = torch.randn(
+        (batch_size, latent_channels, latent_size, latent_size),
+        generator=generator,
+        device=device,
+        dtype=dtype,
+    )
+    
+    # Prepare CFG inputs
+    cond_embeds_cfg = torch.cat([uncond_embeds, cond_embeds], dim=0)
+    mask_cfg = torch.cat([uncond_mask, cond_mask], dim=0)
+    
+    # Euler sampling loop
+    for i, t in enumerate(scheduler.timesteps):
+        # Expand latents for CFG
+        latent_input = torch.cat([dit_latents] * 2)
+        timestep = t.expand(latent_input.shape[0])
+        
+        # Model prediction
+        noise_pred = model.forward_with_dpmsolver(
+            latent_input, timestep, cond_embeds_cfg, mask=mask_cfg
+        )
+        
+        # CFG combination
+        noise_uncond, noise_cond = noise_pred.chunk(2)
+        noise_pred = noise_uncond + cfg_scale * (noise_cond - noise_uncond)
+        
+        # Scheduler step
+        dit_latents = scheduler.step(noise_pred, t, dit_latents, return_dict=False)[0]
+    
+    # Decode DiT latents to images
+    print_rank_0("  Decoding DiT latents...")
+    dit_recon_latents = dit_latents / vae.config.scaling_factor
+    dit_recon_images = vae.decode(dit_recon_latents).sample
+    dit_recon_images = (dit_recon_images / 2 + 0.5).clamp(0, 1)
+    
+    # 4. Create comparison images and save
+    print_rank_0("  Saving comparison images...")
+    vis_dir = os.path.join(output_dir, "visualization", f"step_{global_step}")
+    os.makedirs(vis_dir, exist_ok=True)
+    
+    # Convert tensors to numpy for visualization
+    vae_recon_np = vae_recon_images.cpu().permute(0, 2, 3, 1).float().numpy()
+    dit_recon_np = dit_recon_images.cpu().permute(0, 2, 3, 1).float().numpy()
+    
+    for i, orig_img in enumerate(original_images):
+        # Get reconstructed images
+        vae_img = Image.fromarray((vae_recon_np[i] * 255).round().astype("uint8"))
+        dit_img = Image.fromarray((dit_recon_np[i] * 255).round().astype("uint8"))
+        
+        # Create side-by-side comparison: Original | VAE | DiT
+        comparison = Image.new('RGB', (image_size * 3, image_size))
+        comparison.paste(orig_img, (0, 0))
+        comparison.paste(vae_img, (image_size, 0))
+        comparison.paste(dit_img, (image_size * 2, 0))
+        
+        # Save to file
+        comparison.save(os.path.join(vis_dir, f"comparison_{i}.png"))
+    
+    # 5. Write to TensorBoard
+    if tb_writer is not None:
+        # Create a grid of all comparisons
+        all_images = []
+        for i, orig_img in enumerate(original_images):
+            # Original
+            orig_tensor = torch.from_numpy(np.array(orig_img)).permute(2, 0, 1).float() / 255.0
+            all_images.append(orig_tensor)
+            # VAE reconstruction
+            all_images.append(vae_recon_images[i].cpu().float())
+            # DiT reconstruction  
+            all_images.append(dit_recon_images[i].cpu().float())
+        
+        # Stack and add to tensorboard
+        grid = torch.stack(all_images)  # [N*3, C, H, W]
+        from torchvision.utils import make_grid
+        grid_img = make_grid(grid, nrow=3, padding=2)  # 3 images per row
+        tb_writer.add_image(f"visualization/reconstruction", grid_img, global_step)
+    
+    print_rank_0(f"  Visualization saved to {vis_dir}")
+
 
 def _init_profiler(output_dir, with_stack=False) -> None:
     """Initialize torch profiler with TensorBoard support.
@@ -646,7 +944,6 @@ def train():
     ############## Load VAE and text encoder ##############
     # VAE & Text Encoder is not trainable
     vae = None
-    text_encoder = None
 
     # VAE uses bfloat16 to match model compute dtype
     vae = load_vae(
@@ -655,10 +952,19 @@ def train():
         dtype=get_torch_dtype(args.model_dtype)
     )
     image_tokenizer = load_image_tokenizer(
-        tokenizer_dir=args.tokenizer_dir,
+        tokenizer_dir=args.image_tokenizer_dir,
         device=torch.cuda.current_device(),
         dtype=args.model_dtype
     )
+    
+    # Load processor for visualization (only needed if visualize_dir is set)
+    vis_processor = None
+    if args.visualize_dir:
+        vis_processor = AutoProcessor.from_pretrained(
+            args.image_tokenizer_dir,
+            trust_remote_code=True
+        )
+        print_rank_0(f"Loaded processor for visualization from {args.image_tokenizer_dir}")
     ############## Load VAE and tokenizer ##############
 
     # Create optimizer
@@ -912,6 +1218,34 @@ def train():
                         checkpoint_dir=args.output_dir,
                         global_step=scheduler.global_step
                     )
+
+            # Visualization (only on rank 0)
+            if (args.visualize_dir and 
+                scheduler.global_step > 0 and 
+                scheduler.global_step % args.visualize_per_step == 0 and
+                dist.get_rank() == 0):
+                model.eval()
+                with Timer("visualization"):
+                    visualize_reconstruction(
+                        model=model,
+                        vae=vae,
+                        image_tokenizer=image_tokenizer,
+                        processor=vis_processor,
+                        image_dir=args.visualize_dir,
+                        output_dir=args.output_dir,
+                        global_step=scheduler.global_step,
+                        cfg_scale=args.cfg_scale,
+                        num_sampling_steps=args.num_sampling_steps,
+                        flow_shift=args.flow_shift,
+                        max_condition_length=args.max_condition_length,
+                        image_size=args.image_size,
+                        device=torch.cuda.current_device(),
+                        dtype=get_torch_dtype(args.model_dtype),
+                        tb_writer=tb_writer,
+                        num_images=args.num_vis_images,
+                    )
+                model.train()
+                dist.barrier()  # Sync after visualization
 
             if torch_profiler:
                 torch_profiler.step()
