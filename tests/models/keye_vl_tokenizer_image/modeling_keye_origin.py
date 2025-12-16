@@ -1965,6 +1965,9 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     # Debug: store raw cos/sin before split
     _DEBUG_ROPE_OUTPUTS["cos_before_chunk"] = cos.detach()
     _DEBUG_ROPE_OUTPUTS["sin_before_chunk"] = sin.detach()
+    _DEBUG_ROPE_OUTPUTS['mrope_section'] = torch.tensor(
+            mrope_section, device=q.device
+        )
 
     mrope_section = mrope_section * 2
     cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
