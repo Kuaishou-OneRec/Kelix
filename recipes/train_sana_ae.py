@@ -92,7 +92,7 @@ from muse.utils.common import (
     to_cuda,
     dist_reduce_dict
 )
-from muse.data.datasets import Text2ImageDataset, Text2ImageMultiScaleDatasetWrapper
+from muse.data.datasets import Text2ImageDataset, MultiScaleDatasetWrapper
 from muse.losses.diffusion import FlowMatchingLoss
 
 from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
@@ -1049,7 +1049,7 @@ def train():
     dataset = Text2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
     if args.multi_scale:
-        dataset = Text2ImageMultiScaleDatasetWrapper(
+        dataset = MultiScaleDatasetWrapper(
             dataset=dataset,
             batch_size=args.batch_size
         )
