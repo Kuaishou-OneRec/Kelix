@@ -540,6 +540,16 @@ def test_pipeline_alignment():
     # 重置 Origin 的 apply_multimodal_rotary_pos_emb 调用计数器
     if hasattr(origin_mod.apply_multimodal_rotary_pos_emb, '_call_count'):
         origin_mod.apply_multimodal_rotary_pos_emb._call_count = 0
+    # 重置 Origin 的 KeyeFlashAttention2 attention debug 计数器
+    if hasattr(origin_mod.KeyeFlashAttention2, '_debug_attn_call_count'):
+        origin_mod.KeyeFlashAttention2._debug_attn_call_count = 0
+    # 重置 Muse 的 attention debug 计数器
+    if hasattr(muse_model, "model") and hasattr(muse_model.model, "layers"):
+        for layer in muse_model.model.layers:
+            if hasattr(layer.attn, '_debug_attn_call_count'):
+                layer.attn._debug_attn_call_count = 0
+            if hasattr(layer.attn, '_debug_attn_inputs'):
+                layer.attn._debug_attn_inputs = {}
     muse_llm_rope = None
     if hasattr(muse_model, "model") and hasattr(muse_model.model, "rope"):
         muse_llm_rope = muse_model.model.rope
@@ -685,6 +695,26 @@ def test_pipeline_alignment():
             activations["muse"]["4.R Q After RoPE"] = muse_llm_rope._debug_rope_outputs[0]
             activations["muse"]["4.R K After RoPE"] = muse_llm_rope._debug_rope_outputs[1]
 
+    # 收集 attention 输入的 debug 信息
+    # Origin
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("q_before_attn") is not None:
+        activations["origin"]["q_before_attn"] = origin_mod._DEBUG_ROPE_OUTPUTS["q_before_attn"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("k_before_attn") is not None:
+        activations["origin"]["k_before_attn"] = origin_mod._DEBUG_ROPE_OUTPUTS["k_before_attn"]
+    if origin_mod._DEBUG_ROPE_OUTPUTS.get("v_before_attn") is not None:
+        activations["origin"]["v_before_attn"] = origin_mod._DEBUG_ROPE_OUTPUTS["v_before_attn"]
+    # Muse: 从 LLM Layer 0 的 attention 模块获取
+    llm_layer0_attn = None
+    if hasattr(muse_model, "model") and hasattr(muse_model.model, "layers"):
+        llm_layer0_attn = muse_model.model.layers[0].attn
+    if llm_layer0_attn and hasattr(llm_layer0_attn, "_debug_attn_inputs"):
+        if llm_layer0_attn._debug_attn_inputs.get("q_before_attn") is not None:
+            activations["muse"]["q_before_attn"] = llm_layer0_attn._debug_attn_inputs["q_before_attn"]
+        if llm_layer0_attn._debug_attn_inputs.get("k_before_attn") is not None:
+            activations["muse"]["k_before_attn"] = llm_layer0_attn._debug_attn_inputs["k_before_attn"]
+        if llm_layer0_attn._debug_attn_inputs.get("v_before_attn") is not None:
+            activations["muse"]["v_before_attn"] = llm_layer0_attn._debug_attn_inputs["v_before_attn"]
+
     # --- Analysis ---
     log_separator("Deep Dive Analysis")
     
@@ -717,6 +747,10 @@ def test_pipeline_alignment():
         "maosiyang:k_before_rope",
         "maosiyang:q_after_rope",
         "maosiyang:k_after_rope",
+        # Attention inputs (after transpose, before flash attention)
+        "q_before_attn",
+        "k_before_attn",
+        "v_before_attn",
         "0.3 Attn Raw (Pre-Proj)",
         "0.4 Attn Out (Post-Proj)",
         "0.6 MLP Hidden (fc1)",
@@ -765,6 +799,9 @@ def test_pipeline_alignment():
         "maosiyang:k_before_rope",
         "maosiyang:q_after_rope",
         "maosiyang:k_after_rope",
+        "q_before_attn",
+        "k_before_attn",
+        "v_before_attn",
     }
     
     for k in checkpoints:

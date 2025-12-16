@@ -2312,6 +2312,15 @@ class KeyeFlashAttention2(KeyeAttention):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
+        # Debug: store attention inputs for Layer 0 only
+        if not hasattr(KeyeFlashAttention2, "_debug_attn_call_count"):
+            KeyeFlashAttention2._debug_attn_call_count = 0
+        if KeyeFlashAttention2._debug_attn_call_count == 0:
+            _DEBUG_ROPE_OUTPUTS["q_before_attn"] = query_states.detach()
+            _DEBUG_ROPE_OUTPUTS["k_before_attn"] = key_states.detach()
+            _DEBUG_ROPE_OUTPUTS["v_before_attn"] = value_states.detach()
+        KeyeFlashAttention2._debug_attn_call_count += 1
+
         if (
             sliding_window == -1
             and self.config.use_sliding_window

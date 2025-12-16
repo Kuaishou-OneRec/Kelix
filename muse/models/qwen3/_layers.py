@@ -539,6 +539,17 @@ class KeyeFlashAttention2(nn.Module):
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
+        # Debug: store attention inputs for Layer 0
+        if not hasattr(self, "_debug_attn_inputs"):
+            self._debug_attn_inputs = {}
+        if not hasattr(self, "_debug_attn_call_count"):
+            self._debug_attn_call_count = 0
+        if self._debug_attn_call_count == 0:
+            self._debug_attn_inputs["q_before_attn"] = q.detach()
+            self._debug_attn_inputs["k_before_attn"] = k.detach()
+            self._debug_attn_inputs["v_before_attn"] = v.detach()
+        self._debug_attn_call_count += 1
+
         if get_context_parallel_world_size() > 1:
             cpg = get_context_parallel_group()
             # If context parallel is enabled, the input is sharded along
