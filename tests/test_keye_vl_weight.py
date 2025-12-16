@@ -537,6 +537,9 @@ def test_pipeline_alignment():
     if hasattr(origin_mod, "_DEBUG_ROPE_OUTPUTS"):
         for key in origin_mod._DEBUG_ROPE_OUTPUTS.keys():
             origin_mod._DEBUG_ROPE_OUTPUTS[key] = None
+    # 重置 Origin 的 apply_multimodal_rotary_pos_emb 调用计数器
+    if hasattr(origin_mod.apply_multimodal_rotary_pos_emb, '_call_count'):
+        origin_mod.apply_multimodal_rotary_pos_emb._call_count = 0
     muse_llm_rope = None
     if hasattr(muse_model, "model") and hasattr(muse_model.model, "rope"):
         muse_llm_rope = muse_model.model.rope

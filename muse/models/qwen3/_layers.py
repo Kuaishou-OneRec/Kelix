@@ -717,14 +717,16 @@ class MultimodalRotaryEmbedding(nn.Module):
         if not hasattr(self, "_debug_rope_outputs"):
             self._debug_rope_outputs = []
         
-        # Track call count to distinguish q vs k (first call = q, second call = k)
-        # Use length of _debug_rope_outputs to determine if this is q or k
-        is_q = len(self._debug_rope_outputs) % 2 == 0
+        # Track call count: only record Layer 0's q and k (first two calls)
+        # len == 0: Layer 0's q
+        # len == 1: Layer 0's k
+        # len >= 2: subsequent layers, skip recording
+        call_count = len(self._debug_rope_outputs)
         
-        # Store before RoPE
-        if is_q:
+        # Store before RoPE (only for Layer 0)
+        if call_count == 0:
             self._debug_rope_intermediates["maosiyang:q_before_rope"] = x.detach()
-        else:
+        elif call_count == 1:
             self._debug_rope_intermediates["maosiyang:k_before_rope"] = x.detach()
 
         # Apply RoPE: x_embed = (x * cos) + (rotate_half(x) * sin)
@@ -733,10 +735,10 @@ class MultimodalRotaryEmbedding(nn.Module):
         x_rotated = self.rotate_half(x)
         x_out = (x * cos) + (x_rotated * sin)
 
-        # Store after RoPE
-        if is_q:
+        # Store after RoPE (only for Layer 0)
+        if call_count == 0:
             self._debug_rope_intermediates["maosiyang:q_after_rope"] = x_out.detach()
-        else:
+        elif call_count == 1:
             self._debug_rope_intermediates["maosiyang:k_after_rope"] = x_out.detach()
 
         # Store outputs for debugging

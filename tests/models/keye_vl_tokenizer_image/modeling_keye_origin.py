@@ -1985,16 +1985,24 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     _DEBUG_ROPE_OUTPUTS["cos_after_chunk"] = cos.detach()
     _DEBUG_ROPE_OUTPUTS["sin_after_chunk"] = sin.detach()
 
-    # maosiyang: store q/k before RoPE
-    _DEBUG_ROPE_OUTPUTS["maosiyang:q_before_rope"] = q.detach()
-    _DEBUG_ROPE_OUTPUTS["maosiyang:k_before_rope"] = k.detach()
+    # maosiyang: store q/k before RoPE (only Layer 0, i.e., first call)
+    # Use a counter to track calls
+    if not hasattr(apply_multimodal_rotary_pos_emb, '_call_count'):
+        apply_multimodal_rotary_pos_emb._call_count = 0
+    
+    if apply_multimodal_rotary_pos_emb._call_count == 0:
+        _DEBUG_ROPE_OUTPUTS["maosiyang:q_before_rope"] = q.detach()
+        _DEBUG_ROPE_OUTPUTS["maosiyang:k_before_rope"] = k.detach()
     
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     
-    # maosiyang: store q/k after RoPE
-    _DEBUG_ROPE_OUTPUTS["maosiyang:q_after_rope"] = q_embed.detach()
-    _DEBUG_ROPE_OUTPUTS["maosiyang:k_after_rope"] = k_embed.detach()
+    # maosiyang: store q/k after RoPE (only Layer 0)
+    if apply_multimodal_rotary_pos_emb._call_count == 0:
+        _DEBUG_ROPE_OUTPUTS["maosiyang:q_after_rope"] = q_embed.detach()
+        _DEBUG_ROPE_OUTPUTS["maosiyang:k_after_rope"] = k_embed.detach()
+    
+    apply_multimodal_rotary_pos_emb._call_count += 1
     
     # Debug: store outputs (legacy)
     _DEBUG_ROPE_OUTPUTS["q_after_rope"] = q_embed.detach()
