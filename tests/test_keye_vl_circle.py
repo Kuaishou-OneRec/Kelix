@@ -360,7 +360,7 @@ def prepare_inputs_via_processor(ckpt_path: str, device: str, dtype: torch.dtype
     
     # 2. 初始化 KeyeProcessor
     logger.info("🧠 Initializing KeyeProcessor...")
-    processor = KeyeProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    processor = AutoProcessor.from_pretrained(ckpt_path,trust_remote_code = True)
 
     # 3. 生成图片
     logger.info("🎨 Generating Circle Image...")
