@@ -486,7 +486,6 @@ class KeyeFlashAttention2(nn.Module):
         if self.q_norm is not None:
             q = self.q_norm(q)
         q = q.transpose(1,2)
-
         # Apply positional embeddings after q-norm
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
@@ -526,9 +525,13 @@ class KeyeFlashAttention2(nn.Module):
         # as the query tensor by copying values across the relevant dim
         # k,v shape: [b, n_kv, s, h_d] -> [b, n_h, s, h_d]
         if self.num_heads != self.num_kv_heads:
-            expand_shape = (b, -1, self.num_kv_heads, q_per_kv, self.head_dim)
-            k = k.unsqueeze(3).expand(expand_shape).flatten(2, 3)
-            v = v.unsqueeze(3).expand(expand_shape).flatten(2, 3)
+            # k: [b, n_kv, s, h_d]
+            # unsqueeze(2): [b, n_kv, 1, s, h_d]
+            # expand: [b, n_kv, q_per_kv, s, h_d]
+            # flatten(1, 2): [b, n_h, s, h_d]
+            expand_shape = (b, self.num_kv_heads, q_per_kv, s_y, self.head_dim)
+            k = k.unsqueeze(2).expand(expand_shape).flatten(1, 2)
+            v = v.unsqueeze(2).expand(expand_shape).flatten(1, 2)
 
         if get_context_parallel_world_size() > 1:
             cpg = get_context_parallel_group()
