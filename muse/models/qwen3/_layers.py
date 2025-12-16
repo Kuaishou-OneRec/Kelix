@@ -715,27 +715,11 @@ class MultimodalRotaryEmbedding(nn.Module):
             # Compute cos and sin: [3, batch_size, seq_len, dim]
             cos = emb.cos()
             sin = emb.sin()
-        if not hasattr(self, "_debug_rope_intermediates"):
-            self._debug_rope_intermediates = {
-                "inv_freq": None,
-                "position_ids": None,
-                "cos_before_chunk": None,
-                "sin_before_chunk": None,
-                "cos_after_chunk": None,
-                "sin_after_chunk": None,
-                "mrope_section": None,
-                "maosiyang:q_before_rope": None,
-                "maosiyang:k_before_rope": None,
-                "maosiyang:q_after_rope": None,
-                "maosiyang:k_after_rope": None,
-            }
         # Apply attention scaling (for compatibility with advanced RoPE types)
         cos = cos * self.attention_scaling
         sin = sin * self.attention_scaling
         cos = cos.to(dtype=x.dtype)
         sin = sin.to(dtype=x.dtype)
-        self._debug_rope_intermediates["cos_before_chunk"] = cos.detach()
-        self._debug_rope_intermediates["sin_before_chunk"] = sin.detach()
 
         # Apply multimodal section splitting (same as Origin's apply_multimodal_rotary_pos_emb)
         # mrope_section * 2 for cos/sin concatenation
@@ -747,33 +731,9 @@ class MultimodalRotaryEmbedding(nn.Module):
         cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(1)
         sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(1)
         
-        self._debug_rope_intermediates["inv_freq"] = self.inv_freq.detach()
-        self._debug_rope_intermediates["position_ids"] = position_ids.detach()
-        
-        self._debug_rope_intermediates["mrope_section"] = torch.tensor(
-            self.mrope_section, device=x.device
-        )
 
-        # Store combined cos/sin (after chunk)
-        # cos/sin shape: [batch, 1, seq_len, head_dim]
-        self._debug_rope_intermediates["cos_after_chunk"] = cos.detach()
-        self._debug_rope_intermediates["sin_after_chunk"] = sin.detach()
+        
 
-        # Initialize debug outputs list if not exists
-        if not hasattr(self, "_debug_rope_outputs"):
-            self._debug_rope_outputs = []
-        
-        # Track call count: only record Layer 0's q and k (first two calls)
-        # len == 0: Layer 0's q
-        # len == 1: Layer 0's k
-        # len >= 2: subsequent layers, skip recording
-        call_count = len(self._debug_rope_outputs)
-        
-        # Store before RoPE (only for Layer 0)
-        if call_count == 0:
-            self._debug_rope_intermediates["maosiyang:q_before_rope"] = x.detach()
-        elif call_count == 1:
-            self._debug_rope_intermediates["maosiyang:k_before_rope"] = x.detach()
 
         # Apply RoPE: x_embed = (x * cos) + (rotate_half(x) * sin)
         # x shape: [batch, num_heads, seq_len, head_dim]
@@ -781,15 +741,6 @@ class MultimodalRotaryEmbedding(nn.Module):
         x_rotated = self.rotate_half(x)
         x_out = (x * cos) + (x_rotated * sin)
 
-        # Store after RoPE (only for Layer 0)
-        if call_count == 0:
-            self._debug_rope_intermediates["maosiyang:q_after_rope"] = x_out.detach()
-        elif call_count == 1:
-            self._debug_rope_intermediates["maosiyang:k_after_rope"] = x_out.detach()
-
-        # Store outputs for debugging
-        # x_out is already in [batch, heads, seq_len, head_dim] format (same as Origin)
-        self._debug_rope_outputs.append(x_out.detach())
         
         return x_out
     
