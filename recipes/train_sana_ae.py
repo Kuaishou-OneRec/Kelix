@@ -245,6 +245,16 @@ def get_argument_parser():
     parser.add_argument("--allow-random-init-params", type=str, default='',
                         help="Parameter names to allow random initialization")
     
+    parser.add_argument("--skip-load-params", type=str, default='',
+                        help="Parameter name patterns to skip loading from checkpoint (comma-separated). "
+                             "Uses 'contains' matching. These params will be randomly initialized. "
+                             "E.g., 'y_embedder,cross_attn' skips all params containing these substrings")
+    
+    parser.add_argument("--freeze-params", type=str, default='',
+                        help="Parameter name patterns to freeze (comma-separated). Uses 'contains' matching. "
+                             "E.g., 'y_embedder,cross_attn' freezes all params containing these substrings. "
+                             "Use ^ prefix for inverse: '^y_embedder,^cross_attn' freezes all EXCEPT matching params")
+    
     parser.add_argument("--compile", action="store_true",
                         help="Compile model with torch.compile")
 
@@ -414,6 +424,42 @@ def tokenize_images(tokenizer,
     attention_mask = attention_mask[:, None, None, :]  # [B, 1, 1, max_condition_length]
 
     return fused_embeddings, attention_mask
+
+
+def freeze_params_by_pattern(model, patterns: List[str]) -> int:
+    """Freeze parameters based on pattern matching (contains).
+    
+    Supports two modes:
+    1. Normal mode: freeze params containing any pattern
+       E.g., ['y_embedder', 'cross_attn'] freezes params containing these substrings
+    2. Inverse mode (^ prefix): freeze all EXCEPT params matching patterns
+       E.g., ['^y_embedder', '^cross_attn'] freezes everything except params containing these
+    
+    Args:
+        model: The model to freeze parameters in
+        patterns: List of patterns to match in parameter names (use ^ for inverse selection)
+        
+    Returns:
+        Number of parameters frozen
+    """
+    # Check if inverse mode (all patterns start with ^)
+    inverse_mode = all(p.startswith('^') for p in patterns)
+    if inverse_mode:
+        # Remove ^ prefix for matching
+        patterns = [p[1:] for p in patterns]
+    
+    frozen_count = 0
+    for name, param in model.named_parameters():
+        matches_pattern = any(pattern in name for pattern in patterns)
+
+        # In inverse mode: freeze if NOT matching; normal mode: freeze if matching
+        should_freeze = not matches_pattern if inverse_mode else matches_pattern
+        
+        if should_freeze:
+            param.requires_grad = False
+            frozen_count += 1
+    
+    return frozen_count
 
 
 def load_visualization_images(
@@ -902,7 +948,8 @@ def train():
             # distribute the state_dict from rank 0 to all ranks
             load_from_full_model_state_dict(
                 model=model, full_sd=state_dict,
-                allow_random_init_params=args.allow_random_init_params
+                allow_random_init_params=args.allow_random_init_params,
+                skip_load_params=args.skip_load_params
             )
     else:
         # Train from scratch: initialize model parameters randomly
@@ -923,6 +970,13 @@ def train():
         assert tensor.device != torch.device("meta"), \
         f"{name} not initialized, device={tensor.device}"
 
+    # Freeze specified parameters
+    if args.freeze_params:
+        freeze_patterns = [p.strip() for p in args.freeze_params.split(',') if p.strip()]
+        if freeze_patterns:
+            frozen_count = freeze_params_by_pattern(model, freeze_patterns)
+            print_rank_0(f"Frozen {frozen_count} parameters with patterns: {freeze_patterns}")
+
     if args.compile:
         # Compile model for better performance
         model = torch.compile(model)
@@ -932,15 +986,28 @@ def train():
         # Free the state_dict to save memory
         del state_dict
 
-    # Print trainable parameters
-    print_rank_0("=" * 50)
-    print_rank_0("Parameters:")
+    # Print trainable and frozen parameters
+    trainable_params = []
+    frozen_params = []
     for name, param in model.named_parameters():
         if param.requires_grad:
-            print_rank_0(f"  {name}: {param.shape}")
+            trainable_params.append((name, param.shape))
         else:
-            print_rank_0(f"  {name}: {param.shape} (not trainable)")
-    print_rank_0("=" * 50)
+            frozen_params.append((name, param.shape))
+
+    print_rank_0("=" * 60)
+    print_rank_0(f"Trainable Parameters ({len(trainable_params)}):")
+    for name, shape in trainable_params:
+        print_rank_0(f"  {name}: {shape}")
+    print_rank_0("-" * 60)
+    print_rank_0(f"Frozen Parameters ({len(frozen_params)}):")
+    for name, shape in frozen_params:
+        print_rank_0(f"  {name}: {shape}")
+    print_rank_0("=" * 60)
+
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print_rank_0(f"Total params: {total_params:,}, Trainable: {trainable_count:,} ({100*trainable_count/total_params:.2f}%)")
 
     ############## Load VAE and text encoder ##############
     # VAE & Text Encoder is not trainable

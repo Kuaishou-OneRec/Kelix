@@ -289,9 +289,15 @@ def shard_model(
 
 def load_from_full_model_state_dict(model: "FSDPModule",
                                     full_sd: Dict[str, Any],
-                                    allow_random_init_params: Optional[Union[str, List[str]]] = None):
+                                    allow_random_init_params: Optional[Union[str, List[str]]] = None,
+                                    skip_load_params: Optional[Union[str, List[str]]] = None):
     if isinstance(allow_random_init_params, str):
       allow_random_init_params = allow_random_init_params.split(',')
+    
+    # Parse skip_load_params (prefix matching)
+    if isinstance(skip_load_params, str):
+        skip_load_params = [p.strip() for p in skip_load_params.split(',') if p.strip()]
+    
     meta_sharded_sd = model.state_dict()
     sharded_sd = {}
     if dist.get_rank() == 0:
@@ -328,6 +334,17 @@ def load_from_full_model_state_dict(model: "FSDPModule",
         print_rank_0(f"meta_sharded_sd={format_dict_or_list(meta_sharded_sd_info)}")
 
         device0 = full_sd[list(full_sd)[0]]
+        
+        # Force random init for skip_load_params (even if they exist in checkpoint)
+        if skip_load_params:
+            for k in list(full_sd.keys()):
+                should_skip = any(prefix in k for prefix in skip_load_params)
+                if should_skip and k in meta_sharded_sd:
+                    full_sd[k] = torch.empty(meta_sharded_sd[k].shape)
+                    model.get_initializer(k)(full_sd[k])
+                    full_sd[k] = full_sd[k].to(device0)
+                    print_rank_0(f"Skip load, random init: {k}, shape={full_sd[k].shape}")
+        
         for k in extra_meta_sharded_sd:
             if allow_random_init_params is not None and k in allow_random_init_params:
                 full_sd[k] = torch.empty(extra_meta_sharded_sd[k][0])
