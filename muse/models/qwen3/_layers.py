@@ -387,7 +387,6 @@ class KeyeFlashAttention2(nn.Module):
         self.pos_embeddings = pos_embeddings
 
         self._attention_function = get_attention_function(attention_function)
-        print("maosiyangdebug::::",self._attention_function)
 
         # this flag indicates whether to update the kv-cache during forward
         # passes. when disabled, we can have the cache setup but still
@@ -540,16 +539,16 @@ class KeyeFlashAttention2(nn.Module):
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        # Debug: store attention inputs for Layer 0
-        if not hasattr(self, "_debug_attn_inputs"):
-            self._debug_attn_inputs = {}
-        if not hasattr(self, "_debug_attn_call_count"):
-            self._debug_attn_call_count = 0
-        is_first_call = self._debug_attn_call_count == 0
-        if is_first_call:
-            self._debug_attn_inputs["q_before_attn"] = q.detach()
-            self._debug_attn_inputs["k_before_attn"] = k.detach()
-            self._debug_attn_inputs["v_before_attn"] = v.detach()
+        # # Debug: store attention inputs for Layer 0
+        # if not hasattr(self, "_debug_attn_inputs"):
+        #     self._debug_attn_inputs = {}
+        # if not hasattr(self, "_debug_attn_call_count"):
+        #     self._debug_attn_call_count = 0
+        # is_first_call = self._debug_attn_call_count == 0
+        # if is_first_call:
+        #     self._debug_attn_inputs["q_before_attn"] = q.detach()
+        #     self._debug_attn_inputs["k_before_attn"] = k.detach()
+        #     self._debug_attn_inputs["v_before_attn"] = v.detach()
 
         if get_context_parallel_world_size() > 1:
             cpg = get_context_parallel_group()
@@ -567,11 +566,11 @@ class KeyeFlashAttention2(nn.Module):
         
         is_causal_flag = self.kv_cache is None and mask is None and self.is_causal
         
-        # Debug: print attention parameters
-        if is_first_call:
-            print(f"[Muse] attn params: is_causal={is_causal_flag}, attn_dropout={self.attn_dropout}, training={self.training}")
-            print(f"[Muse] q shape: {q.shape}, k shape: {k.shape}, v shape: {v.shape}")
-            print(f"[Muse] mask: {mask}")
+        # # Debug: print attention parameters
+        # if is_first_call:
+        #     print(f"[Muse] attn params: is_causal={is_causal_flag}, attn_dropout={self.attn_dropout}, training={self.training}")
+        #     print(f"[Muse] q shape: {q.shape}, k shape: {k.shape}, v shape: {v.shape}")
+        #     print(f"[Muse] mask: {mask}")
 
         output = self._attention_function(
             q=q,
@@ -584,9 +583,9 @@ class KeyeFlashAttention2(nn.Module):
             **kwargs,
         )
         
-        # Debug: output after attention function
-        if is_first_call:
-            self._debug_attn_inputs["attn_output_raw"] = output.detach().clone()
+        # # Debug: output after attention function
+        # if is_first_call:
+        #     self._debug_attn_inputs["attn_output_raw"] = output.detach().clone()
         
         if get_context_parallel_world_size() > 1:
             cpg = get_context_parallel_group()
@@ -595,17 +594,17 @@ class KeyeFlashAttention2(nn.Module):
         # reshape the output to be the same shape as the input
         output = output.contiguous().view(b, s_x, -1)
         
-        # Debug: output after contiguous view
-        if is_first_call:
-            self._debug_attn_inputs["attn_output_reshaped"] = output.detach().clone()
+        # # Debug: output after contiguous view
+        # if is_first_call:
+        #     self._debug_attn_inputs["attn_output_reshaped"] = output.detach().clone()
         
         final_output = self.output_proj(output)
         
         # Debug: output after output_proj
-        if is_first_call:
-            self._debug_attn_inputs["attn_output_proj"] = final_output.detach().clone()
+        # if is_first_call:
+        #     self._debug_attn_inputs["attn_output_proj"] = final_output.detach().clone()
         
-        self._debug_attn_call_count += 1
+        # self._debug_attn_call_count += 1
         return final_output
 
 
