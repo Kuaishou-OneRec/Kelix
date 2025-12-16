@@ -271,7 +271,6 @@ class SanaModel(Model):
         Reference: Sana/diffusion/model/nets/sana_multi_scale.py Lines 314-383
         """
         bs = x.shape[0]
-        print(f"inputs x: {x.shape}")
         x = x.to(self.dtype)
         # Match official: timestep.long().to(torch.float32)
         timestep = timestep.long().to(torch.float32)
@@ -306,9 +305,7 @@ class SanaModel(Model):
         t0 = self.t_block(t)  # [N, 6*D]
         
         # Caption embedding
-        print("before shape of y: {}".format(y.shape))
         y = self.y_embedder(y, self.training, mask=mask)  # [N, 1, L, D] or [N, L, D]
-        print("shape of y: {}".format(y.shape))
         if self.y_norm:
             y = self.attention_y_norm(y)
         

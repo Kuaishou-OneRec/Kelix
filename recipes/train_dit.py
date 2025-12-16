@@ -1041,8 +1041,6 @@ def train():
 
             # 5. Forward + Loss Computation
             with record_function("Forward_Loss"):
-                print(f"latents: {latents.shape}")
-                print(f"text_embds: {text_embeds.shape}")
                 loss_dict = loss_fn(
                     model=model,
                     x_start=latents,

@@ -851,9 +851,6 @@ class SanaMSBlock(nn.Module):
                 rotary_emb=image_rotary_emb,
             )
         )
-        print(f"x: {x.shape}")
-        print(f"y: {y.shape}")
-        print(f"mask: {mask.shape}")
         # Cross-attention
         x = x + self.cross_attn(x, y, mask)
         
