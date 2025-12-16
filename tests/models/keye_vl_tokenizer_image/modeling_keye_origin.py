@@ -1597,6 +1597,10 @@ _DEBUG_ROPE_OUTPUTS = {
     "sin_before_chunk": None,
     "cos_after_chunk": None,
     "sin_after_chunk": None,
+    "maosiyang:q_before_rope": None,
+    "maosiyang:k_before_rope": None,
+    "maosiyang:q_after_rope": None,
+    "maosiyang:k_after_rope": None,
 }
 
 # Separate storage for VIT RoPE debugging (to avoid being overwritten by LLM RoPE)
@@ -2012,8 +2016,13 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
+
+    _DEBUG_ROPE_OUTPUTS["maosiyang:q_before_rope"] = q.detach()
+    _DEBUG_ROPE_OUTPUTS["maosiyang:k_before_rope"] = k.detach()
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
+    _DEBUG_ROPE_OUTPUTS["maosiyang:q_after_rope"] = q_embed.detach()
+    _DEBUG_ROPE_OUTPUTS["maosiyang:k_after_rope"] = k_embed.detach()
     return q_embed, k_embed
 
 

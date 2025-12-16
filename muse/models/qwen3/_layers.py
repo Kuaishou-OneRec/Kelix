@@ -678,6 +678,10 @@ class MultimodalRotaryEmbedding(nn.Module):
                 "cos_after_chunk": None,
                 "sin_after_chunk": None,
                 "mrope_section": None,
+                "maosiyang:q_before_rope": None,
+                "maosiyang:k_before_rope": None,
+                "maosiyang:q_after_rope": None,
+                "maosiyang:k_after_rope": None,
             }
         # Apply attention scaling (for compatibility with advanced RoPE types)
         cos = cos * self.attention_scaling
@@ -709,40 +713,35 @@ class MultimodalRotaryEmbedding(nn.Module):
         self._debug_rope_intermediates["cos_after_chunk"] = cos.detach()
         self._debug_rope_intermediates["sin_after_chunk"] = sin.detach()
 
+        # Initialize debug outputs list if not exists
+        if not hasattr(self, "_debug_rope_outputs"):
+            self._debug_rope_outputs = []
+        
+        # Track call count to distinguish q vs k (first call = q, second call = k)
+        # Use length of _debug_rope_outputs to determine if this is q or k
+        is_q = len(self._debug_rope_outputs) % 2 == 0
+        
+        # Store before RoPE
+        if is_q:
+            self._debug_rope_intermediates["maosiyang:q_before_rope"] = x.detach()
+        else:
+            self._debug_rope_intermediates["maosiyang:k_before_rope"] = x.detach()
+
         # Apply RoPE: x_embed = (x * cos) + (rotate_half(x) * sin)
         # x shape: [batch, num_heads, seq_len, head_dim]
         # cos/sin shape: [batch, 1, seq_len, head_dim] -> broadcasts to [batch, num_heads, seq_len, head_dim]
         x_rotated = self.rotate_half(x)
         x_out = (x * cos) + (x_rotated * sin)
 
+        # Store after RoPE
+        if is_q:
+            self._debug_rope_intermediates["maosiyang:q_after_rope"] = x_out.detach()
+        else:
+            self._debug_rope_intermediates["maosiyang:k_after_rope"] = x_out.detach()
+
         # Store outputs for debugging
         # x_out is already in [batch, heads, seq_len, head_dim] format (same as Origin)
-        if not hasattr(self, "_debug_rope_outputs"):
-            self._debug_rope_outputs = []
         self._debug_rope_outputs.append(x_out.detach())
         
         return x_out
     
-    def apply_rotary_pos_emb_qk(
-        self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        input_pos: Optional[torch.Tensor] = None,
-    ) -> tuple:
-        """
-        Apply multimodal 3D rotary position embedding to both query and key tensors.
-        
-        This is a convenience method that applies the same position embedding to both
-        q and k tensors, which is the common use case in attention.
-        
-        Args:
-            q: Query tensor with shape [batch_size, num_heads, seq_len, head_dim]
-            k: Key tensor with shape [batch_size, num_kv_heads, seq_len, head_dim]
-            input_pos: Position indices with shape [3, batch_size, seq_len]
-        
-        Returns:
-            Tuple of (q_embed, k_embed) with rotary position embedding applied
-        """
-        q_embed = self.forward(q, input_pos=input_pos)
-        k_embed = self.forward(k, input_pos=input_pos)
-        return q_embed, k_embed

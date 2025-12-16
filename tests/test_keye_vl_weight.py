@@ -692,6 +692,10 @@ def test_pipeline_alignment():
         "4.R mrope_section",
         "4.R Q After RoPE",
         "4.R K After RoPE",
+        "maosiyang:q_before_rope",
+        "maosiyang:k_before_rope",
+        "maosiyang:q_after_rope",
+        "maosiyang:k_after_rope",
         "0.3 Attn Raw (Pre-Proj)",
         "0.4 Attn Out (Post-Proj)",
         "0.6 MLP Hidden (fc1)",
@@ -736,6 +740,10 @@ def test_pipeline_alignment():
         "4.R sin_after_chunk",
         "4.R Q After RoPE",
         "4.R K After RoPE",
+        "maosiyang:q_before_rope",
+        "maosiyang:k_before_rope",
+        "maosiyang:q_after_rope",
+        "maosiyang:k_after_rope",
     }
     
     for k in checkpoints:
