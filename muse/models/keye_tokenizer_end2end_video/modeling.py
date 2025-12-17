@@ -103,7 +103,7 @@ class KeyeVideoTokenizer(KeyeImageTokenizer):
         return image_embeds
 
 
-class KeyeTokenizerEnd2EndImage(Model):
+class KeyeTokenizerEnd2EndVideo(Model):
     """简单的多模态生成模型：Keye ViT Tokenizer + Qwen3 LLM。"""
 
     def __init__(
