@@ -36,7 +36,8 @@ def set_prec():
 
 set_prec()
 
-device = 1
+# 使用明确的 device，并在可能时使用 cuda:1
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 output_model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.2/step5000/global_step5000/converted/"
 output_model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted"
 
@@ -82,7 +83,8 @@ def process_message( messages, add_generation_prompt=True, padding=False):
         return batch
 
     inputs = _cast_inputs_to_bf16(inputs)
-    return inputs
+    # 确保 inputs 全部在目标 device 上
+    return {k: (v.to(device) if isinstance(v, torch.Tensor) else v) for k, v in inputs.items()}
 
 
 def test_forward():
@@ -101,7 +103,19 @@ def test_forward():
     }]
     inputs = process_message(messages).to(device)
 
-    logits = model(**inputs)
-    print(f"logits=\n{logits}")
+    # 在 forward 时使用 autocast 来强制内部 float ops 使用 bfloat16，避免 float/bfloat16 混合导致 upcast
+    if torch.cuda.is_available():
+        autocast_cm = torch.cuda.amp.autocast
+    else:
+        # CPU 上也可以使用 bfloat16 autocast（需要对应 PyTorch 版本）
+        try:
+            autocast_cm = torch.cpu.amp.autocast
+        except Exception:
+            autocast_cm = nullcontext  # fallback，若没有 cpu autocast 则不使用
+
+    from contextlib import nullcontext
+    with autocast_cm(dtype=torch.bfloat16):
+        logits = model(**inputs)
+     print(f"logits=\n{logits}")
 
 test_forward()
