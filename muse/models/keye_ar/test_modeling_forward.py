@@ -35,6 +35,7 @@ def convert_conf_to_unified_qwen3_config(conf_path):
     config_dict = {}
     
     # 基础模型配置
+    config_dict['model_class'] = 'UnifiedQwen3Model'  # 添加model_class字段
     config_dict['vocab_size'] = get_config_value(conf_data, 'vocab_size', 151936)
     config_dict['embed_dim'] = get_config_value(conf_data, 'hidden_size', 4096, 'embed_dim', 'hidden_size')
     config_dict['num_layers'] = get_config_value(conf_data, 'num_hidden_layers', 36, 'num_layers', 'num_hidden_layers')
