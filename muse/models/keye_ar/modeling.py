@@ -417,7 +417,7 @@ class KeyeARModel(Model):
     """
     
     def __init__(self, config: UnifiedQwen3Config):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         
         # 视觉相关组件
