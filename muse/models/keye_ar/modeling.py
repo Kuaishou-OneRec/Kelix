@@ -359,8 +359,7 @@ class UnifiedQwen3Model(Qwen3Model):
             **kwargs
         )
         return outputs
-<<<<<<< HEAD
-    
+
     @classmethod
     def convert_hf_state_dict(cls,
                               hf_state_dict: Dict[str, torch.Tensor],
@@ -411,8 +410,6 @@ class UnifiedQwen3Model(Qwen3Model):
                 converted_state_dict[f"model.token_head.{key}"] = tensor
         
         return converted_state_dict
-=======
->>>>>>> d6438194b (保留 keye_ar 及 run_blip3o_lzx_debug.sh 来自 dev/lzx_dit_merge_tok，其余同步 dev/dit_merge_tok)
 
 
 class KeyeARModel(Model):
@@ -431,13 +428,6 @@ class KeyeARModel(Model):
         original_hidden_size = getattr(config, "original_hidden_size", config.hidden_size)
         in_dim = (config.vision_config.embedding_dim // config.vision_config.n_q_tokens 
                   if config.vision_config.split_dim else config.vision_config.embedding_dim)
-<<<<<<< HEAD
-=======
-        self.quant_projector = nn.ModuleList([
-            nn.Linear(in_dim, original_hidden_size, bias=False) 
-            for _ in range(self.visual_tokenizer.n_q_tokens)
-        ])
->>>>>>> d6438194b (保留 keye_ar 及 run_blip3o_lzx_debug.sh 来自 dev/lzx_dit_merge_tok，其余同步 dev/dit_merge_tok)
         
         # 主语言模型
         self.model = UnifiedQwen3Model(config)
@@ -546,10 +536,4 @@ class KeyeARModel(Model):
             position_ids=position_ids,
             **kwargs
         )
-<<<<<<< HEAD
         return outputs
-=======
-        return outputs
-
-
->>>>>>> d6438194b (保留 keye_ar 及 run_blip3o_lzx_debug.sh 来自 dev/lzx_dit_merge_tok，其余同步 dev/dit_merge_tok)
