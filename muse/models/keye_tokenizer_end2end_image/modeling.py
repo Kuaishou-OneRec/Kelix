@@ -450,15 +450,15 @@ class KeyeTokenizerEnd2EndImage(Model):
             vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
             image_embeds = self._project_visual_tokens(vq_out["z_q"])
 
-            if vision_token_mask is None:
-                vision_token_mask = input_ids == self.image_token_id
+            # if vision_token_mask is None:
+            #     vision_token_mask = input_ids == self.image_token_id
 
-            if vision_token_mask.sum() != image_embeds.size(0):
-                raise ValueError(
-                    f"视觉token数量({image_embeds.size(0)})与mask中位置({vision_token_mask.sum().item()})不一致"
-                )
-            inputs_embeds = inputs_embeds.clone()
-            inputs_embeds[vision_token_mask] = image_embeds.to(inputs_embeds)
+            # if vision_token_mask.sum() != image_embeds.size(0):
+            #     raise ValueError(
+            #         f"视觉token数量({image_embeds.size(0)})与mask中位置({vision_token_mask.sum().item()})不一致"
+            #     )
+            # inputs_embeds = inputs_embeds.clone()
+            # inputs_embeds[vision_token_mask] = image_embeds.to(inputs_embeds)
 
             # 记录loss
             codebook_loss, commitment_loss, vq_indices = vq_out['codebook_loss'], vq_out['commitment_loss'], vq_out['indices']

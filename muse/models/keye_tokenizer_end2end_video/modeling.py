@@ -506,15 +506,15 @@ class KeyeTokenizerEnd2EndVideo(Model):
             vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
             image_embeds = self._project_visual_tokens(vq_out["z_q"])
 
-            if vision_token_mask is None:
-                vision_token_mask = input_ids == self.image_token_id
+            # if vision_token_mask is None:
+            #     vision_token_mask = input_ids == self.image_token_id
 
-            if vision_token_mask.sum() != image_embeds.size(0):
-                raise ValueError(
-                    f"视觉token数量({image_embeds.size(0)})与mask中位置({vision_token_mask.sum().item()})不一致"
-                )
-            inputs_embeds = inputs_embeds.clone()
-            inputs_embeds[vision_token_mask] = image_embeds.to(inputs_embeds)
+            # if vision_token_mask.sum() != image_embeds.size(0):
+            #     raise ValueError(
+            #         f"视觉token数量({image_embeds.size(0)})与mask中位置({vision_token_mask.sum().item()})不一致"
+            #     )
+            # inputs_embeds = inputs_embeds.clone()
+            # inputs_embeds[vision_token_mask] = image_embeds.to(inputs_embeds)
 
             # 记录loss
             codebook_loss, commitment_loss, vq_indices = vq_out['codebook_loss'], vq_out['commitment_loss'], vq_out['indices']
@@ -526,9 +526,6 @@ class KeyeTokenizerEnd2EndVideo(Model):
 
             n_image_tokens = (input_ids == self.image_token_id).sum().item()
             n_image_features = image_embeds.shape[0]
-
-
-
             if n_image_tokens != n_image_features:
                 fast_image_embeds = torch.cat(fast_image_embeds,dim=0)
                 raise ValueError(
@@ -541,6 +538,8 @@ class KeyeTokenizerEnd2EndVideo(Model):
 
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+        
+        if pixel_values_videos is not None:
 
         if attention_mask is not None:
             attention_mask = attention_mask.to(inputs_embeds.device)
