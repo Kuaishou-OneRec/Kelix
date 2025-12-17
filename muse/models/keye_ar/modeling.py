@@ -14,7 +14,6 @@ from muse.models.base import Model
 from muse.config import Qwen3Config, KeyeVisionConfig, UnifiedQwen3Config
 from muse.config.model_config import ModelConfig, KeyeTokenizerConfig
 from muse.models.qwen3.modeling import Qwen3Model
-from muse.models.keye_vit.modeling import KeyeVisionTransformer
 from muse.models.keye_tokenizer.modeling import KeyeImageTokenizer
 from .unified_token_decoder import UnifiedTokenDecoder
 
