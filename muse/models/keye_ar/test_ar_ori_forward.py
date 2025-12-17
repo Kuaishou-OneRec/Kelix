@@ -116,6 +116,6 @@ def test_forward():
     from contextlib import nullcontext
     with autocast_cm(dtype=torch.bfloat16):
         logits = model(**inputs)
-     print(f"logits=\n{logits}")
+    print(f"logits=\n{logits}")
 
 test_forward()
