@@ -98,7 +98,6 @@ class KeyeImageTokenizer(Model):
                 for i in range(config.n_q_tokens)
             ]
         )
-        self.up_projector = nn.Linear(, config.output_dim)
         self.up_projectors = nn.ModuleList(
             [nn.Linear(config.embedding_dim // config.n_q_tokens \
                 if config.split_dim else config.embedding_dim,
@@ -179,8 +178,9 @@ class KeyeImageTokenizer(Model):
         codebook_loss = [v["codebook_loss"] for v in vq_outputs]
         commitment_loss = [v["commitment_loss"] for v in vq_outputs]
         indices = [v["indices"] for v in vq_outputs]
-        token_embeds = sum(
-            [self.up_projectors[i](x_i) for i, x_i in enumerate(z_q) ])
+        token_embeds = torch.sum(
+            torch.stack([self.up_projectors[i](x_i) \
+                for i, x_i in enumerate(z_q)], dim=1), dim=1)
 
         return {
             "z_q": z_q,

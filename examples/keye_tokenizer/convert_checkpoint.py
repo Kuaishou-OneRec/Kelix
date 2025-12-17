@@ -58,6 +58,8 @@ def convert_hf_checkpoint(hf_state_dict: Dict[str, torch.Tensor]) -> Dict[str, t
     # 1. Extract visual_tokenizer.* keys from full state dict
     origin_tokenizer_state_dict = {}
     for k, v in hf_state_dict.items():
+        if "quant_projector" in k:
+            origin_tokenizer_state_dict[k] = v
         if k.startswith("visual_tokenizer."):
             new_k = k[len("visual_tokenizer."):]
             origin_tokenizer_state_dict[new_k] = v

@@ -389,11 +389,9 @@ def tokenize_images(tokenizer,
         embeddings: List[torch.Tensor] = tokenizer(
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw
-        )["z_q"]
+        )["token_embeds"]
         
-        # Sum embeddings across all codebooks
-        fused_embeddings = torch.sum(torch.stack(embeddings, dim=1), dim=1)
-        _, embed_dim = fused_embeddings.shape
+        _, embed_dim = embeddings.shape
         
         # Split by image_grid_thw and pad to max_condition_length
         # image_grid_thw: [B, 3] where each row is (t, h, w)
@@ -401,7 +399,7 @@ def tokenize_images(tokenizer,
         lengths = (image_grid_thw[:, 1] * image_grid_thw[:, 2] // 4).tolist()  # h * w for each image
         
         # Split fused_embeddings according to lengths
-        split_embeddings = torch.split(fused_embeddings, lengths, dim=0)
+        split_embeddings = torch.split(embeddings, lengths, dim=0)
         
         # Pad each to max_condition_length and stack
         padded = []
@@ -415,15 +413,15 @@ def tokenize_images(tokenizer,
                 emb = emb[:max_condition_length]
             padded.append(emb)
         
-        fused_embeddings = torch.stack(padded, dim=0)  # [B, max_condition_length, embed_dim]
+        embeddings = torch.stack(padded, dim=0)  # [B, max_condition_length, embed_dim]
 
     # Create attention mask based on actual lengths
-    attention_mask = torch.zeros(batch_size, max_condition_length, device=fused_embeddings.device)
+    attention_mask = torch.zeros(batch_size, max_condition_length, device=embeddings.device)
     for i, length in enumerate(lengths):
         attention_mask[i, :min(length, max_condition_length)] = 1
     attention_mask = attention_mask[:, None, None, :]  # [B, 1, 1, max_condition_length]
 
-    return fused_embeddings, attention_mask
+    return embeddings, attention_mask
 
 
 def freeze_params_by_pattern(model, patterns: List[str]) -> int:
