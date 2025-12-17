@@ -1287,40 +1287,6 @@ def train():
             # 6. Backward Pass
             with record_function("Backward"):
                 loss.backward()
-            
-            # #region agent log
-            import json as _json
-            from torch.distributed.tensor import DTensor
-            if dist.get_rank() == 0 and scheduler.global_step <= 3:  # Only rank 0, first 3 steps
-                def _debug_log_grad(loc, msg, data):
-                    with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
-                        _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H1-H5"}) + '\n')
-                # Log loss value
-                _debug_log_grad("train_sana_ae.py:1290", "loss_value", {"loss": float(loss.detach().cpu()), "step": scheduler.global_step})
-                # Count params with grad
-                _total_params = 0; _params_with_grad = 0; _grad_nonzero = 0
-                for name, param in model.named_parameters():
-                    _total_params += 1
-                    if param.grad is not None:
-                        _params_with_grad += 1
-                        if isinstance(param.grad, DTensor):
-                            _g = param.grad.to_local()
-                        else:
-                            _g = param.grad
-                        if _g.abs().sum() > 0:
-                            _grad_nonzero += 1
-                _debug_log_grad("train_sana_ae.py:1295", "grad_stats", {"total_params": _total_params, "params_with_grad": _params_with_grad, "grad_nonzero": _grad_nonzero, "step": scheduler.global_step})
-                for name, param in model.named_parameters():
-                    if param.grad is not None and any(k in name for k in ['y_embedder', 'cross_attn', 'attention_y_norm']):
-                        _g = param.grad
-                        if isinstance(_g, DTensor):
-                            _g = _g.to_local()
-                        _g_cpu = _g.detach().float().cpu()
-                        grad_mean = float(_g_cpu.mean())
-                        grad_std = float(_g_cpu.std())
-                        grad_norm = float(_g_cpu.norm())
-                        _debug_log_grad("train_sana_ae.py:1295", f"grad_{name}", {"mean": grad_mean, "std": grad_std, "norm": grad_norm, "step": scheduler.global_step})
-            # #endregion
 
             # 7. Gradient Clipping
             with record_function("GradClip"):

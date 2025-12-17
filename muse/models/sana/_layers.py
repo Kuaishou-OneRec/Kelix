@@ -419,44 +419,9 @@ class MultiHeadCrossAttention(nn.Module):
         k = self.to_k(cond)
         v = self.to_v(cond)
         
-        # #region agent log
-        import json as _json
-        import torch.distributed as _dist
-        if not hasattr(self, '_attn_log_count'): self._attn_log_count = 0
-        self._attn_log_count += 1
-        # Only log first 3 calls on rank 0
-        _should_log_attn = (not _dist.is_initialized() or _dist.get_rank() == 0) and self._attn_log_count <= 3
-        if _should_log_attn:
-            def _debug_log_attn(loc, msg, data):
-                with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
-                    _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H3"}) + '\n')
-            _x_c = x.detach().float().cpu(); _cond_c = cond.detach().float().cpu()
-            _q_c = q.detach().float().cpu(); _k_c = k.detach().float().cpu(); _v_c = v.detach().float().cpu()
-            _debug_log_attn("_layers.py:420", "cross_attn_input_x", {"shape": list(x.shape), "mean": float(_x_c.mean()), "std": float(_x_c.std())})
-            _debug_log_attn("_layers.py:421", "cross_attn_input_cond", {"shape": list(cond.shape), "mean": float(_cond_c.mean()), "std": float(_cond_c.std())})
-            _debug_log_attn("_layers.py:422", "cross_attn_q_before_norm", {"mean": float(_q_c.mean()), "std": float(_q_c.std())})
-            _debug_log_attn("_layers.py:423", "cross_attn_k_before_norm", {"mean": float(_k_c.mean()), "std": float(_k_c.std())})
-            _debug_log_attn("_layers.py:424", "cross_attn_v", {"mean": float(_v_c.mean()), "std": float(_v_c.std())})
-        # #endregion
-        
         q = self.q_norm(q).view(B, -1, self.num_heads, self.head_dim)
-        # #region agent log - H2: Check k reshape - is cond shape compatible?
-        if _should_log_attn:
-            _k_pre = k.detach().float().cpu()
-            _cond_numel = cond.numel()
-            _expected_k_numel = B * self.num_heads * self.head_dim  # This should match after proper reshape
-            _debug_log_attn("_layers.py:443", "cross_attn_k_before_reshape", {"cond_shape": list(cond.shape), "k_shape_before_view": list(k.shape), "B": B, "num_heads": self.num_heads, "head_dim": self.head_dim, "cond_numel": _cond_numel})
-        # #endregion
         k = self.k_norm(k).view(B, -1, self.num_heads, self.head_dim)
         v = v.view(B, -1, self.num_heads, self.head_dim)
-        
-        # #region agent log
-        if _should_log_attn:
-            _q_c2 = q.detach().float().cpu(); _k_c2 = k.detach().float().cpu(); _v_c2 = v.detach().float().cpu()
-            _debug_log_attn("_layers.py:432", "cross_attn_q_after_norm", {"shape": list(q.shape), "mean": float(_q_c2.mean()), "std": float(_q_c2.std())})
-            _debug_log_attn("_layers.py:433", "cross_attn_k_after_norm", {"shape": list(k.shape), "mean": float(_k_c2.mean()), "std": float(_k_c2.std())})
-            _debug_log_attn("_layers.py:434", "cross_attn_v_after_reshape", {"shape": list(v.shape), "mean": float(_v_c2.mean()), "std": float(_v_c2.std())})
-        # #endregion
         
         if self._xformers_available:
             # Use xformers memory efficient attention with block diagonal mask
@@ -471,14 +436,6 @@ class MultiHeadCrossAttention(nn.Module):
             # Fallback to standard attention
             q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
             
-            # #region agent log - H2/H6: Check q,k,v shapes and mask shape for cross attention
-            if _should_log_attn:
-                _debug_log_attn("_layers.py:472", "cross_attn_sdpa_shapes", {
-                    "q_shape": list(q.shape), "k_shape": list(k.shape), "v_shape": list(v.shape),
-                    "mask_type": str(type(mask)), "mask_shape": list(mask.shape) if hasattr(mask, 'shape') else str(mask)
-                })
-            # #endregion
-            
             attn_mask = None
             if mask is not None and not isinstance(mask, list):
                 if mask.ndim == 2:
@@ -489,22 +446,7 @@ class MultiHeadCrossAttention(nn.Module):
                     else:
                         # Binary mask format, convert to additive
                         attn_mask = (1 - mask.to(q.dtype)) * -10000.0
-                    # #region agent log - H6: Check if attn_mask shape is compatible with q@k.T
-                    if _should_log_attn:
-                        _debug_log_attn("_layers.py:485", "cross_attn_mask_before_expand", {
-                            "attn_mask_shape": list(attn_mask.shape),
-                            "expected_qk_shape": [q.shape[0], q.shape[1], q.shape[2], k.shape[2]],
-                            "q_seq_len": q.shape[2], "k_seq_len": k.shape[2]
-                        })
-                    # #endregion
                     attn_mask = attn_mask[:, None, None].repeat(1, self.num_heads, 1, 1)
-                    # #region agent log - H6: Check final attn_mask shape
-                    if _should_log_attn:
-                        _debug_log_attn("_layers.py:490", "cross_attn_mask_after_expand", {
-                            "attn_mask_shape": list(attn_mask.shape),
-                            "MISMATCH": attn_mask.shape[2] != q.shape[2] or attn_mask.shape[3] != k.shape[2]
-                        })
-                    # #endregion
                     # the output of sdp = (batch, num_heads, seq_len, head_dim)
             x = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask, dropout_p=0.0, is_causal=False)
             x = x.transpose(1, 2)
@@ -512,12 +454,6 @@ class MultiHeadCrossAttention(nn.Module):
         x = x.reshape(B, -1, C)
         x = self.proj(x)
         x = self.proj_drop(x)
-        
-        # #region agent log
-        if _should_log_attn:
-            _out_c = x.detach().float().cpu()
-            _debug_log_attn("_layers.py:481", "cross_attn_output", {"shape": list(x.shape), "mean": float(_out_c.mean()), "std": float(_out_c.std()), "min": float(_out_c.min()), "max": float(_out_c.max()), "abs_mean": float(_out_c.abs().mean())})
-        # #endregion
         
         return x
 
@@ -770,25 +706,7 @@ class CaptionEmbedder(nn.Module):
         if (train and use_dropout) or (force_drop_ids is not None):
             caption = self.token_drop(caption, force_drop_ids, y_embedding)
         
-        # #region agent log
-        import json as _json
-        import torch.distributed as _dist
-        if not hasattr(self, '_yemb_log_count'): self._yemb_log_count = 0
-        self._yemb_log_count += 1
-        _should_log_yemb = (not _dist.is_initialized() or _dist.get_rank() == 0) and self._yemb_log_count <= 3
-        if _should_log_yemb:
-            def _debug_log_yemb(loc, msg, data):
-                with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
-                    _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H4"}) + '\n')
-            _cap_c = caption.detach().float().cpu()
-            _debug_log_yemb("_layers.py:708", "y_proj_input", {"shape": list(caption.shape), "mean": float(_cap_c.mean()), "std": float(_cap_c.std()), "min": float(_cap_c.min()), "max": float(_cap_c.max())})
-        # #endregion
         caption = self.y_proj(caption)
-        # #region agent log
-        if _should_log_yemb:
-            _cap_c2 = caption.detach().float().cpu()
-            _debug_log_yemb("_layers.py:712", "y_proj_output", {"shape": list(caption.shape), "mean": float(_cap_c2.mean()), "std": float(_cap_c2.std()), "min": float(_cap_c2.min()), "max": float(_cap_c2.max())})
-        # #endregion
         return caption
 
 
@@ -933,29 +851,8 @@ class SanaMSBlock(nn.Module):
                 rotary_emb=image_rotary_emb,
             )
         )
-        # #region agent log - H1: Check if cross_attn contribution is too small
-        import json as _json
-        import torch.distributed as _dist
-        if not hasattr(self, '_block_log_count'): self._block_log_count = 0
-        self._block_log_count += 1
-        _should_log_block = (not _dist.is_initialized() or _dist.get_rank() == 0) and self._block_log_count <= 3
-        if _should_log_block:
-            def _debug_log_block(loc, msg, data):
-                with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
-                    _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H1"}) + '\n')
-            _x_before = x.detach().float().cpu()
-            _debug_log_block("_layers.py:914", "x_before_cross_attn", {"shape": list(x.shape), "mean": float(_x_before.mean()), "std": float(_x_before.std()), "abs_mean": float(_x_before.abs().mean())})
-        # #endregion
         # Cross-attention
-        _cross_out = self.cross_attn(x, y, mask)
-        x = x + _cross_out
-        # #region agent log - H1: Check residual effect
-        if _should_log_block:
-            _cross_c = _cross_out.detach().float().cpu()
-            _x_after = x.detach().float().cpu()
-            _ratio = float(_cross_c.abs().mean()) / (float(_x_before.abs().mean()) + 1e-8)
-            _debug_log_block("_layers.py:920", "cross_attn_residual", {"cross_out_abs_mean": float(_cross_c.abs().mean()), "x_after_abs_mean": float(_x_after.abs().mean()), "ratio": _ratio})
-        # #endregion
+        x = x + self.cross_attn(x, y, mask)
         
         # FFN with modulation
         x = x + self.drop_path(
