@@ -13,14 +13,10 @@ from muse.models.base import Model
 from muse.config import Qwen3Config, KeyeVisionConfig
 from muse.config.model_config import ModelConfig, KeyeTokenizerConfig
 from muse.models.qwen3.modeling import Qwen3Model
+from muse.models.keye_tokenizer_end2end_video._layers import Projector
 from muse.models.keye_vit.modeling import KeyeVisionModel
 from muse.models.keye_tokenizer.modeling import KeyeImageTokenizer
-
-# Import will be done when muse.models is imported, avoiding circular import
-# The actual registration happens in __init__.py after import
-
 logger = logging.getLogger(__name__)
-
 
 def lecun_normal_(tensor: torch.Tensor) -> None:
     """LeCun normal initialization.
@@ -47,17 +43,64 @@ def lecun_normal_(tensor: torch.Tensor) -> None:
         std = math.sqrt(1.0 / fan_in)
     init.normal_(tensor, mean=0.0, std=std)
 
+def split_thw(tensor: torch.Tensor) -> torch.Tensor:
+    """将 (n,3) 的 thw 展开时间维，得到 [sum(t),3]."""
+    if tensor.dim() == 1:
+        tensor = tensor.unsqueeze(0)
+    repeats = tensor[:, 0]
+    new_thw = torch.cat(
+        [
+            torch.ones(tensor.shape[0], 1, dtype=tensor.dtype, device=tensor.device),
+            tensor[:, 1:],
+        ],
+        dim=1,
+    )
+    return torch.repeat_interleave(new_thw, repeats, dim=0)
+
 
 class KeyeVideoTokenizer(KeyeImageTokenizer):
+
     def __init__(self, config: KeyeTokenizerConfig):
         super().__init__(config)
-        self.config: KeyeTokenizerConfig = config
-        self.n_q_tokens = config.n_q_tokens
-        self.visual = KeyeVisionModel(config.vision_config)
         self.mlp_AR = Projector(config.vision_config.hidden_size, config.llm_hidden_size)
-        self.pre_llm_align = getattr(config, "pre_llm_align", False)
-        llm_align_size = getattr(config, "llm_align_size", config.llm_hidden_size)
-        align_in_dim = config.llm_hidden_size if self.pre_llm_align else config.llm_hidden_size
+    def get_image_embeds(self, pixel_values: Optional[torch.Tensor] = None, 
+                            image_grid_thw: Optional[torch.LongTensor] = None, 
+                            **kwargs):
+
+
+        # Get dtype from model parameters
+        target_dtype = next(self.visual.parameters()).dtype
+        pixel_values = pixel_values.type(target_dtype)
+        pixel_values = pixel_values.unsqueeze(0)
+        image_grid_thw_split = split_thw(image_grid_thw.squeeze(0))
+        siglip_position_ids = []
+        image_grid_hws = []
+        sample_indices = []
+        cu_seqlens = [0]
+        for idx, thw in enumerate(image_grid_thw_split):
+            thw_tuple = tuple(thw.detach().cpu().numpy().tolist())
+            numel = np.prod(thw_tuple)
+            image_grid_hws.append(thw_tuple)
+            image_position_ids = torch.arange(numel) % np.prod(thw_tuple[1:])
+            siglip_position_ids.append(image_position_ids)
+            sample_indices.append(torch.full((numel,), idx, dtype=torch.int64))
+            cu_seqlens.append(cu_seqlens[-1] + numel)
+
+        siglip_position_ids = torch.concat(siglip_position_ids, dim=0).to(pixel_values.device)
+        cu_seqlens = torch.tensor(cu_seqlens, dtype=torch.int32).to(pixel_values.device)
+        sample_indices = torch.concat(sample_indices, dim=0).to(pixel_values.device)
+
+        vision_outputs = self.visual(
+            pixel_values=pixel_values,
+            image_grid_thw=image_grid_hws,
+            position_ids=siglip_position_ids,
+            interpolate_pos_encoding=True,
+            cu_seqlens=cu_seqlens,
+        )
+        image_embeds = vision_outputs['last_hidden_state']
+
+        image_embeds = self.mlp_AR(image_embeds, image_grid_thw)
+        return image_embeds
 
 
 class KeyeTokenizerEnd2EndImage(Model):
@@ -78,7 +121,7 @@ class KeyeTokenizerEnd2EndImage(Model):
         tokenizer_config = tokenizer_config or KeyeTokenizerConfig(
             vision_config=vision_config, llm_hidden_size=qwen_config.embed_dim
         )
-        self.visual_tokenizer = KeyeImageTokenizer(tokenizer_config)
+        self.visual_tokenizer = KeyeVideoTokenizer(tokenizer_config)
         self.quant_projector = nn.ModuleList(
             [
                 nn.Linear(tokenizer_config.embedding_dim, qwen_config.embed_dim, bias=False)
