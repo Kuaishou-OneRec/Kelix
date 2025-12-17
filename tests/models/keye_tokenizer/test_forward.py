@@ -7,6 +7,7 @@ from transformers import AutoProcessor
 from keye_vl_utils import process_vision_info
 
 MODEL_PATH = "/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/"
+TESTCASES = "/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/testcases.pt"
 
 def generate_circle_image(
         size=(100, 100),
@@ -97,4 +98,9 @@ def test_forward():
         [152707, 167053, 174112, 182049, 187728, 195874, 201204, 214532],
         [153068, 162232, 171391, 178561, 192513, 195874, 204058, 210162]]
     ).to("cuda")
+
+    testcases = torch.load(TESTCASES)
     torch.testing.assert_close(aligned_indices, answer)
+    torch.testing.assert_close(inputs["pixel_values"], testcases["pixel_values"].to("cuda"))
+    torch.testing.assert_close(inputs["image_grid_thw"], testcases["image_grid_thw"].to("cuda"))
+    torch.testing.assert_close(vq_out["token_embeds"], testcases["token_embeds"].to("cuda"))

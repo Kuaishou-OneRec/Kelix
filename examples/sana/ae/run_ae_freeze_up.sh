@@ -18,10 +18,10 @@ script_name=$(basename "$0" .sh)
 MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/
 MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/config.json
 VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
-TEXT_ENCODER_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/text_encoder/
-TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/tokenizer/
+IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
+VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i_debug_8gpu_1
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i_ae_freeze_up
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
@@ -30,10 +30,10 @@ mkdir -p /tmp/_wids_cache
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="sana_t2i_ketu_8gpu"
+comment="sana_t2i_pretrain_auto_encoder"
 
-git add --all
-git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
+# git add --all
+# git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
 git_hash=$(git rev-parse --short HEAD)
 
 set -x
@@ -47,7 +47,7 @@ echo "=========================" >> $OUTPUT_DIR/task_info.log
 echo "Output: $OUTPUT_DIR"
 
 export PYTHONPATH=$PWD:$PYTHONPATH
-
+             
 source set_env.sh
 
 hostfile=/etc/mpi/hostfile_seq
@@ -116,31 +116,34 @@ nohup mpirun --allow-run-as-root \
         -x http_proxy=\
         -x https_proxy=\
         with_nccl_local_env \
-        bash -c "python3 recipes/train_dit.py \
+        bash -c "python3 recipes/train_sana_ae.py \
+                --visualize-dir $VISUALIZE_DIR \
+                --visualize-per-step 30 \
+                --num-vis-images 10 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
-                --text-encoder-dir $TEXT_ENCODER_DIR \
-                --tokenizer-dir $TOKENIZER_DIR \
+                --image-tokenizer-dir $IMAGE_TOKENIZER_DIR \
+                --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
-                --dataset-config examples/sana/t2i.json \
+                --skip-load-params "y_embedder,cross_attn,attention_y_norm" \
+                --freeze-params "^y_embedder,^cross_attn,^attention_y_norm" \
+                --dataset-config examples/sana/ae-mix.json \
                 --learning-rate 1e-4 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
-                --beta1 0.9 \
-                --beta2 0.999 \
-                --max-text-length 300 \
                 --image-size 512 \
+                --beta1 0.9 \
+                --model-config-overrides caption_channels=1024 model_max_length=324 \
+                --beta2 0.999 \
                 --batch-size 32 \
                 --lr-scheduler-type constant \
-                --num-warmup-steps 100 \
+                --num-warmup-steps 2000 \
                 --num-training-steps 100000 \
                 --save-checkpoint-per-step 1000 \
                 --logging-per-step 5 \
                 --clip-range 0.1 \
                 --fp32-weight \
                 --fp32-reduce \
-                --visualize \
-                --eval-sampling-steps 30 \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \

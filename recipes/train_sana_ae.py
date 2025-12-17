@@ -92,13 +92,7 @@ from muse.utils.common import (
     to_cuda,
     dist_reduce_dict
 )
-
-from muse.data.datasets import Text2ImageDataset
-try:
-    from muse.data.datasets import Text2ImageMultiScaleDatasetWrapper
-except ImportError:
-    Text2ImageMultiScaleDatasetWrapper = Text2ImageDataset
-
+from muse.data.datasets import Token2ImageDataset, MultiScaleDatasetWrapper
 from muse.losses.diffusion import FlowMatchingLoss
 
 from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
@@ -251,6 +245,16 @@ def get_argument_parser():
     parser.add_argument("--allow-random-init-params", type=str, default='',
                         help="Parameter names to allow random initialization")
     
+    parser.add_argument("--skip-load-params", type=str, default='',
+                        help="Parameter name patterns to skip loading from checkpoint (comma-separated). "
+                             "Uses 'contains' matching. These params will be randomly initialized. "
+                             "E.g., 'y_embedder,cross_attn' skips all params containing these substrings")
+    
+    parser.add_argument("--freeze-params", type=str, default='',
+                        help="Parameter name patterns to freeze (comma-separated). Uses 'contains' matching. "
+                             "E.g., 'y_embedder,cross_attn' freezes all params containing these substrings. "
+                             "Use ^ prefix for inverse: '^y_embedder,^cross_attn' freezes all EXCEPT matching params")
+    
     parser.add_argument("--compile", action="store_true",
                         help="Compile model with torch.compile")
 
@@ -385,18 +389,17 @@ def tokenize_images(tokenizer,
         embeddings: List[torch.Tensor] = tokenizer(
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw
-        )["z_q"]
+        )["token_embeds"]
         
-        # Sum embeddings across all codebooks
-        fused_embeddings = torch.sum(torch.stack(embeddings, dim=1), dim=1)
-        _, embed_dim = fused_embeddings.shape
+        _, embed_dim = embeddings.shape
         
         # Split by image_grid_thw and pad to max_condition_length
         # image_grid_thw: [B, 3] where each row is (t, h, w)
-        lengths = (image_grid_thw[:, 1] * image_grid_thw[:, 2]).tolist()  # h * w for each image
+        # 4=merge_length
+        lengths = (image_grid_thw[:, 1] * image_grid_thw[:, 2] // 4).tolist()  # h * w for each image
         
         # Split fused_embeddings according to lengths
-        split_embeddings = torch.split(fused_embeddings, lengths, dim=0)
+        split_embeddings = torch.split(embeddings, lengths, dim=0)
         
         # Pad each to max_condition_length and stack
         padded = []
@@ -410,15 +413,51 @@ def tokenize_images(tokenizer,
                 emb = emb[:max_condition_length]
             padded.append(emb)
         
-        fused_embeddings = torch.stack(padded, dim=0)  # [B, max_condition_length, embed_dim]
+        embeddings = torch.stack(padded, dim=0)  # [B, max_condition_length, embed_dim]
 
     # Create attention mask based on actual lengths
-    attention_mask = torch.zeros(batch_size, max_condition_length, device=fused_embeddings.device)
+    attention_mask = torch.zeros(batch_size, max_condition_length, device=embeddings.device)
     for i, length in enumerate(lengths):
         attention_mask[i, :min(length, max_condition_length)] = 1
     attention_mask = attention_mask[:, None, None, :]  # [B, 1, 1, max_condition_length]
 
-    return fused_embeddings, attention_mask
+    return embeddings, attention_mask
+
+
+def freeze_params_by_pattern(model, patterns: List[str]) -> int:
+    """Freeze parameters based on pattern matching (contains).
+    
+    Supports two modes:
+    1. Normal mode: freeze params containing any pattern
+       E.g., ['y_embedder', 'cross_attn'] freezes params containing these substrings
+    2. Inverse mode (^ prefix): freeze all EXCEPT params matching patterns
+       E.g., ['^y_embedder', '^cross_attn'] freezes everything except params containing these
+    
+    Args:
+        model: The model to freeze parameters in
+        patterns: List of patterns to match in parameter names (use ^ for inverse selection)
+        
+    Returns:
+        Number of parameters frozen
+    """
+    # Check if inverse mode (all patterns start with ^)
+    inverse_mode = all(p.startswith('^') for p in patterns)
+    if inverse_mode:
+        # Remove ^ prefix for matching
+        patterns = [p[1:] for p in patterns]
+    
+    frozen_count = 0
+    for name, param in model.named_parameters():
+        matches_pattern = any(pattern in name for pattern in patterns)
+
+        # In inverse mode: freeze if NOT matching; normal mode: freeze if matching
+        should_freeze = not matches_pattern if inverse_mode else matches_pattern
+        
+        if should_freeze:
+            param.requires_grad = False
+            frozen_count += 1
+    
+    return frozen_count
 
 
 def load_visualization_images(
@@ -889,8 +928,6 @@ def train():
     if args.fp32_weight:
         model = model.float()
 
-    print_rank_0(f"Sharding model for distributed training: {model}")
-
     # Shard model for distributed training
     shard_model(
         model=model,
@@ -909,7 +946,8 @@ def train():
             # distribute the state_dict from rank 0 to all ranks
             load_from_full_model_state_dict(
                 model=model, full_sd=state_dict,
-                allow_random_init_params=args.allow_random_init_params
+                allow_random_init_params=args.allow_random_init_params,
+                skip_load_params=args.skip_load_params
             )
     else:
         # Train from scratch: initialize model parameters randomly
@@ -930,6 +968,13 @@ def train():
         assert tensor.device != torch.device("meta"), \
         f"{name} not initialized, device={tensor.device}"
 
+    # Freeze specified parameters
+    if args.freeze_params:
+        freeze_patterns = [p.strip() for p in args.freeze_params.split(',') if p.strip()]
+        if freeze_patterns:
+            frozen_count = freeze_params_by_pattern(model, freeze_patterns)
+            print_rank_0(f"Frozen {frozen_count} parameters with patterns: {freeze_patterns}")
+
     if args.compile:
         # Compile model for better performance
         model = torch.compile(model)
@@ -939,15 +984,28 @@ def train():
         # Free the state_dict to save memory
         del state_dict
 
-    # Print trainable parameters
-    print_rank_0("=" * 50)
-    print_rank_0("Parameters:")
+    # Print trainable and frozen parameters
+    trainable_params = []
+    frozen_params = []
     for name, param in model.named_parameters():
         if param.requires_grad:
-            print_rank_0(f"  {name}: {param.shape}")
+            trainable_params.append((name, param.shape))
         else:
-            print_rank_0(f"  {name}: {param.shape} (not trainable)")
-    print_rank_0("=" * 50)
+            frozen_params.append((name, param.shape))
+
+    print_rank_0("=" * 60)
+    print_rank_0(f"Trainable Parameters ({len(trainable_params)}):")
+    for name, shape in trainable_params:
+        print_rank_0(f"  {name}: {shape}")
+    print_rank_0("-" * 60)
+    print_rank_0(f"Frozen Parameters ({len(frozen_params)}):")
+    for name, shape in frozen_params:
+        print_rank_0(f"  {name}: {shape}")
+    print_rank_0("=" * 60)
+
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print_rank_0(f"Total params: {total_params:,}, Trainable: {trainable_count:,} ({100*trainable_count/total_params:.2f}%)")
 
     ############## Load VAE and text encoder ##############
     # VAE & Text Encoder is not trainable
@@ -973,6 +1031,15 @@ def train():
             trust_remote_code=True
         )
         print_rank_0(f"Loaded processor for visualization from {args.image_tokenizer_dir}")
+
+    # Setup visualization model (for FSDP mode)
+    # In FSDP mode, we need a separate model instance for inference
+    # because the training model has sharded weights
+    model_for_vis = None
+    if args.visualize_dir and dist.get_rank() == 0:
+        with set_default_dtype(args.model_dtype), torch.device("cpu"):
+            model_for_vis = model_cls(model_config)
+        print_rank_0("Created model instance for visualization (on CPU)")
     ############## Load VAE and tokenizer ##############
 
     # Create optimizer
@@ -1033,14 +1100,9 @@ def train():
         print_rank_0(f"Set image_size of dataset to: {args.image_size}")
     
     # Set tokenizer_path from model_dir if not specified
-    if not dataset_config.get("tokenizer_path") and args.tokenizer_dir:
-        dataset_config["tokenizer_path"] = args.tokenizer_dir
-        print_rank_0(f"Set tokenizer_path of dataset to: {args.tokenizer_dir}")
-    
-    # Enable Complex Human Instruction (CHI) if requested
-    if args.use_chi:
-        dataset_config["use_chi"] = True
-        print_rank_0("CHI (Complex Human Instruction) enabled for enhanced text-image alignment")
+    if not dataset_config.get("processor_path") and args.image_tokenizer_dir:
+        dataset_config["processor_path"] = args.image_tokenizer_dir
+        print_rank_0(f"Set tokenizer_path of dataset to: {args.image_tokenizer_dir}")
     
     # Enable multi-scale training if requested
     if args.multi_scale:
@@ -1054,10 +1116,10 @@ def train():
         print_rank_0(f"Dataset sharding: rank={dataset_config['rank']}, world_size={dataset_config['world_size']}")
 
     print_rank_0(f"Building dataset with config: {dataset_config}")
-    dataset = Text2ImageDataset(**dataset_config)
+    dataset = Token2ImageDataset(**dataset_config)
     collate_fn = dataset.collate_fn
     if args.multi_scale:
-        dataset = Text2ImageMultiScaleDatasetWrapper(
+        dataset = MultiScaleDatasetWrapper(
             dataset=dataset,
             batch_size=args.batch_size
         )
@@ -1114,10 +1176,11 @@ def train():
         data_iter = iter([])
 
     # Step 0 visualization: show model state before any optimization
-    if args.visualize:
+    if args.visualize_dir:
         from torch.distributed.checkpoint.state_dict import get_model_state_dict, StateDictOptions
         
         print_rank_0("Running step 0 visualization (before training)...")
+        # Collect full state dict from FSDP model (all ranks participate)
         state_dict = get_model_state_dict(
             model,
             options=StateDictOptions(
@@ -1126,6 +1189,42 @@ def train():
             )
         )
         
+        # Only rank 0 does the actual visualization
+        if dist.get_rank() == 0 and model_for_vis is not None:
+            torch.cuda.empty_cache()
+            gc.collect()
+            
+            # Load weights to visualization model and move to GPU
+            model_for_vis.load_state_dict(state_dict)
+            model_for_vis.to(torch.cuda.current_device())
+            model_for_vis.to(get_torch_dtype(args.model_dtype))
+            model_for_vis.eval()
+            
+            with Timer("visualization step 0"):
+                visualize_reconstruction(
+                    model=model_for_vis,
+                    vae=vae,
+                    image_tokenizer=image_tokenizer,
+                    processor=vis_processor,
+                    image_dir=args.visualize_dir,
+                    output_dir=args.output_dir,
+                    global_step=0,
+                    cfg_scale=args.cfg_scale,
+                    num_sampling_steps=args.num_sampling_steps,
+                    flow_shift=args.flow_shift,
+                    max_condition_length=args.max_condition_length,
+                    image_size=args.image_size,
+                    device=torch.cuda.current_device(),
+                    dtype=get_torch_dtype(args.model_dtype),
+                    tb_writer=tb_writer,
+                    num_images=args.num_vis_images,
+                )
+            
+            # Move model back to CPU to save memory
+            model_for_vis.cpu()
+            torch.cuda.empty_cache()
+        
+        # Sync all ranks after step 0 visualization
         dist.barrier()
 
     while scheduler.global_step < args.num_training_steps:
@@ -1163,7 +1262,7 @@ def train():
 
             # 4. Text Encoder
             with record_function("TextEncoder"):
-                text_embeds, attention_mask = tokenize_images(
+                token_embeds, attention_mask = tokenize_images(
                     image_tokenizer,
                     batch["pixel_values"],
                     batch["image_grid_thw"],
@@ -1176,7 +1275,7 @@ def train():
                 loss_dict = loss_fn(
                     model=model,
                     x_start=latents,
-                    y=text_embeds,
+                    y=token_embeds.unsqueeze(1),
                     mask=attention_mask,
                 )
                 loss = loss_dict["loss"]
@@ -1227,33 +1326,59 @@ def train():
                         global_step=scheduler.global_step
                     )
 
-            # Visualization (only on rank 0)
+            # Visualization: generate sample images every N steps
+            # All ranks participate in get_model_state_dict, only rank 0 does visualization
             if (args.visualize_dir and 
                 scheduler.global_step > 0 and 
-                scheduler.global_step % args.visualize_per_step == 0 and
-                dist.get_rank() == 0):
-                model.eval()
-                with Timer("visualization"):
-                    visualize_reconstruction(
-                        model=model,
-                        vae=vae,
-                        image_tokenizer=image_tokenizer,
-                        processor=vis_processor,
-                        image_dir=args.visualize_dir,
-                        output_dir=args.output_dir,
-                        global_step=scheduler.global_step,
-                        cfg_scale=args.cfg_scale,
-                        num_sampling_steps=args.num_sampling_steps,
-                        flow_shift=args.flow_shift,
-                        max_condition_length=args.max_condition_length,
-                        image_size=args.image_size,
-                        device=torch.cuda.current_device(),
-                        dtype=get_torch_dtype(args.model_dtype),
-                        tb_writer=tb_writer,
-                        num_images=args.num_vis_images,
+                scheduler.global_step % args.visualize_per_step == 0):
+                from torch.distributed.checkpoint.state_dict import get_model_state_dict, StateDictOptions
+                
+                # Collect full state dict from FSDP model (all ranks participate)
+                state_dict = get_model_state_dict(
+                    model,
+                    options=StateDictOptions(
+                        full_state_dict=True,
+                        cpu_offload=True,
                     )
-                model.train()
-                dist.barrier()  # Sync after visualization
+                )
+                
+                # Only rank 0 does the actual visualization
+                if dist.get_rank() == 0 and model_for_vis is not None:
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                    
+                    # Load weights to visualization model and move to GPU
+                    model_for_vis.load_state_dict(state_dict)
+                    model_for_vis.to(torch.cuda.current_device())
+                    model_for_vis.to(get_torch_dtype(args.model_dtype))
+                    model_for_vis.eval()
+                    
+                    with Timer("visualization"):
+                        visualize_reconstruction(
+                            model=model_for_vis,
+                            vae=vae,
+                            image_tokenizer=image_tokenizer,
+                            processor=vis_processor,
+                            image_dir=args.visualize_dir,
+                            output_dir=args.output_dir,
+                            global_step=scheduler.global_step,
+                            cfg_scale=args.cfg_scale,
+                            num_sampling_steps=args.num_sampling_steps,
+                            flow_shift=args.flow_shift,
+                            max_condition_length=args.max_condition_length,
+                            image_size=args.image_size,
+                            device=torch.cuda.current_device(),
+                            dtype=get_torch_dtype(args.model_dtype),
+                            tb_writer=tb_writer,
+                            num_images=args.num_vis_images,
+                        )
+                    
+                    # Move model back to CPU to save memory
+                    model_for_vis.cpu()
+                    torch.cuda.empty_cache()
+                
+                # Sync all ranks after visualization
+                dist.barrier()
 
             if torch_profiler:
                 torch_profiler.step()

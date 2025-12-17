@@ -540,7 +540,8 @@ class Token2ImageDataset(DistributedDataset):
         self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
         self.base_image_size = image_size if isinstance(image_size, int) else image_size[0]
         self.processor_path = processor_path
-        self.processor = AutoProcessor.from_pretrained(self.processor_path)
+        self.processor = AutoProcessor.from_pretrained(
+            self.processor_path, trust_remote_code=True)
         self.max_condition_length = max_condition_length
         self.center_crop = center_crop
         
@@ -809,7 +810,7 @@ class Token2ImageDataset(DistributedDataset):
         Returns:
             Processed sample dict or None if processing fails
         """
-        result = {}
+        # result = {}
 
         # Load and process image
         image_data = sample.get("image")
@@ -842,7 +843,7 @@ class Token2ImageDataset(DistributedDataset):
             target_image = self.transform(image)
 
         
-        result["image"] = target_image
+        # result["image"] = target_image
         
         fake_message = [
             {
@@ -874,6 +875,7 @@ class Token2ImageDataset(DistributedDataset):
         )
 
         return {
+            "image": target_image,
             "pixel_values": inputs["pixel_values"],
             "image_grid_thw": inputs["image_grid_thw"]
         }

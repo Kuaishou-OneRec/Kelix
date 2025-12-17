@@ -19,20 +19,18 @@ MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/
 MODEL_CONFIG=/llm_reco_ssd/zhouyang12/models/muse/Sana_1600M_1024px/config.json
 VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
-OUTPUT_DIR=/mmu_mllm_hdd_2/lingzhixin/output/MuseV2/sana/t2i_ae
-VISUALIZE_DIR=${OUTPUT_DIR}/visualize
+VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
+
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i_ae
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
-mkdir -p $VISUALIZE_DIR
-
-
 
 mkdir -p /tmp/_wids_cache
 
 nnode=$(wc -l < /etc/mpi/hostfile_seq)
 
 # 注意修改实验内容备注
-comment="sana_t2i_pretrain_mix_256px"
+comment="sana_t2i_pretrain_auto_encoder"
 
 # git add --all
 # git commit -m "email=$email,time=$(date +"%Y%m%d %H:%M:%S"),script=$0,node=$nnode,comment=$comment,output=$OUTPUT_DIR, resume"
@@ -120,20 +118,21 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "python3 recipes/train_sana_ae.py \
                 --visualize-dir $VISUALIZE_DIR \
-                --visualize-per-step 1000 \
+                --visualize-per-step 30 \
                 --num-vis-images 10 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
                 --image-tokenizer-dir $IMAGE_TOKENIZER_DIR \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
-                --dataset-config examples/sana/pretrain-mix.json \
+                --allow-random-init-params "y_embedder.y_proj.fc1.weight,y_embedder.y_embedding" \
+                --dataset-config examples/sana/ae-mix.json \
                 --learning-rate 1e-4 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
                 --image-size 512 \
                 --beta1 0.9 \
-                --model-config-overrides caption_channels=128 \
+                --model-config-overrides caption_channels=128 model_max_length=324 \
                 --beta2 0.999 \
                 --batch-size 32 \
                 --lr-scheduler-type constant \

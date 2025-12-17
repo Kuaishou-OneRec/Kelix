@@ -360,6 +360,7 @@ class KeyeTokenizerConfig(ModelConfig):
     vq_temperature_decay: float = Field(default=0.999, description="温度衰减")
     vq_min_temperature: float = Field(default=0.1, description="最低温度")
     pre_llm_align: bool = Field(default=False, description="是否先线性对齐到LLM维度")
+    output_dim: int = Field(default=1024, description="输出维度")
 
 class SanaConfig(ModelConfig):
     """Configuration for Sana DiT model architecture.
