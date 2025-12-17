@@ -446,6 +446,40 @@ class KeyeARModel(Model):
                        if self.ar_mode == 'ar' else config.vocab_size)
         self.lm_head = nn.Linear(config.hidden_size, lm_head_size, bias=False)
 
+    @classmethod
+    def convert_hf_state_dict(cls,
+                              hf_state_dict: Dict[str, torch.Tensor],
+                              tie_word_embeddings: bool = True,
+                              **kwargs) -> Dict[str, torch.Tensor]:
+        """Convert a Hugging Face state dictionary to KeyeARModel state dictionary.
+        
+        This implementation reuses the UnifiedQwen3Model's convert_hf_state_dict logic for the main model
+        and adds handling for the lm_head parameter.
+        
+        Args:
+            hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
+            tie_word_embeddings: Whether the model ties embeddings (skip lm_head if True).
+            **kwargs: Additional keyword arguments.
+        
+        Returns:
+            A dictionary of model state with converted key names.
+        """
+        # First, use UnifiedQwen3Model's convert_hf_state_dict for the main model components
+        converted_state_dict = super().convert_hf_state_dict(
+            hf_state_dict, 
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs
+        )
+        
+        # Handle the lm_head parameter
+        for hf_key, tensor in hf_state_dict.items():
+            # Handle lm_head weight
+            if hf_key == "lm_head.weight":
+                converted_key = "lm_head.weight"
+                converted_state_dict[converted_key] = tensor
+                continue
+        
+        return converted_state_dict
 
     def expand_with_image_tokens(
         self,

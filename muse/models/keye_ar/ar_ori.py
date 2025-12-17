@@ -3873,7 +3873,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         if inputs_embeds is None:
             # print(f"input_ids={input_ids}")
             # inputs_embeds = self.model.embed_tokens(input_ids)
-            from .investigations import compute_row_stats_str
+            # from .investigations import compute_row_stats_str
             if pixel_values is not None:
                 if self.ar_mode == 'ar':
                     with torch.no_grad():
