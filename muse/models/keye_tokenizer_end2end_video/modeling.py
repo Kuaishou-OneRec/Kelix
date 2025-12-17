@@ -112,6 +112,7 @@ class KeyeTokenizerEnd2EndVideo(Model):
         vision_config: KeyeVisionConfig,
         tokenizer_config: Optional[KeyeTokenizerConfig] = None,
         image_token_id: int = -1,
+        video_token_id: int = -1,
         pool: str = "avg",
         amplifier: float = 1.0,
     ):
@@ -129,6 +130,7 @@ class KeyeTokenizerEnd2EndVideo(Model):
             ]
         )
         self.image_token_id = image_token_id
+        self.video_token_id = video_token_id
         self.pool = pool
         self.amplifier = amplifier
         self.vocab_size = qwen_config.vocab_size
@@ -505,17 +507,6 @@ class KeyeTokenizerEnd2EndVideo(Model):
         if pixel_values is not None:
             vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
             image_embeds = self._project_visual_tokens(vq_out["z_q"])
-
-            # if vision_token_mask is None:
-            #     vision_token_mask = input_ids == self.image_token_id
-
-            # if vision_token_mask.sum() != image_embeds.size(0):
-            #     raise ValueError(
-            #         f"视觉token数量({image_embeds.size(0)})与mask中位置({vision_token_mask.sum().item()})不一致"
-            #     )
-            # inputs_embeds = inputs_embeds.clone()
-            # inputs_embeds[vision_token_mask] = image_embeds.to(inputs_embeds)
-
             # 记录loss
             codebook_loss, commitment_loss, vq_indices = vq_out['codebook_loss'], vq_out['commitment_loss'], vq_out['indices']
             aux_losses["codebook_loss"] = codebook_loss
@@ -539,7 +530,43 @@ class KeyeTokenizerEnd2EndVideo(Model):
             image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
         
-        if pixel_values_videos is not None:
+        if pixel_values_videos is not None:      
+            video_beta = 1.0  
+            vq_out_video = self.visual_tokenizer(pixel_values_videos, video_grid_thw)
+            video_embeds = self._project_visual_tokens(vq_out_video["z_q"])
+            # 记录loss
+            video_codebook_loss, video_commitment_loss, video_vq_indices = vq_out_video['codebook_loss'], vq_out_video['commitment_loss'], vq_out_video['indices']
+            if "codebook_loss" in aux_losses:
+                aux_losses["codebook_loss"] = [
+                        img_loss + video_beta * vid_loss
+                        for img_loss, vid_loss in zip(aux_losses["codebook_loss"], video_codebook_loss)
+                    ]
+            else:
+                aux_losses["codebook_loss"] = [video_beta * vid_loss for vid_loss in video_codebook_loss]
+            if "commitment_loss" in aux_losses:
+                aux_losses["commitment_loss"] = [
+                        img_loss + video_beta * vid_loss
+                        for img_loss, vid_loss in zip(aux_losses["commitment_loss"], video_commitment_loss)
+                    ]
+            else:
+                aux_losses["commitment_loss"] = [video_beta * vid_loss for vid_loss in video_commitment_loss]
+
+            aux_losses["video_indices"] = video_vq_indices
+            n_video_tokens = (input_ids == self.video_token_id).sum().item()
+            n_video_features = video_embeds.shape[0]
+            if n_video_tokens != n_video_features:
+                raise ValueError(
+                    f"Video features and video tokens do not match: tokens: {n_video_tokens}, features {n_video_features}"
+                )
+
+            mask = (input_ids == self.video_token_id)
+            mask_unsqueezed = mask.unsqueeze(-1)
+            mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
+            video_mask = mask_expanded.to(inputs_embeds.device)
+
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+        
 
         if attention_mask is not None:
             attention_mask = attention_mask.to(inputs_embeds.device)
