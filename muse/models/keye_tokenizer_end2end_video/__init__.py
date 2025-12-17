@@ -2,7 +2,7 @@
 Keye tokenizer video model implementation.
 """
 
-from muse.models.keye_tokenizer_end2end_image.modeling import (
+from muse.models.keye_tokenizer_end2end_video.modeling import (
     KeyeTokenizerEnd2EndVideo,
 )
 
