@@ -9,32 +9,31 @@ from muse.layers.attention import MultiHeadAttention
 from muse.layers.feed_forward import FeedForward
 from muse.layers.layer_norm import Fp32LayerNorm
 from muse.layers.position_embeddings import LlamaRotaryPositionalEmbeddings
+from muse.config.model_config import UnifiedTokenDecoderConfig
 
 
 class UnifiedTokenDecoder(Model):
     def __init__(self, 
-                 vocab_size: int,
-                 max_length: int,
-                 d_model: int,
-                 eos_token: int,
-                 nhead: int = 8,
-                 num_layers: int = 6,
-                 dim_feedforward: int = 2048,
+                 config: UnifiedTokenDecoderConfig,
                  token_embedding: Optional[nn.Embedding] = None,
-                 use_gradient_checkpointing: bool = True,
-                 input_dim: Optional[int] = None,
-                 reduce: bool = False,
                  lm_head: Optional[nn.Linear] = None,
-                 infer_id_embs_fn = None,
-                 attention_function: str = "eager"):
-        
-        # 创建一个简单的config对象用于Model基类
-        class Config:
-            def __init__(self):
-                self.model_class = "TokenDecoder"
-                self.attention_function = attention_function
+                 infer_id_embs_fn = None):
+
                 
-        super().__init__(Config())
+        super().__init__(Config)
+        
+        # 从config中提取参数
+        vocab_size = config.vocab_size
+        max_length = config.max_length
+        d_model = config.d_model
+        eos_token = config.eos_token
+        nhead = config.nhead
+        num_layers = config.num_layers
+        dim_feedforward = config.dim_feedforward
+        use_gradient_checkpointing = config.use_gradient_checkpointing
+        input_dim = config.input_dim
+        reduce = config.reduce
+        attention_function = config.attention_function
         
         self.vocab_size = vocab_size
         self.d_model = d_model

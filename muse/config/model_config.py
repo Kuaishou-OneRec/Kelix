@@ -589,3 +589,95 @@ class UnifiedQwen3Config(Qwen3Config):
                 "pre_embedding_tokens must be provided when pre_embedding_size is set."
             )
         return values
+
+
+class UnifiedTokenDecoderConfig(ModelConfig):
+    """Configuration for UnifiedTokenDecoder model architecture.
+    
+    This configuration defines the parameters for the UnifiedTokenDecoder,
+    which is a transformer-based decoder for autoregressive token generation.
+    """
+    
+    # Model identification
+    model_class: str = Field(
+        default="UnifiedTokenDecoder",
+        description="Model class name (e.g., 'UnifiedTokenDecoder')"
+    )
+    
+    # Core model dimensions
+    vocab_size: int = Field(
+        default=8192,
+        description="Vocabulary size for the token decoder"
+    )
+    max_length: int = Field(
+        default=9,
+        description="Maximum sequence length"
+    )
+    d_model: int = Field(
+        default=512,
+        description="Hidden dimension size"
+    )
+    eos_token: int = Field(
+        default=151681,
+        description="End-of-sequence token ID"
+    )
+    
+    # Transformer architecture
+    nhead: int = Field(
+        default=4,
+        description="Number of attention heads"
+    )
+    num_layers: int = Field(
+        default=1,
+        description="Number of transformer layers"
+    )
+    dim_feedforward: int = Field(
+        default=1024,
+        description="Dimension of the feedforward network"
+    )
+    
+    # Additional configuration
+    use_gradient_checkpointing: bool = Field(
+        default=True,
+        description="Whether to use gradient checkpointing"
+    )
+    input_dim: Optional[int] = Field(
+        default=None,
+        description="Input dimension (used when reduce=True)"
+    )
+    reduce: bool = Field(
+        default=True,
+        description="Whether to apply dimensionality reduction"
+    )
+    attention_function: Literal["eager", "flash_attention_2"] = Field(
+        default="eager",
+        description="Attention implementation to use"
+    )
+
+
+class KeyeARConfig(ModelConfig):
+    """Configuration for KeyeAR model architecture.
+    
+    This configuration defines the parameters for the KeyeAR model,
+    which is an autoregressive vision-language model based on Qwen3 architecture.
+    """
+    
+    # Model identification
+    model_class: str = Field(
+        default="KeyeARModel",
+        description="Model class name (e.g., 'KeyeARModel')"
+    )
+    
+    # Core model configurations
+    qwen_config: UnifiedQwen3Config = Field(
+        default_factory=UnifiedQwen3Config,
+        description="Configuration for the Qwen3 model component"
+    )
+    tokenizer_config: KeyeTokenizerConfig = Field(
+        default_factory=KeyeTokenizerConfig,
+        description="Configuration for the visual tokenizer component"
+    )
+    token_decoder_config: UnifiedTokenDecoderConfig = Field(
+        default_factory=UnifiedTokenDecoderConfig,
+        description="Configuration for the token decoder component"
+    )

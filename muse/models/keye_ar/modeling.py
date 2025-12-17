@@ -12,7 +12,7 @@ from einops import rearrange
 from muse.layers.transformer import TransformerDecoder, TransformerSelfAttentionLayer
 from muse.models.base import Model
 from muse.config import Qwen3Config, KeyeVisionConfig, UnifiedQwen3Config
-from muse.config.model_config import ModelConfig, KeyeTokenizerConfig
+from muse.config.model_config import ModelConfig, KeyeTokenizerConfig, UnifiedTokenDecoderConfig, KeyeARConfig
 from muse.models.qwen3.modeling import Qwen3Model
 from muse.models.keye_tokenizer.modeling import KeyeImageTokenizer
 from .unified_token_decoder import UnifiedTokenDecoder
@@ -257,47 +257,38 @@ class UnifiedQwen3Model(Qwen3Model):
     UnifiedQwen3Model类，继承自Qwen3Model，支持input_image_ids处理
     """
     
-    def __init__(self, config: UnifiedQwen3Config):
+    def __init__(self, qwen_config: UnifiedQwen3Config, token_decoder_config: UnifiedTokenDecoderConfig):
         """
         初始化UnifiedQwen3Model
         
         Args:
-            config: Qwen3配置对象
+            qwen_config: Qwen3配置对象
+            token_decoder_config: Token解码器配置对象
         """
         # 调用父类初始化
-        super().__init__(config)
+        super().__init__(qwen_config)
         
         # 正确设置padding_idx和pre_embedding相关属性
-        self.padding_idx = config.pad_token_id
+        self.padding_idx = qwen_config.pad_token_id
         tok_embeddings = UnifiedTokenEmbedding(
-            vocab_size=config.vocab_size,
-            hidden_size=config.hidden_size,
-            pre_embedding_size=config.pre_embedding_size,
-            pre_embedding_tokens=config.pre_embedding_tokens,
-            codebook_size=config.codebook_size,
-            n_q_tokens=config.n_q_tokens,
-            q_eos_token=config.q_eos_token,
+            vocab_size=qwen_config.vocab_size,
+            hidden_size=qwen_config.hidden_size,
+            pre_embedding_size=qwen_config.pre_embedding_size,
+            pre_embedding_tokens=qwen_config.pre_embedding_tokens,
+            codebook_size=qwen_config.codebook_size,
+            n_q_tokens=qwen_config.n_q_tokens,
+            q_eos_token=qwen_config.q_eos_token,
         )
         token_head = UnifiedTokenDecoder(
-            vocab_size=config.codebook_size + config.vocab_size,  # 使用码本大小作为词汇表大小
-            max_length=config.n_q_tokens + 1,    # 使用模型的最大序列长度
-            d_model=config.token_head_d_model,       # 使用模型的隐藏层维度
-            eos_token=config.q_eos_token,     # 使用量化结束标记
-            nhead=config.token_head_nheads,           # 使用模型的注意力头数
-            num_layers=config.token_head_num_layers,                     # 根据需要调整层数
-            dim_feedforward=config.token_head_dim_feedforward,  # 使用模型的前馈网络维度
-            attention_function=config.token_head_attention_function,  # 使用模型的注意力实现
-            input_dim=config.hidden_size,     # 输入维度与模型维度相同
+            config=token_decoder_config,
             token_embedding=None,             # 不使用外部token_embedding
-            use_gradient_checkpointing=True, # 根据需要调整
-            reduce=True,                      # 根据需要调整
             lm_head=None,  # 训练的时候，不使用外部lm_head
             infer_id_embs_fn=None             # 训练的时候，不使用外部id_embs_fn
         )
         self.model = UnifiedTransformerDecoder(
             tok_embeddings=tok_embeddings,
             layers=self.model.layers,
-            max_seq_len=config.max_seq_len,
+            max_seq_len=qwen_config.max_seq_len,
             num_heads=self.model.num_heads,
             head_dim=self.model.head_dim,
             norm=self.model.norm,
@@ -416,36 +407,33 @@ class KeyeARModel(Model):
     KeyeAR模型实现，基于Qwen3架构和视觉tokenizer
     """
     
-    def __init__(self, config: UnifiedQwen3Config):
+    def __init__(self, config: KeyeARConfig):
+        # vision_config, qwen3_config, 
         super().__init__(config)
         self.config = config
+
+        qwen_config = config.qwen_config
+        tokenizer_config = config.tokenizer_config
+        token_decoder_config = config.token_decoder_config
         
         # 视觉相关组件
-        self.visual_tokenizer = KeyeImageTokenizer(config.vision_config)
+        self.visual_tokenizer = KeyeImageTokenizer(tokenizer_config)
         
         # 量化投影器
         original_hidden_size = getattr(config, "original_hidden_size", config.hidden_size)
-        in_dim = (config.vision_config.embedding_dim // config.vision_config.n_q_tokens 
-                  if config.vision_config.split_dim else config.vision_config.embedding_dim)
         
         # 主语言模型
-        self.model = UnifiedQwen3Model(config)
+        self.model = UnifiedQwen3Model(qwen_config=config, token_decoder_config=token_decoder_config)
         
         # 配置参数
-        self.vocab_size = config.vocab_size
-        self.ar_mode = getattr(config, 'ar_mode', 'none')
-        assert self.ar_mode in ['none', 'ar'], f"ar_mode must be one of ['none', 'ar'], but got {self.ar_mode}"
+        self.vocab_size = qwen_config.vocab_size
         
         # 位置相关
         self.rope_deltas = None
-        self.pool = getattr(config, 'pool', 'avg')
-        self.amplifier = getattr(config, 'amplifier', 1.0)
         
         # LM头
-        lm_head_size = (config.vocab_size + config.vision_config.codebook_size 
-                       if self.ar_mode == 'ar' else config.vocab_size)
-        self.lm_head = nn.Linear(config.hidden_size, lm_head_size, bias=False)
-
+        lm_head_size = qwen_config.vocab_size + tokenizer_config.codebook_size 
+        self.lm_head = nn.Linear(qwen_config.hidden_size, lm_head_size, bias=False)
     @classmethod
     def convert_hf_state_dict(cls,
                               hf_state_dict: Dict[str, torch.Tensor],
