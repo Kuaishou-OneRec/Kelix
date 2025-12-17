@@ -125,8 +125,8 @@ nohup mpirun --allow-run-as-root \
                 --image-tokenizer-dir $IMAGE_TOKENIZER_DIR \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
-                --skip-load-params "y_embedder,cross_attn" \
-                --freeze-params "^y_embedder,^cross_attn" \
+                --skip-load-params "y_embedder,cross_attn,attention_y_norm" \
+                --freeze-params "^y_embedder,^cross_attn,^attention_y_norm" \
                 --dataset-config examples/sana/ae-mix.json \
                 --learning-rate 1e-4 \
                 --min-lr 1e-7 \
