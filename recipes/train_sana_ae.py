@@ -1290,17 +1290,17 @@ def train():
             
             # #region agent log
             import json as _json
-            def _debug_log_grad(loc, msg, data):
-                with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
-                    _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H1-H5"}) + '\n')
-            if scheduler.global_step % 10 == 0:  # Log every 10 steps to avoid too much output
+            if dist.get_rank() == 0 and scheduler.global_step <= 3:  # Only rank 0, first 3 steps
+                def _debug_log_grad(loc, msg, data):
+                    with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
+                        _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H1-H5"}) + '\n')
                 for name, param in model.named_parameters():
                     if param.grad is not None and any(k in name for k in ['y_embedder', 'cross_attn', 'attention_y_norm']):
                         _g_cpu = param.grad.detach().float().cpu()
                         grad_mean = float(_g_cpu.mean())
                         grad_std = float(_g_cpu.std())
                         grad_norm = float(_g_cpu.norm())
-                        _debug_log_grad("train_sana_ae.py:1295", f"grad_{name}", {"mean": grad_mean, "std": grad_std, "norm": grad_norm})
+                        _debug_log_grad("train_sana_ae.py:1295", f"grad_{name}", {"mean": grad_mean, "std": grad_std, "norm": grad_norm, "step": scheduler.global_step})
             # #endregion
 
             # 7. Gradient Clipping
