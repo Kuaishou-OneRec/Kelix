@@ -59,7 +59,7 @@ from transformers.utils import (
 
 from .configuration_keye import KeyeConfig, KeyeVisionConfig, KeyeImageTokenizerConfig
 from .vq import VectorQuantizer
-from .unified_token_decoder import UnifiedTokenDecoder
+from .token_decoder_ori import PureDecoderTransformer
 # from configuration_keye import KeyeConfig, KeyeVisionConfig, KeyeImageTokenizerConfig
 # from vq import VectorQuantizer
 
@@ -3329,7 +3329,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         lm_head_size = config.vocab_size + config.vision_config.codebook_size if self.ar_mode == 'ar' else config.vocab_size
 
         # self.token_head = nn.Linear(config.hidden_size, (config.vision_config.n_q_tokens + 1) * config.hidden_size, bias=False)
-        self.token_head = UnifiedTokenDecoder(
+        self.token_head = PureDecoderTransformer(
             max_length = self.config.vision_config.codebook_size + 1,
             d_model = getattr(self.config, 'token_head_dim', self.config.hidden_size),
             eos_token = self.config.q_eos_token,
