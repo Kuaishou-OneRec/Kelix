@@ -277,6 +277,7 @@ def load_muse_model(ckpt_path: str, raw_cfg: Dict, device: str, dtype: torch.dty
             vision_config=vision_cfg,
             tokenizer_config=tokenizer_cfg,
             image_token_id=raw_cfg.get("image_token_id", 151655),
+            video_token_id=raw_cfg.get("video_token_id", 151656),
             pool="sum"
         ).to(device)
 
