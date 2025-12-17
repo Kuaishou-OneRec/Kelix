@@ -14,6 +14,8 @@ from muse.layers.feed_forward import FeedForward
 from muse.layers.kv_cache import KVCache
 from typing import Tuple, List
 
+import numpy as np
+from einops import rearrange
 
 class Projector(nn.Module):
     """
