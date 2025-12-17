@@ -34,7 +34,7 @@ def set_prec():
         sci_mode=False,
         precision=1)
 
-set_prec()
+# set_prec()
 
 # 使用明确的 device，并在可能时使用 cuda:1
 device = 0 # torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
