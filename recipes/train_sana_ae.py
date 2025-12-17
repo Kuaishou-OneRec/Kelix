@@ -1295,6 +1295,21 @@ def train():
                 def _debug_log_grad(loc, msg, data):
                     with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
                         _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H1-H5"}) + '\n')
+                # Log loss value
+                _debug_log_grad("train_sana_ae.py:1290", "loss_value", {"loss": float(loss.detach().cpu()), "step": scheduler.global_step})
+                # Count params with grad
+                _total_params = 0; _params_with_grad = 0; _grad_nonzero = 0
+                for name, param in model.named_parameters():
+                    _total_params += 1
+                    if param.grad is not None:
+                        _params_with_grad += 1
+                        if isinstance(param.grad, DTensor):
+                            _g = param.grad.to_local()
+                        else:
+                            _g = param.grad
+                        if _g.abs().sum() > 0:
+                            _grad_nonzero += 1
+                _debug_log_grad("train_sana_ae.py:1295", "grad_stats", {"total_params": _total_params, "params_with_grad": _params_with_grad, "grad_nonzero": _grad_nonzero, "step": scheduler.global_step})
                 for name, param in model.named_parameters():
                     if param.grad is not None and any(k in name for k in ['y_embedder', 'cross_attn', 'attention_y_norm']):
                         _g = param.grad

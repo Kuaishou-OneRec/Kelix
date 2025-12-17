@@ -377,6 +377,19 @@ class SanaModel(Model):
         else:
             raise ValueError("xformers is required for Sana cross-attention without mask")
         
+        # #region agent log - H5: Check y shape and y_lens/mask for cross attention
+        if _should_log:
+            _y_out = y.detach().float().cpu()
+            _y_lens_info = y_lens.tolist() if hasattr(y_lens, 'tolist') else (list(y_lens.shape) if hasattr(y_lens, 'shape') else y_lens)
+            _debug_log("modeling.py:377", "y_before_blocks", {
+                "y_shape": list(y.shape), "x_shape": list(x.shape), 
+                "y_lens_type": str(type(y_lens).__name__),
+                "y_lens_info": str(_y_lens_info)[:200],  # Truncate if too long
+                "xformers_available": _xformers_available,
+                "y_mean": float(_y_out.mean()), "y_std": float(_y_out.std())
+            })
+        # #endregion
+        
         # Transformer blocks
         for block in self.blocks:
             x = block(x, y, t0, y_lens, (self.h, self.w))
