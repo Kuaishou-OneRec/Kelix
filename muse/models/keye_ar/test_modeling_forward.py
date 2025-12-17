@@ -232,7 +232,7 @@ def test_forward():
 
 if __name__ == "__main__":
     # 运行字段对比
-    compare_config_fields()
+    # compare_config_fields()
     
     # 如果需要测试前向传播，取消下面的注释
-    # test_forward()
+    test_forward()
