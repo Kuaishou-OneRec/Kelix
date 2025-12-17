@@ -37,7 +37,7 @@ def set_prec():
 set_prec()
 
 # 使用明确的 device，并在可能时使用 cuda:1
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = 0 # torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 output_model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.2/step5000/global_step5000/converted/"
 output_model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted"
 
