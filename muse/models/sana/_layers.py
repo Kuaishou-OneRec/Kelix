@@ -419,9 +419,26 @@ class MultiHeadCrossAttention(nn.Module):
         k = self.to_k(cond)
         v = self.to_v(cond)
         
+        # #region agent log
+        import json as _json
+        def _debug_log_attn(loc, msg, data):
+            with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
+                _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H3"}) + '\n')
+        _debug_log_attn("_layers.py:420", "cross_attn_input_x", {"shape": list(x.shape), "mean": float(x.mean()), "std": float(x.std())})
+        _debug_log_attn("_layers.py:421", "cross_attn_input_cond", {"shape": list(cond.shape), "mean": float(cond.mean()), "std": float(cond.std())})
+        _debug_log_attn("_layers.py:422", "cross_attn_q_before_norm", {"mean": float(q.mean()), "std": float(q.std())})
+        _debug_log_attn("_layers.py:423", "cross_attn_k_before_norm", {"mean": float(k.mean()), "std": float(k.std())})
+        _debug_log_attn("_layers.py:424", "cross_attn_v", {"mean": float(v.mean()), "std": float(v.std())})
+        # #endregion
+        
         q = self.q_norm(q).view(B, -1, self.num_heads, self.head_dim)
         k = self.k_norm(k).view(B, -1, self.num_heads, self.head_dim)
         v = v.view(B, -1, self.num_heads, self.head_dim)
+        
+        # #region agent log
+        _debug_log_attn("_layers.py:432", "cross_attn_q_after_norm", {"mean": float(q.mean()), "std": float(q.std())})
+        _debug_log_attn("_layers.py:433", "cross_attn_k_after_norm", {"mean": float(k.mean()), "std": float(k.std())})
+        # #endregion
         
         if self._xformers_available:
             # Use xformers memory efficient attention with block diagonal mask
@@ -706,7 +723,17 @@ class CaptionEmbedder(nn.Module):
         if (train and use_dropout) or (force_drop_ids is not None):
             caption = self.token_drop(caption, force_drop_ids, y_embedding)
         
+        # #region agent log
+        import json as _json
+        def _debug_log_yemb(loc, msg, data):
+            with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
+                _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H4"}) + '\n')
+        _debug_log_yemb("_layers.py:708", "y_proj_input", {"shape": list(caption.shape), "mean": float(caption.mean()), "std": float(caption.std()), "min": float(caption.min()), "max": float(caption.max())})
+        # #endregion
         caption = self.y_proj(caption)
+        # #region agent log
+        _debug_log_yemb("_layers.py:712", "y_proj_output", {"shape": list(caption.shape), "mean": float(caption.mean()), "std": float(caption.std()), "min": float(caption.min()), "max": float(caption.max())})
+        # #endregion
         return caption
 
 
