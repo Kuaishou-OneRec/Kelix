@@ -416,7 +416,7 @@ class KeyeARModel(Model):
     KeyeAR模型实现，基于Qwen3架构和视觉tokenizer
     """
     
-    def __init__(self, config: ModelConfig):
+    def __init__(self, config: UnifiedQwen3Config):
         super().__init__()
         self.config = config
         
