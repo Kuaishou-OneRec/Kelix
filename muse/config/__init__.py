@@ -25,6 +25,7 @@ from muse.config.base import BaseConfig, get_config, load_config
 from muse.config.model_config import (
     ModelConfig,
     Qwen3Config,
+    UnifiedQwen3Config,
     SiglipVisionConfig,
     KeyeVisionConfig,
     KeyeTokenizerConfig,
@@ -56,6 +57,7 @@ __all__ = [
     # Model configs
     "ModelConfig",
     "Qwen3Config",
+    "UnifiedQwen3Config",
     "SiglipVisionConfig",
     "KeyeVisionConfig",
     "KeyeTokenizerConfig",

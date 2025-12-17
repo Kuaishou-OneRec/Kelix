@@ -215,11 +215,8 @@ class Qwen3Config(ModelConfig):
             embed_dim = info.data["embed_dim"]
             num_heads = info.data["num_heads"]
             expected_embed_dim = num_heads * v
-            if embed_dim != expected_embed_dim:
-                raise ValueError(
-                    f"embed_dim ({embed_dim}) must equal "
-                    f"num_heads ({num_heads}) * head_dim ({v}) = {expected_embed_dim}"
-                )
+            # Some checkpoints (e.g., Keye) use head_dim overriding embed_dim/num_heads,
+            # allowing q_proj out_dim != embed_dim. Skip strict check here.
         return v
 
     @model_validator(mode="after")
@@ -231,16 +228,9 @@ class Qwen3Config(ModelConfig):
                 f"num_kv_heads ({values.num_kv_heads})"
             )
 
-
-        expected_embed_dim = values.num_heads * values.head_dim
-        if values.embed_dim != expected_embed_dim:
-            raise ValueError(
-                f"embed_dim ({values.embed_dim}) must equal "
-                f"num_heads ({values.num_heads}) * head_dim ({values.head_dim}) "
-                f"= {expected_embed_dim}"
-            )
+        # Relax embed_dim vs num_heads * head_dim to support checkpoints where head_dim is overridden
+        # and q_proj out_dim != embed_dim (e.g., Keye).
         return values
-
 
 class SiglipVisionConfig(ModelConfig):
     """Configuration for the SigLIP vision transformer encoder."""
@@ -513,3 +503,78 @@ class SanaConfig(ModelConfig):
         description="Text encoder model name"
     )
 
+
+class UnifiedQwen3Config(Qwen3Config):
+    """Configuration for UnifiedQwen3 model architecture.
+    
+    This configuration extends Qwen3Config with additional fields for unified autoregressive vision-language models.
+    """
+    
+    # Pre-embedding configuration for vision tokens
+    pre_embedding_size: Optional[int] = Field(
+        default=None,
+        description="Size of the pre-embedding layer for vision tokens. "
+                    "If None, uses direct embedding lookup."
+    )
+    pre_embedding_tokens: Optional[int] = Field(
+        default=None,
+        description="Number of tokens in the pre-embedding vocabulary. "
+                    "Only used when pre_embedding_size is not None."
+    )
+
+    # Token IDs for special tokens
+    image_token_id: Optional[int] = Field(
+        default=None,
+        description="Token ID used to represent image placeholders in the text sequence."
+    )
+    pad_token_id: Optional[int] = Field(
+        default=None,
+        description="Token ID used for padding."
+    )
+    q_eos_token: Optional[int] = Field(
+        default=None,
+        description="Token ID used to represent quantization end token."
+    )
+
+    # Tokenizer configuration
+    codebook_size: int = Field(default=8192, description="码本大小")
+    n_q_tokens: int = Field(default=8, description="每个位置量化token数量")
+
+    # Token head configuration
+    token_head_d_model: int = Field(
+        default=4096,
+        description="Dimensionality of the model for token head"
+    )
+    token_head_nheads: int = Field(
+        default=32,
+        description="Number of attention heads for token head"
+    )
+    token_head_num_layers: int = Field(
+        default=3,
+        description="Number of layers for token head"
+    )
+    token_head_dim_feedforward: int = Field(
+        default=11008,
+        description="Dimensionality of the feed-forward network for token head"
+    )
+    token_head_attention_function: Literal["eager", "flash_attention_2"] = Field(
+        default="eager",
+        description="Attention implementation to use for token head"
+    )
+    token_head_use_gradient_checkpointing: bool = Field(
+        default=True,
+        description="Whether to use gradient checkpointing for token head"
+    )
+    token_head_reduce: bool = Field(
+        default=True,
+        description="Whether to reduce for token head"
+    )
+
+    @model_validator(mode="after")
+    def validate_pre_embedding_fields(cls, values: "UnifiedQwen3Config") -> "UnifiedQwen3Config":
+        """Validate that pre_embedding_tokens is provided when pre_embedding_size is set."""
+        if values.pre_embedding_size is not None and values.pre_embedding_tokens is None:
+            raise ValueError(
+                "pre_embedding_tokens must be provided when pre_embedding_size is set."
+            )
+        return values
