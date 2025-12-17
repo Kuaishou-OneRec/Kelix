@@ -307,7 +307,10 @@ class SanaModel(Model):
         # Caption embedding
         y = self.y_embedder(y, self.training, mask=mask)  # [N, 1, L, D] or [N, L, D]
         if self.y_norm:
+            print(self.attention_y_norm.weight)
+            print("before: ", y)
             y = self.attention_y_norm(y)
+            print("after: ", y)
         
         # Check for xformers availability (same logic as official)
         _xformers_available = False
