@@ -101,7 +101,7 @@ def test_forward():
             {"type": "text", "text": " What's sum of the first 10 positive integers? After necessary analysis, your final output should follow the format: Final Answer: X."},
         ],
     }]
-    inputs = process_message(messages).to(device)
+    inputs = process_message(messages)#.to(device)
 
     # 在 forward 时使用 autocast 来强制内部 float ops 使用 bfloat16，避免 float/bfloat16 混合导致 upcast
     if torch.cuda.is_available():
