@@ -26,12 +26,14 @@ logger = logging.getLogger(__name__)
 
 class UnifiedTokenEmbedding(nn.Module):
     def __init__(self, vocab_size, codebook_size, pad_token_id, hidden_size, n_q_tokens, q_eos_token, image_token_id, pre_embedding_size=None, pre_embedding_tokens=None):
+        super().__init__()  # 添加这行确保正确初始化
         self.pre_embedding_size = pre_embedding_size
         self.pre_embedding_tokens = pre_embedding_tokens
         self.padding_idx = pad_token_id
         self.n_q_tokens = n_q_tokens
         self.q_eos_token = q_eos_token
         self.image_token_id = image_token_id
+        self.vocab_size = vocab_size  # 添加这行保存vocab_size属性
         
         # 如果启用了new_table且没有pre_embedding_size，则扩展词汇表
         if self.pre_embedding_size is None:
@@ -41,7 +43,7 @@ class UnifiedTokenEmbedding(nn.Module):
             # 创建新的嵌入层
             new_embed_tokens = nn.Embedding(new_vocab_size, hidden_size, self.padding_idx)
             # 如果原来的嵌入层有权重，复制过来
-            if hasattr(self.embed_tokens, 'weight'):
+            if hasattr(self, 'embed_tokens') and hasattr(self.embed_tokens, 'weight'):
                 with torch.no_grad():
                     new_embed_tokens.weight[:old_vocab_size] = self.embed_tokens.weight
 
@@ -52,6 +54,12 @@ class UnifiedTokenEmbedding(nn.Module):
         if self.pre_embedding_size is not None:
             self.pre_embedding = nn.Embedding(self.pre_embedding_tokens, self.pre_embedding_size)
             self.pre_embedding_linear = nn.Linear(self.pre_embedding_size, hidden_size)
+
+    @classmethod
+    def convert_hf_state_dict(cls, hf_state_dict: Dict[str, torch.Tensor], 
+                             **kwargs) -> Dict[str, torch.Tensor]:
+        converted_state_dict = hf_state_dict
+        return converted_state_dict
 
     def _embedding_aggregation(self, extended_tokens, embeddings):
         # 获取q_eos token id
@@ -249,7 +257,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
         # TODO: always output a list to have a consistent output type
         output = output if not hidden else [*hidden, output]
         return output
-    
+
 
 class UnifiedQwen3Model(Qwen3Model):
     """
@@ -357,6 +365,57 @@ class UnifiedQwen3Model(Qwen3Model):
             **kwargs
         )
         return outputs
+    
+    @classmethod
+    def convert_hf_state_dict(cls,
+                              hf_state_dict: Dict[str, torch.Tensor],
+                              tie_word_embeddings: bool = True,
+                              **kwargs) -> Dict[str, torch.Tensor]:
+        """Convert a Hugging Face state dictionary to Muse model state dictionary.
+        
+        This implementation reuses the Qwen3Model's convert_hf_state_dict logic for the main model
+        and UnifiedTokenDecoder's convert_hf_state_dict logic for the token head.
+        
+        Args:
+            hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
+            tie_word_embeddings: Whether the model ties embeddings (skip lm_head if True).
+            **kwargs: Additional keyword arguments.
+        
+        Returns:
+            A dictionary of model state with converted key names.
+        """
+        # First, use Qwen3Model's convert_hf_state_dict for the main model components
+        converted_state_dict = super().convert_hf_state_dict(
+            hf_state_dict, 
+            tie_word_embeddings=tie_word_embeddings,
+            **kwargs
+        )
+        
+        # Then, handle the token_head components using UnifiedTokenDecoder's convert_hf_state_dict
+        # Extract token_head related keys from hf_state_dict
+        token_head_state_dict = {}
+        token_head_prefix = "model.token_head."
+        
+        for hf_key, tensor in hf_state_dict.items():
+            # Check if this key belongs to the token_head
+            if hf_key.startswith(token_head_prefix):
+                # Remove the prefix to get the relative key for UnifiedTokenDecoder
+                relative_key = hf_key[len(token_head_prefix):]
+                token_head_state_dict[relative_key] = tensor
+        
+        # If we have token_head keys, convert them using UnifiedTokenDecoder's logic
+        if token_head_state_dict:
+            # Use UnifiedTokenDecoder's convert_hf_state_dict method
+            converted_token_head_state_dict = UnifiedTokenDecoder.convert_hf_state_dict(
+                token_head_state_dict, 
+                reduce_mode=True  # Assuming reduce=True for the token_head
+            )
+            
+            # Add the converted token_head keys back with the proper prefix
+            for key, tensor in converted_token_head_state_dict.items():
+                converted_state_dict[f"model.token_head.{key}"] = tensor
+        
+        return converted_state_dict
 
 
 class KeyeARModel(Model):
@@ -375,10 +434,6 @@ class KeyeARModel(Model):
         original_hidden_size = getattr(config, "original_hidden_size", config.hidden_size)
         in_dim = (config.vision_config.embedding_dim // config.vision_config.n_q_tokens 
                   if config.vision_config.split_dim else config.vision_config.embedding_dim)
-        self.quant_projector = nn.ModuleList([
-            nn.Linear(in_dim, original_hidden_size, bias=False) 
-            for _ in range(self.visual_tokenizer.n_q_tokens)
-        ])
         
         # 主语言模型
         self.model = UnifiedQwen3Model(config)
@@ -488,5 +543,3 @@ class KeyeARModel(Model):
             **kwargs
         )
         return outputs
-
-
