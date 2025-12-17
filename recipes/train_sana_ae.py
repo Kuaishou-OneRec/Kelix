@@ -1296,9 +1296,10 @@ def train():
             if scheduler.global_step % 10 == 0:  # Log every 10 steps to avoid too much output
                 for name, param in model.named_parameters():
                     if param.grad is not None and any(k in name for k in ['y_embedder', 'cross_attn', 'attention_y_norm']):
-                        grad_mean = float(param.grad.mean())
-                        grad_std = float(param.grad.std())
-                        grad_norm = float(param.grad.norm())
+                        _g_cpu = param.grad.detach().float().cpu()
+                        grad_mean = float(_g_cpu.mean())
+                        grad_std = float(_g_cpu.std())
+                        grad_norm = float(_g_cpu.norm())
                         _debug_log_grad("train_sana_ae.py:1295", f"grad_{name}", {"mean": grad_mean, "std": grad_std, "norm": grad_norm})
             # #endregion
 

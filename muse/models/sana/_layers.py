@@ -424,11 +424,13 @@ class MultiHeadCrossAttention(nn.Module):
         def _debug_log_attn(loc, msg, data):
             with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
                 _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H3"}) + '\n')
-        _debug_log_attn("_layers.py:420", "cross_attn_input_x", {"shape": list(x.shape), "mean": float(x.mean()), "std": float(x.std())})
-        _debug_log_attn("_layers.py:421", "cross_attn_input_cond", {"shape": list(cond.shape), "mean": float(cond.mean()), "std": float(cond.std())})
-        _debug_log_attn("_layers.py:422", "cross_attn_q_before_norm", {"mean": float(q.mean()), "std": float(q.std())})
-        _debug_log_attn("_layers.py:423", "cross_attn_k_before_norm", {"mean": float(k.mean()), "std": float(k.std())})
-        _debug_log_attn("_layers.py:424", "cross_attn_v", {"mean": float(v.mean()), "std": float(v.std())})
+        _x_c = x.detach().float().cpu(); _cond_c = cond.detach().float().cpu()
+        _q_c = q.detach().float().cpu(); _k_c = k.detach().float().cpu(); _v_c = v.detach().float().cpu()
+        _debug_log_attn("_layers.py:420", "cross_attn_input_x", {"shape": list(x.shape), "mean": float(_x_c.mean()), "std": float(_x_c.std())})
+        _debug_log_attn("_layers.py:421", "cross_attn_input_cond", {"shape": list(cond.shape), "mean": float(_cond_c.mean()), "std": float(_cond_c.std())})
+        _debug_log_attn("_layers.py:422", "cross_attn_q_before_norm", {"mean": float(_q_c.mean()), "std": float(_q_c.std())})
+        _debug_log_attn("_layers.py:423", "cross_attn_k_before_norm", {"mean": float(_k_c.mean()), "std": float(_k_c.std())})
+        _debug_log_attn("_layers.py:424", "cross_attn_v", {"mean": float(_v_c.mean()), "std": float(_v_c.std())})
         # #endregion
         
         q = self.q_norm(q).view(B, -1, self.num_heads, self.head_dim)
@@ -436,8 +438,9 @@ class MultiHeadCrossAttention(nn.Module):
         v = v.view(B, -1, self.num_heads, self.head_dim)
         
         # #region agent log
-        _debug_log_attn("_layers.py:432", "cross_attn_q_after_norm", {"mean": float(q.mean()), "std": float(q.std())})
-        _debug_log_attn("_layers.py:433", "cross_attn_k_after_norm", {"mean": float(k.mean()), "std": float(k.std())})
+        _q_c2 = q.detach().float().cpu(); _k_c2 = k.detach().float().cpu()
+        _debug_log_attn("_layers.py:432", "cross_attn_q_after_norm", {"mean": float(_q_c2.mean()), "std": float(_q_c2.std())})
+        _debug_log_attn("_layers.py:433", "cross_attn_k_after_norm", {"mean": float(_k_c2.mean()), "std": float(_k_c2.std())})
         # #endregion
         
         if self._xformers_available:
@@ -728,11 +731,13 @@ class CaptionEmbedder(nn.Module):
         def _debug_log_yemb(loc, msg, data):
             with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
                 _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H4"}) + '\n')
-        _debug_log_yemb("_layers.py:708", "y_proj_input", {"shape": list(caption.shape), "mean": float(caption.mean()), "std": float(caption.std()), "min": float(caption.min()), "max": float(caption.max())})
+        _cap_c = caption.detach().float().cpu()
+        _debug_log_yemb("_layers.py:708", "y_proj_input", {"shape": list(caption.shape), "mean": float(_cap_c.mean()), "std": float(_cap_c.std()), "min": float(_cap_c.min()), "max": float(_cap_c.max())})
         # #endregion
         caption = self.y_proj(caption)
         # #region agent log
-        _debug_log_yemb("_layers.py:712", "y_proj_output", {"shape": list(caption.shape), "mean": float(caption.mean()), "std": float(caption.std()), "min": float(caption.min()), "max": float(caption.max())})
+        _cap_c2 = caption.detach().float().cpu()
+        _debug_log_yemb("_layers.py:712", "y_proj_output", {"shape": list(caption.shape), "mean": float(_cap_c2.mean()), "std": float(_cap_c2.std()), "min": float(_cap_c2.min()), "max": float(_cap_c2.max())})
         # #endregion
         return caption
 

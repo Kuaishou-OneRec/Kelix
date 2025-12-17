@@ -287,7 +287,8 @@ class SanaModel(Model):
         def _debug_log_x(loc, msg, data):
             with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
                 _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H1"}) + '\n')
-        _debug_log_x("modeling.py:285", "x_after_embedder", {"shape": list(x.shape), "mean": float(x.mean()), "std": float(x.std()), "min": float(x.min()), "max": float(x.max())})
+        _x_cpu = x.detach().float().cpu()
+        _debug_log_x("modeling.py:285", "x_after_embedder", {"shape": list(x.shape), "mean": float(_x_cpu.mean()), "std": float(_x_cpu.std()), "min": float(_x_cpu.min()), "max": float(_x_cpu.max())})
         # #endregion
         
         # Apply position embedding if enabled
@@ -318,19 +319,23 @@ class SanaModel(Model):
         def _debug_log(loc, msg, data):
             with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
                 _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H1-H4"}) + '\n')
-        _debug_log("modeling.py:309", "y_before_embedder", {"shape": list(y.shape), "mean": float(y.mean()), "std": float(y.std()), "min": float(y.min()), "max": float(y.max())})
+        _y_cpu = y.detach().float().cpu()
+        _debug_log("modeling.py:309", "y_before_embedder", {"shape": list(y.shape), "mean": float(_y_cpu.mean()), "std": float(_y_cpu.std()), "min": float(_y_cpu.min()), "max": float(_y_cpu.max())})
         # #endregion
         y = self.y_embedder(y, self.training, mask=mask)  # [N, 1, L, D] or [N, L, D]
         # #region agent log
-        _debug_log("modeling.py:311", "y_after_embedder", {"shape": list(y.shape), "mean": float(y.mean()), "std": float(y.std()), "min": float(y.min()), "max": float(y.max())})
+        _y_cpu2 = y.detach().float().cpu()
+        _debug_log("modeling.py:311", "y_after_embedder", {"shape": list(y.shape), "mean": float(_y_cpu2.mean()), "std": float(_y_cpu2.std()), "min": float(_y_cpu2.min()), "max": float(_y_cpu2.max())})
         # #endregion
         if self.y_norm:
             # #region agent log
-            _debug_log("modeling.py:314", "attention_y_norm_weight", {"mean": float(self.attention_y_norm.weight.mean()), "std": float(self.attention_y_norm.weight.std()), "min": float(self.attention_y_norm.weight.min()), "max": float(self.attention_y_norm.weight.max())})
+            _w_cpu = self.attention_y_norm.weight.detach().float().cpu()
+            _debug_log("modeling.py:314", "attention_y_norm_weight", {"mean": float(_w_cpu.mean()), "std": float(_w_cpu.std()), "min": float(_w_cpu.min()), "max": float(_w_cpu.max())})
             # #endregion
             y = self.attention_y_norm(y)
             # #region agent log
-            _debug_log("modeling.py:318", "y_after_norm", {"shape": list(y.shape), "mean": float(y.mean()), "std": float(y.std()), "min": float(y.min()), "max": float(y.max())})
+            _y_cpu3 = y.detach().float().cpu()
+            _debug_log("modeling.py:318", "y_after_norm", {"shape": list(y.shape), "mean": float(_y_cpu3.mean()), "std": float(_y_cpu3.std()), "min": float(_y_cpu3.min()), "max": float(_y_cpu3.max())})
             # #endregion
         
         # Check for xformers availability (same logic as official)
