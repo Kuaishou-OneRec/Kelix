@@ -91,7 +91,7 @@ def test_forward():
             {"type": "text", "text": " What's sum of the first 10 positive integers? After necessary analysis, your final output should follow the format: Final Answer: X."},
         ],
     }]
-    inputs = process_message(messages)
+    inputs = process_message(messages).to(device)
     logits = model(**inputs)
     print(f"logits=\n{logits}")
 
