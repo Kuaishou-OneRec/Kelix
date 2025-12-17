@@ -43,6 +43,7 @@ def _build_muse_tokenizer_config(hf_config: Dict[str, Any]) -> KeyeTokenizerConf
         vq_temperature=1.0,
         vq_temperature_decay=0.999,
         vq_min_temperature=0.1,
+        output_dim=outer_vcfg.get("output_dim", 1024),
     )
     return tokenizer_cfg
 
@@ -53,8 +54,6 @@ def convert_hf_checkpoint(hf_state_dict: Dict[str, torch.Tensor]) -> Dict[str, t
     
     Returns the converted Muse-style state dict.
     """
-    # save_dir = Path(save_path)
-    # save_dir.mkdir(parents=True, exist_ok=True)
     
     # 1. Extract visual_tokenizer.* keys from full state dict
     origin_tokenizer_state_dict = {}
@@ -85,6 +84,7 @@ def convert_hf_checkpoint(hf_state_dict: Dict[str, torch.Tensor]) -> Dict[str, t
         new_k = new_k.replace(".mlp.fc2.", ".mlp.w2.")
         # Convert post_layernorm -> ln_post
         new_k = new_k.replace(".post_layernorm.", ".ln_post.")
+        new_k = new_k.replace("quant_projector", "up_projectors")
         
         muse_state_dict[new_k] = v
     
