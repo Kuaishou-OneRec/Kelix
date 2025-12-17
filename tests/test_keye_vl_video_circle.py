@@ -263,7 +263,7 @@ def load_muse_model(ckpt_path: str, raw_cfg: Dict, device: str, dtype: torch.dty
     )
 
     with set_default_dtype(dtype):
-        muse_model = muse_mod.KeyeTokenizerEnd2EndImage(
+        muse_model = muse_mod.KeyeTokenizerEnd2EndVideo(
             qwen_config=qwen_cfg,
             vision_config=vision_cfg,
             tokenizer_config=tokenizer_cfg,
