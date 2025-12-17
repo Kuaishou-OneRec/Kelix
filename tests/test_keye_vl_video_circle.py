@@ -116,18 +116,27 @@ def prepare_inputs_common(ckpt_path: str, device: str, dtype: torch.dtype):
 
     # [Align] 使用 100x100
     logger.info("🎨 Generating Circle Image (100x100)...")
-    image = generate_circle_image(size=(100, 100)) 
+    # image = generate_circle_image(size=(100, 100)) 
     
-    # [Align] 只有图片，没有文本
+    # # [Align] 只有图片，没有文本
+    # messages = [
+    #     {
+    #         "role": "user",
+    #         "content": [
+    #             {"type": "image", "image": image},
+    #         ],
+    #     }
+    # ]
+
+    mp4 = '/llm_reco/maosiyang/23b77760a4304e9092eb3b45b7bf8050.mp4'
     messages = [
         {
             "role": "user",
             "content": [
-                {"type": "image", "image": image},
+                {"type": "video", "video": "/llm_reco/maosiyang/23b77760a4304e9092eb3b45b7bf8050.mp4"},
             ],
         }
     ]
-
     logger.info("📝 Applying Chat Template...")
     text = processor.apply_chat_template(
         messages, 
