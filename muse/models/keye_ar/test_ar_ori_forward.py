@@ -92,6 +92,7 @@ def test_forward():
         ],
     }]
     inputs = process_message(messages).to(device)
+    
     logits = model(**inputs)
     print(f"logits=\n{logits}")
 
