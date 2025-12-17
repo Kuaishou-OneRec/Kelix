@@ -21,7 +21,9 @@ import argparse  # 添加argparse模块导入
 
 # 导入模型相关模块
 # from recovlm.models.tokenizer_end2end_mt_1drope_v8.configuration_keye import KeyeConfig
+
 from muse.models.keye_ar.ar_ori import KeyeForConditionalGeneration#, KeyeImageTokenizer
+
 from keye_vl_utils import process_vision_info
 
 def set_prec():
