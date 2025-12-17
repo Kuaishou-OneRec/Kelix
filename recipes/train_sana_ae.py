@@ -1287,6 +1287,20 @@ def train():
             # 6. Backward Pass
             with record_function("Backward"):
                 loss.backward()
+            
+            # #region agent log
+            import json as _json
+            def _debug_log_grad(loc, msg, data):
+                with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
+                    _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H1-H5"}) + '\n')
+            if scheduler.global_step % 10 == 0:  # Log every 10 steps to avoid too much output
+                for name, param in model.named_parameters():
+                    if param.grad is not None and any(k in name for k in ['y_embedder', 'cross_attn', 'attention_y_norm']):
+                        grad_mean = float(param.grad.mean())
+                        grad_std = float(param.grad.std())
+                        grad_norm = float(param.grad.norm())
+                        _debug_log_grad("train_sana_ae.py:1295", f"grad_{name}", {"mean": grad_mean, "std": grad_std, "norm": grad_norm})
+            # #endregion
 
             # 7. Gradient Clipping
             with record_function("GradClip"):
