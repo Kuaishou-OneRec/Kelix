@@ -330,40 +330,14 @@ class Roraty2DPositionalEmbeddings(nn.Module):
         # rope_emb 已经是 x.dtype（从 calculate_freqs 传入），无需再转换
         cos, sin = (rope_emb.cos(), rope_emb.sin())
         
-        # Store rope_emb, cos, sin before chunk for debugging
-        if not hasattr(self, '_debug_rope_intermediates'):
-            self._debug_rope_intermediates = {
-                "inv_freq": None,
-                "rope_emb_max_grid": None,
-                "pids": None,
-                "rope_emb": None,
-                "cos_before_chunk": None,
-                "sin_before_chunk": None,
-                "cos_after_chunk": None,
-                "sin_after_chunk": None,
-            }
-        # 保存转换后的 inv_freq（与 x.dtype 一致）
-        self._debug_rope_intermediates["inv_freq"] = self.inv_freq.to(dtype=x.dtype).detach()
-        self._debug_rope_intermediates["rope_emb_max_grid"] = rope_emb_max_grid.detach()
-        self._debug_rope_intermediates["pids"] = pids.detach()
-        self._debug_rope_intermediates["rope_emb"] = rope_emb.detach()
-        self._debug_rope_intermediates["cos_before_chunk"] = cos.detach()
-        self._debug_rope_intermediates["sin_before_chunk"] = sin.detach()
         
         cos = cos.chunk(2, dim=-1)[0].contiguous()
         sin = sin.chunk(2, dim=-1)[0].contiguous()
         
-        # Store cos/sin after chunk
-        self._debug_rope_intermediates["cos_after_chunk"] = cos.detach()
-        self._debug_rope_intermediates["sin_after_chunk"] = sin.detach()
-        
+
         result = flash_apply_rotary_emb(
             x.float(), cos.float(), sin.float()
         ).to(dtype=x.dtype)
-        # Store for debugging - track via a module-level list
-        if not hasattr(self, '_debug_rope_outputs'):
-            self._debug_rope_outputs = []
-        self._debug_rope_outputs.append(result.detach())
         return result
 
 
