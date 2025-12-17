@@ -73,8 +73,16 @@ def process_message( messages, add_generation_prompt=True, padding=False):
         truncation=False,
         return_tensors="pt",
     ).to(device)
-    return inputs
 
+    # 将 inputs 中所有浮点类型的 Tensor 转为 bfloat16
+    def _cast_inputs_to_bf16(batch):
+        for k, v in list(batch.items()):
+            if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
+                batch[k] = v.to(dtype=torch.bfloat16)
+        return batch
+
+    inputs = _cast_inputs_to_bf16(inputs)
+    return inputs
 
 
 def test_forward():
@@ -92,7 +100,7 @@ def test_forward():
         ],
     }]
     inputs = process_message(messages).to(device)
-    
+
     logits = model(**inputs)
     print(f"logits=\n{logits}")
 
