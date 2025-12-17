@@ -1290,13 +1290,17 @@ def train():
             
             # #region agent log
             import json as _json
+            from torch.distributed.tensor import DTensor
             if dist.get_rank() == 0 and scheduler.global_step <= 3:  # Only rank 0, first 3 steps
                 def _debug_log_grad(loc, msg, data):
                     with open('/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse/debug.log', 'a') as _f:
                         _f.write(_json.dumps({"location": loc, "message": msg, "data": data, "sessionId": "debug-session", "hypothesisId": "H1-H5"}) + '\n')
                 for name, param in model.named_parameters():
                     if param.grad is not None and any(k in name for k in ['y_embedder', 'cross_attn', 'attention_y_norm']):
-                        _g_cpu = param.grad.detach().float().cpu()
+                        _g = param.grad
+                        if isinstance(_g, DTensor):
+                            _g = _g.to_local()
+                        _g_cpu = _g.detach().float().cpu()
                         grad_mean = float(_g_cpu.mean())
                         grad_std = float(_g_cpu.std())
                         grad_norm = float(_g_cpu.norm())
