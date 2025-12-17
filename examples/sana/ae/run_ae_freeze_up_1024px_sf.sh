@@ -133,7 +133,7 @@ nohup mpirun --allow-run-as-root \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
-                --model-config-overrides caption_channels=1024 model_max_length=324 y_norm_scale_factor=1.0 \
+                --model-config-overrides caption_channels=1024 model_max_length=324 y_norm_scale_factor=0.01 \
                 --beta2 0.999 \
                 --batch-size 32 \
                 --lr-scheduler-type constant \
