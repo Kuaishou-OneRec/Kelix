@@ -158,45 +158,45 @@ def prepare_inputs_common(ckpt_path: str, device: str, dtype: torch.dtype):
         padding=False, 
         truncation=False,
         return_tensors="pt",
-    )
+    ).to(device)
 
     return inputs, processor, messages
 
-def prepare_inputs_for_muse(inputs, device: str, dtype: torch.dtype):
-    """
-    为 Muse 模型准备输入
-    """
-    model_inputs = {
-        "input_ids": inputs["input_ids"].to(device),
-        "attention_mask": inputs["attention_mask"].to(device),
-        "pixel_values": inputs["pixel_values"].to(device, dtype=dtype),
-        "image_grid_thw": inputs["image_grid_thw"].to(device)
-    }
+# def prepare_inputs_for_muse(inputs, device: str, dtype: torch.dtype):
+#     """
+#     为 Muse 模型准备输入
+#     """
+#     model_inputs = {
+#         "input_ids": inputs["input_ids"].to(device),
+#         "attention_mask": inputs["attention_mask"].to(device),
+#         "pixel_values": inputs["pixel_values"].to(device, dtype=dtype),
+#         "image_grid_thw": inputs["image_grid_thw"].to(device)
+#     }
     
-    # [Muse Specific] Muse Model 期望 pixel_values 是 [N, C, H, W]
-    if model_inputs["pixel_values"].dim() == 5 and model_inputs["pixel_values"].shape[0] == 1:
-        model_inputs["pixel_values"] = model_inputs["pixel_values"].squeeze(0)
+#     # [Muse Specific] Muse Model 期望 pixel_values 是 [N, C, H, W]
+#     if model_inputs["pixel_values"].dim() == 5 and model_inputs["pixel_values"].shape[0] == 1:
+#         model_inputs["pixel_values"] = model_inputs["pixel_values"].squeeze(0)
 
-    logger.info(f"   [Muse] Input IDs Shape: {model_inputs['input_ids'].shape}")
-    logger.info(f"   [Muse] Pixel Values Shape: {model_inputs['pixel_values'].shape}")
-    logger.info(f"   [Muse] Image Grid: {model_inputs['image_grid_thw'].tolist()}")
+#     logger.info(f"   [Muse] Input IDs Shape: {model_inputs['input_ids'].shape}")
+#     logger.info(f"   [Muse] Pixel Values Shape: {model_inputs['pixel_values'].shape}")
+#     logger.info(f"   [Muse] Image Grid: {model_inputs['image_grid_thw'].tolist()}")
     
-    return model_inputs
+#     return model_inputs
 
-def prepare_inputs_for_origin(inputs, device):
-    """
-    为 Origin 模型准备输入
-    [关键对齐] 与新 HF 代码完全一致：直接 .to(device)，不转换 dtype
-    """
-    # 直接把整个 inputs 移到 device 上，保持原始 dtype（与新 HF 代码一致）
-    model_inputs = inputs.to(device)
+# def prepare_inputs_for_origin(inputs, device):
+#     """
+#     为 Origin 模型准备输入
+#     [关键对齐] 与新 HF 代码完全一致：直接 .to(device)，不转换 dtype
+#     """
+#     # 直接把整个 inputs 移到 device 上，保持原始 dtype（与新 HF 代码一致）
+#     model_inputs = inputs.to(device)
 
-    logger.info(f"   [Origin] Input IDs Shape: {model_inputs['input_ids'].shape}")
-    logger.info(f"   [Origin] Pixel Values Shape: {model_inputs['pixel_values'].shape}")
-    logger.info(f"   [Origin] Pixel Values Dtype: {model_inputs['pixel_values'].dtype}")
-    logger.info(f"   [Origin] Image Grid: {model_inputs['image_grid_thw'].tolist()}")
+#     logger.info(f"   [Origin] Input IDs Shape: {model_inputs['input_ids'].shape}")
+#     logger.info(f"   [Origin] Pixel Values Shape: {model_inputs['pixel_values'].shape}")
+#     logger.info(f"   [Origin] Pixel Values Dtype: {model_inputs['pixel_values'].dtype}")
+#     logger.info(f"   [Origin] Image Grid: {model_inputs['image_grid_thw'].tolist()}")
     
-    return model_inputs
+#     return model_inputs
 
 # =========================================================================
 # Model Loading Functions
@@ -418,7 +418,7 @@ def run_comparison():
     
     # ========== Muse Model ==========
     muse_model = load_muse_model(ckpt_path, raw_cfg, device, dtype)
-    muse_inputs = prepare_inputs_for_muse(inputs, device, dtype)
+    muse_inputs = inputs
     
     logger.info("\n🔥 Running Muse Forward...")
     with torch.no_grad():
@@ -436,8 +436,8 @@ def run_comparison():
     # ========== Origin Model ==========
     origin_model = load_origin_model(ckpt_path, device, dtype)
     # [关键对齐] 与新 HF 代码一致，直接 .to(device)
-    origin_inputs = prepare_inputs_for_origin(inputs, device)
-    
+    # origin_inputs = prepare_inputs_for_origin(inputs, device)
+    origin_inputs = inputs
     logger.info("\n🔥 Running Origin Forward...")
     with torch.no_grad():
         origin_outputs = origin_model(**origin_inputs)
