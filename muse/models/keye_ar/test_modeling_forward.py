@@ -45,10 +45,17 @@ def convert_conf_to_unified_qwen3_config(conf_path):
     config_dict['hidden_act'] = get_config_value(conf_data, 'hidden_act', 'silu')
     config_dict['norm_eps'] = get_config_value(conf_data, 'rms_norm_eps', 1e-6, 'norm_eps', 'rms_norm_eps')
     config_dict['attn_dropout'] = get_config_value(conf_data, 'attention_dropout', 0.0)
+    config_dict['attention_function'] = get_config_value(conf_data, 'attention_function', 'eager')
+    config_dict['q_proj_bias'] = get_config_value(conf_data, 'q_proj_bias', False)
+    config_dict['k_proj_bias'] = get_config_value(conf_data, 'k_proj_bias', False)
+    config_dict['v_proj_bias'] = get_config_value(conf_data, 'v_proj_bias', False)
+    config_dict['attention_bias'] = get_config_value(conf_data, 'attention_bias', False)
+    config_dict['tie_word_embeddings'] = get_config_value(conf_data, 'tie_word_embeddings', True)
     
     # RoPE配置
     config_dict['rope_theta'] = get_config_value(conf_data, 'rope_theta', 1000000)
     config_dict['max_seq_len'] = get_config_value(conf_data, 'max_position_embeddings', 40960, 'max_seq_len', 'max_position_embeddings')
+    config_dict['rope_base'] = get_config_value(conf_data, 'rope_theta', 1000000, 'rope_base', 'rope_theta')
     
     # RoPE scaling配置
     if 'rope_scaling' in conf_data:
@@ -64,38 +71,73 @@ def convert_conf_to_unified_qwen3_config(conf_path):
     # Vision配置（从vision_config中提取）
     if 'vision_config' in conf_data:
         vision_config = conf_data['vision_config']
-        config_dict['codebook_size'] = get_config_value(vision_config, 'codebook_size', 65536)
+        config_dict['codebook_size'] = get_config_value(vision_config, 'codebook_size', 8192)  # 默认值改为8192
         config_dict['n_q_tokens'] = get_config_value(vision_config, 'n_q_tokens', 8)
-        
-        # 视觉编码器配置
-        if 'vision_config' in vision_config:
-            vis_cfg = vision_config['vision_config']
-            config_dict['vision_hidden_size'] = get_config_value(vis_cfg, 'hidden_size', 1152, 'vision_hidden_size', 'hidden_size')
-            config_dict['vision_num_layers'] = get_config_value(vis_cfg, 'num_hidden_layers', 27, 'vision_num_layers', 'num_hidden_layers')
-            config_dict['vision_num_heads'] = get_config_value(vis_cfg, 'num_attention_heads', 16, 'vision_num_heads', 'num_attention_heads')
-            config_dict['vision_intermediate_size'] = get_config_value(vis_cfg, 'intermediate_size', 4304, 'vision_intermediate_size', 'intermediate_size')
-            
-        # 解码器配置
-        if 'decoder_config' in vision_config:
-            dec_cfg = vision_config['decoder_config']
-            config_dict['decoder_hidden_size'] = get_config_value(dec_cfg, 'hidden_size', 128, 'decoder_hidden_size', 'hidden_size')
-            config_dict['decoder_num_layers'] = get_config_value(dec_cfg, 'num_hidden_layers', 3, 'decoder_num_layers', 'num_hidden_layers')
-            config_dict['decoder_num_heads'] = get_config_value(dec_cfg, 'num_attention_heads', 8, 'decoder_num_heads', 'num_attention_heads')
-            config_dict['decoder_intermediate_size'] = get_config_value(dec_cfg, 'intermediate_size', 384, 'decoder_intermediate_size', 'intermediate_size')
     else:
         print("Warning: vision_config not found in conf_data, using default values for all vision-related configs")
-        config_dict['codebook_size'] = 65536
+        config_dict['codebook_size'] = 8192  # 默认值改为8192
         config_dict['n_q_tokens'] = 8
     
     # Token head配置
     config_dict['token_head_d_model'] = get_config_value(conf_data, 'token_head_dim', 512, 'token_head_d_model', 'token_head_dim')
     config_dict['token_head_nheads'] = get_config_value(conf_data, 'token_head_nhead', 4, 'token_head_nheads', 'token_head_nhead')
     config_dict['token_head_dim_feedforward'] = get_config_value(conf_data, 'token_head_intermediate_dim', 2048, 'token_head_dim_feedforward', 'token_head_intermediate_dim')
+    config_dict['token_head_num_layers'] = get_config_value(conf_data, 'token_head_num_layers', 3)
+    config_dict['token_head_attention_function'] = get_config_value(conf_data, 'token_head_attention_function', 'eager')
+    config_dict['token_head_use_gradient_checkpointing'] = get_config_value(conf_data, 'token_head_use_gradient_checkpointing', True)
+    config_dict['token_head_reduce'] = get_config_value(conf_data, 'token_head_reduce', True)
     
     # 其他配置
     config_dict['use_multimodal_rope'] = True  # 根据Qwen3Config默认值设置
     
     return config_dict
+
+def compare_config_fields():
+    """比较UnifiedQwen3Config字段与转换后配置字段的差异"""
+    # 获取UnifiedQwen3Config的所有字段
+    unified_config_fields = set(UnifiedQwen3Config.model_fields.keys())
+    
+    # 获取转换后的配置字段
+    converted_config = convert_conf_to_unified_qwen3_config("muse/models/keye_ar/conf.json")
+    converted_fields = set(converted_config.keys())
+    
+    # 找出缺失的字段
+    missing_fields = unified_config_fields - converted_fields
+    extra_fields = converted_fields - unified_config_fields
+    
+    print("=" * 50)
+    print("配置字段对比结果:")
+    print("=" * 50)
+    print(f"UnifiedQwen3Config总字段数: {len(unified_config_fields)}")
+    print(f"转换后配置字段数: {len(converted_fields)}")
+    print()
+    
+    if missing_fields:
+        print("缺失的字段 (在UnifiedQwen3Config中但不在转换后配置中):")
+        for field in sorted(missing_fields):
+            print(f"  - {field}")
+        print()
+    
+    if extra_fields:
+        print("多余的字段 (在转换后配置中但不在UnifiedQwen3Config中):")
+        for field in sorted(extra_fields):
+            print(f"  - {field}")
+        print()
+    
+    if not missing_fields and not extra_fields:
+        print("字段完全匹配!")
+    
+    print("统一的字段:")
+    common_fields = unified_config_fields & converted_fields
+    for field in sorted(common_fields):
+        print(f"  - {field}")
+    
+    return {
+        "unified_config_fields": unified_config_fields,
+        "converted_fields": converted_fields,
+        "missing_fields": missing_fields,
+        "extra_fields": extra_fields
+    }
 
 def load_keye_ar_model():
     """加载KeyeARModel，使用convert_hf_state_dict函数转换权重"""
@@ -189,4 +231,8 @@ def test_forward():
         print(f"Last hidden state shape: {outputs.last_hidden_state.shape}")
 
 if __name__ == "__main__":
-    test_forward()
+    # 运行字段对比
+    compare_config_fields()
+    
+    # 如果需要测试前向传播，取消下面的注释
+    # test_forward()
