@@ -460,15 +460,15 @@ def run_comparison():
     save_dir.mkdir(parents=True, exist_ok=True)
     
     # [FIX] Save individual logits files as well
-    torch.save(muse_logits.detach().cpu(), save_dir / "muse_model_logits.pt")
-    torch.save(origin_logits.detach().cpu(), save_dir / "origin_model_logits.pt")
+    torch.save(muse_logits.detach().cpu(), save_dir / "muse_model_logits_video.pt")
+    torch.save(origin_logits.detach().cpu(), save_dir / "origin_model_logits_video.pt")
     
     # Save dictionary
     torch.save({
         "muse_logits": muse_logits.detach().cpu(),
         "origin_logits": origin_logits.detach().cpu(),
         "comparison": comparison_results,
-    }, save_dir / "comparison_results.pt")
+    }, save_dir / "comparison_results_video.pt")
     
     logger.info(f"\n💾 Results saved to {save_dir}")
     logger.info("\n✅ Comparison Completed!")
