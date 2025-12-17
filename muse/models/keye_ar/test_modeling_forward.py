@@ -22,7 +22,9 @@ def load_keye_ar_model():
     
     # 加载processor和配置
     processor = AutoProcessor.from_pretrained(output_model_dir, trust_remote_code=True)
-    config = UnifiedQwen3Config.from_pretrained(output_model_dir)
+
+    # muse/config/base.py
+    config = UnifiedQwen3Config.load(output_model_dir + "/config.json")
     
     # 创建模型实例
     model = KeyeARModel(config)
