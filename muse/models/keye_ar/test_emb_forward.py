@@ -205,7 +205,7 @@ print(f"output1={output1}")
 print(f"output2={output2}")
 
 
-extended_tokens[extended_tokens==-100] = 151981
+extended_tokens[extended_tokens==-100] = 151681
 # 运行测试
 print("\n=== 测试第一个函数 ===")
 output1 = test1.infer_id_embs(extended_tokens, group_size=9)
