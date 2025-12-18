@@ -105,8 +105,8 @@ hidden_act=hidden_act,
         model_class="UnifiedTokenDecoder",  # 添加model_class字段
         vocab_size=codebook_size,
         d_model=token_head_dim,
-        nhead=token_head_nhead,
-        num_layers=1,  # 默认值
+nhead=token_head_nhead,
+num_layers=1,  # 默认值
         dim_feedforward=token_head_intermediate_dim,
         input_dim=hidden_size,
         reduce=True
@@ -238,8 +238,7 @@ def load_keye_ar_model_v2(output_model_dir, device):
         torch_dtype=torch.bfloat16, 
         low_cpu_mem_usage=True
     )
-    
-    # 获取KeyeForConditionalGeneration的state_dict
+# 获取KeyeForConditionalGeneration的state_dict
     keye_state_dict = keye_model.state_dict()
     
     # 转换为KeyeARModel的state_dict
@@ -398,10 +397,21 @@ class LayerAlignmentHook:
         self.layer_modules[layer_name] = {
             'module': module,
             'module_type': type(module).__name__,
-            'module_str': str(module)
+            'module_str': str(module),
+            'module_full_name': module.__class__.__module__ + '.' + module.__class__.__name__
         }
         
-        def hook(module_input, input, output):
+        def hook(module, input, output):
+            # 在hook执行时也更新模块信息，确保获取到最新的模块状态
+            self.layer_modules[layer_name] = {
+                'module': module,
+                'module_type': type(module).__name__,
+                'module_str': str(module),
+                'module_full_name': module.__class__.__module__ + '.' + module.__class__.__name__,
+                'input_shapes': [inp.shape if hasattr(inp, 'shape') else str(type(inp)) for inp in input],
+                'output_shape': output.shape if hasattr(output, 'shape') else str(type(output))
+            }
+            
             if len(self.layer_outputs[layer_name]) == 1:
                 print(f"跳过{layer_name}的第二个输出") # 只需要第一个
                 return
@@ -431,6 +441,12 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
     print("层对齐分析报告")
     print("="*80)
     
+    # 调试信息：打印可用的层和模块信息
+    print(f"调试信息 - {hook1.model_name} 可用的层: {list(hook1.layer_outputs.keys())}")
+    print(f"调试信息 - {hook2.model_name} 可用的层: {list(hook2.layer_outputs.keys())}")
+    print(f"调试信息 - {hook1.model_name} 存储的模块信息: {list(hook1.layer_modules.keys())}")
+    print(f"调试信息 - {hook2.model_name} 存储的模块信息: {list(hook2.layer_modules.keys())}")
+    
     all_success = True
     layer_comparisons = {}
     
@@ -455,17 +471,29 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
             if layer_name in hook1.layer_modules:
                 module_info = hook1.layer_modules[layer_name]
                 print(f"  模块类型: {module_info['module_type']}")
+                print(f"  模块完整名称: {module_info['module_full_name']}")
                 print(f"  模块标识: {module_info['module_str']}")
+                if 'input_shapes' in module_info:
+                    print(f"  输入形状: {module_info['input_shapes']}")
+                if 'output_shape' in module_info:
+                    print(f"  输出形状: {module_info['output_shape']}")
             else:
                 print("  模块信息未记录")
+                print(f"  可用的模块信息键: {list(hook1.layer_modules.keys())}")
             
             print(f"\n{hook2.model_name} 模块信息:")
             if layer_name in hook2.layer_modules:
                 module_info = hook2.layer_modules[layer_name]
                 print(f"  模块类型: {module_info['module_type']}")
+                print(f"  模块完整名称: {module_info['module_full_name']}")
                 print(f"  模块标识: {module_info['module_str']}")
+                if 'input_shapes' in module_info:
+                    print(f"  输入形状: {module_info['input_shapes']}")
+                if 'output_shape' in module_info:
+                    print(f"  输出形状: {module_info['output_shape']}")
             else:
                 print("  模块信息未记录")
+                print(f"  可用的模块信息键: {list(hook2.layer_modules.keys())}")
             
             print(f"\n=== 详细输出信息 ===")
             print(f"outputs1({[x.shape for x in outputs1]})={outputs1}")
@@ -484,17 +512,29 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
                 if layer_name in hook1.layer_modules:
                     module_info = hook1.layer_modules[layer_name]
                     print(f"  模块类型: {module_info['module_type']}")
+                    print(f"  模块完整名称: {module_info['module_full_name']}")
                     print(f"  模块标识: {module_info['module_str']}")
+                    if 'input_shapes' in module_info:
+                        print(f"  输入形状: {module_info['input_shapes']}")
+                    if 'output_shape' in module_info:
+                        print(f"  输出形状: {module_info['output_shape']}")
                 else:
                     print("  模块信息未记录")
+                    print(f"  可用的模块信息键: {list(hook1.layer_modules.keys())}")
                 
                 print(f"\n{hook2.model_name} 模块信息:")
                 if layer_name in hook2.layer_modules:
                     module_info = hook2.layer_modules[layer_name]
                     print(f"  模块类型: {module_info['module_type']}")
+                    print(f"  模块完整名称: {module_info['module_full_name']}")
                     print(f"  模块标识: {module_info['module_str']}")
+                    if 'input_shapes' in module_info:
+                        print(f"  输入形状: {module_info['input_shapes']}")
+                    if 'output_shape' in module_info:
+                        print(f"  输出形状: {module_info['output_shape']}")
                 else:
                     print("  模块信息未记录")
+                    print(f"  可用的模块信息键: {list(hook2.layer_modules.keys())}")
                 
                 print(f"\n=== 详细输出信息 ===")
                 print(f"{hook1.model_name} 输出 (out1):")
@@ -549,17 +589,29 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
                 if layer_name in hook1.layer_modules:
                     module_info = hook1.layer_modules[layer_name]
                     print(f"  模块类型: {module_info['module_type']}")
+                    print(f"  模块完整名称: {module_info['module_full_name']}")
                     print(f"  模块标识: {module_info['module_str']}")
+                    if 'input_shapes' in module_info:
+                        print(f"  输入形状: {module_info['input_shapes']}")
+                    if 'output_shape' in module_info:
+                        print(f"  输出形状: {module_info['output_shape']}")
                 else:
                     print("  模块信息未记录")
+                    print(f"  可用的模块信息键: {list(hook1.layer_modules.keys())}")
                 
                 print(f"\n{hook2.model_name} 模块信息:")
                 if layer_name in hook2.layer_modules:
                     module_info = hook2.layer_modules[layer_name]
                     print(f"  模块类型: {module_info['module_type']}")
+                    print(f"  模块完整名称: {module_info['module_full_name']}")
                     print(f"  模块标识: {module_info['module_str']}")
+                    if 'input_shapes' in module_info:
+                        print(f"  输入形状: {module_info['input_shapes']}")
+                    if 'output_shape' in module_info:
+                        print(f"  输出形状: {module_info['output_shape']}")
                 else:
                     print("  模块信息未记录")
+                    print(f"  可用的模块信息键: {list(hook2.layer_modules.keys())}")
                 
                 print(f"\n=== 详细输出信息 ===")
                 print(f"{hook1.model_name} 输出 (out1):")
@@ -580,28 +632,21 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
                 print(f"平均相对误差: {mean_relative_diff:.6e}")
                 
                 # 输出差异最大的位置
-                max_diff_indices = torch.argmax(abs_diff.view(-1))
-                max_diff_pos = np.unravel_index(max_diff_indices.item(), out1.shape)
-                print(f"最大差异位置: {max_diff_pos}")
-                print(f"该位置的值: {hook1.model_name}: {out1_f32[max_diff_pos]:.6f}, {hook2.model_name}: {out2_f32[max_diff_pos]:.6f}")
-                print(f"绝对差异: {abs_diff[max_diff_pos]:.6e}")
-                print(f"相对差异: {relative_diff[max_diff_pos]:.6e}")
+                max_diff_idx = torch.argmax(abs_diff)
+                max_diff_idx_unraveled = np.unravel_index(max_diff_idx.item(), out1.shape)
+                print(f"最大差异位置: {max_diff_idx_unraveled}")
+                print(f"  在{layer_name}[{i}]的该位置:")
+                print(f"  {hook1.model_name} 值: {out1_f32.flatten()[max_diff_idx].item():.6f}")
+                print(f"  {hook2.model_name} 值: {out2_f32.flatten()[max_diff_idx].item():.6f}")
+                print(f"  绝对差异: {abs_diff.flatten()[max_diff_idx].item():.6e}")
                 
-                layer_success = False
                 all_success = False
+                layer_comparisons[layer_name] = False
                 return False, layer_comparisons
-            else:
+            
+            if layer_success:
                 print(f"✅ {layer_name}[{i}]: 输出一致")
-                print(f"     最大绝对误差: {max_abs_diff:.6e}")
-                print(f"     最大相对误差: {max_relative_diff:.6e}")
-        
-        layer_comparisons[layer_name] = layer_success
-    
-    print("\n" + "="*80)
-    if all_success:
-        print("🎉 所有层输出完全一致！")
-    else:
-        print("❌ 部分层输出不一致，请检查上述报告")
+                layer_comparisons[layer_name] = True
     
     return all_success, layer_comparisons
 
@@ -777,7 +822,6 @@ def main():
         # 移除hook
         conditional_hook.remove_hooks()
         ar_hook.remove_hooks()
-        
         # 输出最终结果
         print("\n" + "="*80)
         print("最终验证结果")
