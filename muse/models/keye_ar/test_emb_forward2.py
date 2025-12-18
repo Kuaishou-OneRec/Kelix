@@ -16,7 +16,7 @@ class FirstClass(nn.Module):
         self.q_eos_token = 151681  # 从extended_tokens中可以看出eos token是151681
         self.pre_embedding_size = None
         self.pre_embedding_tokens = None
-        self.embed_tokens = nn.Embedding(vocab_size, hidden_size)
+        self.embed_tokens = nn.Embedding(vocab_size + 65536, hidden_size)
         self.pre_embedding = None
         self.pre_embedding_linear = None
         
@@ -86,7 +86,7 @@ class SecondClass(nn.Module):
         super().__init__()
         self.config = MockConfig()
         self.pre_embedding_size = None
-        self.embed_tokens = nn.Embedding(vocab_size, hidden_size)
+        self.embed_tokens = nn.Embedding(vocab_size + 65536, hidden_size)
         self.pre_embedding = None
         self.pre_embedding_linear = None
 
