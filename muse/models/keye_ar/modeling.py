@@ -339,7 +339,7 @@ class UnifiedQwen3Model(Qwen3Model):
         print(f"uuuu22222", input_ids.shape)
         # 调用父类的forward方法获取基本功能
         outputs = super().forward(
-            input_ids=input_ids,
+            tokens=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
