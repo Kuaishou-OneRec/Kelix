@@ -609,6 +609,10 @@ class UnifiedTokenDecoderConfig(ModelConfig):
         default=8192,
         description="Vocabulary size for the token decoder"
     )
+    max_pos_length: int = Field(
+        default=65537,
+        description="Maximum sequence length"
+    )
     max_length: int = Field(
         default=9,
         description="Maximum sequence length"

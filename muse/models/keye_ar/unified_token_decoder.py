@@ -25,6 +25,7 @@ class UnifiedTokenDecoder(Model):
         # 从config中提取参数
         vocab_size = config.vocab_size
         max_length = config.max_length
+        max_pos_length = config.max_pos_length
         d_model = config.d_model
         eos_token = config.eos_token
         nhead = config.nhead
@@ -38,6 +39,7 @@ class UnifiedTokenDecoder(Model):
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.max_length = max_length
+        self.max_pos_length = max_pos_length
         self.eos_token = eos_token
         self.use_gradient_checkpointing = use_gradient_checkpointing
         self.input_dim = input_dim
@@ -59,7 +61,7 @@ class UnifiedTokenDecoder(Model):
             self.token_embedding = nn.Embedding(vocab_size, d_model)
         
         # 位置编码 - 添加可训练的位置编码以匹配原始模型
-        self.position_embedding = nn.Embedding(max_length, d_model)
+        self.position_embedding = nn.Embedding(self.max_pos_length, d_model)
         
         # 创建解码器层
         layers = []
