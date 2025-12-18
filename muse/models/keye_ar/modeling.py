@@ -645,6 +645,8 @@ class KeyeARModel(Model):
                 aligned_indices = torch.stack([x_i for x_i in vq_out['indices']], 0).T
                 aligned_indices = self.vocab_size + aligned_indices + torch.arange(self.config.tokenizer_config.n_q_tokens).\
                     to(tokens)[None] * self.config.tokenizer_config.codebook_size // self.config.tokenizer_config.n_q_tokens
+                import IPython
+                IPython.embed()
         else:
             aligned_indices = torch.zeros(0, self.config.tokenizer_config.n_q_tokens).to(tokens)
         
