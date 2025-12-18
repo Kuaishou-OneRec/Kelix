@@ -24,6 +24,8 @@ import os
 import random
 import json
 import logging
+import base64
+from io import BytesIO
 
 import torch
 import torch.nn as nn
@@ -1404,39 +1406,179 @@ class ChatCompletionVisionDataset(DistributedDataset):
     }
     return inputs
 
+  def _load_images_to_wrapper(self, images: Any, wrapper: Dict[str, Any], sample: Dict[str, Any]) -> None:
+    """
+    从路径或 base64 加载图片到 wrapper。
+    支持：
+    - 文件路径：直接用 Image.open 加载
+    - base64 字符串：解码后加载
+    """
+    if images is None:
+      return
+    
+    if isinstance(images, str):
+      try:
+        images = json.loads(images)
+      except Exception as e:
+        logger.warning(f"Failed to parse images json: {e}")
+        return
+    
+    if not isinstance(images, dict):
+      logger.warning(f"Unsupported images type: {type(images)}, expected dict")
+      return
+    
+    for image_name, image_value in images.items():
+      if image_value is None:
+        continue
+      
+      # 检查是否是有效文件路径
+      if isinstance(image_value, str) and os.path.exists(image_value):
+        try:
+          image = Image.open(image_value)
+          wrapper[image_name] = image
+        except Exception as e:
+          logger.warning(f"Failed to load image from path {image_value}: {e}")
+      # 否则按 base64 处理
+      elif isinstance(image_value, str):
+        try:
+          image_bytes = base64.b64decode(image_value)
+          image_bytes_stream = BytesIO(image_bytes)
+          image = Image.open(image_bytes_stream)
+          wrapper[image_name] = image
+        except Exception as e:
+          logger.warning(f"Failed to decode base64 image {image_name}: {e}")
+      # 已经是 PIL Image
+      elif hasattr(image_value, 'mode'):
+        wrapper[image_name] = image_value
+      else:
+        logger.warning(f"Unsupported image value type for {image_name}: {type(image_value)}")
+
+  def _load_videos_to_wrapper(self, videos: Any, wrapper: Dict[str, Any], sample: Dict[str, Any]) -> None:
+    """
+    处理视频路径，将 messages 中的视频占位符替换为实际路径。
+    """
+    if videos is None:
+      return
+    
+    if isinstance(videos, str):
+      try:
+        videos = json.loads(videos)
+      except Exception as e:
+        logger.warning(f"Failed to parse videos json: {e}")
+        return
+    
+    if not videos:
+      return
+    
+    if isinstance(videos, list):
+      logger.warning(f"Unexpected list of videos: {videos}, skip")
+      return
+    
+    if not isinstance(videos, dict):
+      logger.warning(f"Unsupported videos type: {type(videos)}, expected dict")
+      return
+    
+    # 获取 messages
+    messages = wrapper.get("json", {}).get("messages", [])
+    if not messages:
+      messages = wrapper.get("json", {}).get("message", [])
+    
+    for video_name, video_path in videos.items():
+      if video_path is None:
+        continue
+      
+      # 检查是否是有效文件路径
+      if isinstance(video_path, str) and os.path.exists(video_path):
+        # 将视频路径放到 wrapper 中供后续使用
+        wrapper[video_name] = video_path
+        
+        # 同时替换 messages 中的视频引用
+        try:
+          for message in messages:
+            if not isinstance(message, dict):
+              continue
+            contents = message.get('content', [])
+            if isinstance(contents, str):
+              continue
+            if not isinstance(contents, list):
+              continue
+            for content in contents:
+              if isinstance(content, dict) and content.get('type') == 'video' and content.get('video') == video_name:
+                content['video'] = video_path
+        except Exception as e:
+          logger.warning(f"Failed to substitute video path for {video_name}: {e}")
+      elif isinstance(video_path, str):
+        # 视频路径不存在，但仍然放到 wrapper 中（可能是远程路径）
+        wrapper[video_name] = video_path
+      elif isinstance(video_path, bytes):
+        # 视频字节数据
+        wrapper[video_name] = video_path
+      else:
+        logger.warning(f"Unsupported video value type for {video_name}: {type(video_path)}")
+
   def process(self, sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
     """
     Process a single sample from Parquet.
     Wraps the sample to match the expected format of _process.
+    
+    整合了 NaiveParquetDataset 的数据解析机制：
+    1. JSON 字符串字段解析
+    2. 图片加载（支持路径和 base64）
+    3. 视频路径处理
     """
-    # 解析常见的 JSON 字符串字段
+    # 1. 解析常见的 JSON 字符串字段
     # Parquet 读取出来的 messages, images, videos 通常是 string，需要反序列化
-    parse_keys = ["messages", "images", "videos", "segments", "chosen", "rejected"]
+    parse_keys = ["messages", "message", "images", "videos", "segments", "chosen", "rejected", "metadata"]
     for key in parse_keys:
       if key in sample and sample[key] is not None and isinstance(sample[key], str):
         try:
           sample[key] = json.loads(sample[key])
         except Exception as e:
-          logger.warning(f"Failed to parse json field {key} in sample {sample.get('__key__', 'unknown')}: {e}")
+          if np.random.rand() < 0.01:
+            logger.warning(f"Failed to parse json field {key} in sample {sample.get('uuid', sample.get('__key__', 'unknown'))}: {e}")
+
+    # 2. 验证 messages/segments 格式
+    messages = sample.get("messages") or sample.get("message")
+    segments = sample.get("segments")
+    
+    if messages is not None:
+      if isinstance(messages, np.ndarray):
+        sample["messages"] = messages.tolist()
+      elif not isinstance(messages, list):
+        raise ValueError(f"Invalid messages format: expected list, got {type(messages)}")
+    elif segments is not None:
+      if isinstance(segments, np.ndarray):
+        sample["segments"] = segments.tolist()
+      elif not isinstance(segments, list):
+        raise ValueError(f"Invalid segments format: expected list, got {type(segments)}")
+    else:
+      raise ValueError(f"Sample missing both 'messages' and 'segments' fields")
 
     source_name = sample.get("source", "None")
     
-    # Wrap sample to match existing logic which expects {"json": sample}
-    wrapper = {"json": sample}
+    # 3. 构建 wrapper
+    wrapper = {
+      "json": sample,
+      "__key__": sample.get("uuid", sample.get("__key__", "unknown")),
+      "__url__": sample.get("__url__", "unknown"),
+    }
     
-    # 将 images 和 videos 字典打平放到 wrapper 根目录下
-    # 因为 _fill_image_block 和 _fill_video_block 会在 sample_dict (即这里的 wrapper) 中
-    # 查找图片/视频的 key (例如 "image1": "/path/to/img.jpg")
-    if "images" in sample and isinstance(sample["images"], dict):
-      wrapper.update(sample["images"])
+    # 4. 加载图片到 wrapper（支持路径和 base64）
+    self._load_images_to_wrapper(sample.get("images"), wrapper, sample)
     
-    if "videos" in sample and isinstance(sample["videos"], dict):
-      wrapper.update(sample["videos"])
+    # 5. 处理视频路径
+    self._load_videos_to_wrapper(sample.get("videos"), wrapper, sample)
 
-    # Update epoch_idx if available
-    wrapper["epoch_idx"] = 0 # Default, or fetch from self if we track it
+    # 6. Update epoch_idx if available
+    wrapper["epoch_idx"] = sample.get("epoch_idx", 0)
     
     return self._process(wrapper, source_name)
+  
+  def pack_sample(self, buffer: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+    return self._packing(buffer)
+
+  def get_sample_length(self, sample: Dict[str, torch.Tensor]) -> int:
+    return sample["input_ids"].shape[-1]
 
 
 
