@@ -532,25 +532,9 @@ class KeyeARModel(Model):
             # Convert using KeyeImageTokenizer's convert_hf_state_dict method
             converted_visual_tokenizer_state_dict = self.visual_tokenizer.convert_hf_state_dict(visual_tokenizer_state_dict)
             
-            # Add back the "visual_tokenizer." prefix and update the main converted_state_dict
             for k, v in converted_visual_tokenizer_state_dict.items():
-                # 确保键有正确的前缀
-                # if not k.startswith("visual."):
-                #     converted_key = f"visual_tokenizer.visual.{k}"
-                # else:
                 converted_key = f"visual_tokenizer.{k}"
                 converted_state_dict[converted_key] = v
-        
-        # 修复UnifiedTokenDecoder的前缀问题
-        # 查找所有token_head相关的键并确保它们有正确的前缀
-        token_head_keys = [k for k in converted_state_dict.keys() if "token_head" in k]
-        for k in token_head_keys:
-            # 确保token_head键有正确的前缀
-            if not k.startswith("model.token_head."):
-                # 移除旧键并添加带正确前缀的新键
-                tensor = converted_state_dict.pop(k)
-                new_key = f"model.{k}" if not k.startswith("model.") else k
-                converted_state_dict[new_key] = tensor
         
         return converted_state_dict
 

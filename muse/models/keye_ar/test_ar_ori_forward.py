@@ -25,6 +25,7 @@ import argparse  # 添加argparse模块导入
 from muse.models.keye_ar.ar_ori import KeyeForConditionalGeneration#, KeyeImageTokenizer
 
 from keye_vl_utils import process_vision_info
+import IPython
 
 
 def generate_circle_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(255, 255, 255), outline_width=5):
@@ -81,7 +82,7 @@ processor = AutoProcessor.from_pretrained(
             output_model_dir, 
             trust_remote_code=True
         )
-        
+IPython.embed()
 
 def process_message( messages, add_generation_prompt=True, padding=False):
     text = processor.apply_chat_template(
