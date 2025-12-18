@@ -57,6 +57,7 @@ class FirstClass(nn.Module):
         else:
             stage2_embeds = self.embed_tokens(safe_visual_indices)
             print("222222", stage2_embeds.shape)
+            print(stage2_embeds[0,6])
             visual_embeds_final = stage2_embeds
 
         mask_final = is_visual_group.unsqueeze(-1).expand_as(text_embeds)
