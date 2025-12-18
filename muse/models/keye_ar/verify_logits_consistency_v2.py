@@ -425,8 +425,8 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
         
         if len(outputs1) != len(outputs2):
             print(f"❌ {layer_name}: 输出数量不匹配 ({len(outputs1)} vs {len(outputs2)})")
-            print(f"outputs1={outputs1}")
-            print(f"outputs2={outputs2}")
+            print(f"outputs1({[x.shape for x in outputs1]})={outputs1}")
+            print(f"outputs2({[x.shape for x in outputs2]})={outputs2}")
             all_success = False
             layer_comparisons[layer_name] = False
             continue
