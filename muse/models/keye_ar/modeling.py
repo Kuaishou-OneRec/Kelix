@@ -301,7 +301,7 @@ class UnifiedQwen3Model(Qwen3Model):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
+        tokens: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
@@ -318,7 +318,7 @@ class UnifiedQwen3Model(Qwen3Model):
         前向传播函数，支持input_image_ids处理
         
         Args:
-            input_ids: 输入token IDs
+            tokens: 输入token IDs
             attention_mask: 注意力掩码
             position_ids: 位置IDs
             past_key_values: 过去的key/value缓存
@@ -330,16 +330,16 @@ class UnifiedQwen3Model(Qwen3Model):
             input_image_ids: 输入图像token IDs
             cache_position: 缓存位置
         """
-        print(f"uuuu1111", input_ids.shape)
-        if input_ids.size(-1) == 1:
-            input_ids = self.model.tok_embeddings.expand_input_ids(
+        print(f"uuuu1111", tokens.shape)
+        if tokens.size(-1) == 1:
+            tokens = self.model.tok_embeddings.expand_input_ids(
                 input_image_ids=input_image_ids,
-                input_ids=input_ids,
+                tokens=tokens,
             )
-        print(f"uuuu22222", input_ids.shape)
+        print(f"uuuu22222", tokens.shape)
         # 调用父类的forward方法获取基本功能
         outputs = super().forward(
-            tokens=input_ids,
+            tokens=tokens,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -475,14 +475,14 @@ class KeyeARModel(Model):
     def expand_with_image_tokens(
         self,
         input_image_ids: torch.Tensor,
-        input_ids: torch.Tensor,
+        tokens: torch.Tensor,
     ) -> torch.Tensor:
         """
         拓展input_ids矩阵，将image_token_id对应的行替换为input_image_ids和eos_token
         
         参数说明：
             input_image_ids: 图像索引矩阵，维度为 (im_len, n_q_tokens)
-            input_ids: 原始输入ID矩阵，维度为 (batch_size, len) 或 (batch_size, len, 1)
+            tokens: 原始输入ID矩阵，维度为 (batch_size, len) 或 (batch_size, len, 1)
             padded_token: 填充标记的整数ID
             image_token_id: 用于标识需要替换为图像tokens的特殊标记ID
         
@@ -490,24 +490,24 @@ class KeyeARModel(Model):
             expanded_ids: 拓展后的矩阵，维度为 (batch_size, len, 1 + n_q_tokens)
         """
         # 记录原始维度
-        original_shape = input_ids.shape
+        original_shape = tokens.shape
         batch_size = original_shape[0]
         
         # 如果是3D且最后一维为1，则squeeze最后一维
-        if input_ids.dim() == 3 and input_ids.size(-1) == 1:
-            input_ids = input_ids.squeeze(-1)
-        elif input_ids.dim() != 2:
-            raise ValueError(f"input_ids必须是2D或3D张量，当前为 {input_ids.shape}")
+        if tokens.dim() == 3 and tokens.size(-1) == 1:
+            tokens = tokens.squeeze(-1)
+        elif tokens.dim() != 2:
+            raise ValueError(f"input_ids必须是2D或3D张量，当前为 {tokens.shape}")
             
         # 确保input_ids是2D (batch_size, len)
-        assert input_ids.dim() == 2, f"input_ids必须是2D张量，当前为 {input_ids.shape}"
+        assert tokens.dim() == 2, f"input_ids必须是2D张量，当前为 {tokens.shape}"
         
         # 获取序列长度
-        len_seq = input_ids.size(1)
+        len_seq = tokens.size(1)
         output_dim = 1 + self.config.tokenizer_config.n_q_tokens  # 输出矩阵的列数
         
         # 将input_ids flatten成 (batch_size * len, 1) 的形式以便处理
-        flattened_input_ids = input_ids.view(-1, 1)  # (batch_size * len, 1)
+        flattened_input_ids = tokens.view(-1, 1)  # (batch_size * len, 1)
         
         # 初始化输出矩阵，所有位置先填充q_eos_token
         flattened_expanded_ids = torch.full(
@@ -547,7 +547,7 @@ class KeyeARModel(Model):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        tokens: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         pixel_values: Optional[torch.Tensor] = None,
@@ -559,19 +559,19 @@ class KeyeARModel(Model):
                 vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
                 aligned_indices = torch.stack([x_i for x_i in vq_out['indices']], 0).T
                 aligned_indices = self.vocab_size + aligned_indices + torch.arange(self.config.tokenizer_config.n_q_tokens).\
-                    to(input_ids)[None] * self.config.tokenizer_config.codebook_size // self.config.tokenizer_config.n_q_tokens
+                    to(tokens)[None] * self.config.tokenizer_config.codebook_size // self.config.tokenizer_config.n_q_tokens
         else:
-            aligned_indices = torch.zeros(0, self.config.tokenizer_config.n_q_tokens).to(input_ids)
+            aligned_indices = torch.zeros(0, self.config.tokenizer_config.n_q_tokens).to(tokens)
         
-        input_ids = self.expand_with_image_tokens(aligned_indices, input_ids)
+        tokens = self.expand_with_image_tokens(aligned_indices, tokens)
         assert position_ids.ndim == 2, "position_ids must be 2D"
-        assert input_ids.ndim == 3, "input_ids must be 3D after expansion, get {}".format(input_ids.shape)
-        assert input_ids.size(2) == self.config.qwen_config.n_q_tokens + 1, \
-            "input_ids must have {} columns after expansion, get {}. aligned_indices: {}".format(self.config.qwen_config.n_q_tokens + 1, input_ids.size(2), aligned_indices)
-        print(f"input_ids={input_ids.shape}, position_ids={position_ids.shape}")
+        assert tokens.ndim == 3, "tokens must be 3D after expansion, get {}".format(tokens.shape)
+        assert tokens.size(2) == self.config.qwen_config.n_q_tokens + 1, \
+            "tokens must have {} columns after expansion, get {}. aligned_indices: {}".format(self.config.qwen_config.n_q_tokens + 1, tokens.size(2), aligned_indices)
+        print(f"tokens={tokens.shape}, position_ids={position_ids.shape}")
         # 调用Qwen3Model
         outputs = self.model(
-            input_ids=input_ids,
+            tokens=tokens,
             attention_mask=attention_mask,
             position_ids=position_ids,
             **kwargs
