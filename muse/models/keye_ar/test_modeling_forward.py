@@ -282,7 +282,8 @@ def test_forward():
     ]
     
     inputs = process_message(messages, processor, device)
-    
+    inputs["position_ids"] = torch.arange(0, inputs["input_ids"].size(1)).unsqueeze(0).to(device)    
+ 
     # 使用与test_ar_ori_forward.py相同的autocast逻辑
     if torch.cuda.is_available():
         autocast_cm = torch.cuda.amp.autocast
