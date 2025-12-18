@@ -21,7 +21,7 @@ VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i_ae_freeze_up_1024px_scale1.0
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i_ae_up_1024px_s1.0_cond1024
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
@@ -118,24 +118,23 @@ nohup mpirun --allow-run-as-root \
         with_nccl_local_env \
         bash -c "python3 recipes/train_sana_ae.py \
                 --visualize-dir $VISUALIZE_DIR \
-                --visualize-per-step 30 \
+                --visualize-per-step 100 \
                 --num-vis-images 10 \
                 --model-dir $MODEL_DIR \
                 --vae-dir $VAE_DIR \
                 --image-tokenizer-dir $IMAGE_TOKENIZER_DIR \
-                --max-condition-length 324 \
+                --max-condition-length 1024 \
                 --output-dir $OUTPUT_DIR \
                 --skip-load-params "y_embedder,cross_attn,attention_y_norm" \
-                --freeze-params "^y_embedder,^cross_attn,^attention_y_norm" \
                 --dataset-config examples/sana/ae-mix.json \
                 --learning-rate 1e-4 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
-                --model-config-overrides caption_channels=1024 model_max_length=324 y_norm_scale_factor=1 \
+                --model-config-overrides caption_channels=1024 model_max_length=1024 y_norm_scale_factor=1 \
                 --beta2 0.999 \
-                --batch-size 32 \
+                --batch-size 16 \
                 --lr-scheduler-type constant \
                 --num-warmup-steps 2000 \
                 --num-training-steps 100000 \

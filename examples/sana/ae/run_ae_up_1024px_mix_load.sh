@@ -21,7 +21,7 @@ VAE_DIR=/llm_reco_ssd/zhouyang12/models/SANA1.5_1.6B_1024px_diffusers/vae/
 IMAGE_TOKENIZER_DIR=/llm_reco_ssd/zhouyang12/models/muse/KeyeTokenizer/
 VISUALIZE_DIR=/llm_reco_ssd/zhouyang12/data/val_images/
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i_ae_freeze_up_1024px_scale1.0
+OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/sana/t2i_ae_up_1024px_load
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
@@ -58,7 +58,7 @@ TCP_NIC=$(ifconfig | grep -B1 " "$(hostname -i)" " | grep -o "^\w*")
 
 MASTER_ADDR=$MY_NODE_IP
 MASTER_PORT=8499
-
+# --skip-load-params "y_embedder,cross_attn,attention_y_norm" \复用所有参数，不随机初始化
 nohup mpirun --allow-run-as-root \
         -hostfile $hostfile \
         -mca btl self,tcp -mca pml ob1 \
@@ -125,15 +125,14 @@ nohup mpirun --allow-run-as-root \
                 --image-tokenizer-dir $IMAGE_TOKENIZER_DIR \
                 --max-condition-length 324 \
                 --output-dir $OUTPUT_DIR \
-                --skip-load-params "y_embedder,cross_attn,attention_y_norm" \
-                --freeze-params "^y_embedder,^cross_attn,^attention_y_norm" \
                 --dataset-config examples/sana/ae-mix.json \
+                --allow-random-init-params "y_embedder.y_proj.fc1.weight,y_embedder.y_embedding" \
                 --learning-rate 1e-4 \
                 --min-lr 1e-7 \
                 --weight-decay 0.0 \
                 --image-size 1024 \
                 --beta1 0.9 \
-                --model-config-overrides caption_channels=1024 model_max_length=324 y_norm_scale_factor=1 \
+                --model-config-overrides caption_channels=1024 model_max_length=324 \
                 --beta2 0.999 \
                 --batch-size 32 \
                 --lr-scheduler-type constant \
