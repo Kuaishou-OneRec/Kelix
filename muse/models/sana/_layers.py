@@ -812,6 +812,11 @@ class SanaMSBlock(nn.Module):
         
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         
+        # Cross attention norm (fixes training instability - see SANA 1.5)
+        ## DEBUG Start
+        self.norm_cross = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        ## DEBUG End
+
         # FFN
         if ffn_type == "mlp":
             approx_gelu = lambda: nn.GELU(approximate="tanh")
@@ -860,16 +865,21 @@ class SanaMSBlock(nn.Module):
                 rotary_emb=image_rotary_emb,
             )
         )
+        # Cross-attention with norm (FIX: added norm_cross for training stability)
+        # DEBUG Start
+        x_normed = self.norm_cross(x)
+        # DEBUG End
         # #region agent log
         try:
             import json, os, torch.distributed as _dist
             if not _dist.is_initialized() or _dist.get_rank() == 0:
                 _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_new/debug.log"
-                with open(_log_path, "a") as _f: _f.write(json.dumps({"hypothesisId": "H1", "location": "_layers.py:SanaMSBlock.forward", "message": "x before cross_attn", "data": {"mean": float(x.mean()), "std": float(x.std()), "max": float(x.abs().max())}, "timestamp": __import__("time").time()}) + "\n")
+                with open(_log_path, "a") as _f: _f.write(json.dumps({"hypothesisId": "H1", "location": "_layers.py:SanaMSBlock.forward", "message": "x before cross_attn (after norm)", "data": {"mean": float(x_normed.mean()), "std": float(x_normed.std()), "max": float(x_normed.abs().max())}, "timestamp": __import__("time").time()}) + "\n")
         except: pass
         # #endregion
-        # Cross-attention
-        cross_attn_out = self.cross_attn(x, y, mask)
+        # DEBUG Start
+        cross_attn_out = self.cross_attn(x_normed, y, mask)
+        # DEBUG End
         # #region agent log
         try:
             if not _dist.is_initialized() or _dist.get_rank() == 0:
