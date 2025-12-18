@@ -431,7 +431,7 @@ class UnifiedQwen3Model(Qwen3Model):
             del converted_state_dict['model.token_head.token_embedding.weight']
 
         if not tie_word_embeddings:
-            converted_state_dict["model.output.weight"] = converted_state_dict["lm_head.weight"]
+            converted_state_dict["model.output.weight"] = hf_state_dict["lm_head.weight"]
         import IPython
         IPython.embed()
         return converted_state_dict
