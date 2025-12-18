@@ -91,6 +91,8 @@ class UnifiedTokenEmbedding(nn.Module):
         embeddings = self._get_token_embeddings(extended_tokens)
         if aggregation:
             aggregated_embeddings = self._embedding_aggregation(extended_tokens, embeddings)
+            import IPython
+            IPython.embed()
             return aggregated_embeddings
         else:
             return embeddings
@@ -178,6 +180,7 @@ class UnifiedTokenEmbedding(nn.Module):
             text_embeds = text_embeds.repeat_interleave(group_size - 1, dim=2)
         
         token_inputs_embeds = torch.where(mask_final[:, :, None, :], visual_embeds_final, text_embeds)
+
         return token_inputs_embeds
     
 
