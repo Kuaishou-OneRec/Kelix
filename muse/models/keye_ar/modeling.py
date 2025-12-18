@@ -501,6 +501,7 @@ class KeyeARModel(Model):
             
             # Add back the "visual_tokenizer." prefix and update the main converted_state_dict
             for k, v in converted_visual_tokenizer_state_dict.items():
+                print(f"convertion: {k} -> {converted_key}")
                 converted_key = f"visual_tokenizer.{k}"
                 converted_state_dict[converted_key] = v
         
