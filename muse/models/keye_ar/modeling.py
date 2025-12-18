@@ -477,8 +477,8 @@ class KeyeARModel(Model):
                 main_model_state_dict[new_k] = tensor
             elif hf_key.startswith("quant_projector."):
                 # Convert quant_projector to up_projectors
-                new_k = hf_key.replace("quant_projector.", "visual_tokenizer.up_projectors.")
-                main_model_state_dict[new_k] = tensor
+                new_k = hf_key.replace("quant_projector.", "up_projectors.")
+                visual_tokenizer_state_dict[new_k] = tensor
             elif hf_key.startswith("model.model.layers."):
                 # Handle nested model structure: model.model.layers.* -> model.layers.*
                 # Remove the extra "model." prefix to match Qwen3Model's expected format
@@ -516,13 +516,11 @@ class KeyeARModel(Model):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs
         )
-
         # 修复：将"model."前缀加回到转换后的键上
         final_converted_state_dict = {}
         for k, v in converted_state_dict.items():
             # 如果键不是以"model."开头，则添加"model."前缀
             final_converted_state_dict[f"model.{k}"] = v
-            print(f"after convert {k}: {v.shape}")
             
         # 更新converted_state_dict引用
         converted_state_dict = final_converted_state_dict
@@ -539,9 +537,17 @@ class KeyeARModel(Model):
             for k, v in converted_visual_tokenizer_state_dict.items():
                 converted_key = f"visual_tokenizer.{k}"
                 converted_state_dict[converted_key] = v
+                
+        # 特殊处理：确保tok_embeddings.embed_tokens.weight有正确的键名
+        if "model.tok_embeddings.embed_tokens.weight" in converted_state_dict:
+            # 移动到model.model.tok_embeddings.embed_tokens.weight
+            weight = converted_state_dict.pop("model.tok_embeddings.embed_tokens.weight")
+            converted_state_dict["model.model.tok_embeddings.embed_tokens.weight"] = weight
+            
         if 'model.model.token_head.token_embedding.weight' in converted_state_dict:
             print("delete model.model.token_head.token_embedding.weight")
             del converted_state_dict['model.model.token_head.token_embedding.weight']
+            
         return converted_state_dict
 
     def expand_with_image_tokens(
