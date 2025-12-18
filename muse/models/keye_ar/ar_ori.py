@@ -3801,7 +3801,6 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
 
         # print(f"mask_final={mask_final.shape}, visual_embeds_final={visual_embeds_final.shape}, text_embeds={text_embeds.shape}")
         token_inputs_embeds = torch.where(mask_final[:, :, None, :], visual_embeds_final, text_embeds)
-        # print(f"token_inputs_embedstoken_inputs_embeds", token_inputs_embeds.shape)
         return token_inputs_embeds
 
 
