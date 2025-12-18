@@ -16,9 +16,9 @@ sed 's/=1/=8/g' /etc/mpi/hostfile > /etc/mpi/hostfile_seq
 script_name=$(basename "$0" .sh)
 
 # Model and output directories - modify as needed
-MODEL_DIR=/llm_reco_ssd/zhouyang12/models/muse/keye_tokenizer_end2end_image
+MODEL_DIR=/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image
 
-OUTPUT_DIR=/mmu_mllm_hdd_2/zhouyang12/output/MuseV2/keye_tok_e2e/test
+OUTPUT_DIR=/mmu_mllm_hdd_2/maosiyang/output/MuseV2/keye_tok_e2e/test
 export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
 mkdir -p $OUTPUT_DIR
 
