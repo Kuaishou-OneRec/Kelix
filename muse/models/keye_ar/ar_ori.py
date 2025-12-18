@@ -754,8 +754,8 @@ class SiglipAttention(nn.Module):
             self.q_norm = None
             self.k_norm = None
 
-        if self.config._attn_implementation != 'flash_attention_2':
-            raise RuntimeError(f"SiglipAttention flash_attention_2 is not set!!!!!! Get {self.config._attn_implementation}")
+        #if self.config._attn_implementation != 'flash_attention_2':
+        #    raise RuntimeError(f"SiglipAttention flash_attention_2 is not set!!!!!! Get {self.config._attn_implementation}")
             # print(f"SiglipAttention flash_attention_2 is not set!!!!!! Get {self.config._attn_implementation}")
 
     def forward(
@@ -2980,6 +2980,9 @@ class Qwen3Model(Qwen3PreTrainedModel):
                 image_mask = mask_expanded.to(inputs_embeds.device)
                 input_image_embeds = input_image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, input_image_embeds)
+
+        import IPython
+        IPython.embed()
 
         ####################################################################################
         ####################################################################################

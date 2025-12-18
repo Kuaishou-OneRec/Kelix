@@ -211,12 +211,12 @@ def load_keye_for_conditional_generation(output_model_dir, device):
     model = KeyeForConditionalGeneration.from_pretrained(
         output_model_dir, 
         _attn_implementation="flash_attention_2", 
-        torch_dtype=torch.bfloat16, 
+        torch_dtype=torch.float, 
         low_cpu_mem_usage=True
     )
     model.config.output_one_token = model.output_one_token = False
     model.token_head.use_flash_attn = True
-    model = model.to(device).bfloat16()
+    model = model.to(device).float()
     return model
 
 
@@ -235,7 +235,7 @@ def load_keye_ar_model_v2(output_model_dir, device):
     keye_model = KeyeForConditionalGeneration.from_pretrained(
         output_model_dir, 
         _attn_implementation="flash_attention_2", 
-        torch_dtype=torch.bfloat16, 
+        torch_dtype=torch.float, 
         low_cpu_mem_usage=True
     )
 # 获取KeyeForConditionalGeneration的state_dict
@@ -245,8 +245,8 @@ def load_keye_ar_model_v2(output_model_dir, device):
     converted_state_dict = model.convert_hf_state_dict(keye_state_dict, tie_word_embeddings=False)
     model.load_state_dict(converted_state_dict, strict=True)
     
-    # 将模型移到设备并转换为bfloat16精度
-    model = model.to(device).bfloat16()
+    # 将模型移到设备并转换为float精度
+    model = model.to(device).float()
     
     return model, processor
 
@@ -265,11 +265,11 @@ def process_message(messages, processor, device, add_generation_prompt=True, pad
         return_tensors="pt",
     ).to(device)
     
-    # 转换到bfloat16精度
+    # 转换到float精度
     def _cast_inputs_to_bf16(batch):
         for k, v in list(batch.items()):
             if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
-                batch[k] = v.to(dtype=torch.bfloat16)
+                batch[k] = v.to(dtype=torch.float)
         return batch
     
     inputs = _cast_inputs_to_bf16(inputs)
@@ -563,7 +563,7 @@ def get_keye_conditional_generation_logits(model, inputs, layer_hook=None):
 
     inputs["position_ids"] = torch.arange(0, inputs["input_ids"].size(1)).unsqueeze(0).to(inputs["input_ids"].device)
 
-    with autocast_cm(dtype=torch.bfloat16):
+    with autocast_cm(dtype=torch.float):
         outputs = model(**inputs)
     
     # KeyeForConditionalGeneration直接返回logits
@@ -595,7 +595,7 @@ def get_keye_ar_model_logits(model, inputs, layer_hook=None):
         except Exception:
             autocast_cm = nullcontext
 
-    with autocast_cm(dtype=torch.bfloat16):
+    with autocast_cm(dtype=torch.float):
         outputs = model(**inputs_ar)
     
     return outputs
