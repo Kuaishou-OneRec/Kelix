@@ -1407,27 +1407,34 @@ class ChatCompletionVisionDataset(DistributedDataset):
     Process a single sample from Parquet.
     Wraps the sample to match the expected format of _process.
     """
+    # 解析常见的 JSON 字符串字段
+    # Parquet 读取出来的 messages, images, videos 通常是 string，需要反序列化
+    parse_keys = ["messages", "images", "videos", "segments", "chosen", "rejected"]
+    for key in parse_keys:
+      if key in sample and sample[key] is not None and isinstance(sample[key], str):
+        try:
+          sample[key] = json.loads(sample[key])
+        except Exception as e:
+          logger.warning(f"Failed to parse json field {key} in sample {sample.get('__key__', 'unknown')}: {e}")
+
     source_name = sample.get("source", "None")
+    
     # Wrap sample to match existing logic which expects {"json": sample}
-    # If the parquet schema matches the json schema, this should work.
     wrapper = {"json": sample}
     
-    # Update epoch_idx if available from DistributedDataset
-    # but DistributedDataset doesn't inject epoch_idx into sample automatically unless we do it in _parser?
-    # Actually DistributedDataset logic handles epochs by iterating num_epochs. 
-    # The sample itself comes from parquet.
-    # We can inject a dummy epoch_idx if needed by _process
+    # 将 images 和 videos 字典打平放到 wrapper 根目录下
+    # 因为 _fill_image_block 和 _fill_video_block 会在 sample_dict (即这里的 wrapper) 中
+    # 查找图片/视频的 key (例如 "image1": "/path/to/img.jpg")
+    if "images" in sample and isinstance(sample["images"], dict):
+      wrapper.update(sample["images"])
+    
+    if "videos" in sample and isinstance(sample["videos"], dict):
+      wrapper.update(sample["videos"])
+
+    # Update epoch_idx if available
     wrapper["epoch_idx"] = 0 # Default, or fetch from self if we track it
     
     return self._process(wrapper, source_name)
-
-  def pack_sample(self, buffer: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
-      return self._packing(buffer)
-
-  def get_sample_length(self, sample: Dict[str, torch.Tensor]) -> int:
-      return sample["input_ids"].shape[-1]
-
-
 
 
 
