@@ -16,6 +16,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw
 from transformers import AutoProcessor
 from contextlib import nullcontext
+from collections import defaultdict
 
 # 导入模型相关模块
 from muse.models.keye_ar.ar_ori import KeyeForConditionalGeneration
@@ -32,6 +33,8 @@ def get_config_value(config_dict, key, default_value, config_name=""):
         config_source = f" in {config_name}" if config_name else ""
         warnings.warn(f"{key} not found{config_source}, using default value: {default_value}")
     return value
+
+
 
 
 def load_keye_ar_config(conf_path):
@@ -173,6 +176,33 @@ def generate_circle_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(
                  fill=fill_color, outline=outline_color, width=outline_width)
     return image
 
+def process_im_message(processor, image):
+    messages = [{
+            "role": "user",
+            "content": [
+                {"type": "image", "image": image},
+            ],
+        }]
+    text = processor.apply_chat_template(
+        messages, 
+        tokenize=False, 
+        add_generation_prompt=True  # 开启生成提示
+    )
+
+    print(f"text={text}")
+
+    image_inputs, video_inputs = process_vision_info(messages)
+
+    # 构建原始输入（纯有效Token，无任何Pad）
+    inputs = processor(
+        text=[text],
+        images=image_inputs,
+        videos=video_inputs,
+        padding=False,  # 强制关闭Pad，确保原始输入无多余Token
+        truncation=False,
+        return_tensors="pt",
+    ).to(1)
+    return inputs
 
 def load_keye_for_conditional_generation(output_model_dir, device):
     """加载KeyeForConditionalGeneration模型（ground truth）"""
@@ -245,8 +275,157 @@ def process_message(messages, processor, device, add_generation_prompt=True, pad
     return {k: (v.to(device) if isinstance(v, torch.Tensor) else v) for k, v in inputs.items()}
 
 
-def get_keye_conditional_generation_logits(model, inputs):
+class LayerAlignmentHook:
+    """为模型层添加forward hook来对齐输出"""
+    
+    def __init__(self, model_name):
+        self.model_name = model_name
+        self.layer_outputs = defaultdict(list)
+        self.hooks = []
+        
+    def register_hooks(self, model):
+        """为模型的关键层注册forward hook"""
+        print(f"为{self.model_name}注册层对齐hook...")
+        
+        # 为Qwen3Model的transformer层注册hook
+        if hasattr(model, 'model') and hasattr(model.model, 'layers'):
+            for i, layer in enumerate(model.model.layers):
+                hook = self._create_layer_hook(f"transformer_layer_{i}")
+                self.hooks.append(layer.register_forward_hook(hook))
+                print(f"  注册transformer层 {i}")
+        
+        # 为embedding层注册hook
+        if hasattr(model, 'model') and hasattr(model.model, 'embed_tokens'):
+            hook = self._create_layer_hook("embedding")
+            self.hooks.append(model.model.embed_tokens.register_forward_hook(hook))
+            print(f"  注册embedding层")
+        
+        # 为norm层注册hook
+        if hasattr(model, 'model') and hasattr(model.model, 'norm'):
+            hook = self._create_layer_hook("final_norm")
+            self.hooks.append(model.model.norm.register_forward_hook(hook))
+            print(f"  注册final_norm层")
+        
+        # 为lm_head注册hook
+        if hasattr(model, 'lm_head'):
+            hook = self._create_layer_hook("lm_head")
+            self.hooks.append(model.lm_head.register_forward_hook(hook))
+            print(f"  注册lm_head层")
+        
+        # 为token_head注册hook（KeyeARModel特有）
+        if hasattr(model, 'token_head'):
+            hook = self._create_layer_hook("token_head")
+            self.hooks.append(model.token_head.register_forward_hook(hook))
+            print(f"  注册token_head层")
+            
+            # 为token_head内部的transformer层注册hook
+            if hasattr(model.token_head, 'transformer') and hasattr(model.token_head.transformer, 'layers'):
+                for i, layer in enumerate(model.token_head.transformer.layers):
+                    hook = self._create_layer_hook(f"token_head_transformer_layer_{i}")
+                    self.hooks.append(layer.register_forward_hook(hook))
+                    print(f"  注册token_head transformer层 {i}")
+    
+    def _create_layer_hook(self, layer_name):
+        """创建forward hook函数"""
+        def hook(module, input, output):
+            # 存储层的输出
+            if isinstance(output, tuple):
+                # 对于返回tuple的层，取第一个元素（通常是hidden states）
+                self.layer_outputs[layer_name].append(output[0].detach().cpu())
+            else:
+                self.layer_outputs[layer_name].append(output.detach().cpu())
+        return hook
+    
+    def remove_hooks(self):
+        """移除所有hook"""
+        for hook in self.hooks:
+            hook.remove()
+        self.hooks.clear()
+    
+    def clear_outputs(self):
+        """清空存储的输出"""
+        self.layer_outputs.clear()
+
+def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
+    """比较两个hook记录的层输出"""
+    print("\n" + "="*80)
+    print("层对齐分析报告")
+    print("="*80)
+    
+    all_success = True
+    layer_comparisons = {}
+    
+    # 获取两个hook中共同的层
+    common_layers = set(hook1.layer_outputs.keys()) & set(hook2.layer_outputs.keys())
+    unique_layers1 = set(hook1.layer_outputs.keys()) - common_layers
+    unique_layers2 = set(hook2.layer_outputs.keys()) - common_layers
+    
+    if unique_layers1:
+        print(f"⚠️ {hook1.model_name} 独有的层: {sorted(unique_layers1)}")
+    if unique_layers2:
+        print(f"⚠️ {hook2.model_name} 独有的层: {sorted(unique_layers2)}")
+    
+    for layer_name in sorted(common_layers):
+        outputs1 = hook1.layer_outputs[layer_name]
+        outputs2 = hook2.layer_outputs[layer_name]
+        
+        if len(outputs1) != len(outputs2):
+            print(f"❌ {layer_name}: 输出数量不匹配 ({len(outputs1)} vs {len(outputs2)})")
+            all_success = False
+            layer_comparisons[layer_name] = False
+            continue
+        
+        layer_success = True
+        for i, (out1, out2) in enumerate(zip(outputs1, outputs2)):
+            # 检查形状是否一致
+            if out1.shape != out2.shape:
+                print(f"❌ {layer_name}[{i}]: 形状不匹配 {out1.shape} vs {out2.shape}")
+                layer_success = False
+                all_success = False
+                continue
+            
+            # 转换为float32进行精确比较
+            out1_f32 = out1.float()
+            out2_f32 = out2.float()
+            
+            # 计算绝对误差
+            abs_diff = torch.abs(out1_f32 - out2_f32)
+            max_abs_diff = torch.max(abs_diff).item()
+            mean_abs_diff = torch.mean(abs_diff).item()
+            
+            # 计算相对误差
+            relative_diff = abs_diff / (torch.abs(out2_f32) + 1e-8)
+            max_relative_diff = torch.max(relative_diff).item()
+            mean_relative_diff = torch.mean(relative_diff).item()
+            
+            # 检查是否在容差范围内
+            if max_abs_diff > tolerance or max_relative_diff > tolerance:
+                print(f"❌ {layer_name}[{i}]: 输出不一致")
+                print(f"     最大绝对误差: {max_abs_diff:.6e}")
+                print(f"     最大相对误差: {max_relative_diff:.6e}")
+                layer_success = False
+                all_success = False
+            else:
+                print(f"✅ {layer_name}[{i}]: 输出一致")
+                print(f"     最大绝对误差: {max_abs_diff:.6e}")
+                print(f"     最大相对误差: {max_relative_diff:.6e}")
+        
+        layer_comparisons[layer_name] = layer_success
+    
+    print("\n" + "="*80)
+    if all_success:
+        print("🎉 所有层输出完全一致！")
+    else:
+        print("❌ 部分层输出不一致，请检查上述报告")
+    
+    return all_success, layer_comparisons
+
+
+def get_keye_conditional_generation_logits(model, inputs, layer_hook=None):
     """获取KeyeForConditionalGeneration的logits（ground truth）"""
+    if layer_hook:
+        layer_hook.clear_outputs()
+    
     if torch.cuda.is_available():
         autocast_cm = torch.cuda.amp.autocast
     else:
@@ -268,9 +447,11 @@ def get_keye_conditional_generation_logits(model, inputs):
         else:
             raise ValueError("无法获取KeyeForConditionalGeneration的logits")
 
-
-def get_keye_ar_model_logits(model, inputs):
+def get_keye_ar_model_logits(model, inputs, layer_hook=None):
     """获取KeyeARModel的logits"""
+    if layer_hook:
+        layer_hook.clear_outputs()
+    
     # 准备KeyeARModel的输入
     inputs_ar = inputs.copy()
     inputs_ar["position_ids"] = torch.arange(0, inputs_ar["input_ids"].size(1)).unsqueeze(0).to(inputs_ar["input_ids"].device)
@@ -288,9 +469,8 @@ def get_keye_ar_model_logits(model, inputs):
     with autocast_cm(dtype=torch.bfloat16):
         outputs = model(**inputs_ar)
     
-    # import IPython
-    # IPython.embed()
-    return outputs # Out[2]: torch.Size([1, 66, 9, 217472])
+    return outputs
+
 
 def compare_logits(logits1, logits2, model1_name, model2_name, tolerance=1e-5):
     """比较两个logits张量是否一致"""
@@ -355,6 +535,20 @@ def main():
         print("正在加载KeyeARModel...")
         keye_ar_model, processor = load_keye_ar_model_v2(output_model_dir, device)
         
+        tokens_conditional = keye_conditional_model.forward_image_tokens(**process_im_message(processor, generate_circle_image()))
+        tokens_ar = keye_ar_model.forward_image_tokens(**process_im_message(processor, generate_circle_image()))
+        print(f"tokens_conditional=\n{tokens_conditional}")
+        print(f"tokens_ar=\n{tokens_ar}")
+        assert torch.all(tokens_conditional == tokens_ar)
+
+        # 创建层对齐hook
+        conditional_hook = LayerAlignmentHook("KeyeForConditionalGeneration")
+        ar_hook = LayerAlignmentHook("KeyeARModel")
+        
+        # 为两个模型注册hook
+        conditional_hook.register_hooks(keye_conditional_model)
+        ar_hook.register_hooks(keye_ar_model)
+        
         # 准备测试消息
         COT_SYSTEM_PROMPT = "You are a helpful assistant."
         messages = [
@@ -376,30 +570,39 @@ def main():
         inputs = process_message(messages, processor, device)
 
         print("获取KeyeARModel的logits...")
-        keye_ar_logits = get_keye_ar_model_logits(keye_ar_model, inputs)
+        keye_ar_logits = get_keye_ar_model_logits(keye_ar_model, inputs, ar_hook)
 
         # 获取两个模型的logits
         print("获取KeyeForConditionalGeneration的logits...")
-        keye_conditional_logits = get_keye_conditional_generation_logits(keye_conditional_model, inputs)
-
-        
+        keye_conditional_logits = get_keye_conditional_generation_logits(keye_conditional_model, inputs, conditional_hook)
         
         # 比较logits
-        success = compare_logits(
-            keye_conditional_logits, 
+        logits_success = compare_logits(
+            keye_conditional_logits.reshape(keye_ar_logits.shape), 
             keye_ar_logits, 
             "KeyeForConditionalGeneration", 
             "KeyeARModel",
             tolerance=1e-4  # 设置容差
         )
-
-        import IPython
-        IPython.embed()
         
-        if success:
-            print("\n🎉 验证成功！两个模型的前向logits完全一致。")
+        # 比较层输出
+        layer_success, layer_comparisons = compare_layer_outputs(conditional_hook, ar_hook, tolerance=1e-4)
+        
+        # 移除hook
+        conditional_hook.remove_hooks()
+        ar_hook.remove_hooks()
+        
+        # 输出最终结果
+        print("\n" + "="*80)
+        print("最终验证结果")
+        print("="*80)
+        print(f"Logits一致性: {'✅ 通过' if logits_success else '❌ 失败'}")
+        print(f"层对齐一致性: {'✅ 通过' if layer_success else '❌ 失败'}")
+        
+        if logits_success and layer_success:
+            print("\n🎉 验证成功！两个模型的前向logits和层输出完全一致。")
         else:
-            print("\n❌ 验证失败！两个模型的前向logits不一致。")
+            print("\n❌ 验证失败！请检查上述报告。")
             return 1
             
     except Exception as e:

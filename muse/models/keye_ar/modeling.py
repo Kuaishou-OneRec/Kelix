@@ -88,11 +88,11 @@ class UnifiedTokenEmbedding(nn.Module):
         Returns:
             aggregated_embeddings: 聚合后的embedding，shape=[batch_size, length, hidden_size]
         """
-        print(f"UnifiedTokenEmbedding forward called with extended_tokens shape: {extended_tokens.shape}")
-        print(self)
-        print(extended_tokens.max(), extended_tokens.min())
-        print(extended_tokens)
-        torch.save(extended_tokens, "debug_extended_tokens.pt")
+        # print(f"UnifiedTokenEmbedding forward called with extended_tokens shape: {extended_tokens.shape}")
+        # print(self)
+        # print(extended_tokens.max(), extended_tokens.min())
+        # print(extended_tokens)
+        # torch.save(extended_tokens, "debug_extended_tokens.pt")
         # 1. 获取混合token（普通+image）的embedding
         embeddings = self._get_token_embeddings(extended_tokens)
         if aggregation:
@@ -351,13 +351,13 @@ class UnifiedQwen3Model(Qwen3Model):
             input_image_ids: 输入图像token IDs
             cache_position: 缓存位置
         """
-        print(f"uuuu1111", tokens.shape)
+        #print(f"uuuu1111", tokens.shape)
         if tokens.size(-1) == 1:
             tokens = self.model.tok_embeddings.expand_input_ids(
                 input_image_ids=input_image_ids,
                 tokens=tokens,
             )
-        print(f"uuuu22222", tokens.shape)
+        #print(f"uuuu22222", tokens.shape)
         # 调用父类的forward方法获取基本功能
         outputs = super().forward(
             tokens=tokens,
@@ -654,6 +654,18 @@ class KeyeARModel(Model):
         
         return expanded_ids
 
+    def forward_image_tokens(
+            self,
+            pixel_values,
+            image_grid_thw,
+            **kwargs
+            ):
+        vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
+        indices = torch.stack([x_i for x_i in vq_out['indices']], 0).T 
+        aligned_indices = self.vocab_size + indices + torch.arange(self.config.vision_config.n_q_tokens).\
+            to(next(iter(self.parameters())).device)[None] * self.config.vision_config.codebook_size // self.config.vision_config.n_q_tokens
+        return aligned_indices
+
     def forward(
         self,
         tokens: torch.LongTensor = None,
@@ -679,7 +691,7 @@ class KeyeARModel(Model):
         assert tokens.ndim == 3, "tokens must be 3D after expansion, get {}".format(tokens.shape)
         assert tokens.size(2) == self.config.qwen_config.n_q_tokens + 1, \
             "tokens must have {} columns after expansion, get {}. aligned_indices: {}".format(self.config.qwen_config.n_q_tokens + 1, tokens.size(2), aligned_indices)
-        print(f"tokens={tokens.shape}, position_ids={position_ids.shape}")
+        # print(f"tokens={tokens.shape}, position_ids={position_ids.shape}")
         # 调用Qwen3Model
         outputs = self.model(
             tokens=tokens,
