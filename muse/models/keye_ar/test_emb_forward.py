@@ -252,6 +252,24 @@ print("\n=== 测试第二个函数 ===")
 output2 = test2.infer_id_embs(extended_tokens, group_size=9)
 print(f"输出2形状: {output2.shape}")
 
+print(f"output1={output1}")
+print(f"output2={output2}")
+
+extended_tokens[extended_tokens==-100] = 151681
+
+# 运行测试
+print("=== 测试第一个函数 ===")
+output1 = test1.infer_id_embs(extended_tokens, group_size=9)
+print(f"输出1形状: {output1.shape}")
+
+print("\n=== 测试第二个函数 ===")
+output2 = test2.infer_id_embs(extended_tokens, group_size=9)
+print(f"输出2形状: {output2.shape}")
+
+print(f"output1={output1}")
+print(f"output2={output2}")
+
+exit()
 # 检查形状是否相同
 print(f"\n=== 形状比较 ===")
 print(f"输出1形状: {output1.shape}")
