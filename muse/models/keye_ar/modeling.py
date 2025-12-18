@@ -481,55 +481,66 @@ class KeyeARModel(Model):
         
         参数说明：
             input_image_ids: 图像索引矩阵，维度为 (im_len, n_q_tokens)
-            input_ids: 原始输入ID矩阵，维度为 (len, 1)
+            input_ids: 原始输入ID矩阵，维度为 (batch_size, len) 或 (batch_size, len, 1)
             padded_token: 填充标记的整数ID
             image_token_id: 用于标识需要替换为图像tokens的特殊标记ID
         
         返回值：
-            expanded_ids: 拓展后的矩阵，维度为 (len, 1 + n_q_tokens)
+            expanded_ids: 拓展后的矩阵，维度为 (batch_size, len, 1 + n_q_tokens)
         """
-        # 校验输入维度
-        assert input_ids.dim() == 2 and input_ids.size(1) == 1, \
-            f"input_ids必须是 (len, 1) 维度，当前为 {input_ids.shape}"
-        assert input_image_ids.dim() == 2, \
-            f"input_image_ids必须是 2D 矩阵，当前为 {input_image_ids.shape}"
+        # 记录原始维度
+        original_shape = input_ids.shape
+        batch_size = original_shape[0]
         
-        assert input_ids.size(-1) == 1, \
-            f"拓展之前的input_ids的列数必须为1，当前为 {input_ids.size(1)}"
-
-        len_seq = input_ids.size(0)  # 序列长度
+        # 如果是3D且最后一维为1，则squeeze最后一维
+        if input_ids.dim() == 3 and input_ids.size(-1) == 1:
+            input_ids = input_ids.squeeze(-1)
+        elif input_ids.dim() != 2:
+            raise ValueError(f"input_ids必须是2D或3D张量，当前为 {input_ids.shape}")
+            
+        # 确保input_ids是2D (batch_size, len)
+        assert input_ids.dim() == 2, f"input_ids必须是2D张量，当前为 {input_ids.shape}"
+        
+        # 获取序列长度
+        len_seq = input_ids.size(1)
         output_dim = 1 + self.config.n_q_tokens  # 输出矩阵的列数
         
-        # 1. 初始化输出矩阵，所有位置先填充padded_token
-        expanded_ids = torch.full(
-            size=(len_seq, output_dim),
+        # 将input_ids flatten成 (batch_size * len, 1) 的形式以便处理
+        flattened_input_ids = input_ids.view(-1, 1)  # (batch_size * len, 1)
+        
+        # 初始化输出矩阵，所有位置先填充q_eos_token
+        flattened_expanded_ids = torch.full(
+            size=(flattened_input_ids.size(0), output_dim),
             fill_value=self.config.q_eos_token,
-            dtype=input_ids.dtype,
-            device=input_ids.device
+            dtype=flattened_input_ids.dtype,
+            device=flattened_input_ids.device
         )
         
-        # 2. 找到input_ids中等于image_token_id的行索引
-        image_token_mask = (input_ids.squeeze(1) == self.config.image_token_id)  # (len,)
+        # 找到flattened_input_ids中等于image_token_id的行索引
+        image_token_mask = (flattened_input_ids.squeeze(1) == self.config.image_token_id)  # (batch_size * len,)
         image_token_indices = torch.nonzero(image_token_mask, as_tuple=True)[0]  # 满足条件的行索引
         
         # 校验：input_image_ids的行数必须等于image_token的数量
         assert input_image_ids.size(0) == len(image_token_indices), \
             f"input_image_ids的行数 ({input_image_ids.size(0)}) 必须等于input_ids中image_token_id的数量 ({len(image_token_indices)})"
         
-        # 3. 处理非image_token的行
-        # 第一列填充input_ids的值，第二列填充self.q_eos_token，其余保持padded_token
-        non_image_mask = ~image_token_mask  # (len,)
-        expanded_ids[non_image_mask, 0] = input_ids[non_image_mask, 0]  # 第一列：原始input_id
-        if output_dim > 1:  # 确保至少有第二列
-            expanded_ids[non_image_mask, 1] = self.config.q_eos_token  # self.q_eos_token
+        # 处理非image_token的行
+        # 第一列填充原始input_ids的值
+        non_image_mask = ~image_token_mask  # (batch_size * len,)
+        flattened_expanded_ids[non_image_mask, 0] = flattened_input_ids[non_image_mask, 0]
         
-        # 4. 处理image_token的行
-        # 前n_q_tokens列填充input_image_ids，最后一列填充eself.q_eos_token
+        if output_dim > 1:  # 确保至少有第二列
+            flattened_expanded_ids[non_image_mask, 1] = self.config.q_eos_token  # self.q_eos_token
+
+        # 处理image_token的行
         if len(image_token_indices) > 0:  # 只有存在image_token时才处理
             # 前n_q_tokens列：填充对应位置的input_image_ids
-            expanded_ids[image_token_indices, :self.config.n_q_tokens] = input_image_ids
-            # 最后一列：填充self.q_eos_token
-            expanded_ids[image_token_indices, -1] = self.config.q_eos_token
+            flattened_expanded_ids[image_token_indices, :self.config.n_q_tokens] = input_image_ids
+            # 最后一列：填充q_eos_token
+            flattened_expanded_ids[image_token_indices, -1] = self.config.q_eos_token
+        
+        # 将结果reshape回原来的batch格式 (batch_size, len, output_dim)
+        expanded_ids = flattened_expanded_ids.view(batch_size, len_seq, output_dim)
         
         return expanded_ids
 
@@ -550,6 +561,7 @@ class KeyeARModel(Model):
                     to(input_ids)[None] * self.config.tokenizer_config.codebook_size // self.config.tokenizer_config.n_q_tokens
         else:
             aligned_indices = torch.zeros(0, self.config.tokenizer_config.n_q_tokens).to(input_ids)
+        
         input_ids = self.expand_with_image_tokens(aligned_indices, input_ids)
         assert position_ids.ndim == 2, "position_ids must be 2D"
         # 调用Qwen3Model
