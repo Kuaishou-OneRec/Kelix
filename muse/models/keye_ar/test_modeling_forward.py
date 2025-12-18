@@ -145,7 +145,7 @@ def load_keye_ar_config(conf_path):
         token_head_dim_feedforward=token_head_intermediate_dim,
         token_head_num_layers=token_head_num_layers,
     )
-    print(f"unified_qwen_config.tie_word_embeddings={unified_qwen_config.tie_word_embeddings}")
+
     # 构造KeyeARConfig
     keye_ar_config = KeyeARConfig(
         model_class="KeyeARModel",  # 添加model_class字段

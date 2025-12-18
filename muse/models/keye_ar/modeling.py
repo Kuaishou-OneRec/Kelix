@@ -286,9 +286,10 @@ class UnifiedQwen3Model(Qwen3Model):
             qwen_config: Qwen3配置对象
             token_decoder_config: Token解码器配置对象
         """
+        print(8888, qwen_config.tie_word_embeddings)
         # 调用父类初始化
         super().__init__(qwen_config)
-        
+        print(8888, qwen_config.tie_word_embeddings)
         # 正确设置padding_idx和pre_embedding相关属性
         self.padding_idx = qwen_config.pad_token_id
         tok_embeddings = UnifiedTokenEmbedding(
