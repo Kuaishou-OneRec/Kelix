@@ -175,6 +175,7 @@ class UnifiedTokenDecoder(Model):
         return output
     
     def generate(self, input_ids: Optional[torch.Tensor] = None, 
+                 tokens: Optional[torch.Tensor] = None,
                  input_embeddings: Optional[torch.Tensor] = None, 
                  max_new_tokens: int = 50, 
                  temperature: float = 1.0, 
@@ -188,6 +189,9 @@ class UnifiedTokenDecoder(Model):
         生成函数：统一使用input_embeddings作为输入（prefill后也保持embedding输入）
         """
         self.eval()
+
+        if tokens is not None:
+            input_ids = tokens
         
         # 检查输入合法性
         if (input_ids is None and input_embeddings is None) or \
