@@ -383,6 +383,7 @@ def main():
         keye_conditional_logits = get_keye_conditional_generation_logits(keye_conditional_model, inputs)
 
         
+        
         # 比较logits
         success = compare_logits(
             keye_conditional_logits, 
@@ -391,6 +392,9 @@ def main():
             "KeyeARModel",
             tolerance=1e-4  # 设置容差
         )
+
+        import IPython
+        IPython.embed()
         
         if success:
             print("\n🎉 验证成功！两个模型的前向logits完全一致。")
