@@ -475,9 +475,9 @@ class KeyeARModel(Model):
                 # Extract visual weights and add visual_tokenizer prefix
                 new_k = "visual_tokenizer." + hf_key
                 main_model_state_dict[new_k] = tensor
-            elif hf_key.startswith("model.quant_projector."):
+            elif hf_key.startswith("quant_projector."):
                 # Convert quant_projector to up_projectors
-                new_k = hf_key.replace("model.quant_projector.", "visual_tokenizer.up_projectors.")
+                new_k = hf_key.replace("quant_projector.", "visual_tokenizer.up_projectors.")
                 main_model_state_dict[new_k] = tensor
             elif hf_key.startswith("model.model.layers."):
                 # Handle nested model structure: model.model.layers.* -> model.layers.*
