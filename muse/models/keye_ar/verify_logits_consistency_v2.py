@@ -382,6 +382,10 @@ class LayerAlignmentHook:
     def _create_layer_hook(self, layer_name):
         """创建forward hook函数"""
         def hook(module, input, output):
+            if len(self.layer_outputs[layer_name]) == 1:
+                print(f"跳过{layer_name}的第一个输出")
+                return
+            
             # 存储层的输出
             if isinstance(output, tuple):
                 # 对于返回tuple的层，取第一个元素（通常是hidden states）
@@ -504,6 +508,8 @@ def get_keye_conditional_generation_logits(model, inputs, layer_hook=None):
             autocast_cm = torch.cpu.amp.autocast
         except Exception:
             autocast_cm = nullcontext
+
+    inputs["position_ids"] = torch.arange(0, inputs["input_ids"].size(1)).unsqueeze(0).to(inputs["input_ids"].device)
 
     with autocast_cm(dtype=torch.bfloat16):
         outputs = model(**inputs)
