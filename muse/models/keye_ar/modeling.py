@@ -103,8 +103,8 @@ class UnifiedTokenEmbedding(nn.Module):
         print(f"extended_tokens3333={extended_tokens}")
         if group_size is None:
             group_size = self.n_q_tokens + 1
-        import IPython
-        IPython.embed()
+        # import IPython
+        # IPython.embed()
         extended_tokens = extended_tokens.reshape([extended_tokens.shape[0], -1, group_size])
         input_ids_reshaped = extended_tokens
 
@@ -116,7 +116,7 @@ class UnifiedTokenEmbedding(nn.Module):
         text_embeds = self.embed_tokens(first_token)
         raw_visual_indices = input_ids_reshaped[:, :, :-1] if group_size > 1 else input_ids_reshaped
         mask_expanded_indices = is_visual_group.unsqueeze(-1).expand_as(raw_visual_indices)
-        
+
         # 这里的 0 是为了安全计算，这些计算结果最后会被 mask 掉
         safe_visual_indices = torch.where(mask_expanded_indices, raw_visual_indices, torch.zeros_like(raw_visual_indices))
 

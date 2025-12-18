@@ -3764,8 +3764,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             group_size = self.config.vision_config.n_q_tokens + 1
         # print(extended_tokens)
         # print(f"extended_tokens={extended_tokens.shape}, group_size={group_size}") # extended_tokens=torch.Size([350, 1]), group_size=1
-        import IPython
-        IPython.embed()
+        # import IPython
+        # IPython.embed()
         extended_tokens = extended_tokens.reshape([extended_tokens.shape[0], -1, group_size])
         batch_size, compressed_len, dim = extended_tokens.shape
         # assert dim == group_size
@@ -3779,7 +3779,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         text_embeds = self.model.embed_tokens(first_token)
         raw_visual_indices = input_ids_reshaped[:, :, :-1] if group_size > 1 else input_ids_reshaped
         mask_expanded_indices = is_visual_group.unsqueeze(-1).expand_as(raw_visual_indices)
-        
+
         # 这里的 0 是为了安全计算，这些计算结果最后会被 mask 掉
         safe_visual_indices = torch.where(mask_expanded_indices, raw_visual_indices, torch.zeros_like(raw_visual_indices))
 
@@ -3999,7 +3999,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             train_dict["aligned_indices"] = torch.zeros(0, self.config.vision_config.n_q_tokens + 1).to(input_ids)
         extended_tokens = expand_with_image_tokens(train_dict["aligned_indices"].detach(), input_ids.flatten()[:,None], self.config.q_eos_token, -100, self.config.image_token_id, self.config.vision_config.n_q_tokens)
         # and_with_image_tokens(image_indices, input_ids.flatten()[:,None], model.config.q_eos_token, -100, image_token_id, n_q_tokens)
-
+        import IPython
+        IPython.embed()
         group_size = self.config.vision_config.n_q_tokens + 1
         batch_size = input_ids.shape[0]
         compressed_len = input_ids.shape[1]
