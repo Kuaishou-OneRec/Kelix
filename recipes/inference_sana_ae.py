@@ -324,7 +324,7 @@ def main():
     
     # Load processor for image preprocessing
     print("Loading processor...")
-    processor = AutoProcessor.from_pretrained(args.image_tokenizer_dir)
+    processor = AutoProcessor.from_pretrained(args.image_tokenizer_dir, trust_remote_code=True)
     
     # Run inference
     run_inference(
