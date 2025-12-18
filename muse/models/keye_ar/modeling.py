@@ -178,7 +178,7 @@ but this is required during inference if the model has been setup with any layer
                 which use encoder embeddings and caches have been setup.
             input_pos (Optional[torch.Tensor]): Optional tensor which contains the position ids
                 of each token. During training, this is used to indicate the positions
-                of each token relative to its sample when packed, shape ``[b x s]``.
+of each token relative to its sample when packed, shape ``[b x s]``.
                 During inference, this indicates the position of the current token.
                 This parameter is required during inference if caches have been setup. Default is None.
             input_embeds (Optional[torch.Tensor]): Pass these instead of tokens to short-circuit token embeddings
@@ -394,7 +394,6 @@ class UnifiedQwen3Model(Qwen3Model):
         
         # Handle token_head weights using UnifiedTokenDecoder's convert_hf_state_dict
         if token_head_state_dict:
-            from ..unified_token_decoder import UnifiedTokenDecoder
             converted_token_head_state_dict = UnifiedTokenDecoder.convert_hf_state_dict(
                 state_dict=token_head_state_dict,
                 reduce_mode=True  # We want to reduce the output dimensions
@@ -538,8 +537,25 @@ class KeyeARModel(Model):
             
             # Add back the "visual_tokenizer." prefix and update the main converted_state_dict
             for k, v in converted_visual_tokenizer_state_dict.items():
-                converted_key = f"visual_tokenizer.{k}"
+                # 确保键有正确的前缀
+                if not k.startswith("visual."):
+                    converted_key = f"visual_tokenizer.visual.{k}"
+                else:
+                    converted_key = f"visual_tokenizer.{k}"
                 converted_state_dict[converted_key] = v
+        
+        # 修复UnifiedTokenDecoder的前缀问题
+        # 查找所有token_head相关的键并确保它们有正确的前缀
+        token_head_keys = [k for k in converted_state_dict.keys() if "token_head" in k]
+        for k in token_head_keys:
+            # 确保token_head键有正确的前缀
+            if not k.startswith("model.token_head."):
+                # 移除旧键并添加带正确前缀的新键
+                tensor = converted_state_dict.pop(k)
+                new_key = f"model.token_head.{k}" if not k.startswith("model.") else k
+                if not new_key.startswith("model.token_head."):
+                    new_key = f"model.token_head.{k.replace('model.', '')}" if k.startswith("model.") else f"model.token_head.{k}"
+                converted_state_dict[new_key] = tensor
         
         return converted_state_dict
 
