@@ -34,7 +34,7 @@ def get_config_value(config_dict, key, default_value, config_name=""):
         warnings.warn(f"{key} not found{config_source}, using default value: {default_value}")
     return value
 
-device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 
