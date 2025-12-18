@@ -330,12 +330,13 @@ class UnifiedQwen3Model(Qwen3Model):
             input_image_ids: 输入图像token IDs
             cache_position: 缓存位置
         """
+        print(f"uuuu1111", input_ids.shape)
         if input_ids.size(-1) == 1:
             input_ids = self.model.tok_embeddings.expand_input_ids(
                 input_image_ids=input_image_ids,
                 input_ids=input_ids,
             )
-
+        print(f"uuuu22222", input_ids.shape)
         # 调用父类的forward方法获取基本功能
         outputs = super().forward(
             input_ids=input_ids,
