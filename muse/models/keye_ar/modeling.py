@@ -467,7 +467,7 @@ class KeyeARModel(Model):
         )
         
         # Handle the lm_head parameter
-        for hf_key, tensor in hf_state_dict.items():
+        for hf_key, tensor in list(hf_state_dict.items()):
             # Handle lm_head weight
             if hf_key == "lm_head.weight":
                 converted_key = "lm_head.weight"
