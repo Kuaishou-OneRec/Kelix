@@ -200,7 +200,7 @@ def load_keye_ar_model():
     # 加载并转换状态字典
     # state_dict = load_safetensors_state_dict(output_model_dir)
     # converted_state_dict = KeyeARModel.convert_hf_state_dict(state_dict, tie_word_embeddings=False)
-    # model.load_state_dict(converted_state_dict, strict=False)
+    # model.load_state_dict(converted_state_dict, strict=True)
     
     # 将模型移到设备并转换为bfloat16精度
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

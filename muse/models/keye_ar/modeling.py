@@ -81,7 +81,11 @@ class UnifiedTokenEmbedding(nn.Module):
         Returns:
             aggregated_embeddings: 聚合后的embedding，shape=[batch_size, length, hidden_size]
         """
-
+        print(f"UnifiedTokenEmbedding forward called with extended_tokens shape: {extended_tokens.shape}")
+        print(self)
+        print(extended_tokens.max(), extended_tokens.min())
+        print(extended_tokens)
+        torch.save(extended_tokens, "debug_extended_tokens.pt")
         # 1. 获取混合token（普通+image）的embedding
         embeddings = self._get_token_embeddings(extended_tokens)
         if aggregation:
