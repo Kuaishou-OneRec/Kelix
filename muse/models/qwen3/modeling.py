@@ -112,6 +112,7 @@ class Qwen3Model(Model):
         )
 
     def forward(self, *args, **kwargs):
+        print(f"Qwen3Model forward called with {self.model}")
         return self.model(*args, **kwargs)
     
     def get_initializer(self, name: str) -> Callable[[torch.Tensor], None]:
