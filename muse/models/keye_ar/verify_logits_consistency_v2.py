@@ -211,12 +211,12 @@ def load_keye_for_conditional_generation(output_model_dir, device):
     model = KeyeForConditionalGeneration.from_pretrained(
         output_model_dir, 
         _attn_implementation="flash_attention_2", 
-        torch_dtype=torch.float, 
+        torch_dtype=torch.bfloat16, 
         low_cpu_mem_usage=True
     )
     model.config.output_one_token = model.output_one_token = False
     model.token_head.use_flash_attn = True
-    model = model.to(device).float()
+    model = model.to(device).bfloat16()
     return model
 
 
@@ -235,7 +235,7 @@ def load_keye_ar_model_v2(output_model_dir, device):
     keye_model = KeyeForConditionalGeneration.from_pretrained(
         output_model_dir, 
         _attn_implementation="flash_attention_2", 
-        torch_dtype=torch.float, 
+        torch_dtype=torch.bfloat16, 
         low_cpu_mem_usage=True
     )
 # 获取KeyeForConditionalGeneration的state_dict
@@ -246,7 +246,7 @@ def load_keye_ar_model_v2(output_model_dir, device):
     model.load_state_dict(converted_state_dict, strict=True)
     
     # 将模型移到设备并转换为float精度
-    model = model.to(device).float()
+    model = model.to(device).bfloat16()
     
     return model, processor
 
@@ -269,7 +269,7 @@ def process_message(messages, processor, device, add_generation_prompt=True, pad
     def _cast_inputs_to_bf16(batch):
         for k, v in list(batch.items()):
             if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
-                batch[k] = v.to(dtype=torch.float)
+                batch[k] = v.to(dtype=torch.bfloat16)
         return batch
     
     inputs = _cast_inputs_to_bf16(inputs)
@@ -517,8 +517,8 @@ def compare_layer_outputs(hook1, hook2, model1=None, model2=None, tolerance=1e-5
                     return False, layer_comparisons
             
             # 计算MAE误差
-            out1_f32 = out1.float()
-            out2_f32 = out2.float()
+            out1_f32 = out1.bfloat16()
+            out2_f32 = out2.bfloat16()
             mae = torch.mean(torch.abs(out1_f32 - out2_f32)).item()
             
             # 检查是否在容差范围内
@@ -613,8 +613,8 @@ def compare_logits(logits1, logits2, model1_name, model2_name, tolerance=1e-5):
         return False
     
     # 转换为float32进行精确比较
-    logits1_f32 = logits1.float()
-    logits2_f32 = logits2.float()
+    logits1_f32 = logits1.bfloat16()
+    logits2_f32 = logits2.bfloat16()
     
     # 计算绝对误差和相对误差
     abs_diff = torch.abs(logits1_f32 - logits2_f32)
