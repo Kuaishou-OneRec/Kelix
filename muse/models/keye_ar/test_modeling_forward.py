@@ -243,7 +243,7 @@ def load_keye_ar_model_v2():
     model.load_state_dict(converted_state_dict, strict=True)
     
     # 将模型移到设备并转换为bfloat16精度
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
     model = model.to(device).bfloat16()
     
     return model, processor, device
