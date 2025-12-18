@@ -278,7 +278,7 @@ class UnifiedQwen3Model(Qwen3Model):
     UnifiedQwen3Model类，继承自Qwen3Model，支持input_image_ids处理
     """
     
-    def __init__(self, qwen_config: UnifiedQwen3Config, token_decoder_config: UnifiedTokenDecoderConfig):
+    def __init__(self, qwen_config: UnifiedQwen3Config, token_decoder_config: UnifiedTokenDecoderConfig, tokenizer_config: KeyeTokenizerConfig):
         """
         初始化UnifiedQwen3Model
         
@@ -286,10 +286,8 @@ class UnifiedQwen3Model(Qwen3Model):
             qwen_config: Qwen3配置对象
             token_decoder_config: Token解码器配置对象
         """
-        print(8888, qwen_config.tie_word_embeddings)
         # 调用父类初始化
         super().__init__(qwen_config)
-        print(8888, qwen_config.tie_word_embeddings)
         assert qwen_config.tie_word_embeddings == False, "tie_word_embeddings must be False in UnifiedQwen3Model"
         # 正确设置padding_idx和pre_embedding相关属性
         self.padding_idx = qwen_config.pad_token_id
@@ -317,7 +315,7 @@ class UnifiedQwen3Model(Qwen3Model):
             num_heads=self.model.num_heads,
             head_dim=self.model.head_dim,
             norm=self.model.norm,
-            output=nn.Linear(qwen_config.vocab_size + token_decoder_config.codebook_size, qwen_config.embed_dim),
+            output=nn.Linear(qwen_config.embed_dim, qwen_config.vocab_size + tokenizer_config.codebook_size),
             token_head=token_head
         )
 
@@ -459,7 +457,7 @@ class KeyeARModel(Model):
         original_hidden_size = qwen_config.embed_dim
         
         # 主语言模型
-        self.model = UnifiedQwen3Model(qwen_config=qwen_config, token_decoder_config=token_decoder_config)
+        self.model = UnifiedQwen3Model(qwen_config=qwen_config, token_decoder_config=token_decoder_config, tokenizer_config=tokenizer_config)
         
         # 配置参数
         self.vocab_size = qwen_config.vocab_size
