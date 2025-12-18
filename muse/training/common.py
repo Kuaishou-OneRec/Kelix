@@ -108,6 +108,17 @@ def set_default_dtype(dtype: Union[str, torch.dtype]) -> Generator[None, None, N
     finally:
         torch.set_default_dtype(old_dtype)
 
+def get_torch_dtype(dtype_str: str) -> torch.dtype:
+    """
+    Get torch.dtype from string.
+    """
+    dtype_map = {
+        "bfloat16": torch.bfloat16,
+        "float16": torch.float16,
+        "float32": torch.float32,
+    }
+    return dtype_map[dtype_str]
+
 def clip_grad_by_value(model: torch.nn.Module, clip_range: Optional[float] = None):
     """
     Clip gradients by value for all model parameters.

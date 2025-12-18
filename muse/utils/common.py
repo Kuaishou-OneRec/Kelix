@@ -1,5 +1,5 @@
 # TODO: clean utils
-from typing import Tuple
+from typing import Tuple, Any
 #from rich import print
 import time
 import torch
@@ -12,6 +12,7 @@ import pickle
 import traceback
 import subprocess
 import os
+import inspect
 
 
 def print_rank_n(*msg, rank=0):
@@ -127,3 +128,18 @@ def format_dict_or_list(obj, indent_level=0, indent_size=2):
         return '[\n' + formatted_items + '\n' + (' ' * indent_size * indent_level) + ']'
     else:
         return obj
+
+def inspect_file(py_obj: Any):
+  # 获取源代码文件路径
+  try:
+    source_file = inspect.getfile(py_obj.__class__)
+    print(f"source file: {source_file}")
+  except:
+    print("cannot get source file path")
+
+  # 获取源代码行号
+  try:
+    source_lines = inspect.getsourcelines(py_obj.__class__)
+    print(f"start line number: {source_lines[1]}")
+  except:
+    print("cannot get source code line number")
