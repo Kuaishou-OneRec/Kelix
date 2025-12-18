@@ -127,7 +127,7 @@ vocab_size = 151936  # 217472
 hidden_size = 768
 
 # 初始化模型（共享同一个embed_tokens保证权重一致）
-embed_tokens = nn.Embedding(vocab_size, hidden_size)
+embed_tokens = nn.Embedding(vocab_size+65536, hidden_size)
 torch.manual_seed(42)  # 设置随机种子保证可复现
 
 # 初始化第一个类
