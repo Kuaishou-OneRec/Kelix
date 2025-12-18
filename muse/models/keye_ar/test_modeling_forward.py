@@ -54,6 +54,7 @@ def load_keye_ar_config(conf_path):
         vocab_size=vision_config_data.get('codebook_size', 65536),
         d_model=conf_data.get('token_head_dim', 512),
         nhead=conf_data.get('token_head_nhead', 4),
+        input_dim=conf_data.get('hidden_size', 4096),
         num_layers=1,  # 默认值
         dim_feedforward=conf_data.get('token_head_intermediate_dim', 2048),
         reduce=True
