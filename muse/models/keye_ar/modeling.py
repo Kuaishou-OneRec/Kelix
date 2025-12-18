@@ -357,8 +357,7 @@ class UnifiedQwen3Model(Qwen3Model):
         )
         return outputs
 
-    @classmethod
-    def convert_hf_state_dict(cls,
+    def convert_hf_state_dict(self,
                               hf_state_dict: Dict[str, torch.Tensor],
                               tie_word_embeddings: bool = True,
                               **kwargs) -> Dict[str, torch.Tensor]:
@@ -483,7 +482,7 @@ class KeyeARModel(Model):
                 main_model_state_dict[hf_key] = tensor
         
         # Convert the main model state dict using UnifiedQwen3Model's convert_hf_state_dict
-        converted_state_dict = UnifiedQwen3Model.convert_hf_state_dict(
+        converted_state_dict = self.model.convert_hf_state_dict(
             hf_state_dict=main_model_state_dict,
             **kwargs
         )
