@@ -454,8 +454,8 @@ class KeyeARModel(Model):
         # LM头
         lm_head_size = qwen_config.vocab_size + tokenizer_config.codebook_size 
         self.lm_head = nn.Linear(qwen_config.embed_dim, lm_head_size, bias=False)
-    @classmethod
-    def convert_hf_state_dict(cls,
+
+        def convert_hf_state_dict(self, 
                               hf_state_dict: Dict[str, torch.Tensor],
                               tie_word_embeddings: bool = True,
                               **kwargs) -> Dict[str, torch.Tensor]:

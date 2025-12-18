@@ -200,7 +200,7 @@ def load_keye_ar_model():
     
     # 加载并转换状态字典
     state_dict = load_safetensors_state_dict(output_model_dir)
-    converted_state_dict = KeyeARModel.convert_hf_state_dict(state_dict, tie_word_embeddings=False)
+    converted_state_dict = model.convert_hf_state_dict(state_dict, tie_word_embeddings=False)
     model.load_state_dict(converted_state_dict, strict=True)
     
     # 将模型移到设备并转换为bfloat16精度
@@ -238,7 +238,7 @@ def load_keye_ar_model_v2():
     keye_state_dict = keye_model.state_dict()
     
     # 转换为KeyeARModel的state_dict
-    converted_state_dict = KeyeARModel.convert_hf_state_dict(keye_state_dict, tie_word_embeddings=False)
+    converted_state_dict = model.convert_hf_state_dict(keye_state_dict, tie_word_embeddings=False)
     model.load_state_dict(converted_state_dict, strict=True)
     
     # 将模型移到设备并转换为bfloat16精度
