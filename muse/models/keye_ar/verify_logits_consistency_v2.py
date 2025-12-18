@@ -878,7 +878,6 @@ def main():
 def dump_and_embed(hook1, hook2, layer_name, error_type, output_index=None, out1=None, out2=None, abs_diff=None):
     """dump输入输出并进入IPython embed模式"""
     import os
-    import pickle
     import datetime
     
     # 创建dump目录
@@ -886,9 +885,9 @@ def dump_and_embed(hook1, hook2, layer_name, error_type, output_index=None, out1
     os.makedirs(dump_dir, exist_ok=True)
     
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    dump_file = os.path.join(dump_dir, f"debug_{layer_name}_{error_type}_{timestamp}.pkl")
+    dump_file = os.path.join(dump_dir, f"debug_{layer_name}_{error_type}_{timestamp}.pt")
     
-    # 收集调试信息
+    # 收集可序列化的调试信息（避免包含函数对象）
     debug_info = {
         'timestamp': timestamp,
         'layer_name': layer_name,
@@ -896,18 +895,59 @@ def dump_and_embed(hook1, hook2, layer_name, error_type, output_index=None, out1
         'output_index': output_index,
         'hook1_model_name': hook1.model_name,
         'hook2_model_name': hook2.model_name,
-        'hook1_layer_outputs': hook1.layer_outputs.get(layer_name, []),
-        'hook2_layer_outputs': hook2.layer_outputs.get(layer_name, []),
-        'hook1_module_info': hook1.layer_modules.get(layer_name, {}),
-        'hook2_module_info': hook2.layer_modules.get(layer_name, {}),
         'out1': out1,
         'out2': out2,
         'abs_diff': abs_diff
     }
     
-    # # dump到文件
-    # with open(dump_file, 'wb') as f:
-    #     pickle.dump(debug_info, f)
+    # 添加可序列化的层输出信息（只保存张量数据）
+    if layer_name in hook1.layer_outputs:
+        debug_info['hook1_layer_outputs_shapes'] = [x.shape for x in hook1.layer_outputs[layer_name]]
+        debug_info['hook1_layer_outputs_stats'] = []
+        for i, output in enumerate(hook1.layer_outputs[layer_name]):
+            debug_info['hook1_layer_outputs_stats'].append({
+                'shape': output.shape,
+                'min': output.min().item(),
+                'max': output.max().item(),
+                'mean': output.mean().item(),
+                'std': output.std().item()
+            })
+    
+    if layer_name in hook2.layer_outputs:
+        debug_info['hook2_layer_outputs_shapes'] = [x.shape for x in hook2.layer_outputs[layer_name]]
+        debug_info['hook2_layer_outputs_stats'] = []
+        for i, output in enumerate(hook2.layer_outputs[layer_name]):
+            debug_info['hook2_layer_outputs_stats'].append({
+                'shape': output.shape,
+                'min': output.min().item(),
+                'max': output.max().item(),
+                'mean': output.mean().item(),
+                'std': output.std().item()
+            })
+    
+    # 添加可序列化的模块信息（避免包含模块对象）
+    if layer_name in hook1.layer_modules:
+        module_info = hook1.layer_modules[layer_name]
+        debug_info['hook1_module_info'] = {
+            'module_type': module_info.get('module_type', 'unknown'),
+            'module_str': module_info.get('module_str', 'unknown'),
+            'module_full_name': module_info.get('module_full_name', 'unknown'),
+            'input_shapes': module_info.get('input_shapes', []),
+            'output_shape': module_info.get('output_shape', 'unknown')
+        }
+    
+    if layer_name in hook2.layer_modules:
+        module_info = hook2.layer_modules[layer_name]
+        debug_info['hook2_module_info'] = {
+            'module_type': module_info.get('module_type', 'unknown'),
+            'module_str': module_info.get('module_str', 'unknown'),
+            'module_full_name': module_info.get('module_full_name', 'unknown'),
+            'input_shapes': module_info.get('input_shapes', []),
+            'output_shape': module_info.get('output_shape', 'unknown')
+        }
+    
+    # 使用torch.save来保存张量数据
+    torch.save(debug_info, dump_file)
     
     print(f"调试信息已保存到: {dump_file}")
     print(f"文件大小: {os.path.getsize(dump_file)} 字节")
