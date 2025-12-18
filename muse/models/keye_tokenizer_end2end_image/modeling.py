@@ -11,7 +11,7 @@ from einops import rearrange
 
 from muse.models.base import Model
 from muse.config import Qwen3Config, KeyeVisionConfig
-from muse.config.model_config import ModelConfig, KeyeTokenizerConfig
+from muse.config.model_config import ModelConfig, KeyeTokenizerConfig, KeyeTokenizerEnd2EndImageConfig
 from muse.models.qwen3.modeling import Qwen3Model
 from muse.models.keye_tokenizer.modeling import KeyeImageTokenizer
 
@@ -52,19 +52,20 @@ class KeyeTokenizerEnd2EndImage(Model):
 
     def __init__(
         self,
-        qwen_config: Qwen3Config,
-        vision_config: KeyeVisionConfig,
-        tokenizer_config: Optional[KeyeTokenizerConfig] = None,
-        image_token_id: int = -1,
-        pool: str = "avg",
-        amplifier: float = 1.0,
+        config: KeyeTokenizerEnd2EndImageConfig
     ):
-        super().__init__(qwen_config)
+        super().__init__(config)
+        self.config = config
+        
+        qwen_config = config.qwen_config
+        vision_config = config.vision_config
+        tokenizer_config = config.tokenizer_config
+        image_token_id = config.image_token_id
+        pool = config.pool
+        amplifier = config.amplifier
+
         self.model = Qwen3Model(qwen_config)
         self.use_multimodal_rope = qwen_config.use_multimodal_rope
-        tokenizer_config = tokenizer_config or KeyeTokenizerConfig(
-            vision_config=vision_config, llm_hidden_size=qwen_config.embed_dim
-        )
         self.visual_tokenizer = KeyeImageTokenizer(tokenizer_config)
         self.quant_projector = nn.ModuleList(
             [

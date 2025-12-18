@@ -18,7 +18,7 @@ import argparse
 import torch
 import logging
 
-from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig
+from muse.config import Qwen3Config, KeyeVisionConfig, KeyeTokenizerConfig, KeyeTokenizerEnd2EndImageConfig
 from muse.models.keye_tokenizer_end2end_image import KeyeTokenizerEnd2EndImage
 from muse.training.common import set_default_dtype
 from muse.training.checkpoint import load_hf_checkpoint
@@ -235,15 +235,19 @@ def main():
     
     # Create model
     logger.info(f"Creating model with dtype={args.dtype}")
+    
+    # Create unified config
+    unified_config = KeyeTokenizerEnd2EndImageConfig(
+        qwen_config=qwen_cfg,
+        vision_config=vision_cfg,
+        tokenizer_config=tokenizer_cfg,
+        image_token_id=image_token_id,
+        pool=args.pool,
+        amplifier=args.amplifier
+    )
+    
     with set_default_dtype(args.dtype), torch.device("cpu"):
-        model = KeyeTokenizerEnd2EndImage(
-            qwen_config=qwen_cfg,
-            vision_config=vision_cfg,
-            tokenizer_config=tokenizer_cfg,
-            image_token_id=image_token_id,
-            pool=args.pool,
-            amplifier=args.amplifier,
-        )
+        model = KeyeTokenizerEnd2EndImage(unified_config)
     
     # Load state dict
     missing, unexpected = model.load_state_dict(state_dict, strict=False)
@@ -270,19 +274,13 @@ def main():
     output_path.mkdir(parents=True, exist_ok=True)
     
     logger.info(f"Saving converted checkpoint to {output_path}")
+    # Force updating the config in the model before saving
+    model.config = unified_config
     model.save_pretrained(str(output_path))
     
-    # Save configs as well for reference
-    config_output = {
-        "qwen_config": qwen_cfg.model_dump(),
-        "vision_config": vision_cfg.model_dump(),
-        "tokenizer_config": tokenizer_cfg.model_dump(),
-        "image_token_id": image_token_id,
-        "pool": args.pool,
-        "amplifier": args.amplifier,
-    }
+    # Save unified config as muse_config.json for reference
     with open(output_path / "muse_config.json", "w", encoding="utf-8") as f:
-        json.dump(config_output, f, indent=2)
+        f.write(unified_config.model_dump_json(indent=2))
     
     logger.info("Conversion completed successfully!")
 
