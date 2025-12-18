@@ -131,8 +131,8 @@ nohup mpirun --allow-run-as-root \
                 --use-flash-attention-2 \
                 --logging-per-step 1 \
                 --fp32-weight \
-                --codebook-loss-weight 1.0 \
-                --commitment-loss-weight 0.25 \
+                --codebook_loss_weight 1.0 \
+                --commitment_loss_weight 0.25 \
                 --seed 19260817 \
                 --enable-gradient-checkpointing \
                 --prefetch-params-in-forward \
