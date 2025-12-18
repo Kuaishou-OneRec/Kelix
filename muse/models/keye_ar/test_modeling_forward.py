@@ -84,7 +84,7 @@ def load_keye_ar_config(conf_path):
     token_head_dim = get_config_value(conf_data, 'token_head_dim', 512, "conf_data")
     token_head_nhead = get_config_value(conf_data, 'token_head_nhead', 4, "conf_data")
     token_head_intermediate_dim = get_config_value(conf_data, 'token_head_intermediate_dim', 2048, "conf_data")
-    token_head_num_layers = get_config_value(conf_data, 'token_head_num_layers', 3, "conf_data")
+    token_head_num_layers = get_config_value(conf_data, 'token_head_num_layers', 1, "conf_data")
     
     unified_token_decoder_config = UnifiedTokenDecoderConfig(
         model_class="UnifiedTokenDecoder",  # 添加model_class字段
@@ -283,7 +283,7 @@ def test_forward():
     
     inputs = process_message(messages, processor, device)
     inputs["position_ids"] = torch.arange(0, inputs["input_ids"].size(1)).unsqueeze(0).to(device)    
- 
+    inputs["tokens"] = inputs["input_ids"]
     # 使用与test_ar_ori_forward.py相同的autocast逻辑
     if torch.cuda.is_available():
         autocast_cm = torch.cuda.amp.autocast
