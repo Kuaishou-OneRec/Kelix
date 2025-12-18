@@ -404,6 +404,9 @@ class UnifiedQwen3Model(Qwen3Model):
                 converted_key = f"model.token_head.{k}"
                 converted_state_dict[converted_key] = v
         
+        # model.tok_embeddings.weight
+        converted_state_dict["model.tok_embeddings.embed_tokens.weight"] = converted_state_dict["model.tok_embeddings.weight"]
+        del converted_state_dict["model.tok_embeddings.weight"]
         return converted_state_dict
 
 
