@@ -60,8 +60,6 @@ class UnifiedTokenEmbedding(nn.Module):
         if embeddings.size(2) == extended_tokens.size(2) - 1:
             embeddings = torch.nn.functional.pad(embeddings, (0, 0, 0, 1), value=0)
 
-        #print(extended_tokens.shape, embeddings.shape)
-        #IPython.embed()
 
         # 获取q_eos token id
         q_eos_token_id = self.q_eos_token
@@ -76,9 +74,6 @@ class UnifiedTokenEmbedding(nn.Module):
         masked_embeddings = embeddings.float() * valid_mask_expanded.to(embeddings.dtype)
         aggregated_embeddings = masked_embeddings.sum(dim=2)
         aggregated_embeddings = aggregated_embeddings.float().bfloat16()# 跟baseline对齐
-        # print(1111111)
-        # import IPython
-        # IPython.embed()
         return aggregated_embeddings
 
     def forward(self, extended_tokens, aggregation=True):
@@ -96,8 +91,7 @@ class UnifiedTokenEmbedding(nn.Module):
         embeddings = self._get_token_embeddings(extended_tokens)
         if aggregation:
             aggregated_embeddings = self._embedding_aggregation(extended_tokens, embeddings)
-            import IPython
-            IPython.embed()
+            torch.save(aggregated_embeddings, "aggregated_embeddings.pt")
             return aggregated_embeddings
         else:
             return embeddings
