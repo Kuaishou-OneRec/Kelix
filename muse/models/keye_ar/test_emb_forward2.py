@@ -12,6 +12,7 @@ class FirstClass(nn.Module):
     def __init__(self, vocab_size, hidden_size=768):
         super().__init__()
         self.vocab_size = vocab_size
+        assert vocab_size == 151936
         self.n_q_tokens = 8  # 对应vision_config.n_q_tokens
         self.q_eos_token = 151681  # 从extended_tokens中可以看出eos token是151681
         self.pre_embedding_size = None
@@ -86,6 +87,7 @@ class SecondClass(nn.Module):
         super().__init__()
         self.config = MockConfig()
         self.pre_embedding_size = None
+        assert vocab_size == 151936
         self.embed_tokens = nn.Embedding(vocab_size + 65536, hidden_size)
         self.pre_embedding = None
         self.pre_embedding_linear = None
