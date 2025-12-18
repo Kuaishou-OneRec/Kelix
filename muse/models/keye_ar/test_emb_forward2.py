@@ -119,7 +119,7 @@ class SecondClass(nn.Module):
         return inputs_embeds
 
 # 设置参数
-vocab_size = 151936 + 65536  # 217472
+vocab_size = 151936  # 217472
 hidden_size = 768
 
 # 初始化模型（共享同一个embed_tokens保证权重一致）
