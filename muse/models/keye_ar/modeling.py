@@ -316,7 +316,7 @@ class UnifiedQwen3Model(Qwen3Model):
             num_heads=self.model.num_heads,
             head_dim=self.model.head_dim,
             norm=self.model.norm,
-            output=self.model.output,
+            output=nn.Linear(qwen_config.vocab_size + token_decoder_config.codebook_size, qwen_config.embed_dim),
             token_head=token_head
         )
 
