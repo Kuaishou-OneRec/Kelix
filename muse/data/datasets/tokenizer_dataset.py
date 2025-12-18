@@ -846,7 +846,17 @@ class ChatCompletionVisionDataset(DistributedDataset):
     msg_key = "message" if "message" in sample["json"] else "messages"
     messages = sample["json"][msg_key]
 
+    # Validate messages format
+    if messages is None or not isinstance(messages, list):
+      print('maosiyangdebug', messages)
+      raise ValueError(f"Invalid messages format: messages is None or not a list, got {type(messages)}")
+
     for turn in messages:
+      # Validate turn format - each turn should be a dict with 'role' and 'content'
+      if not isinstance(turn, dict):
+        try :
+          print('maosiyangdebugturn', turn)
+        raise ValueError(f"Invalid turn format: expected dict, got {type(turn)}, value={str(turn)[:100]}")
       try:
         content = turn["content"]
         if isinstance(content, str):
