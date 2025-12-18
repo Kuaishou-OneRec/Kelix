@@ -550,8 +550,6 @@ class KeyeARModel(Model):
                 # 移除旧键并添加带正确前缀的新键
                 tensor = converted_state_dict.pop(k)
                 new_key = f"model.{k}" if not k.startswith("model.") else k
-                if not new_key.startswith("model.token_head."):
-                    new_key = f"model.token_head.{k.replace('model.', '')}" if k.startswith("model.") else f"model.token_head.{k}"
                 converted_state_dict[new_key] = tensor
         
         return converted_state_dict
