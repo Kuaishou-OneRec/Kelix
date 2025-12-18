@@ -482,6 +482,30 @@ def train():
                 print_rank_0("Initialize RoPE")
                 m.rope_init()
 
+
+    # Fix: Materialize buffers that are still on meta device (e.g. position_ids)
+    # 修复：手动实例化那些不在 checkpoint 中且仍停留在 meta 设备上的 buffers
+    for name, module in model.named_modules():
+        for buffer_name, buffer in module.named_buffers(recurse=False):
+            if buffer.device.type == "meta":
+                print_rank_0(f"Materializing buffer '{name}.{buffer_name}' from meta to {torch.cuda.current_device()}")
+                
+                # 如果是 position_ids，通常需要初始化为 [0, 1, 2, ...]
+                if "position_ids" in buffer_name:
+                    # 获取序列长度 (通常是最后一个维度)
+                    seq_len = buffer.shape[-1]
+                    # 创建 [0, 1, ..., seq_len-1]
+                    new_buffer = torch.arange(seq_len, device=torch.cuda.current_device(), dtype=buffer.dtype)
+                    # 如果原始 shape 是 [1, seq_len]，需要 expand
+                    if buffer.ndim > 1:
+                        new_buffer = new_buffer.expand(buffer.shape)
+                else:
+                    # 其他 buffer 默认初始化为全 0
+                    new_buffer = torch.zeros_like(buffer, device=torch.cuda.current_device())
+                
+                # 将实例化的 buffer 注册回模块，替换掉 meta buffer
+                module.register_buffer(buffer_name, new_buffer)
+
     # Check if all parameters & buffers are initialized
     for name, tensor in itertools.chain(model.named_parameters(), model.named_buffers()):
         assert tensor.device != torch.device("meta"), \
