@@ -407,6 +407,11 @@ class UnifiedQwen3Model(Qwen3Model):
         # model.tok_embeddings.weight
         converted_state_dict["model.tok_embeddings.embed_tokens.weight"] = converted_state_dict["model.tok_embeddings.weight"]
         del converted_state_dict["model.tok_embeddings.weight"]
+
+        if 'model.token_head.token_embedding.weight' in converted_state_dict:
+            print("delete model.token_head.token_embedding.weight")
+            del converted_state_dict['model.token_head.token_embedding.weight']
+
         return converted_state_dict
 
 
@@ -538,17 +543,17 @@ class KeyeARModel(Model):
                 converted_key = f"visual_tokenizer.{k}"
                 converted_state_dict[converted_key] = v
                 
-        # 特殊处理：确保tok_embeddings.weight有正确的键名
-        # Qwen3Model会将model.embed_tokens.weight转换为model.tok_embeddings.weight
-        # 但KeyeARModel需要的是model.model.tok_embeddings.embed_tokens.weight
-        if "model.tok_embeddings.weight" in converted_state_dict:
-            # 移动到model.model.tok_embeddings.embed_tokens.weight
-            weight = converted_state_dict.pop("model.tok_embeddings.weight")
-            converted_state_dict["model.model.tok_embeddings.embed_tokens.weight"] = weight
+        # # 特殊处理：确保tok_embeddings.weight有正确的键名
+        # # Qwen3Model会将model.embed_tokens.weight转换为model.tok_embeddings.weight
+        # # 但KeyeARModel需要的是model.model.tok_embeddings.embed_tokens.weight
+        # if "model.tok_embeddings.weight" in converted_state_dict:
+        #     # 移动到model.model.tok_embeddings.embed_tokens.weight
+        #     weight = converted_state_dict.pop("model.tok_embeddings.weight")
+        #     converted_state_dict["model.model.tok_embeddings.embed_tokens.weight"] = weight
             
-        if 'model.model.token_head.token_embedding.weight' in converted_state_dict:
-            print("delete model.model.token_head.token_embedding.weight")
-            del converted_state_dict['model.model.token_head.token_embedding.weight']
+        # if 'model.model.token_head.token_embedding.weight' in converted_state_dict:
+        #     print("delete model.model.token_head.token_embedding.weight")
+        #     del converted_state_dict['model.model.token_head.token_embedding.weight']
             
         return converted_state_dict
 
