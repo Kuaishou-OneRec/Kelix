@@ -423,6 +423,11 @@ class MultiHeadCrossAttention(nn.Module):
         k = self.k_norm(k).view(B, -1, self.num_heads, self.head_dim)
         v = v.view(B, -1, self.num_heads, self.head_dim)
         
+        # #region agent log
+        import json; _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_new/debug.log"
+        with open(_log_path, "a") as _f: _f.write(json.dumps({"hypothesisId": "H5", "location": "_layers.py:MultiHeadCrossAttention.forward", "message": "qk stats after norm", "data": {"q_mean": float(q.mean()), "q_std": float(q.std()), "q_max": float(q.abs().max()), "k_mean": float(k.mean()), "k_std": float(k.std()), "k_max": float(k.abs().max())}, "timestamp": __import__("time").time()}) + "\n")
+        # #endregion
+        
         if self._xformers_available:
             # Use xformers memory efficient attention with block diagonal mask
             attn_bias = None
@@ -851,8 +856,19 @@ class SanaMSBlock(nn.Module):
                 rotary_emb=image_rotary_emb,
             )
         )
+        # #region agent log
+        import json; _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_new/debug.log"
+        with open(_log_path, "a") as _f: _f.write(json.dumps({"hypothesisId": "H1", "location": "_layers.py:SanaMSBlock.forward", "message": "x before cross_attn", "data": {"mean": float(x.mean()), "std": float(x.std()), "max": float(x.abs().max())}, "timestamp": __import__("time").time()}) + "\n")
+        # #endregion
         # Cross-attention
-        x = x + self.cross_attn(x, y, mask)
+        cross_attn_out = self.cross_attn(x, y, mask)
+        # #region agent log
+        with open(_log_path, "a") as _f: _f.write(json.dumps({"hypothesisId": "H2", "location": "_layers.py:SanaMSBlock.forward", "message": "cross_attn output", "data": {"mean": float(cross_attn_out.mean()), "std": float(cross_attn_out.std()), "max": float(cross_attn_out.abs().max())}, "timestamp": __import__("time").time()}) + "\n")
+        # #endregion
+        x = x + cross_attn_out
+        # #region agent log
+        with open(_log_path, "a") as _f: _f.write(json.dumps({"hypothesisId": "H3", "location": "_layers.py:SanaMSBlock.forward", "message": "x after cross_attn residual", "data": {"mean": float(x.mean()), "std": float(x.std()), "max": float(x.abs().max())}, "timestamp": __import__("time").time()}) + "\n")
+        # #endregion
         
         # FFN with modulation
         x = x + self.drop_path(

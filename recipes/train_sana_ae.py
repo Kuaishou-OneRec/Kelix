@@ -1287,6 +1287,18 @@ def train():
             # 6. Backward Pass
             with record_function("Backward"):
                 loss.backward()
+            
+            # #region agent log
+            import json; _log_path = "/llm_reco_ssd/zhouyang12/code/dev/muse_v2/muse_new/debug.log"
+            if scheduler.global_step % 10 == 0:  # Log every 10 steps to reduce overhead
+                cross_attn_grad_stats = []
+                for name, param in model.named_parameters():
+                    if "cross_attn" in name and param.grad is not None:
+                        grad = param.grad.detach()
+                        cross_attn_grad_stats.append({"name": name, "grad_norm": float(grad.norm()), "grad_max": float(grad.abs().max())})
+                if cross_attn_grad_stats:
+                    with open(_log_path, "a") as _f: _f.write(json.dumps({"hypothesisId": "H4", "location": "train_sana_ae.py:backward", "message": "cross_attn gradients", "data": {"step": scheduler.global_step, "grads": cross_attn_grad_stats[:5]}, "timestamp": __import__("time").time()}) + "\n")
+            # #endregion
 
             # 7. Gradient Clipping
             with record_function("GradClip"):
