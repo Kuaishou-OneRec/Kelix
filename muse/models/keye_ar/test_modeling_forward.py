@@ -115,7 +115,7 @@ def load_keye_ar_config(conf_path):
     rope_theta = get_config_value(conf_data, 'rope_theta', 1000000, "conf_data")
     max_position_embeddings = get_config_value(conf_data, 'max_position_embeddings', 40960, "conf_data")
     tie_word_embeddings = get_config_value(conf_data, 'tie_word_embeddings', False, "conf_data")
-    print(f"tie_word_embeddings={tie_word_embeddings}")
+
     image_token_id = conf_data.get('image_token_id')
     pad_token_id = conf_data.get('pad_token_id')
     q_eos_token = conf_data.get('q_eos_token')

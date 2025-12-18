@@ -432,6 +432,8 @@ class UnifiedQwen3Model(Qwen3Model):
 
         if not tie_word_embeddings:
             converted_state_dict["model.output.weight"] = converted_state_dict["lm_head.weight"]
+        import IPython
+        IPython.embed()
         return converted_state_dict
 
 
@@ -533,6 +535,9 @@ class KeyeARModel(Model):
                 else:
                     # 对于不以"model."开头的键，需要添加"model."前缀
                     main_model_state_dict[f"model.{hf_key}"] = tensor
+
+            if hf_key == "lm_head.weight":
+                main_model_state_dict["lm_head.weight"] = tensor
 
         # Convert the main model state dict using UnifiedQwen3Model's convert_hf_state_dict
         # 修复：正确传递参数，将tie_word_embeddings作为关键字参数而不是位置参数
