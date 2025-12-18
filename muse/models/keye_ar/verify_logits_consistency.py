@@ -17,7 +17,7 @@ from contextlib import nullcontext
 from muse.models.keye_ar.ar_ori import KeyeForConditionalGeneration
 from muse.models.keye_ar.modeling import KeyeARModel
 from muse.models.keye_ar.keye_vl_utils import process_vision_info
-from muse.models.keye_ar.configuration_keye import KeyeARConfig
+from muse.config import KeyeARConfig, UnifiedQwen3Config, KeyeTokenizerConfig, UnifiedTokenDecoderConfig, KeyeVisionConfig
 
 
 def generate_circle_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(255, 255, 255), outline_width=5):
