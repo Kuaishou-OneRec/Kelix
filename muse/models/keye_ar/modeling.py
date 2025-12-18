@@ -359,65 +359,50 @@ class UnifiedQwen3Model(Qwen3Model):
 
     def convert_hf_state_dict(self,
                               hf_state_dict: Dict[str, torch.Tensor],
-                              tie_word_embeddings: bool = True,
                               **kwargs) -> Dict[str, torch.Tensor]:
-        """Convert a Hugging Face state dictionary to KeyeARModel state dictionary.
+        """Convert a Hugging Face state dictionary to UnifiedQwen3Model state dictionary.
         
-        This implementation reuses the UnifiedQwen3Model's convert_hf_state_dict logic for the main model
-        and adds handling for the lm_head parameter.
+        This implementation reuses the Qwen3Model's convert_hf_state_dict logic for the main model
+        and adds handling for the token_head parameter.
         
         Args:
             hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
-            tie_word_embeddings: Whether the model ties embeddings (skip lm_head if True).
             **kwargs: Additional keyword arguments.
         
         Returns:
             A dictionary of model state with converted key names.
         """
-        from examples.keye_tokenizer.convert_checkpoint import convert_hf_checkpoint as convert_hf_checkpoint_for_tokenizer
-
-        # First, use UnifiedQwen3Model's convert_hf_state_dict for the main model components
-        # Extract the keys that belong to the main model (excluding visual_tokenizer and lm_head)
+        # First, use Qwen3Model's convert_hf_state_dict for the main model components
+        # Extract the keys that belong to the main model (excluding token_head)
         main_model_state_dict = {}
+        token_head_state_dict = {}
+        
         for hf_key, tensor in hf_state_dict.items():
-            if not hf_key.startswith("visual_tokenizer.") and not hf_key == "lm_head.weight":
+            # Extract token_head.* keys for separate processing
+            if hf_key.startswith("model.token_head."):
+                new_k = hf_key[len("model.token_head."):]
+                token_head_state_dict[new_k] = tensor
+            else:
                 main_model_state_dict[hf_key] = tensor
         
-        print("tie_word_embeddings", tie_word_embeddings)
-        print("kwargs", kwargs)
-        # Convert the main model state dict using UnifiedQwen3Model's convert_hf_state_dict
-        converted_state_dict = Qwen3Model.convert_hf_state_dict(
-            self,
-            hf_state_dict=main_model_state_dict, 
-            tie_word_embeddings=tie_word_embeddings,
+        # Convert the main model state dict using Qwen3Model's convert_hf_state_dict
+        converted_state_dict = super().convert_hf_state_dict(
+            hf_state_dict=main_model_state_dict,
             **kwargs
         )
         
-        # Handle the lm_head parameter
-        for hf_key, tensor in list(hf_state_dict.items()):
-            # Handle lm_head weight
-            if hf_key == "lm_head.weight":
-                converted_key = "lm_head.weight"
-                converted_state_dict[converted_key] = tensor
-                continue
+        # Handle token_head weights using UnifiedTokenDecoder's convert_hf_state_dict
+        if token_head_state_dict:
+            from ..unified_token_decoder import UnifiedTokenDecoder
+            converted_token_head_state_dict = UnifiedTokenDecoder.convert_hf_state_dict(
+                state_dict=token_head_state_dict,
+                reduce_mode=True  # We want to reduce the output dimensions
+            )
             
-            # Handle visual_tokenizer weights using the imported function
-            if hf_key.startswith("visual_tokenizer."):
-                # Extract visual_tokenizer.* keys and convert using the imported function
-                visual_tokenizer_state_dict = {}
-                for k, v in hf_state_dict.items():
-                    if k.startswith("visual_tokenizer."):
-                        new_k = k[len("visual_tokenizer."):]
-                        visual_tokenizer_state_dict[new_k] = v
-                
-                # Convert using the imported function
-                converted_visual_tokenizer_state_dict = convert_hf_checkpoint_for_tokenizer(visual_tokenizer_state_dict)
-                
-                # Add back the "visual_tokenizer." prefix and update the main converted_state_dict
-                for k, v in converted_visual_tokenizer_state_dict.items():
-                    converted_key = f"visual_tokenizer.{k}"
-                    converted_state_dict[converted_key] = v
-                continue
+            # Add back the "model.token_head." prefix
+            for k, v in converted_token_head_state_dict.items():
+                converted_key = f"model.token_head.{k}"
+                converted_state_dict[converted_key] = v
         
         return converted_state_dict
 
@@ -462,7 +447,7 @@ class KeyeARModel(Model):
         """Convert a Hugging Face state dictionary to KeyeARModel state dictionary.
         
         This implementation reuses the UnifiedQwen3Model's convert_hf_state_dict logic for the main model
-        and adds handling for the lm_head parameter.
+        and adds handling for the lm_head and visual_tokenizer parameters.
         
         Args:
             hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
@@ -472,46 +457,43 @@ class KeyeARModel(Model):
         Returns:
             A dictionary of model state with converted key names.
         """
-        from examples.keye_tokenizer.convert_checkpoint import convert_hf_checkpoint as convert_hf_checkpoint_for_tokenizer
+        from examples.keye_tokenizer.convert_checkpoint import convert_hf_checkpoint
 
         # First, use UnifiedQwen3Model's convert_hf_state_dict for the main model components
         # Extract the keys that belong to the main model (excluding visual_tokenizer and lm_head)
         main_model_state_dict = {}
+        lm_head_weight = None
+        visual_tokenizer_state_dict = {}
+        
         for hf_key, tensor in hf_state_dict.items():
-            if not hf_key.startswith("visual_tokenizer.") and not hf_key == "lm_head.weight":
+            if hf_key == "lm_head.weight":
+                lm_head_weight = tensor
+            elif hf_key.startswith("visual_tokenizer."):
+                new_k = hf_key[len("visual_tokenizer."):]
+                visual_tokenizer_state_dict[new_k] = tensor
+            else:
                 main_model_state_dict[hf_key] = tensor
         
         # Convert the main model state dict using UnifiedQwen3Model's convert_hf_state_dict
         converted_state_dict = self.model.convert_hf_state_dict(
             hf_state_dict=main_model_state_dict,
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs
         )
         
         # Handle the lm_head parameter
-        for hf_key, tensor in list(hf_state_dict.items()):
-            # Handle lm_head weight
-            if hf_key == "lm_head.weight":
-                converted_key = "lm_head.weight"
-                converted_state_dict[converted_key] = tensor
-                continue
+        if lm_head_weight is not None and not tie_word_embeddings:
+            converted_state_dict["lm_head.weight"] = lm_head_weight
             
-            # Handle visual_tokenizer weights using the imported function
-            if hf_key.startswith("visual_tokenizer."):
-                # Extract visual_tokenizer.* keys and convert using the imported function
-                visual_tokenizer_state_dict = {}
-                for k, v in hf_state_dict.items():
-                    if k.startswith("visual_tokenizer."):
-                        new_k = k[len("visual_tokenizer."):]
-                        visual_tokenizer_state_dict[new_k] = v
-                
-                # Convert using the imported function
-                converted_visual_tokenizer_state_dict = convert_hf_checkpoint_for_tokenizer(visual_tokenizer_state_dict)
-                
-                # Add back the "visual_tokenizer." prefix and update the main converted_state_dict
-                for k, v in converted_visual_tokenizer_state_dict.items():
-                    converted_key = f"visual_tokenizer.{k}"
-                    converted_state_dict[converted_key] = v
-                continue
+        # Handle visual_tokenizer weights using the imported function
+        if visual_tokenizer_state_dict:
+            # Convert using the imported function
+            converted_visual_tokenizer_state_dict = convert_hf_checkpoint(visual_tokenizer_state_dict)
+            
+            # Add back the "visual_tokenizer." prefix and update the main converted_state_dict
+            for k, v in converted_visual_tokenizer_state_dict.items():
+                converted_key = f"visual_tokenizer.{k}"
+                converted_state_dict[converted_key] = v
         
         return converted_state_dict
 
