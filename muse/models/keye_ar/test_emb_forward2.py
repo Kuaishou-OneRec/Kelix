@@ -104,6 +104,8 @@ class SecondClass(nn.Module):
                 input_image_embeds = self.pre_embedding(input_image_ids % self.embed_tokens.num_embeddings).detach()
                 input_image_embeds = self.pre_embedding_linear(input_image_embeds)
             else:
+                print(input_image_ids.max())
+                print(self.embed_tokens)
                 input_image_embeds = self.embed_tokens(input_image_ids)
 
             if input_image_ids.numel():
