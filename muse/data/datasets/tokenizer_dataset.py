@@ -33,7 +33,7 @@ from PIL import Image
 from torchvision import transforms as T
 
 from transformers import AutoTokenizer, AutoProcessor, Qwen2VLProcessor, Qwen2VLConfig
-from keye_vl_utils import process_vision_info
+from tests.models.keye_tokenizer_end2end_video.keye_vl_utils import process_vision_info
 
 import signal
 import time
