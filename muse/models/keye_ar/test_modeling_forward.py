@@ -114,7 +114,8 @@ def load_keye_ar_config(conf_path):
     attention_dropout = get_config_value(conf_data, 'attention_dropout', 0.0, "conf_data")
     rope_theta = get_config_value(conf_data, 'rope_theta', 1000000, "conf_data")
     max_position_embeddings = get_config_value(conf_data, 'max_position_embeddings', 40960, "conf_data")
-    
+    tie_word_embeddings = get_config_value(conf_data, 'tie_word_embeddings', False, "conf_data")
+    print(f"tie_word_embeddings={tie_word_embeddings}")
     image_token_id = conf_data.get('image_token_id')
     pad_token_id = conf_data.get('pad_token_id')
     q_eos_token = conf_data.get('q_eos_token')
@@ -131,6 +132,7 @@ def load_keye_ar_config(conf_path):
         hidden_act=hidden_act,
         norm_eps=rms_norm_eps,
         attn_dropout=attention_dropout,
+        tie_word_embeddings=tie_word_embeddings,
         rope_theta=rope_theta,
         max_seq_len=max_position_embeddings,
         image_token_id=image_token_id,
@@ -143,7 +145,7 @@ def load_keye_ar_config(conf_path):
         token_head_dim_feedforward=token_head_intermediate_dim,
         token_head_num_layers=token_head_num_layers,
     )
-    
+    print(f"unified_qwen_config.tie_word_embeddings={unified_qwen_config.tie_word_embeddings}")
     # 构造KeyeARConfig
     keye_ar_config = KeyeARConfig(
         model_class="KeyeARModel",  # 添加model_class字段
