@@ -34,6 +34,8 @@ def get_config_value(config_dict, key, default_value, config_name=""):
         warnings.warn(f"{key} not found{config_source}, using default value: {default_value}")
     return value
 
+device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
+
 
 
 
@@ -201,7 +203,7 @@ def process_im_message(processor, image):
         padding=False,  # 强制关闭Pad，确保原始输入无多余Token
         truncation=False,
         return_tensors="pt",
-    ).to(2)
+    ).to(device)
     return inputs
 
 def load_keye_for_conditional_generation(output_model_dir, device):
@@ -521,7 +523,6 @@ def compare_logits(logits1, logits2, model1_name, model2_name, tolerance=1e-5):
 def main():
     """主函数：验证两个模型的logits一致性"""
     # 设置设备
-    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
     print(f"使用设备: {device}")
     
     # 模型路径
