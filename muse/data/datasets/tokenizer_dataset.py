@@ -854,8 +854,7 @@ class ChatCompletionVisionDataset(DistributedDataset):
     for turn in messages:
       # Validate turn format - each turn should be a dict with 'role' and 'content'
       if not isinstance(turn, dict):
-        try :
-          print('maosiyangdebugturn', turn)
+        print('maosiyangdebugturn', turn)
         raise ValueError(f"Invalid turn format: expected dict, got {type(turn)}, value={str(turn)[:100]}")
       try:
         content = turn["content"]
