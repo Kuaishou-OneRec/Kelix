@@ -278,6 +278,8 @@ class UnifiedQwen3Model(Qwen3Model):
             codebook_size=qwen_config.codebook_size,
             n_q_tokens=qwen_config.n_q_tokens,
             q_eos_token=qwen_config.q_eos_token,
+            pad_token_id=qwen_config.pad_token_id,
+            image_token_id=qwen_config.image_token_id,
         )
         token_head = UnifiedTokenDecoder(
             config=token_decoder_config,
