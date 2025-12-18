@@ -420,7 +420,7 @@ class KeyeARModel(Model):
         self.visual_tokenizer = KeyeImageTokenizer(tokenizer_config)
         
         # 量化投影器
-        original_hidden_size = getattr(config, "original_hidden_size", config.hidden_size)
+        original_hidden_size = qwen_config.hidden_size
         
         # 主语言模型
         self.model = UnifiedQwen3Model(qwen_config=config, token_decoder_config=token_decoder_config)
