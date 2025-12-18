@@ -563,7 +563,7 @@ def get_keye_conditional_generation_logits(model, inputs, layer_hook=None):
 
     inputs["position_ids"] = torch.arange(0, inputs["input_ids"].size(1)).unsqueeze(0).to(inputs["input_ids"].device)
 
-    with autocast_cm(dtype=torch.float):
+    with autocast_cm(dtype=torch.bfloat16):
         outputs = model(**inputs)
     
     # KeyeForConditionalGeneration直接返回logits
