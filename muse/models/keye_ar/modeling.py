@@ -88,6 +88,7 @@ class UnifiedTokenEmbedding(nn.Module):
         Returns:
             aggregated_embeddings: 聚合后的embedding，shape=[batch_size, length, hidden_size]
         """
+
         embeddings = self._get_token_embeddings(extended_tokens)
         if aggregation:
             aggregated_embeddings = self._embedding_aggregation(extended_tokens, embeddings)
