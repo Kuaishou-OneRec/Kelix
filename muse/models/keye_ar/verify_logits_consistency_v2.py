@@ -34,7 +34,7 @@ def get_config_value(config_dict, key, default_value, config_name=""):
         warnings.warn(f"{key} not found{config_source}, using default value: {default_value}")
     return value
 
-device = torch.device("cuda:4" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:3" if torch.cuda.is_available() else "cpu")
 
 
 
@@ -436,30 +436,17 @@ class LayerAlignmentHook:
         self.layer_outputs.clear()
         self.layer_modules.clear()
 
-def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
+def compare_layer_outputs(hook1, hook2, model1=None, model2=None, tolerance=1e-5):
     """比较两个hook记录的层输出"""
-    print("\n" + "="*80)
-    print("层对齐分析报告")
-    print("="*80)
-    
-    # 调试信息：打印可用的层和模块信息
-    print(f"调试信息 - {hook1.model_name} 可用的层: {list(hook1.layer_outputs.keys())}")
-    print(f"调试信息 - {hook2.model_name} 可用的层: {list(hook2.layer_outputs.keys())}")
-    print(f"调试信息 - {hook1.model_name} 存储的模块信息: {list(hook1.layer_modules.keys())}")
-    print(f"调试信息 - {hook2.model_name} 存储的模块信息: {list(hook2.layer_modules.keys())}")
+    print("\n" + "="*50)
+    print("层对齐分析")
+    print("="*50)
     
     all_success = True
     layer_comparisons = {}
     
     # 获取两个hook中共同的层
     common_layers = set(hook1.layer_outputs.keys()) & set(hook2.layer_outputs.keys())
-    unique_layers1 = set(hook1.layer_outputs.keys()) - common_layers
-    unique_layers2 = set(hook2.layer_outputs.keys()) - common_layers
-    
-    if unique_layers1:
-        print(f"⚠️ {hook1.model_name} 独有的层: {sorted(unique_layers1)}")
-    if unique_layers2:
-        print(f"⚠️ {hook2.model_name} 独有的层: {sorted(unique_layers2)}")
     
     for layer_name in sorted(common_layers):
         outputs1 = hook1.layer_outputs[layer_name]
@@ -467,44 +454,19 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
         
         if len(outputs1) != len(outputs2):
             print(f"❌ {layer_name}: 输出数量不匹配 ({len(outputs1)} vs {len(outputs2)})")
-            print("\n=== 详细模块信息 ===")
-            print(f"{hook1.model_name} 模块信息:")
-            if layer_name in hook1.layer_modules:
-                module_info = hook1.layer_modules[layer_name]
-                print(f"  模块类型: {module_info['module_type']}")
-                print(f"  模块完整名称: {module_info['module_full_name']}")
-                print(f"  模块标识: {module_info['module_str']}")
-                if 'input_shapes' in module_info:
-                    print(f"  输入形状: {module_info['input_shapes']}")
-                if 'output_shape' in module_info:
-                    print(f"  输出形状: {module_info['output_shape']}")
-            else:
-                print("  模块信息未记录")
-                print(f"  可用的模块信息键: {list(hook1.layer_modules.keys())}")
-            
-            print(f"\n{hook2.model_name} 模块信息:")
-            if layer_name in hook2.layer_modules:
-                module_info = hook2.layer_modules[layer_name]
-                print(f"  模块类型: {module_info['module_type']}")
-                print(f"  模块完整名称: {module_info['module_full_name']}")
-                print(f"  模块标识: {module_info['module_str']}")
-                if 'input_shapes' in module_info:
-                    print(f"  输入形状: {module_info['input_shapes']}")
-                if 'output_shape' in module_info:
-                    print(f"  输出形状: {module_info['output_shape']}")
-            else:
-                print("  模块信息未记录")
-                print(f"  可用的模块信息键: {list(hook2.layer_modules.keys())}")
-            
-            print(f"\n=== 详细输出信息 ===")
-            print(f"outputs1({[x.shape for x in outputs1]})={outputs1}")
-            print(f"outputs2({[x.shape for x in outputs2]})={outputs2}")
+            print(f"模块: {layer_name}")
+            print(f"形状1: {[x.shape for x in outputs1]}")
+            print(f"形状2: {[x.shape for x in outputs2]}")
             
             # 进入调试模式
-            print("\n" + "="*80)
-            print("进入调试模式 - 输出数量不匹配")
-            print("="*80)
-            dump_and_embed(hook1, hook2, layer_name, "output_count_mismatch")
+            print("\n进入调试模式...")
+            print("可用变量: model1, model2, hook1, hook2, layer_name, outputs1, outputs2")
+            try:
+                import IPython
+                IPython.embed()
+            except ImportError:
+                import code
+                code.interact(local=locals())
             
             all_success = False
             layer_comparisons[layer_name] = False
@@ -515,176 +477,68 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
             # 检查形状是否一致
             if out1.shape != out2.shape:
                 print(f"❌ {layer_name}[{i}]: 形状不匹配 {out1.shape} vs {out2.shape}")
-                print("\n=== 详细模块信息 ===")
-                print(f"{hook1.model_name} 模块信息:")
-                if layer_name in hook1.layer_modules:
-                    module_info = hook1.layer_modules[layer_name]
-                    print(f"  模块类型: {module_info['module_type']}")
-                    print(f"  模块完整名称: {module_info['module_full_name']}")
-                    print(f"  模块标识: {module_info['module_str']}")
-                    if 'input_shapes' in module_info:
-                        print(f"  输入形状: {module_info['input_shapes']}")
-                    if 'output_shape' in module_info:
-                        print(f"  输出形状: {module_info['output_shape']}")
-                else:
-                    print("  模块信息未记录")
-                    print(f"  可用的模块信息键: {list(hook1.layer_modules.keys())}")
+                print(f"模块: {layer_name}")
                 
-                print(f"\n{hook2.model_name} 模块信息:")
-                if layer_name in hook2.layer_modules:
-                    module_info = hook2.layer_modules[layer_name]
-                    print(f"  模块类型: {module_info['module_type']}")
-                    print(f"  模块完整名称: {module_info['module_full_name']}")
-                    print(f"  模块标识: {module_info['module_str']}")
-                    if 'input_shapes' in module_info:
-                        print(f"  输入形状: {module_info['input_shapes']}")
-                    if 'output_shape' in module_info:
-                        print(f"  输出形状: {module_info['output_shape']}")
-                else:
-                    print("  模块信息未记录")
-                    print(f"  可用的模块信息键: {list(hook2.layer_modules.keys())}")
-                
-                print(f"\n=== 详细输出信息 ===")
-                print(f"{hook1.model_name} 输出 (out1):")
-                print(f"  形状: {out1.shape}")
-                print(f"  数值范围: [{out1.min().item():.6f}, {out1.max().item():.6f}]")
-                print(f"  平均值: {out1.mean().item():.6f}")
-                print(f"  标准差: {out1.std().item():.6f}")
-                print(f"\n{hook2.model_name} 输出 (out2):")
-                print(f"  形状: {out2.shape}")
-                print(f"  数值范围: [{out2.min().item():.6f}, {out2.max().item():.6f}]")
-                print(f"  平均值: {out2.mean().item():.6f}")
-                print(f"  标准差: {out2.std().item():.6f}")
-                print(f"\n元素总数: {out1.numel()} vs {out2.numel()}")
-                
-                # 尝试将out1 reshape到out2的形状
-                try:
-                    # 计算总元素数是否相同
-                    if out1.numel() == out2.numel():
+                # 尝试reshape
+                if out1.numel() == out2.numel():
+                    try:
                         out1_reshaped = out1.reshape(out2.shape)
-                        print(f"     尝试reshape: {out1.shape} -> {out2.shape}")
+                        print(f"尝试reshape: {out1.shape} -> {out2.shape}")
                         out1 = out1_reshaped
-                    else:
-                        print(f"     ❌ 元素总数不匹配，无法reshape")
-                        layer_success = False
-                        all_success = False
-                        
+                    except Exception as e:
+                        print(f"reshape失败: {e}")
                         # 进入调试模式
-                        print("\n" + "="*80)
-                        print("进入调试模式 - 形状不匹配")
-                        print("="*80)
-                        dump_and_embed(hook1, hook2, layer_name, "shape_mismatch", i, out1, out2)
+                        print("\n进入调试模式...")
+                        print("可用变量: model1, model2, hook1, hook2, layer_name, out1, out2")
+                        try:
+                            import IPython
+                            IPython.embed()
+                        except ImportError:
+                            import code
+                            code.interact(local=locals())
                         
+                        all_success = False
+                        layer_comparisons[layer_name] = False
                         return False, layer_comparisons
-                except Exception as e:
-                    print(f"     ❌ reshape失败: {e}")
-                    layer_success = False
-                    all_success = False
-                    
+                else:
+                    print(f"元素总数不匹配: {out1.numel()} vs {out2.numel()}")
                     # 进入调试模式
-                    print("\n" + "="*80)
-                    print("进入调试模式 - reshape失败")
-                    print("="*80)
-                    dump_and_embed(hook1, hook2, layer_name, "reshape_failed", i, out1, out2)
+                    print("\n进入调试模式...")
+                    print("可用变量: model1, model2, hook1, hook2, layer_name, out1, out2")
+                    try:
+                        import IPython
+                        IPython.embed()
+                    except ImportError:
+                        import code
+                        code.interact(local=locals())
                     
+                    all_success = False
+                    layer_comparisons[layer_name] = False
                     return False, layer_comparisons
             
-            # 转换为float32进行精确比较
+            # 计算MAE误差
             out1_f32 = out1.float()
             out2_f32 = out2.float()
-            
-            # 计算绝对误差
-            abs_diff = torch.abs(out1_f32 - out2_f32)
-            max_abs_diff = torch.max(abs_diff).item()
-            mean_abs_diff = torch.mean(abs_diff).item()
-            
-            # 计算相对误差
-            relative_diff = abs_diff / (torch.abs(out2_f32) + 1e-8)
-            max_relative_diff = torch.max(relative_diff).item()
-            mean_relative_diff = torch.mean(relative_diff).item()
+            mae = torch.mean(torch.abs(out1_f32 - out2_f32)).item()
             
             # 检查是否在容差范围内
-            if max_abs_diff > tolerance or max_relative_diff > tolerance:
-                print(f"❌ {layer_name}[{i}]: 输出不一致")
-                print("\n=== 详细模块信息 ===")
-                print(f"{hook1.model_name} 模块信息:")
-                if layer_name in hook1.layer_modules:
-                    module_info = hook1.layer_modules[layer_name]
-                    print(f"  模块类型: {module_info['module_type']}")
-                    print(f"  模块完整名称: {module_info['module_full_name']}")
-                    print(f"  模块标识: {module_info['module_str']}")
-                    if 'input_shapes' in module_info:
-                        print(f"  输入形状: {module_info['input_shapes']}")
-                    if 'output_shape' in module_info:
-                        print(f"  输出形状: {module_info['output_shape']}")
-                else:
-                    print("  模块信息未记录")
-                    print(f"  可用的模块信息键: {list(hook1.layer_modules.keys())}")
-                
-                print(f"\n{hook2.model_name} 模块信息:")
-                if layer_name in hook2.layer_modules:
-                    module_info = hook2.layer_modules[layer_name]
-                    print(f"  模块类型: {module_info['module_type']}")
-                    print(f"  模块完整名称: {module_info['module_full_name']}")
-                    print(f"  模块标识: {module_info['module_str']}")
-                    if 'input_shapes' in module_info:
-                        print(f"  输入形状: {module_info['input_shapes']}")
-                    if 'output_shape' in module_info:
-                        print(f"  输出形状: {module_info['output_shape']}")
-                else:
-                    print("  模块信息未记录")
-                    print(f"  可用的模块信息键: {list(hook2.layer_modules.keys())}")
-                
-                print(f"\n=== 详细输出信息 ===")
-                print(f"{hook1.model_name} 输出 (out1):")
-                print(f"  形状: {out1.shape}")
-                print(f"  数值范围: [{out1.min().item():.6f}, {out1.max().item():.6f}]")
-                print(f"  平均值: {out1.mean().item():.6f}")
-                print(f"  标准差: {out1.std().item():.6f}")
-                print(f"\n{hook2.model_name} 输出 (out2):")
-                print(f"  形状: {out2.shape}")
-                print(f"  数值范围: [{out2.min().item():.6f}, {out2.max().item():.6f}]")
-                print(f"  平均值: {out2.mean().item():.6f}")
-                print(f"  标准差: {out2.std().item():.6f}")
-                
-                print(f"\n=== 差异分析 ===")
-                print(f"最大绝对误差: {max_abs_diff:.6e}")
-                print(f"平均绝对误差: {mean_abs_diff:.6e}")
-                print(f"最大相对误差: {max_relative_diff:.6e}")
-                print(f"平均相对误差: {mean_relative_diff:.6e}")
-                
-                # 输出差异最大的位置
-                max_diff_idx = torch.argmax(abs_diff)
-                max_diff_idx_unraveled = np.unravel_index(max_diff_idx.item(), out1.shape)
-                print(f"最大差异位置: {max_diff_idx_unraveled}")
-                print(f"  在{layer_name}[{i}]的该位置:")
-                print(f"  {hook1.model_name} 值: {out1_f32.flatten()[max_diff_idx].item():.6f}")
-                print(f"  {hook2.model_name} 值: {out2_f32.flatten()[max_diff_idx].item():.6f}")
-                print(f"  绝对差异: {abs_diff.flatten()[max_diff_idx].item():.6e}")
+            if mae > tolerance:
+                print(f"❌ {layer_name}[{i}]: 输出不一致 (MAE: {mae:.6e})")
+                print(f"模块: {layer_name}")
+                print(f"形状: {out1.shape}")
                 
                 # 进入调试模式
-                print("\n" + "="*80)
-                print("进入调试模式 - 形状不匹配")
-                print("="*80)
-                print("可用变量:")
-                print("  - hook1: 第一个模型的hook对象")
-                print("  - hook2: 第二个模型的hook对象")
-                print("  - model1: 第一个模型对象 (KeyeForConditionalGeneration)")
-                print("  - model2: 第二个模型对象 (KeyeARModel)")
-                print("  - layer_name: 当前出错的层名")
-                print("  - out1: 第一个模型的输出")
-                print("  - out2: 第二个模型的输出")
-                print("\n输入 'exit' 或按 Ctrl+D 退出调试模式")
-                
-                # 直接在当前函数中进入embed模式
+                print("\n进入调试模式...")
+                print("可用变量: model1, model2, hook1, hook2, layer_name, out1, out2, mae")
                 try:
-                    from IPython import embed
-                    embed()
+                    import IPython
+                    IPython.embed()
                 except ImportError:
-                    print("IPython未安装，使用标准Python交互模式")
                     import code
                     code.interact(local=locals())
                 
+                all_success = False
+                layer_comparisons[layer_name] = False
                 return False, layer_comparisons
             
             if layer_success:
@@ -892,6 +746,109 @@ def main():
     
     return 0
 
+
+
+
+
+def dump_and_embed(hook1, hook2, layer_name, error_type, output_index=None, out1=None, out2=None, abs_diff=None):
+    """dump输入输出并进入IPython embed模式"""
+    import os
+    import datetime
+    
+    # 创建dump目录
+    dump_dir = "debug_dumps"
+    os.makedirs(dump_dir, exist_ok=True)
+    
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    dump_file = os.path.join(dump_dir, f"debug_{layer_name}_{error_type}_{timestamp}.pt")
+    
+    # 收集可序列化的调试信息（避免包含函数对象）
+    debug_info = {
+        'timestamp': timestamp,
+        'layer_name': layer_name,
+        'error_type': error_type,
+        'output_index': output_index,
+        'hook1_model_name': hook1.model_name,
+        'hook2_model_name': hook2.model_name,
+        'out1': out1,
+        'out2': out2,
+        'abs_diff': abs_diff
+    }
+    
+    # 添加可序列化的层输出信息（只保存张量数据）
+    if layer_name in hook1.layer_outputs:
+        debug_info['hook1_layer_outputs_shapes'] = [x.shape for x in hook1.layer_outputs[layer_name]]
+        debug_info['hook1_layer_outputs_stats'] = []
+        for i, output in enumerate(hook1.layer_outputs[layer_name]):
+            debug_info['hook1_layer_outputs_stats'].append({
+                'shape': output.shape,
+                'min': output.min().item(),
+                'max': output.max().item(),
+                'mean': output.mean().item(),
+                'std': output.std().item()
+            })
+    
+    if layer_name in hook2.layer_outputs:
+        debug_info['hook2_layer_outputs_shapes'] = [x.shape for x in hook2.layer_outputs[layer_name]]
+        debug_info['hook2_layer_outputs_stats'] = []
+        for i, output in enumerate(hook2.layer_outputs[layer_name]):
+            debug_info['hook2_layer_outputs_stats'].append({
+                'shape': output.shape,
+                'min': output.min().item(),
+                'max': output.max().item(),
+                'mean': output.mean().item(),
+                'std': output.std().item()
+            })
+    
+    # 添加可序列化的模块信息（避免包含模块对象）
+    if layer_name in hook1.layer_modules:
+        module_info = hook1.layer_modules[layer_name]
+        debug_info['hook1_module_info'] = {
+            'module_type': module_info.get('module_type', 'unknown'),
+            'module_str': module_info.get('module_str', 'unknown'),
+            'module_full_name': module_info.get('module_full_name', 'unknown'),
+            'input_shapes': module_info.get('input_shapes', []),
+            'output_shape': module_info.get('output_shape', 'unknown')
+        }
+    
+    if layer_name in hook2.layer_modules:
+        module_info = hook2.layer_modules[layer_name]
+        debug_info['hook2_module_info'] = {
+            'module_type': module_info.get('module_type', 'unknown'),
+            'module_str': module_info.get('module_str', 'unknown'),
+            'module_full_name': module_info.get('module_full_name', 'unknown'),
+            'input_shapes': module_info.get('input_shapes', []),
+            'output_shape': module_info.get('output_shape', 'unknown')
+        }
+    
+    # 使用torch.save来保存张量数据
+    torch.save(debug_info, dump_file)
+    
+    print(f"调试信息已保存到: {dump_file}")
+    print(f"文件大小: {os.path.getsize(dump_file)} 字节")
+    
+    # 进入IPython embed模式
+    print("\n进入IPython交互调试模式...")
+    print("可用变量:")
+    print("  - hook1: 第一个模型的hook对象")
+    print("  - hook2: 第二个模型的hook对象")
+    print("  - layer_name: 当前出错的层名")
+    print("  - error_type: 错误类型")
+    print("  - output_index: 输出索引")
+    print("  - out1: 第一个模型的输出")
+    print("  - out2: 第二个模型的输出")
+    print("  - abs_diff: 绝对差异")
+    print("  - debug_info: 完整的调试信息字典")
+    print("  - dump_file: dump文件路径")
+    print("\n输入 'exit' 或按 Ctrl+D 退出调试模式")
+    
+    # try:
+    #     from IPython import embed
+    #     embed()
+    # except ImportError:
+    #     print("IPython未安装，使用标准Python交互模式")
+    #     import code
+    #     code.interact(local=locals())
 
 if __name__ == "__main__":
     exit(main())
