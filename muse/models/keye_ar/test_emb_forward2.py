@@ -56,6 +56,7 @@ class FirstClass(nn.Module):
             visual_embeds_final = stage1_embeds
         else:
             stage2_embeds = self.embed_tokens(safe_visual_indices)
+            print("222222", stage2_embeds.shape)
             visual_embeds_final = stage2_embeds
 
         mask_final = is_visual_group.unsqueeze(-1).expand_as(text_embeds)
@@ -106,10 +107,8 @@ class SecondClass(nn.Module):
                 input_image_embeds = self.pre_embedding(input_image_ids % self.embed_tokens.num_embeddings).detach()
                 input_image_embeds = self.pre_embedding_linear(input_image_embeds)
             else:
-                print(input_image_ids.max())
-                print(self.embed_tokens)
                 input_image_embeds = self.embed_tokens(input_image_ids)
-
+                print(input_image_embeds)
             if input_image_ids.numel():
                 batch, _ = input_image_ids.shape
                 input_image_embeds = input_image_embeds.view(batch, self.config.vision_config.n_q_tokens, -1).sum(1)
