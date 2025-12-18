@@ -517,10 +517,7 @@ class KeyeARModel(Model):
         final_converted_state_dict = {}
         for k, v in converted_state_dict.items():
             # 如果键不是以"model."开头，则添加"model."前缀
-            if not k.startswith("model."):
-                final_converted_state_dict[f"model.{k}"] = v
-            else:
-                final_converted_state_dict[k] = v
+            final_converted_state_dict[f"model.{k}"] = v
             print(f"after convert {k}: {v.shape}")
             
         # 更新converted_state_dict引用
@@ -538,10 +535,10 @@ class KeyeARModel(Model):
             # Add back the "visual_tokenizer." prefix and update the main converted_state_dict
             for k, v in converted_visual_tokenizer_state_dict.items():
                 # 确保键有正确的前缀
-                if not k.startswith("visual."):
-                    converted_key = f"visual_tokenizer.visual.{k}"
-                else:
-                    converted_key = f"visual_tokenizer.{k}"
+                # if not k.startswith("visual."):
+                #     converted_key = f"visual_tokenizer.visual.{k}"
+                # else:
+                converted_key = f"visual_tokenizer.visual.{k}"
                 converted_state_dict[converted_key] = v
         
         # 修复UnifiedTokenDecoder的前缀问题
