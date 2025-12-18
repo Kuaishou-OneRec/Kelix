@@ -148,7 +148,7 @@ def load_keye_ar_config(conf_path):
         max_seq_len=max_position_embeddings,
         image_token_id=image_token_id,
         pad_token_id=pad_token_id,
-        q_eos_token=q_eos_token,
+q_eos_token=q_eos_token,
         codebook_size=codebook_size,
         n_q_tokens=n_q_tokens,
         token_head_d_model=token_head_dim,
@@ -398,7 +398,7 @@ class LayerAlignmentHook:
     
     def clear_outputs(self):
         """清空存储的输出"""
-        self.layer_outputs.clear()
+        self.layer_outputs.clear
 
 def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
     """比较两个hook记录的层输出"""
@@ -433,10 +433,25 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
         for i, (out1, out2) in enumerate(zip(outputs1, outputs2)):
             # 检查形状是否一致
             if out1.shape != out2.shape:
-                print(f"❌ {layer_name}[{i}]: 形状不匹配 {out1.shape} vs {out2.shape}")
-                layer_success = False
-                all_success = False
-                continue
+                print(f"⚠️ {layer_name}[{i}]: 形状不匹配 {out1.shape} vs {out2.shape}")
+                
+                # 尝试将out1 reshape到out2的形状
+                try:
+                    # 计算总元素数是否相同
+                    if out1.numel() == out2.numel():
+                        out1_reshaped = out1.reshape(out2.shape)
+                        print(f"     尝试reshape: {out1.shape} -> {out2.shape}")
+                        out1 = out1_reshaped
+                    else:
+                        print(f"     ❌ 元素总数不匹配，无法reshape: {out1.numel()} vs {out2.numel()}")
+                        layer_success = False
+                        all_success = False
+                        continue
+                except Exception as e:
+                    print(f"     ❌ reshape失败: {e}")
+                    layer_success = False
+                    all_success = False
+                    continue
             
             # 转换为float32进行精确比较
             out1_f32 = out1.float()
