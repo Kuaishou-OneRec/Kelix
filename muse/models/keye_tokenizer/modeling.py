@@ -271,6 +271,8 @@ class KeyeImageTokenizer(Model):
             # Convert quant_projector -> up_projectors
             new_k = new_k.replace("quant_projector", "up_projectors")
             
-            muse_state_dict[new_k] = v
+            # 过滤掉不需要的键
+            if "visual.head" not in new_k:
+                muse_state_dict[new_k] = v
         
         return muse_state_dict
