@@ -121,9 +121,6 @@ class UnifiedTokenEmbedding(nn.Module):
         
         # 安全索引处理
         safe_visual_indices = torch.where(mask_expanded_indices, raw_visual_indices, torch.zeros_like(raw_visual_indices))
-        safe_visual_indices = torch.clamp(safe_visual_indices, min=0)
-        safe_visual_indices = torch.where(safe_visual_indices > 299999, torch.zeros_like(safe_visual_indices), safe_visual_indices)
-
         if self.pre_embedding_size is not None:
             vis_emb_input = (safe_visual_indices % self.vocab_size).clone()
             vis_emb_input[(vis_emb_input >= self.pre_embedding_tokens) | (vis_emb_input<0)] = 0

@@ -30,24 +30,25 @@ class FirstClass(nn.Module):
             return embeddings
 
     def _get_token_embeddings(self, extended_tokens, group_size=None):
+        # 修复点1：对齐reshape逻辑（和SecondClass完全一致）
         if group_size is None:
             group_size = self.n_q_tokens + 1
         extended_tokens = extended_tokens.reshape([extended_tokens.shape[0], -1, group_size])
         input_ids_reshaped = extended_tokens
 
+        # 识别视觉组 Mask
         first_token = input_ids_reshaped[:, :, 0].clone()
         is_visual_group = (first_token >= self.vocab_size)
 
         first_token[(first_token>=self.vocab_size) | (first_token<0)] = 0
         text_embeds = self.embed_tokens(first_token)
         
+        # 修复点2：对齐visual indices切片逻辑（和SecondClass完全一致）
         raw_visual_indices = input_ids_reshaped[:, :, :-1] if group_size > 1 else input_ids_reshaped
         mask_expanded_indices = is_visual_group.unsqueeze(-1).expand_as(raw_visual_indices)
         
+        # 安全索引处理
         safe_visual_indices = torch.where(mask_expanded_indices, raw_visual_indices, torch.zeros_like(raw_visual_indices))
-        safe_visual_indices = torch.clamp(safe_visual_indices, min=0)
-        safe_visual_indices = torch.where(safe_visual_indices > self.vocab_size, torch.zeros_like(safe_visual_indices), safe_visual_indices)
-
         if self.pre_embedding_size is not None:
             vis_emb_input = (safe_visual_indices % self.vocab_size).clone()
             vis_emb_input[(vis_emb_input >= self.pre_embedding_tokens) | (vis_emb_input<0)] = 0
@@ -56,12 +57,11 @@ class FirstClass(nn.Module):
             visual_embeds_final = stage1_embeds
         else:
             stage2_embeds = self.embed_tokens(safe_visual_indices)
-            print("222222", stage2_embeds.shape)
-            print(stage2_embeds[0,6])
             visual_embeds_final = stage2_embeds
 
         mask_final = is_visual_group.unsqueeze(-1).expand_as(text_embeds)
         
+        # 修复点3：对齐repeat_interleave逻辑（和SecondClass完全一致）
         text_embeds = text_embeds[:,:,None]
         if group_size > 1:
             text_embeds = text_embeds.repeat_interleave(group_size - 1, dim=2)
@@ -69,6 +69,7 @@ class FirstClass(nn.Module):
         token_inputs_embeds = torch.where(mask_final[:, :, None, :], visual_embeds_final, text_embeds)
 
         return token_inputs_embeds
+    
     
     def _embedding_aggregation(self, extended_tokens, embeddings):
         if embeddings.size(2) == extended_tokens.size(2) - 1:
