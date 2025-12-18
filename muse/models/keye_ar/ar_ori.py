@@ -4039,6 +4039,7 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
         if self.output_one_token:
             hidden_states = self.token_head(hidden_states.reshape(-1,1,dim)).reshape(batch, -1, dim)
         else:
+            print(f"extended_tokens2222={extended_tokens}")
             infered = self.infer_id_embs(extended_tokens)
             token_inputs_embeds = infered.transpose(0,1)
             token_inputs_embeds_next = torch.roll(token_inputs_embeds, shifts=-1, dims=1)
