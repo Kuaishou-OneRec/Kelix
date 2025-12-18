@@ -584,6 +584,8 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
             # 检查是否在容差范围内
             if max_abs_diff > tolerance or max_relative_diff > tolerance:
                 print(f"❌ {layer_name}[{i}]: 输出不一致")
+                print(f"out1_f32={out1_f32}")
+                print(f"out2_f32={out2_f32}")
                 print("\n=== 详细模块信息 ===")
                 print(f"{hook1.model_name} 模块信息:")
                 if layer_name in hook1.layer_modules:
