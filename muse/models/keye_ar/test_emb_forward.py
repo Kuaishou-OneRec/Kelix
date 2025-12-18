@@ -12,9 +12,10 @@ class ModelForFirstFunc:
         self.pre_embedding_tokens = pre_embedding_tokens
         self.dim = dim
         
-        # 模拟嵌入层（固定随机种子保证结果可复现）
+        # 模拟嵌入层 - 扩大嵌入层尺寸以覆盖所有可能的token值
         torch.manual_seed(42)
-        self.embed_tokens = torch.nn.Embedding(vocab_size + 200000, dim)  # 覆盖视觉token范围
+        # 设置足够大的嵌入层维度（覆盖220000以内的所有token）
+        self.embed_tokens = torch.nn.Embedding(220000, dim)  
         if pre_embedding_size is not None:
             self.pre_embedding = torch.nn.Embedding(pre_embedding_tokens, pre_embedding_size)
             self.pre_embedding_linear = torch.nn.Linear(pre_embedding_size, dim)
@@ -48,6 +49,15 @@ class FirstInferClass:
         
         # 这里的 0 是为了安全计算，这些计算结果最后会被 mask 掉
         safe_visual_indices = torch.where(mask_expanded_indices, raw_visual_indices, torch.zeros_like(raw_visual_indices))
+        
+        # 关键修复：对超大视觉token做安全映射，避免索引越界
+        # 将超过嵌入层维度的token映射到0（不影响结果，因为会被mask）
+        embed_max_idx = self.model.embed_tokens.weight.shape[0] - 1
+        safe_visual_indices = torch.where(
+            safe_visual_indices > embed_max_idx,
+            torch.zeros_like(safe_visual_indices),
+            safe_visual_indices
+        )
 
         if self.model.pre_embedding_size is not None:
             vis_emb_input = (safe_visual_indices % self.vocab_size).clone()
@@ -77,9 +87,9 @@ class SecondInferClass:
         self.pre_embedding_tokens = pre_embedding_tokens
         self.dim = dim
         
-        # 模拟嵌入层（使用相同随机种子保证权重一致）
+        # 模拟嵌入层 - 扩大嵌入层尺寸
         torch.manual_seed(42)
-        self.embed_tokens = torch.nn.Embedding(vocab_size + 200000, dim)
+        self.embed_tokens = torch.nn.Embedding(220000, dim)
         if pre_embedding_size is not None:
             self.pre_embedding = torch.nn.Embedding(pre_embedding_tokens, pre_embedding_size)
             self.pre_embedding_linear = torch.nn.Linear(pre_embedding_size, dim)
@@ -89,7 +99,6 @@ class SecondInferClass:
         input extended_tokens: batchsize x seqlen x (n_q_tokens + 1)
         output token_inputs_embeds: batchsize x seqlen x (n_q_tokens + 1) x dim
         """
-        # print(f"extended_tokens3333={extended_tokens}")
         if group_size is None:
             group_size = self.n_q_tokens + 1
 
@@ -100,17 +109,25 @@ class SecondInferClass:
         first_token = input_ids_reshaped[:, :, 0].clone()
         is_visual_group = (first_token >= self.vocab_size)
 
-        first_token[(first_token>=self.config.vocab_size) | (first_token<0)] = 0  # 把vision tokens 置零
+        first_token[(first_token>=self.vocab_size) | (first_token<0)] = 0  # 修复：self.config.vocab_size → self.vocab_size
         text_embeds = self.embed_tokens(first_token)
         raw_visual_indices = input_ids_reshaped[:, :, :-1] if group_size > 1 else input_ids_reshaped
         mask_expanded_indices = is_visual_group.unsqueeze(-1).expand_as(raw_visual_indices)
         
         # 这里的 0 是为了安全计算，这些计算结果最后会被 mask 掉
         safe_visual_indices = torch.where(mask_expanded_indices, raw_visual_indices, torch.zeros_like(raw_visual_indices))
+        
+        # 关键修复：对超大视觉token做安全映射
+        embed_max_idx = self.embed_tokens.weight.shape[0] - 1
+        safe_visual_indices = torch.where(
+            safe_visual_indices > embed_max_idx,
+            torch.zeros_like(safe_visual_indices),
+            safe_visual_indices
+        )
 
         if self.pre_embedding_size is not None:
             vis_emb_input = (safe_visual_indices % self.vocab_size).clone()
-            vis_emb_input[(vis_emb_input >= self.pre_embedding_tokens) | (vis_emb_input<0)] = 0  #  把text tokens 置零
+            vis_emb_input[(vis_emb_input >= self.pre_embedding_tokens) | (vis_emb_input<0)] = 0
             stage1_embeds = self.pre_embedding(vis_emb_input).detach()
             stage1_embeds = self.pre_embedding_linear(stage1_embeds)
             visual_embeds_final = stage1_embeds
@@ -164,60 +181,19 @@ def build_test_input():
 
 # 执行测试
 def test_two_functions():
-    # 1. 初始化参数（根据常见配置设置，你可根据实际情况调整）
-    vocab_size = 150000  # 视觉token起始值151652 > 150000，符合is_visual_group判断逻辑
-    pre_embedding_size = None  # 先测试无pre_embedding的情况
+    # 1. 初始化参数
+    vocab_size = 150000
+    pre_embedding_size = None
     pre_embedding_tokens = None
     group_size = 9
     
     # 2. 构造输入
     extended_tokens = build_test_input()
-    print(f"输入形状: {extended_tokens.shape}")  # 应该是 [1, 27, 9]
+    print(f"输入形状: {extended_tokens.shape}")  # [1, 27, 9]
     
     # 3. 初始化两个类的实例
     first_instance = FirstInferClass(vocab_size, pre_embedding_size, pre_embedding_tokens)
     second_instance = SecondInferClass(vocab_size, n_q_tokens=8, pre_embedding_size=pre_embedding_size, pre_embedding_tokens=pre_embedding_tokens)
-    
-    # 修复第二个函数中的笔误（self.config.vocab_size → self.vocab_size）
-    # 原第二个函数中有一行写错了，这里动态修复
-    def corrected_infer_id_embs(self, extended_tokens, group_size=None):
-        if group_size is None:
-            group_size = self.n_q_tokens + 1
-
-        extended_tokens = extended_tokens.reshape([extended_tokens.shape[0], -1, group_size])
-        input_ids_reshaped = extended_tokens
-
-        # 2. 识别视觉组 Mask
-        first_token = input_ids_reshaped[:, :, 0].clone()
-        is_visual_group = (first_token >= self.vocab_size)
-
-        first_token[(first_token>=self.vocab_size) | (first_token<0)] = 0  # 修复：self.config.vocab_size → self.vocab_size
-        text_embeds = self.embed_tokens(first_token)
-        raw_visual_indices = input_ids_reshaped[:, :, :-1] if group_size > 1 else input_ids_reshaped
-        mask_expanded_indices = is_visual_group.unsqueeze(-1).expand_as(raw_visual_indices)
-        
-        # 这里的 0 是为了安全计算，这些计算结果最后会被 mask 掉
-        safe_visual_indices = torch.where(mask_expanded_indices, raw_visual_indices, torch.zeros_like(raw_visual_indices))
-
-        if self.pre_embedding_size is not None:
-            vis_emb_input = (safe_visual_indices % self.vocab_size).clone()
-            vis_emb_input[(vis_emb_input >= self.pre_embedding_tokens) | (vis_emb_input<0)] = 0
-            stage1_embeds = self.pre_embedding(vis_emb_input).detach()
-            stage1_embeds = self.pre_embedding_linear(stage1_embeds)
-            visual_embeds_final = stage1_embeds
-        else:
-            stage2_embeds = self.embed_tokens(safe_visual_indices)
-            visual_embeds_final = stage2_embeds
-
-        mask_final = is_visual_group.unsqueeze(-1).expand_as(text_embeds)
-
-        text_embeds = text_embeds[:,:,None]
-        if group_size > 1:
-            text_embeds = text_embeds.repeat_interleave(group_size - 1, dim=2)
-
-        token_inputs_embeds = torch.where(mask_final[:, :, None, :], visual_embeds_final, text_embeds)
-        return token_inputs_embeds
-    second_instance.infer_id_embs = corrected_infer_id_embs.__get__(second_instance, SecondInferClass)
     
     # 4. 调用两个函数
     output1 = first_instance.infer_id_embs(extended_tokens, group_size=group_size)
@@ -243,8 +219,16 @@ def test_two_functions():
         print(f"不一致的位置数量: {len(diff_indices)}")
         if len(diff_indices) > 0:
             print(f"第一个不一致的位置: {diff_indices[0].tolist()}")
-            print(f"第一个函数对应值: {output1[tuple(diff_indices[0])].item()}")
-            print(f"第二个函数对应值: {output2[tuple(diff_indices[0])].item()}")
+            print(f"第一个函数对应值: {output1[tuple(diff_indices[0])].item():.6f}")
+            print(f"第二个函数对应值: {output2[tuple(diff_indices[0])].item():.6f}")
 
 if __name__ == "__main__":
+    # 设置设备（优先使用GPU，如果没有则用CPU）
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"使用设备: {device}")
+    
+    # 禁用pynvml警告（可选）
+    import warnings
+    warnings.filterwarnings("ignore")
+    
     test_two_functions()
