@@ -146,7 +146,7 @@ def load_keye_ar_config(conf_path):
         tie_word_embeddings=tie_word_embeddings,
         rope_theta=rope_theta,
         max_seq_len=max_position_embeddings,
-        image_token_id=image_token_id,
+image_token_id=image_token_id,
         pad_token_id=pad_token_id,
 q_eos_token=q_eos_token,
         codebook_size=codebook_size,
@@ -203,7 +203,7 @@ def process_im_message(processor, image):
         padding=False,  # 强制关闭Pad，确保原始输入无多余Token
         truncation=False,
         return_tensors="pt",
-).to(device)
+    ).to(device)
     return inputs
 
 def load_keye_for_conditional_generation(output_model_dir, device):
@@ -404,21 +404,135 @@ class LayerAlignmentHook:
         """清空存储的输出"""
         self.layer_outputs.clear
 
-import os
-os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-os.environ["TORCH_USE_CUDA_DSA"] = "1"
-os.environ["nosp"] = 'true'
-
-import json
-import torch
-import numpy as np
-import warnings
-import sys  # 添加sys模块导入
-from pathlib import Path
-from PIL import Image, ImageDraw
-from transformers import AutoProcessor
-from contextlib import nullcontext
-from collections import defaultdict
+def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
+    """比较两个hook记录的层输出"""
+    print("\n" + "="*80)
+    print("层对齐分析报告")
+    print("="*80)
+    
+    all_success = True
+    layer_comparisons = {}
+    
+    # 获取两个hook中共同的层
+    common_layers = set(hook1.layer_outputs.keys()) & set(hook2.layer_outputs.keys())
+    unique_layers1 = set(hook1.layer_outputs.keys()) - common_layers
+    unique_layers2 = set(hook2.layer_outputs.keys()) - common_layers
+    
+    if unique_layers1:
+        print(f"⚠️ {hook1.model_name} 独有的层: {sorted(unique_layers1)}")
+    if unique_layers2:
+        print(f"⚠️ {hook2.model_name} 独有的层: {sorted(unique_layers2)}")
+    
+    for layer_name in sorted(common_layers):
+        outputs1 = hook1.layer_outputs[layer_name]
+        outputs2 = hook2.layer_outputs[layer_name]
+        
+        if len(outputs1) != len(outputs2):
+            print(f"❌ {layer_name}: 输出数量不匹配 ({len(outputs1)} vs {len(outputs2)})")
+            print(f"outputs1({[x.shape for x in outputs1]})={outputs1}")
+            print(f"outputs2({[x.shape for x in outputs2]})={outputs2}")
+            all_success = False
+            layer_comparisons[layer_name] = False
+            continue
+        
+        layer_success = True
+        for i, (out1, out2) in enumerate(zip(outputs1, outputs2)):
+            # 检查形状是否一致
+            if out1.shape != out2.shape:
+                print(f"❌ {layer_name}[{i}]: 形状不匹配 {out1.shape} vs {out2.shape}")
+                print("\n=== 详细输出信息 ===")
+                print(f"{hook1.model_name} 输出 (out1):")
+                print(f"  形状: {out1.shape}")
+                print(f"  数值范围: [{out1.min().item():.6f}, {out1.max().item():.6f}]")
+                print(f"  平均值: {out1.mean().item():.6f}")
+                print(f"  标准差: {out1.std().item():.6f}")
+                print(f"\n{hook2.model_name} 输出 (out2):")
+                print(f"  形状: {out2.shape}")
+                print(f"  数值范围: [{out2.min().item():.6f}, {out2.max().item():.6f}]")
+                print(f"  平均值: {out2.mean().item():.6f}")
+                print(f"  标准差: {out2.std().item():.6f}")
+                print(f"\n元素总数: {out1.numel()} vs {out2.numel()}")
+                
+                # 尝试将out1 reshape到out2的形状
+                try:
+                    # 计算总元素数是否相同
+                    if out1.numel() == out2.numel():
+                        out1_reshaped = out1.reshape(out2.shape)
+                        print(f"     尝试reshape: {out1.shape} -> {out2.shape}")
+                        out1 = out1_reshaped
+                    else:
+                        print(f"     ❌ 元素总数不匹配，无法reshape")
+                        layer_success = False
+                        all_success = False
+                        return False, layer_comparisons
+                except Exception as e:
+                    print(f"     ❌ reshape失败: {e}")
+                    layer_success = False
+                    all_success = False
+                    return False, layer_comparisons
+            
+            # 转换为float32进行精确比较
+            out1_f32 = out1.float()
+            out2_f32 = out2.float()
+            
+            # 计算绝对误差
+            abs_diff = torch.abs(out1_f32 - out2_f32)
+            max_abs_diff = torch.max(abs_diff).item()
+            mean_abs_diff = torch.mean(abs_diff).item()
+            
+            # 计算相对误差
+            relative_diff = abs_diff / (torch.abs(out2_f32) + 1e-8)
+            max_relative_diff = torch.max(relative_diff).item()
+            mean_relative_diff = torch.mean(relative_diff).item()
+            
+            # 检查是否在容差范围内
+            if max_abs_diff > tolerance or max_relative_diff > tolerance:
+                print(f"out1_f32={out1_f32}")
+                print(f"out2_f32={out2_f32}")
+                print(f"❌ {layer_name}[{i}]: 输出不一致")
+                print("\n=== 详细输出信息 ===")
+                print(f"{hook1.model_name} 输出 (out1):")
+                print(f"  形状: {out1.shape}")
+                print(f"  数值范围: [{out1.min().item():.6f}, {out1.max().item():.6f}]")
+                print(f"  平均值: {out1.mean().item():.6f}")
+                print(f"  标准差: {out1.std().item():.6f}")
+                print(f"\n{hook2.model_name} 输出 (out2):")
+                print(f"  形状: {out2.shape}")
+                print(f"  数值范围: [{out2.min().item():.6f}, {out2.max().item():.6f}]")
+                print(f"  平均值: {out2.mean().item():.6f}")
+                print(f"  标准差: {out2.std().item():.6f}")
+                
+                print(f"\n=== 差异分析 ===")
+                print(f"最大绝对误差: {max_abs_diff:.6e}")
+                print(f"平均绝对误差: {mean_abs_diff:.6e}")
+                print(f"最大相对误差: {max_relative_diff:.6e}")
+                print(f"平均相对误差: {mean_relative_diff:.6e}")
+                
+                # 输出差异最大的位置
+                max_diff_indices = torch.argmax(abs_diff.view(-1))
+                max_diff_pos = np.unravel_index(max_diff_indices.item(), out1.shape)
+                print(f"最大差异位置: {max_diff_pos}")
+                print(f"该位置的值: {hook1.model_name}: {out1_f32[max_diff_pos]:.6f}, {hook2.model_name}: {out2_f32[max_diff_pos]:.6f}")
+                print(f"绝对差异: {abs_diff[max_diff_pos]:.6e}")
+                print(f"相对差异: {relative_diff[max_diff_pos]:.6e}")
+                
+                layer_success = False
+                all_success = False
+                return False, layer_comparisons
+            else:
+                print(f"✅ {layer_name}[{i}]: 输出一致")
+                print(f"     最大绝对误差: {max_abs_diff:.6e}")
+                print(f"     最大相对误差: {max_relative_diff:.6e}")
+        
+        layer_comparisons[layer_name] = layer_success
+    
+    print("\n" + "="*80)
+    if all_success:
+        print("🎉 所有层输出完全一致！")
+    else:
+        print("❌ 部分层输出不一致，请检查上述报告")
+    
+    return all_success, layer_comparisons
 
 
 def get_keye_conditional_generation_logits(model, inputs, layer_hook=None):
@@ -475,7 +589,7 @@ def get_keye_ar_model_logits(model, inputs, layer_hook=None):
 
 
 def compare_logits(logits1, logits2, model1_name, model2_name, tolerance=1e-5):
-    """比较两个logits张量是否一致，不一致时直接停止运行"""
+    """比较两个logits张量是否一致"""
     print(f"\n=== 比较 {model1_name} 和 {model2_name} 的logits ===")
     print(f"Logits1 shape: {logits1.shape}")
     print(f"Logits2 shape: {logits2.shape}")
@@ -483,8 +597,7 @@ def compare_logits(logits1, logits2, model1_name, model2_name, tolerance=1e-5):
     # 检查形状是否一致
     if logits1.shape != logits2.shape:
         print(f"❌ 形状不一致: {model1_name} {logits1.shape} vs {model2_name} {logits2.shape}")
-        print("\n❌ 发现不一致，停止运行！")
-        sys.exit(1)
+        return False
     
     # 转换为float32进行精确比较
     logits1_f32 = logits1.float()
@@ -511,151 +624,14 @@ def compare_logits(logits1, logits2, model1_name, model2_name, tolerance=1e-5):
         return True
     else:
         print("❌ Logits不一致！")
-        print(f"logits1: {logits1}")
-        print(f"logits2: {logits2}")
+        
         # 输出差异最大的位置
         max_diff_indices = torch.argmax(abs_diff.view(-1))
         max_diff_pos = np.unravel_index(max_diff_indices.item(), logits1.shape)
         print(f"最大差异位置: {max_diff_pos}")
         print(f"该位置的值: {model1_name}: {logits1_f32[max_diff_pos]:.6f}, {model2_name}: {logits2_f32[max_diff_pos]:.6f}")
         
-        # 打印详细输出信息
-        print(f"\n=== 详细Logits信息 ===")
-        print(f"logits1 (shape: {logits1.shape}):")
-        print(f"  数值范围: [{torch.min(logits1).item():.6f}, {torch.max(logits1).item():.6f}]")
-        print(f"  平均值: {torch.mean(logits1).item():.6f}")
-        print(f"  标准差: {torch.std(logits1).item():.6f}")
-        
-        print(f"logits2 (shape: {logits2.shape}):")
-        print(f"  数值范围: [{torch.min(logits2).item():.6f}, {torch.max(logits2).item():.6f}]")
-        print(f"  平均值: {torch.mean(logits2).item():.6f}")
-        print(f"  标准差: {torch.std(logits2).item():.6f}")
-        
-        print(f"差异 (shape: {abs_diff.shape}):")
-        print(f"  最大差异: {max_abs_diff:.6e}")
-        print(f"  平均差异: {mean_abs_diff:.6e}")
-        
-        print(f"  最大差异位置: {max_diff_pos}")
-        print(f"  该位置的值: {model1_name}: {logits1_f32[max_diff_pos]:.6f}, {model2_name}: {logits2_f32[max_diff_pos]:.6f}")
-        print(f"  该位置的绝对差异: {abs_diff[max_diff_pos]:.6e}")
-        print(f"  该位置的相对差异: {relative_diff[max_diff_pos]:.6e}")
-        
-        print("\n❌ 发现不一致，停止运行！")
-        sys.exit(1)
-
-
-def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
-    """比较两个hook记录的层输出，不一致时直接停止运行"""
-    print("\n" + "="*80)
-    print("层对齐分析报告")
-    print("="*80)
-    
-    all_success = True
-    layer_comparisons = {}
-    
-    # 获取两个hook中共同的层
-    common_layers = set(hook1.layer_outputs.keys()) & set(hook2.layer_outputs.keys())
-    unique_layers1 = set(hook1.layer_outputs.keys()) - common_layers
-    unique_layers2 = set(hook2.layer_outputs.keys()) - common_layers
-    
-    if unique_layers1:
-        print(f"⚠️ {hook1.model_name} 独有的层: {sorted(unique_layers1)}")
-    if unique_layers2:
-        print(f"⚠️ {hook2.model_name} 独有的层: {sorted(unique_layers2)}")
-    
-    for layer_name in sorted(common_layers):
-        outputs1 = hook1.layer_outputs[layer_name]
-        outputs2 = hook2.layer_outputs[layer_name]
-        
-        if len(outputs1) != len(outputs2):
-            print(f"❌ {layer_name}: 输出数量不匹配 ({len(outputs1)} vs {len(outputs2)})")
-            print(f"outputs1({[x.shape for x in outputs1]})={outputs1}")
-            print(f"outputs2({[x.shape for x in outputs2]})={outputs2}")
-            print("\n❌ 发现不一致，停止运行！")
-            sys.exit(1)
-        
-        layer_success = True
-        for i, (out1, out2) in enumerate(zip(outputs1, outputs2)):
-            # 检查形状是否一致
-            if out1.shape != out2.shape:
-                print(f"⚠️ {layer_name}[{i}]: 形状不匹配 {out1.shape} vs {out2.shape}")
-                
-                # 尝试将out1 reshape到out2的形状
-                try:
-                    # 计算总元素数是否相同
-                    if out1.numel() == out2.numel():
-                        out1_reshaped = out1.reshape(out2.shape)
-                        print(f"     尝试reshape: {out1.shape} -> {out2.shape}")
-                        out1 = out1_reshaped
-                    else:
-                        print(f"     ❌ 元素总数不匹配，无法reshape: {out1.numel()} vs {out2.numel()}")
-                        print("\n❌ 发现不一致，停止运行！")
-                        sys.exit(1)
-                except Exception as e:
-                    print(f"     ❌ reshape失败: {e}")
-                    print("\n❌ 发现不一致，停止运行！")
-                    sys.exit(1)
-            
-            # 转换为float32进行精确比较
-            out1_f32 = out1.float()
-            out2_f32 = out2.float()
-            
-            # 计算绝对误差
-            abs_diff = torch.abs(out1_f32 - out2_f32)
-            max_abs_diff = torch.max(abs_diff).item()
-            mean_abs_diff = torch.mean(abs_diff).item()
-            
-            # 计算相对误差
-            relative_diff = abs_diff / (torch.abs(out2_f32) + 1e-8)
-            max_relative_diff = torch.max(relative_diff).item()
-            mean_relative_diff = torch.mean(relative_diff).item()
-            
-            # 检查是否在容差范围内
-            if max_abs_diff > tolerance or max_relative_diff > tolerance:
-                print(f"❌ {layer_name}[{i}]: 输出不一致")
-                print(f"     最大绝对误差: {max_abs_diff:.6e}")
-                print(f"     最大相对误差: {max_relative_diff:.6e}")
-                
-                # 打印详细输出信息
-                print(f"\n=== 详细输出信息 ===")
-                print(f"out1 (shape: {out1.shape}):")
-                print(f"  数值范围: [{torch.min(out1).item():.6f}, {torch.max(out1).item():.6f}]")
-                print(f"  平均值: {torch.mean(out1).item():.6f}")
-                print(f"  标准差: {torch.std(out1).item():.6f}")
-                
-                print(f"out2 (shape: {out2.shape}):")
-                print(f"  数值范围: [{torch.min(out2).item():.6f}, {torch.max(out2).item():.6f}]")
-                print(f"  平均值: {torch.mean(out2).item():.6f}")
-                print(f"  标准差: {torch.std(out2).item():.6f}")
-                
-                print(f"差异 (shape: {abs_diff.shape}):")
-                print(f"  最大差异: {max_abs_diff:.6e}")
-                print(f"  平均差异: {mean_abs_diff:.6e}")
-                
-                # 找到差异最大的位置
-                max_diff_indices = torch.argmax(abs_diff.view(-1))
-                max_diff_pos = np.unravel_index(max_diff_indices.item(), out1.shape)
-                print(f"  最大差异位置: {max_diff_pos}")
-                print(f"  该位置的值: out1: {out1_f32[max_diff_pos]:.6f}, out2: {out2_f32[max_diff_pos]:.6f}")
-                print(f"  该位置的绝对差异: {abs_diff[max_diff_pos]:.6e}")
-                print(f"  该位置的相对差异: {relative_diff[max_diff_pos]:.6e}")
-                
-                print("\n❌ 发现不一致，停止运行！")
-                sys.exit(1)
-            else:
-                print(f"✅ {layer_name}[{i}]: 输出一致")
-                print(f"     最大绝对误差: {max_abs_diff:.6e}")
-                print(f"     最大相对误差: {max_relative_diff:.6e}")
-        
-        layer_comparisons[layer_name] = layer_success
-    
-    print("\n" + "="*80)
-    if all_success:
-        print("🎉 所有层输出完全一致！")
-    else:
-        print("❌ 部分层输出不一致，请检查上述报告")
-    
-    return all_success, layer_comparisons
+        return False
 
 
 def main():
