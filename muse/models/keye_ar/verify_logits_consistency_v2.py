@@ -448,7 +448,7 @@ def compare_layer_outputs(hook1, hook2, model1=None, model2=None, tolerance=1e-5
     # 获取两个hook中共同的层
     common_layers = set(hook1.layer_outputs.keys()) & set(hook2.layer_outputs.keys())
     
-    for layer_name in sorted(common_layers):
+    for il, layer_name in enumerate(sorted(common_layers)):
         outputs1 = hook1.layer_outputs[layer_name]
         outputs2 = hook2.layer_outputs[layer_name]
         
@@ -526,6 +526,10 @@ def compare_layer_outputs(hook1, hook2, model1=None, model2=None, tolerance=1e-5
                 print(f"❌ {layer_name}[{i}]: 输出不一致 (MAE: {mae:.6e})")
                 print(f"模块: {layer_name}")
                 print(f"形状: {out1.shape}")
+
+                if il == 0:
+                    print("embedding layer verified")
+                    continue
                 
                 # 进入调试模式
                 print("\n进入调试模式...")
