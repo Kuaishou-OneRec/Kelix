@@ -546,10 +546,10 @@ class KeyeARModel(Model):
             with torch.no_grad():
                 vq_out = self.visual_tokenizer(pixel_values, image_grid_thw)
                 aligned_indices = torch.stack([x_i for x_i in vq_out['indices']], 0).T
-                aligned_indices = self.vocab_size + aligned_indices + torch.arange(self.config.vision_config.n_q_tokens).\
-                    to(input_ids)[None] * self.config.vision_config.codebook_size // self.config.vision_config.n_q_tokens
+                aligned_indices = self.vocab_size + aligned_indices + torch.arange(self.config.tokenizer_config.n_q_tokens).\
+                    to(input_ids)[None] * self.config.tokenizer_config.codebook_size // self.config.tokenizer_config.n_q_tokens
         else:
-            aligned_indices = torch.zeros(0, self.config.n_q_tokens).to(input_ids)
+            aligned_indices = torch.zeros(0, self.config.tokenizer_config.n_q_tokens).to(input_ids)
         input_ids = self.expand_with_image_tokens(aligned_indices, input_ids)
         assert position_ids.ndim == 2, "position_ids must be 2D"
         # 调用Qwen3Model

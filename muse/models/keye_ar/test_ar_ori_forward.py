@@ -26,6 +26,33 @@ from muse.models.keye_ar.ar_ori import KeyeForConditionalGeneration#, KeyeImageT
 
 from keye_vl_utils import process_vision_info
 
+
+def generate_circle_image(size=(100, 100), fill_color=(0, 0, 0), outline_color=(255, 255, 255), outline_width=5):
+    """
+    生成一个包含一个圆的 PIL Image 对象，用于测试。
+    
+    Args:
+        size: 图像的大小，默认为 (100, 100)
+        fill_color: 圆的填充颜色，默认为黑色 (0, 0, 0)
+        outline_color: 圆的轮廓颜色，默认为白色 (255, 255, 255)
+        outline_width: 圆的轮廓宽度，默认为 5
+        
+    Returns:
+        生成的 PIL Image 对象
+    """
+    # 创建一个新的图像对象
+    image = Image.new('RGB', size, color=(255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    # 计算圆的坐标（图像中心为圆心）
+    x_center, y_center = size[0] // 2, size[1] // 2
+    radius = min(size[0], size[1]) // 2
+    # 绘制圆
+    draw.ellipse([x_center - radius, y_center - radius, x_center + radius, y_center + radius],
+                 fill=fill_color,
+                 outline=outline_color,
+                 width=outline_width)
+    return image
+
 def set_prec():
     torch.set_printoptions(
         threshold=float('inf'),
