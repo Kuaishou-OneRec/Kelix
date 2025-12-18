@@ -209,7 +209,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
             - d_e: encoder embed dim
             - m_s: max seq len
         """
-
+        print(111, tokens.shape)
         self._validate_inputs(
             tokens=tokens,
             mask=mask,
@@ -218,7 +218,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
             input_pos=input_pos,
             input_embeds=input_embeds,
         )
-
+        print(2222, tokens.shape)
         # shape: [b, s, d]
         h = self.tok_embeddings(tokens) if input_embeds is None else input_embeds
 
@@ -567,7 +567,7 @@ class KeyeARModel(Model):
         assert input_ids.ndim == 3, "input_ids must be 3D after expansion, get {}".format(input_ids.shape)
         assert input_ids.size(2) == self.config.qwen_config.n_q_tokens + 1, \
             "input_ids must have {} columns after expansion, get {}. aligned_indices: {}".format(self.config.qwen_config.n_q_tokens + 1, input_ids.size(2), aligned_indices)
-        
+        print(f"input_ids={input_ids.shape}, position_ids={position_ids.shape}")
         # 调用Qwen3Model
         outputs = self.model(
             input_ids=input_ids,
