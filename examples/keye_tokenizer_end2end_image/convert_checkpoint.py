@@ -46,6 +46,7 @@ def _build_qwen3_config(hf_config: Dict[str, Any]) -> Qwen3Config:
         mrope_section = rope_scaling.get("mrope_section", None)
     
     qwen_cfg = Qwen3Config(
+        model_class="Qwen3Model",
         vocab_size=text_cfg.get("vocab_size", 151936),
         embed_dim=text_cfg.get("hidden_size", 4096),
         num_layers=text_cfg.get("num_hidden_layers", 32),
