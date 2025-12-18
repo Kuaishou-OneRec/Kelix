@@ -174,7 +174,7 @@ and before the softmax. This parameter is required during inference if caches ha
             encoder_mask (Optional[torch.Tensor]):  Boolean tensor defining a relational matrix between
                 tokens and encoder embeddings. A True value at position ``i,j`` means token ``i`` can attend
                 to embedding ``j`` in the decoder. Mask has shape ``[b x s x s_e]``. Default is None,
-                but this is required during inference if the model has been setup with any layers
+but this is required during inference if the model has been setup with any layers
                 which use encoder embeddings and caches have been setup.
             input_pos (Optional[torch.Tensor]): Optional tensor which contains the position ids
                 of each token. During training, this is used to indicate the positions
@@ -457,7 +457,6 @@ class KeyeARModel(Model):
         Returns:
             A dictionary of model state with converted key names.
         """
-        from examples.keye_tokenizer.convert_checkpoint import convert_hf_checkpoint
 
         # First, use UnifiedQwen3Model's convert_hf_state_dict for the main model components
         # Extract the keys that belong to the main model (excluding visual_tokenizer and lm_head)
@@ -485,10 +484,10 @@ class KeyeARModel(Model):
         if lm_head_weight is not None and not tie_word_embeddings:
             converted_state_dict["lm_head.weight"] = lm_head_weight
             
-        # Handle visual_tokenizer weights using the imported function
+        # Handle visual_tokenizer weights using KeyeImageTokenizer's convert_hf_state_dict method
         if visual_tokenizer_state_dict:
-            # Convert using the imported function
-            converted_visual_tokenizer_state_dict = convert_hf_checkpoint(visual_tokenizer_state_dict)
+            # Convert using KeyeImageTokenizer's convert_hf_state_dict method
+            converted_visual_tokenizer_state_dict = self.visual_tokenizer.convert_hf_state_dict(visual_tokenizer_state_dict)
             
             # Add back the "visual_tokenizer." prefix and update the main converted_state_dict
             for k, v in converted_visual_tokenizer_state_dict.items():

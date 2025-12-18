@@ -236,3 +236,41 @@ class KeyeImageTokenizer(Model):
 
     def get_checkpointable_module_classes(self):
         return self.visual.get_checkpointable_module_classes()
+
+    def convert_hf_state_dict(self, hf_state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+        """Convert a Hugging Face state dictionary to KeyeImageTokenizer state dictionary.
+        
+        Args:
+            hf_state_dict (Dict[str, torch.Tensor]): The Hugging Face state dictionary.
+        
+        Returns:
+            A dictionary of model state with converted key names.
+        """
+        muse_state_dict = {}
+        for k, v in hf_state_dict.items():
+            new_k = k
+            
+            # Convert visual.vision_model.* to visual.*
+            if k.startswith("visual.vision_model."):
+                new_k = "visual." + k[len("visual.vision_model."):]
+            
+            # Convert encoder.layers.X.layer_norm1 -> encoder.layers.X.sa_norm
+            new_k = new_k.replace(".layer_norm1.", ".sa_norm.")
+            # Convert encoder.layers.X.layer_norm2 -> encoder.layers.X.mlp_norm
+            new_k = new_k.replace(".layer_norm2.", ".mlp_norm.")
+            # Convert self_attn -> attn
+            new_k = new_k.replace(".self_attn.", ".attn.")
+            # Convert out_proj -> output_proj
+            new_k = new_k.replace(".out_proj.", ".output_proj.")
+            # Convert mlp.fc1 -> mlp.w1
+            new_k = new_k.replace(".mlp.fc1.", ".mlp.w1.")
+            # Convert mlp.fc2 -> mlp.w2
+            new_k = new_k.replace(".mlp.fc2.", ".mlp.w2.")
+            # Convert post_layernorm -> ln_post
+            new_k = new_k.replace(".post_layernorm.", ".ln_post.")
+            # Convert quant_projector -> up_projectors
+            new_k = new_k.replace("quant_projector", "up_projectors")
+            
+            muse_state_dict[new_k] = v
+        
+        return muse_state_dict
