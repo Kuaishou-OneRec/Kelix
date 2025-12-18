@@ -664,12 +664,27 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
                 
                 # 进入调试模式
                 print("\n" + "="*80)
-                print("进入调试模式 - 数值不一致")
+                print("进入调试模式 - 形状不匹配")
                 print("="*80)
-                dump_and_embed(hook1, hook2, layer_name, "value_mismatch", i, out1_f32, out2_f32, abs_diff)
+                print("可用变量:")
+                print("  - hook1: 第一个模型的hook对象")
+                print("  - hook2: 第二个模型的hook对象")
+                print("  - model1: 第一个模型对象 (KeyeForConditionalGeneration)")
+                print("  - model2: 第二个模型对象 (KeyeARModel)")
+                print("  - layer_name: 当前出错的层名")
+                print("  - out1: 第一个模型的输出")
+                print("  - out2: 第二个模型的输出")
+                print("\n输入 'exit' 或按 Ctrl+D 退出调试模式")
                 
-                all_success = False
-                layer_comparisons[layer_name] = False
+                # 直接在当前函数中进入embed模式
+                try:
+                    from IPython import embed
+                    embed()
+                except ImportError:
+                    print("IPython未安装，使用标准Python交互模式")
+                    import code
+                    code.interact(local=locals())
+                
                 return False, layer_comparisons
             
             if layer_success:
@@ -845,7 +860,13 @@ def main():
         )
         
         # 比较层输出
-        layer_success, layer_comparisons = compare_layer_outputs(conditional_hook, ar_hook, tolerance=1e-4)
+        layer_success, layer_comparisons = compare_layer_outputs(
+            conditional_hook, 
+            ar_hook, 
+            model1=keye_conditional_model, 
+            model2=keye_ar_model, 
+            tolerance=1e-4
+        )
         
         # 移除hook
         conditional_hook.remove_hooks()
@@ -871,109 +892,6 @@ def main():
     
     return 0
 
-
-
-
-
-def dump_and_embed(hook1, hook2, layer_name, error_type, output_index=None, out1=None, out2=None, abs_diff=None):
-    """dump输入输出并进入IPython embed模式"""
-    import os
-    import datetime
-    
-    # 创建dump目录
-    dump_dir = "debug_dumps"
-    os.makedirs(dump_dir, exist_ok=True)
-    
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    dump_file = os.path.join(dump_dir, f"debug_{layer_name}_{error_type}_{timestamp}.pt")
-    
-    # 收集可序列化的调试信息（避免包含函数对象）
-    debug_info = {
-        'timestamp': timestamp,
-        'layer_name': layer_name,
-        'error_type': error_type,
-        'output_index': output_index,
-        'hook1_model_name': hook1.model_name,
-        'hook2_model_name': hook2.model_name,
-        'out1': out1,
-        'out2': out2,
-        'abs_diff': abs_diff
-    }
-    
-    # 添加可序列化的层输出信息（只保存张量数据）
-    if layer_name in hook1.layer_outputs:
-        debug_info['hook1_layer_outputs_shapes'] = [x.shape for x in hook1.layer_outputs[layer_name]]
-        debug_info['hook1_layer_outputs_stats'] = []
-        for i, output in enumerate(hook1.layer_outputs[layer_name]):
-            debug_info['hook1_layer_outputs_stats'].append({
-                'shape': output.shape,
-                'min': output.min().item(),
-                'max': output.max().item(),
-                'mean': output.mean().item(),
-                'std': output.std().item()
-            })
-    
-    if layer_name in hook2.layer_outputs:
-        debug_info['hook2_layer_outputs_shapes'] = [x.shape for x in hook2.layer_outputs[layer_name]]
-        debug_info['hook2_layer_outputs_stats'] = []
-        for i, output in enumerate(hook2.layer_outputs[layer_name]):
-            debug_info['hook2_layer_outputs_stats'].append({
-                'shape': output.shape,
-                'min': output.min().item(),
-                'max': output.max().item(),
-                'mean': output.mean().item(),
-                'std': output.std().item()
-            })
-    
-    # 添加可序列化的模块信息（避免包含模块对象）
-    if layer_name in hook1.layer_modules:
-        module_info = hook1.layer_modules[layer_name]
-        debug_info['hook1_module_info'] = {
-            'module_type': module_info.get('module_type', 'unknown'),
-            'module_str': module_info.get('module_str', 'unknown'),
-            'module_full_name': module_info.get('module_full_name', 'unknown'),
-            'input_shapes': module_info.get('input_shapes', []),
-            'output_shape': module_info.get('output_shape', 'unknown')
-        }
-    
-    if layer_name in hook2.layer_modules:
-        module_info = hook2.layer_modules[layer_name]
-        debug_info['hook2_module_info'] = {
-            'module_type': module_info.get('module_type', 'unknown'),
-            'module_str': module_info.get('module_str', 'unknown'),
-            'module_full_name': module_info.get('module_full_name', 'unknown'),
-            'input_shapes': module_info.get('input_shapes', []),
-            'output_shape': module_info.get('output_shape', 'unknown')
-        }
-    
-    # 使用torch.save来保存张量数据
-    torch.save(debug_info, dump_file)
-    
-    print(f"调试信息已保存到: {dump_file}")
-    print(f"文件大小: {os.path.getsize(dump_file)} 字节")
-    
-    # 进入IPython embed模式
-    print("\n进入IPython交互调试模式...")
-    print("可用变量:")
-    print("  - hook1: 第一个模型的hook对象")
-    print("  - hook2: 第二个模型的hook对象")
-    print("  - layer_name: 当前出错的层名")
-    print("  - error_type: 错误类型")
-    print("  - output_index: 输出索引")
-    print("  - out1: 第一个模型的输出")
-    print("  - out2: 第二个模型的输出")
-    print("  - abs_diff: 绝对差异")
-    print("  - debug_info: 完整的调试信息字典")
-    print("  - dump_file: dump文件路径")
-    print("\n输入 'exit' 或按 Ctrl+D 退出调试模式")
-    
-    try:
-        from IPython import embed
-        embed()
-    except ImportError:
-        print("IPython未安装，使用标准Python交互模式")
-        import code
-        code.interact(local=locals())
 
 if __name__ == "__main__":
     exit(main())
