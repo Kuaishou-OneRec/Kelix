@@ -473,6 +473,67 @@ class KeyeARModel(Model):
                 converted_key = "lm_head.weight"
                 converted_state_dict[converted_key] = tensor
                 continue
+            
+            # Handle visual_tokenizer weights
+            if hf_key.startswith("visual_tokenizer."):
+                rest_key = hf_key[len("visual_tokenizer."):]
+                
+                # Handle visual.vision_model.* -> visual_tokenizer.visual.*
+                if rest_key.startswith("visual.vision_model."):
+                    vision_rest = rest_key[len("visual.vision_model."):]
+                    # Skip pooling head (vision_model.head.*) – not used in Muse KeyeVisionTransformer
+                    if vision_rest.startswith("head."):
+                        continue
+                    # Handle embeddings
+                    if vision_rest.startswith("embeddings."):
+                        converted_key = f"visual_tokenizer.visual.{vision_rest}"
+                        converted_state_dict[converted_key] = tensor
+                        continue
+                    
+                    # Handle post_layernorm -> ln_post
+                    if vision_rest.startswith("post_layernorm."):
+                        suffix = vision_rest.replace("post_layernorm.", "")
+                        converted_key = f"visual_tokenizer.visual.ln_post.{suffix}"
+                        converted_state_dict[converted_key] = tensor
+                        continue
+                    
+                    # Handle encoder layers
+                    if vision_rest.startswith("encoder.layers."):
+                        parts = vision_rest.split(".", 3)  # ["encoder", "layers", "{i}", "rest"]
+                        if len(parts) >= 4:
+                            layer_idx = parts[2]
+                            layer_rest = parts[3]
+                            
+                            if layer_rest.startswith("layer_norm1."):
+                                suffix = layer_rest.replace("layer_norm1.", "")
+                                converted_key = f"visual_tokenizer.visual.encoder.layers.{layer_idx}.sa_norm.{suffix}"
+                                converted_state_dict[converted_key] = tensor
+                                continue
+                            
+                            if layer_rest.startswith("layer_norm2."):
+                                suffix = layer_rest.replace("layer_norm2.", "")
+                                converted_key = f"visual_tokenizer.visual.encoder.layers.{layer_idx}.mlp_norm.{suffix}"
+                                converted_state_dict[converted_key] = tensor
+                                continue
+                            
+                            if layer_rest.startswith("self_attn."):
+                                attn_key = layer_rest.replace("self_attn.", "attn.")
+                                attn_key = attn_key.replace("out_proj.", "output_proj.")
+                                converted_key = f"visual_tokenizer.visual.encoder.layers.{layer_idx}.{attn_key}"
+                                converted_state_dict[converted_key] = tensor
+                                continue
+                            
+                            if layer_rest.startswith("mlp."):
+                                new_rest_key = layer_rest.replace("fc1", "w1").replace("fc2", "w2")
+                                converted_key = f"visual_tokenizer.visual.encoder.layers.{layer_idx}.{new_rest_key}"
+                                converted_state_dict[converted_key] = tensor
+                                continue
+                
+                # Handle other visual_tokenizer components (mlp_AR, pre_llm_aligner, encoder, quantizer, etc.)
+                else:
+                    converted_key = f"visual_tokenizer.{rest_key}"
+                    converted_state_dict[converted_key] = tensor
+                continue
         
         return converted_state_dict
 

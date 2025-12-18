@@ -4126,3 +4126,18 @@ class Projector(nn.Module):
         hidden_states = self.linear_2(hidden_states)
 
         return hidden_states
+    
+'''
+已知/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted/config.json严格等于muse/models/keye_ar/conf.json。请你debug如下错误，我要求所有KeyeARModel的参数都可以来自KeyeForConditionalGeneration，你看你需要修改相关的convert_hf_state_dict函数。注意，你不能修改UnifiedTokenDecoder和Qwen3Model的convert_hf_state_dict，因为他们一定是正确的，而且你必须复用他们。Traceback (most recent call last):
+  File "/llm_reco/lingzhixin/muse_v2/muse/muse/models/keye_ar/test_modeling_forward.py", line 393, in <module>
+    test_forward_v2()
+  File "/llm_reco/lingzhixin/muse_v2/muse/muse/models/keye_ar/test_modeling_forward.py", line 349, in test_forward_v2
+    model, processor, device = load_keye_ar_model_v2()
+                               ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/llm_reco/lingzhixin/muse_v2/muse/muse/models/keye_ar/test_modeling_forward.py", line 242, in load_keye_ar_model_v2
+    model.load_state_dict(converted_state_dict, strict=True)
+  File "/opt/conda/envs/py312/lib/python3.12/site-packages/torch/nn/modules/module.py", line 2581, in load_state_dict
+    raise RuntimeError(
+RuntimeError: Error(s) in loading state_dict for KeyeARModel:
+        Missing key(s) in state_dict: "visual_tokenizer.visual.embeddings.patch_embedding.weight",。。。
+'''
