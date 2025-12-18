@@ -340,7 +340,7 @@ def train():
     # Determine training mode and get model_class
     if args.model_dir:
         # Continue pretrain mode: get model_class from model_dir/config.json
-        model_config_path = Path(args.model_dir) / "config.json"
+        model_config_path = Path(args.model_dir) / "muse_config.json"
         if not model_config_path.exists():
             raise FileNotFoundError(
                 f"Config file not found: {model_config_path}. "
