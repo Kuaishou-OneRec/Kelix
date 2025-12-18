@@ -173,19 +173,25 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
                 token ``i`` does not attend to token ``j``. If no mask is specified, a causal mask
                 is used by default.
 
-A :class:`~torch.nn.attention.flex_attention.BlockMask` for document masking in a packed sequence
+                A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_seq_len]``,
+                or ``[b x s x self.encoder_max_cache_seq_len]`` if using KV-cacheing with encoder/decoder layers.
+                A value of True in row ``i`` and column ``j`` means token ``i`` attends to token ``j``. A value of False means
+                token ``i`` does not attend to token ``j``. If no mask is specified, a causal mask
+                is used by default.
+
+                A :class:`~torch.nn.attention.flex_attention.BlockMask` for document masking in a packed sequence
                 created via `create_block_mask <https://pytorch.org/blog/flexattention/#mask-mods>`_. We  use
                 :func:`~torch.nn.attention.flex_attention.flex_attention` when computing attention with block masks.
                 Default is None.
             encoder_input (Optional[torch.Tensor]): Optional input embeds from the encoder. Shape ``[b x s_e x d_e]``
-encoder_mask (Optional[torch.Tensor]):  Boolean tensor defining a relational matrix between
+                encoder_mask (Optional[torch.Tensor]):  Boolean tensor defining a relational matrix between
                 tokens and encoder embeddings. A True value at position ``i,j`` means token ``i`` can attend
                 to embedding ``j`` in the decoder. Mask has shape ``[b x s x s_e]``. Default is None,
-but this is required during inference if the model has been setup with any layers
+                but this is required during inference if the model has been setup with any layers
                 which use encoder embeddings and caches have been setup.
             input_pos (Optional[torch.Tensor]): Optional tensor which contains the position ids
                 of each token. During training, this is used to indicate the positions
-of each token relative to its sample when packed, shape ``[b x s]``.
+                of each token relative to its sample when packed, shape ``[b x s]``.
                 During inference, this indicates the position of the current token.
                 This parameter is required during inference if caches have been setup. Default is None.
             input_embeds (Optional[torch.Tensor]): Pass these instead of tokens to short-circuit token embeddings
@@ -195,12 +201,12 @@ of each token relative to its sample when packed, shape ``[b x s]``.
                 - window_size (int): sliding window size for local attention
 
         Returns:
-Union[torch.Tensor, list[torch.Tensor]]: output tensor with shape ``[b x s x v]`` if `self.skip_output_layer=False`
+            Union[torch.Tensor, list[torch.Tensor]]: output tensor with shape ``[b x s x v]`` if `self.skip_output_layer=False`
             and ``[b x s x d]`` otherwise, or a list of layer output tensors defined by ``output_hidden_states`` with the
             final output tensor appended to the list.
 
         Note:
-At the very first step of inference, when the model is provided with a prompt,
+            At the very first step of inference, when the model is provided with a prompt,
             ``input_pos`` should contain the positions of all of the tokens in the prompt.
             For a single-batch prompt, or a batch of prompts with identical lengths, this
             will be ``torch.arange(prompt_length)``. For a batch of varying-length prompts,
@@ -211,16 +217,15 @@ At the very first step of inference, when the model is provided with a prompt,
             the position(s) of the current token(s) ``torch.tensor([padded_prompt_length])``. Otherwise,
             ``input_pos`` will contain all the position ids up to the current token.
 
-Shape notation:
+        Shape notation:
             - b: batch size
             - s: token sequence length
             - s_e: encoder sequence length
-- v: vocab size
+            - v: vocab size
             - d: token embed dim
             - d_e: encoder embed dim
             - m_s: max seq len
         """
-        print(111, tokens.shape)
         self._validate_inputs(
             tokens=tokens,
             mask=mask,
@@ -229,7 +234,7 @@ Shape notation:
             input_pos=input_pos,
             input_embeds=input_embeds,
         )
-        print(2222, tokens.shape)
+
         # shape: [b, s, d]
         h = self.tok_embeddings(tokens) if input_embeds is None else input_embeds
 
@@ -253,7 +258,10 @@ Shape notation:
         token_inputs_embeds = self.tok_embeddings(tokens, aggregation=False)
         next_token_inputs_embeds = torch.roll(token_inputs_embeds, shifts=-1, dims=1)
         h = torch.cat([h[:,:,None], next_token_inputs_embeds], dim=2).to(h)
-        h = h.reshape(-1, h.size(2) + 1, h.size(-1))
+        import IPython
+        IPython.embed()
+
+        h = h.reshape(-1, h.size(1) + 1, h.size(-1))
 
         # shape: [b, seq_len, out_dim]
         output = self.unembed(h)
