@@ -86,7 +86,8 @@ def load_keye_ar_config(conf_path):
     token_head_nhead = get_config_value(conf_data, 'token_head_nhead', 4, "conf_data")
     token_head_intermediate_dim = get_config_value(conf_data, 'token_head_intermediate_dim', 2048, "conf_data")
     token_head_num_layers = get_config_value(conf_data, 'token_head_num_layers', 1, "conf_data")
-    
+    hidden_size = get_config_value(conf_data, 'hidden_size', 4096, "conf_data")
+
     unified_token_decoder_config = UnifiedTokenDecoderConfig(
         model_class="UnifiedTokenDecoder",  # 添加model_class字段
         vocab_size=codebook_size,
@@ -94,13 +95,13 @@ def load_keye_ar_config(conf_path):
         nhead=token_head_nhead,
         num_layers=1,  # 默认值
         dim_feedforward=token_head_intermediate_dim,
-        input_dim=embedding_dim,
+        input_dim=hidden_size,
         reduce=True
     )
     
     # 构造UnifiedQwen3Config
     vocab_size = get_config_value(conf_data, 'vocab_size', 151936, "conf_data")
-    hidden_size = get_config_value(conf_data, 'hidden_size', 4096, "conf_data")
+    
     num_hidden_layers = get_config_value(conf_data, 'num_hidden_layers', 36, "conf_data")
     num_attention_heads = get_config_value(conf_data, 'num_attention_heads', 32, "conf_data")
     num_key_value_heads = get_config_value(conf_data, 'num_key_value_heads', 8, "conf_data")
