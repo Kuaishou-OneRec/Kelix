@@ -166,7 +166,7 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
                 token ``i`` does not attend to token ``j``. If no mask is specified, a causal mask
                 is used by default.
 
-                A :class:`~torch.nn.attention.flex_attention.BlockMask` for document masking in a packed sequence
+A :class:`~torch.nn.attention.flex_attention.BlockMask` for document masking in a packed sequence
                 created via `create_block_mask <https://pytorch.org/blog/flexattention/#mask-mods>`_. We  use
                 :func:`~torch.nn.attention.flex_attention.flex_attention` when computing attention with block masks.
                 Default is None.
@@ -485,16 +485,30 @@ class KeyeARModel(Model):
                 # Remove the extra "model." prefix to match Qwen3Model's expected format
                 new_k = hf_key.replace("model.model.layers.", "model.layers.")
                 main_model_state_dict[new_k] = tensor
+            elif hf_key.startswith("model.visual_tokenizer.model.model.layers."):
+                # Handle nested visual_tokenizer structure: model.visual_tokenizer.model.model.layers.* -> visual_tokenizer.model.layers.*
+                new_k = hf_key.replace("model.visual_tokenizer.model.model.layers.", "visual_tokenizer.model.layers.")
+                main_model_state_dict[new_k] = tensor
+            elif hf_key.startswith("model.visual_tokenizer.model."):
+                # Handle other visual_tokenizer nested structure: model.visual_tokenizer.model.* -> visual_tokenizer.model.*
+                new_k = hf_key.replace("model.visual_tokenizer.model.", "visual_tokenizer.model.")
+                main_model_state_dict[new_k] = tensor
             else:
                 main_model_state_dict[hf_key] = tensor
         
+
+        for k, v in main_model_state_dict.items():
+            print(f"to convert {k}: {v.shape}")
+
         # Convert the main model state dict using UnifiedQwen3Model's convert_hf_state_dict
         converted_state_dict = self.model.convert_hf_state_dict(
             hf_state_dict=main_model_state_dict,
             tie_word_embeddings=tie_word_embeddings,
             **kwargs
         )
-        
+
+        for k, v in converted_state_dict.items():
+            print(f"after convert {k}: {v.shape}")
         # Handle the lm_head parameter
         if lm_head_weight is not None and not tie_word_embeddings:
             converted_state_dict["lm_head.weight"] = lm_head_weight
