@@ -538,7 +538,7 @@ class KeyeARModel(Model):
                 # if not k.startswith("visual."):
                 #     converted_key = f"visual_tokenizer.visual.{k}"
                 # else:
-                converted_key = f"visual_tokenizer.visual.{k}"
+                converted_key = f"visual_tokenizer.{k}"
                 converted_state_dict[converted_key] = v
         
         # 修复UnifiedTokenDecoder的前缀问题
