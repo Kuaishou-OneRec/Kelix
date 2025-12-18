@@ -25,6 +25,8 @@ from muse.config.base import BaseConfig, get_config, load_config
 from muse.config.model_config import (
     ModelConfig,
     Qwen3Config,
+    KeyeARConfig,
+    UnifiedTokenDecoderConfig,
     SiglipVisionConfig,
     KeyeVisionConfig,
     KeyeTokenizerConfig,
