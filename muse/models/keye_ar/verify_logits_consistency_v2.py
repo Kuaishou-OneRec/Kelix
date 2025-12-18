@@ -905,9 +905,9 @@ def dump_and_embed(hook1, hook2, layer_name, error_type, output_index=None, out1
         'abs_diff': abs_diff
     }
     
-    # dump到文件
-    with open(dump_file, 'wb') as f:
-        pickle.dump(debug_info, f)
+    # # dump到文件
+    # with open(dump_file, 'wb') as f:
+    #     pickle.dump(debug_info, f)
     
     print(f"调试信息已保存到: {dump_file}")
     print(f"文件大小: {os.path.getsize(dump_file)} 字节")
