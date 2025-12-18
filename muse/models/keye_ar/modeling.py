@@ -503,7 +503,7 @@ class KeyeARModel(Model):
         
         # 获取序列长度
         len_seq = input_ids.size(1)
-        output_dim = 1 + self.config.n_q_tokens  # 输出矩阵的列数
+        output_dim = 1 + self.config.tokenizer_config.n_q_tokens  # 输出矩阵的列数
         
         # 将input_ids flatten成 (batch_size * len, 1) 的形式以便处理
         flattened_input_ids = input_ids.view(-1, 1)  # (batch_size * len, 1)
@@ -511,13 +511,13 @@ class KeyeARModel(Model):
         # 初始化输出矩阵，所有位置先填充q_eos_token
         flattened_expanded_ids = torch.full(
             size=(flattened_input_ids.size(0), output_dim),
-            fill_value=self.config.q_eos_token,
+            fill_value=self.config.qwen_config.q_eos_token,
             dtype=flattened_input_ids.dtype,
             device=flattened_input_ids.device
         )
         
         # 找到flattened_input_ids中等于image_token_id的行索引
-        image_token_mask = (flattened_input_ids.squeeze(1) == self.config.image_token_id)  # (batch_size * len,)
+        image_token_mask = (flattened_input_ids.squeeze(1) == self.config.qwen_config.image_token_id)  # (batch_size * len,)
         image_token_indices = torch.nonzero(image_token_mask, as_tuple=True)[0]  # 满足条件的行索引
         
         # 校验：input_image_ids的行数必须等于image_token的数量
@@ -530,14 +530,14 @@ class KeyeARModel(Model):
         flattened_expanded_ids[non_image_mask, 0] = flattened_input_ids[non_image_mask, 0]
         
         if output_dim > 1:  # 确保至少有第二列
-            flattened_expanded_ids[non_image_mask, 1] = self.config.q_eos_token  # self.q_eos_token
+            flattened_expanded_ids[non_image_mask, 1] = self.config.qwen_config.q_eos_token  # self.q_eos_token
 
         # 处理image_token的行
         if len(image_token_indices) > 0:  # 只有存在image_token时才处理
             # 前n_q_tokens列：填充对应位置的input_image_ids
-            flattened_expanded_ids[image_token_indices, :self.config.n_q_tokens] = input_image_ids
+            flattened_expanded_ids[image_token_indices, :self.config.qwen_config.n_q_tokens] = input_image_ids
             # 最后一列：填充q_eos_token
-            flattened_expanded_ids[image_token_indices, -1] = self.config.q_eos_token
+            flattened_expanded_ids[image_token_indices, -1] = self.config.qwen_config.q_eos_token
         
         # 将结果reshape回原来的batch格式 (batch_size, len, output_dim)
         expanded_ids = flattened_expanded_ids.view(batch_size, len_seq, output_dim)
