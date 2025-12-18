@@ -2981,9 +2981,6 @@ class Qwen3Model(Qwen3PreTrainedModel):
                 input_image_embeds = input_image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, input_image_embeds)
 
-
-        import IPython
-        IPython.embed()
         ####################################################################################
         ####################################################################################
         if cache_position is None:
