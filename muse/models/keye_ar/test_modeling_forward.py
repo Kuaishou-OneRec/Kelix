@@ -12,7 +12,7 @@ from transformers import AutoProcessor
 from muse.models.keye_ar.modeling import KeyeARModel
 from muse.config import KeyeARConfig, UnifiedQwen3Config, KeyeTokenizerConfig, UnifiedTokenDecoderConfig, KeyeVisionConfig
 from keye_vl_utils import process_vision_info
-
+from PIL import Image, ImageDraw
 
 # 设置环境变量
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
