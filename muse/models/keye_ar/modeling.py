@@ -423,7 +423,7 @@ class KeyeARModel(Model):
         original_hidden_size = qwen_config.embed_dim
         
         # 主语言模型
-        self.model = UnifiedQwen3Model(qwen_config=config, token_decoder_config=token_decoder_config)
+        self.model = UnifiedQwen3Model(qwen_config=qwen_config, token_decoder_config=token_decoder_config)
         
         # 配置参数
         self.vocab_size = qwen_config.vocab_size
