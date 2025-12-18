@@ -75,6 +75,9 @@ class UnifiedTokenEmbedding(nn.Module):
         valid_mask_expanded = valid_mask.unsqueeze(-1).expand(embeddings.shape)
         masked_embeddings = embeddings * valid_mask_expanded.to(embeddings.dtype)
         aggregated_embeddings = masked_embeddings.sum(dim=2)
+        print(1111111)
+        import IPython
+        IPython.embed()
         return aggregated_embeddings
 
     def forward(self, extended_tokens, aggregation=True):

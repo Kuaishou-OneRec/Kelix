@@ -4161,31 +4161,32 @@ RuntimeError: Error(s) in loading state_dict for KeyeARModel:
 '''
 
 
-# with torch.autocast(dtype=torch.float):
-#     if inputs_embeds is None:
-#         inputs_embeds = self.embed_tokens(input_ids)
+# self.embed_tokens = self.embed_tokens.float()
 
-#     ####################################################################################
-#     ####################################################################################
-#     if getattr(self.config, "new_table", False):
-#         if input_image_ids is None:
-#             if input_ids is not None:
-#                 input_image_ids = torch.zeros_like(input_ids[..., :0])
-#             else:
-#                 input_image_ids = torch.zeros_like(inputs_embeds[..., :0, 0]).long()
+# if inputs_embeds is None:
+#     inputs_embeds = self.embed_tokens(input_ids)
 
-#         if self.pre_embedding_size is not None: # stage1 training
-#             input_image_embeds = self.pre_embedding(input_image_ids % self.embed_tokens.num_embeddings).detach()
-#             input_image_embeds = self.pre_embedding_linear(input_image_embeds)
-#         else: # stage2.3 training
-#             input_image_embeds = self.embed_tokens(input_image_ids)
+# ####################################################################################
+# ####################################################################################
+# if getattr(self.config, "new_table", False):
+#     if input_image_ids is None:
+#         if input_ids is not None:
+#             input_image_ids = torch.zeros_like(input_ids[..., :0])
+#         else:
+#             input_image_ids = torch.zeros_like(inputs_embeds[..., :0, 0]).long()
 
-#         if input_image_ids.numel():
-#             batch, _ = input_image_ids.shape
-#             input_image_embeds = input_image_embeds.view(batch, self.config.vision_config.n_q_tokens, -1).sum(1)
-#             mask = (input_ids == self.config.image_token_id)
-#             mask_unsqueezed = mask.unsqueeze(-1)
-#             mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
-#             image_mask = mask_expanded.to(inputs_embeds.device)
-#             input_image_embeds = input_image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-#             inputs_embeds = inputs_embeds.masked_scatter(image_mask, input_image_embeds)
+#     if self.pre_embedding_size is not None: # stage1 training
+#         input_image_embeds = self.pre_embedding(input_image_ids % self.embed_tokens.num_embeddings).detach()
+#         input_image_embeds = self.pre_embedding_linear(input_image_embeds)
+#     else: # stage2.3 training
+#         input_image_embeds = self.embed_tokens(input_image_ids)
+
+#     if input_image_ids.numel():
+#         batch, _ = input_image_ids.shape
+#         input_image_embeds = input_image_embeds.view(batch, self.config.vision_config.n_q_tokens, -1).sum(1)
+#         mask = (input_ids == self.config.image_token_id)
+#         mask_unsqueezed = mask.unsqueeze(-1)
+#         mask_expanded = mask_unsqueezed.expand_as(inputs_embeds)
+#         image_mask = mask_expanded.to(inputs_embeds.device)
+#         input_image_embeds = input_image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+#         inputs_embeds = inputs_embeds.masked_scatter(image_mask, input_image_embeds)
