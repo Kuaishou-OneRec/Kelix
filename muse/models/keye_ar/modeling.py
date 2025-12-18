@@ -272,7 +272,7 @@ class UnifiedQwen3Model(Qwen3Model):
         self.padding_idx = qwen_config.pad_token_id
         tok_embeddings = UnifiedTokenEmbedding(
             vocab_size=qwen_config.vocab_size,
-            hidden_size=qwen_config.hidden_size,
+            hidden_size=qwen_config.embed_dim,
             pre_embedding_size=qwen_config.pre_embedding_size,
             pre_embedding_tokens=qwen_config.pre_embedding_tokens,
             codebook_size=qwen_config.codebook_size,
@@ -420,7 +420,7 @@ class KeyeARModel(Model):
         self.visual_tokenizer = KeyeImageTokenizer(tokenizer_config)
         
         # 量化投影器
-        original_hidden_size = qwen_config.hidden_size
+        original_hidden_size = qwen_config.embed_dim
         
         # 主语言模型
         self.model = UnifiedQwen3Model(qwen_config=config, token_decoder_config=token_decoder_config)
@@ -433,7 +433,7 @@ class KeyeARModel(Model):
         
         # LM头
         lm_head_size = qwen_config.vocab_size + tokenizer_config.codebook_size 
-        self.lm_head = nn.Linear(qwen_config.hidden_size, lm_head_size, bias=False)
+        self.lm_head = nn.Linear(qwen_config.embed_dim, lm_head_size, bias=False)
     @classmethod
     def convert_hf_state_dict(cls,
                               hf_state_dict: Dict[str, torch.Tensor],
