@@ -257,11 +257,13 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
 
         token_inputs_embeds = self.tok_embeddings(tokens, aggregation=False)
         next_token_inputs_embeds = torch.roll(token_inputs_embeds, shifts=-1, dims=1)
+
+        # batchsize x length x (n_q_tokens + 1) x embed_dim
         h = torch.cat([h[:,:,None], next_token_inputs_embeds], dim=2).to(h)
         import IPython
         IPython.embed()
 
-        h = h.reshape(-1, h.size(1) + 1, h.size(-1))
+        # h = h.reshape(-1, h.size(2), h.size(-1))
 
         # shape: [b, seq_len, out_dim]
         output = self.unembed(h)
