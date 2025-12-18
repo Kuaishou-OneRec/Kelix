@@ -201,7 +201,7 @@ def process_im_message(processor, image):
         padding=False,  # 强制关闭Pad，确保原始输入无多余Token
         truncation=False,
         return_tensors="pt",
-    ).to(1)
+    ).to(2)
     return inputs
 
 def load_keye_for_conditional_generation(output_model_dir, device):
