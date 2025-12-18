@@ -459,7 +459,7 @@ class KeyeARModel(Model):
         Returns:
             A dictionary of model state with converted key names.
         """
-        from muse.examples.keye_tokenizer.convert_checkpoint import convert_hf_checkpoint_for_tokenizer
+        from examples.keye_tokenizer.convert_checkpoint import convert_hf_checkpoint_for_tokenizer
 
         # First, use UnifiedQwen3Model's convert_hf_state_dict for the main model components
         converted_state_dict = super().convert_hf_state_dict(
