@@ -188,7 +188,7 @@ but this is required during inference if the model has been setup with any layer
                 - window_size (int): sliding window size for local attention
 
         Returns:
-            Union[torch.Tensor, list[torch.Tensor]]: output tensor with shape ``[b x s x v]`` if `self.skip_output_layer=False`
+Union[torch.Tensor, list[torch.Tensor]]: output tensor with shape ``[b x s x v]`` if `self.skip_output_layer=False`
             and ``[b x s x d]`` otherwise, or a list of layer output tensors defined by ``output_hidden_states`` with the
             final output tensor appended to the list.
 
@@ -480,6 +480,11 @@ class KeyeARModel(Model):
                 # Convert quant_projector to up_projectors
                 new_k = hf_key.replace("quant_projector.", "visual_tokenizer.up_projectors.")
                 main_model_state_dict[new_k] = tensor
+            elif hf_key.startswith("model.model.layers."):
+                # Handle nested model structure: model.model.layers.* -> model.layers.*
+                # Remove the extra "model." prefix to match Qwen3Model's expected format
+                new_k = hf_key.replace("model.model.layers.", "model.layers.")
+                main_model_state_dict[new_k] = tensor
             else:
                 main_model_state_dict[hf_key] = tensor
         
@@ -501,7 +506,6 @@ class KeyeARModel(Model):
             
             # Add back the "visual_tokenizer." prefix and update the main converted_state_dict
             for k, v in converted_visual_tokenizer_state_dict.items():
-                print(f"convertion: {k} -> {converted_key}")
                 converted_key = f"visual_tokenizer.{k}"
                 converted_state_dict[converted_key] = v
         
