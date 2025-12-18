@@ -289,6 +289,16 @@ class LayerAlignmentHook:
         """为模型的关键层注册forward hook"""
         print(f"为{self.model_name}注册层对齐hook...")
         
+        # 检测模型类型并应用相应的hook注册逻辑
+        if hasattr(model, 'model') and hasattr(model.model, 'model'):
+            # KeyeARModel结构：model -> model.model -> UnifiedTransformerDecoder
+            self._register_keye_ar_hooks(model)
+        else:
+            # KeyeForConditionalGeneration结构
+            self._register_keye_conditional_generation_hooks(model)
+    
+    def _register_keye_conditional_generation_hooks(self, model):
+        """为KeyeForConditionalGeneration注册hook"""
         # 为Qwen3Model的transformer层注册hook
         if hasattr(model, 'model') and hasattr(model.model, 'layers'):
             for i, layer in enumerate(model.model.layers):
@@ -314,7 +324,7 @@ class LayerAlignmentHook:
             self.hooks.append(model.lm_head.register_forward_hook(hook))
             print(f"  注册lm_head层")
         
-        # 为token_head注册hook（KeyeARModel特有）
+        # 为token_head注册hook（KeyeForConditionalGeneration特有）
         if hasattr(model, 'token_head'):
             hook = self._create_layer_hook("token_head")
             self.hooks.append(model.token_head.register_forward_hook(hook))
@@ -323,6 +333,48 @@ class LayerAlignmentHook:
             # 为token_head内部的transformer层注册hook
             if hasattr(model.token_head, 'transformer') and hasattr(model.token_head.transformer, 'layers'):
                 for i, layer in enumerate(model.token_head.transformer.layers):
+                    hook = self._create_layer_hook(f"token_head_transformer_layer_{i}")
+                    self.hooks.append(layer.register_forward_hook(hook))
+                    print(f"  注册token_head transformer层 {i}")
+    
+    def _register_keye_ar_hooks(self, model):
+        """为KeyeARModel注册hook"""
+        # KeyeARModel结构：model -> model.model -> UnifiedTransformerDecoder
+        
+        # 为UnifiedTransformerDecoder的transformer层注册hook
+        if hasattr(model.model, 'model') and hasattr(model.model.model, 'layers'):
+            for i, layer in enumerate(model.model.model.layers):
+                hook = self._create_layer_hook(f"transformer_layer_{i}")
+                self.hooks.append(layer.register_forward_hook(hook))
+                print(f"  注册transformer层 {i}")
+        
+        # 为embedding层注册hook
+        if hasattr(model.model, 'model') and hasattr(model.model.model, 'tok_embeddings'):
+            hook = self._create_layer_hook("embedding")
+            self.hooks.append(model.model.model.tok_embeddings.register_forward_hook(hook))
+            print(f"  注册embedding层")
+        
+        # 为norm层注册hook
+        if hasattr(model.model, 'model') and hasattr(model.model.model, 'norm'):
+            hook = self._create_layer_hook("final_norm")
+            self.hooks.append(model.model.model.norm.register_forward_hook(hook))
+            print(f"  注册final_norm层")
+        
+        # 为lm_head注册hook
+        if hasattr(model, 'lm_head'):
+            hook = self._create_layer_hook("lm_head")
+            self.hooks.append(model.lm_head.register_forward_hook(hook))
+            print(f"  注册lm_head层")
+        
+        # 为token_head注册hook（KeyeARModel特有）
+        if hasattr(model.model, 'model') and hasattr(model.model.model, 'token_head'):
+            hook = self._create_layer_hook("token_head")
+            self.hooks.append(model.model.model.token_head.register_forward_hook(hook))
+            print(f"  注册token_head层")
+            
+            # 为token_head内部的transformer层注册hook
+            if hasattr(model.model.model.token_head, 'transformer') and hasattr(model.model.model.token_head.transformer, 'layers'):
+                for i, layer in enumerate(model.model.model.token_head.transformer.layers):
                     hook = self._create_layer_hook(f"token_head_transformer_layer_{i}")
                     self.hooks.append(layer.register_forward_hook(hook))
                     print(f"  注册token_head transformer层 {i}")
