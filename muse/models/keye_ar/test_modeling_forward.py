@@ -392,6 +392,9 @@ def test_forward_v2():
     if hasattr(outputs, 'last_hidden_state'):
         print(f"Last hidden state shape: {outputs.last_hidden_state.shape}")
 
+    import IPython
+    IPython.embed()
+
 if __name__ == "__main__":
     # 如果需要测试前向传播，取消下面的注释
     # test_forward()

@@ -260,8 +260,8 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
 
         # batchsize x length x (n_q_tokens + 1) x embed_dim
         h = torch.cat([h[:,:,None], next_token_inputs_embeds], dim=2).to(h)
-        import IPython
-        IPython.embed()
+        # import IPython
+        # IPython.embed()
 
         # h = h.reshape(-1, h.size(2), h.size(-1))
 
@@ -431,8 +431,8 @@ class UnifiedQwen3Model(Qwen3Model):
 
         if not tie_word_embeddings:
             converted_state_dict["model.output.weight"] = hf_state_dict["lm_head.weight"]
-        import IPython
-        IPython.embed()
+        # import IPython
+        # IPython.embed()
         return converted_state_dict
 
 
