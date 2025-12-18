@@ -20,7 +20,7 @@ class UnifiedTokenDecoder(Model):
                  infer_id_embs_fn = None):
 
                 
-        super().__init__(Config)
+        super().__init__(config)
         
         # 从config中提取参数
         vocab_size = config.vocab_size
