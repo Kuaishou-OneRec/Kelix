@@ -209,6 +209,43 @@ def load_keye_ar_model():
     
     return model, processor, device
 
+
+def load_keye_ar_model_v2():
+    """加载KeyeARModel_v2，从KeyeForConditionalGeneration获取state_dict并转换为KeyeARModel的state_dict"""
+    # 使用与test_ar_ori_forward.py相同的模型路径
+    output_model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted"
+    
+    # 加载processor和配置
+    processor = AutoProcessor.from_pretrained(output_model_dir, trust_remote_code=True)
+    
+    # 直接从conf.json加载KeyeARConfig
+    config = load_keye_ar_config("muse/models/keye_ar/conf.json")
+    
+    # 创建模型实例
+    model = KeyeARModel(config)
+    
+    # 从KeyeForConditionalGeneration获取state_dict
+    keye_model = KeyeForConditionalGeneration.from_pretrained(
+        output_model_dir, 
+        _attn_implementation="flash_attention_2", 
+        torch_dtype=torch.bfloat16, 
+        low_cpu_mem_usage=True
+    )
+    
+    # 获取KeyeForConditionalGeneration的state_dict
+    keye_state_dict = keye_model.state_dict()
+    
+    # 转换为KeyeARModel的state_dict
+    converted_state_dict = KeyeARModel.convert_hf_state_dict(keye_state_dict, tie_word_embeddings=False)
+    model.load_state_dict(converted_state_dict, strict=True)
+    
+    # 将模型移到设备并转换为bfloat16精度
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model = model.to(device).bfloat16()
+    
+    return model, processor, device
+
+
 def process_message(messages, processor, device, add_generation_prompt=True, padding=False):
     """处理消息，生成模型输入"""
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=add_generation_prompt)
@@ -305,6 +342,50 @@ def test_forward():
     if hasattr(outputs, 'last_hidden_state'):
         print(f"Last hidden state shape: {outputs.last_hidden_state.shape}")
 
+def test_forward_v2():
+    """测试KeyeARModel_v2前向传播"""
+    model, processor, device = load_keye_ar_model_v2()
+    
+    # 使用与test_ar_ori_forward.py相同的消息格式
+    COT_SYSTEM_PROMPT = "You are a helpful assistant."
+    messages = [
+        {"role": "system",
+         "content": [
+             {"type": "text", "text": COT_SYSTEM_PROMPT},
+         ], },
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "image": generate_circle_image()},
+                {"type": "text", "text": " What's sum of the first 10 positive integers? After necessary analysis, your final output should follow the format: Final Answer: X."},
+            ],
+        }
+    ]
+    
+    inputs = process_message(messages, processor, device)
+    inputs["position_ids"] = torch.arange(0, inputs["input_ids"].size(1)).unsqueeze(0).to(device)    
+    inputs["tokens"] = inputs["input_ids"]
+    del inputs["input_ids"]
+    # 使用与test_ar_ori_forward.py相同的autocast逻辑
+    if torch.cuda.is_available():
+        autocast_cm = torch.cuda.amp.autocast
+    else:
+        # CPU 上也可以使用 bfloat16 autocast（需要对应 PyTorch 版本）
+        try:
+            autocast_cm = torch.cpu.amp.autocast
+        except Exception:
+            from contextlib import nullcontext
+            autocast_cm = nullcontext  # fallback，若没有 cpu autocast 则不使用
+
+    with autocast_cm(dtype=torch.bfloat16):
+        outputs = model(**inputs)
+    
+    print(f"Output type: {type(outputs)}")
+    # KeyeARModel的forward方法返回的是Qwen3Model的输出，其中包含hidden_states
+    if hasattr(outputs, 'last_hidden_state'):
+        print(f"Last hidden state shape: {outputs.last_hidden_state.shape}")
+
 if __name__ == "__main__":
     # 如果需要测试前向传播，取消下面的注释
-    test_forward()
+    # test_forward()
+    test_forward_v2()
