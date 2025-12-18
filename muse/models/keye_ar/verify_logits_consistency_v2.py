@@ -68,7 +68,7 @@ def load_keye_ar_config(conf_path):
         num_hidden_layers=num_hidden_layers,
         num_attention_heads=num_attention_heads,
         intermediate_size=intermediate_size,
-        hidden_act=hidden_act,
+hidden_act=hidden_act,
         layer_norm_eps=layer_norm_eps,
         attention_dropout=attention_dropout,
         rope_theta=rope_theta,
@@ -283,6 +283,7 @@ class LayerAlignmentHook:
     def __init__(self, model_name):
         self.model_name = model_name
         self.layer_outputs = defaultdict(list)
+        self.layer_modules = {}  # 存储每个层对应的模块信息
         self.hooks = []
         
     def register_hooks(self, model):
@@ -302,38 +303,44 @@ class LayerAlignmentHook:
         # 为Qwen3Model的transformer层注册hook
         if hasattr(model, 'model') and hasattr(model.model, 'layers'):
             for i, layer in enumerate(model.model.layers):
-                hook = self._create_layer_hook(f"transformer_layer_{i}")
+                layer_name = f"transformer_layer_{i}"
+                hook = self._create_layer_hook(layer_name, layer)
                 self.hooks.append(layer.register_forward_hook(hook))
                 print(f"  注册transformer层 {i}")
         
         # 为embedding层注册hook
         if hasattr(model, 'model') and hasattr(model.model, 'embed_tokens'):
-            hook = self._create_layer_hook("embedding")
+            layer_name = "embedding"
+            hook = self._create_layer_hook(layer_name, model.model.embed_tokens)
             self.hooks.append(model.model.embed_tokens.register_forward_hook(hook))
             print(f"  注册embedding层")
         
         # 为norm层注册hook
         if hasattr(model, 'model') and hasattr(model.model, 'norm'):
-            hook = self._create_layer_hook("final_norm")
+            layer_name = "final_norm"
+            hook = self._create_layer_hook(layer_name, model.model.norm)
             self.hooks.append(model.model.norm.register_forward_hook(hook))
             print(f"  注册final_norm层")
         
         # 为lm_head注册hook
         if hasattr(model, 'lm_head'):
-            hook = self._create_layer_hook("lm_head")
+            layer_name = "lm_head"
+            hook = self._create_layer_hook(layer_name, model.lm_head)
             self.hooks.append(model.lm_head.register_forward_hook(hook))
             print(f"  注册lm_head层")
         
         # 为token_head注册hook（KeyeForConditionalGeneration特有）
         if hasattr(model, 'token_head'):
-            hook = self._create_layer_hook("token_head")
+            layer_name = "token_head"
+            hook = self._create_layer_hook(layer_name, model.token_head)
             self.hooks.append(model.token_head.register_forward_hook(hook))
             print(f"  注册token_head层")
             
             # 为token_head内部的transformer层注册hook
             if hasattr(model.token_head, 'transformer') and hasattr(model.token_head.transformer, 'layers'):
                 for i, layer in enumerate(model.token_head.transformer.layers):
-                    hook = self._create_layer_hook(f"token_head_transformer_layer_{i}")
+                    layer_name = f"token_head_transformer_layer_{i}"
+                    hook = self._create_layer_hook(layer_name, layer)
                     self.hooks.append(layer.register_forward_hook(hook))
                     print(f"  注册token_head transformer层 {i}")
     
@@ -344,46 +351,59 @@ class LayerAlignmentHook:
         # 为UnifiedTransformerDecoder的transformer层注册hook
         if hasattr(model.model, 'model') and hasattr(model.model.model, 'layers'):
             for i, layer in enumerate(model.model.model.layers):
-                hook = self._create_layer_hook(f"transformer_layer_{i}")
+                layer_name = f"transformer_layer_{i}"
+                hook = self._create_layer_hook(layer_name, layer)
                 self.hooks.append(layer.register_forward_hook(hook))
                 print(f"  注册transformer层 {i}")
         
         # 为embedding层注册hook
         if hasattr(model.model, 'model') and hasattr(model.model.model, 'tok_embeddings'):
-            hook = self._create_layer_hook("embedding")
+            layer_name = "embedding"
+            hook = self._create_layer_hook(layer_name, model.model.model.tok_embeddings)
             self.hooks.append(model.model.model.tok_embeddings.register_forward_hook(hook))
             print(f"  注册embedding层")
         
         # 为norm层注册hook
         if hasattr(model.model, 'model') and hasattr(model.model.model, 'norm'):
-            hook = self._create_layer_hook("final_norm")
+            layer_name = "final_norm"
+            hook = self._create_layer_hook(layer_name, model.model.model.norm)
             self.hooks.append(model.model.model.norm.register_forward_hook(hook))
             print(f"  注册final_norm层")
         
         # 为lm_head注册hook
         if hasattr(model, 'lm_head'):
-            hook = self._create_layer_hook("lm_head")
+            layer_name = "lm_head"
+            hook = self._create_layer_hook(layer_name, model.lm_head)
             self.hooks.append(model.lm_head.register_forward_hook(hook))
             print(f"  注册lm_head层")
         
         # 为token_head注册hook（KeyeARModel特有）
         if hasattr(model.model, 'model') and hasattr(model.model.model, 'token_head'):
-            hook = self._create_layer_hook("token_head")
+            layer_name = "token_head"
+            hook = self._create_layer_hook(layer_name, model.model.model.token_head)
             self.hooks.append(model.model.model.token_head.register_forward_hook(hook))
             print(f"  注册token_head层")
             
             # 为token_head内部的transformer层注册hook
             if hasattr(model.model.model.token_head, 'transformer') and hasattr(model.model.model.token_head.transformer, 'layers'):
                 for i, layer in enumerate(model.model.model.token_head.transformer.layers):
-                    hook = self._create_layer_hook(f"token_head_transformer_layer_{i}")
+                    layer_name = f"token_head_transformer_layer_{i}"
+                    hook = self._create_layer_hook(layer_name, layer)
                     self.hooks.append(layer.register_forward_hook(hook))
                     print(f"  注册token_head transformer层 {i}")
     
-    def _create_layer_hook(self, layer_name):
-        """创建forward hook函数"""
-        def hook(module, input, output):
+    def _create_layer_hook(self, layer_name, module):
+        """创建forward hook函数，并存储模块信息"""
+        # 存储模块信息
+        self.layer_modules[layer_name] = {
+            'module': module,
+            'module_type': type(module).__name__,
+            'module_str': str(module)
+        }
+        
+        def hook(module_input, input, output):
             if len(self.layer_outputs[layer_name]) == 1:
-                print(f"跳过{layer_name}的第二个输出")
+                print(f"跳过{layer_name}的第二个输出") # 只需要第一个
                 return
             
             # 存储层的输出
@@ -402,7 +422,8 @@ class LayerAlignmentHook:
     
     def clear_outputs(self):
         """清空存储的输出"""
-        self.layer_outputs.clear
+        self.layer_outputs.clear()
+        self.layer_modules.clear()
 
 def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
     """比较两个hook记录的层输出"""
@@ -429,18 +450,53 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
         
         if len(outputs1) != len(outputs2):
             print(f"❌ {layer_name}: 输出数量不匹配 ({len(outputs1)} vs {len(outputs2)})")
+            print("\n=== 详细模块信息 ===")
+            print(f"{hook1.model_name} 模块信息:")
+            if layer_name in hook1.layer_modules:
+                module_info = hook1.layer_modules[layer_name]
+                print(f"  模块类型: {module_info['module_type']}")
+                print(f"  模块标识: {module_info['module_str']}")
+            else:
+                print("  模块信息未记录")
+            
+            print(f"\n{hook2.model_name} 模块信息:")
+            if layer_name in hook2.layer_modules:
+                module_info = hook2.layer_modules[layer_name]
+                print(f"  模块类型: {module_info['module_type']}")
+                print(f"  模块标识: {module_info['module_str']}")
+            else:
+                print("  模块信息未记录")
+            
+            print(f"\n=== 详细输出信息 ===")
             print(f"outputs1({[x.shape for x in outputs1]})={outputs1}")
             print(f"outputs2({[x.shape for x in outputs2]})={outputs2}")
             all_success = False
             layer_comparisons[layer_name] = False
-            continue
+            return False, layer_comparisons
         
         layer_success = True
         for i, (out1, out2) in enumerate(zip(outputs1, outputs2)):
             # 检查形状是否一致
             if out1.shape != out2.shape:
                 print(f"❌ {layer_name}[{i}]: 形状不匹配 {out1.shape} vs {out2.shape}")
-                print("\n=== 详细输出信息 ===")
+                print("\n=== 详细模块信息 ===")
+                print(f"{hook1.model_name} 模块信息:")
+                if layer_name in hook1.layer_modules:
+                    module_info = hook1.layer_modules[layer_name]
+                    print(f"  模块类型: {module_info['module_type']}")
+                    print(f"  模块标识: {module_info['module_str']}")
+                else:
+                    print("  模块信息未记录")
+                
+                print(f"\n{hook2.model_name} 模块信息:")
+                if layer_name in hook2.layer_modules:
+                    module_info = hook2.layer_modules[layer_name]
+                    print(f"  模块类型: {module_info['module_type']}")
+                    print(f"  模块标识: {module_info['module_str']}")
+                else:
+                    print("  模块信息未记录")
+                
+                print(f"\n=== 详细输出信息 ===")
                 print(f"{hook1.model_name} 输出 (out1):")
                 print(f"  形状: {out1.shape}")
                 print(f"  数值范围: [{out1.min().item():.6f}, {out1.max().item():.6f}]")
@@ -487,10 +543,25 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
             
             # 检查是否在容差范围内
             if max_abs_diff > tolerance or max_relative_diff > tolerance:
-                print(f"out1_f32={out1_f32}")
-                print(f"out2_f32={out2_f32}")
                 print(f"❌ {layer_name}[{i}]: 输出不一致")
-                print("\n=== 详细输出信息 ===")
+                print("\n=== 详细模块信息 ===")
+                print(f"{hook1.model_name} 模块信息:")
+                if layer_name in hook1.layer_modules:
+                    module_info = hook1.layer_modules[layer_name]
+                    print(f"  模块类型: {module_info['module_type']}")
+                    print(f"  模块标识: {module_info['module_str']}")
+                else:
+                    print("  模块信息未记录")
+                
+                print(f"\n{hook2.model_name} 模块信息:")
+                if layer_name in hook2.layer_modules:
+                    module_info = hook2.layer_modules[layer_name]
+                    print(f"  模块类型: {module_info['module_type']}")
+                    print(f"  模块标识: {module_info['module_str']}")
+                else:
+                    print("  模块信息未记录")
+                
+                print(f"\n=== 详细输出信息 ===")
                 print(f"{hook1.model_name} 输出 (out1):")
                 print(f"  形状: {out1.shape}")
                 print(f"  数值范围: [{out1.min().item():.6f}, {out1.max().item():.6f}]")
@@ -617,7 +688,6 @@ def compare_logits(logits1, logits2, model1_name, model2_name, tolerance=1e-5):
     print(f"平均绝对误差: {mean_abs_diff:.6e}")
     print(f"最大相对误差: {max_relative_diff:.6e}")
     print(f"平均相对误差: {mean_relative_diff:.6e}")
-    
     # 检查是否在容差范围内
     if max_abs_diff < tolerance and max_relative_diff < tolerance:
         print("✅ Logits完全一致！")
