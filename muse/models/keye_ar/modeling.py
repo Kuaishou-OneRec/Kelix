@@ -475,10 +475,10 @@ class KeyeARModel(Model):
                 # Extract visual weights and add visual_tokenizer prefix
                 new_k = "visual_tokenizer." + hf_key
                 main_model_state_dict[new_k] = tensor
-            elif hf_key.startswith("quant_projector."):
-                # Convert quant_projector to up_projectors
-                new_k = hf_key.replace("quant_projector.", "visual_tokenizer.up_projectors.")
-                main_model_state_dict[new_k] = tensor
+            # elif hf_key.startswith("quant_projector."):
+            #     # Convert quant_projector to up_projectors
+            #     new_k = hf_key.replace("quant_projector.", "visual_tokenizer.up_projectors.")
+            #     main_model_state_dict[new_k] = tensor
             elif hf_key.startswith("model.model.layers."):
                 # Handle nested model structure: model.model.layers.* -> model.layers.*
                 # Remove the extra "model." prefix to match Qwen3Model's expected format
@@ -535,7 +535,9 @@ class KeyeARModel(Model):
             for k, v in converted_visual_tokenizer_state_dict.items():
                 converted_key = f"visual_tokenizer.{k}"
                 converted_state_dict[converted_key] = v
-        
+        if 'model.model.token_head.token_embedding.weight' in converted_state_dict:
+            print("delete model.model.token_head.token_embedding.weight")
+            del converted_state_dict['model.model.token_head.token_embedding.weight']
         return converted_state_dict
 
     def expand_with_image_tokens(
