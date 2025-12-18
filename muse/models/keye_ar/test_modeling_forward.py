@@ -7,6 +7,7 @@ import os
 import json
 import torch
 import warnings
+from pathlib import Path
 from transformers import AutoProcessor
 from muse.models.keye_ar.modeling import KeyeARModel
 from muse.config import KeyeARConfig, UnifiedQwen3Config, KeyeTokenizerConfig, UnifiedTokenDecoderConfig, KeyeVisionConfig
@@ -88,7 +89,6 @@ def load_keye_ar_config(conf_path):
         vocab_size=codebook_size,
         d_model=token_head_dim,
         nhead=token_head_nhead,
-        input_dim=embedding_dim,
         num_layers=1,  # 默认值
         dim_feedforward=token_head_intermediate_dim,
         reduce=True
@@ -147,6 +147,39 @@ def load_keye_ar_config(conf_path):
     
     return keye_ar_config
 
+def load_safetensors_state_dict(model_dir):
+    """从safetensors文件加载模型状态字典"""
+    try:
+        from safetensors.torch import load_file
+    except ImportError:
+        raise ImportError("Please install safetensors package: pip install safetensors")
+    
+    model_dir = Path(model_dir)
+    state_dict = {}
+    
+    # 查找所有safetensors文件
+    safetensors_files = list(model_dir.glob("*.safetensors"))
+    
+    # 如果有分片的模型文件，加载所有分片
+    if safetensors_files:
+        for safetensor_file in safetensors_files:
+            # 跳过索引文件
+            if "index" in str(safetensor_file):
+                continue
+            print(f"Loading {safetensor_file.name}...")
+            shard_state_dict = load_file(str(safetensor_file))
+            state_dict.update(shard_state_dict)
+    else:
+        # 如果没有找到safetensors文件，尝试查找pytorch_model.bin
+        pytorch_model_path = model_dir / "pytorch_model.bin"
+        if pytorch_model_path.exists():
+            print("Loading pytorch_model.bin...")
+            state_dict = torch.load(str(pytorch_model_path), map_location="cpu")
+        else:
+            raise FileNotFoundError(f"No safetensors or pytorch_model.bin files found in {model_dir}")
+    
+    return state_dict
+
 def load_keye_ar_model():
     """加载KeyeARModel，使用convert_hf_state_dict函数转换权重"""
     # 使用与test_ar_ori_forward.py相同的模型路径
@@ -162,7 +195,7 @@ def load_keye_ar_model():
     model = KeyeARModel(config)
     
     # 加载并转换状态字典
-    state_dict = torch.load(f"{output_model_dir}/pytorch_model.bin", map_location="cpu")
+    state_dict = load_safetensors_state_dict(output_model_dir)
     converted_state_dict = KeyeARModel.convert_hf_state_dict(state_dict, tie_word_embeddings=False)
     model.load_state_dict(converted_state_dict, strict=False)
     
