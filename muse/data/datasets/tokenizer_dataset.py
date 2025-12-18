@@ -32,8 +32,14 @@ import numpy as np
 from PIL import Image
 from torchvision import transforms as T
 
-from transformers import AutoTokenizer, AutoProcessor
+from transformers import AutoTokenizer, AutoProcessor, Qwen2VLProcessor, Qwen2VLConfig
 from keye_vl_utils import process_vision_info
+
+import signal
+import time
+import copy
+import traceback
+import torch.distributed as dist
 
 from muse.data.image_augs import AutoAugmentWrapper
 from muse.data.datasets.base import DistributedDataset, load_image
@@ -468,7 +474,7 @@ def get_rope_index_slowfast(
 
 
 
-class ChatCompletionVisionDataset(IterableDataset):
+class ChatCompletionVisionDataset(DistributedDataset):
   def __init__(self,
                sources: Union[str, List[str]],
                max_length: int = 1024,
@@ -498,6 +504,9 @@ class ChatCompletionVisionDataset(IterableDataset):
                min_visual_tokens_per_frame: int = 4,
                max_visual_tokens_per_frame: int = 512,
                use_flops_balance=False,
+               train_video: bool = True,
+               process_vision_info_args: Dict[str, Any] = {},
+               use_slowfast: bool = False,
                **kargs):
     """
     datasource_config: 默认覆盖全局配置
@@ -511,16 +520,22 @@ class ChatCompletionVisionDataset(IterableDataset):
                         video_max_frames
     """
     if base_model_dir:
-      processor = Qwen2VLProcessor.from_pretrained(base_model_dir)
-      model_config = Qwen2VLConfig.from_pretrained(base_model_dir)
-      spatial_merge_size = model_config.vision_config.spatial_merge_size
-      patch_size = model_config.vision_config.patch_size
-      image_token_id = model_config.image_token_id
-      video_token_id = model_config.video_token_id
-      vision_start_token_id = model_config.vision_start_token_id
-      vision_end_token_id = model_config.vision_end_token_id
-      pad_token_id = model_config.pad_token_id
+      try:
+        processor = Qwen2VLProcessor.from_pretrained(base_model_dir)
+        model_config = Qwen2VLConfig.from_pretrained(base_model_dir)
+        spatial_merge_size = model_config.vision_config.spatial_merge_size
+        patch_size = model_config.vision_config.patch_size
+        image_token_id = model_config.image_token_id
+        video_token_id = model_config.video_token_id
+        vision_start_token_id = model_config.vision_start_token_id
+        vision_end_token_id = model_config.vision_end_token_id
+        pad_token_id = model_config.pad_token_id
+      except Exception as e:
+        logger.warning(f"Failed to load config/processor from {base_model_dir}: {e}")
 
+    self.train_video = train_video
+    self.process_vision_info_args = process_vision_info_args
+    self.use_slowfast = use_slowfast
     self.use_flops_balance = use_flops_balance
     self.process_vision_info = process_vision_info
     self.auto_aug = AutoAugmentWrapper(policy=kargs.get("autoaug_policy", None))
@@ -551,17 +566,11 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.vision_start_token_id = vision_start_token_id
     self.vision_end_token_id = vision_end_token_id
     self.pad_token_id = pad_token_id
-    self.patch_size = patch_size
+    # self.patch_size = patch_size # Duplicate
     # Pad sequence to multiple of `multiple_of`
     self.multiple_of = multiple_of
     self.shuffle_size = shuffle_size
     self.shuffle_initial_size = shuffle_initial_size
-
-    self.use_flops_balance = kargs.get("use_flops_balance", False)
-
-    if self.use_flops_balance: self.dataset, self.total_samples = None, None
-    else:  self.dataset, self.total_samples = self._build_source_dataset(sources)
-    self.sources = sources
 
     # for data_source monitor
     self.source_sample_cnt = {}
@@ -574,58 +583,38 @@ class ChatCompletionVisionDataset(IterableDataset):
     self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
     # self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
 
-    # append image_pad for each packing
-    # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
-    image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
-    
+    image_pad_len = 8
     self.max_length = max_length - image_pad_len
     assert self.max_length > 0
-
     self.datasource_config = datasource_config
 
     kargs["use_flops_balance"] = self.use_flops_balance
     self.kargs = self.kwargs = kargs
+    
+    # Call DistributedDataset __init__
+    super().__init__(
+        sources=sources,
+        packing=True, # Always enable packing for this dataset as per requirement
+        max_length=max_length, # Passing original max_length, adjust internally if needed
+        **kargs
+    )
+    
+    # Recalculate max_length after super init to account for image pad if needed
+    # But wait, DistributedDataset stores max_length.
+    # We need to subtract image_pad_len from self.max_length for processing logic
+    
+    try:
+        if self.processor:
+             image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
+    except Exception:
+        image_pad_len = 6
+        
+    self.max_length = max_length - image_pad_len
+    assert self.max_length > 0
+    
     print("Dataset init done")
 
-
-  def _build_source_dataset(self, sources):
-    total_samples = 0
-    if isinstance(sources, str):
-      sources = sources.split(",")
-    with Timer("Read urls"):
-      urls = []
-      for source in sources:
-        with open(source, encoding="utf-8") as f:
-          index = json.loads(f.read())["shardlist"]
-          for item in index:
-            urls.append(os.path.join(os.path.dirname(source), item["url"]))
-            total_samples += item["nsamples"]
-
-    with Timer("Sort -> Shuffle -> Broadcast"):
-      # broadcast all urls
-      urls.sort()
-      random.shuffle(urls)
-      t = [urls]
-      dist.broadcast_object_list(t, src=0)
-      urls = t[0]
-      logger.info(f"[RANK{dist.get_rank()}] {urls=}")
-
-    with Timer("Build dataset"):
-      dataset = wds.WebDataset(
-          urls,
-          handler=wds.warn_and_continue,
-          resampled=True,
-          shardshuffle=True,
-          cache_dir="/tmp/_wids_cache",
-          nodesplitter=wds.split_by_node,
-          workersplitter=wds.split_by_worker
-      )
-
-      dataset = dataset.shuffle(
-          self.shuffle_size, initial=self.shuffle_initial_size).decode(
-        "pil", handler=wds.warn_and_continue)
-
-    return dataset, total_samples
+  # Removed _build_source_dataset as it is handled by DistributedDataset
 
   def _fill_image_block(self, block: Dict[str, Any],
                         sample_dict: Dict[str, Any],
@@ -811,7 +800,7 @@ class ChatCompletionVisionDataset(IterableDataset):
         f"Unable to generate sample with 0 loss_mask."
       )
 
-    if isinstance(self, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast):
+    if self.use_slowfast:
       inputs["position_ids"] = get_rope_index_slowfast(
           input_ids = inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw", None),
@@ -956,7 +945,7 @@ class ChatCompletionVisionDataset(IterableDataset):
           f"Unable to generate sample with 0 loss_mask."
         )
 
-    if isinstance(self, ChatCompletionVisionParquetDataset_keye_vitrope_slowfast):
+    if self.use_slowfast:
       inputs["position_ids"] = get_rope_index_slowfast(
           input_ids = inputs["input_ids"],
           image_grid_thw=inputs.get("image_grid_thw", None),
@@ -1404,114 +1393,543 @@ class ChatCompletionVisionDataset(IterableDataset):
     }
     return inputs
 
-  def init(self):
-    if self.dataset is None:
-      self.dataset, self.total_samples = self._build_source_dataset(self.sources)
+  def process(self, sample: Dict[str, Any]) -> Dict[str, torch.Tensor]:
+    """
+    Process a single sample from Parquet.
+    Wraps the sample to match the expected format of _process.
+    """
+    source_name = sample.get("source", "None")
+    # Wrap sample to match existing logic which expects {"json": sample}
+    # If the parquet schema matches the json schema, this should work.
+    wrapper = {"json": sample}
+    
+    # Update epoch_idx if available from DistributedDataset
+    # but DistributedDataset doesn't inject epoch_idx into sample automatically unless we do it in _parser?
+    # Actually DistributedDataset logic handles epochs by iterating num_epochs. 
+    # The sample itself comes from parquet.
+    # We can inject a dummy epoch_idx if needed by _process
+    wrapper["epoch_idx"] = 0 # Default, or fetch from self if we track it
+    
+    return self._process(wrapper, source_name)
 
-  def __iter__(self):
-    self.init()
-    buffer = []
-    source_list = []
-    cur_length = 0
-    ds_iter = iter(self.dataset)
-    sample_ids = []
-    batch_id = 0
-    while True:
-      #for sample in self.dataset:
+  def pack_sample(self, buffer: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
+      return self._packing(buffer)
+
+  def get_sample_length(self, sample: Dict[str, torch.Tensor]) -> int:
+      return sample["input_ids"].shape[-1]
+
+
+
+
+
+
+
+class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionDataset):
+  def __init__(self,
+               sources: Union[str, List[str]],
+               max_length: int = 1024,
+               min_visual_tokens_per_image: int = 4,
+               max_visual_tokens_per_image: int = 512,
+               min_visual_tokens_per_gen_image: int = -1,
+               max_visual_tokens_per_gen_image: int = -1,
+               video_nframe: int = -1,
+               video_fps: float = 2.0,
+               video_min_frames: int = -1,
+               video_max_frames: int = 120,
+               shrink_ratio: float = 0.9,
+               max_retry: int = 5,
+               multiple_of: int = 8,
+               shuffle_size: int = 100000,
+               shuffle_initial_size: int = 20000,
+               base_model_dir: Optional[str] = None,
+               processor: Optional[Qwen2VLProcessor] = None,
+               spatial_merge_size: int = 2,
+               patch_size: int = 16,
+               image_token_id: int = 151655,
+               video_token_id: int = 151656,
+               fast_video_token_id: int = 151678,
+               vision_start_token_id: int = 151652,
+               vision_end_token_id: int = 151653,
+               pad_token_id: int = 151643,
+               datasource_config:Dict[str, Dict[str, Any]] = {},
+               cut_to_pad=True,
+               process_vision_info_args={"image_factor":28},
+               min_visual_tokens_per_frame: int = 4,
+               max_visual_tokens_per_frame: int = 512,
+               **kwargs
+               ):
+    """
+    datasource_config: 默认覆盖全局配置
+                      key: datasource_name
+                      Dict: datasource config, support params:
+                        min_visual_tokens_per_image
+                        max_visual_tokens_per_image
+                        video_nframe
+                        video_fps
+                        video_min_frames
+                        video_max_frames
+    """
+    if base_model_dir:
       try:
-        sample = next(ds_iter)
-
-        sample_key = sample["__key__"] if "__key__" in sample else ""
-        sample_url = sample["__url__"] if "__url__" in sample else ""
-
-        try:
-          source_name = sample["json"]["source"]
-          # # WARN: ugly code, for dirty dataset.
-          # if source_name.startswith("PDFA"):
-          #   source_name = "PDFA"
-          # elif source_name.startswith("/llm_reco_ssd/luoxinchen/dataset/"):
-          #   source_name = source_name.split("/")[4]
-        except:
-          source_name = "None"
-
-        self.source_sample_cnt.setdefault(source_name, 0)
-        self.source_sample_cnt[source_name] += 1
-
-        signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(60)
-
-        inputs = self._process(sample, source_name)
-
-        signal.alarm(0)
-      except StopIteration as e:
-        signal.alarm(0)
-        logger.info(f"StopIteration: {e}")
-        break
+        from muse.models.keye_tokenizer.configuration_keye import KeyeConfig
+        
+        processor = AutoProcessor.from_pretrained(base_model_dir, trust_remote_code=True)
+        model_config = KeyeConfig.from_pretrained(base_model_dir)
+        
+        spatial_merge_size = model_config.vision_config.spatial_merge_size
+        patch_size = model_config.vision_config.patch_size
+        image_token_id = model_config.image_token_id
+        video_token_id = model_config.video_token_id
+        fast_video_token_id = model_config.fast_video_token_id
+        vision_start_token_id = model_config.vision_start_token_id
+        vision_end_token_id = model_config.vision_end_token_id
+        pad_token_id = model_config.pad_token_id
+        
+        logger.info(f"Loaded config from {base_model_dir}: spatial_merge_size={spatial_merge_size}, patch_size={patch_size}")
+      except ImportError:
+         logger.warning("KeyeConfig not found in muse.models.keye_tokenizer.configuration_keye, skipping config loading from base_model_dir.")
       except Exception as e:
-        signal.alarm(0)
-        print(traceback.format_exc())
-        self.source_error_cnt.setdefault(source_name, 0)
-        self.source_error_cnt[source_name] += 1
-        error_ratio = self.source_error_cnt[source_name] * 1.0 / \
-          self.source_sample_cnt[source_name]
+         logger.warning(f"Failed to load KeyeConfig/Processor from {base_model_dir}: {e}. Using default args.")
+
+    kwargs['use_flops_balance'] = kwargs.get("use_flops_balance", False)
+    self.use_flops_balance = kwargs['use_flops_balance']
+    self.slowfast_padder = SlowFastVisionPadder(base_model_dir)
+    self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
+    self.process_vision_info_args = process_vision_info_args
+    self.cut_to_pad = cut_to_pad
+    print(f"set cut_to_pad={cut_to_pad}")
+    self.processor = processor
+    # self.process_vision_info = process_vision_info_keye_vitrope_slowfast
+
+    self.min_visual_tokens_per_image = min_visual_tokens_per_image
+    self.max_visual_tokens_per_image = max_visual_tokens_per_image
+    self.min_visual_tokens_per_frame = min_visual_tokens_per_frame
+    self.max_visual_tokens_per_frame = max_visual_tokens_per_frame
+
+    self.min_visual_tokens_per_gen_image = min_visual_tokens_per_gen_image
+    self.max_visual_tokens_per_gen_image = max_visual_tokens_per_gen_image
+
+    self.video_nframe = video_nframe
+    self.video_fps = video_fps
+    self.video_min_frames = video_min_frames
+    self.video_max_frames = video_max_frames
+    if video_nframe > 0 and (video_fps > 0 or video_min_frames > 0 or video_max_frames > 0):
+      logger.warning(
+        f"ChatCompletionVisionDataset(video_fps=...): video_fps, video_min_frames, "\
+          f"video_max_frames will be ignored when video_nframe>0 ({video_nframe=})"
+      )
+    self.patch_size = patch_size
+    self.shrink_ratio = shrink_ratio
+    self.max_retry = max_retry
+    self.spatial_merge_size = spatial_merge_size
+    self.image_token_id = image_token_id
+    self.video_token_id = video_token_id
+    self.fast_video_token_id = fast_video_token_id
+    self.vision_start_token_id = vision_start_token_id
+    self.vision_end_token_id = vision_end_token_id
+    self.pad_token_id = pad_token_id
+    self.patch_size = patch_size
+    # Pad sequence to multiple of `multiple_of`
+    self.multiple_of = multiple_of
+    self.shuffle_size = shuffle_size
+    self.shuffle_initial_size = shuffle_initial_size
+    
+    # Initialize base class
+    super().__init__(
+        sources=sources,
+        max_length=max_length,
+        processor=processor,
+        use_flops_balance=self.use_flops_balance,
+        use_slowfast=True, # Enable slowfast logic in base class if needed, or handle here
+        **kwargs
+    )
+    
+    # self.sources = sources # Handled by super
+
+    # for data_source monitor
+    self.source_sample_cnt = {}
+    self.source_error_cnt = {}
+
+    if base_model_dir:
+        self.tokenizer = AutoTokenizer.from_pretrained(base_model_dir, trust_remote_code=True)
+        self.img_start_token = "<|vision_start|>"
+        self.img_end_token = "<|vision_end|>"
+        self.img_start_token_id = self.tokenizer.encode(self.img_start_token)[0]
+        self.img_end_token_id = self.tokenizer.encode(self.img_end_token)[0]
+    # self.img_context_token_id = self.tokenizer.encode(self.img_context_token)[0]
+
+    # append image_pad for each packing
+    # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1]
+    # image_pad_len = self._gen_img_pad()["input_ids"].shape[-1] # 6
+    image_pad_len = 8
+    self.max_length = max_length - image_pad_len
+    assert self.max_length > 0
+
+    self.datasource_config = datasource_config
+    self.kargs = self.kwargs = kwargs
+    
+  def _cut_sample(self, inputs, packable_length):
+    return self._cut_sample_cjx(inputs, packable_length)
+
+  def _cut_sample_cjx(self, inputs, packable_length):
+    # Same logic as provided
+    # ... (implementation from provided snippet)
+    inputs1 = copy.deepcopy(inputs)
+
+    # if 'pixel_values_videos' in inputs and dist.get_rank() == 0:
+    inputs["input_ids"] = inputs["input_ids"][:, :packable_length]
+    inputs["loss_mask"] = inputs["loss_mask"][:, :packable_length]
+
+    inputs["position_ids"] = inputs["position_ids"][..., :packable_length]
+
+    vision_starts = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
+    vision_ends = torch.nonzero(inputs["input_ids"][0] == self.vision_end_token_id)
+
+
+    if len(vision_starts) and len(vision_starts) > len(vision_ends): # 说明图片不完整
+      # inputs["input_ids"][:, vision_starts[-1]:] = 0 # 随便什么id都可以
+      # inputs["loss_mask"][:, vision_starts[-1]:] = 0
+      # inputs["position_ids"][:, vision_starts[-1]:] = 0
+      inputs["input_ids"] = inputs["input_ids"][:, :vision_starts[-1]] # 继续截断,截断到vision_starts token,因为vision_start之后的内容都不会有loss
+      inputs["loss_mask"] = inputs["loss_mask"][:, :vision_starts[-1]]
+      inputs["position_ids"] = inputs["position_ids"][..., :vision_starts[-1]]
+    
+    vision_start_indices = torch.nonzero(inputs["input_ids"][0] == self.vision_start_token_id)
+    if vision_start_indices.numel() == 0:  # 检查是否为空
+      image_nums = 0
+      video_token_nums = 0
+      fast_video_token_nums = 0
+    else:
+      vision_tokens = inputs["input_ids"][0][vision_start_indices + 1]
+      image_nums = (vision_tokens == self.image_token_id).sum()
+      video_token_nums = (inputs["input_ids"][0] == self.video_token_id).sum()
+      fast_video_token_nums = (inputs["input_ids"][0] == self.fast_video_token_id).sum()
+
+    if 'image_grid_thw' in inputs and len(inputs["pixel_values"]) and 'video_grid_thw' in inputs and len(inputs["pixel_values_videos"]):
+      raise Exception("Unexpected inputs: there are both pixel_values and pixel_values_videos: {}/{}".format(inputs["pixel_values"].shape, inputs["pixel_values_videos"].shape))
+
+    if 'image_grid_thw' in inputs: # 如果有图片
+      n_tokens = 0
+      for i in range(len(vision_ends), len(inputs["image_grid_thw"])):
+        n_tokens_hw = inputs["image_grid_thw"][i]
+        n_tokens += n_tokens_hw[1] * n_tokens_hw[2]
+
+      if n_tokens: inputs["pixel_values"] = inputs["pixel_values"][:-n_tokens]
+      inputs["image_grid_thw"] = inputs["image_grid_thw"][:len(vision_ends)]
+
+    if 'video_grid_thw' in inputs: # 如果有视频
+      # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs000000_{dist.get_rank()}")
+      # print(f"inputs000000_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
+      used_n_token = 0
+      video_token_nums = video_token_nums * 4 # 注意这里的乘4是因为我们有2*2的merge patch操作
+      video_used_idx = len(inputs["video_grid_thw"])
+      for idx, n_tokens_hw in enumerate(inputs["video_grid_thw"]):
+        if used_n_token == video_token_nums:
+          video_used_idx = idx
+          break
+        used_n_token += (n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2])
+
+      inputs["pixel_values_videos"] = inputs["pixel_values_videos"][:video_token_nums]
+      inputs["video_grid_thw"] = inputs["video_grid_thw"][:video_used_idx]
+    
+    if 'fast_video_grid_thw' in inputs: # 如果有视频
+      # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs000000_{dist.get_rank()}")
+      # print(f"inputs000000_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
+      fast_used_n_token = 0
+      fast_video_token_nums = fast_video_token_nums * 4 # 注意这里的乘4是因为我们有2*2的merge patch操作
+      fast_video_used_idx = len(inputs["fast_video_grid_thw"])
+      for idx, n_tokens_hw in enumerate(inputs["fast_video_grid_thw"]):
+        if fast_used_n_token == fast_video_token_nums:
+          fast_video_used_idx = idx
+          break
+        fast_used_n_token += (n_tokens_hw[0] * n_tokens_hw[1] * n_tokens_hw[2])
+
+      inputs["fast_pixel_values_videos"] = inputs["fast_pixel_values_videos"][:fast_video_token_nums]
+      inputs["fast_video_grid_thw"] = inputs["fast_video_grid_thw"][:fast_video_used_idx]
+
+      # if dist.get_rank() == 0 or True: print_input_info(inputs, f"inputs111111_{dist.get_rank()}")
+      # print(f"inputs111111_{dist.get_rank()}", inputs["input_ids"].shape, inputs["input_ids"].flatten().tolist())
+
+    if "pixel_values" in inputs and len(inputs["pixel_values"]) == 0:
+        del inputs["pixel_values"]
+        del inputs["image_grid_thw"]
+
+    if "pixel_values_videos" in inputs and len(inputs["pixel_values_videos"]) == 0:
+        del inputs["pixel_values_videos"]
+        del inputs["video_grid_thw"]
         
-        if np.random.rand() < 0.001:
-          logger.error(
-            f"rank{torch.distributed.get_rank()} ChatCompletionVisionDataset process sample error. \n"
-            f"{source_name=}, {error_ratio=}, {sample_key=}, {sample_url=}, {sample.get('video', None)=}, sample=\n{str(sample)[:50]}\n" + 
-            print_input_info(sample, "sample: ", return_str=True) + '\n' + str(sample) + '\n' +
-            f"errmsg={traceback.format_exc()}")
-        continue
+    if "fast_pixel_values_videos" in inputs and len(inputs["fast_pixel_values_videos"]) == 0:
+        del inputs["fast_pixel_values_videos"]
+        del inputs["fast_video_grid_thw"]
+          
+    ############# debug cjx #############
+    return inputs
 
-      sample_length = inputs["input_ids"].shape[-1]
-      if cur_length + sample_length >= self.max_length:
-        # packed_inputs = self._packing(buffer)
-        # packed_inputs["data_source"] = source_list
-        # buffer = [inputs]
-        # source_list = [source_name]
-        # cur_length = sample_length
+  def _append_sample_packing(self,
+                             inputs: Dict[str, torch.Tensor],
+                             packed_input_ids: List[torch.Tensor],
+                             packed_position_ids: List[torch.Tensor],
+                             packed_loss_mask: List[torch.Tensor],
+                             packed_pixel_values: List[torch.Tensor],
+                             packed_pixel_values_videos: List[torch.Tensor],
+                             packed_image_gird_thw: List[torch.Tensor],
+                             packed_video_grid_thw: List[torch.Tensor],
+                             packed_sample_idx: List[torch.Tensor],
+                             cu_seqlens: List[int],
+                             packed_fast_pixel_values_videos: List[torch.Tensor],
+                             packed_fast_video_grid_thw: List[torch.Tensor],
+                             sample_idx: Optional[int] = None,
+                             image_pad: bool = False):
+    
+    if not image_pad:
+      packable_length = self.max_length - cu_seqlens[-1]
+      if packable_length == 0: return
 
-        if self.cut_to_pad:
-          buffer.append(inputs)
-          sample_ids.append(sample_key)
-          source_list.append(source_name)
-          packed_inputs = self._packing(buffer)
+    if not image_pad and self.cut_to_pad and inputs['input_ids'].shape[1] > packable_length:
+        inputs = self._cut_sample_cjx(inputs, packable_length)
 
-          packed_inputs["data_source"] = source_list
-          buffer = []
-          source_list = []
-          cur_length = 0
-          if packed_inputs["loss_mask"].sum().item() == 0:
-            continue # packing失败，这种情况通常是只有一个样本，而且这个样本以图片开头，而且图片占满了所有有效token
-        else:
-          packed_inputs = self._packing(buffer)
-          packed_inputs["data_source"] = source_list
-          buffer = [inputs]
-          source_list = [source_name]
-          cur_length = sample_length
+    packed_input_ids.append(inputs["input_ids"].flatten())
+    packed_loss_mask.append(inputs["loss_mask"].flatten())
+    packed_position_ids.append(inputs["position_ids"])
+    if sample_idx is None:
+      sample_idx = len(cu_seqlens) - 1
+    packed_sample_idx.append(
+      torch.full_like(packed_input_ids[-1], sample_idx))
+
+    if "pixel_values" in inputs and len(inputs["pixel_values"]):
+      packed_pixel_values.append(inputs["pixel_values"])
+      packed_image_gird_thw.append(inputs["image_grid_thw"])
+
+    if "pixel_values_videos" in inputs:
+      packed_pixel_values_videos.append(inputs["pixel_values_videos"])
+      packed_video_grid_thw.append(inputs["video_grid_thw"])
+
+    ##### fast #####
+    if "fast_pixel_values_videos" in inputs:
+      packed_fast_pixel_values_videos.append(inputs["fast_pixel_values_videos"])
+      packed_fast_video_grid_thw.append(inputs["fast_video_grid_thw"])
+    cu_seqlens.append(cu_seqlens[-1] + len(inputs["input_ids"][0]))
+
+    return len(inputs["input_ids"][0])
+
+  def _packing(self, buffer: List[Dict[str, torch.Tensor]]):
+    packed_input_ids: List[torch.Tensor] = []
+    packed_position_ids: List[torch.Tensor] = []
+    packed_loss_mask: List[torch.Tensor] = []
+    packed_pixel_values: List[torch.Tensor] = []
+    packed_pixel_values_videos: List[torch.Tensor] = []
+    packed_image_gird_thw: List[torch.Tensor] = []
+    packed_video_grid_thw: List[torch.Tensor] = []
+    packed_sample_idx: List[torch.Tensor] = []
+    packed_fast_pixel_values_videos: List[torch.Tensor] = []
+    packed_fast_video_grid_thw: List[torch.Tensor] = []
+    cu_seqlens: List[int] = [0]
+    epochs = []
+    valid_seq_len = 0
+
+    for _, inputs in enumerate(buffer):
+      image_pad = True if self.use_flops_balance else False
+      epochs.append(inputs.get("epoch_idx", None)) # inputs["image_grid_thw"][i]
+
+      valid_seq_len += self._append_sample_packing(inputs,
+                                      packed_input_ids,
+                                      packed_position_ids,
+                                      packed_loss_mask,
+                                      packed_pixel_values,
+                                      packed_pixel_values_videos,
+                                      packed_image_gird_thw,
+                                      packed_video_grid_thw,
+                                      packed_sample_idx,
+                                      cu_seqlens,
+                                      packed_fast_pixel_values_videos,
+                                      packed_fast_video_grid_thw,
+                                      image_pad=image_pad
+                                      )
 
 
-        # skip pure text sample
-        # 有pad image，原则上不会出现纯文本输入
-        if packed_inputs["pixel_values"] is None and \
-            packed_inputs["pixel_values_videos"] is None:
-          logger.warning("Skip pure text sample.")
-          continue
 
-        # skip 0 label pack
-        if packed_inputs["loss_mask"].sum() == 0:
-          logger.warning("Skip 0 lable sample.")
-          continue
-        
-        # print(f"rank={torch.distributed.get_rank()}, {sample_ids=}, {batch_id=}")
-        sample_ids = []
-        batch_id += 1
-        yield packed_inputs
+    # 1. 保证image, slow_video, fast_video的 vit token数量都是8的倍数。
+    # 2. 保证每张卡都会经过VIT
+    if self.slowfast_padder:
+        paddings = self.slowfast_padder( 
+          packed_pixel_values,
+          packed_pixel_values_videos,
+          packed_fast_pixel_values_videos
+        )
+        for pad in paddings:
+          self._append_sample_packing(pad,
+                                      packed_input_ids,
+                                      packed_position_ids,
+                                      packed_loss_mask,
+                                      packed_pixel_values,
+                                      packed_pixel_values_videos,
+                                      packed_image_gird_thw,
+                                      packed_video_grid_thw,
+                                      packed_sample_idx,
+                                      cu_seqlens,
+                                      packed_fast_pixel_values_videos,
+                                      packed_fast_video_grid_thw,
+                                      sample_idx=-1,
+                                      image_pad=True
+                                      )
+    
+    packed_input_ids = torch.cat(packed_input_ids, dim=0).unsqueeze(0)
+    packed_loss_mask = torch.cat(packed_loss_mask, dim=0).unsqueeze(0)
+    packed_position_ids = torch.cat(packed_position_ids, dim=-1)
+    packed_sample_idx = torch.cat(packed_sample_idx, dim=0).unsqueeze(0)
+    packed_pixel_values = None if len(packed_pixel_values) == 0 else \
+      torch.cat(packed_pixel_values, dim=0)
+    packed_image_gird_thw = None if len(packed_image_gird_thw) == 0 else \
+      torch.cat(packed_image_gird_thw, dim=0)
+    packed_pixel_values_videos = \
+      None if len(packed_pixel_values_videos) == 0 else \
+        torch.cat(packed_pixel_values_videos, dim=0)
+    packed_video_grid_thw = None if len(packed_video_grid_thw) == 0 else \
+      torch.cat(packed_video_grid_thw, dim=0)
+    ####fast####
+    packed_fast_pixel_values_videos = None if len(packed_fast_pixel_values_videos) == 0 else \
+      torch.cat(packed_fast_pixel_values_videos, dim=0)
+    packed_fast_video_grid_thw = None if len(packed_fast_video_grid_thw) == 0 else \
+      torch.cat(packed_fast_video_grid_thw, dim=0)
+    ############
 
-      else:
-        buffer.append(inputs)
-        sample_ids.append(sample_key)
-        source_list.append(source_name)
-        cur_length += sample_length
+    # pad seq len to multiple_of
+    if (
+      self.multiple_of > 1 and packed_input_ids.numel() % self.multiple_of != 0
+    ):
+      padding_len = self.multiple_of - (packed_input_ids.numel() % self.multiple_of)
+      packed_input_ids = F.pad(
+        packed_input_ids, (0, padding_len),
+        value=self.processor.tokenizer.pad_token_id)
+      packed_sample_idx = F.pad(
+        packed_sample_idx, (0, padding_len), value=-1)
+      packed_position_ids = F.pad(packed_position_ids, (0, padding_len), value=0)
+      packed_loss_mask = F.pad(packed_loss_mask, (0, padding_len), value=0)
+      cu_seqlens.append(cu_seqlens[-1] + padding_len)
+
+    epochs = [x for x in epochs if x is not None]
+    inputs = {
+      "input_ids": packed_input_ids,
+      "position_ids": packed_position_ids,
+      "loss_mask": packed_loss_mask,
+      "pixel_values": packed_pixel_values,
+      "image_grid_thw": packed_image_gird_thw, # 
+      "pixel_values_videos": packed_pixel_values_videos,
+      "video_grid_thw": packed_video_grid_thw,
+      "cu_seqlens": torch.tensor(cu_seqlens, dtype=torch.int32),
+      "sample_idx": packed_sample_idx.to(torch.int32),
+      "epoch_idx": torch.tensor([sum(epochs) / len(epochs)], dtype=torch.float32) if epochs else torch.tensor([0.0]),
+      "fast_pixel_values_videos": packed_fast_pixel_values_videos,
+      "fast_video_grid_thw": packed_fast_video_grid_thw,
+    }
+    inputs = self._convert_pixels_types(inputs)
+    return inputs
 
 
+
+
+class SlowFastVisionPadder:
+    """
+    给slow fast的padding，最多使用4+6个token
+    """
+    def __init__(self, model_dir):
+        processor = AutoProcessor.from_pretrained(model_dir, trust_remote_code=True)
+        self.processor = processor
+        self.patch_size = processor.image_processor.patch_size
+        self.merge_size = processor.image_processor.merge_size
+        assert self.merge_size == 2, f"SlowFastVisionPadder does not support self.merge_size({self.merge_size}) != 2"
+        self.image_pad = processor.tokenizer.encode("<|image_pad|>")[0]
+        self.video_pad = processor.tokenizer.encode("<|video_pad|>")[0]
+        fast_video_pad = processor.tokenizer.encode("<|fast_video_pad|>")
+        assert len(fast_video_pad) == 1, "Decode fast_video_pad failed: {}".format(fast_video_pad)
+        self.fast_video_pad = fast_video_pad[0]
+        self.vision_start = processor.tokenizer.encode("<|vision_start|>")[0]
+        self.vision_end = processor.tokenizer.encode("<|vision_end|>")[0]
+        self.frame = processor.tokenizer.encode("<|frame|>")[0]
+
+    def __call__(self, packed_pixel_values, packed_pixel_values_videos, packed_fast_pixel_values_videos):
+          return [
+            self.gen_img_pad(n_merged_slow_tokens=1),
+            self.gen_video_pad(n_merged_slow_tokens=1),
+          ]
+          paddings = []
+          n_pixel_values = sum([x.shape[0] for x in packed_pixel_values], 0)
+          n_pixel_values_videos = sum([x.shape[0] for x in packed_pixel_values_videos], 0)
+          n_fast_pixel_values_videos = sum([x.shape[0] for x in packed_fast_pixel_values_videos], 0)
+
+          if n_pixel_values % 8 == 4: paddings.append(self.gen_img_pad(n_merged_slow_tokens=1))
+          elif n_pixel_values == 0: paddings.append(self.gen_img_pad(n_merged_slow_tokens=2))
+
+          paddings.append(
+            self.gen_video_pad(
+              n_merged_slow_tokens=1 if n_pixel_values_videos % 8 == 4 else 2, 
+              n_merged_fast_tokens=1 if n_fast_pixel_values_videos % 8 == 4 else 2, 
+              )
+          )
+
+          return paddings
+
+    def gen_img_pad(self, n_merged_slow_tokens=1):
+        input_ids = [self.vision_start] + [self.image_pad] * n_merged_slow_tokens + [self.vision_end]
+        inputs = {
+            "input_ids": torch.tensor([input_ids], dtype=torch.int64),
+            "attention_mask": torch.tensor([[1] * (n_merged_slow_tokens + 2)], dtype=torch.int64),
+            "pixel_values": torch.rand(n_merged_slow_tokens * 4, 3, self.patch_size, self.patch_size).float(),
+            "image_grid_thw": torch.tensor([[1, 2, n_merged_slow_tokens * 2]], dtype=torch.int64),
+            "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
+        }
+        inputs["position_ids"] = get_rope_index(
+          inputs["input_ids"],
+          image_grid_thw=inputs.get("image_grid_thw"),
+          video_grid_thw=inputs.get("video_grid_thw"),
+          spatial_merge_size=self.merge_size,
+          image_token_id=self.image_pad,
+          video_token_id=self.video_pad,
+          vision_start_token_id=self.vision_start
+        )
+
+        return inputs
+
+    def gen_video_pad(self, n_merged_slow_tokens=1, n_merged_fast_tokens=2):
+        """
+        demo: 
+        'input_ids':
+        Tensor: shape=(1, 42), dtype=torch.int64, device=cpu, data=tensor([151652,     27,     91,   6763])...tensor([  6213,     91,     29, 151653])
+        'attention_mask':
+        Tensor: shape=(1, 42), dtype=torch.int64, device=cpu, data=tensor([1, 1, 1, 1])...tensor([1, 1, 1, 1])
+        'pixel_values_videos':
+        Tensor: shape=(16, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([-1., -1., -1., -1.])...tensor([-1., -1., -1., -1.])
+        'video_grid_thw':
+        Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([1, 4, 4])...tensor([1, 4, 4])
+        'fast_pixel_values_videos':
+        Tensor: shape=(32, 3, 14, 14), dtype=torch.float32, device=cpu, data=tensor([-1., -1., -1., -1.])...tensor([-1., -1., -1., -1.])
+        'fast_video_grid_thw':
+        Tensor: shape=(1, 3), dtype=torch.int64, device=cpu, data=tensor([1, 8, 4])...tensor([1, 8, 4])
+        """
+        # 标准是这个
+        # # <|frame|>ts<|placeholder|><|placeholder|> ... n_slow ... <|placeholder|><|fast_start|><|fast_placeholder|><|fast_placeholder|> ... n_fast ... <|fast_placeholder|><|fast_end|>
+        # 但是我们不需要那么多token
+        #   只需要<|placeholder|><|placeholder|> ... n_slow ... <|placeholder|><|fast_placeholder|><|fast_placeholder|> ... n_fast ... <|fast_placeholder|>
+        # total_slow_tokens = pass # 
+        # video_inputs = (
+        input_ids = [self.vision_start] + [self.video_pad] * n_merged_slow_tokens + [self.fast_video_pad] * n_merged_fast_tokens + [self.vision_end]
+        inputs = {
+            "input_ids": torch.tensor([input_ids], dtype=torch.int64),
+            "attention_mask": torch.tensor([[1] * len(input_ids)], dtype=torch.int64),
+            "video_grid_thw": torch.tensor([[1, 2, n_merged_slow_tokens * 2]], dtype=torch.int64),
+            "fast_video_grid_thw": torch.tensor([[1, 2, n_merged_fast_tokens * 2]], dtype=torch.int64),
+            "fast_pixel_values_videos": torch.rand(n_merged_fast_tokens * 4, 3, self.patch_size, self.patch_size).float(),
+            "pixel_values_videos": torch.rand(n_merged_slow_tokens * 4, 3, self.patch_size, self.patch_size).float(),
+            "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
+        }
+        inputs["position_ids"] = get_rope_index(
+          inputs["input_ids"],
+          image_grid_thw=inputs.get("image_grid_thw"),
+          video_grid_thw=inputs.get("video_grid_thw"),
+          spatial_merge_size=self.merge_size,
+          image_token_id=self.image_pad,
+          video_token_id=self.video_pad,
+          vision_start_token_id=self.vision_start
+        )
+
+        return inputs
