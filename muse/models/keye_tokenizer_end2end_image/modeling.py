@@ -76,7 +76,8 @@ class KeyeTokenizerEnd2EndImage(Model):
         self.pool = pool
         self.amplifier = amplifier
         self.vocab_size = qwen_config.vocab_size
-        self.lm_head = nn.Linear(qwen_config.embed_dim, qwen_config.vocab_size, bias=False)
+        # Note: lm_head is inside self.model.model.output (TransformerDecoder.output)
+        # We don't define a separate lm_head here to avoid redundancy
         # cache rope deltas (aligned with origin implementation)
         self.rope_deltas: Optional[torch.Tensor] = None
 
@@ -285,10 +286,12 @@ class KeyeTokenizerEnd2EndImage(Model):
         self.model.embed_tokens = value
 
     def get_output_embeddings(self):
-        return self.lm_head
+        # Output embeddings are inside TransformerDecoder.output
+        return self.model.model.output
 
     def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+        # Output embeddings are inside TransformerDecoder.output
+        self.model.model.output = new_embeddings
 
     def set_decoder(self, decoder):
         self.model = decoder
