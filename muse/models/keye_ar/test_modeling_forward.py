@@ -80,6 +80,7 @@ def load_keye_ar_config(conf_path):
         n_q_tokens=n_q_tokens,
     )
     
+    print(f"keye_tokenizer_config={keye_tokenizer_config}")
     # 构造UnifiedTokenDecoderConfig
     token_head_dim = get_config_value(conf_data, 'token_head_dim', 512, "conf_data")
     token_head_nhead = get_config_value(conf_data, 'token_head_nhead', 4, "conf_data")
@@ -198,9 +199,9 @@ def load_keye_ar_model():
     model = KeyeARModel(config)
     
     # 加载并转换状态字典
-    # state_dict = load_safetensors_state_dict(output_model_dir)
-    # converted_state_dict = KeyeARModel.convert_hf_state_dict(state_dict, tie_word_embeddings=False)
-    # model.load_state_dict(converted_state_dict, strict=True)
+    state_dict = load_safetensors_state_dict(output_model_dir)
+    converted_state_dict = KeyeARModel.convert_hf_state_dict(state_dict, tie_word_embeddings=False)
+    model.load_state_dict(converted_state_dict, strict=True)
     
     # 将模型移到设备并转换为bfloat16精度
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
