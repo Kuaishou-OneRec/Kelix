@@ -288,9 +288,9 @@ def get_keye_ar_model_logits(model, inputs):
     with autocast_cm(dtype=torch.bfloat16):
         outputs = model(**inputs_ar)
     
-    import IPython
-    IPython.embed()
-
+    # import IPython
+    # IPython.embed()
+    return outputs # Out[2]: torch.Size([1, 66, 9, 217472])
 
 def compare_logits(logits1, logits2, model1_name, model2_name, tolerance=1e-5):
     """比较两个logits张量是否一致"""
