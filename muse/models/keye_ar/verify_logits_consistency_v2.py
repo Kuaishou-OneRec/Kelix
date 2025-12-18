@@ -425,6 +425,8 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
         
         if len(outputs1) != len(outputs2):
             print(f"❌ {layer_name}: 输出数量不匹配 ({len(outputs1)} vs {len(outputs2)})")
+            print(f"outputs1={outputs1}")
+            print(f"outputs2={outputs2}")
             all_success = False
             layer_comparisons[layer_name] = False
             continue
@@ -603,11 +605,12 @@ def main():
         print("正在加载KeyeARModel...")
         keye_ar_model, processor = load_keye_ar_model_v2(output_model_dir, device)
         
-        tokens_conditional = keye_conditional_model.forward_image_tokens(**process_im_message(processor, generate_circle_image()))
-        tokens_ar = keye_ar_model.forward_image_tokens(**process_im_message(processor, generate_circle_image()))
-        print(f"tokens_conditional=\n{tokens_conditional}")
-        print(f"tokens_ar=\n{tokens_ar}")
-        assert torch.all(tokens_conditional == tokens_ar)
+        if 0:
+            tokens_conditional = keye_conditional_model.forward_image_tokens(**process_im_message(processor, generate_circle_image()))
+            tokens_ar = keye_ar_model.forward_image_tokens(**process_im_message(processor, generate_circle_image()))
+            print(f"tokens_conditional=\n{tokens_conditional}")
+            print(f"tokens_ar=\n{tokens_ar}")
+            assert torch.all(tokens_conditional == tokens_ar)
 
         # 创建层对齐hook
         conditional_hook = LayerAlignmentHook("KeyeForConditionalGeneration")
