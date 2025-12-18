@@ -91,6 +91,7 @@ def load_keye_ar_config(conf_path):
         nhead=token_head_nhead,
         num_layers=1,  # 默认值
         dim_feedforward=token_head_intermediate_dim,
+        input_dim=token_head_dim,
         reduce=True
     )
     
