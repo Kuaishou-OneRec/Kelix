@@ -288,14 +288,8 @@ def get_keye_ar_model_logits(model, inputs):
     with autocast_cm(dtype=torch.bfloat16):
         outputs = model(**inputs_ar)
     
-    # KeyeARModel返回的是Qwen3Model的输出，需要从hidden_states计算logits
-    if hasattr(outputs, 'last_hidden_state'):
-        hidden_states = outputs.last_hidden_state
-        # 使用lm_head计算logits
-        logits = model.lm_head(hidden_states)
-        return logits
-    else:
-        raise ValueError("无法获取KeyeARModel的hidden_states")
+    import IPython
+    IPython.embed()
 
 
 def compare_logits(logits1, logits2, model1_name, model2_name, tolerance=1e-5):
@@ -380,13 +374,14 @@ def main():
         # 处理输入
         print("处理输入消息...")
         inputs = process_message(messages, processor, device)
-        
+
+        print("获取KeyeARModel的logits...")
+        keye_ar_logits = get_keye_ar_model_logits(keye_ar_model, inputs)
+
         # 获取两个模型的logits
         print("获取KeyeForConditionalGeneration的logits...")
         keye_conditional_logits = get_keye_conditional_generation_logits(keye_conditional_model, inputs)
-        
-        print("获取KeyeARModel的logits...")
-        keye_ar_logits = get_keye_ar_model_logits(keye_ar_model, inputs)
+
         
         # 比较logits
         success = compare_logits(
