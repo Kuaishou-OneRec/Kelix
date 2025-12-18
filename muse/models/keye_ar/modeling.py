@@ -193,7 +193,7 @@ Union[torch.Tensor, list[torch.Tensor]]: output tensor with shape ``[b x s x v]`
             final output tensor appended to the list.
 
         Note:
-            At the very first step of inference, when the model is provided with a prompt,
+At the very first step of inference, when the model is provided with a prompt,
             ``input_pos`` should contain the positions of all of the tokens in the prompt.
             For a single-batch prompt, or a batch of prompts with identical lengths, this
             will be ``torch.arange(prompt_length)``. For a batch of varying-length prompts,
@@ -492,10 +492,11 @@ class KeyeARModel(Model):
                 # Handle other visual_tokenizer nested structure: model.visual_tokenizer.model.* -> visual_tokenizer.model.*
                 new_k = hf_key.replace("model.visual_tokenizer.model.", "visual_tokenizer.model.")
                 main_model_state_dict[new_k] = tensor
-            elif hf_key == "model.embed_tokens.weight":
-                # Convert model.embed_tokens.weight to model.tok_embeddings.embed_tokens.weight
-                new_k = "model.tok_embeddings.embed_tokens.weight"
-                main_model_state_dict[new_k] = tensor
+            # 修复：不要预先转换model.embed_tokens.weight，让Qwen3Model来处理
+            # elif hf_key == "model.embed_tokens.weight":
+            #     # Convert model.embed_tokens.weight to model.tok_embeddings.embed_tokens.weight
+            #     new_k = "model.tok_embeddings.embed_tokens.weight"
+            #     main_model_state_dict[new_k] = tensor
             else:
                 # 修复：对于其他键，如果以"model."开头，需要保留这个前缀
                 # 因为UnifiedQwen3Model期望接收带有"model."前缀的键
@@ -504,10 +505,6 @@ class KeyeARModel(Model):
                 else:
                     # 对于不以"model."开头的键，需要添加"model."前缀
                     main_model_state_dict[f"model.{hf_key}"] = tensor
-        
-
-        for k, v in main_model_state_dict.items():
-            print(f"to convert {k}: {v.shape}")
 
         # Convert the main model state dict using UnifiedQwen3Model's convert_hf_state_dict
         # 修复：正确传递参数，将tie_word_embeddings作为关键字参数而不是位置参数
@@ -538,10 +535,12 @@ class KeyeARModel(Model):
                 converted_key = f"visual_tokenizer.{k}"
                 converted_state_dict[converted_key] = v
                 
-        # 特殊处理：确保tok_embeddings.embed_tokens.weight有正确的键名
-        if "model.tok_embeddings.embed_tokens.weight" in converted_state_dict:
+        # 特殊处理：确保tok_embeddings.weight有正确的键名
+        # Qwen3Model会将model.embed_tokens.weight转换为model.tok_embeddings.weight
+        # 但KeyeARModel需要的是model.model.tok_embeddings.embed_tokens.weight
+        if "model.tok_embeddings.weight" in converted_state_dict:
             # 移动到model.model.tok_embeddings.embed_tokens.weight
-            weight = converted_state_dict.pop("model.tok_embeddings.embed_tokens.weight")
+            weight = converted_state_dict.pop("model.tok_embeddings.weight")
             converted_state_dict["model.model.tok_embeddings.embed_tokens.weight"] = weight
             
         if 'model.model.token_head.token_embedding.weight' in converted_state_dict:
