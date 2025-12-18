@@ -511,7 +511,8 @@ def compare_logits(logits1, logits2, model1_name, model2_name, tolerance=1e-5):
         return True
     else:
         print("❌ Logits不一致！")
-        
+        print(f"logits1: {logits1}")
+        print(f"logits2: {logits2}")
         # 输出差异最大的位置
         max_diff_indices = torch.argmax(abs_diff.view(-1))
         max_diff_pos = np.unravel_index(max_diff_indices.item(), logits1.shape)
