@@ -290,6 +290,7 @@ class UnifiedQwen3Model(Qwen3Model):
         # 调用父类初始化
         super().__init__(qwen_config)
         print(8888, qwen_config.tie_word_embeddings)
+        assert qwen_config.tie_word_embeddings == False, "tie_word_embeddings must be False in UnifiedQwen3Model"
         # 正确设置padding_idx和pre_embedding相关属性
         self.padding_idx = qwen_config.pad_token_id
         tok_embeddings = UnifiedTokenEmbedding(
