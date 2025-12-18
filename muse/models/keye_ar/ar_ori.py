@@ -2981,6 +2981,9 @@ class Qwen3Model(Qwen3PreTrainedModel):
                 input_image_embeds = input_image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, input_image_embeds)
 
+
+        import IPython
+        IPython.embed()
         ####################################################################################
         ####################################################################################
         if cache_position is None:
@@ -3999,8 +4002,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             train_dict["aligned_indices"] = torch.zeros(0, self.config.vision_config.n_q_tokens + 1).to(input_ids)
         extended_tokens = expand_with_image_tokens(train_dict["aligned_indices"].detach(), input_ids.flatten()[:,None], self.config.q_eos_token, -100, self.config.image_token_id, self.config.vision_config.n_q_tokens)
         # and_with_image_tokens(image_indices, input_ids.flatten()[:,None], model.config.q_eos_token, -100, image_token_id, n_q_tokens)
-        import IPython
-        IPython.embed()
+        # import IPython
+        # IPython.embed()
         group_size = self.config.vision_config.n_q_tokens + 1
         batch_size = input_ids.shape[0]
         compressed_len = input_ids.shape[1]
