@@ -383,7 +383,7 @@ class LayerAlignmentHook:
         """创建forward hook函数"""
         def hook(module, input, output):
             if len(self.layer_outputs[layer_name]) == 1:
-                print(f"跳过{layer_name}的第一个输出")
+                print(f"跳过{layer_name}的第二个输出")
                 return
             
             # 存储层的输出
