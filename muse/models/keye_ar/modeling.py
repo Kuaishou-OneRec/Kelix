@@ -253,7 +253,7 @@ Shape notation:
         token_inputs_embeds = self.tok_embeddings(tokens, aggregation=False)
         next_token_inputs_embeds = torch.roll(token_inputs_embeds, shifts=-1, dims=1)
         h = torch.cat([h[:,:,None], next_token_inputs_embeds], dim=2).to(h)
-        h = h.reshape(-1, self.n_q_tokens + 1, h.size(-1))
+        h = h.reshape(-1, h.size(2) + 1, h.size(-1))
 
         # shape: [b, seq_len, out_dim]
         output = self.unembed(h)
