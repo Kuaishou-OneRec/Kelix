@@ -56,6 +56,10 @@ class UnifiedTokenEmbedding(nn.Module):
         return converted_state_dict
 
     def _embedding_aggregation(self, extended_tokens, embeddings):
+        import IPython
+        print(extended_tokens.shape, embeddings.shape)
+        IPython.embed()
+
         # 获取q_eos token id
         q_eos_token_id = self.q_eos_token
 
