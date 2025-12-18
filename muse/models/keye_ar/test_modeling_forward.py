@@ -275,7 +275,7 @@ def test_forward():
         {
             "role": "user",
             "content": [
-                {"type": "image", "image": generate_circle_image()}
+                {"type": "image", "image": generate_circle_image()},
                 {"type": "text", "text": " What's sum of the first 10 positive integers? After necessary analysis, your final output should follow the format: Final Answer: X."},
             ],
         }
