@@ -6,6 +6,7 @@ KeyeARModel前向demo脚本
 import os
 import json
 import torch
+import warnings
 from transformers import AutoProcessor
 from muse.models.keye_ar.modeling import KeyeARModel
 from muse.config import KeyeARConfig, UnifiedQwen3Config, KeyeTokenizerConfig, UnifiedTokenDecoderConfig, KeyeVisionConfig
@@ -15,6 +16,15 @@ os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 os.environ["TORCH_USE_CUDA_DSA"] = "1"
 os.environ["nosp"] = 'true'
 
+def get_config_value(config_dict, key, default_value, config_name=""):
+    """从配置字典中获取值，如果不存在则使用默认值并发出警告"""
+    value = config_dict.get(key)
+    if value is None:
+        value = default_value
+        config_source = f" in {config_name}" if config_name else ""
+        warnings.warn(f"{key} not found{config_source}, using default value: {default_value}")
+    return value
+
 def load_keye_ar_config(conf_path):
     """直接从conf.json加载KeyeARConfig"""
     with open(conf_path, 'r') as f:
@@ -23,67 +33,108 @@ def load_keye_ar_config(conf_path):
     # 构造KeyeVisionConfig
     vision_config_data = conf_data.get('vision_config', {})
     vision_config_inner = vision_config_data.get('vision_config', {})
+    
+    # 获取vision_config_inner中的字段
+    image_size = get_config_value(vision_config_inner, 'image_size', 384, "vision_config")
+    patch_size = get_config_value(vision_config_inner, 'patch_size', 14, "vision_config")
+    hidden_size = get_config_value(vision_config_inner, 'hidden_size', 1152, "vision_config")
+    num_hidden_layers = get_config_value(vision_config_inner, 'num_hidden_layers', 27, "vision_config")
+    num_attention_heads = get_config_value(vision_config_inner, 'num_attention_heads', 16, "vision_config")
+    intermediate_size = get_config_value(vision_config_inner, 'intermediate_size', 4304, "vision_config")
+    hidden_act = get_config_value(vision_config_inner, 'hidden_act', 'gelu_pytorch_tanh', "vision_config")
+    layer_norm_eps = get_config_value(vision_config_inner, 'layer_norm_eps', 1e-6, "vision_config")
+    attention_dropout = get_config_value(vision_config_inner, 'attention_dropout', 0.0, "vision_config")
+    rope_theta = get_config_value(vision_config_inner, 'rope_theta', 10000.0, "vision_config")
+    
     keye_vision_config = KeyeVisionConfig(
         model_class="KeyeVL1_5VisionModel",  # 添加model_class字段
-        image_size=vision_config_inner.get('image_size', 384),
-        patch_size=vision_config_inner.get('patch_size', 14),
-        hidden_size=vision_config_inner.get('hidden_size', 1152),
-        num_hidden_layers=vision_config_inner.get('num_hidden_layers', 27),
-        num_attention_heads=vision_config_inner.get('num_attention_heads', 16),
-        intermediate_size=vision_config_inner.get('intermediate_size', 4304),
-        hidden_act=vision_config_inner.get('hidden_act', 'gelu_pytorch_tanh'),
-        layer_norm_eps=vision_config_inner.get('layer_norm_eps', 1e-6),
-        attention_dropout=vision_config_inner.get('attention_dropout', 0.0),
-        rope_theta=vision_config_inner.get('rope_theta', 10000.0),
+        image_size=image_size,
+        patch_size=patch_size,
+        hidden_size=hidden_size,
+        num_hidden_layers=num_hidden_layers,
+        num_attention_heads=num_attention_heads,
+        intermediate_size=intermediate_size,
+        hidden_act=hidden_act,
+        layer_norm_eps=layer_norm_eps,
+        attention_dropout=attention_dropout,
+        rope_theta=rope_theta,
     )
     
     # 构造KeyeTokenizerConfig
+    codebook_size = get_config_value(vision_config_data, 'codebook_size', 65536, "vision_config_data")
+    embedding_dim = get_config_value(vision_config_data, 'embedding_dim', 128, "vision_config_data")
+    init_embedding_dim = get_config_value(vision_config_data, 'init_embedding_dim', 4096, "vision_config_data")
+    llm_hidden_size = get_config_value(vision_config_data, 'llm_hidden_size', 4096, "vision_config_data")
+    n_q_tokens = get_config_value(vision_config_data, 'n_q_tokens', 8, "vision_config_data")
+    
     keye_tokenizer_config = KeyeTokenizerConfig(
         model_class="KeyeImageTokenizer",  # 添加model_class字段
         vision_config=keye_vision_config,
-        codebook_size=vision_config_data.get('codebook_size', 65536),
-        embedding_dim=vision_config_data.get('embedding_dim', 128),
-        init_embedding_dim=vision_config_data.get('init_embedding_dim', 4096),
-        llm_hidden_size=vision_config_data.get('llm_hidden_size', 4096),
-        n_q_tokens=vision_config_data.get('n_q_tokens', 8),
+        codebook_size=codebook_size,
+        embedding_dim=embedding_dim,
+        init_embedding_dim=init_embedding_dim,
+        llm_hidden_size=llm_hidden_size,
+        n_q_tokens=n_q_tokens,
     )
     
     # 构造UnifiedTokenDecoderConfig
+    token_head_dim = get_config_value(conf_data, 'token_head_dim', 512, "conf_data")
+    token_head_nhead = get_config_value(conf_data, 'token_head_nhead', 4, "conf_data")
+    token_head_intermediate_dim = get_config_value(conf_data, 'token_head_intermediate_dim', 2048, "conf_data")
+    token_head_num_layers = get_config_value(conf_data, 'token_head_num_layers', 3, "conf_data")
+    
     unified_token_decoder_config = UnifiedTokenDecoderConfig(
         model_class="UnifiedTokenDecoder",  # 添加model_class字段
-        vocab_size=vision_config_data.get('codebook_size', 65536),
-        d_model=conf_data.get('token_head_dim', 512),
-        nhead=conf_data.get('token_head_nhead', 4),
-        input_dim=conf_data.get('hidden_size', 4096),
+        vocab_size=codebook_size,
+        d_model=token_head_dim,
+        nhead=token_head_nhead,
+        input_dim=embedding_dim,
         num_layers=1,  # 默认值
-        dim_feedforward=conf_data.get('token_head_intermediate_dim', 2048),
+        dim_feedforward=token_head_intermediate_dim,
         reduce=True
     )
     
     # 构造UnifiedQwen3Config
+    vocab_size = get_config_value(conf_data, 'vocab_size', 151936, "conf_data")
+    hidden_size = get_config_value(conf_data, 'hidden_size', 4096, "conf_data")
+    num_hidden_layers = get_config_value(conf_data, 'num_hidden_layers', 36, "conf_data")
+    num_attention_heads = get_config_value(conf_data, 'num_attention_heads', 32, "conf_data")
+    num_key_value_heads = get_config_value(conf_data, 'num_key_value_heads', 8, "conf_data")
+    head_dim = get_config_value(conf_data, 'head_dim', 128, "conf_data")
+    intermediate_size = get_config_value(conf_data, 'intermediate_size', 12288, "conf_data")
+    hidden_act = get_config_value(conf_data, 'hidden_act', 'silu', "conf_data")
+    rms_norm_eps = get_config_value(conf_data, 'rms_norm_eps', 1e-6, "conf_data")
+    attention_dropout = get_config_value(conf_data, 'attention_dropout', 0.0, "conf_data")
+    rope_theta = get_config_value(conf_data, 'rope_theta', 1000000, "conf_data")
+    max_position_embeddings = get_config_value(conf_data, 'max_position_embeddings', 40960, "conf_data")
+    
+    image_token_id = conf_data.get('image_token_id')
+    pad_token_id = conf_data.get('pad_token_id')
+    q_eos_token = conf_data.get('q_eos_token')
+    
     unified_qwen_config = UnifiedQwen3Config(
         model_class="Qwen3Model",  # 添加model_class字段
-        vocab_size=conf_data.get('vocab_size', 151936),
-        embed_dim=conf_data.get('hidden_size', 4096),
-        num_layers=conf_data.get('num_hidden_layers', 36),
-        num_heads=conf_data.get('num_attention_heads', 32),
-        num_kv_heads=conf_data.get('num_key_value_heads', 8),
-        head_dim=conf_data.get('head_dim', 128),
-        intermediate_dim=conf_data.get('intermediate_size', 12288),
-        hidden_act=conf_data.get('hidden_act', 'silu'),
-        norm_eps=conf_data.get('rms_norm_eps', 1e-6),
-        attn_dropout=conf_data.get('attention_dropout', 0.0),
-        rope_theta=conf_data.get('rope_theta', 1000000),
-        max_seq_len=conf_data.get('max_position_embeddings', 40960),
-        image_token_id=conf_data.get('image_token_id'),
-        pad_token_id=conf_data.get('pad_token_id'),
-        q_eos_token=conf_data.get('q_eos_token'),
-        codebook_size=vision_config_data.get('codebook_size', 65536),
-        n_q_tokens=vision_config_data.get('n_q_tokens', 8),
-        token_head_d_model=conf_data.get('token_head_dim', 512),
-        token_head_nheads=conf_data.get('token_head_nhead', 4),
-        token_head_dim_feedforward=conf_data.get('token_head_intermediate_dim', 2048),
-        token_head_num_layers=conf_data.get('token_head_num_layers', 3),
+        vocab_size=vocab_size,
+        embed_dim=hidden_size,
+        num_layers=num_hidden_layers,
+        num_heads=num_attention_heads,
+        num_kv_heads=num_key_value_heads,
+        head_dim=head_dim,
+        intermediate_dim=intermediate_size,
+        hidden_act=hidden_act,
+        norm_eps=rms_norm_eps,
+        attn_dropout=attention_dropout,
+        rope_theta=rope_theta,
+        max_seq_len=max_position_embeddings,
+        image_token_id=image_token_id,
+        pad_token_id=pad_token_id,
+        q_eos_token=q_eos_token,
+        codebook_size=codebook_size,
+        n_q_tokens=n_q_tokens,
+        token_head_d_model=token_head_dim,
+        token_head_nheads=token_head_nhead,
+        token_head_dim_feedforward=token_head_intermediate_dim,
+        token_head_num_layers=token_head_num_layers,
     )
     
     # 构造KeyeARConfig
