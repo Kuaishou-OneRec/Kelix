@@ -70,14 +70,15 @@ class UnifiedTokenEmbedding(nn.Module):
         eos_mask = (extended_tokens == q_eos_token_id)
         eos_cumsum = eos_mask.cumsum(dim=2)
         valid_mask = (eos_cumsum == 0)
-        
+
         # 应用掩码并聚合
         valid_mask_expanded = valid_mask.unsqueeze(-1).expand(embeddings.shape)
-        masked_embeddings = embeddings * valid_mask_expanded.to(embeddings.dtype)
+        masked_embeddings = embeddings.float() * valid_mask_expanded.to(embeddings.dtype)
         aggregated_embeddings = masked_embeddings.sum(dim=2)
-        print(1111111)
-        import IPython
-        IPython.embed()
+        aggregated_embeddings = aggregated_embeddings.float().bfloat16()# 跟baseline对齐
+        # print(1111111)
+        # import IPython
+        # IPython.embed()
         return aggregated_embeddings
 
     def forward(self, extended_tokens, aggregation=True):
