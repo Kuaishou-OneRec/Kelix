@@ -247,11 +247,11 @@ test2 = TestClass2(shared_embedding)
 print("=== 测试第一个函数 ===")
 output1 = test1.infer_id_embs(extended_tokens, group_size=9)
 print(f"输出1形状: {output1.shape}")
-
+x1 = output1
 print("\n=== 测试第二个函数 ===")
 output2 = test2.infer_id_embs(extended_tokens, group_size=9)
 print(f"输出2形状: {output2.shape}")
-
+x2 = output2
 print(f"output1={output1}")
 print(f"output2={output2}")
 
@@ -261,13 +261,18 @@ print(extended_tokens)
 print("=== 测试第一个函数 ===")
 output1 = test1.infer_id_embs(extended_tokens, group_size=9)
 print(f"输出1形状: {output1.shape}")
-
+x3  = output1
 print("\n=== 测试第二个函数 ===")
 output2 = test2.infer_id_embs(extended_tokens, group_size=9)
 print(f"输出2形状: {output2.shape}")
-
+x4 = output2
 print(f"output1={output1}")
 print(f"output2={output2}")
+
+
+print(f"close12={torch.allclose(x1, x2)}")
+print(f"close23={torch.allclose(x2, x3)}")
+print(f"close34={torch.allclose(x3, x4)}")
 
 exit()
 # 检查形状是否相同
