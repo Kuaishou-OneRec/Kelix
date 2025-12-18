@@ -160,7 +160,7 @@ class UnifiedTransformerDecoder(TransformerDecoder):
 and before the softmax. This parameter is required during inference if caches have been setup.
                 Either:
 
-                A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_seq_len]``,
+A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_seq_len]``,
                 or ``[b x s x self.encoder_max_cache_seq_len]`` if using KV-cacheing with encoder/decoder layers.
                 A value of True in row ``i`` and column ``j`` means token ``i`` attends to token ``j``. A value of False means
                 token ``i`` does not attend to token ``j``. If no mask is specified, a causal mask
@@ -357,8 +357,9 @@ class UnifiedQwen3Model(Qwen3Model):
         )
         return outputs
 
-    def convert_hf_state_dict(self,
+    def convert_hf_state_dict(self, 
                               hf_state_dict: Dict[str, torch.Tensor],
+                              tie_word_embeddings: bool = True,
                               **kwargs) -> Dict[str, torch.Tensor]:
         """Convert a Hugging Face state dictionary to UnifiedQwen3Model state dictionary.
         
@@ -457,7 +458,7 @@ class KeyeARModel(Model):
         Returns:
             A dictionary of model state with converted key names.
         """
-
+    
         # First, use UnifiedQwen3Model's convert_hf_state_dict for the main model components
         # Extract the keys that belong to the main model (excluding visual_tokenizer and lm_head)
         main_model_state_dict = {}
@@ -468,8 +469,17 @@ class KeyeARModel(Model):
             if hf_key == "lm_head.weight":
                 lm_head_weight = tensor
             elif hf_key.startswith("visual_tokenizer."):
+                # Extract visual_tokenizer weights
                 new_k = hf_key[len("visual_tokenizer."):]
                 visual_tokenizer_state_dict[new_k] = tensor
+            elif hf_key.startswith("visual."):
+                # Extract visual weights and add visual_tokenizer prefix
+                new_k = "visual_tokenizer." + hf_key
+                main_model_state_dict[new_k] = tensor
+            elif hf_key.startswith("quant_projector."):
+                # Convert quant_projector to up_projectors
+                new_k = hf_key.replace("quant_projector.", "visual_tokenizer.up_projectors.")
+                main_model_state_dict[new_k] = tensor
             else:
                 main_model_state_dict[hf_key] = tensor
         

@@ -226,7 +226,7 @@ def load_keye_ar_model_v2():
     # 创建模型实例
     model = KeyeARModel(config)
     
-    # 从KeyeForConditionalGeneration获取state_dict
+    # # 从KeyeForConditionalGeneration获取state_dict
     keye_model = KeyeForConditionalGeneration.from_pretrained(
         output_model_dir, 
         _attn_implementation="flash_attention_2", 
