@@ -69,7 +69,8 @@ def load_keye_ar_config(conf_path):
     init_embedding_dim = get_config_value(vision_config_data, 'init_embedding_dim', 4096, "vision_config_data")
     llm_hidden_size = get_config_value(vision_config_data, 'llm_hidden_size', 4096, "vision_config_data")
     n_q_tokens = get_config_value(vision_config_data, 'n_q_tokens', 8, "vision_config_data")
-    
+    split_voc = get_config_value(vision_config_data, 'split_voc', 1, "vision_config_data")
+
     keye_tokenizer_config = KeyeTokenizerConfig(
         model_class="KeyeImageTokenizer",  # 添加model_class字段
         vision_config=keye_vision_config,
@@ -78,6 +79,7 @@ def load_keye_ar_config(conf_path):
         init_embedding_dim=init_embedding_dim,
         llm_hidden_size=llm_hidden_size,
         n_q_tokens=n_q_tokens,
+        split_voc=split_voc
     )
     
     print(f"keye_tokenizer_config={keye_tokenizer_config}")
