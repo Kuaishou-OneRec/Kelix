@@ -208,7 +208,7 @@ Shape notation:
             - b: batch size
             - s: token sequence length
             - s_e: encoder sequence length
-            - v: vocab size
+- v: vocab size
             - d: token embed dim
             - d_e: encoder embed dim
             - m_s: max seq len
@@ -514,8 +514,19 @@ class KeyeARModel(Model):
             **kwargs
         )
 
+        # 修复：将"model."前缀加回到转换后的键上
+        final_converted_state_dict = {}
         for k, v in converted_state_dict.items():
+            # 如果键不是以"model."开头，则添加"model."前缀
+            if not k.startswith("model."):
+                final_converted_state_dict[f"model.{k}"] = v
+            else:
+                final_converted_state_dict[k] = v
             print(f"after convert {k}: {v.shape}")
+            
+        # 更新converted_state_dict引用
+        converted_state_dict = final_converted_state_dict
+
         # Handle the lm_head parameter
         if lm_head_weight is not None and not tie_word_embeddings:
             converted_state_dict["lm_head.weight"] = lm_head_weight
