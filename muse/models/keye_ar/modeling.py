@@ -564,6 +564,9 @@ class KeyeARModel(Model):
         
         input_ids = self.expand_with_image_tokens(aligned_indices, input_ids)
         assert position_ids.ndim == 2, "position_ids must be 2D"
+        assert input_ids.ndim == 3, "input_ids must be 3D after expansion, get {}".format(input_ids.shape)
+        assert input_ids.size(2) == self.config.qwen_config.n_q_tokens + 1, \
+            "input_ids must have {} columns after expansion, get {}".format(self.config.qwen_config.n_q_tokens + 1, input_ids.size(2))
         # 调用Qwen3Model
         outputs = self.model(
             input_ids=input_ids,
