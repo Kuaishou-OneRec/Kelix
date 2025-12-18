@@ -475,10 +475,10 @@ class KeyeARModel(Model):
                 # Extract visual weights and add visual_tokenizer prefix
                 new_k = "visual_tokenizer." + hf_key
                 main_model_state_dict[new_k] = tensor
-            # elif hf_key.startswith("quant_projector."):
-            #     # Convert quant_projector to up_projectors
-            #     new_k = hf_key.replace("quant_projector.", "visual_tokenizer.up_projectors.")
-            #     main_model_state_dict[new_k] = tensor
+            elif hf_key.startswith("model.quant_projector."):
+                # Convert quant_projector to up_projectors
+                new_k = hf_key.replace("model.quant_projector.", "visual_tokenizer.up_projectors.")
+                main_model_state_dict[new_k] = tensor
             elif hf_key.startswith("model.model.layers."):
                 # Handle nested model structure: model.model.layers.* -> model.layers.*
                 # Remove the extra "model." prefix to match Qwen3Model's expected format
@@ -491,6 +491,10 @@ class KeyeARModel(Model):
             elif hf_key.startswith("model.visual_tokenizer.model."):
                 # Handle other visual_tokenizer nested structure: model.visual_tokenizer.model.* -> visual_tokenizer.model.*
                 new_k = hf_key.replace("model.visual_tokenizer.model.", "visual_tokenizer.model.")
+                main_model_state_dict[new_k] = tensor
+            elif hf_key == "model.embed_tokens.weight":
+                # Convert model.embed_tokens.weight to model.tok_embeddings.embed_tokens.weight
+                new_k = "model.tok_embeddings.embed_tokens.weight"
                 main_model_state_dict[new_k] = tensor
             else:
                 # 修复：对于其他键，如果以"model."开头，需要保留这个前缀
