@@ -211,6 +211,7 @@ def load_keye_ar_model():
 
 
 def load_keye_ar_model_v2():
+    from muse.models.keye_ar.ar_ori import KeyeForConditionalGeneration#, KeyeImageTokenizer
     """加载KeyeARModel_v2，从KeyeForConditionalGeneration获取state_dict并转换为KeyeARModel的state_dict"""
     # 使用与test_ar_ori_forward.py相同的模型路径
     output_model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted"
@@ -219,6 +220,7 @@ def load_keye_ar_model_v2():
     processor = AutoProcessor.from_pretrained(output_model_dir, trust_remote_code=True)
     
     # 直接从conf.json加载KeyeARConfig
+    # 已知/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted/config.json严格等于muse/models/keye_ar/conf.json
     config = load_keye_ar_config("muse/models/keye_ar/conf.json")
     
     # 创建模型实例
