@@ -305,6 +305,7 @@ class LayerAlignmentHook:
                 layer_name = f"transformer_layer_{i}"
                 hook = self._create_layer_hook(layer_name, layer)
                 self.hooks.append(layer.register_forward_hook(hook))
+                self.layer_modules[layer_name] = layer  
                 print(f"  注册transformer层 {i}")
         
         # 为embedding层注册hook
@@ -498,6 +499,13 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
             print(f"\n=== 详细输出信息 ===")
             print(f"outputs1({[x.shape for x in outputs1]})={outputs1}")
             print(f"outputs2({[x.shape for x in outputs2]})={outputs2}")
+            
+            # 进入调试模式
+            print("\n" + "="*80)
+            print("进入调试模式 - 输出数量不匹配")
+            print("="*80)
+            dump_and_embed(hook1, hook2, layer_name, "output_count_mismatch")
+            
             all_success = False
             layer_comparisons[layer_name] = False
             return False, layer_comparisons
@@ -560,11 +568,25 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
                         print(f"     ❌ 元素总数不匹配，无法reshape")
                         layer_success = False
                         all_success = False
+                        
+                        # 进入调试模式
+                        print("\n" + "="*80)
+                        print("进入调试模式 - 形状不匹配")
+                        print("="*80)
+                        dump_and_embed(hook1, hook2, layer_name, "shape_mismatch", i, out1, out2)
+                        
                         return False, layer_comparisons
                 except Exception as e:
                     print(f"     ❌ reshape失败: {e}")
                     layer_success = False
                     all_success = False
+                    
+                    # 进入调试模式
+                    print("\n" + "="*80)
+                    print("进入调试模式 - reshape失败")
+                    print("="*80)
+                    dump_and_embed(hook1, hook2, layer_name, "reshape_failed", i, out1, out2)
+                    
                     return False, layer_comparisons
             
             # 转换为float32进行精确比较
@@ -584,8 +606,6 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
             # 检查是否在容差范围内
             if max_abs_diff > tolerance or max_relative_diff > tolerance:
                 print(f"❌ {layer_name}[{i}]: 输出不一致")
-                print(f"out1_f32={out1_f32}")
-                print(f"out2_f32={out2_f32}")
                 print("\n=== 详细模块信息 ===")
                 print(f"{hook1.model_name} 模块信息:")
                 if layer_name in hook1.layer_modules:
@@ -641,6 +661,12 @@ def compare_layer_outputs(hook1, hook2, tolerance=1e-5):
                 print(f"  {hook1.model_name} 值: {out1_f32.flatten()[max_diff_idx].item():.6f}")
                 print(f"  {hook2.model_name} 值: {out2_f32.flatten()[max_diff_idx].item():.6f}")
                 print(f"  绝对差异: {abs_diff.flatten()[max_diff_idx].item():.6e}")
+                
+                # 进入调试模式
+                print("\n" + "="*80)
+                print("进入调试模式 - 数值不一致")
+                print("="*80)
+                dump_and_embed(hook1, hook2, layer_name, "value_mismatch", i, out1_f32, out2_f32, abs_diff)
                 
                 all_success = False
                 layer_comparisons[layer_name] = False
@@ -845,6 +871,69 @@ def main():
     
     return 0
 
+
+
+
+
+def dump_and_embed(hook1, hook2, layer_name, error_type, output_index=None, out1=None, out2=None, abs_diff=None):
+    """dump输入输出并进入IPython embed模式"""
+    import os
+    import pickle
+    import datetime
+    
+    # 创建dump目录
+    dump_dir = "debug_dumps"
+    os.makedirs(dump_dir, exist_ok=True)
+    
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    dump_file = os.path.join(dump_dir, f"debug_{layer_name}_{error_type}_{timestamp}.pkl")
+    
+    # 收集调试信息
+    debug_info = {
+        'timestamp': timestamp,
+        'layer_name': layer_name,
+        'error_type': error_type,
+        'output_index': output_index,
+        'hook1_model_name': hook1.model_name,
+        'hook2_model_name': hook2.model_name,
+        'hook1_layer_outputs': hook1.layer_outputs.get(layer_name, []),
+        'hook2_layer_outputs': hook2.layer_outputs.get(layer_name, []),
+        'hook1_module_info': hook1.layer_modules.get(layer_name, {}),
+        'hook2_module_info': hook2.layer_modules.get(layer_name, {}),
+        'out1': out1,
+        'out2': out2,
+        'abs_diff': abs_diff
+    }
+    
+    # dump到文件
+    with open(dump_file, 'wb') as f:
+        pickle.dump(debug_info, f)
+    
+    print(f"调试信息已保存到: {dump_file}")
+    print(f"文件大小: {os.path.getsize(dump_file)} 字节")
+    
+    # 进入IPython embed模式
+    print("\n进入IPython交互调试模式...")
+    print("可用变量:")
+    print("  - hook1: 第一个模型的hook对象")
+    print("  - hook2: 第二个模型的hook对象")
+    print("  - layer_name: 当前出错的层名")
+    print("  - error_type: 错误类型")
+    print("  - output_index: 输出索引")
+    print("  - out1: 第一个模型的输出")
+    print("  - out2: 第二个模型的输出")
+    print("  - abs_diff: 绝对差异")
+    print("  - debug_info: 完整的调试信息字典")
+    print("  - dump_file: dump文件路径")
+    print("\n输入 'exit' 或按 Ctrl+D 退出调试模式")
+    
+    try:
+        from IPython import embed
+        embed()
+    except ImportError:
+        print("IPython未安装，使用标准Python交互模式")
+        import code
+        code.interact(local=locals())
 
 if __name__ == "__main__":
     exit(main())
