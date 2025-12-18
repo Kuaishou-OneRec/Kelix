@@ -29,7 +29,7 @@ class FirstClass:
 
     def core_logic(self, extended_tokens):
         batch_size = extended_tokens.shape[0]
-        compressed_len = extended_tokens.shape[1] // GROUP_SIZE
+        compressed_len = extended_tokens.shape[1] #// GROUP_SIZE
         input_ids_reshaped = extended_tokens.reshape([batch_size, compressed_len, GROUP_SIZE])
 
         # 识别视觉组 Mask
