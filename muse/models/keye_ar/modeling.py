@@ -483,8 +483,7 @@ class KeyeARModel(Model):
         
         # Convert the main model state dict using UnifiedQwen3Model's convert_hf_state_dict
         converted_state_dict = UnifiedQwen3Model.convert_hf_state_dict(
-            cls,  # Pass cls as the first argument since it's a classmethod
-            main_model_state_dict, 
+            hf_state_dict=main_model_state_dict,
             **kwargs
         )
         
