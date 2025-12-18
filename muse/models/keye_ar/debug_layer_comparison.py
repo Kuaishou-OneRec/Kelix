@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from typing import Dict, Any, Tuple
 from token_decoder_ori import PureDecoderTransformer
-from token_decoder import TokenDecoder
+from muse.models.keye_ar.unified_token_decoder import TokenDecoder
 
 class LayerComparisonDebugger:
     def __init__(self, ori_model: PureDecoderTransformer, new_model: TokenDecoder):

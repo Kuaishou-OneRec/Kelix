@@ -24,6 +24,7 @@ def load_keye_ar_config(conf_path):
     vision_config_data = conf_data.get('vision_config', {})
     vision_config_inner = vision_config_data.get('vision_config', {})
     keye_vision_config = KeyeVisionConfig(
+        model_class="KeyeVL1_5VisionModel",  # 添加model_class字段
         image_size=vision_config_inner.get('image_size', 384),
         patch_size=vision_config_inner.get('patch_size', 14),
         hidden_size=vision_config_inner.get('hidden_size', 1152),
@@ -38,6 +39,7 @@ def load_keye_ar_config(conf_path):
     
     # 构造KeyeTokenizerConfig
     keye_tokenizer_config = KeyeTokenizerConfig(
+        model_class="KeyeImageTokenizer",  # 添加model_class字段
         vision_config=keye_vision_config,
         codebook_size=vision_config_data.get('codebook_size', 65536),
         embedding_dim=vision_config_data.get('embedding_dim', 128),
@@ -48,6 +50,7 @@ def load_keye_ar_config(conf_path):
     
     # 构造UnifiedTokenDecoderConfig
     unified_token_decoder_config = UnifiedTokenDecoderConfig(
+        model_class="UnifiedTokenDecoder",  # 添加model_class字段
         vocab_size=vision_config_data.get('codebook_size', 65536),
         d_model=conf_data.get('token_head_dim', 512),
         nhead=conf_data.get('token_head_nhead', 4),
@@ -57,6 +60,7 @@ def load_keye_ar_config(conf_path):
     
     # 构造UnifiedQwen3Config
     unified_qwen_config = UnifiedQwen3Config(
+        model_class="Qwen3Model",  # 添加model_class字段
         vocab_size=conf_data.get('vocab_size', 151936),
         embed_dim=conf_data.get('hidden_size', 4096),
         num_layers=conf_data.get('num_hidden_layers', 36),
@@ -82,6 +86,7 @@ def load_keye_ar_config(conf_path):
     
     # 构造KeyeARConfig
     keye_ar_config = KeyeARConfig(
+        model_class="KeyeARModel",  # 添加model_class字段
         qwen_config=unified_qwen_config,
         tokenizer_config=keye_tokenizer_config,
         token_decoder_config=unified_token_decoder_config,
