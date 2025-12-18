@@ -103,7 +103,8 @@ class UnifiedTokenEmbedding(nn.Module):
         print(f"extended_tokens3333={extended_tokens}")
         if group_size is None:
             group_size = self.n_q_tokens + 1
-
+        import IPython
+        IPython.embed()
         extended_tokens = extended_tokens.reshape([extended_tokens.shape[0], -1, group_size])
         input_ids_reshaped = extended_tokens
 

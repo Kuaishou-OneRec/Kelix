@@ -3764,7 +3764,8 @@ class KeyeForConditionalGeneration(Qwen3PreTrainedModel, GenerationMixin):
             group_size = self.config.vision_config.n_q_tokens + 1
         # print(extended_tokens)
         # print(f"extended_tokens={extended_tokens.shape}, group_size={group_size}") # extended_tokens=torch.Size([350, 1]), group_size=1
-        # print(f"extended_tokens={extended_tokens}")
+        import IPython
+        IPython.embed()
         extended_tokens = extended_tokens.reshape([extended_tokens.shape[0], -1, group_size])
         batch_size, compressed_len, dim = extended_tokens.shape
         # assert dim == group_size
