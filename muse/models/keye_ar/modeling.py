@@ -171,7 +171,7 @@ A :class:`~torch.nn.attention.flex_attention.BlockMask` for document masking in 
                 :func:`~torch.nn.attention.flex_attention.flex_attention` when computing attention with block masks.
                 Default is None.
             encoder_input (Optional[torch.Tensor]): Optional input embeds from the encoder. Shape ``[b x s_e x d_e]``
-            encoder_mask (Optional[torch.Tensor]):  Boolean tensor defining a relational matrix between
+encoder_mask (Optional[torch.Tensor]):  Boolean tensor defining a relational matrix between
                 tokens and encoder embeddings. A True value at position ``i,j`` means token ``i`` can attend
                 to embedding ``j`` in the decoder. Mask has shape ``[b x s x s_e]``. Default is None,
 but this is required during inference if the model has been setup with any layers
@@ -204,7 +204,7 @@ Union[torch.Tensor, list[torch.Tensor]]: output tensor with shape ``[b x s x v]`
             the position(s) of the current token(s) ``torch.tensor([padded_prompt_length])``. Otherwise,
             ``input_pos`` will contain all the position ids up to the current token.
 
-        Shape notation:
+Shape notation:
             - b: batch size
             - s: token sequence length
             - s_e: encoder sequence length
@@ -494,13 +494,20 @@ class KeyeARModel(Model):
                 new_k = hf_key.replace("model.visual_tokenizer.model.", "visual_tokenizer.model.")
                 main_model_state_dict[new_k] = tensor
             else:
-                main_model_state_dict[hf_key] = tensor
+                # 修复：对于其他键，如果以"model."开头，需要保留这个前缀
+                # 因为UnifiedQwen3Model期望接收带有"model."前缀的键
+                if hf_key.startswith("model."):
+                    main_model_state_dict[hf_key] = tensor
+                else:
+                    # 对于不以"model."开头的键，需要添加"model."前缀
+                    main_model_state_dict[f"model.{hf_key}"] = tensor
         
 
         for k, v in main_model_state_dict.items():
             print(f"to convert {k}: {v.shape}")
 
         # Convert the main model state dict using UnifiedQwen3Model's convert_hf_state_dict
+        # 修复：正确传递参数，将tie_word_embeddings作为关键字参数而不是位置参数
         converted_state_dict = self.model.convert_hf_state_dict(
             hf_state_dict=main_model_state_dict,
             tie_word_embeddings=tie_word_embeddings,
