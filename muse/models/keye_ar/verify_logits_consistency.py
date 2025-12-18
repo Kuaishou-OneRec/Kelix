@@ -204,7 +204,7 @@ def compare_logits(logits1, logits2, model1_name, model2_name, tolerance=1e-5):
 def main():
     """主函数：验证两个模型的logits一致性"""
     # 设置设备
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
     print(f"使用设备: {device}")
     
     # 模型路径
