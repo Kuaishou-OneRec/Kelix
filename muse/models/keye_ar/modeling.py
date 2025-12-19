@@ -249,6 +249,8 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
                 input_pos=input_pos,
                 **kwargs,
             )
+        
+        print(f"unified_output_hid_states=\n{h}")
 
         if len(self.layers) in self.output_hidden_states:
             hidden.append(h)

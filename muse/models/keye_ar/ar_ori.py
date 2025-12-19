@@ -3058,6 +3058,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
+        print(f"qqqqqq_hidden_states=\n{hidden_states}")
         # hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
