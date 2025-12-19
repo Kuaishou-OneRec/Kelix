@@ -1537,6 +1537,10 @@ class ChatCompletionVisionDataset(DistributedDataset):
           if np.random.rand() < 0.01:
             logger.warning(f"Failed to parse json field {key} in sample {sample.get('uuid', sample.get('__key__', 'unknown'))}: {e}")
 
+    if "messages" in sample and sample["messages"] is None:
+      del sample["messages"]
+    if "message" in sample and sample["message"] is None:
+      del sample["message"]
     # 2. 验证 messages/segments 格式
     messages = sample.get("messages") or sample.get("message")
     segments = sample.get("segments")
