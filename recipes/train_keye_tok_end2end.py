@@ -229,11 +229,11 @@ def get_argument_parser():
     parser.add_argument("--lr", type=float, default=2e-4,
                         help="The peak learning rate for optimizer.")
     
-    parser.add_argument("--vision-lr", type=float, default=-1.0,
+    parser.add_argument("--vision_lr", type=float, default=-1.0,
                         help="The peak learning rate for vision encoder. "
                              "If < 0, uses --lr value.")
     
-    parser.add_argument("--vision-lr-layer-decay", type=float, default=1.0,
+    parser.add_argument("--vision_lr_layer_decay", type=float, default=1.0,
                         help="Layer-wise learning rate decay for vision encoder.")
 
     # For AdamW optimizer
