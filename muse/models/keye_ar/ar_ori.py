@@ -2139,6 +2139,7 @@ class KeyeFlashAttention2(KeyeAttention):
         sliding_window = -1,
         **kwargs,
     ):
+        torch.save(hidden_states, "flash_hidden_states.pt")
         bsz, q_len, _ = hidden_states.size()
         q= self.q_proj(hidden_states).view(bsz, q_len, -1, self.head_dim)
         query_states = self.q_norm(q)

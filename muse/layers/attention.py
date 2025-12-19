@@ -241,7 +241,8 @@ class MultiHeadAttention(nn.Module):
         # y has shape [b, s_y, d]
         b, s_x, _ = x.shape
         s_y = y.shape[1] if y is not None else 0
-
+        print(f"x={x.shape}")
+        torch.save(x, "x.pt")
         # q has shape [b, s_x, num_heads * head_dim]
         q = self.q_proj(x)
 
