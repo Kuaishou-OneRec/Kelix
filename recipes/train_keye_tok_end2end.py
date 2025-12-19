@@ -765,6 +765,22 @@ def train():
     print_rank_0("Starting training...")
     model.train()
     
+    # ========== Debug: Track frozen vs trainable weights ==========
+    # Select one frozen param and one trainable param to monitor
+    debug_frozen_name = "visual_tokenizer.mlp_AR.pre_norm.weight"
+    debug_trainable_name = "visual_tokenizer.encoder.weight"
+    
+    debug_frozen_param = None
+    debug_trainable_param = None
+    for name, param in model.named_parameters():
+        if debug_frozen_name in name:
+            debug_frozen_param = param
+            print_rank_0(f"[DEBUG] Monitoring frozen param: {name}, requires_grad={param.requires_grad}")
+        if debug_trainable_name in name:
+            debug_trainable_param = param
+            print_rank_0(f"[DEBUG] Monitoring trainable param: {name}, requires_grad={param.requires_grad}")
+    # ================================================================
+    
     while True:
         with contextlib.ExitStack() as ctx:
             if torch_profiler:
@@ -886,6 +902,15 @@ def train():
 
             metrics.step_time.tick()
             metrics.step()
+
+            # ========== Debug: Print weight values to verify freeze ==========
+            if debug_frozen_param is not None:
+                frozen_vals = debug_frozen_param.data.flatten()[:5].tolist()
+                print_rank_0(f"[DEBUG Step {scheduler.global_step}] FROZEN ({debug_frozen_name}): {frozen_vals}")
+            if debug_trainable_param is not None:
+                trainable_vals = debug_trainable_param.data.flatten()[:5].tolist()
+                print_rank_0(f"[DEBUG Step {scheduler.global_step}] TRAINABLE ({debug_trainable_name}): {trainable_vals}")
+            # ================================================================
 
             # Logging at specified intervals
             if scheduler.should_logging():
