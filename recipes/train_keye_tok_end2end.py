@@ -286,19 +286,19 @@ def get_argument_parser():
                         help="Number of batches to cache for overfitting (debug mode)")
 
     ############ Freeze Args ############
-    parser.add_argument("--freeze-llm", action="store_true",
+    parser.add_argument("--freeze_llm", action="store_true",
                         help="Freeze LLM parameters, only train visual_tokenizer and quant_projector")
     
-    parser.add_argument("--freeze-projector", action="store_true",
+    parser.add_argument("--freeze_projector", action="store_true",
                         help="Freeze quant_projector parameters")
     
-    parser.add_argument("--freeze-tokenizer", action="store_true",
+    parser.add_argument("--freeze_tokenizer", action="store_true",
                         help="Freeze visual_tokenizer parameters, train quant_projector parameters")
     
-    parser.add_argument("--freeze-navit", action="store_true",
+    parser.add_argument("--freeze_navit", action="store_true",
                         help="Freeze NaViT (visual_tokenizer.visual) parameters, train VQ parameters")
     
-    parser.add_argument("--freeze-navit-mlp-ar", action="store_true",
+    parser.add_argument("--freeze_navit_mlp_ar", action="store_true",
                         help="Freeze visual_tokenizer.mlp_AR parameters")
 
     return parser
