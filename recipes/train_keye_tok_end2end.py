@@ -110,6 +110,7 @@ from muse.config import load_config
 
 from muse.utils.metrics import Logger, StdoutBackend, CSVBackend, TensorBoardBackend
 from muse.training.common import initialize_metrics, StepScheduler
+from muse.losses import CrossEntropyLoss
 
 logger = logging.getLogger(__name__)
 
@@ -665,6 +666,14 @@ def train():
         print_rank_0("Warning: No dataloader available. Training loop will not run.")
         data_iter = iter([])
 
+    # Initialize loss function for external LM loss computation
+    # shift_labels=False because we will pre-shift labels in the training loop
+    loss_fn = CrossEntropyLoss(
+        ignore_index=-100, 
+        return_token_loss=True, 
+        shift_labels=False
+    )
+
     print_rank_0("Starting training...")
     model.train()
     
@@ -716,8 +725,26 @@ def train():
                     labels=labels,
                 )
             
-            # Extract losses from model output
-            lm_loss = output["loss"]
+            # Get logits from model output
+            logits = output["logits"]
+            
+            # ============ Compute LM loss externally (shifted labels) ============
+            # Shift labels: remove first token, pad end with ignore_index
+            # This aligns labels with logits for autoregressive prediction
+            pad = torch.full(
+                (labels.shape[0], 1), 
+                loss_fn.ignore_index,
+                dtype=labels.dtype
+            ).to(device=labels.device, non_blocking=True)
+            shifted_labels = torch.cat([labels[:, 1:], pad], dim=-1)
+            
+            # Get local sequence for context parallel (if enabled)
+            local_labels = get_local_sequence(shifted_labels, seq_idx=1)
+            
+            # Compute LM loss and per-token loss
+            lm_loss, per_token_loss = loss_fn(logits=logits, labels=local_labels)
+            
+            # Extract auxiliary losses from model output
             codebook_loss = output.get("codebook_loss", torch.tensor(0.0))
             commitment_loss = output.get("commitment_loss", torch.tensor(0.0))
             
@@ -727,12 +754,14 @@ def train():
 
             if isinstance(commitment_loss, (list, tuple)):
                 commitment_loss = sum(commitment_loss) / len(commitment_loss)
+            
             total_loss = lm_loss + args.codebook_loss_weight * codebook_loss + args.commitment_loss_weight * commitment_loss
+            
             # Record metrics
             metrics.loss.append(total_loss.detach())
-            metrics.lm_loss.append(lm_loss.detach().item() if lm_loss is not None else 0.0)
-            metrics.codebook_loss.append(codebook_loss.detach().item() if codebook_loss is not None else 0.0)
-            metrics.commitment_loss.append(commitment_loss.detach().item() if commitment_loss is not None else 0.0)
+            metrics.lm_loss.append(lm_loss.detach().item())
+            metrics.codebook_loss.append(codebook_loss.detach().item() if isinstance(codebook_loss, torch.Tensor) else codebook_loss)
+            metrics.commitment_loss.append(commitment_loss.detach().item() if isinstance(commitment_loss, torch.Tensor) else commitment_loss)
             # ================================================ End of Forward pass ================================================
 
             # ================================================ Backward pass ================================================
