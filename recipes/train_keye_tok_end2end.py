@@ -228,6 +228,13 @@ def get_argument_parser():
 
     parser.add_argument("--lr", type=float, default=2e-4,
                         help="The peak learning rate for optimizer.")
+    
+    parser.add_argument("--vision-lr", type=float, default=-1.0,
+                        help="The peak learning rate for vision encoder. "
+                             "If < 0, uses --lr value.")
+    
+    parser.add_argument("--vision-lr-layer-decay", type=float, default=1.0,
+                        help="Layer-wise learning rate decay for vision encoder.")
 
     # For AdamW optimizer
     parser.add_argument("--weight-decay", type=float, default=0.1,
@@ -612,11 +619,18 @@ def train():
     print_rank_0(f"Total trainable: {trainable_count} params, {trainable_numel:,} elements")
     print_rank_0("=" * 50)
 
-    # Prepare optimizer
+    # Set vision learning rate (use main lr if not specified)
+    vision_lr = args.vision_lr if args.vision_lr > 0 else args.lr
+    print_rank_0(f"Learning rate: {args.lr}, Vision learning rate: {vision_lr}, "
+                 f"Vision LR layer decay: {args.vision_lr_layer_decay}")
+
+    # Prepare optimizer with separate vision learning rate
     optimizer = torch.optim.AdamW(
         model.get_optimizer_grouped_parameters(
             learning_rate=args.lr,
-            weight_decay=args.weight_decay
+            weight_decay=args.weight_decay,
+            vision_learning_rate=vision_lr,
+            vision_lr_layer_decay=args.vision_lr_layer_decay
         ),
         lr=args.lr,
         betas=(args.beta1, args.beta2),
@@ -707,6 +721,7 @@ def train():
     metrics.new("lm_loss", dtype="float", reduce="mean")
     metrics.new("codebook_loss", dtype="float", reduce="mean")
     metrics.new("commitment_loss", dtype="float", reduce="mean")
+    metrics.new("vision_learning_rate", dtype="float", reduce="mean")
     
     # Track extra metrics for logging
     acc_steps = args.gradient_accumulation_steps
@@ -726,6 +741,12 @@ def train():
     metrics.logger.track(
         avg_commitment_loss.avg(window=logging_per_step)[::logging_per_step],
         name="commitment_loss", group="training")
+    
+    # Track vision learning rate
+    avg_vision_lr = metrics.vision_learning_rate.avg(window=acc_steps)[::acc_steps][1:]
+    metrics.logger.track(
+        avg_vision_lr.avg(window=logging_per_step)[::logging_per_step],
+        name="vision_learning_rate", group="training")
     
     # Initialize step scheduler for training loop management
     scheduler = StepScheduler(args)
@@ -764,22 +785,6 @@ def train():
 
     print_rank_0("Starting training...")
     model.train()
-    
-    # ========== Debug: Track frozen vs trainable weights ==========
-    # Select one frozen param and one trainable param to monitor
-    debug_frozen_name = "visual_tokenizer.mlp_AR.pre_norm.weight"
-    debug_trainable_name = "visual_tokenizer.encoder.weight"
-    
-    debug_frozen_param = None
-    debug_trainable_param = None
-    for name, param in model.named_parameters():
-        if debug_frozen_name in name:
-            debug_frozen_param = param
-            print_rank_0(f"[DEBUG] Monitoring frozen param: {name}, requires_grad={param.requires_grad}")
-        if debug_trainable_name in name:
-            debug_trainable_param = param
-            print_rank_0(f"[DEBUG] Monitoring trainable param: {name}, requires_grad={param.requires_grad}")
-    # ================================================================
     
     while True:
         with contextlib.ExitStack() as ctx:
@@ -894,6 +899,17 @@ def train():
                 learning_rate = lr_scheduler.get_last_lr()[0]
                 metrics.learning_rate.append(learning_rate)
                 
+                # Get vision learning rate from optimizer param groups
+                # Vision params are typically in later param groups
+                model_lrs = lr_scheduler.get_last_lr()
+                if len(model_lrs) > 2:
+                    vision_learning_rate = model_lrs[2]
+                elif len(model_lrs) > 1:
+                    vision_learning_rate = model_lrs[1]
+                else:
+                    vision_learning_rate = learning_rate
+                metrics.vision_learning_rate.append(vision_learning_rate)
+                
                 with record_function("OptimizerStep"):
                     optimizer.step()
                     lr_scheduler.step()
@@ -902,22 +918,6 @@ def train():
 
             metrics.step_time.tick()
             metrics.step()
-
-            # ========== Debug: Print weight values to verify freeze ==========
-            if debug_frozen_param is not None:
-                # Handle DTensor (FSDP) by converting to local tensor first
-                frozen_data = debug_frozen_param.data
-                if hasattr(frozen_data, 'to_local'):
-                    frozen_data = frozen_data.to_local()
-                frozen_vals = frozen_data.flatten()[:5].tolist()
-                print_rank_0(f"[DEBUG Step {scheduler.global_step}] FROZEN ({debug_frozen_name}): {frozen_vals}")
-            if debug_trainable_param is not None:
-                trainable_data = debug_trainable_param.data
-                if hasattr(trainable_data, 'to_local'):
-                    trainable_data = trainable_data.to_local()
-                trainable_vals = trainable_data.flatten()[:10].tolist()
-                print_rank_0(f"[DEBUG Step {scheduler.global_step}] TRAINABLE ({debug_trainable_name}): {trainable_vals}")
-            # ================================================================
 
             # Logging at specified intervals
             if scheduler.should_logging():

@@ -1,13 +1,13 @@
 {
     "sources": "/llm_reco/vlm/datahub/datasets/Stage2_blended/0.7.13/index/parquet.json",
-    "max_length": 20000,
+    "max_length": 15000,
     "min_visual_tokens_per_image": 32,
     "max_visual_tokens_per_image": 1280,
     "min_visual_tokens_per_frame": 48,
     "max_visual_tokens_per_frame": 768,
     "video_fps": 2.0,
     "video_max_frames": 40,
-    "base_model_dir": "/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image",
+    "base_model_dir": "/llm_reco_ssd/maosiyang/models/muse/keye_tokenizer_end2end_image_for_stage_2",
     "shrink_ratio": 0.7,
     "max_retry": 3,
     "multiple_of": 8,
@@ -18,5 +18,5 @@
     "use_flops_balance": false,
     "video_total_pixels": 47040000,
     "max_sample_length": 88000,
-    "train_video": true
+    "train_video": false
 }
