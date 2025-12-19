@@ -117,8 +117,8 @@ nohup mpirun --allow-run-as-root \
                 --model-dir $MODEL_DIR \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/keye_tokenizer_end2end_image/run_exp1.6.8_stage2.json \
-                --learning-rate 2e-4 \
-                --min-lr 1e-7 \
+                --lr 2e-4 \
+                --min_lr 1e-7 \
                 --weight-decay 0.1 \
                 --beta1 0.9 \
                 --beta2 0.95 \

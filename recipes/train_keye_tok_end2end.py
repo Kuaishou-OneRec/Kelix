@@ -220,13 +220,13 @@ def get_argument_parser():
     parser.add_argument("--num-training-steps", type=int, default=1000,
                         help="The number of training steps to do.")
 
-    parser.add_argument("--num-epochs", type=int, default=1,
+    parser.add_argument("--epochs", type=int, default=1,
                         help="Number of epochs to train, no effect for pretraining.")
     
-    parser.add_argument("--min-lr", type=float, default=1e-6,
+    parser.add_argument("--min_lr", type=float, default=1e-6,
                         help="The minimum learning rate to reach after the cosine schedule.")
 
-    parser.add_argument("--learning-rate", type=float, default=2e-4,
+    parser.add_argument("--lr", type=float, default=2e-4,
                         help="The peak learning rate for optimizer.")
 
     # For AdamW optimizer
@@ -431,6 +431,9 @@ def train():
     
     if args.max_length:
         dataset_config["max_length"] = args.max_length
+
+    if args.epochs:
+        dataset_config["num_epochs"] = args.epochs
     
     # Set base_model_dir from model_dir if not specified
     if not dataset_config.get("base_model_dir") and args.model_dir:
@@ -612,10 +615,10 @@ def train():
     # Prepare optimizer
     optimizer = torch.optim.AdamW(
         model.get_optimizer_grouped_parameters(
-            learning_rate=args.learning_rate,
+            learning_rate=args.lr,
             weight_decay=args.weight_decay
         ),
-        lr=args.learning_rate,
+        lr=args.lr,
         betas=(args.beta1, args.beta2),
         eps=1.0e-8
     )
@@ -667,6 +670,10 @@ def train():
             print_rank_0(f"Dataset sharding: rank={dataset_config['rank']}, world_size={dataset_config['world_size']}")
         
         dataset = ChatCompletionVisionDataset_keye_vitrope_slowfast(**dataset_config)
+
+        if args.batch_size is not None and args.batch_size != 1:
+            print_rank_0(f"Warning: batch_size arg is {args.batch_size}, but ignored (forced to 1) because dataset handles packing.")
+
         dataloader = DataLoader(
             dataset,
             batch_size=1,  # Each sample is already batched in ChatCompletionVisionDataset
