@@ -803,10 +803,6 @@ class SanaMSBlock(nn.Module):
         
         self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         
-        # [FIX] Cross attention norm - fixes training instability (see SANA 1.5)
-        # To revert: remove this line and change forward() to use `self.cross_attn(x, y, mask)` instead of `self.cross_attn(self.norm_cross(x), y, mask)`
-        self.norm_cross = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-
         # FFN
         if ffn_type == "mlp":
             approx_gelu = lambda: nn.GELU(approximate="tanh")
@@ -855,9 +851,8 @@ class SanaMSBlock(nn.Module):
                 rotary_emb=image_rotary_emb,
             )
         )
-        # [FIX] Cross-attention with norm - fixes training instability
-        # To revert: change to `x = x + self.cross_attn(x, y, mask)`
-        x = x + self.cross_attn(self.norm_cross(x), y, mask)
+        # Cross-attention
+        x = x + self.cross_attn(x, y, mask)
         
         # FFN with modulation
         x = x + self.drop_path(
