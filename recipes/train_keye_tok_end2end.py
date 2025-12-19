@@ -908,7 +908,7 @@ def train():
                 frozen_vals = debug_frozen_param.data.flatten()[:5].tolist()
                 print_rank_0(f"[DEBUG Step {scheduler.global_step}] FROZEN ({debug_frozen_name}): {frozen_vals}")
             if debug_trainable_param is not None:
-                trainable_vals = debug_trainable_param.data.flatten()[:5].tolist()
+                trainable_vals = debug_trainable_param.data.flatten()[:10].tolist()
                 print_rank_0(f"[DEBUG Step {scheduler.global_step}] TRAINABLE ({debug_trainable_name}): {trainable_vals}")
             # ================================================================
 
