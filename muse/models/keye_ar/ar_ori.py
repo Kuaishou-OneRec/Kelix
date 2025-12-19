@@ -2151,12 +2151,13 @@ class KeyeFlashAttention2(KeyeAttention):
 
         # Because the input can be padded, the absolute sequence length depends on the max position id.
         cos, sin = position_embeddings
-        # query_states, key_states = apply_multimodal_rotary_pos_emb(
-        #     query_states, key_states, cos, sin, self.rope_scaling["mrope_section"]
-        # )
+        print(f"query_states_before_mrope={query_states}")
+        torch.save(query_states, "query_states_before_mrope.pt")
+        torch.save(cos, "cos.pt")
         query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin #, self.rope_scaling["mrope_section"]
         )
+        torch.save(query_states, "query_states_after_mrope.pt")
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -3018,8 +3019,9 @@ class Qwen3Model(Qwen3PreTrainedModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
 
-        print(f"qqqqqq_hidden_states=\n{hidden_states}")
-        
+        print(f"qqqqqq_hidden_states=\n{hidden_states}, position_ids={position_ids}")
+        torch.save(hidden_states, "hidden_states.pt")
+
         # exit()
         for i, decoder_layer in enumerate(self.layers):
 
@@ -3059,7 +3061,7 @@ class Qwen3Model(Qwen3PreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
-
+            break
         print(f"qqqqqq_hidden_states=\n{hidden_states}")
         # hidden_states = self.norm(hidden_states)
 
