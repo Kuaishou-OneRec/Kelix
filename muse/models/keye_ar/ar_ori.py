@@ -2155,6 +2155,7 @@ class KeyeFlashAttention2(KeyeAttention):
         print(f"query_states_before_mrope={query_states}")
         torch.save(query_states, "query_states_before_mrope.pt")
         torch.save(cos, "cos.pt")
+
         query_states, key_states = apply_rotary_pos_emb(
             query_states, key_states, cos, sin #, self.rope_scaling["mrope_section"]
         )
