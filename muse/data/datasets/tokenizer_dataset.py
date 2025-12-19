@@ -632,7 +632,7 @@ class ChatCompletionVisionDataset(DistributedDataset):
     else:
       image = block["image"]
 
-    print('maosiyangdebugimage', image)
+    # print('maosiyangdebugimage', image)
     if image.mode != "RGB":
       image = image.convert("RGB")
     image = self.auto_aug(image)
