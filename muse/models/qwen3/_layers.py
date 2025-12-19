@@ -235,7 +235,7 @@ class Qwen3Attention(nn.Module):
             "x":x,
             "input_pos": input_pos
         }, "qwen3_attn_forward.pt")
-        exit()
+        # exit()
         if y is None:
             if self.kv_cache is None or not self.cache_enabled:
                 raise ValueError(
