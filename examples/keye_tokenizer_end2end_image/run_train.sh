@@ -131,7 +131,6 @@ nohup mpirun --allow-run-as-root \
                 --save-checkpoint-per-step 1000 \
                 --context-parallel-size 1 \
                 --use-flash-attention-2 \
-                --logging-per-step 1 \
                 --fp32-weight \
                 --codebook_loss_weight 1.0 \
                 --commitment_loss_weight 0.25 \
