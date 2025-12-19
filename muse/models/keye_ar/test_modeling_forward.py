@@ -192,8 +192,8 @@ def load_safetensors_state_dict(model_dir):
 def load_keye_ar_model():
     """加载KeyeARModel，使用convert_hf_state_dict函数转换权重"""
     # 使用与test_ar_ori_forward.py相同的模型路径
-    output_model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted"
-    
+    # output_model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted"
+    output_model_dir = "/llm_reco_ssd/lingzhixin/models/tmp"
     # 加载processor和配置
     processor = AutoProcessor.from_pretrained(output_model_dir, trust_remote_code=True)
 
@@ -220,7 +220,7 @@ def load_keye_ar_model_v2():
     """加载KeyeARModel_v2，从KeyeForConditionalGeneration获取state_dict并转换为KeyeARModel的state_dict"""
     # 使用与test_ar_ori_forward.py相同的模型路径
     output_model_dir = "/mmu_mllm_hdd_2/zhouyang12/output/Keye/vqar_11.7/run_8b_vis_stage3.29_1e-4/step4000/global_step4000/converted"
-    
+    output_model_dir = "/llm_reco_ssd/lingzhixin/models/tmp"
     # 加载processor和配置
     processor = AutoProcessor.from_pretrained(output_model_dir, trust_remote_code=True)
     
