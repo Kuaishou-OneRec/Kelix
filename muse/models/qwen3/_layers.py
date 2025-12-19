@@ -208,6 +208,7 @@ class Qwen3Attention(nn.Module):
         b, s_x, _ = x.shape
         s_y = y.shape[1] if y is not None else 0
 
+
         # q has shape [b, s_x, num_heads * head_dim]
         q = self.q_proj(x)
 
@@ -215,15 +216,25 @@ class Qwen3Attention(nn.Module):
         q_per_kv = self.num_heads // self.num_kv_heads
         q = q.view(b, s_x, self.num_kv_heads * q_per_kv, self.head_dim)
 
+        q_before_norm = q
         # Qwen3 applies QK-norm before the RoPE, which is different from most of the models.
         # Normalize q
         if self.q_norm is not None:
             q = self.q_norm(q)
 
+        q_after_norm = q
         # Apply positional embeddings after q-norm
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
 
+        torch.save({
+            "q_before_norm": q_before_norm,
+            "q_after_norm": q_after_norm,
+            "q":q,
+            "x":x,
+            "input_pos": input_pos
+        }, "qwen3_attn_forward.pt")
+        exit()
         if y is None:
             if self.kv_cache is None or not self.cache_enabled:
                 raise ValueError(

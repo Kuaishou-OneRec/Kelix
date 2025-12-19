@@ -241,23 +241,18 @@ class MultiHeadAttention(nn.Module):
         # y has shape [b, s_y, d]
         b, s_x, _ = x.shape
         s_y = y.shape[1] if y is not None else 0
-        print(f"x={x.shape}")
-        torch.save(x, "x.pt")
+
         # q has shape [b, s_x, num_heads * head_dim]
         q = self.q_proj(x)
 
         # number of queries per key/value
         q_per_kv = self.num_heads // self.num_kv_heads
         q = q.view(b, s_x, self.num_kv_heads * q_per_kv, self.head_dim)
-        print(f"q_before_pos={q}")
-        q0 = q
+
         # Apply positional embeddings
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
-            print(f"q_after_pos={q}")
 
-        torch.save(q, "q_after_pos.pt")
-        torch.save(q0, "q_before_pos.pt")
         # Normalize q
         if self.q_norm is not None:
             q = self.q_norm(q)
