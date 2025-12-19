@@ -3018,6 +3018,8 @@ class Qwen3Model(Qwen3PreTrainedModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
 
+        print(f"qqqqqq_hidden_states=\n{hidden_states}")
+        
         # exit()
         for i, decoder_layer in enumerate(self.layers):
 

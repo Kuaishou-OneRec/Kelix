@@ -235,7 +235,7 @@ A boolean tensor with shape ``[b x s x s]``, ``[b x s x self.encoder_max_cache_s
 
         # shape: [b, s, d]
         h = self.tok_embeddings(tokens) if input_embeds is None else input_embeds
-
+        print(f"unified_output_before_input=\n{h}")
         hidden = []
         for i, layer in enumerate(self.layers):
             if i in self.output_hidden_states:
