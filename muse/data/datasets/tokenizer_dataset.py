@@ -1646,10 +1646,42 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
         pad_token_id = model_config.pad_token_id
         
         logger.info(f"Loaded config from {base_model_dir}: spatial_merge_size={spatial_merge_size}, patch_size={patch_size}")
-      except ImportError:
-         logger.warning("KeyeConfig not found in muse.models.keye_tokenizer.configuration_keye, skipping config loading from base_model_dir.")
+      except ImportError as e:
+        logger.warning(f"KeyeConfig not found, trying Qwen2VLProcessor: {e}")
+        # Fallback to Qwen2VLProcessor
+        try:
+          processor = Qwen2VLProcessor.from_pretrained(base_model_dir, trust_remote_code=True)
+          model_config = Qwen2VLConfig.from_pretrained(base_model_dir)
+          spatial_merge_size = model_config.vision_config.spatial_merge_size
+          patch_size = model_config.vision_config.patch_size
+          image_token_id = model_config.image_token_id
+          video_token_id = model_config.video_token_id
+          vision_start_token_id = model_config.vision_start_token_id
+          vision_end_token_id = model_config.vision_end_token_id
+          pad_token_id = model_config.pad_token_id
+          logger.info(f"Loaded Qwen2VL config from {base_model_dir}")
+        except Exception as e2:
+          raise RuntimeError(f"Failed to load processor from {base_model_dir}: {e2}")
       except Exception as e:
-         logger.warning(f"Failed to load KeyeConfig/Processor from {base_model_dir}: {e}. Using default args.")
+        logger.warning(f"Failed to load KeyeConfig/Processor from {base_model_dir}: {e}. Trying Qwen2VLProcessor...")
+        # Fallback to Qwen2VLProcessor
+        try:
+          processor = Qwen2VLProcessor.from_pretrained(base_model_dir, trust_remote_code=True)
+          model_config = Qwen2VLConfig.from_pretrained(base_model_dir)
+          spatial_merge_size = model_config.vision_config.spatial_merge_size
+          patch_size = model_config.vision_config.patch_size
+          image_token_id = model_config.image_token_id
+          video_token_id = model_config.video_token_id
+          vision_start_token_id = model_config.vision_start_token_id
+          vision_end_token_id = model_config.vision_end_token_id
+          pad_token_id = model_config.pad_token_id
+          logger.info(f"Loaded Qwen2VL config from {base_model_dir}")
+        except Exception as e2:
+          raise RuntimeError(f"Failed to load processor from {base_model_dir}: KeyeConfig error: {e}, Qwen2VL error: {e2}")
+    
+    # Ensure processor is not None
+    if processor is None:
+      raise ValueError("processor is None. Please provide a valid base_model_dir or processor argument.")
 
     kwargs['use_flops_balance'] = kwargs.get("use_flops_balance", False)
     self.use_flops_balance = kwargs['use_flops_balance']
