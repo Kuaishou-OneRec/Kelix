@@ -905,10 +905,17 @@ def train():
 
             # ========== Debug: Print weight values to verify freeze ==========
             if debug_frozen_param is not None:
-                frozen_vals = debug_frozen_param.data.flatten()[:5].tolist()
+                # Handle DTensor (FSDP) by converting to local tensor first
+                frozen_data = debug_frozen_param.data
+                if hasattr(frozen_data, 'to_local'):
+                    frozen_data = frozen_data.to_local()
+                frozen_vals = frozen_data.flatten()[:5].tolist()
                 print_rank_0(f"[DEBUG Step {scheduler.global_step}] FROZEN ({debug_frozen_name}): {frozen_vals}")
             if debug_trainable_param is not None:
-                trainable_vals = debug_trainable_param.data.flatten()[:10].tolist()
+                trainable_data = debug_trainable_param.data
+                if hasattr(trainable_data, 'to_local'):
+                    trainable_data = trainable_data.to_local()
+                trainable_vals = trainable_data.flatten()[:10].tolist()
                 print_rank_0(f"[DEBUG Step {scheduler.global_step}] TRAINABLE ({debug_trainable_name}): {trainable_vals}")
             # ================================================================
 
