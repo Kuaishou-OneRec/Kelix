@@ -60,7 +60,6 @@ class UnifiedTokenEmbedding(nn.Module):
         if embeddings.size(2) == extended_tokens.size(2) - 1:
             embeddings = torch.nn.functional.pad(embeddings, (0, 0, 0, 1), value=0)
 
-
         # 获取q_eos token id
         q_eos_token_id = self.q_eos_token
 

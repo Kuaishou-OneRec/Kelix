@@ -205,6 +205,9 @@ class Qwen3Attention(nn.Module):
         """
         # x has shape [b, s_x, d]
         # y has shape [b, s_y, d]
+        torch.save({
+            "x":x
+        }, "qwen3_attn_forward.pt")
         b, s_x, _ = x.shape
         s_y = y.shape[1] if y is not None else 0
 
