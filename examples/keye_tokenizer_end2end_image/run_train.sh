@@ -125,7 +125,8 @@ nohup mpirun --allow-run-as-root \
                 --beta2 0.95 \
                 --max-length 15000 \
                 --lr-scheduler-type cosine \
-                --num-warmup-steps 20 \
+                --num-warmup-steps 1000 \
+                --logging_per_step 10 \
                 --num-training-steps 10000 \
                 --save-checkpoint-per-step 1000 \
                 --context-parallel-size 1 \

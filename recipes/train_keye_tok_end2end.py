@@ -115,6 +115,72 @@ from muse.losses import CrossEntropyLoss
 logger = logging.getLogger(__name__)
 
 
+def compute_codebook_metrics(
+    indices: list,
+    codebook_size: int,
+    n_q_tokens: int = 8
+) -> tuple:
+    """
+    计算codebook的perplexity和usage指标。
+    
+    Args:
+        indices: VQ indices列表，每个元素是一个codebook的indices tensor
+        codebook_size: 码本大小
+        n_q_tokens: 量化token数量
+        
+    Returns:
+        global_perplexities: 每个codebook的perplexity列表
+        codebook_usages: 每个codebook的usage列表
+    """
+    if indices is None:
+        return [], []
+    
+    global_perplexities = []
+    codebook_usages = []
+    
+    with torch.no_grad():
+        for i, vq_indices in enumerate(indices):
+            local_indices = vq_indices.flatten()
+            local_batch_size = local_indices.shape[0]
+            
+            world_size = dist.get_world_size()
+            batch_sizes = torch.zeros(world_size, dtype=torch.long, device=local_indices.device)
+            dist.all_gather_into_tensor(
+                batch_sizes, 
+                torch.tensor([local_batch_size], dtype=torch.long, device=local_indices.device)
+            )
+            
+            max_batch_size = batch_sizes.max().item()
+            padded_indices = torch.zeros(max_batch_size, dtype=local_indices.dtype, device=local_indices.device)
+            padded_indices[:local_batch_size] = local_indices
+            
+            gathered_indices_list = [
+                torch.zeros(max_batch_size, dtype=local_indices.dtype, device=local_indices.device) 
+                for _ in range(world_size)
+            ]
+            dist.all_gather(gathered_indices_list, padded_indices)
+            
+            global_indices = []
+            for rank_idx, rank_indices in enumerate(gathered_indices_list):
+                valid_size = batch_sizes[rank_idx].item()
+                global_indices.append(rank_indices[:valid_size])
+            global_indices = torch.cat(global_indices, dim=0)
+            
+            counts = torch.bincount(global_indices.long(), minlength=codebook_size)
+            total_samples = global_indices.shape[0]
+            
+            avg_probs = counts.float() / total_samples
+            non_zero_probs = avg_probs[avg_probs > 0]
+            entropy = -torch.sum(non_zero_probs * torch.log(non_zero_probs + 1e-10))
+            global_perplexity = torch.exp(entropy)
+            codebook_usage = (counts > 0).sum().float() / codebook_size
+            
+            global_perplexities.append(global_perplexity.item())
+            codebook_usages.append(codebook_usage.item())
+    
+    return global_perplexities, codebook_usages
+
+
 def get_argument_parser():
     parser = argparse.ArgumentParser()
 
@@ -263,7 +329,7 @@ def get_argument_parser():
     parser.add_argument("--context-parallel-size", type=int, default=1,
                         help="Context parallelism size")
 
-    parser.add_argument("--logging-per-step", type=int, default=100,
+    parser.add_argument("--logging_per_step", type=int, default=100,
                         help="The number of steps to log training info")
 
     parser.add_argument("--comment", type=str, default=None,
@@ -723,6 +789,16 @@ def train():
     metrics.new("commitment_loss", dtype="float", reduce="mean")
     metrics.new("vision_learning_rate", dtype="float", reduce="mean")
     
+    # Add metrics for codebook perplexity and usage (average across all codebooks)
+    metrics.new("avg_perplexity", dtype="float", reduce="mean")
+    metrics.new("avg_codebook_usage", dtype="float", reduce="mean")
+    
+    # Add per-codebook metrics (for n_q_tokens codebooks)
+    n_q_tokens = model_config.tokenizer_config.n_q_tokens
+    for i in range(n_q_tokens):
+        metrics.new(f"perplexity_{i}", dtype="float", reduce="mean")
+        metrics.new(f"codebook_usage_{i}", dtype="float", reduce="mean")
+    
     # Track extra metrics for logging
     acc_steps = args.gradient_accumulation_steps
     logging_per_step = args.logging_per_step
@@ -747,6 +823,32 @@ def train():
     metrics.logger.track(
         avg_vision_lr.avg(window=logging_per_step)[::logging_per_step],
         name="vision_learning_rate", group="training")
+    
+    # Track perplexity and codebook usage metrics
+    avg_perplexity = metrics.avg_perplexity.avg(window=acc_steps)[::acc_steps][1:]
+    avg_usage = metrics.avg_codebook_usage.avg(window=acc_steps)[::acc_steps][1:]
+    metrics.logger.track(
+        avg_perplexity.avg(window=logging_per_step)[::logging_per_step],
+        name="avg_perplexity", group="metrics")
+    metrics.logger.track(
+        avg_usage.avg(window=logging_per_step)[::logging_per_step],
+        name="avg_codebook_usage", group="metrics")
+    
+    # Track per-codebook metrics
+    for i in range(n_q_tokens):
+        ppl_series = getattr(metrics, f"perplexity_{i}")
+        usage_series = getattr(metrics, f"codebook_usage_{i}")
+        avg_ppl = ppl_series.avg(window=acc_steps)[::acc_steps][1:]
+        avg_usg = usage_series.avg(window=acc_steps)[::acc_steps][1:]
+        metrics.logger.track(
+            avg_ppl.avg(window=logging_per_step)[::logging_per_step],
+            name=f"perplexity_{i}", group="metrics")
+        metrics.logger.track(
+            avg_usg.avg(window=logging_per_step)[::logging_per_step],
+            name=f"codebook_usage_{i}", group="metrics")
+    
+    # Store codebook config for metrics computation
+    codebook_size = model_config.tokenizer_config.codebook_size
     
     # Initialize step scheduler for training loop management
     scheduler = StepScheduler(args)
@@ -882,6 +984,25 @@ def train():
             metrics.lm_loss.append(lm_loss.detach().item())
             metrics.codebook_loss.append(codebook_loss.detach().item() if isinstance(codebook_loss, torch.Tensor) else codebook_loss)
             metrics.commitment_loss.append(commitment_loss.detach().item() if isinstance(commitment_loss, torch.Tensor) else commitment_loss)
+            
+            # ============ Compute codebook perplexity and usage ============
+            vq_indices = output.get("indices", None)
+            if vq_indices is not None:
+                global_perplexities, codebook_usages = compute_codebook_metrics(
+                    indices=vq_indices,
+                    codebook_size=codebook_size,
+                    n_q_tokens=n_q_tokens
+                )
+                
+                # Record average perplexity and usage
+                if global_perplexities:
+                    metrics.avg_perplexity.append(sum(global_perplexities) / len(global_perplexities))
+                    metrics.avg_codebook_usage.append(sum(codebook_usages) / len(codebook_usages))
+                    
+                    # Record per-codebook metrics
+                    for i, (ppl, usage) in enumerate(zip(global_perplexities, codebook_usages)):
+                        getattr(metrics, f"perplexity_{i}").append(ppl)
+                        getattr(metrics, f"codebook_usage_{i}").append(usage)
             # ================================================ End of Forward pass ================================================
 
             # ================================================ Backward pass ================================================
