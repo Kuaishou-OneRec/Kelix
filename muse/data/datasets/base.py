@@ -349,11 +349,83 @@ class DistributedDataset(IterableDataset):
 
   def __iter__(self):
     """Iterate through the dataset, processing samples and handling epochs."""
+    import signal
+    import traceback
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    # Timeout handler for stuck samples
+    def timeout_handler(signum, frame):
+      raise TimeoutError("Sample processing timeout (60 secs)")
+    
+    # Error tracking per data source
+    source_sample_cnt = {}
+    source_error_cnt = {}
+    
     buffer = []
     current_length = 0
     for _ in range(self.num_epochs):
       for sample in self._get_reader_iter():
-        new_inputs = self.process(sample)
+        # Get source name for error tracking
+        source_name = "unknown"
+        sample_key = ""
+        sample_url = ""
+        try:
+          if isinstance(sample, dict):
+            source_name = sample.get("source", sample.get("json", {}).get("source", "unknown"))
+            sample_key = sample.get("__key__", sample.get("uuid", ""))
+            sample_url = sample.get("__url__", sample.get("__file__", ""))
+        except:
+          pass
+        
+        source_sample_cnt.setdefault(source_name, 0)
+        source_sample_cnt[source_name] += 1
+        
+        try:
+          # Set timeout for processing (Unix-only, gracefully skip on Windows)
+          try:
+            signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(60)
+          except (AttributeError, ValueError):
+            pass  # SIGALRM not available on Windows
+          
+          new_inputs = self.process(sample)
+          
+          # Clear timeout
+          try:
+            signal.alarm(0)
+          except (AttributeError, ValueError):
+            pass
+          
+        except StopIteration:
+          # Clear timeout and re-raise
+          try:
+            signal.alarm(0)
+          except (AttributeError, ValueError):
+            pass
+          raise
+        except Exception as e:
+          # Clear timeout
+          try:
+            signal.alarm(0)
+          except (AttributeError, ValueError):
+            pass
+          
+          # Track errors
+          source_error_cnt.setdefault(source_name, 0)
+          source_error_cnt[source_name] += 1
+          error_ratio = source_error_cnt[source_name] * 1.0 / source_sample_cnt[source_name]
+          
+          # Log error occasionally to avoid flooding logs
+          if np.random.rand() < 1:  # 1% chance to log
+            logger.error(
+              f"DistributedDataset process sample error. "
+              f"{source_name=}, {error_ratio=:.4f}, {sample_key=}, {sample_url=}\n"
+              f"errmsg={traceback.format_exc()}"
+            )
+          continue  # Skip bad sample and continue
+        
         if not new_inputs:
           continue
         if self.packing:
