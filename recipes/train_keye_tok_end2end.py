@@ -721,18 +721,18 @@ def train():
             codebook_loss = output.get("codebook_loss", torch.tensor(0.0))
             commitment_loss = output.get("commitment_loss", torch.tensor(0.0))
             
-            # Compute total loss with weights
-            total_loss = lm_loss
-            if codebook_loss is not None and codebook_loss.numel() > 0:
-                total_loss = total_loss + args.codebook_loss_weight * codebook_loss.mean()
-            if commitment_loss is not None and commitment_loss.numel() > 0:
-                total_loss = total_loss + args.commitment_loss_weight * commitment_loss.mean()
-            
+            if isinstance(codebook_loss, (list, tuple)):
+                # 如果是列表，求平均
+                codebook_loss = sum(codebook_loss) / len(codebook_loss)
+
+            if isinstance(commitment_loss, (list, tuple)):
+                commitment_loss = sum(commitment_loss) / len(commitment_loss)
+            total_loss = lm_loss + args.codebook_loss_weight * codebook_loss + args.commitment_loss_weight * commitment_loss
             # Record metrics
             metrics.loss.append(total_loss.detach())
             metrics.lm_loss.append(lm_loss.detach().item() if lm_loss is not None else 0.0)
-            metrics.codebook_loss.append(codebook_loss.mean().detach().item() if codebook_loss is not None and codebook_loss.numel() > 0 else 0.0)
-            metrics.commitment_loss.append(commitment_loss.mean().detach().item() if commitment_loss is not None and commitment_loss.numel() > 0 else 0.0)
+            metrics.codebook_loss.append(codebook_loss.detach().item() if codebook_loss is not None else 0.0)
+            metrics.commitment_loss.append(commitment_loss.detach().item() if commitment_loss is not None else 0.0)
             # ================================================ End of Forward pass ================================================
 
             # ================================================ Backward pass ================================================
