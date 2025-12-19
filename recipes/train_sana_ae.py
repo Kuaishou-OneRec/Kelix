@@ -95,11 +95,12 @@ from muse.utils.common import (
 from muse.data.datasets import (
     Token2ImageDataset, 
     MultiScaleDatasetWrapper,
-    DynamicMultiScaleDatasetWrapper,
 )
 from muse.data.utils import (
     parse_resolution_budgets, 
     DEFAULT_RESOLUTION_BUDGETS,
+    ResolutionBudget,
+    ResolutionBudgetConfig,
 )
 from muse.losses.diffusion import FlowMatchingLoss
 
@@ -195,10 +196,8 @@ def get_argument_parser():
                         help="Number of data loading workers")
     
     parser.add_argument("--multi-scale", action="store_true",
-                        help="Enable multi-scale training with variable aspect ratios")
-    
-    parser.add_argument("--dynamic-multi-scale", action="store_true",
-                        help="Enable dynamic multi-scale with curriculum resolution sampling")
+                        help="Enable multi-scale training with variable aspect ratios. "
+                             "Use --resolution-budgets for curriculum scheduling.")
     
     parser.add_argument("--resolution-budgets", type=str, default=None,
                         help="Resolution budgets as 'size:batch_size,...' "
@@ -1127,11 +1126,6 @@ def train():
         dataset_config["processor_path"] = args.image_tokenizer_dir
         print_rank_0(f"Set tokenizer_path of dataset to: {args.image_tokenizer_dir}")
     
-    # Enable multi-scale training if requested (but not for dynamic multi-scale)
-    if args.multi_scale and not args.dynamic_multi_scale:
-        dataset_config["multi_scale"] = True
-        print_rank_0("Multi-scale training enabled with variable aspect ratios")
-
     # Add distributed rank/world_size to dataset config for proper data sharding
     if dist.is_initialized():
         dataset_config["rank"] = dist.get_rank()
@@ -1143,10 +1137,10 @@ def train():
     collate_fn = dataset.collate_fn
     
     # Store wrapper reference for step updates (used in training loop)
-    dynamic_wrapper = None
+    multi_scale_wrapper = None
     
-    if args.dynamic_multi_scale:
-        # Parse or use default resolution budget config
+    if args.multi_scale:
+        # Parse resolution budget config or create single-resolution default
         if args.resolution_budgets:
             budget_config = parse_resolution_budgets(
                 args.resolution_budgets,
@@ -1154,9 +1148,14 @@ def train():
                 args.resolution_end_weights,
             )
         else:
-            budget_config = DEFAULT_RESOLUTION_BUDGETS
+            # Single resolution default - no curriculum scheduling
+            budget_config = ResolutionBudgetConfig(
+                budgets=[ResolutionBudget(args.image_size, args.batch_size)],
+                start_weights=[1.0],
+                end_weights=[1.0],
+            )
         
-        print_rank_0(f"Dynamic multi-scale training with curriculum scheduling:")
+        print_rank_0(f"Multi-scale training with curriculum scheduling:")
         print_rank_0(f"  Total steps: {args.num_training_steps}")
         for b, sw, ew in zip(budget_config.budgets, 
                               budget_config.start_weights, 
@@ -1164,8 +1163,8 @@ def train():
             print_rank_0(f"  {b.size}x{b.size}: batch_size={b.batch_size}, "
                          f"weight {sw:.2f} -> {ew:.2f}")
         
-        # Wrap with dynamic multi-scale (with curriculum scheduling)
-        dynamic_wrapper = DynamicMultiScaleDatasetWrapper(
+        # Wrap with multi-scale wrapper (supports both fixed and dynamic resolution)
+        multi_scale_wrapper = MultiScaleDatasetWrapper(
             dataset=dataset,
             config=budget_config,
             total_steps=args.num_training_steps,
@@ -1173,25 +1172,13 @@ def train():
         )
         
         dataloader = DataLoader(
-            dynamic_wrapper,
+            multi_scale_wrapper,
             batch_size=1,  # Wrapper yields pre-batched lists
             num_workers=args.num_workers,
             collate_fn=lambda x: collate_fn(x[0])
         )
         
-        print_rank_0("Dynamic multi-scale enabled with linear weight interpolation")
-    
-    elif args.multi_scale:
-        dataset = MultiScaleDatasetWrapper(
-            dataset=dataset,
-            batch_size=args.batch_size
-        )
-        dataloader = DataLoader(
-            dataset,
-            batch_size=1,
-            num_workers=args.num_workers,
-            collate_fn=lambda x: collate_fn(x[0])
-        )
+        print_rank_0("Multi-scale training enabled")
     else:
         dataloader = DataLoader(
             dataset,
@@ -1314,9 +1301,9 @@ def train():
 
             scheduler.step()
             
-            # Update dynamic multi-scale weights based on training progress
-            if dynamic_wrapper is not None:
-                dynamic_wrapper.set_step(scheduler.global_step)
+            # Update multi-scale weights based on training progress
+            if multi_scale_wrapper is not None:
+                multi_scale_wrapper.set_step(scheduler.global_step)
 
             # 3. VAE Encode (get latents)
             with record_function("VAE_Encode"):
@@ -1381,9 +1368,9 @@ def train():
             if scheduler.should_logging():
                 metrics.write_logs(scheduler.global_step)
                 
-                # Log curriculum weight progression for dynamic multi-scale
-                if dynamic_wrapper is not None:
-                    stats = dynamic_wrapper.get_sampler_stats()
+                # Log curriculum weight progression for multi-scale
+                if multi_scale_wrapper is not None:
+                    stats = multi_scale_wrapper.get_sampler_stats()
                     weight_str = ", ".join(
                         f"{size}:{w:.2f}" 
                         for size, w in stats["weights"].items()

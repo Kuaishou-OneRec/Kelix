@@ -26,6 +26,7 @@ import os
 import random
 import json
 import logging
+import collections
 
 import torch
 import torch.nn as nn
@@ -58,7 +59,7 @@ logger = logging.getLogger(__name__)
 # Resolution Budget Sampler for Dynamic Multi-Scale Training
 # =============================================================================
 
-class ResolutionBudgetSampler:
+class ResolutionBudgetScheduler:
     """Samples resolution budgets with curriculum weight scheduling.
     
     Weights interpolate linearly from start_weights to end_weights
@@ -74,10 +75,7 @@ class ResolutionBudgetSampler:
         ...     start_weights=[0.8, 0.2],
         ...     end_weights=[0.2, 0.8],
         ... )
-        >>> sampler = ResolutionBudgetSampler(config, total_steps=100000)
-        >>> sampler.set_step(0)       # weights = [0.8, 0.2]
-        >>> sampler.set_step(50000)   # weights = [0.5, 0.5]
-        >>> sampler.set_step(100000)  # weights = [0.2, 0.8]
+        >>> scheduler = ResolutionBudgetScheduler(config, total_steps=100000)
     """
     
     def __init__(self, config: ResolutionBudgetConfig, total_steps: int):
@@ -85,6 +83,7 @@ class ResolutionBudgetSampler:
         self.budgets = config.budgets
         self.total_steps = max(1, total_steps)
         self._current_step = 0
+        self._current_resolution = self.budgets[0].size  # Default to first resolution
         
         # Pre-compute aspect ratio dicts for each resolution
         self.aspect_ratio_dicts = {
@@ -92,14 +91,23 @@ class ResolutionBudgetSampler:
         }
         
         logger.info(
-            f"ResolutionBudgetSampler initialized with {len(self.budgets)} resolutions, "
+            f"ResolutionBudgetScheduler initialized with {len(self.budgets)} resolutions, "
             f"total_steps={total_steps}"
         )
-        logger.info(f"  Start weights: {config.start_weights}")
-        logger.info(f"  End weights: {config.end_weights}")
+        for b, sw, ew in zip(config.budgets, config.start_weights, config.end_weights):
+            logger.info(f"  {b.size}px: weight {sw:.2f} -> {ew:.2f}")
+    
+    def step(self):
+        """Update current training step for weight interpolation."""
+        self._current_step += 1
+        self._current_resolution = self.sample().size
     
     def set_step(self, step: int):
-        """Update current training step for weight interpolation."""
+        """Set current training step directly.
+        
+        Args:
+            step: The training step to set
+        """
         self._current_step = step
     
     @property
@@ -111,6 +119,11 @@ class ResolutionBudgetSampler:
     def current_weights(self) -> List[float]:
         """Get current interpolated weights."""
         return self.config.get_weights(self.progress)
+    
+    @property
+    def current_resolution(self) -> int:
+        """Get current resolution."""
+        return self._current_resolution
     
     def sample(self) -> ResolutionBudget:
         """Sample a resolution budget using current interpolated weights."""
@@ -126,6 +139,7 @@ class ResolutionBudgetSampler:
         weights = self.current_weights
         return {
             "step": self._current_step,
+            "resolution": self.current_resolution,
             "progress": self.progress,
             "weights": {b.size: w for b, w in zip(self.budgets, weights)},
         }
@@ -620,7 +634,6 @@ class Token2ImageDataset(DistributedDataset):
         **kwargs,
     ):
         self.image_size = (image_size, image_size) if isinstance(image_size, int) else image_size
-        self.base_image_size = image_size if isinstance(image_size, int) else image_size[0]
         self.processor_path = processor_path
         self.processor = AutoProcessor.from_pretrained(
             self.processor_path, trust_remote_code=True)
@@ -629,11 +642,6 @@ class Token2ImageDataset(DistributedDataset):
         
         # Multi-scale training support
         self.multi_scale = multi_scale
-        if multi_scale:
-            self.aspect_ratios = get_aspect_ratio_dict(self.base_image_size)
-            logger.info(f"Multi-scale training enabled with {len(self.aspect_ratios)} aspect ratios")
-        else:
-            self.aspect_ratios = None
         
         # Build transforms
         self.transform = self._build_transform()
@@ -648,16 +656,33 @@ class Token2ImageDataset(DistributedDataset):
             # 先按短边 Resize（保持宽高比），再 CenterCrop
             target_size = min(self.image_size)
             transform_list.extend([
-                T.Resize(target_size, interpolation=T.InterpolationMode.BICUBIC),  # 短边缩放到 target_size
+                T.Resize(target_size, interpolation=T.InterpolationMode.BILINEAR),  # 短边缩放到 target_size
                 T.CenterCrop(target_size),  # 裁剪成正方形
             ])
         
         transform_list.extend([
-            T.Resize(self.image_size, interpolation=T.InterpolationMode.BICUBIC),
+            T.Resize(self.image_size, interpolation=T.InterpolationMode.BILINEAR),
             T.ToTensor(),
             T.Normalize([0.5], [0.5]),
         ])
         
+        return T.Compose(transform_list)
+    
+    def _build_multiscale_transform(self, target_size: Tuple[int, int]) -> Callable:
+        """Build transform for a specific target size in multi-scale training.
+        
+        Args:
+            target_size: Target (height, width) for this aspect ratio
+            
+        Returns:
+            Transform pipeline for this size
+        """
+        transform_list = [
+            T.Resize(target_size, interpolation=T.InterpolationMode.BILINEAR),
+            T.CenterCrop(target_size),
+            T.ToTensor(),
+            T.Normalize([0.5], [0.5]),
+        ]
         return T.Compose(transform_list)
     
     def get_content(self,
@@ -799,16 +824,6 @@ class Token2ImageDataset(DistributedDataset):
         image = sample.get("image", None)
         text = sample.get("text", None)
         
-        # Check for multiple captions
-        captions = sample.get("captions", None)
-
-        if captions and isinstance(captions, dict) and len(captions) > 1:
-            # Multiple captions - random selection
-            text = random.choice(list(captions.values()))
-        elif captions and isinstance(captions, dict):
-            # Single caption in dict format
-            text = next(iter(captions.values()))
-        
         if image and text:
             return {
                 "image": image,
@@ -837,17 +852,11 @@ class Token2ImageDataset(DistributedDataset):
                     content = turn["content"]
                     # Already validated: exactly 1 image block
                     for block in content:
-                        if block["type"] == "image":
+                        # TODO: 暂时兼容错误的格式，后面记得修复
+                        # Gen_BLIP3o-Pretrain-Long-Caption/0.0.1
+                        # type=image_gen 
+                        if block["type"] == "image" or block["type"] == "image_gen":
                             image = block["image"]
-                            break
-                        if block["type"] == "image_gen":
-                            # 兼容错误的格式，后面记得修复
-                            # Gen_BLIP3o-Pretrain-Long-Caption/0.0.1
-                            # type=image_gen, image: 
-                            if "image" in block:
-                                image = block["image"]
-                            elif "image_gen" in block:
-                                image = block["image_gen"]
                             break
 
         if segments:
@@ -861,28 +870,9 @@ class Token2ImageDataset(DistributedDataset):
         if image is None or text is None:
             return None
 
-        return {
-            "image": image,
-            "text": text
-        }
+        return {"image": image, "text": text}
 
-    def _build_multiscale_transform(self, target_size: Tuple[int, int]) -> Callable:
-        """Build transform for a specific target size in multi-scale training.
-        
-        Args:
-            target_size: Target (height, width) for this aspect ratio
-            
-        Returns:
-            Transform pipeline for this size
-        """
-        transform_list = [
-            T.Resize(target_size, interpolation=T.InterpolationMode.BICUBIC),
-            T.CenterCrop(target_size),
-            T.ToTensor(),
-            T.Normalize([0.5], [0.5]),
-        ]
-        return T.Compose(transform_list)
-    
+
     def _process_pair(self, sample: Dict[str, Any]) -> Optional[Dict[str, torch.Tensor]]:
         """Process a single image-text pair.
         
@@ -899,9 +889,6 @@ class Token2ImageDataset(DistributedDataset):
         if image_data is None:
             return None
         
-        # Store raw image data for dynamic multi-scale re-processing
-        result["_raw_image"] = image_data
-        
         image = load_image(image_data)
         if image is None:
             return None
@@ -909,24 +896,13 @@ class Token2ImageDataset(DistributedDataset):
         # Convert to RGB
         if image.mode != "RGB":
             image = image.convert("RGB")
-        
-        # Apply transforms (with multi-scale support)
-        if self.multi_scale and self.aspect_ratios:
-            # Get original image size and find closest aspect ratio
-            orig_w, orig_h = image.size
-            closest_ratio = get_closest_ratio(orig_h, orig_w, self.aspect_ratios)
-            target_h, target_w = self.aspect_ratios[closest_ratio]
-            # Build and apply transform for this specific target size
-            transform = self._build_multiscale_transform((target_h, target_w))
-            target_image = transform(image)
-            
-            # Store aspect ratio info for potential use in collation
-            result["aspect_ratio"] = closest_ratio
-            result["target_size"] = (target_h, target_w)
+
+        if self.multi_scale:
+            target_h, target_w = sample["target_height"], sample["target_width"]
+            target_image = self._build_multiscale_transform((target_h, target_w))(image)
         else:
-            target_h, target_w = self.image_size
             target_image = self.transform(image)
-        
+
         fake_message = [
             {
                 "role": "user",
@@ -979,13 +955,18 @@ class Token2ImageDataset(DistributedDataset):
             image = pair["image"]
             if image in images:
                 pair["image"] = images[image]
-            
-            return self._process_pair(pair)
+            metadata = json.loads(sample.get("metadata", '{}'))
+            height = metadata.get("height", None)
+            width = metadata.get("width", None)
+            if height is not None and width is not None:
+                pair["height"] = height
+                pair["width"] = width
+            return pair
         return None
 
     def collate_fn(
         self,
-        batch: List[Dict[str, torch.Tensor]],
+        batch: List[Dict[str, Any]],
     ) -> Dict[str, torch.Tensor]:
         """Collate batch samples.
         
@@ -1000,282 +981,148 @@ class Token2ImageDataset(DistributedDataset):
             images in a batch may have different sizes. We resize all
             images to the first image's size for consistent batching.
         """
+        # Here is the real process of batch.
         result = {}
-        # Standard mode: all images have same size
+        if not self.multi_scale:
+            batch = [self._process_pair(sample) for sample in batch]
 
         # Concatenate pixel_values: [s, d] -> [S, d] where S is sum of all s
         result["pixel_values"] = torch.concat([s["pixel_values"] for s in batch], dim=0)
         result["image_grid_thw"] = torch.concat([s["image_grid_thw"] for s in batch], dim=0)
         result["image"] = torch.stack([s["image"] for s in batch])
-        
-        # Include resolution metadata for logging (all samples in batch have same resolution)
-        if "resolution" in batch[0]:
-            result["resolution"] = batch[0]["resolution"]
-        if "target_size" in batch[0]:
-            result["target_size"] = batch[0]["target_size"]
-        if "aspect_ratio" in batch[0]:
-            result["aspect_ratio"] = batch[0]["aspect_ratio"]
 
         return result
 
 class MultiScaleDatasetWrapper(IterableDataset):
-    """Multi-scale dataset wrapper.
+    """Multi-scale dataset wrapper with global buckets.
     
-    Wraps a X2ImageDataset and groups samples by aspect ratio into buckets.
-    Args:
-        dataset: The X2ImageDataset to wrap.
-    Example:
-        >>> dataset = X2ImageDataset(sources=..., multi_scale=True)
-        >>> bucket_dataset = MultiScaleDatasetWrapper(
-        ...     dataset=dataset,
-        ...     batch_size=16,
-        ...     aspect_ratios=get_aspect_ratio_dict(1024),
-        ... )
-        >>> dataloader = DataLoader(
-        ...     bucket_dataset,
-        ...     batch_size=1,
-        ...     collate_fn=lambda x: dataset.collate_fn(x[0]),
-        ... )
-    """
-    
-    def __init__(
-        self,
-        dataset: IterableDataset,
-        batch_size: int,
-        bucket_key: str = "aspect_ratio",
-        drop_last: bool = False,
-    ):
-        self.dataset = dataset
-        self.batch_size = batch_size
-        self.aspect_ratios = dataset.aspect_ratios
-        assert self.aspect_ratios is not None, "`aspect_ratios` is None in dataset"
-        self.bucket_key = bucket_key
-        self.drop_last = drop_last
-        
-        logger.info(
-            f"Text2ImageMultiScaleDataset initialized with batch_size={batch_size}, "
-            f"{len(self.aspect_ratios)} aspect ratios, drop_last={drop_last}"
-        )
-    
-    def __iter__(self) -> Iterator[List[Dict]]:
-        """Iterate and yield batches grouped by aspect ratio."""
-        # Create a bucket for each aspect ratio
-        buckets: Dict[str, List] = {
-            ratio: [] for ratio in self.aspect_ratios.keys()}
-        
-        for sample in self.dataset:
-            # Get the sample's aspect ratio
-            ratio = sample.get(self.bucket_key)
-            if ratio is None or ratio not in buckets:
-                # Default to square if ratio not found
-                ratio = "1.0"
-            
-            # Add sample to the corresponding bucket
-            buckets[ratio].append(sample)
-            
-            # Yield batch when bucket is full
-            if len(buckets[ratio]) >= self.batch_size:
-                yield buckets[ratio][:self.batch_size]
-                buckets[ratio] = buckets[ratio][self.batch_size:]
-        
-        # Handle remaining samples after iteration ends
-        if not self.drop_last:
-            for ratio, bucket in buckets.items():
-                # Yield any complete batches remaining
-                while len(bucket) >= self.batch_size:
-                    yield bucket[:self.batch_size]
-                    bucket = bucket[self.batch_size:]
-                # Yield incomplete batch if any samples remain
-                if bucket:
-                    yield bucket
-
-
-class DynamicMultiScaleDatasetWrapper(IterableDataset):
-    """Dynamic multi-scale dataset wrapper with curriculum resolution sampling.
-    
-    For each micro-step (batch yield):
-    1. Sample a resolution budget by current interpolated weight
-    2. Use that resolution's aspect ratios and batch size
-    3. Fill a bucket until batch_size samples with same aspect ratio
-    
-    The sampler's weights are updated externally via `set_step()` to implement
-    curriculum learning (low-res heavy early, high-res heavy late).
+    Wraps a X2ImageDataset and groups samples by (resolution, aspect_ratio) into 
+    global buckets. Supports both single-resolution (fixed) and multi-resolution 
+    (dynamic) training through a unified ResolutionBudgetConfig API.
     
     Args:
-        dataset: Base Token2ImageDataset
-        config: ResolutionBudgetConfig with budgets and weight schedule
-        total_steps: Total training steps for weight interpolation
-        drop_last: Whether to drop incomplete batches
+        dataset: The X2ImageDataset to wrap (must have _build_multiscale_transform).
+        config: ResolutionBudgetConfig defining resolutions, batch sizes, and weights.
+                Single-resolution config automatically behaves as fixed resolution training.
+        total_steps: Total training steps for curriculum weight interpolation.
+                     Default 1 for fixed weights (no curriculum).
+        drop_last: Whether to drop incomplete batches at the end.
         
-    Example:
-        >>> from muse.data.utils import DEFAULT_RESOLUTION_BUDGETS
-        >>> config = DEFAULT_RESOLUTION_BUDGETS
-        >>> wrapper = DynamicMultiScaleDatasetWrapper(dataset, config, total_steps=100000)
-        >>> for step, batch in enumerate(DataLoader(wrapper, batch_size=1)):
-        ...     wrapper.set_step(step)  # Update weights based on progress
-        ...     print(batch["image"].shape, batch["resolution"])
+    Example (fixed resolution):
+        >>> config = ResolutionBudgetConfig(
+        ...     budgets=[ResolutionBudget(1024, batch_size=16)],
+        ...     start_weights=[1.0],
+        ...     end_weights=[1.0],
+        ... )
+        >>> wrapper = MultiScaleDatasetWrapper(dataset, config)
+        >>> dataloader = DataLoader(wrapper, batch_size=1, collate_fn=...)
+        
+    Example (dynamic resolution with curriculum):
+        >>> config = ResolutionBudgetConfig(
+        ...     budgets=[
+        ...         ResolutionBudget(512, batch_size=32),
+        ...         ResolutionBudget(1024, batch_size=8),
+        ...     ],
+        ...     start_weights=[0.8, 0.2],  # 80% low-res at start
+        ...     end_weights=[0.2, 0.8],    # 80% high-res at end
+        ... )
+        >>> wrapper = MultiScaleDatasetWrapper(dataset, config, total_steps=100000)
+        >>> for step, batch in enumerate(dataloader):
+        ...     wrapper.set_step(step)  # Update curriculum weights
+        ...     train(batch)
     """
     
     def __init__(
         self,
         dataset: IterableDataset,
         config: ResolutionBudgetConfig,
-        total_steps: int,
+        total_steps: int = 1,
         drop_last: bool = False,
+        max_bucket_size: int = 10000,
     ):
         self.dataset = dataset
         self.config = config
-        self.sampler = ResolutionBudgetSampler(config, total_steps)
         self.drop_last = drop_last
+        self.max_bucket_size = max_bucket_size
         
-        # Store reference to dataset's transform builder
-        self._build_multiscale_transform = dataset._build_multiscale_transform
+        # Resolution sampler (handles single or multiple resolutions uniformly)
+        self.scheduler = ResolutionBudgetScheduler(config, total_steps)
         
+        # Batch sizes per resolution
+        self._batch_sizes = {b.size: b.batch_size for b in config.budgets}
+        
+        # Log config
         logger.info(
-            f"DynamicMultiScaleDatasetWrapper initialized with "
-            f"{len(config.budgets)} resolution budgets, total_steps={total_steps}"
+            f"MultiScaleDatasetWrapper initialized with {len(config.budgets)} resolutions, "
+            f"total_steps={total_steps}, drop_last={drop_last}"
         )
         for b, sw, ew in zip(config.budgets, config.start_weights, config.end_weights):
-            logger.info(f"  {b.size}x{b.size}: batch_size={b.batch_size}, "
-                       f"weight {sw:.2f} -> {ew:.2f}")
-    
+            logger.info(
+                f"  {b.size}px: batch_size={b.batch_size}, weight {sw:.2f} -> {ew:.2f}"
+            )
+
     def set_step(self, step: int):
         """Update current training step for curriculum weight scheduling.
         
-        Call this each training step to update the resolution sampling weights.
+        Args:
+            step: Current global training step
         """
-        self.sampler.set_step(step)
+        self.scheduler._current_step = step
     
     def get_sampler_stats(self) -> Dict[str, Any]:
-        """Get current sampler statistics for logging."""
-        return self.sampler.get_stats()
-    
-    def _transform_for_resolution(
-        self,
-        image: Image.Image,
-        resolution: int,
-        aspect_ratios: Dict[str, Tuple[int, int]]
-    ) -> Tuple[torch.Tensor, str, Tuple[int, int]]:
-        """Transform image to target resolution with closest aspect ratio.
+        """Get current sampling statistics for logging.
         
-        Args:
-            image: PIL Image (already RGB)
-            resolution: Target resolution budget
-            aspect_ratios: Aspect ratio dict for this resolution
-            
         Returns:
-            (transformed_tensor, aspect_ratio_key, target_size)
+            Dict with step, progress, and weights info
         """
-        orig_w, orig_h = image.size
-        closest_ratio = get_closest_ratio(orig_h, orig_w, aspect_ratios)
-        target_h, target_w = aspect_ratios[closest_ratio]
-        
-        transform = self._build_multiscale_transform((target_h, target_w))
-        tensor = transform(image)
-        
-        return tensor, closest_ratio, (target_h, target_w)
-    
+        return self.scheduler.get_stats()
+
     def __iter__(self) -> Iterator[List[Dict]]:
-        """Iterate and yield batches with dynamic resolution.
+        """Iterate and yield batches grouped by (resolution, aspect_ratio).
         
         Algorithm:
-        1. Sample a resolution budget for current batch
-        2. Create empty buckets for each aspect ratio at that resolution
-        3. Pull samples from dataset, transform them, bucket by aspect ratio
-        4. When any bucket reaches batch_size, yield it and start new resolution
-        5. Leftover samples are re-queued for next iteration
+        1. Sample target resolution based on current curriculum weights
+        2. Check if any bucket for target_res has enough samples
+        3. If yes, yield batch and sample next resolution
+        4. If no, read sample from dataset, transform, add to bucket
+        5. Repeat until dataset exhausted
         """
-        # Queue of raw samples for re-processing at different resolutions
-        sample_queue: List[Dict] = []
-        
-        # Iterator over base dataset
-        base_iter = iter(self.dataset)
-        exhausted = False
-        
-        while True:
-            # Sample resolution for this micro-step
-            budget = self.sampler.sample()
-            aspect_ratios = self.sampler.get_aspect_ratios(budget.size)
-            batch_size = budget.batch_size
+        # Global buckets: (resolution, aspect_ratio) -> [samples]
+        buckets: Dict[int, Dict[str, List[Dict]]] = {}
+
+        # initialize buckets for each resolution
+        for budget in self.config.budgets:
+            buckets[budget.size] = {}
+            aspect_ratios = self.scheduler.get_aspect_ratios(budget.size)
+            for aspect_ratio in aspect_ratios:
+                buckets[budget.size][aspect_ratio] = []
+
+        for sample in self.dataset:
+            if sample is None:
+                continue
+            orig_h, orig_w = sample["height"], sample["width"]
+
+            res = self.scheduler.current_resolution
+            if res not in buckets:
+                continue
+            aspect_ratio = get_closest_ratio(
+                orig_h, orig_w, self.scheduler.get_aspect_ratios(res))
+            # TODO: filter out too extreme aspect ratios
+
+            buckets[res][aspect_ratio].append(sample)
+            # if bucket exceeds the maximum size, discard the oldest sample to avoid memory overflow
+            buckets[res][aspect_ratio] = buckets[res][aspect_ratio][-self.max_bucket_size:]
             
-            # Buckets for this resolution: aspect_ratio -> list of processed samples
-            buckets: Dict[str, List[Dict]] = {r: [] for r in aspect_ratios.keys()}
-            
-            batch_ready = False
-            
-            while not batch_ready:
-                # Try to get a sample
-                sample = None
-                
-                # First try queue
-                if sample_queue:
-                    sample = sample_queue.pop(0)
-                elif not exhausted:
-                    try:
-                        sample = next(base_iter)
-                    except StopIteration:
-                        exhausted = True
-                
-                if sample is None:
-                    # No more samples available
-                    break
-                
-                # Extract image for processing
-                # The sample from dataset already has processed fields,
-                # but we need the raw image to re-transform for different resolution
-                raw_image = sample.get("_raw_image")
-                if raw_image is None:
-                    # Sample doesn't have raw image preserved - skip
-                    continue
-                
-                image = load_image(raw_image)
-                if image is None:
-                    continue
-                if image.mode != "RGB":
-                    image = image.convert("RGB")
-                
-                # Transform for current resolution
-                tensor, ratio, target_size = self._transform_for_resolution(
-                    image, budget.size, aspect_ratios
-                )
-                
-                # Build processed sample
-                processed = {
-                    "image": tensor,
-                    "aspect_ratio": ratio,
-                    "target_size": target_size,
-                    "resolution": budget.size,
-                    "_raw_image": raw_image,  # Keep for potential re-queue
-                }
-                
-                # Copy other fields from original sample
-                for key in ["pixel_values", "image_grid_thw"]:
-                    if key in sample:
-                        processed[key] = sample[key]
-                
-                # Add to bucket
-                buckets[ratio].append(processed)
-                
-                # Check if bucket is full
-                if len(buckets[ratio]) >= batch_size:
-                    # Yield the batch
-                    batch = buckets[ratio][:batch_size]
-                    remaining = buckets[ratio][batch_size:]
-                    buckets[ratio] = []
-                    
-                    # Re-queue remaining and other buckets for next micro-step
-                    for r, bucket in buckets.items():
-                        sample_queue.extend(bucket)
-                    sample_queue.extend(remaining)
-                    
+            tgt_res = self.scheduler.current_resolution
+            for ratio in self.scheduler.get_aspect_ratios(tgt_res):
+                if len(buckets[tgt_res][ratio]) >= self._batch_sizes[tgt_res]:
+                    batch = buckets[tgt_res][ratio][:self._batch_sizes[tgt_res]]
+                    buckets[tgt_res][ratio] = buckets[tgt_res][ratio][self._batch_sizes[tgt_res]:]
+                    tgt_h, tgt_w = self.scheduler.get_aspect_ratios(tgt_res)[ratio]
+                    for sample in batch:
+                        sample["target_height"] = tgt_h
+                        sample["target_width"] = tgt_w
                     yield batch
-                    batch_ready = True
+                    self.scheduler.step()
+                    break
             
-            # If we're here without batch_ready, we've exhausted samples
-            if not batch_ready:
-                # Handle remaining samples
-                if not self.drop_last:
-                    for ratio, bucket in buckets.items():
-                        if bucket:
-                            yield bucket
-                break

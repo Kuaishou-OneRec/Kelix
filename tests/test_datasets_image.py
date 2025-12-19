@@ -1077,7 +1077,7 @@ from muse.data.utils import (
     DEFAULT_RESOLUTION_BUDGETS,
     parse_resolution_budgets,
 )
-from muse.data.datasets.image import ResolutionBudgetSampler
+from muse.data.datasets.image import ResolutionBudgetScheduler
 
 
 class TestResolutionBudgetConfig:
@@ -1197,13 +1197,13 @@ class TestParseResolutionBudgets:
         assert config.end_weights[1] > config.end_weights[0]
 
 
-class TestResolutionBudgetSampler:
-    """Test ResolutionBudgetSampler class"""
+class TestResolutionBudgetScheduler:
+    """Test ResolutionBudgetScheduler class"""
     
     def test_init(self):
         """Test sampler initialization"""
         config = DEFAULT_RESOLUTION_BUDGETS
-        sampler = ResolutionBudgetSampler(config, total_steps=1000)
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
         
         assert len(sampler.budgets) == 3
         assert sampler.total_steps == 1000
@@ -1212,7 +1212,7 @@ class TestResolutionBudgetSampler:
     def test_set_step(self):
         """Test set_step updates current step"""
         config = DEFAULT_RESOLUTION_BUDGETS
-        sampler = ResolutionBudgetSampler(config, total_steps=1000)
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
         
         sampler.set_step(500)
         
@@ -1222,7 +1222,7 @@ class TestResolutionBudgetSampler:
     def test_progress_capped_at_one(self):
         """Test progress is capped at 1.0"""
         config = DEFAULT_RESOLUTION_BUDGETS
-        sampler = ResolutionBudgetSampler(config, total_steps=1000)
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
         
         sampler.set_step(2000)  # Beyond total_steps
         
@@ -1231,7 +1231,7 @@ class TestResolutionBudgetSampler:
     def test_sample_returns_budget(self):
         """Test sample returns a ResolutionBudget"""
         config = DEFAULT_RESOLUTION_BUDGETS
-        sampler = ResolutionBudgetSampler(config, total_steps=1000)
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
         
         budget = sampler.sample()
         
@@ -1248,7 +1248,7 @@ class TestResolutionBudgetSampler:
             start_weights=[0.9, 0.1],
             end_weights=[0.1, 0.9],
         )
-        sampler = ResolutionBudgetSampler(config, total_steps=1000)
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
         sampler.set_step(0)
         
         # Sample many times and count
@@ -1270,7 +1270,7 @@ class TestResolutionBudgetSampler:
             start_weights=[0.9, 0.1],
             end_weights=[0.1, 0.9],
         )
-        sampler = ResolutionBudgetSampler(config, total_steps=1000)
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
         sampler.set_step(1000)
         
         # Sample many times and count
@@ -1285,7 +1285,7 @@ class TestResolutionBudgetSampler:
     def test_get_aspect_ratios(self):
         """Test get_aspect_ratios returns correct dict"""
         config = DEFAULT_RESOLUTION_BUDGETS
-        sampler = ResolutionBudgetSampler(config, total_steps=1000)
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
         
         ratios_512 = sampler.get_aspect_ratios(512)
         ratios_1024 = sampler.get_aspect_ratios(1024)
@@ -1299,7 +1299,7 @@ class TestResolutionBudgetSampler:
     def test_get_stats(self):
         """Test get_stats returns correct info"""
         config = DEFAULT_RESOLUTION_BUDGETS
-        sampler = ResolutionBudgetSampler(config, total_steps=1000)
+        sampler = ResolutionBudgetScheduler(config, total_steps=1000)
         sampler.set_step(250)
         
         stats = sampler.get_stats()

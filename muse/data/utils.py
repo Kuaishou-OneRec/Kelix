@@ -58,7 +58,25 @@ def get_closest_ratio(height: int, width: int, aspect_ratios: dict) -> str:
     ratio = height / width
     return min(aspect_ratios.keys(), key=lambda r: abs(float(r) - ratio))
 
-
+def get_closest_size(
+    height: int,
+    width: int,
+    aspect_ratios: Dict[str, Tuple[int, int]],
+) -> Tuple[int, int]:
+    """Transform image to target resolution with closest aspect ratio.
+    
+    Args:
+        image: PIL Image (already RGB).
+        resolution: Target resolution budget.
+        aspect_ratios: Aspect ratio dict for this resolution.
+        
+    Returns:
+        Tuple of (transformed_tensor, aspect_ratio_key, target_size).
+    """
+    closest_ratio = get_closest_ratio(height, width, aspect_ratios)
+    target_h, target_w = aspect_ratios[closest_ratio]
+    
+    return target_h, target_w
 # =============================================================================
 # Resolution Budget Configuration for Dynamic Multi-Scale Training
 # =============================================================================
