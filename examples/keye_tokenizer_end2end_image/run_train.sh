@@ -117,7 +117,7 @@ nohup mpirun --allow-run-as-root \
                 --model-dir $MODEL_DIR \
                 --output-dir $OUTPUT_DIR \
                 --dataset-config examples/keye_tokenizer_end2end_image/run_exp1.6.8_stage2.json \
-                --lr 2e-4 \
+                --lr 1e-1 \
                 --min_lr 1e-7 \
                 --weight-decay 0.1 \
                 --beta1 0.9 \
@@ -127,7 +127,7 @@ nohup mpirun --allow-run-as-root \
                 --freeze_navit_mlp_ar \
                 --max-length 20000 \
                 --lr-scheduler-type cosine \
-                --num-warmup-steps 100 \
+                --num-warmup-steps 10 \
                 --num-training-steps 100000 \
                 --save-checkpoint-per-step 1000 \
                 --context-parallel-size 1 \
