@@ -122,6 +122,9 @@ nohup mpirun --allow-run-as-root \
                 --weight-decay 0.1 \
                 --beta1 0.9 \
                 --beta2 0.95 \
+                --freeze_navit \
+                --freeze_llm \
+                --freeze_navit_mlp_ar \
                 --max-length 20000 \
                 --lr-scheduler-type cosine \
                 --num-warmup-steps 100 \

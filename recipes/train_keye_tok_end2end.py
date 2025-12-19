@@ -285,10 +285,74 @@ def get_argument_parser():
     parser.add_argument("--overfit-batches", type=int, default=None,
                         help="Number of batches to cache for overfitting (debug mode)")
 
+    ############ Freeze Args ############
+    parser.add_argument("--freeze-llm", action="store_true",
+                        help="Freeze LLM parameters, only train visual_tokenizer and quant_projector")
+    
+    parser.add_argument("--freeze-projector", action="store_true",
+                        help="Freeze quant_projector parameters")
+    
+    parser.add_argument("--freeze-tokenizer", action="store_true",
+                        help="Freeze visual_tokenizer parameters, train quant_projector parameters")
+    
+    parser.add_argument("--freeze-navit", action="store_true",
+                        help="Freeze NaViT (visual_tokenizer.visual) parameters, train VQ parameters")
+    
+    parser.add_argument("--freeze-navit-mlp-ar", action="store_true",
+                        help="Freeze visual_tokenizer.mlp_AR parameters")
+
     return parser
 
 
 
+
+
+def freeze_params(args, model):
+    """Freeze specific model parameters based on command line arguments.
+    
+    Args:
+        args: Command line arguments containing freeze flags
+        model: The model to freeze parameters on
+    """
+    if args.freeze_llm:
+        print_rank_0("Freeze LLM parameters.")
+        for name, param in model.named_parameters():
+            if not (name.startswith("visual_tokenizer") or name.startswith("quant_projector")):
+                print_rank_0(f"Disable LLM grad: {name}")
+                param.requires_grad = False
+        print_rank_0("=" * 50)
+    
+    if args.freeze_projector:
+        print_rank_0("Freeze quant_projector parameters.")
+        for name, param in model.named_parameters():
+            if name.startswith("quant_projector"):
+                print_rank_0(f"Disable quant_projector grad: {name}")
+                param.requires_grad = False
+        print_rank_0("=" * 50)
+    
+    if args.freeze_tokenizer:
+        print_rank_0("Freeze tokenizer parameters. Train quant_projector parameters")
+        for name, param in model.named_parameters():
+            if name.startswith("visual_tokenizer"):
+                print_rank_0(f"Disable visual_tokenizer grad: {name}")
+                param.requires_grad = False
+        print_rank_0("=" * 50)
+    
+    if args.freeze_navit:
+        print_rank_0("Freeze NaViT parameters. Train VQ parameters")
+        for name, param in model.named_parameters():
+            if name.startswith("visual_tokenizer.visual") and not name.startswith("visual_tokenizer.mlp_AR"):
+                print_rank_0(f"Disable visual_tokenizer_navit grad: {name}")
+                param.requires_grad = False
+        print_rank_0("=" * 50)
+    
+    if args.freeze_navit_mlp_ar:
+        print_rank_0("Freeze mlp_AR parameters.")
+        for name, param in model.named_parameters():
+            if name.startswith("visual_tokenizer.mlp_AR"):
+                print_rank_0(f"Disable visual_tokenizer.mlp_AR grad: {name}")
+                param.requires_grad = False
+        print_rank_0("=" * 50)
 
 
 def _init_profiler(output_dir) -> None:
@@ -518,14 +582,31 @@ def train():
     if state_dict is not None:
         del state_dict
 
-    # Print trainable parameters
+    # Freeze specific parameters based on args
+    freeze_params(args, model)
+
+    # Print frozen and trainable parameters separately
     print_rank_0("=" * 50)
-    print_rank_0("Parameters:")
+    print_rank_0("Frozen Parameters:")
+    frozen_count = 0
+    frozen_numel = 0
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            print_rank_0(f"  [FROZEN] {name}: {param.shape}")
+            frozen_count += 1
+            frozen_numel += param.numel()
+    print_rank_0(f"Total frozen: {frozen_count} params, {frozen_numel:,} elements")
+    print_rank_0("=" * 50)
+    
+    print_rank_0("Trainable Parameters:")
+    trainable_count = 0
+    trainable_numel = 0
     for name, param in model.named_parameters():
         if param.requires_grad:
-            print_rank_0(f"  {name}: {param.shape}")
-        else:
-            print_rank_0(f"  {name}: {param.shape} (not trainable)")
+            print_rank_0(f"  [TRAINABLE] {name}: {param.shape}")
+            trainable_count += 1
+            trainable_numel += param.numel()
+    print_rank_0(f"Total trainable: {trainable_count} params, {trainable_numel:,} elements")
     print_rank_0("=" * 50)
 
     # Prepare optimizer
