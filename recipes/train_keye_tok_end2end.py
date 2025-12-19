@@ -335,7 +335,6 @@ def train():
     with open(args.dataset_config, encoding="utf-8") as f:
         dataset_config = json.loads(f.read())
 
-    dataset_name = dataset_config.pop("name")
     
     # Determine training mode and get model_class
     if args.model_dir:
