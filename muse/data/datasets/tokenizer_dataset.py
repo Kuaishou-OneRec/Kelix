@@ -1694,12 +1694,36 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
     super().__init__(
         sources=sources,
         max_length=max_length,
+        min_visual_tokens_per_image=min_visual_tokens_per_image,
+        max_visual_tokens_per_image=max_visual_tokens_per_image,
+        video_nframe=video_nframe,
+        video_fps=video_fps,
+        video_min_frames=video_min_frames,
+        video_max_frames=video_max_frames,
+        shrink_ratio=shrink_ratio,
+        max_retry=max_retry,
+        multiple_of=multiple_of,
+        shuffle_size=shuffle_size,
+        shuffle_initial_size=shuffle_initial_size,
+        base_model_dir=base_model_dir,  # <--- 关键修复：传递 base_model_dir
         processor=processor,
+        spatial_merge_size=spatial_merge_size,
+        patch_size=patch_size,
+        image_token_id=image_token_id,
+        video_token_id=video_token_id,
+        fast_video_token_id=fast_video_token_id,
+        vision_start_token_id=vision_start_token_id,
+        vision_end_token_id=vision_end_token_id,
+        pad_token_id=pad_token_id,
+        datasource_config=datasource_config,
+        cut_to_pad=cut_to_pad,
+        min_visual_tokens_per_frame=min_visual_tokens_per_frame,
+        max_visual_tokens_per_frame=max_visual_tokens_per_frame,
         use_flops_balance=self.use_flops_balance,
-        use_slowfast=True, # Enable slowfast logic in base class if needed, or handle here
+        process_vision_info_args=process_vision_info_args,
+        use_slowfast=True, 
         **kwargs
     )
-    
     # self.sources = sources # Handled by super
 
     # for data_source monitor
