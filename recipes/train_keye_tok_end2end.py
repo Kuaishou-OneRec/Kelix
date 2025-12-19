@@ -104,7 +104,7 @@ from muse.utils.common import (
     to_device,
     dist_reduce_dict
 )
-from muse.data.datasets import ChatCompletionVisionDataset
+from muse.data.datasets import ChatCompletionVisionDataset,ChatCompletionVisionDataset_keye_vitrope_slowfast
 
 from muse.config import load_config
 
@@ -585,7 +585,7 @@ def train():
             dataset_config["world_size"] = dist.get_world_size()
             print_rank_0(f"Dataset sharding: rank={dataset_config['rank']}, world_size={dataset_config['world_size']}")
         
-        dataset = ChatCompletionVisionDataset(**dataset_config)
+        dataset = ChatCompletionVisionDataset_keye_vitrope_slowfast(**dataset_config)
         dataloader = DataLoader(
             dataset,
             batch_size=1,  # Each sample is already batched in ChatCompletionVisionDataset
