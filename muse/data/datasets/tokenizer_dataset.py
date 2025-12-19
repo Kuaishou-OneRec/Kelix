@@ -1648,8 +1648,7 @@ class ChatCompletionVisionDataset_keye_vitrope_slowfast(ChatCompletionVisionData
       except Exception as e:
          logger.warning(f"Failed to load config/Processor from {base_model_dir}: {e}. Using default args.")
 
-    kwargs['use_flops_balance'] = kwargs.get("use_flops_balance", False)
-    self.use_flops_balance = kwargs['use_flops_balance']
+    self.use_flops_balance = kwargs.pop("use_flops_balance", False)
     self.slowfast_padder = SlowFastVisionPadder(base_model_dir)
     self.auto_aug = AutoAugmentWrapper(policy=kwargs.get("autoaug_policy", None))
     self.process_vision_info_args = process_vision_info_args
