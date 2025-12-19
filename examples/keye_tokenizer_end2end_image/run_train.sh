@@ -122,9 +122,9 @@ nohup mpirun --allow-run-as-root \
                 --weight-decay 0.1 \
                 --beta1 0.9 \
                 --beta2 0.95 \
-                --max-length 15000 \
+                --max-length 20000 \
                 --lr-scheduler-type cosine \
-                --num-warmup-steps 1000 \
+                --num-warmup-steps 100 \
                 --num-training-steps 100000 \
                 --save-checkpoint-per-step 1000 \
                 --context-parallel-size 1 \
