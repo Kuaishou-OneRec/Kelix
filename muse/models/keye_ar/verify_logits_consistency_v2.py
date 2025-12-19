@@ -238,7 +238,7 @@ def load_keye_ar_model_v2(output_model_dir, device):
         torch_dtype=torch.bfloat16, 
         low_cpu_mem_usage=True
     )
-# 获取KeyeForConditionalGeneration的state_dict
+    # 获取KeyeForConditionalGeneration的state_dict
     keye_state_dict = keye_model.state_dict()
     
     # 转换为KeyeARModel的state_dict
