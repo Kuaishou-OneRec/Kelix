@@ -505,9 +505,14 @@ class KeyeTokenizerEnd2EndImage(Model):
         if isinstance(logits, list):
             logits = logits[-1]
 
-        # Note: LM loss is now computed externally in the training script
-        # using CrossEntropyLoss with shift_labels=False (labels are pre-shifted)
+        loss = None
+        if labels is not None:
+            shift_logits = logits[:, :-1, :].contiguous()
+            shift_labels = labels[:, 1:].contiguous()
+            loss = F.cross_entropy(shift_logits.view(-1, self.vocab_size), shift_labels.view(-1))
+
         return {
+            "loss": loss,
             "logits": logits,
             **aux_losses,
         }

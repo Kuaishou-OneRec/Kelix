@@ -703,11 +703,22 @@ def train():
             # Extract batch data for KeyeTokenizerEnd2EndImage
             input_ids = batch["input_ids"]
             attention_mask = batch.get("attention_mask", None)
-            labels = batch.get("labels", None)
+            loss_mask = batch.get("loss_mask", None)
             pixel_values = batch.get("pixel_values", None)
             image_grid_thw = batch.get("image_grid_thw", None)
             pixel_values_videos = batch.get("pixel_values_videos", None)
             video_grid_thw = batch.get("video_grid_thw", None)
+            
+            # Process input_ids: set negative values to 0
+            input_ids = input_ids * (input_ids > 0).to(torch.int64, non_blocking=True)
+            
+            # Generate labels based on loss_mask: mask tokens (e.g., image tokens) should not be predicted
+            if loss_mask is not None:
+                labels = input_ids * loss_mask + loss_fn.ignore_index * (1 - loss_mask)
+                labels = labels.to(torch.int64)
+            else:
+                # Fallback: use input_ids as labels if no loss_mask provided
+                labels = input_ids.clone()
 
             num_tokens = input_ids.numel()
             metrics.tokens.append(num_tokens)
