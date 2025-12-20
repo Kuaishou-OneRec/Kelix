@@ -2043,6 +2043,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         inv_freq_expanded0 = inv_freq_expanded
         
         if os.environ.get("debug_for_muse", "0") == "1":
+            print(f"debug_for_muse: rotary" )
             inv_freq_expanded = 1.0 / (self.config.rope_theta ** (torch.arange(0, self.head_dim, 2, dtype=torch.int64)[: (self.head_dim // 2)].float() / self.head_dim)).to(x.device)
             self.inv_freq = inv_freq_expanded #  这里暂时对齐custom的实现，后续可以去掉
             inv_freq_expanded = inv_freq_expanded[None,:,None]
