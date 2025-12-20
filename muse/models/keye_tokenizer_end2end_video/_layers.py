@@ -138,7 +138,6 @@ class Projector(nn.Module):
 
     def forward(self, image_features: torch.Tensor, image_grid_thw: List[Tuple[int, int, int]]) -> torch.Tensor:
         image_grid_thw_tensor = torch.tensor(image_grid_thw, device=image_features.device)
-        print('maosiyangdebugimage_grid_thw_tensor', image_grid_thw_tensor, image_features.shape)
         image_features = self.split(image_features, image_grid_thw_tensor)
         if isinstance(image_features, (list, tuple)):
             return torch.cat(
