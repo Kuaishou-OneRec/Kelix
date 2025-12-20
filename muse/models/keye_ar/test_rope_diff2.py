@@ -33,6 +33,7 @@ class Qwen3RotaryEmbedding(nn.Module):
         
         # Step 1: 扩展inv_freq
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        inv_freq_expanded = 1.0 / (self.config.rope_theta ** (torch.arange(0, self.head_dim, 2, dtype=torch.int64)[: (self.head_dim // 2)].float() / self.head_dim))
         if save_intermediates:
             intermediates["inv_freq_expanded"] = inv_freq_expanded.clone()
             intermediates["inv_freq_original"] = self.inv_freq.clone()
