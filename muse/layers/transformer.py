@@ -173,9 +173,10 @@ class TransformerSelfAttentionLayer(nn.Module):
         # Input tensor and attention output have the same shape
         # [b, s, d]
         # Norm applied before self-attention
-        # if x.shape[-1] == 512:
-        #     import IPython
-        #     IPython.embed()
+        print("selfatttt")
+        if x.shape[-1] == 512:
+            import IPython
+            IPython.embed()
         h = self.sa_norm(x)
         if getattr(self.sa_norm, "weight", torch.zeros([0])).shape[0] == 4096 \
             or getattr(self.sa_norm, "scale", torch.zeros([0])).shape[0] == 4096:
@@ -187,7 +188,13 @@ class TransformerSelfAttentionLayer(nn.Module):
             # With TP we need to use a replicated tensor here
             bsz, seq_len, *_ = h.shape
             mask = self.mask_mod(mask=mask, bsz=bsz, seq_len=seq_len)
-
+        torch.save(
+            {
+                "h": h,
+                "x": x,
+            },
+            "debug_attn.pt",
+        )
         attn_out = self.attn(h, h, mask=mask, input_pos=input_pos, **kwargs)
         
         # Residual connection; shape: [batch_size, seq_length, embed_dim]
