@@ -96,8 +96,8 @@ class UnifiedTokenDecoder(Model):
             layer = TransformerSelfAttentionLayer(
                 attn=self_attn,
                 mlp=mlp,
-                sa_norm=Fp32LayerNorm(d_model, eps=1e-5),
-                mlp_norm=Fp32LayerNorm(d_model, eps=1e-5)
+                sa_norm=nn.LayerNorm(d_model),# Fp32LayerNorm(d_model, eps=1e-5),
+                mlp_norm=nn.LayerNorm(d_model)
             )
             layers.append(layer)
         
@@ -130,9 +130,9 @@ class UnifiedTokenDecoder(Model):
             out: (Batch, Seq_Len, d_model) 或 (Batch, Seq_Len, vocab_size) 如果lm_head不为None
         """
         batch_size, seq_len, _ = x_emb.shape
-        print(f"unified_decoder")
-        import IPython
-        IPython.embed()
+        # print(f"unified_decoder")
+        # import IPython
+        # IPython.embed()
         if not self.reduce:
             x_emb0 = 0
         else:
@@ -157,8 +157,8 @@ class UnifiedTokenDecoder(Model):
         if self.lm_head is not None:
             output = self.lm_head(output)
         
-        import IPython
-        IPython.embed()
+        # import IPython
+        # IPython.embed()
         return output
     
     def forward_with_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
