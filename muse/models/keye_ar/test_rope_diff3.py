@@ -105,18 +105,9 @@ class Qwen3RotaryEmbedding(nn.Module):
     
     def rope_init(self):
         # 重载rope_init，确保和__init__逻辑一致
-        base = self.config.rope_theta
-        dim = self.head_dim
-        theta = 1.0 / (
-            base ** (
-                torch.arange(0, dim, 2, dtype=torch.int64, device=self.device)[: (dim // 2)]
-                .float()
-                / dim
-            )
-        )
-        self.inv_freq = theta.to(dtype=torch.float64).to(self.device).to(dtype=torch.bfloat16)
-        self.register_buffer("inv_freq", self.inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq.clone()
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, self.device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
 
 # 代码2：RotaryPositionalEmbeddings（完全不变）
 class RotaryPositionalEmbeddings(nn.Module):
