@@ -66,8 +66,8 @@ class Qwen3RotaryEmbedding(nn.Module):
                 intermediates["emb"] = emb.clone()
             
             # Step 5: 计算cos/sin并缩放
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+            cos = emb.cos().bfloat16() * self.attention_scaling
+            sin = emb.sin().bfloat16() * self.attention_scaling
             if save_intermediates:
                 intermediates["cos_before_scaling"] = emb.cos().clone()
                 intermediates["sin_before_scaling"] = emb.sin().clone()
