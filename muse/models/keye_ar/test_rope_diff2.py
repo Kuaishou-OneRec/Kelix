@@ -241,9 +241,9 @@ if __name__ == "__main__":
     device = "cpu"
     print(f"使用设备: {device} (CPU避免cuda精度干扰)")
 
-    with torch.autocast(device_type='cuda', dtype=torch.float, enabled=False):
+    with torch.autocast(device_type='cuda', dtype=torch.bfloat16, enabled=False):
         # 1. 实例化QwenRoPE并运行，保存所有中间结果
-        qwen_rope = Qwen3RotaryEmbedding(config, device=device).to(device).float()
+        qwen_rope = Qwen3RotaryEmbedding(config, device=device).to(device).bfloat16()
         position_ids = torch.arange(seq_len).expand(batch_size, -1).to(device)
         x_dummy = torch.randn(batch_size, seq_len, head_dim, device=device)
         # 运行forward并保存中间结果
@@ -254,15 +254,15 @@ if __name__ == "__main__":
             dim=head_dim, 
             max_seq_len=4096, 
             base=1000000  # 和Qwen的theta对齐
-        ).to(device).float()
+        ).to(device).bfloat16()
         # 核心：调用对比函数，逐步骤校验
         custom_rope.compare_with_qwen(qwen_intermediates, seq_len, device)
 
         # 3. 原测试逻辑验证
         custom_cache = custom_rope.cache[position_ids]
         cos2, sin2 = custom_cache[..., 0], custom_cache[..., 1]
-        # cos1=torch.float32, cos2=torch.float
+        # cos1=torch.float32, cos2=torch.bfloat16
 
         print(f"cos1={cos1.dtype}, cos2={cos2.dtype}")
-        is_match = torch.allclose(cos1.float(), cos2.float(), atol=1e-6) and torch.allclose(sin1.float(), sin2.float(), atol=1e-6)
+        is_match = torch.allclose(cos1.bfloat16(), cos2.bfloat16(), atol=1e-6) and torch.allclose(sin1.float(), sin2.float(), atol=1e-6)
         print(f"\n原测试逻辑最终结果: {'有误差' if not is_match else '无误差'}")
