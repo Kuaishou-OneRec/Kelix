@@ -173,10 +173,12 @@ class TransformerSelfAttentionLayer(nn.Module):
         # Input tensor and attention output have the same shape
         # [b, s, d]
         # Norm applied before self-attention
-        print(f"selfatt")
+        
         h = self.sa_norm(x)
-        import IPython
-        IPython.embed()
+        if self.sa_norm.weight.shape[0] == 4096:
+            print(f"selfatt")
+            import IPython
+            IPython.embed()
         if self.mask_mod is not None:
             # With TP we need to use a replicated tensor here
             bsz, seq_len, *_ = h.shape
