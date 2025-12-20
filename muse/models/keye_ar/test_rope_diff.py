@@ -49,7 +49,7 @@ class Qwen3RotaryEmbedding(nn.Module):
 
 
 # 代码1：Qwen3RotaryEmbedding（保存中间结果）
-class Qwen3RotaryEmbedding_(nn.Module):
+class Qwen3RotaryEmbedding(nn.Module):
     def __init__(self, config, device=None):
         super().__init__()
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
@@ -104,8 +104,8 @@ class Qwen3RotaryEmbedding_(nn.Module):
         
         cos_out = cos.to(dtype=x.dtype)
         sin_out = sin.to(dtype=x.dtype)
-        import IPython
-        IPython.embed()
+        #import IPython
+        #IPython.embed()
         return cos_out, sin_out
     
     def rope_init(self):
