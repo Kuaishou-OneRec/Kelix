@@ -1046,8 +1046,23 @@ def train():
             video_vq_indices = output.get("video_indices", None)
             if video_vq_indices is not None:
                 print_rank_0(f"[DEBUG] Model output contains video_indices with {len(video_vq_indices)} codebooks")
+                video_global_perplexities, video_codebook_usages = compute_codebook_metrics(
+                    indices=video_vq_indices,
+                    codebook_size=codebook_size,
+                    n_q_tokens=n_q_tokens
+                )
+
+                # Record average perplexity and usage for video
+                if video_global_perplexities:
+                    metrics.video_avg_perplexity.append(sum(video_global_perplexities) / len(video_global_perplexities))
+                    metrics.video_avg_codebook_usage.append(sum(video_codebook_usages) / len(video_codebook_usages))
+
+                    # Record per-codebook metrics for video
+                    for i, (ppl, usage) in enumerate(zip(video_global_perplexities, video_codebook_usages)):
+                        getattr(metrics, f"video_perplexity_{i}").append(ppl)
+                        getattr(metrics, f"video_codebook_usage_{i}").append(usage)
             else:
-                # Debug: check batch input data
+                # Debug: check batch input data when video_indices is None
                 video_grid_thw_batch = batch.get("video_grid_thw", None)
                 pixel_values_videos_batch = batch.get("pixel_values_videos", None)
                 fast_video_grid_thw_batch = batch.get("fast_video_grid_thw", None)
@@ -1058,21 +1073,6 @@ def train():
                 print_rank_0(f"[DEBUG] Batch input - pixel_values_videos shape: {pixel_values_videos_batch.shape if pixel_values_videos_batch is not None else None}")
                 print_rank_0(f"[DEBUG] Batch input - fast_video_grid_thw shape: {fast_video_grid_thw_batch.shape if fast_video_grid_thw_batch is not None else None}")
                 print_rank_0(f"[DEBUG] Batch input - fast_pixel_values_videos shape: {fast_pixel_values_videos_batch.shape if fast_pixel_values_videos_batch is not None else None}")
-                video_global_perplexities, video_codebook_usages = compute_codebook_metrics(
-                    indices=video_vq_indices,
-                    codebook_size=codebook_size,
-                    n_q_tokens=n_q_tokens
-                )
-                
-                # Record average perplexity and usage for video
-                if video_global_perplexities:
-                    metrics.video_avg_perplexity.append(sum(video_global_perplexities) / len(video_global_perplexities))
-                    metrics.video_avg_codebook_usage.append(sum(video_codebook_usages) / len(video_codebook_usages))
-                    
-                    # Record per-codebook metrics for video
-                    for i, (ppl, usage) in enumerate(zip(video_global_perplexities, video_codebook_usages)):
-                        getattr(metrics, f"video_perplexity_{i}").append(ppl)
-                        getattr(metrics, f"video_codebook_usage_{i}").append(usage)
             # ================================================ End of Forward pass ================================================
 
             # ================================================ Backward pass ================================================
