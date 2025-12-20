@@ -2114,8 +2114,8 @@ class SlowFastVisionPadder:
             "input_ids": torch.tensor([input_ids], dtype=torch.int64),
             "attention_mask": torch.tensor([[1] * len(input_ids)], dtype=torch.int64),
             "video_grid_thw": torch.tensor([[1, 2, n_merged_slow_tokens * 2]], dtype=torch.int64),
-            "fast_video_grid_thw": torch.tensor([[1, 2, n_merged_fast_tokens * 2]], dtype=torch.int64),
-            "fast_pixel_values_videos": torch.rand(n_merged_fast_tokens * 4, 3, self.patch_size, self.patch_size).float(),
+            # "fast_video_grid_thw": torch.tensor([[1, 2, n_merged_fast_tokens * 2]], dtype=torch.int64),
+            # "fast_pixel_values_videos": torch.rand(n_merged_fast_tokens * 4, 3, self.patch_size, self.patch_size).float(),
             "pixel_values_videos": torch.rand(n_merged_slow_tokens * 4, 3, self.patch_size, self.patch_size).float(),
             "loss_mask": torch.zeros(len(input_ids), dtype=torch.int64),
         }
