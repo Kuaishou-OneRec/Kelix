@@ -117,6 +117,7 @@ class KeyeTokenizerEnd2EndVideo(Model):
         vision_config = config.vision_config
         tokenizer_config = config.tokenizer_config
         image_token_id = config.image_token_id
+        video_token_id = config.video_token_id
         pool = config.pool
         amplifier = config.amplifier
 
