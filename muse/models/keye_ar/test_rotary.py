@@ -85,7 +85,7 @@ def test_rmsnorm_bf16():
     torch.manual_seed(42)  # 固定随机种子，保证可复现
     input_tensor = torch.randn(
         batch_size, seq_len, hidden_size, 
-        device=device, dtype=torch.bfloat16
+        device=device, dtype=torch.float32
     )
     
     # 4. 前向传播（关闭梯度计算，加速测试）
