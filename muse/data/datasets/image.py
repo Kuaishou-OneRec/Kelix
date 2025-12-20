@@ -1050,6 +1050,9 @@ class MultiScaleDatasetWrapper(IterableDataset):
         self.drop_last = drop_last
         self.max_bucket_size = max_bucket_size
         
+        # Use same random generator as dataset for consistent results across ranks
+        self.rng = dataset.rng
+        
         # Resolution sampler (handles single or multiple resolutions uniformly)
         self.scheduler = ResolutionBudgetScheduler(config, total_steps)
         
@@ -1119,7 +1122,9 @@ class MultiScaleDatasetWrapper(IterableDataset):
             buckets[res][aspect_ratio] = buckets[res][aspect_ratio][-self.max_bucket_size:]
             
             tgt_res = self.scheduler.current_resolution
-            for ratio in self.scheduler.get_aspect_ratios(tgt_res):
+            aspect_ratio_keys = list(self.scheduler.get_aspect_ratios(tgt_res).keys())
+            self.rng.shuffle(aspect_ratio_keys)
+            for ratio in aspect_ratio_keys:
                 if len(buckets[tgt_res][ratio]) >= self._batch_sizes[tgt_res]:
                     batch = buckets[tgt_res][ratio][:self._batch_sizes[tgt_res]]
                     buckets[tgt_res][ratio] = buckets[tgt_res][ratio][self._batch_sizes[tgt_res]:]
