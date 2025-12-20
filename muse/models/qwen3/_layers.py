@@ -205,9 +205,7 @@ class Qwen3Attention(nn.Module):
         """
         # x has shape [b, s_x, d]
         # y has shape [b, s_y, d]
-        torch.save({
-            "x":x
-        }, "qwen3_attn_forward.pt")
+
         b, s_x, _ = x.shape
         s_y = y.shape[1] if y is not None else 0
 
@@ -224,21 +222,12 @@ class Qwen3Attention(nn.Module):
         # Normalize q
         if self.q_norm is not None:
             q = self.q_norm(q)
-        # import IPython
-        # IPython.embed()
-        q_after_norm = q
+
         # Apply positional embeddings after q-norm
         if self.pos_embeddings is not None:
             q = self.pos_embeddings(q, input_pos=input_pos)
 
-        # torch.save({
-        #     "q_before_norm": q_before_norm,
-        #     "q_after_norm": q_after_norm,
-        #     "q":q,
-        #     "x":x,
-        #     "input_pos": input_pos
-        # }, "qwen3_attn_forward.pt")
-        # exit()
+
         if y is None:
             if self.kv_cache is None or not self.cache_enabled:
                 raise ValueError(
@@ -297,23 +286,11 @@ class Qwen3Attention(nn.Module):
             training=self.training,
             **kwargs,
         )
-        torch.save(
-            {
-                "q":q,
-                "k":k,
-                "v":v,
-                "mask":mask,
-                "output":output,
-            },
-            "qwen3_attn_forward.pt"
-        )
+
         if get_context_parallel_world_size() > 1:
             cpg = get_context_parallel_group()
             # output: [b, s_x * P, n_h // P, h_d] -> [b, s_x, n_h, h_d]
             output = SeqAllToAll4D.apply(cpg, output, 1, 2)
         # reshape the output to be the same shape as the input
         output = output.contiguous().view(b, s_x, -1)
-        print("qqq333")
-        import IPython
-        IPython.embed()
         return self.output_proj(output)
