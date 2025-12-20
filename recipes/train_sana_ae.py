@@ -1324,7 +1324,7 @@ def train():
                     image_tokenizer,
                     batch["pixel_values"],
                     batch["image_grid_thw"],
-                    args.batch_size,
+                    batch["image"].shape[0],
                     args.max_condition_length,
                 )
 

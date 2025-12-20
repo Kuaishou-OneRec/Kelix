@@ -963,8 +963,10 @@ class Token2ImageDataset(DistributedDataset):
             if image in images:
                 pair["image"] = images[image]
             metadata = json.loads(sample.get("metadata", '{}'))
-            height = metadata.get("height", None)
-            width = metadata.get("width", None)
+            images_info = metadata.get("images_info", {})
+            image_info = images_info.get(image, {})
+            height = image_info.get("height", None)
+            width = image_info.get("width", None)
             if height is not None and width is not None:
                 pair["height"] = height
                 pair["width"] = width
@@ -1109,6 +1111,8 @@ class MultiScaleDatasetWrapper(IterableDataset):
 
         for sample in self.dataset:
             if sample is None:
+                continue
+            if not ("height" in sample and "width" in sample):
                 continue
             orig_h, orig_w = sample["height"], sample["width"]
 
