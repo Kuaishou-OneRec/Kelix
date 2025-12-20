@@ -130,7 +130,9 @@ class UnifiedTokenDecoder(Model):
             out: (Batch, Seq_Len, d_model) 或 (Batch, Seq_Len, vocab_size) 如果lm_head不为None
         """
         batch_size, seq_len, _ = x_emb.shape
-        
+        print(f"unified_decoder")
+        import IPython
+        IPython.embed()
         if not self.reduce:
             x_emb0 = 0
         else:

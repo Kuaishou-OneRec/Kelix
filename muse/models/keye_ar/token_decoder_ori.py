@@ -213,6 +213,9 @@ class PureDecoderTransformer(nn.Module):
         Returns:
             out: (Batch, Seq_Len, d_model)
         """
+        print("PureDecoderTransformer.forward")
+        import IPython
+        IPython.embed()
         batch_size, seq_len, _ = x_emb.shape
         
         if not self.reduce: x_emb0 = 0
