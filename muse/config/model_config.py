@@ -146,10 +146,10 @@ class Qwen3Config(ModelConfig):
         default="llama",
         description="RoPE implementation style: 'llama' (interleaved cos/sin) or 'hf' (separated cos/sin)"
     )
-    rope_theta: float = Field(
-        default=10000.0,
-        description="RoPE theta parameter (alias for rope_base)"
-    )
+    # rope_theta: float = Field(
+    #     default=10000.0,
+    #     description="RoPE theta parameter (alias for rope_base)"
+    # )
     rope_scaling: Optional[dict] = Field(
         default=None,
         description="RoPE scaling config (e.g., {'rope_type': 'default', 'mrope_section': [...]})"

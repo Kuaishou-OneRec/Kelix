@@ -2533,10 +2533,10 @@ class KeyeDecoderLayer(nn.Module):
 
         residual = hidden_states
         hidden_states0 = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        print(f"keyeee")
-        import IPython
-        IPython.embed()
+        hidden_states = self.input_layernorm(hidden_states) # done
+        # print(f"keyeee")
+        # import IPython
+        # IPython.embed()
 
         # Self Attention
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
