@@ -95,7 +95,7 @@ class Qwen3RotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             
             # Step 5: 计算cos/sin并缩放
-            if os.environ.get("Qwen3RMSNorm_fp32", "1") == "1":
+            if os.environ.get("debug_for_muse", "0") == "1":
                 cos = emb.cos().bfloat16() * self.attention_scaling
                 sin = emb.sin().bfloat16() * self.attention_scaling
             else:
