@@ -128,7 +128,8 @@ def test_rmsnorm_bf16():
 # 执行测试
 if __name__ == "__main__":
     # 检查bf16支持
-    if not torch.cuda.is_available() and not torch.backends.cpu.bf16:
-        print("警告：当前设备不支持bf16，将使用float16模拟测试！")
-        torch.set_default_dtype(torch.float16)
-    test_rmsnorm_bf16()
+    with torch.cuda.amp.autocast(dtype=torch.bfloat16):
+        if not torch.cuda.is_available() and not torch.backends.cpu.bf16:
+            print("警告：当前设备不支持bf16，将使用float16模拟测试！")
+            torch.set_default_dtype(torch.float16)
+        test_rmsnorm_bf16()
