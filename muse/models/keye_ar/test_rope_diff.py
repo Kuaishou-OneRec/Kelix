@@ -104,7 +104,7 @@ if __name__ == "__main__":
     custom_rope = RotaryPositionalEmbeddings(dim=head_dim, max_seq_len=4096).to("cuda").bfloat16()
 
     # 生成测试数据
-    position_ids = torch.arange(seq_len).expand(batch_size, -1).cuda()
+    position_ids = torch.arange(seq_len).expand(batch_size, -1).to("cuda")
     x_dummy = torch.randn(batch_size, seq_len, head_dim, device="cuda")
 
     # 获取cos/sin
