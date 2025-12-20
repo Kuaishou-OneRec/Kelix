@@ -235,7 +235,7 @@ if __name__ == "__main__":
     print(f"使用设备: {device} (CPU避免cuda精度干扰)")
 
     # 1. 实例化QwenRoPE并运行，保存所有中间结果
-    qwen_rope = Qwen3RotaryEmbedding(config, device=device).to(device)
+    qwen_rope = Qwen3RotaryEmbedding(config, device=device).to(device).bfloat16()
     position_ids = torch.arange(seq_len).expand(batch_size, -1).to(device)
     x_dummy = torch.randn(batch_size, seq_len, head_dim, device=device)
     # 运行forward并保存中间结果
@@ -246,7 +246,7 @@ if __name__ == "__main__":
         dim=head_dim, 
         max_seq_len=4096, 
         base=1000000  # 和Qwen的theta对齐
-    ).to(device)
+    ).to(device).bfloat16()
     # 核心：调用对比函数，逐步骤校验
     custom_rope.compare_with_qwen(qwen_intermediates, seq_len, device)
 
