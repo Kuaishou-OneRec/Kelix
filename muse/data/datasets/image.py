@@ -900,8 +900,14 @@ class Token2ImageDataset(DistributedDataset):
         if self.multi_scale:
             target_h, target_w = sample["target_height"], sample["target_width"]
             target_image = self._build_multiscale_transform((target_h, target_w))(image)
+            # Apply same Resize + CenterCrop but keep as PIL image for processor
+            condition_image = T.Compose([
+                T.Resize((target_h, target_w), interpolation=T.InterpolationMode.BILINEAR),
+                T.CenterCrop((target_h, target_w)),
+            ])(image)
         else:
             target_image = self.transform(image)
+            condition_image = image
 
         fake_message = [
             {
@@ -909,7 +915,7 @@ class Token2ImageDataset(DistributedDataset):
                 "content": [
                     {
                         "type": "image",
-                        "image": target_image,
+                        "image": condition_image,
                         "min_pixels": 4 * 28 * 28,
                         "max_pixels": self.max_condition_length * 28 * 28
                     }
