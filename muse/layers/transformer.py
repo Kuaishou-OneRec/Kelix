@@ -697,6 +697,7 @@ class TransformerDecoder(nn.Module):
                 input_pos=input_pos,
                 **kwargs,
             )
+            break
 
         if len(self.layers) in self.output_hidden_states:
             hidden.append(h)
